@@ -1,0 +1,18 @@
+{
+  "default.search" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "default.search-kbd" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "ghost.search" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "lg.search" : {
+    "height" : 36,
+    "width" : 240
+  }
+}

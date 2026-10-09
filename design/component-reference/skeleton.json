@@ -1,0 +1,40 @@
+{
+ "component": "skeleton",
+ "source": "apps/web/src/components/ui/skeleton.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "block",
+   "html": "<div class=\"bg-muted-foreground/15 motion-safe:animate-skeleton rounded-sm\" data-slot=\"skeleton\" style=\"width:120px;height:16px\"></div>",
+   "native": {
+    "shape": "block",
+    "width": "120",
+    "height": "16"
+   }
+  },
+  {
+   "name": "card",
+   "html": "<div class=\"bg-muted-foreground/15 motion-safe:animate-skeleton rounded-lg\" data-slot=\"skeleton\" style=\"width:160px;height:48px\"></div>",
+   "native": {
+    "shape": "card",
+    "width": "160",
+    "height": "48"
+   }
+  },
+  {
+   "name": "pill",
+   "html": "<div class=\"bg-muted-foreground/15 motion-safe:animate-skeleton rounded-full\" data-slot=\"skeleton\" style=\"width:80px;height:20px\"></div>",
+   "native": {
+    "shape": "pill",
+    "width": "80",
+    "height": "20"
+   }
+  }
+ ]
+}

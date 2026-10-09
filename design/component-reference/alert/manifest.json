@@ -1,0 +1,26 @@
+{
+  "default" : {
+    "height" : 68,
+    "width" : 360
+  },
+  "error" : {
+    "height" : 68,
+    "width" : 360
+  },
+  "info" : {
+    "height" : 68,
+    "width" : 360
+  },
+  "sidebar" : {
+    "height" : 48,
+    "width" : 360
+  },
+  "success" : {
+    "height" : 68,
+    "width" : 360
+  },
+  "warning" : {
+    "height" : 68,
+    "width" : 360
+  }
+}

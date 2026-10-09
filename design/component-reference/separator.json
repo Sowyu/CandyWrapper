@@ -1,0 +1,31 @@
+{
+ "component": "separator",
+ "source": "apps/web/src/components/ui/separator.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "horizontal",
+   "html": "<div class=\"shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px data-[orientation=vertical]:not-[[class^='h-']]:not-[[class*='_h-']]:self-stretch\" data-orientation=\"horizontal\" data-slot=\"separator\" role=\"separator\"></div>",
+   "wrapperStyle": "display:block;width:120px",
+   "native": {
+    "orientation": "horizontal",
+    "length": "120"
+   }
+  },
+  {
+   "name": "vertical",
+   "html": "<div class=\"shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px data-[orientation=vertical]:not-[[class^='h-']]:not-[[class*='_h-']]:self-stretch\" data-orientation=\"vertical\" data-slot=\"separator\" role=\"separator\" aria-orientation=\"vertical\"></div>",
+   "wrapperStyle": "display:flex;height:24px",
+   "native": {
+    "orientation": "vertical",
+    "length": "24"
+   }
+  }
+ ]
+}

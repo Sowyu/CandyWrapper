@@ -1,0 +1,22 @@
+{
+  "default.placeholder" : {
+    "height" : 72,
+    "width" : 240
+  },
+  "default.value" : {
+    "height" : 92,
+    "width" : 240
+  },
+  "invalid.value" : {
+    "height" : 72,
+    "width" : 240
+  },
+  "lg.placeholder" : {
+    "height" : 76,
+    "width" : 240
+  },
+  "sm.placeholder" : {
+    "height" : 68,
+    "width" : 240
+  }
+}

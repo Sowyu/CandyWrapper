@@ -5,7 +5,9 @@
 // Usage: swift scripts/component-reference.swift <spec.json>   (run through scripts/component-reference)
 //
 // spec.json: { "component": "button", "states": [...], "themes": ["light", "dark"],
-//              "cases": [ { "name": "outline.sm", "html": "<button ...>", "wrapperStyle": "..." } ] }
+//              "cases": [ { "name": "outline.sm", "html": "<button ...>", "wrapperStyle": "...", "stateTarget": "input" } ] }
+// `stateTarget` (optional) is a selector inside the case element that receives the forced state and the
+// `disabled` attribute, for wrappers styled with `:has()` (Input, Textarea, InputGroup).
 // States: rest, hover, active (hover + active), focus-visible (focus + focus-visible), disabled
 // (the `disabled` attribute). Pseudo classes are forced with CSS.forcePseudoState.
 // Output: design/component-reference/<component>/<case>.<state>.<theme>.png at 2x, clipped to the
@@ -55,7 +57,7 @@ func page(theme: String) throws -> URL {
 let toolDir = NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"
 let chrome = (try? FileManager.default.contentsOfDirectory(atPath: toolDir))?.sorted().last.map { "\(toolDir)/\($0)/chrome-headless-shell" }
 guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found under ~/.t3/tools"); exit(1) }
-let port = 9334
+let port = 9334 + Int(getpid() % 500) // per process, so parallel captures never share a DevTools port
 let proc = Process()
 proc.executableURL = URL(fileURLWithPath: chrome)
 proc.arguments = ["--remote-debugging-port=\(port)", "--user-data-dir=\(work.appendingPathComponent("profile").path)",
@@ -142,6 +144,12 @@ for theme in themes {
         let rect = try await evaluate("(() => { const r = document.querySelectorAll('.case > div > :first-child')[\(i)].getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()") as! [Double]
         manifest[name] = ["width": rect[2], "height": rect[3]]
         let clip: [String: Any] = ["x": rect[0] - pad, "y": rect[1] - pad, "width": rect[2] + 2 * pad, "height": rect[3] + 2 * pad, "scale": 1]
+        var target = nodeIds[i]
+        if let selector = c["stateTarget"] as? String {
+            let found = try await send("DOM.querySelector", ["nodeId": nodeIds[i], "selector": selector])
+            guard let id = found["nodeId"] as? Int, id != 0 else { print("\(name): no element for stateTarget \(selector)"); exit(1) }
+            target = id
+        }
         for state in states {
             let forced: [String] = switch state {
             case "hover": ["hover"]
@@ -149,14 +157,14 @@ for theme in themes {
             case "focus-visible": ["focus", "focus-visible"]
             default: []
             }
-            if state == "disabled" { try await send("DOM.setAttributeValue", ["nodeId": nodeIds[i], "name": "disabled", "value": ""]) }
-            try await send("CSS.forcePseudoState", ["nodeId": nodeIds[i], "forcedPseudoClasses": forced])
+            if state == "disabled" { try await send("DOM.setAttributeValue", ["nodeId": target, "name": "disabled", "value": ""]) }
+            try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": forced])
             try await settle()
             let shot = try await send("Page.captureScreenshot", ["format": "png", "clip": clip, "captureBeyondViewport": false])
             guard let b64 = shot["data"] as? String, let png = Data(base64Encoded: b64) else { print("no screenshot for \(name).\(state)"); continue }
             try png.write(to: outDir.appendingPathComponent("\(name).\(state).\(theme).png"))
-            try await send("CSS.forcePseudoState", ["nodeId": nodeIds[i], "forcedPseudoClasses": [String]()])
-            if state == "disabled" { try await send("DOM.removeAttribute", ["nodeId": nodeIds[i], "name": "disabled"]) }
+            try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": [String]()])
+            if state == "disabled" { try await send("DOM.removeAttribute", ["nodeId": target, "name": "disabled"]) }
         }
     }
     print("\(theme): \(cases.count * states.count) images")

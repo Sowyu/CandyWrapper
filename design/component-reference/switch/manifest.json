@@ -1,0 +1,42 @@
+{
+  "default.mixed" : {
+    "height" : 18,
+    "width" : 30
+  },
+  "default.off" : {
+    "height" : 18,
+    "width" : 30
+  },
+  "default.off.disabled" : {
+    "height" : 18,
+    "width" : 30
+  },
+  "default.on" : {
+    "height" : 18,
+    "width" : 30
+  },
+  "default.on.disabled" : {
+    "height" : 18,
+    "width" : 30
+  },
+  "sm.mixed" : {
+    "height" : 16,
+    "width" : 26
+  },
+  "sm.off" : {
+    "height" : 16,
+    "width" : 26
+  },
+  "sm.off.disabled" : {
+    "height" : 16,
+    "width" : 26
+  },
+  "sm.on" : {
+    "height" : 16,
+    "width" : 26
+  },
+  "sm.on.disabled" : {
+    "height" : 16,
+    "width" : 26
+  }
+}
