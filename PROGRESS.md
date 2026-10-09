@@ -4,15 +4,15 @@ Update this file at the end of every work session. Newest log entry first.
 
 ## Current milestone
 
-Milestone 2, design system. Milestone 1 was demoed and accepted on 2026-10-09. The user noted that more settings pages and usage views should be captured; do that as each component needs it.
+Milestone 3, skeleton: connect to a T3 server and show real projects and threads in the sidebar. Milestone 2 was signed off by the user on 2026-10-09 after reviewing `../CandyWrapper-research/review/m2/index.html`.
 
 ## Milestones
 
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Research: protocol, parity checklist, reference screenshots, baseline benchmarks | done, accepted 2026-10-09 |
-| 2 | Design system and component gallery, user sign-off | in progress |
-| 3 | Skeleton: connect to server, sidebar shows real data | not started |
+| 2 | Design system and component gallery, user sign-off | done, signed off 2026-10-09 |
+| 3 | Skeleton: connect to server, sidebar shows real data | in progress |
 | 4 | Read-only thread view | not started |
 | 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | not started |
 | 6 | T3 Connect | not started |
@@ -37,6 +37,15 @@ Milestone 2, design system. Milestone 1 was demoed and accepted on 2026-10-09. T
 - [x] Official desktop app baseline in `docs/benchmarks.md`: cold launch about 3.4 s to sidebar data, idle 2.6% CPU, 88 interrupt wakeups/s, Energy Impact 4.29, 544 MB, bundle 366 MB. Streaming and large-thread memory deferred to milestone 8
 - [x] Demo milestone 1 to the user (accepted)
 
+## Milestone 3 checklist
+
+- [ ] T3Protocol wire types: Effect RPC envelopes, auth and pairing HTTP types, typed errors (agent W)
+- [ ] T3Client: HTTP auth (token exchange, session, ws ticket), WebSocket RPC client (requests, streams with Ack per Chunk, Ping keepalive, Interrupt on cancel), reconnect supervisor with T3's backoff, Keychain credential store; integration test against the sandbox server (agent W)
+- [ ] T3Protocol domain types for the shell stream and server config subset; T3Store shell reducer (snapshot, deltas, sequence dedupe, resume cursor) and sidebar derived state (status, ordering, grouping, timestamps), tested against fixtures/transcripts (agent D)
+- [ ] App wiring: ServerManager (discover the local server via `~/.t3/userdata/server-runtime.json`, read-only; or a custom URL plus pairing link), connection status, main window with the sidebar showing real data
+- [ ] Window chrome matching the desktop app (traffic lights, title bar, drag regions)
+- [ ] Demo: connect to the user's live T3 (ask first; pairing writes an auth session into the live install)
+
 ## Milestone 2 checklist
 
 - [x] `scripts/extract-tokens`: resolves every T3 CSS variable in headless Chromium from `design/t3-source/main.css` and generates `Tokens.generated.swift` (114 semantic colors, base palette, radii, type, shadows, easings) plus `docs/design-tokens.md`. Main-panel pixels match the references exactly
@@ -48,7 +57,7 @@ Milestone 2, design system. Milestone 1 was demoed and accepted on 2026-10-09. T
 - [x] Component library: 47 components across 46 fidelity suites, mostly 0.6% to 3% differing pixels against T3, 78 tests in 13 suites. Inventory and numbers in `docs/design.md`
 - [x] `CandyWrapper.xcodeproj` from `project.yml` with XcodeGen; app builds with xcodebuild and opens in the GUI session (`--gallery` or option-shift-command-G for the gallery)
 - [x] `docs/design.md`: sources, fonts, architecture, inventory with fidelity numbers, substitutions with side-by-side images, known gaps
-- [ ] User visual sign-off. Review page: `../CandyWrapper-research/review/m2/index.html` (open in the GUI session)
+- [x] User visual sign-off (2026-10-09). The only finding was the Alert's centered icon on long text, which matched T3; AlertView gained T3's first-line alignment mode
 
 Gotchas found so far:
 - Offscreen AppKit views only get a layer tree inside a window that has displayed once. `Snapshot` hosts the view in a hidden borderless window and calls `display()` first.
