@@ -1,0 +1,50 @@
+import AppKit
+
+/// Base for every custom-drawn component. Layer-backed, top-left origin like the web
+/// layout it copies, and it only redraws when a property it owns changes.
+open class DSView: NSView {
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    @available(*, unavailable)
+    public required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    open override var isFlipped: Bool { true }
+
+    /// Frame-based layout: any size change re-runs `layout()`.
+    open override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize != frame.size
+        super.setFrameSize(newSize)
+        if changed { needsLayout = true }
+    }
+
+    /// Subclasses that only set layer properties override `updateLayer` and keep this true.
+    /// Subclasses that draw text or paths return false and override `draw(_:)`.
+    open override var wantsUpdateLayer: Bool { true }
+
+    /// Re-resolve dynamic colors stored on layers (CGColor does not follow appearance).
+    open override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    /// Runs `body` with the view's appearance current so dynamic NSColors resolve for it.
+    public func resolving<T>(_ body: () -> T) -> T {
+        var result: T?
+        effectiveAppearance.performAsCurrentDrawingAppearance { result = body() }
+        return result!
+    }
+}
+
+public extension NSColor {
+    /// The CGColor for this color under the given view's appearance.
+    @MainActor
+    func cgColor(in view: NSView) -> CGColor {
+        var color = cgColor
+        view.effectiveAppearance.performAsCurrentDrawingAppearance { color = self.cgColor }
+        return color
+    }
+}
