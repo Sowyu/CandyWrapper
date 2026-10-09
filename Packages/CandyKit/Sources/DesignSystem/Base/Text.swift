@@ -62,6 +62,9 @@ public final class LabelView: DSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
+    /// Decoration: clicks go to the control or bar underneath.
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     public convenience init(_ text: String, font: NSFont = DSFont.ui(14), color: NSColor? = nil) {
         self.init(frame: .zero)
         self.text = text

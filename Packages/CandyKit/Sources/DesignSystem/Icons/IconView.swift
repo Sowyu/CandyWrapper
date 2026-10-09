@@ -39,6 +39,9 @@ public final class IconView: NSView {
     public required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: nominalSize, height: nominalSize) }
+
+    /// Decoration: clicks go to the control or bar underneath.
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
     public override var isOpaque: Bool { false }
 
     public override func setFrameSize(_ newSize: NSSize) {

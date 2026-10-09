@@ -7,10 +7,20 @@ let package = Package(
     products: [
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "T3Protocol", targets: ["T3Protocol"]),
+        .library(name: "T3Client", targets: ["T3Client"]),
+        .library(name: "T3Store", targets: ["T3Store"]),
     ],
     targets: [
         .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"]),
+        // Wire and domain types from docs/protocol.md. No I/O.
         .target(name: "T3Protocol"),
+        // Transport: HTTP auth, WebSocket RPC, reconnect supervisor, Keychain.
+        .target(name: "T3Client", dependencies: ["T3Protocol"]),
+        // Normalized state and reducers fed by T3Client streams.
+        .target(name: "T3Store", dependencies: ["T3Protocol"]),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
+        .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
+        .testTarget(name: "T3ClientTests", dependencies: ["T3Client"]),
+        .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
     ]
 )
