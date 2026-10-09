@@ -124,6 +124,7 @@ struct TogglesFidelityTests {
     static func render(_ view: NSView, state: ControlView.State, width: Double, pixels: (Int, Int), dark: Bool) -> NSBitmapImageRep {
         let canvas = FidelityTests.Canvas(frame: .zero)
         canvas.addSubview(view)
+        view.setFrameSize(NSSize(width: width, height: 0)) // wrapped text measures its height at the width
         var size = view.intrinsicContentSize
         if size.width == NSView.noIntrinsicMetric { size.width = width }
         view.frame = NSRect(origin: NSPoint(x: 8, y: 8), size: size)

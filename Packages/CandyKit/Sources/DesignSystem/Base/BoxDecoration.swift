@@ -36,6 +36,18 @@ public struct BoxStyle: Equatable {
     public var shadows: [BoxShadow] = []
     /// Shadows of a `before:absolute before:inset-0 before:rounded-[radius-1]` pseudo element.
     public var beforeShadows: [BoxShadow] = []
+    /// Per-side border widths (`border-t`, `border-s`). When set, it replaces `borderWidth`.
+    public var borderEdges: Edges?
+    /// Which corners take `radius`: `.bottom` is `rounded-b-*`.
+    public var corners = Corners.all
+
+    public struct Edges: Equatable, Sendable {
+        public var top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat
+        public init(top: CGFloat = 0, left: CGFloat = 0, bottom: CGFloat = 0, right: CGFloat = 0) {
+            self.top = top; self.left = left; self.bottom = bottom; self.right = right
+        }
+    }
+    public enum Corners: Equatable, Sendable { case all, bottom }
 
     public init() {}
 }
@@ -48,7 +60,8 @@ public final class BoxDecorationLayer: CALayer {
     /// The view whose appearance resolves the dynamic colors.
     public weak var host: NSView?
     /// Room for shadows and the 3px focus ring.
-    public let outset: CGFloat = 12
+    /// Raise it for large shadows (toasts, dialogs); the layer clips at this margin.
+    public var outset: CGFloat = 12
 
     public override init() {
         super.init()
@@ -98,13 +111,35 @@ enum BoxPainter {
 
     /// `box` is in a top-left origin space. CALayer contents are y-up unless the context
     /// is flipped, so `yDown` converts CSS y offsets.
+    /// A rounded rect with only the CSS bottom corners rounded. `flipped` says whether +y is down.
+    static func bottomRounded(_ rect: CGRect, _ radius: CGFloat, flipped: Bool) -> CGPath {
+        let r = max(0, min(radius, min(rect.width, rect.height) / 2))
+        let path = CGMutablePath()
+        let (top, bottom) = flipped ? (rect.minY, rect.maxY) : (rect.maxY, rect.minY)
+        let dir: CGFloat = flipped ? -1 : 1 // from the bottom edge toward the top
+        path.move(to: CGPoint(x: rect.minX, y: top))
+        path.addLine(to: CGPoint(x: rect.minX, y: bottom + dir * r))
+        path.addArc(tangent1End: CGPoint(x: rect.minX, y: bottom), tangent2End: CGPoint(x: rect.minX + r, y: bottom), radius: r)
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: bottom))
+        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: bottom), tangent2End: CGPoint(x: rect.maxX, y: bottom + dir * r), radius: r)
+        path.addLine(to: CGPoint(x: rect.maxX, y: top))
+        path.closeSubpath()
+        return path
+    }
+
     static func paint(_ style: BoxStyle, in ctx: CGContext, box: CGRect, flipped: Bool) {
         let ySign: CGFloat = flipped ? 1 : -1 // CSS +y is down
-        let borderPath = rounded(box, style.radius)
-        let paddingBox = box.insetBy(dx: style.border == nil ? 0 : style.borderWidth,
-                                     dy: style.border == nil ? 0 : style.borderWidth)
-        let paddingRadius = max(0, style.radius - (style.border == nil ? 0 : style.borderWidth))
-        let paddingPath = rounded(paddingBox, paddingRadius)
+        let shape: (CGRect, CGFloat) -> CGPath = { rect, radius in
+            style.corners == .bottom ? bottomRounded(rect, radius, flipped: flipped) : rounded(rect, radius)
+        }
+        let borderPath = shape(box, style.radius)
+        let w = style.border == nil ? 0 : style.borderWidth
+        let e = style.border == nil ? BoxStyle.Edges() : style.borderEdges ?? BoxStyle.Edges(top: w, left: w, bottom: w, right: w)
+        // CSS top is the context's maxY when the context is y-up.
+        let paddingBox = CGRect(x: box.minX + e.left, y: box.minY + (flipped ? e.top : e.bottom),
+                                width: box.width - e.left - e.right, height: box.height - e.top - e.bottom)
+        let paddingRadius = max(0, style.radius - max(e.top, e.left, e.bottom, e.right))
+        let paddingPath = shape(paddingBox, paddingRadius)
 
         // 1. Outer shadows, last entry painted first.
         for shadow in style.shadows.reversed() where !shadow.inset {

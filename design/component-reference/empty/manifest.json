@@ -3,8 +3,16 @@
     "height" : 256,
     "width" : 400
   },
+  "compact.wrap" : {
+    "height" : 256,
+    "width" : 400
+  },
   "default" : {
     "height" : 208,
+    "width" : 400
+  },
+  "default.wrap" : {
+    "height" : 276,
     "width" : 400
   }
 }

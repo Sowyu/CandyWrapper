@@ -1,0 +1,14 @@
+{
+  "compact.auto" : {
+    "height" : 32,
+    "width" : 112.9921875
+  },
+  "default.auto" : {
+    "height" : 48,
+    "width" : 120.9921875
+  },
+  "default.md" : {
+    "height" : 48,
+    "width" : 320
+  }
+}

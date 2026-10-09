@@ -187,14 +187,16 @@ A_VARIANTS = {
     "warning": "border-warning/32 bg-warning-surface text-warning-foreground [&_[data-slot=alert-description]]:text-warning-foreground/80 [&_svg]:text-warning",
 }
 cases = []
-for v in A_VARIANTS:
+LONG_TITLE = "Your session expired while the agent was still running"
+LONG_DESC = "Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again."
+for v, title, desc in [(v, "Heads up", "Something needs your attention.") for v in A_VARIANTS] + [
+        ("default", LONG_TITLE, LONG_DESC), ("sidebar", LONG_TITLE, LONG_DESC), ("error", LONG_TITLE, LONG_DESC)]:
     cls = merge(f"{A_BASE} {A_VARIANTS[v]}")
-    title, desc = "Heads up", "Something needs your attention."
     html = (f'<div data-slot="alert" data-variant="{v}" role="alert" class="{cls}"><div class="flex gap-2 items-center">'
             f'<div class="flex shrink-0 items-center justify-center size-4 [&>svg]:size-full">{CIRCLE_ALERT}</div>'
             f'<div class="flex min-w-0 flex-1 flex-col gap-0.5"><div class="font-medium" data-slot="alert-title">{title}</div>'
             f'<div class="flex flex-col gap-2.5 text-muted-foreground" data-slot="alert-description">{desc}</div></div></div></div>')
-    cases.append({"name": v, "html": html, "wrapperStyle": "display:block;width:360px",
+    cases.append({"name": v if title == "Heads up" else f"{v}.wrap", "html": html, "wrapperStyle": "display:block;width:360px",
                   "native": {"variant": v, "title": title, "description": desc, "icon": "circleAlert", "width": "360"}})
 specs["alert"] = {"source": "apps/web/src/components/ui/alert.tsx", "states": ["rest"], "cases": cases}
 
@@ -210,15 +212,16 @@ media = merge(f"{M_BASE} {M_ICON}")
 left = merge(f"{M_BASE} {M_ICON} -translate-x-0.5 -rotate-10 pointer-events-none absolute bottom-px origin-bottom-left scale-84 shadow-none")
 right = merge(f"{M_BASE} {M_ICON} pointer-events-none absolute bottom-px origin-bottom-right translate-x-0.5 rotate-10 scale-84 shadow-none")
 cases = []
-for size in E_SIZES:
-    title, desc = "No threads yet", "Start a conversation to see it here."
+for size, title, desc in [(z, "No threads yet", "Start a conversation to see it here.") for z in E_SIZES] + [
+        ("default", "Nothing matches the filters you picked for this project", "Clear a filter or search all projects. Archived threads stay hidden until you turn on the archive toggle in settings."),
+        ("compact", "No threads yet", "Start a conversation with the agent and every reply, tool call and diff shows up in this list.")]:
     html = (f'<div data-slot="empty" class="{E_BASE} {E_SIZES[size]}"><div data-slot="empty-header" class="flex max-w-sm flex-col items-center text-center">'
             f'<div class="relative mb-6" data-slot="empty-media" data-variant="icon"><div aria-hidden="true" class="{left}"></div>'
             f'<div aria-hidden="true" class="{right}"></div><div class="{media}">{INBOX}</div></div>'
             f'<div class="font-semibold text-xl" data-slot="empty-title">{title}</div>'
             f'<div class="text-muted-foreground text-sm [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4 [[data-slot=empty-title]+&]:mt-1 [[data-slot=empty-description]+&]:mt-1" data-slot="empty-description">{desc}</div>'
             f'</div></div>')
-    cases.append({"name": size, "html": html, "wrapperStyle": "display:flex;width:400px",
+    cases.append({"name": size if title == "No threads yet" and desc.startswith("Start a conversation to") else f"{size}.wrap", "html": html, "wrapperStyle": "display:flex;width:400px",
                   "native": {"size": size, "title": title, "description": desc, "icon": "inbox", "width": "400"}})
 specs["empty"] = {"source": "apps/web/src/components/ui/empty.tsx", "states": ["rest"], "cases": cases}
 

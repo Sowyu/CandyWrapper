@@ -110,6 +110,7 @@ enum TogglesGallery {
             super.layout()
             var y: CGFloat = 0
             for view in views {
+                view.setFrameSize(NSSize(width: bounds.width, height: view.frame.height)) // wrapped text measures at the width
                 let h = view.intrinsicContentSize.height
                 view.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
                 y += h + spacing

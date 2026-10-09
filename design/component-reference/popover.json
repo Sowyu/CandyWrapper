@@ -1,0 +1,40 @@
+{
+ "component": "popover",
+ "source": "apps/web/src/components/ui/popover.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "default.auto",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-lg text-popover-foreground outline-none transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] has-data-[slot=calendar]:rounded-xl has-data-[slot=calendar]:before:rounded-[calc(var(--radius-xl)-1px)] data-starting-style:scale-98 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] \" data-slot=\"popover-popup\" data-side=\"bottom\"><div class=\"relative size-full max-h-(--available-height) overflow-clip px-(--viewport-inline-padding) has-data-[slot=calendar]:p-2 data-instant:transition-none py-4 [--viewport-inline-padding:--spacing(4)] not-data-transitioning:overflow-y-auto\" data-slot=\"popover-viewport\"><h2 class=\"font-semibold text-sm leading-none\" data-slot=\"popover-title\">Share thread</h2></div></div>",
+   "wrapperStyle": "display:inline-block;--available-height:600px",
+   "native": {
+    "padding": "default",
+    "width": "auto"
+   }
+  },
+  {
+   "name": "compact.auto",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-lg text-popover-foreground outline-none transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] has-data-[slot=calendar]:rounded-xl has-data-[slot=calendar]:before:rounded-[calc(var(--radius-xl)-1px)] data-starting-style:scale-98 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] \" data-slot=\"popover-popup\" data-side=\"bottom\"><div class=\"relative size-full max-h-(--available-height) overflow-clip px-(--viewport-inline-padding) has-data-[slot=calendar]:p-2 data-instant:transition-none py-2 [--viewport-inline-padding:--spacing(3)] not-data-transitioning:overflow-y-auto\" data-slot=\"popover-viewport\"><h2 class=\"font-semibold text-sm leading-none\" data-slot=\"popover-title\">Share thread</h2></div></div>",
+   "wrapperStyle": "display:inline-block;--available-height:600px",
+   "native": {
+    "padding": "compact",
+    "width": "auto"
+   }
+  },
+  {
+   "name": "default.md",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-lg text-popover-foreground outline-none transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] has-data-[slot=calendar]:rounded-xl has-data-[slot=calendar]:before:rounded-[calc(var(--radius-xl)-1px)] data-starting-style:scale-98 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] w-80 max-w-[calc(100vw-2rem)]\" data-slot=\"popover-popup\" data-side=\"bottom\"><div class=\"relative size-full max-h-(--available-height) overflow-clip px-(--viewport-inline-padding) has-data-[slot=calendar]:p-2 data-instant:transition-none py-4 [--viewport-inline-padding:--spacing(4)] not-data-transitioning:overflow-y-auto\" data-slot=\"popover-viewport\"><h2 class=\"font-semibold text-sm leading-none\" data-slot=\"popover-title\">Share thread</h2></div></div>",
+   "wrapperStyle": "display:inline-block;--available-height:600px",
+   "native": {
+    "padding": "default",
+    "width": "md"
+   }
+  }
+ ]
+}

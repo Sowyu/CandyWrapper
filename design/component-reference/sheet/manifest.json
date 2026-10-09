@@ -1,0 +1,14 @@
+{
+  "left" : {
+    "height" : 360,
+    "width" : 448
+  },
+  "right" : {
+    "height" : 360,
+    "width" : 448
+  },
+  "right.inset" : {
+    "height" : 360,
+    "width" : 448
+  }
+}

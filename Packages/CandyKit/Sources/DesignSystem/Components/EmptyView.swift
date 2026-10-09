@@ -4,7 +4,7 @@ import QuartzCore
 /// T3's `Empty` (`apps/web/src/components/ui/empty.tsx`): icon media with two fanned cards behind it,
 /// title, description and optional content, centered. Spec: ui-components-b.md section 13.
 /// Padding uses the `md:` value (window 768px and wider).
-/// ponytail: one-line title and description; add balanced wrapping when an empty state shows long copy
+/// Title and description wrap with `text-wrap: balance` inside the header's `max-w-sm`.
 public final class EmptyView: DSView {
     public enum Size: String, CaseIterable, Sendable {
         case `default`, compact, hero
@@ -25,8 +25,8 @@ public final class EmptyView: DSView {
         didSet { oldValue?.removeFromSuperview(); content.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
 
-    private let titleLabel = LabelView()
-    private let descriptionLabel = LabelView()
+    private let titleLabel = TextBlockView()
+    private let descriptionLabel = TextBlockView()
     private let media: MediaView?
 
     public init(title: String, message: String? = nil, icon: IconName? = nil, size: Size = .default) {
@@ -35,6 +35,8 @@ public final class EmptyView: DSView {
         self.size = size
         titleLabel.text = title
         titleLabel.alignment = .center
+        titleLabel.balanced = true
+        descriptionLabel.balanced = true
         descriptionLabel.text = message ?? ""
         descriptionLabel.alignment = .center
         media.map(addSubview)
@@ -45,36 +47,53 @@ public final class EmptyView: DSView {
 
     private var hasMessage: Bool { !descriptionLabel.text.isEmpty }
 
-    private var headerHeight: CGFloat {
-        let m = size.metrics
-        return (media == nil ? 0 : 36 + m.mediaGap) + m.titleLine + (hasMessage ? 4 + m.bodyLine : 0)
+    /// Header text width: `max-w-sm` inside the padding. Before the first frame, unbounded.
+    private func textWidth(_ width: CGFloat) -> CGFloat {
+        width > 0 ? min(384, width - 2 * size.metrics.padding) : .greatestFiniteMagnitude
     }
 
-    private var stackHeight: CGFloat {
-        headerHeight + (content.map { size.metrics.gap + $0.intrinsicContentSize.height } ?? 0)
+    private func headerHeight(_ width: CGFloat) -> CGFloat {
+        let m = size.metrics, w = textWidth(width)
+        return (media == nil ? 0 : 36 + m.mediaGap) + titleLabel.height(forWidth: w)
+            + (hasMessage ? 4 + descriptionLabel.height(forWidth: w) : 0)
+    }
+
+    private func stackHeight(_ width: CGFloat) -> CGFloat {
+        headerHeight(width) + (content.map { size.metrics.gap + $0.intrinsicContentSize.height } ?? 0)
+    }
+
+    public func height(forWidth width: CGFloat) -> CGFloat {
+        max(size.metrics.minHeight, stackHeight(width) + 2 * size.metrics.padding)
     }
 
     public override var intrinsicContentSize: NSSize {
-        let m = size.metrics
-        return NSSize(width: NSView.noIntrinsicMetric, height: max(m.minHeight, stackHeight + 2 * m.padding))
+        NSSize(width: NSView.noIntrinsicMetric, height: height(forWidth: bounds.width))
+    }
+
+    public override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if widthChanged { invalidateIntrinsicContentSize() }
     }
 
     public override func layout() {
         super.layout()
         let m = size.metrics
         let width = bounds.width
-        var y = ((bounds.height - stackHeight) / 2).rounded()
+        var y = ((bounds.height - stackHeight(width)) / 2).rounded()
         if let media {
             media.frame = NSRect(x: ((width - 36) / 2).rounded(), y: y, width: 36, height: 36)
             y += 36 + m.mediaGap
         }
-        let textWidth = min(384, width - 2 * m.padding) // header `max-w-sm`
+        let textWidth = self.textWidth(width)
         let textX = (width - textWidth) / 2
-        titleLabel.frame = NSRect(x: textX, y: y, width: textWidth, height: m.titleLine)
-        y += m.titleLine
+        let titleHeight = titleLabel.height(forWidth: textWidth)
+        titleLabel.frame = NSRect(x: textX, y: y, width: textWidth, height: titleHeight)
+        y += titleHeight
         if hasMessage {
-            descriptionLabel.frame = NSRect(x: textX, y: y + 4, width: textWidth, height: m.bodyLine)
-            y += 4 + m.bodyLine
+            let h = descriptionLabel.height(forWidth: textWidth)
+            descriptionLabel.frame = NSRect(x: textX, y: y + 4, width: textWidth, height: h)
+            y += 4 + h
         }
         if let content {
             let s = content.intrinsicContentSize

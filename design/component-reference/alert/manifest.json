@@ -3,8 +3,16 @@
     "height" : 68,
     "width" : 360
   },
+  "default.wrap" : {
+    "height" : 148,
+    "width" : 360
+  },
   "error" : {
     "height" : 68,
+    "width" : 360
+  },
+  "error.wrap" : {
+    "height" : 148,
     "width" : 360
   },
   "info" : {
@@ -13,6 +21,10 @@
   },
   "sidebar" : {
     "height" : 48,
+    "width" : 360
+  },
+  "sidebar.wrap" : {
+    "height" : 80,
     "width" : 360
   },
   "success" : {

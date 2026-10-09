@@ -1,0 +1,26 @@
+{
+  "default.default.placeholder" : {
+    "height" : 32,
+    "width" : 200
+  },
+  "default.default.value" : {
+    "height" : 32,
+    "width" : 200
+  },
+  "default.default.value.open" : {
+    "height" : 32,
+    "width" : 200
+  },
+  "default.lg.value" : {
+    "height" : 36,
+    "width" : 200
+  },
+  "default.sm.value" : {
+    "height" : 28,
+    "width" : 200
+  },
+  "ghost.default.value" : {
+    "height" : 32,
+    "width" : 125.53125
+  }
+}
