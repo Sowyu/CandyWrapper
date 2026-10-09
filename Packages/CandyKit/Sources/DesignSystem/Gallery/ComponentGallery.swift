@@ -20,7 +20,7 @@ public enum ComponentGallery {
     public static var sections: [Section] {
         [ColorSwatches.section, TypeSamples.section, ButtonGallery.variantsSection, ButtonGallery.sizesSection]
             + FormsGallery.sections + TogglesGallery.sections + PopupsGallery.sections
-            + OverlaysGallery.sections + LayoutGallery.sections + extraSections
+            + OverlaysGallery.sections + LayoutGallery.sections + SidebarGallery.sections + extraSections
     }
 
     /// Components append their sections here (kept in one place so the gallery stays complete).

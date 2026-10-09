@@ -1,0 +1,21 @@
+{
+ "component": "sidebar-menu-sub",
+ "source": "apps/web/src/components/ui/sidebar.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "second-active",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border border-l px-2.5 py-0.5 group-data-[collapsible=icon]:hidden\"><li class=\"group/menu-sub-item relative\"><a data-active=\"false\" data-size=\"md\" class=\"-translate-x-px flex h-7 min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-sidebar-foreground outline-hidden ring-ring hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 active:bg-sidebar-row-active active:text-sidebar-foreground disabled:pointer-events-none disabled:opacity-64 aria-disabled:pointer-events-none aria-disabled:opacity-64 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground data-[active=true]:bg-sidebar-row-selected data-[active=true]:text-sidebar-foreground text-sm group-data-[collapsible=icon]:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path></svg><span>Settings</span></a></li><li class=\"group/menu-sub-item relative\"><a data-active=\"true\" data-size=\"md\" class=\"-translate-x-px flex h-7 min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-sidebar-foreground outline-hidden ring-ring hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 active:bg-sidebar-row-active active:text-sidebar-foreground disabled:pointer-events-none disabled:opacity-64 aria-disabled:pointer-events-none aria-disabled:opacity-64 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground data-[active=true]:bg-sidebar-row-selected data-[active=true]:text-sidebar-foreground text-sm group-data-[collapsible=icon]:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path></svg><span>Archive</span></a></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "active": "1"
+   }
+  }
+ ]
+}

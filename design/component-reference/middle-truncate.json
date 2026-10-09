@@ -1,0 +1,45 @@
+{
+ "component": "middle-truncate",
+ "source": "apps/web/src/components/ui/middle-truncate.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "path",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift\"><span class=\"min-w-0 truncate\">/Users/mrm/Projects/candywrapper/Sources/ScrollArea</span><span class=\"shrink-0\">View.swift</span></span>",
+   "wrapperStyle": "display:flex;width:180px",
+   "native": {
+    "value": "/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift"
+   }
+  },
+  {
+   "name": "branch",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"fix/cache-main-20260918-180825\"><span class=\"min-w-0 truncate\">fix/cache-main-20260</span><span class=\"shrink-0\">918-180825</span></span>",
+   "wrapperStyle": "display:flex;width:180px",
+   "native": {
+    "value": "fix/cache-main-20260918-180825"
+   }
+  },
+  {
+   "name": "sha-long",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"t3code-worktree-3b6af0b2c41d9e\"><span class=\"min-w-0 truncate\">t3code-worktree-3b6a</span><span class=\"shrink-0\">f0b2c41d9e</span></span>",
+   "wrapperStyle": "display:flex;width:180px",
+   "native": {
+    "value": "t3code-worktree-3b6af0b2c41d9e"
+   }
+  },
+  {
+   "name": "short",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"main\"><span class=\"min-w-0 truncate\">main</span></span>",
+   "wrapperStyle": "display:flex;width:180px",
+   "native": {
+    "value": "main"
+   }
+  }
+ ]
+}

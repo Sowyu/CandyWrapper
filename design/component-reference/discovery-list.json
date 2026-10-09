@@ -1,0 +1,23 @@
+{
+ "component": "discovery-list",
+ "source": "apps/web/src/components/ui/discovery-list.tsx",
+ "states": [
+  "rest",
+  "hover",
+  "focus-visible",
+  "disabled"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "two-rows",
+   "html": "<div class=\"flex flex-col divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-background\"><button type=\"button\" class=\"group flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-4 shrink-0 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path></svg><div class=\"flex min-w-0 flex-1 flex-col\"><span class=\"truncate text-sm font-medium text-foreground\">candywrapper</span><span class=\"truncate text-xs text-muted-foreground\">~/Projects/candywrapper</span></div></button><button type=\"button\" class=\"group flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-4 shrink-0 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 19h8\"></path><path d=\"m4 17 6-6-6-6\"></path></svg><div class=\"flex min-w-0 flex-1 flex-col\"><span class=\"truncate text-sm font-medium text-foreground\">t3code</span><span class=\"truncate text-xs text-muted-foreground\">~/Projects/t3code, a very long description that truncates</span></div></button></div>",
+   "wrapperStyle": "display:block;width:320px",
+   "stateTarget": "button:nth-child(1)",
+   "native": {}
+  }
+ ]
+}

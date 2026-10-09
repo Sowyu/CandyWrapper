@@ -1,0 +1,18 @@
+{
+  "active" : {
+    "height" : 32,
+    "width" : 542
+  },
+  "active.shortcut" : {
+    "height" : 32,
+    "width" : 542
+  },
+  "idle" : {
+    "height" : 32,
+    "width" : 542
+  },
+  "idle.shortcut" : {
+    "height" : 32,
+    "width" : 542
+  }
+}

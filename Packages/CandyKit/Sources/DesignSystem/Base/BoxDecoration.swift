@@ -47,7 +47,18 @@ public struct BoxStyle: Equatable {
             self.top = top; self.left = left; self.bottom = bottom; self.right = right
         }
     }
-    public enum Corners: Equatable, Sendable { case all, bottom }
+    /// CSS corners that keep the radius: `.bottom` is `rounded-t-none`, `.leading` is `rounded-e-none`.
+    public struct Corners: OptionSet, Equatable, Sendable {
+        public let rawValue: UInt8
+        public init(rawValue: UInt8) { self.rawValue = rawValue }
+        public static let topLeft = Corners(rawValue: 1), topRight = Corners(rawValue: 2)
+        public static let bottomLeft = Corners(rawValue: 4), bottomRight = Corners(rawValue: 8)
+        public static let all: Corners = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+        public static let bottom: Corners = [.bottomLeft, .bottomRight]
+        public static let top: Corners = [.topLeft, .topRight]
+        public static let leading: Corners = [.topLeft, .bottomLeft]
+        public static let trailing: Corners = [.topRight, .bottomRight]
+    }
 
     public init() {}
 }
@@ -111,18 +122,21 @@ enum BoxPainter {
 
     /// `box` is in a top-left origin space. CALayer contents are y-up unless the context
     /// is flipped, so `yDown` converts CSS y offsets.
-    /// A rounded rect with only the CSS bottom corners rounded. `flipped` says whether +y is down.
-    static func bottomRounded(_ rect: CGRect, _ radius: CGFloat, flipped: Bool) -> CGPath {
+    /// A rect with only `corners` (CSS sides) rounded. `flipped` says whether +y is down.
+    static func cornerRounded(_ rect: CGRect, _ radius: CGFloat, corners: BoxStyle.Corners, flipped: Bool) -> CGPath {
         let r = max(0, min(radius, min(rect.width, rect.height) / 2))
-        let path = CGMutablePath()
+        if corners == .all || r == 0 { return rounded(rect, r) }
         let (top, bottom) = flipped ? (rect.minY, rect.maxY) : (rect.maxY, rect.minY)
-        let dir: CGFloat = flipped ? -1 : 1 // from the bottom edge toward the top
-        path.move(to: CGPoint(x: rect.minX, y: top))
-        path.addLine(to: CGPoint(x: rect.minX, y: bottom + dir * r))
-        path.addArc(tangent1End: CGPoint(x: rect.minX, y: bottom), tangent2End: CGPoint(x: rect.minX + r, y: bottom), radius: r)
-        path.addLine(to: CGPoint(x: rect.maxX - r, y: bottom))
-        path.addArc(tangent1End: CGPoint(x: rect.maxX, y: bottom), tangent2End: CGPoint(x: rect.maxX, y: bottom + dir * r), radius: r)
-        path.addLine(to: CGPoint(x: rect.maxX, y: top))
+        let path = CGMutablePath()
+        // From the middle of the top edge, clockwise in CSS terms: top-right, bottom-right, bottom-left, top-left.
+        let points: [(CGPoint, BoxStyle.Corners)] = [(CGPoint(x: rect.maxX, y: top), .topRight), (CGPoint(x: rect.maxX, y: bottom), .bottomRight),
+                                                     (CGPoint(x: rect.minX, y: bottom), .bottomLeft), (CGPoint(x: rect.minX, y: top), .topLeft)]
+        path.move(to: CGPoint(x: rect.midX, y: top))
+        for i in 0..<4 {
+            let (p, corner) = points[i]
+            let next = points[(i + 1) % 4].0
+            if corners.contains(corner) { path.addArc(tangent1End: p, tangent2End: next, radius: r) } else { path.addLine(to: p) }
+        }
         path.closeSubpath()
         return path
     }
@@ -130,7 +144,7 @@ enum BoxPainter {
     static func paint(_ style: BoxStyle, in ctx: CGContext, box: CGRect, flipped: Bool) {
         let ySign: CGFloat = flipped ? 1 : -1 // CSS +y is down
         let shape: (CGRect, CGFloat) -> CGPath = { rect, radius in
-            style.corners == .bottom ? bottomRounded(rect, radius, flipped: flipped) : rounded(rect, radius)
+            cornerRounded(rect, radius, corners: style.corners, flipped: flipped)
         }
         let borderPath = shape(box, style.radius)
         let w = style.border == nil ? 0 : style.borderWidth
@@ -144,10 +158,10 @@ enum BoxPainter {
         // 1. Outer shadows, last entry painted first.
         for shadow in style.shadows.reversed() where !shadow.inset {
             let (rect, radius) = spreadRect(box, style.radius, shadow.spread)
-            let shape = rounded(rect.offsetBy(dx: shadow.x, dy: shadow.y * ySign), radius)
+            let shadowShape = shape(rect.offsetBy(dx: shadow.x, dy: shadow.y * ySign), radius)
             ctx.saveGState()
             clipOutside(borderPath, in: ctx) // CSS never paints an outer shadow under its box
-            paintShadow(of: shape, blur: shadow.blur, color: shadow.color.cgColor, in: ctx)
+            paintShadow(of: shadowShape, blur: shadow.blur, color: shadow.color.cgColor, in: ctx)
             ctx.restoreGState()
         }
 
@@ -187,11 +201,11 @@ enum BoxPainter {
 
         // 5. `::before` outer shadows: the pseudo element covers the padding box with radius - 1.
         for shadow in style.beforeShadows.reversed() where !shadow.inset {
-            let beforePath = rounded(paddingBox, max(0, style.radius - 1))
+            let beforePath = shape(paddingBox, max(0, style.radius - 1))
             let (rect, radius) = spreadRect(paddingBox, max(0, style.radius - 1), shadow.spread)
             ctx.saveGState()
             clipOutside(beforePath, in: ctx)
-            paintShadow(of: rounded(rect.offsetBy(dx: shadow.x, dy: shadow.y * ySign), radius),
+            paintShadow(of: shape(rect.offsetBy(dx: shadow.x, dy: shadow.y * ySign), radius),
                         blur: shadow.blur, color: shadow.color.cgColor, in: ctx)
             ctx.restoreGState()
         }
@@ -222,5 +236,31 @@ enum BoxPainter {
         ctx.setFillColor(CGColor(gray: 0, alpha: 1))
         evenOdd ? ctx.fillPath(using: .evenOdd) : ctx.fillPath()
         ctx.restoreGState()
+    }
+}
+
+/// A plain box painted with a `BoxStyle`: cards, panels and list frames. Subviews sit on top.
+open class BoxView: DSView {
+    public let decoration = BoxDecorationLayer()
+    public var boxStyle: BoxStyle {
+        get { decoration.boxStyle }
+        set { decoration.boxStyle = newValue }
+    }
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        decoration.host = self
+        layer?.addSublayer(decoration)
+        layer?.masksToBounds = false
+    }
+
+    open override func layout() {
+        super.layout()
+        decoration.layout(boxSize: bounds.size)
+    }
+
+    open override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        decoration.setNeedsDisplay()
     }
 }

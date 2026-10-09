@@ -1,0 +1,26 @@
+{
+  "default" : {
+    "height" : 48,
+    "width" : 240
+  },
+  "icon" : {
+    "height" : 48,
+    "width" : 240
+  },
+  "lg" : {
+    "height" : 64,
+    "width" : 240
+  },
+  "outline" : {
+    "height" : 48,
+    "width" : 240
+  },
+  "selected" : {
+    "height" : 48,
+    "width" : 240
+  },
+  "sm" : {
+    "height" : 44,
+    "width" : 240
+  }
+}
