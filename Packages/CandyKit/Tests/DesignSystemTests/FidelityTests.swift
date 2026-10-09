@@ -69,7 +69,7 @@ struct FidelityTests {
         }
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "%d cases, mean differing %.2f%%, report: %@", results.count, mean * 100,
-                     Self.out.appendingPathComponent("report.html").path))
+                     Self.out.appendingPathComponent("report-button.html").path))
         #expect(!results.isEmpty)
     }
 
@@ -141,6 +141,7 @@ struct FidelityTests {
         return ((Double(over) / Double(n), maxDiff, Double(total) / Double(n * 3)), diff)
     }
 
+    /// One report per component: report-<slug>.html, so parallel suites never overwrite each other.
     static func writeReport(_ results: [Result], title: String) throws {
         var rows = ""
         for r in results {
@@ -157,7 +158,8 @@ struct FidelityTests {
         <p>Columns: T3 in Chromium, ours, diff (red where a channel differs by more than \(tolerance)/255). Images are 2x, shown at 1x.</p>
         <table><tr><th>case</th><th>reference</th><th>ours</th><th>diff</th></tr>\(rows)</table>
         """
-        try html.write(to: out.appendingPathComponent("report.html"), atomically: true, encoding: .utf8)
+        let slug = title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: "-")
+        try html.write(to: out.appendingPathComponent("report-\(slug).html"), atomically: true, encoding: .utf8)
     }
 }
 
