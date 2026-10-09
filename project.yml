@@ -25,6 +25,12 @@ targets:
         product: DesignSystem
       - package: CandyKit
         product: T3Protocol
+      - package: CandyKit
+        product: T3Client
+      - package: CandyKit
+        product: T3Store
+      - package: CandyKit
+        product: Features
     info:
       path: App/Resources/Info.plist
       properties:

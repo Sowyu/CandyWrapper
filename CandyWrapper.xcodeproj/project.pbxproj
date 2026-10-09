@@ -7,15 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
 		54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37909056866A108B1B58D3C6 /* MainWindow.swift */; };
 		71718717C7EBF952C5C3D99D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A5E63032239ADD1C5F8E1C /* main.swift */; };
+		7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */ = {isa = PBXBuildFile; productRef = 8A26017E3FA14E25E7143DA8 /* T3Store */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
+		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
+		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
 		D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		606083DF126114F0273EEEDD /* ShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSession.swift; sourceTree = "<group>"; };
 		92A5E63032239ADD1C5F8E1C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		9E2E782C1ADCF72BBE6BC1C4 /* CandyWrapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CandyWrapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -29,6 +34,9 @@
 			files = (
 				A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */,
 				98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */,
+				C96452D36BFF7AE73672A212 /* T3Client in Frameworks */,
+				7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */,
+				B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,6 +65,7 @@
 				A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
+				606083DF126114F0273EEEDD /* ShellSession.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -96,6 +105,9 @@
 			packageProductDependencies = (
 				2223614E5F50DD4B20DCA9AC /* DesignSystem */,
 				A244FA9F04D77F15EAC9B9AD /* T3Protocol */,
+				C7D08B4D8BE9EBFA3061FF4B /* T3Client */,
+				8A26017E3FA14E25E7143DA8 /* T3Store */,
+				54CB6DADB388C03EE21F5713 /* Features */,
 			);
 			productName = CandyWrapper;
 			productReference = 9E2E782C1ADCF72BBE6BC1C4 /* CandyWrapper.app */;
@@ -144,6 +156,7 @@
 			files = (
 				D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
+				430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -351,9 +364,21 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = DesignSystem;
 		};
+		54CB6DADB388C03EE21F5713 /* Features */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Features;
+		};
+		8A26017E3FA14E25E7143DA8 /* T3Store */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = T3Store;
+		};
 		A244FA9F04D77F15EAC9B9AD /* T3Protocol */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = T3Protocol;
+		};
+		C7D08B4D8BE9EBFA3061FF4B /* T3Client */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = T3Client;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
