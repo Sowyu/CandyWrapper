@@ -1,0 +1,5 @@
+.t3code-src/
+.build/
+*.o
+scripts/procstat
+.DS_Store

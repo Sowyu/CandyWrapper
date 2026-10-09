@@ -1,0 +1,66 @@
+{
+ "base": "http://127.0.0.1:47391",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark"
+ ],
+ "states": [
+  {
+   "name": "seed-approval",
+   "path": "/",
+   "actions": [
+    {
+     "click": "[data-slot=popover-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Haiku 5.5\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Runtime mode\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Supervised\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "Create a file named approval-demo.txt containing the word hello."
+    },
+    {
+     "wait": 300
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 20000
+    },
+    {
+     "js": "location.pathname",
+     "log": true
+    }
+   ]
+  }
+ ]
+}

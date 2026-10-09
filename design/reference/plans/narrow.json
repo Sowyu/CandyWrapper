@@ -1,0 +1,96 @@
+{
+ "base": "http://127.0.0.1:47391",
+ "width": 800,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "04n-new-thread-narrow",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "03n-kitchen-sink-narrow",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0.3;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "11n-right-panel-narrow",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "b",
+     "meta": true,
+     "alt": true
+    },
+    {
+     "wait": 1200
+    }
+   ]
+  }
+ ]
+}

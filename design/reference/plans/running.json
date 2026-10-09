@@ -1,0 +1,162 @@
+{
+ "base": "http://127.0.0.1:47391",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "01-running-turn",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "click": "[data-slot=popover-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Haiku 5.5\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Runtime mode\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Full access\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "Write a 700 word story about a lighthouse keeper, in 8 paragraphs. No tools."
+    },
+    {
+     "wait": 300
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 3500
+    }
+   ]
+  },
+  {
+   "name": "29-queued-messages",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "click": "[data-slot=popover-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Haiku 5.5\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Runtime mode\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Full access\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "Write a 700 word story about a lighthouse keeper, in 8 paragraphs. No tools."
+    },
+    {
+     "wait": 300
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 2500
+    },
+    {
+     "type": "second queued message"
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "type": "third queued message"
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  }
+ ]
+}

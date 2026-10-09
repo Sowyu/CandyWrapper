@@ -1,0 +1,12 @@
+#!/bin/sh
+# Clones the official T3 Code source at the tag in T3_VERSION into .t3code-src/.
+set -eu
+cd "$(dirname "$0")/.."
+tag=$(cat T3_VERSION)
+if [ -d .t3code-src/.git ]; then
+  git -C .t3code-src fetch --tags --quiet origin
+else
+  git clone --quiet --filter=blob:none https://github.com/pingdotgg/t3code.git .t3code-src
+fi
+git -C .t3code-src checkout --quiet "$tag"
+echo ".t3code-src at $tag ($(git -C .t3code-src rev-parse --short HEAD))"
