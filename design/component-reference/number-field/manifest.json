@@ -1,0 +1,22 @@
+{
+  "default.increment" : {
+    "height" : 32,
+    "width" : 160
+  },
+  "default.input" : {
+    "height" : 32,
+    "width" : 160
+  },
+  "disabled" : {
+    "height" : 32,
+    "width" : 160
+  },
+  "lg.input" : {
+    "height" : 36,
+    "width" : 160
+  },
+  "sm.input" : {
+    "height" : 28,
+    "width" : 160
+  }
+}

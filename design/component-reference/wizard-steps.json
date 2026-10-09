@@ -1,0 +1,35 @@
+{
+ "component": "wizard-steps",
+ "source": "apps/web/src/components/ui/wizard.tsx",
+ "states": [
+  "rest",
+  "hover",
+  "focus-visible"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "current-0",
+   "html": "<ol class=\"grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-zinc-25 p-1 ring-1 ring-black/5 dark:bg-white/4 dark:ring-white/5\" role=\"list\"><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent bg-card text-foreground shadow-xs ring-1 ring-black/5 hover:bg-card dark:shadow-none dark:ring-white/5\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary/10 text-primary ring-primary/30\" aria-hidden=\"true\">1</span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-foreground\">Project</span></button></li><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\" aria-hidden=\"true\">2</span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-muted-foreground\">Environment</span></button></li><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\" aria-hidden=\"true\">3</span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-muted-foreground\">Review</span></button></li></ol>",
+   "wrapperStyle": "display:block;width:520px",
+   "stateTarget": "li:nth-child(3) button",
+   "native": {
+    "steps": "Project,Environment,Review",
+    "current": "0"
+   }
+  },
+  {
+   "name": "current-1",
+   "html": "<ol class=\"grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-zinc-25 p-1 ring-1 ring-black/5 dark:bg-white/4 dark:ring-white/5\" role=\"list\"><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary text-primary-foreground ring-primary\" aria-hidden=\"true\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check size-4 shrink-0\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg></span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-muted-foreground\">Project</span></button></li><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent bg-card text-foreground shadow-xs ring-1 ring-black/5 hover:bg-card dark:shadow-none dark:ring-white/5\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary/10 text-primary ring-primary/30\" aria-hidden=\"true\">2</span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-foreground\">Environment</span></button></li><li class=\"min-w-0\"><button type=\"button\" class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:justify-center max-sm:px-2 cursor-pointer hover:bg-card disabled:cursor-default disabled:hover:bg-transparent\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\" aria-hidden=\"true\">3</span><span class=\"min-w-0 truncate text-sm font-medium max-sm:hidden text-muted-foreground\">Review</span></button></li></ol>",
+   "wrapperStyle": "display:block;width:520px",
+   "stateTarget": "li:nth-child(3) button",
+   "native": {
+    "steps": "Project,Environment,Review",
+    "current": "1"
+   }
+  }
+ ]
+}

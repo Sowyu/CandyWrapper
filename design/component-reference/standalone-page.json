@@ -1,0 +1,46 @@
+{
+ "component": "standalone-page",
+ "source": "apps/web/src/components/ui/standalone-page.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "pairing",
+   "html": "<div class=\"relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6\" style=\"min-height:420px\"><div class=\"pointer-events-none absolute inset-0 opacity-80\"><div class=\"absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-emerald-500)_14%,transparent),transparent)]\"></div><div class=\"absolute inset-y-0 left-0 w-72 bg-[radial-gradient(28rem_18rem_at_left,color-mix(in_srgb,var(--color-sky-500)_10%,transparent),transparent)]\"></div><div class=\"absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]\"></div></div><div class=\"relative w-full max-w-xl rounded-2xl border border-border/80 shadow-2xl shadow-black/20 backdrop-blur-md bg-card/90\"><div class=\"p-6 sm:p-8\"><p class=\"text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase\">Pair device</p><h1 class=\"mt-3 text-2xl font-semibold tracking-tight sm:text-3xl\">Connect to T3 Code</h1><p class=\"mt-2 text-sm leading-relaxed text-muted-foreground\">Open this link on the device you want to pair.</p></div></div></div>",
+   "wrapperStyle": "display:block;width:720px",
+   "native": {
+    "tone": "pairing",
+    "eyebrow": "Pair device",
+    "title": "Connect to T3 Code",
+    "text": "Open this link on the device you want to pair."
+   }
+  },
+  {
+   "name": "error",
+   "html": "<div class=\"relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6\" style=\"min-height:420px\"><div class=\"pointer-events-none absolute inset-0 opacity-80\"><div class=\"absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-red-500)_16%,transparent),transparent)]\"></div><div class=\"absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]\"></div></div><div class=\"relative w-full max-w-xl rounded-2xl border border-border/80 shadow-2xl shadow-black/20 backdrop-blur-md bg-card/90\"><div class=\"p-6 sm:p-8\"><p class=\"text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase\">Something went wrong</p><h1 class=\"mt-3 text-2xl font-semibold tracking-tight sm:text-3xl\">Pairing failed</h1><p class=\"mt-2 text-sm leading-relaxed text-muted-foreground\">The pairing link expired. Ask for a new one.</p></div></div></div>",
+   "wrapperStyle": "display:block;width:720px",
+   "native": {
+    "tone": "error",
+    "eyebrow": "Something went wrong",
+    "title": "Pairing failed",
+    "text": "The pairing link expired. Ask for a new one."
+   }
+  },
+  {
+   "name": "brand",
+   "html": "<div class=\"relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6\" style=\"min-height:420px\"><div class=\"pointer-events-none absolute inset-0 opacity-80\"><div class=\"absolute inset-x-0 top-0 h-72 bg-[radial-gradient(48rem_20rem_at_top,color-mix(in_srgb,var(--color-blue-500)_12%,transparent),transparent)]\"></div><div class=\"absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_94%,var(--color-black))_0%,var(--background)_62%)]\"></div></div><div class=\"relative w-full max-w-xl rounded-2xl border border-border/80 shadow-2xl shadow-black/20 backdrop-blur-md overflow-hidden bg-card/94\"><div class=\"p-6 sm:p-8\"><p class=\"text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase\">T3 Code</p><h1 class=\"mt-3 text-2xl font-semibold tracking-tight sm:text-3xl\">Welcome back</h1><p class=\"mt-2 text-sm leading-relaxed text-muted-foreground\">Sign in to continue to your workspace.</p></div></div></div>",
+   "wrapperStyle": "display:block;width:720px",
+   "native": {
+    "tone": "brand",
+    "eyebrow": "T3 Code",
+    "title": "Welcome back",
+    "text": "Sign in to continue to your workspace."
+   }
+  }
+ ]
+}

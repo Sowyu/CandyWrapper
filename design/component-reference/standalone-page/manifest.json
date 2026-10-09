@@ -1,0 +1,14 @@
+{
+  "brand" : {
+    "height" : 420,
+    "width" : 720
+  },
+  "error" : {
+    "height" : 420,
+    "width" : 720
+  },
+  "pairing" : {
+    "height" : 420,
+    "width" : 720
+  }
+}

@@ -41,6 +41,10 @@ public final class ButtonView: ControlView {
     public var title: String? { didSet { label.text = title ?? ""; invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
+    /// Set by GroupView: a joined side loses its radius and its border (`rounded-s-none border-s-0`).
+    public var joinedSides: (leading: Bool, trailing: Bool) = (false, false) {
+        didSet { restyle(); invalidateIntrinsicContentSize() }
+    }
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
@@ -72,9 +76,10 @@ public final class ButtonView: ControlView {
 
     public override var intrinsicContentSize: NSSize {
         let m = size.metrics
-        if size.isIconOnly { return NSSize(width: m.height, height: m.height) }
+        let joined = CGFloat((joinedSides.leading ? 1 : 0) + (joinedSides.trailing ? 1 : 0))
+        if size.isIconOnly { return NSSize(width: m.height - joined, height: m.height) }
         // CSS: padding and the 1px border on both sides, plus the exact text advance.
-        var width = 2 * (m.padding + 1) + label.textWidth
+        var width = 2 * (m.padding + 1) + label.textWidth - joined
         let icons = [leadingIconView, trailingIconView].compactMap { $0 }
         // Icons carry `-mx-0.5`, so each takes its size minus 4px of inline space.
         width += icons.reduce(0) { total, _ in total + m.icon - 4 + m.gap }
@@ -99,7 +104,7 @@ public final class ButtonView: ControlView {
         if labelWidth > 0 { parts.append(labelWidth) }
         if trailingIconView != nil { parts.append(m.icon - 4) }
         let total = parts.reduce(0, +) + m.gap * CGFloat(max(0, parts.count - 1))
-        var x = (bounds.width - total) / 2
+        var x = (bounds.width - total) / 2 + CGFloat((joinedSides.leading ? 0 : 1) - (joinedSides.trailing ? 0 : 1)) / 2
         if let leading = leadingIconView {
             leading.frame = NSRect(x: x - 2, y: iconY, width: m.icon, height: m.icon)
             x += m.icon - 4 + m.gap
@@ -136,7 +141,14 @@ public final class ButtonView: ControlView {
         let m = size.metrics
         label.font = DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
-        let look = ButtonStyles.look(variant: variant, state: state, radius: m.radius)
+        var look = ButtonStyles.look(variant: variant, state: state, radius: m.radius)
+        if joinedSides.leading || joinedSides.trailing {
+            var corners = BoxStyle.Corners.all
+            if joinedSides.leading { corners.subtract(.leading) }
+            if joinedSides.trailing { corners.subtract(.trailing) }
+            look.box.corners = corners
+            look.box.borderEdges = .init(top: 1, left: joinedSides.leading ? 0 : 1, bottom: 1, right: joinedSides.trailing ? 0 : 1)
+        }
         decoration.boxStyle = look.box
         label.color = look.text
         for iconView in [leadingIconView, trailingIconView].compactMap({ $0 }) {

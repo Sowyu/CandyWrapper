@@ -1,0 +1,18 @@
+{
+  "faded.middle" : {
+    "height" : 160,
+    "width" : 240
+  },
+  "faded.near-top" : {
+    "height" : 160,
+    "width" : 240
+  },
+  "faded.top" : {
+    "height" : 160,
+    "width" : 240
+  },
+  "plain.bottom" : {
+    "height" : 160,
+    "width" : 240
+  }
+}

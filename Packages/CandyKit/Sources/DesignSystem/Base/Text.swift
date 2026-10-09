@@ -57,6 +57,8 @@ public final class LabelView: DSView {
     public var truncates = true { didSet { needsDisplay = true } }
     /// `underline` with T3's `underline-offset-4`.
     public var isUnderlined = false { didSet { if isUnderlined != oldValue { needsDisplay = true } } }
+    /// CSS `letter-spacing` in points, added after every character like Chromium.
+    public var tracking: CGFloat = 0 { didSet { if tracking != oldValue { invalidate() } } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -82,7 +84,8 @@ public final class LabelView: DSView {
     }
 
     private func attributed() -> NSAttributedString {
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        if tracking != 0 { attributes[.kern] = tracking }
         return NSAttributedString(string: text, attributes: attributes)
     }
 

@@ -1,0 +1,10 @@
+{
+  "button-hover" : {
+    "height" : 24,
+    "width" : 24
+  },
+  "tab" : {
+    "height" : 24,
+    "width" : 24
+  }
+}

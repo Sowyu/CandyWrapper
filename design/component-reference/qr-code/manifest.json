@@ -1,0 +1,18 @@
+{
+  "alnum-h1-128" : {
+    "height" : 128,
+    "width" : 128
+  },
+  "nightly-m1-128" : {
+    "height" : 128,
+    "width" : 128
+  },
+  "numeric-l0-128" : {
+    "height" : 128,
+    "width" : 128
+  },
+  "pairing-m2-132" : {
+    "height" : 132,
+    "width" : 132
+  }
+}

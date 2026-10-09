@@ -7,6 +7,9 @@ public final class KbdView: DSView {
     public var icon: IconName? { didSet { updateIcon() } }
     /// `rounded` (4px); InputGroup addons use 5px.
     public var radius: CGFloat = 4 { didSet { needsDisplay = true } }
+    /// Overrides for parents that restyle keys, such as the command footer (`bg-foreground/8 text-foreground`).
+    public var fillOverride: NSColor? { didSet { needsDisplay = true } }
+    public var textOverride: NSColor? { didSet { applyColors() } }
 
     private let label = LabelView()
     private var iconView: IconView?
@@ -44,7 +47,7 @@ public final class KbdView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
+        layer?.backgroundColor = (fillOverride ?? Themed.color(\.muted)).cgColor(in: self)
         layer?.cornerRadius = radius
     }
 
@@ -54,13 +57,13 @@ public final class KbdView: DSView {
     }
 
     private func applyColors() {
-        label.color = Themed.color(\.contrastMutedForeground)
-        iconView?.strokeColor = Themed.color(\.contrastMutedForeground)
+        label.color = textOverride ?? Themed.color(\.contrastMutedForeground)
+        iconView?.strokeColor = textOverride ?? Themed.color(\.contrastMutedForeground)
     }
 
     private func updateIcon() {
         iconView?.removeFromSuperview()
-        iconView = icon.map { IconView(name: $0, size: 12, strokeColor: Themed.color(\.contrastMutedForeground)) }
+        iconView = icon.map { IconView(name: $0, size: 12, strokeColor: textOverride ?? Themed.color(\.contrastMutedForeground)) }
         if let iconView { addSubview(iconView) }
         invalidateIntrinsicContentSize()
         needsLayout = true

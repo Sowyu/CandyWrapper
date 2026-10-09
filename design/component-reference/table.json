@@ -1,0 +1,30 @@
+{
+ "component": "table",
+ "source": "apps/web/src/components/ui/table.tsx",
+ "states": [
+  "rest",
+  "hover"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "rows",
+   "html": "<div data-slot=\"table-container\" class=\"relative w-full overflow-x-auto\"><table data-slot=\"table\" class=\"w-full caption-bottom text-xs\"><thead data-slot=\"table-header\" class=\"[&_tr]:border-b\"><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">Process</th><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">CPU</th><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">Memory</th></tr></thead><tbody data-slot=\"table-body\" class=\"[&_tr:last-child]:border-0\"><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">t3 serve</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">0.4%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">182 MB</td></tr><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">claude</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">2.1%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">96 MB</td></tr><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">git status</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">0.0%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">4 MB</td></tr></tbody></table></div>",
+   "wrapperStyle": "display:block;width:360px",
+   "stateTarget": "tbody tr:nth-child(2)",
+   "native": {}
+  },
+  {
+   "name": "selected",
+   "html": "<div data-slot=\"table-container\" class=\"relative w-full overflow-x-auto\"><table data-slot=\"table\" class=\"w-full caption-bottom text-xs\"><thead data-slot=\"table-header\" class=\"[&_tr]:border-b\"><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">Process</th><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">CPU</th><th data-slot=\"table-head\" class=\"h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0\">Memory</th></tr></thead><tbody data-slot=\"table-body\" class=\"[&_tr:last-child]:border-0\"><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\" data-state=\"selected\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">t3 serve</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">0.4%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">182 MB</td></tr><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">claude</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">2.1%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">96 MB</td></tr><tr data-slot=\"table-row\" class=\"border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted\"><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">git status</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">0.0%</td><td data-slot=\"table-cell\" class=\"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0\">4 MB</td></tr></tbody></table></div>",
+   "wrapperStyle": "display:block;width:360px",
+   "stateTarget": "tbody tr:nth-child(2)",
+   "native": {
+    "selected": "0"
+   }
+  }
+ ]
+}
