@@ -26,8 +26,10 @@ public struct BoxShadow: Equatable, Sendable {
 public struct BoxStyle: Equatable {
     public var radius: CGFloat = 0
     public var fill: NSColor?
-    /// `bg-clip-padding`: the fill stops inside the border instead of running under it.
-    public var fillClipsToPadding = false
+    /// `background-clip`. `.padding` stops the fill inside the border instead of running under it;
+    /// `.paddingInLight` is T3's `not-dark:bg-clip-padding`.
+    public enum BackgroundClip: Equatable, Sendable { case border, padding, paddingInLight }
+    public var backgroundClip = BackgroundClip.border
     public var border: NSColor?
     public var borderWidth: CGFloat = 1
     /// Outer and inset shadows, first entry on top, as in CSS.
@@ -63,13 +65,22 @@ public final class BoxDecorationLayer: CALayer {
         frame = CGRect(x: -outset, y: -outset, width: size.width + 2 * outset, height: size.height + 2 * outset)
     }
 
-    public override func draw(in ctx: CGContext) {
+    public nonisolated override func draw(in ctx: CGContext) {
+        // Core Animation calls this on the main thread for layers in a view tree.
+        nonisolated(unsafe) let ctx = ctx
+        nonisolated(unsafe) let layer = self
+        MainActor.assumeIsolated { layer.drawDecoration(in: ctx) }
+    }
+
+    private func drawDecoration(in ctx: CGContext) {
         guard let host else { return }
         host.effectiveAppearance.performAsCurrentDrawingAppearance {
             BoxPainter.paint(boxStyle, in: ctx, box: CGRect(x: outset, y: outset,
                                                          width: bounds.width - 2 * outset,
                                                          height: bounds.height - 2 * outset),
-                             flipped: !(host.isFlipped))
+                             // Core Animation flips the context itself when the layer tree is flipped
+                             // (a flipped host view), so ask the layer, not the view.
+                             flipped: contentsAreFlipped())
         }
     }
 }
@@ -107,7 +118,10 @@ enum BoxPainter {
 
         // 2. Background.
         if let fill = style.fill {
-            ctx.addPath(style.fillClipsToPadding ? paddingPath : borderPath)
+            // paint() runs with the host's appearance current, so this sees the host's theme.
+            let dark = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let clip = style.backgroundClip == .padding || (style.backgroundClip == .paddingInLight && !dark)
+            ctx.addPath(clip ? paddingPath : borderPath)
             ctx.setFillColor(fill.cgColor)
             ctx.fillPath()
         }

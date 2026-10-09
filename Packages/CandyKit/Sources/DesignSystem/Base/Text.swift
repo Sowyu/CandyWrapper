@@ -30,13 +30,16 @@ public struct TextLine {
     }
 
     /// Baseline y (top-left origin) for a line box starting at `top` with CSS `line-height`.
+    /// Blink rounds the font's ascent and descent to whole CSS px, then floors the half-leading
+    /// (FontMetrics and NGLineHeightMetrics::AddLeading), so the baseline lands on a whole px.
     public func baseline(top: CGFloat, lineHeight: CGFloat) -> CGFloat {
-        top + (lineHeight - (ascent + descent)) / 2 + ascent
+        let a = ascent.rounded(), d = descent.rounded()
+        return top + ((lineHeight - (a + d)) / 2).rounded(.down) + a
     }
 }
 
 /// Single-style text, drawn once into the layer and redrawn only when it changes.
-/// Font smoothing is off to match Chromium with `-webkit-font-smoothing: antialiased`.
+/// Font smoothing is on: measured closer to Chromium than plain antialiasing.
 public final class LabelView: DSView {
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
     public var font: NSFont = DSFont.ui(14) { didSet { invalidate() } }
@@ -77,13 +80,18 @@ public final class LabelView: DSView {
     }
 
     public override var intrinsicContentSize: NSSize {
-        NSSize(width: ceil(TextLine(attributed()).width), height: resolvedLineHeight)
+        NSSize(width: ceil(textWidth), height: resolvedLineHeight)
     }
+
+    /// The unrounded advance width, for layouts that place text at fractional x like CSS.
+    public var textWidth: CGFloat { TextLine(attributed()).width }
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty else { return }
-        ctx.setShouldSmoothFonts(false)
-        ctx.setAllowsFontSmoothing(false)
+        // Core Text's smoothing (stem darkening) matches Chromium's glyph weight better than
+        // plain antialiasing: Button fidelity 2.91% differing pixels with it, 3.27% without.
+        ctx.setShouldSmoothFonts(true)
+        ctx.setAllowsFontSmoothing(true)
         var line = TextLine(attributed())
         if truncates, line.width > bounds.width, bounds.width > 0 {
             let ellipsis = CTLineCreateWithAttributedString(
