@@ -1,0 +1,40 @@
+{
+ "component": "tooltip",
+ "source": "apps/web/src/components/ui/tooltip.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "default",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] border bg-popover not-dark:bg-clip-padding shadow-md/5 max-w-80 wrap-anywhere whitespace-normal leading-snug\" data-slot=\"tooltip-popup\" data-side=\"top\"><div class=\"relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)] data-instant:transition-none\" data-slot=\"tooltip-viewport\">Copy path</div></div>",
+   "native": {
+    "variant": "default",
+    "text": "Copy path"
+   },
+   "wrapperStyle": "display:inline-block"
+  },
+  {
+   "name": "glass",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-xl shadow-black/25 before:hidden max-w-80 wrap-anywhere whitespace-normal leading-snug\" data-slot=\"tooltip-popup\" data-side=\"top\"><div class=\"relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)] data-instant:transition-none\" data-slot=\"tooltip-viewport\">Open in editor</div></div>",
+   "native": {
+    "variant": "glass",
+    "text": "Open in editor"
+   },
+   "wrapperStyle": "display:inline-block"
+  },
+  {
+   "name": "code",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] border bg-popover not-dark:bg-clip-padding shadow-md/5 max-w-120 wrap-anywhere text-left font-mono text-[11px] leading-relaxed\" data-slot=\"tooltip-popup\" data-side=\"top\"><div class=\"relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)] data-instant:transition-none\" data-slot=\"tooltip-viewport\">git status --short</div></div>",
+   "native": {
+    "variant": "code",
+    "text": "git status --short"
+   },
+   "wrapperStyle": "display:inline-block"
+  }
+ ]
+}

@@ -1,0 +1,81 @@
+{
+ "component": "select-trigger",
+ "source": "apps/web/src/components/ui/select.tsx",
+ "states": [
+  "rest",
+  "hover",
+  "focus-visible"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "default.default.value",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 w-full min-w-36 border-input bg-background not-dark:bg-clip-padding text-foreground shadow-xs/5 ring-ring/24 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 dark:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='text-'])]:text-icon-muted [[data-disabled],:focus-visible,[aria-invalid],[data-pressed]]:shadow-none min-h-9 px-[calc(--spacing(3)-1px)] sm:min-h-8\" data-slot=\"select-trigger\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\">Claude Haiku</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "default",
+    "size": "default",
+    "value": "Claude Haiku",
+    "open": "false"
+   }
+  },
+  {
+   "name": "default.default.placeholder",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 w-full min-w-36 border-input bg-background not-dark:bg-clip-padding text-foreground shadow-xs/5 ring-ring/24 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 dark:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='text-'])]:text-icon-muted [[data-disabled],:focus-visible,[aria-invalid],[data-pressed]]:shadow-none min-h-9 px-[calc(--spacing(3)-1px)] sm:min-h-8\" data-slot=\"select-trigger\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\" data-placeholder=\"\">Choose a model</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "default",
+    "size": "default",
+    "value": "",
+    "open": "false"
+   }
+  },
+  {
+   "name": "default.sm.value",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 w-full min-w-36 border-input bg-background not-dark:bg-clip-padding text-foreground shadow-xs/5 ring-ring/24 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 dark:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='text-'])]:text-icon-muted [[data-disabled],:focus-visible,[aria-invalid],[data-pressed]]:shadow-none min-h-8 gap-1.5 px-[calc(--spacing(2.5)-1px)] sm:min-h-7\" data-slot=\"select-trigger\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\">Claude Haiku</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "default",
+    "size": "sm",
+    "value": "Claude Haiku",
+    "open": "false"
+   }
+  },
+  {
+   "name": "default.lg.value",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 w-full min-w-36 border-input bg-background not-dark:bg-clip-padding text-foreground shadow-xs/5 ring-ring/24 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 dark:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='text-'])]:text-icon-muted [[data-disabled],:focus-visible,[aria-invalid],[data-pressed]]:shadow-none min-h-10 px-[calc(--spacing(3)-1px)] sm:min-h-9\" data-slot=\"select-trigger\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\">Claude Haiku</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "default",
+    "size": "lg",
+    "value": "Claude Haiku",
+    "open": "false"
+   }
+  },
+  {
+   "name": "default.default.value.open",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 w-full min-w-36 border-input bg-background not-dark:bg-clip-padding text-foreground shadow-xs/5 ring-ring/24 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 dark:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-visible:not-aria-invalid:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='text-'])]:text-icon-muted [[data-disabled],:focus-visible,[aria-invalid],[data-pressed]]:shadow-none min-h-9 px-[calc(--spacing(3)-1px)] sm:min-h-8\" data-slot=\"select-trigger\" data-pressed=\"\" data-popup-open=\"\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\">Claude Haiku</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "default",
+    "size": "default",
+    "value": "Claude Haiku",
+    "open": "true"
+   }
+  },
+  {
+   "name": "ghost.default.value",
+   "html": "<button type=\"button\" class=\"relative inline-flex cursor-pointer select-none items-center justify-between gap-2 border rounded-lg text-left text-base outline-none transition-[color,box-shadow,background-color] data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 border-transparent text-secondary-label focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground min-h-9 px-[calc(--spacing(3)-1px)] sm:min-h-8\" data-slot=\"select-trigger\"><span class=\"flex-1 truncate data-placeholder:text-placeholder\" data-slot=\"select-value\">Claude Haiku</span><span data-slot=\"select-icon\" class=\"flex\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down -me-1 size-3 opacity-50\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button>",
+   "wrapperStyle": "display:block;width:200px",
+   "native": {
+    "variant": "ghost",
+    "size": "default",
+    "value": "Claude Haiku",
+    "open": "false"
+   }
+  }
+ ]
+}

@@ -1,0 +1,34 @@
+{
+  "center.260" : {
+    "height" : 120,
+    "width" : 260
+  },
+  "clamp2.260" : {
+    "height" : 40,
+    "width" : 260
+  },
+  "sm.180" : {
+    "height" : 200,
+    "width" : 180
+  },
+  "sm.260" : {
+    "height" : 120,
+    "width" : 260
+  },
+  "sm.343" : {
+    "height" : 100,
+    "width" : 343
+  },
+  "sm.420" : {
+    "height" : 80,
+    "width" : 420
+  },
+  "xl.300" : {
+    "height" : 112,
+    "width" : 300
+  },
+  "xs13.300" : {
+    "height" : 90,
+    "width" : 300
+  }
+}

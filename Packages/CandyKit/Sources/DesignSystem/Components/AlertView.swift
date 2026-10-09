@@ -2,9 +2,9 @@ import AppKit
 
 /// T3's `Alert` (`apps/web/src/components/ui/alert.tsx`) with centered control alignment:
 /// icon, title over description, optional actions. Spec: ui-components-b.md section 7.
-/// Width comes from the frame; height from `intrinsicContentSize`.
-/// ponytail: title and description are one line each and the glass surface is not drawn;
-/// add wrapping when an alert shows long copy, and glass with the other glass surfaces.
+/// Width comes from the frame; height from `intrinsicContentSize` at the current width, or `height(forWidth:)`.
+/// Title and description wrap.
+/// ponytail: the glass surface is not drawn; add it with the other glass surfaces.
 public final class AlertView: DSView {
     public enum Variant: String, CaseIterable, Sendable { case `default`, sidebar, error, info, success, warning }
 
@@ -18,8 +18,8 @@ public final class AlertView: DSView {
     }
 
     private let decoration = BoxDecorationLayer()
-    private let titleLabel = LabelView()
-    private let descriptionLabel = LabelView()
+    private let titleLabel = TextBlockView()
+    private let descriptionLabel = TextBlockView()
     private var iconView: IconView?
 
     public convenience init(_ title: String?, message: String? = nil, icon: IconName? = nil, variant: Variant = .default) {
@@ -51,42 +51,59 @@ public final class AlertView: DSView {
     private var hasTitle: Bool { !(title?.isEmpty ?? true) }
     private var hasMessage: Bool { !(message?.isEmpty ?? true) }
 
-    private var contentHeight: CGFloat {
-        let lines = (hasTitle ? 1 : 0) + (hasMessage ? 1 : 0)
-        return CGFloat(lines) * metrics.line + (lines == 2 ? 2 : 0)
+    /// Left and right edges of the text column for a total width.
+    private func textColumn(_ width: CGFloat) -> (x: CGFloat, right: CGFloat) {
+        let x = metrics.px + 1 + (iconView == nil ? 0 : 16 + 8)
+        var right = width - metrics.px - 1
+        if !actions.isEmpty { right -= actions.reduce(0) { $0 + $1.intrinsicContentSize.width + 4 } - 4 + 8 }
+        return (x, right)
     }
 
-    private var rowHeight: CGFloat {
-        max(contentHeight, iconView == nil ? 0 : 16, actions.map(\.intrinsicContentSize.height).max() ?? 0)
+    private func contentHeight(_ width: CGFloat) -> CGFloat {
+        // Before the first frame there is no width; measure one line each.
+        let column = textColumn(width), w = width > 0 ? column.right - column.x : .greatestFiniteMagnitude
+        let title = hasTitle ? titleLabel.height(forWidth: w) : 0
+        let message = hasMessage ? descriptionLabel.height(forWidth: w) : 0
+        return title + message + (hasTitle && hasMessage ? 2 : 0)
     }
+
+    private func rowHeight(_ width: CGFloat) -> CGFloat {
+        max(contentHeight(width), iconView == nil ? 0 : 16, actions.map(\.intrinsicContentSize.height).max() ?? 0)
+    }
+
+    public func height(forWidth width: CGFloat) -> CGFloat { rowHeight(width) + 2 * (metrics.py + 1) }
 
     public override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: rowHeight + 2 * (metrics.py + 1))
+        NSSize(width: NSView.noIntrinsicMetric, height: height(forWidth: bounds.width))
+    }
+
+    public override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if widthChanged { invalidateIntrinsicContentSize() }
     }
 
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         let m = metrics
-        let top = m.py + 1, rowH = rowHeight
-        var x = m.px + 1
-        var right = bounds.width - m.px - 1
-        if let iconView {
-            iconView.frame = NSRect(x: x, y: top + (rowH - 16) / 2, width: 16, height: 16)
-            x += 16 + 8
-        }
+        let top = m.py + 1, rowH = rowHeight(bounds.width)
+        let (x, right) = textColumn(bounds.width)
+        iconView?.frame = NSRect(x: m.px + 1, y: top + (rowH - 16) / 2, width: 16, height: 16)
+        var actionRight = bounds.width - m.px - 1
         for action in actions.reversed() {
             let size = action.intrinsicContentSize
-            action.frame = NSRect(x: right - size.width, y: top + (rowH - size.height) / 2, width: size.width, height: size.height)
-            right -= size.width + 4
+            action.frame = NSRect(x: actionRight - size.width, y: top + (rowH - size.height) / 2, width: size.width, height: size.height)
+            actionRight -= size.width + 4
         }
-        if !actions.isEmpty { right += 4 - 8 }
-        var y = top + (rowH - contentHeight) / 2
+        let w = right - x
+        var y = top + (rowH - contentHeight(bounds.width)) / 2
         if hasTitle {
-            titleLabel.frame = NSRect(x: x, y: y, width: right - x, height: m.line)
-            y += m.line + 2
+            let h = titleLabel.height(forWidth: w)
+            titleLabel.frame = NSRect(x: x, y: y, width: w, height: h)
+            y += h + 2
         }
-        descriptionLabel.frame = NSRect(x: x, y: y, width: hasMessage ? right - x : 0, height: m.line)
+        descriptionLabel.frame = NSRect(x: x, y: y, width: hasMessage ? w : 0, height: descriptionLabel.height(forWidth: w))
     }
 
     private func updateIcon() {

@@ -1,0 +1,104 @@
+{
+ "component": "text-block",
+ "source": "apps/web (plain prose)",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "sm.180",
+   "html": "<p class=\"text-sm text-foreground\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:180px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "sm.260",
+   "html": "<p class=\"text-sm text-foreground\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:260px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "sm.343",
+   "html": "<p class=\"text-sm text-foreground\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:343px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "sm.420",
+   "html": "<p class=\"text-sm text-foreground\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:420px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "xs13.300",
+   "html": "<p class=\"text-muted-foreground\" style=\"font-size:13px;line-height:18px\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:300px",
+   "native": {
+    "font": "13",
+    "line": "18",
+    "weight": "regular",
+    "muted": "true",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "xl.300",
+   "html": "<p class=\"font-semibold text-xl\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the sam</p>",
+   "wrapperStyle": "display:block;width:300px",
+   "native": {
+    "font": "20",
+    "line": "28",
+    "weight": "semibold",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the sam"
+   }
+  },
+  {
+   "name": "clamp2.260",
+   "html": "<p class=\"text-sm line-clamp-2\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:260px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "maxLines": "2",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  },
+  {
+   "name": "center.260",
+   "html": "<p class=\"text-sm text-center\">T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it.</p>",
+   "wrapperStyle": "display:block;width:260px",
+   "native": {
+    "font": "14",
+    "line": "20",
+    "weight": "regular",
+    "align": "center",
+    "text": "T3 Code runs coding agents against your repositories. Each thread keeps its own worktree, so two agents can edit the same project at once without stepping on each other, and every diff stays reviewable before you merge it."
+   }
+  }
+ ]
+}
