@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Generate IconData.generated.swift from lucide-static SVGs plus the custom SVGs in T3's Icons.tsx.
+
+Usage: scripts/extract-icons [--lucide DIR] [--t3 DIR] [--out FILE]
+  --lucide  unpacked lucide-static package dir (contains icons/*.svg)
+  --t3      T3 Code checkout (reads apps/web/src)
+Stdlib only. Re-runnable; output is deterministic.
+"""
+import argparse, os, re, sys
+import xml.etree.ElementTree as ET
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+ap = argparse.ArgumentParser()
+ap.add_argument("--lucide", default="/Users/mrm/CandyWrapper-research/downloads/lucide-static-0.564.0/package")
+ap.add_argument("--t3", default="/Users/mrm/CandyWrapper-research/t3code")
+ap.add_argument("--out", default=os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconData.generated.swift"))
+args = ap.parse_args()
+
+SRC = os.path.join(args.t3, "apps/web/src")
+
+# Aliases: when several imported names resolve to identical geometry, prefer these (current lucide names).
+PREFER = {
+    "triangle-alert", "circle-check", "circle-x", "circle-alert", "globe", "house", "ellipsis", "ellipsis-vertical",
+    "square-terminal", "clock", "history", "folder-tree", "circle-arrow-up", "square-arrow-out-up-right",
+    "circle-user-round", "user-round-x", "square-pen", "layout-panel-top", "panels-top-left", "rotate-ccw",
+    "wrap-text", "text-wrap", "link-2", "unlink-2", "plug-2", "mouse-pointer-2", "file-diff", "file-code-2",
+    "settings-2", "square-split-horizontal", "square-split-vertical", "keyboard", "git-commit-horizontal",
+}
+
+# ---------- 1. imported lucide names ----------
+names = set()
+for r, _, fs in os.walk(SRC):
+    for f in fs:
+        if f.endswith((".ts", ".tsx")):
+            t = open(os.path.join(r, f), encoding="utf-8").read()
+            for m in re.finditer(r'import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"lucide-react"', t):
+                for n in m.group(1).split(","):
+                    n = n.strip()
+                    if n and not n.startswith("type "):
+                        names.add(n.split(" as ")[0].strip())
+names -= {"LucideIcon", "createLucideIcon"}
+
+def kebab(n):
+    s = re.sub(r"([a-z])([A-Z0-9])", r"\1-\2", n)
+    s = re.sub(r"([A-Z])([A-Z][a-z])", r"\1-\2", s)
+    return s.lower()
+
+icons_dir = os.path.join(args.lucide, "icons")
+have = {f[:-4] for f in os.listdir(icons_dir) if f.endswith(".svg")}
+resolved, missing = {}, []
+for n in sorted(names):
+    k = kebab(n)
+    if k not in have and n.endswith("Icon") and kebab(n[:-4]) in have:
+        k = kebab(n[:-4])
+    if k in have:
+        resolved[k] = n
+    else:
+        missing.append(n)
+
+# ---------- shape model ----------
+def num(v):
+    f = float(v)
+    return repr(int(f)) if f == int(f) else repr(round(f, 6))
+
+def sw(s):  # swift string literal
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+COLORS = {"white": "FFFFFF", "black": "000000"}
+def color(v):
+    if v is None: return None
+    v = v.strip()
+    if v == "none": return ".none"
+    if v == "currentColor": return ".current"
+    if v in COLORS: v = "#" + COLORS[v]
+    m = re.fullmatch(r"#([0-9a-fA-F]+)", v)
+    if m:
+        h = m.group(1)
+        if len(h) == 3: h = "".join(c * 2 for c in h)
+        if len(h) == 6: h += "FF"
+        if len(h) == 8: return ".rgba(0x%s)" % h.upper()
+    raise ValueError("unsupported colour " + v)
+
+def points(s):
+    return [num(x) for x in re.findall(r"-?\d*\.?\d+(?:e-?\d+)?", s)]
+
+def geometry(tag, a):
+    g = lambda k, d="0": num(a.get(k, d))
+    if tag == "path": return "path(d: %s)" % sw(a["d"])
+    if tag == "circle": return "circle(cx: %s, cy: %s, r: %s)" % (g("cx"), g("cy"), g("r"))
+    if tag == "ellipse": return "ellipse(cx: %s, cy: %s, rx: %s, ry: %s)" % (g("cx"), g("cy"), g("rx"), g("ry"))
+    if tag == "line": return "line(x1: %s, y1: %s, x2: %s, y2: %s)" % (g("x1"), g("y1"), g("x2"), g("y2"))
+    if tag == "rect":
+        rx, ry = a.get("rx"), a.get("ry")
+        if rx is None and ry is not None: rx = ry
+        if ry is None and rx is not None: ry = rx
+        return "rect(x: %s, y: %s, w: %s, h: %s, rx: %s, ry: %s)" % (g("x"), g("y"), g("width"), g("height"), num(rx or 0), num(ry or 0))
+    if tag in ("polyline", "polygon"): return "%s([%s])" % (tag, ", ".join(points(a["points"])))
+    raise ValueError("tag " + tag)
+
+SHAPES = ("path", "circle", "ellipse", "line", "rect", "polyline", "polygon")
+LUCIDE_BASE = {"fill": "none", "stroke": "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round"}
+BRAND_BASE = {"fill": None, "stroke": "none", "stroke-width": "1", "stroke-linecap": "butt", "stroke-linejoin": "miter"}
+CAMEL = {"strokeWidth": "stroke-width", "strokeLinecap": "stroke-linecap", "strokeLinejoin": "stroke-linejoin",
+         "fillRule": "fill-rule", "fillOpacity": "fill-opacity", "strokeOpacity": "stroke-opacity"}
+
+def paint_expr(style):
+    fill = style.get("fill")
+    if fill is None: fill = "#000000"  # SVG default
+    stroke = style.get("stroke", "none")
+    parts = ["fill: " + color(fill), "stroke: " + color(stroke)]
+    p = []
+    if style.get("stroke-width") != "2" or True:
+        pass
+    swv = float(style.get("stroke-width", "1"))
+    op = float(style.get("opacity", "1"))
+    cap = style.get("stroke-linecap", "butt")
+    join = style.get("stroke-linejoin", "miter")
+    rule = style.get("fill-rule", "nonzero")
+    off = style.get("_offset")
+    return fill, stroke, swv, op, cap, join, rule, off
+
+LUCIDE_PAINT = ("none", "currentColor", 2.0, 1.0, "round", "round", "nonzero", None)
+
+def paint_swift(t):
+    if t == LUCIDE_PAINT: return ""
+    fill, stroke, swv, op, cap, join, rule, off = t
+    s = "fill: %s, stroke: %s" % (color(fill), color(stroke))
+    if stroke != "none": s += ", strokeWidth: %s" % num(swv)
+    if op != 1.0: s += ", opacity: %s" % num(op)
+    if cap != "butt": s += ", lineCap: .%s" % cap
+    if join != "miter": s += ", lineJoin: .%s" % join
+    if rule == "evenodd": s += ", evenOdd: true"
+    if off: s += ", offsetX: %s, offsetY: %s" % (num(off[0]), num(off[1]))
+    return ", IconPaint(%s)" % s
+
+def element(tag, a, style):
+    st = dict(style)
+    for k, v in a.items():
+        if k in ("d", "points", "x", "y", "width", "height", "cx", "cy", "r", "rx", "ry", "x1", "y1", "x2", "y2", "id", "transform", "className", "clipRule"): continue
+        if k in st or k in ("fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity", "fill-rule"):
+            st[k] = v
+    for bad in ("mask", "filter", "clip-path"):
+        if bad in a: raise ValueError(bad)
+    if "transform" in a and not re.fullmatch(r"scale\([\d.]+\)", a["transform"]): raise ValueError("transform on element")
+    return "IconElement(.%s%s)" % (geometry(tag, a), paint_swift(paint_expr(st)))
+
+# ---------- 2. lucide ----------
+def local(t): return t.split("}")[-1]
+lucide = {}
+for k in sorted(resolved):
+    root = ET.parse(os.path.join(icons_dir, k + ".svg")).getroot()
+    vb = [num(x) for x in root.get("viewBox").split()]
+    els = []
+    for e in root:
+        tag = local(e.tag)
+        if tag in SHAPES: els.append(element(tag, dict(e.attrib), LUCIDE_BASE))
+        else: raise SystemExit("unexpected tag %s in %s" % (tag, k))
+    lucide[k] = (vb, els)
+
+# dedupe identical aliases
+groups = {}
+for k, (vb, els) in lucide.items():
+    groups.setdefault((tuple(vb), tuple(els)), []).append(k)
+chosen = {}
+for key, ks in groups.items():
+    pick = next((k for k in sorted(ks) if k in PREFER), sorted(ks)[0])
+    if len(ks) > 1: print("alias group %s -> %s" % (ks, pick), file=sys.stderr)
+    chosen[pick] = lucide[pick]
+
+# ---------- 3. brand icons from Icons.tsx ----------
+tsx = open(os.path.join(SRC, "components/Icons.tsx"), encoding="utf-8").read()
+blocks = re.split(r"\nexport const (?=\w+)", "\n" + tsx)[1:]
+ATTR = re.compile(r'([\w-]+)\s*=\s*(?:"([^"]*)"|\{([^{}]*)\})', re.S)
+TAG = re.compile(r"<(/?)(\w+)((?:[^<>{}]|\{[^{}]*\})*?)(/?)>", re.S)
+brand, brand_skipped = {}, {}
+for b in blocks:
+    name = re.match(r"\w+", b).group(0)
+    m = re.search(r"<svg\b((?:[^<>{}]|\{[^{}]*\})*?)>", b, re.S)
+    if not m: continue
+    def attrs(s):
+        d = {}
+        for k, v1, v2 in ATTR.findall(s):
+            if not v1 and v2:
+                tm = re.fullmatch(r'\s*monochrome\s*\?\s*"[^"]*"\s*:\s*"([^"]*)"\s*', v2)
+                v1 = tm.group(1) if tm else None
+            d[CAMEL.get(k, k)] = v1 if v1 is not None else "{" + v2 + "}"
+        return d
+    try:
+        sa = attrs(m.group(1))
+        cm = re.search(r'className=\{cn\("([^"]*)"', m.group(1))
+        if cm:
+            cls = cm.group(1)
+            hx = re.search(r"(?<![:\w])fill-\[(#[0-9a-fA-F]+)\]", cls)
+            if "dark:fill-" in cls or "fill-current" in cls: sa["fill"] = "currentColor"
+            elif hx: sa["fill"] = hx.group(1)
+            elif re.search(r"(?<![:\w])fill-(black|white)", cls): sa["fill"] = "currentColor"
+        vb = sa.get("viewBox")
+        if not vb: raise ValueError("no viewBox")
+        vbn = [num(x) for x in vb.split()]
+        base = dict(BRAND_BASE)
+        for k in ("fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity", "fill-rule"):
+            if k in sa: base[k] = sa[k]
+        if any(x in b for x in ("<defs", "<mask", "<use", "<linearGradient", "<clipPath", "filter=", "mask=", "clipPath=")):
+            raise ValueError("gradient/mask/filter/defs")
+        stack, els = [base], []
+        for t in TAG.finditer(b[m.end():]):
+            close, tag, body, selfc = t.groups()
+            if tag == "svg": break
+            if close:
+                if tag == "g": stack.pop()
+                continue
+            a = attrs(body)
+            if any(v.startswith("{") for v in a.values()): raise ValueError("dynamic attribute")
+            if tag == "g":
+                st = dict(stack[-1])
+                for k in ("fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity", "fill-rule"):
+                    if k in a: st[k] = a[k]
+                tr = a.get("transform")
+                if tr:
+                    mt = re.fullmatch(r"translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)\s*\)", tr)
+                    if not mt: raise ValueError("g transform")
+                    st["_offset"] = (float(mt.group(1)), float(mt.group(2)))
+                stack.append(st)
+                if selfc: stack.pop()
+            elif tag in SHAPES:
+                els.append(element(tag, a, stack[-1]))
+            else:
+                raise ValueError("tag " + tag)
+        if not els: raise ValueError("no elements")
+        sc = {mm.group(1) for mm in (re.search(r'transform="scale\(([\d.]+)\)"', b),) if mm}
+        if sc:
+            f = float(sc.pop()); vbn = [num(float(x) / f) for x in vbn]
+        key = "brand" + name[0].upper() + name[1:]
+        key = re.sub(r"Icon$", "", key)
+        brand[key] = (vbn, els)
+    except (ValueError, KeyError) as ex:
+        brand_skipped[name] = str(ex)
+
+# ---------- 4. emit ----------
+def camel(k):
+    parts = k.split("-")
+    s = parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+    return "icon" + s[0].upper() + s[1:] if s[0].isdigit() else s
+
+SWIFT_KW = {"repeat", "case", "default", "import", "in", "is", "as", "init", "self", "super", "true", "false", "nil", "func", "var", "let", "class", "struct", "enum", "if", "else", "switch", "for", "while", "return", "do", "try", "throw", "where", "operator", "protocol", "extension", "static", "public", "private", "internal", "subscript", "typealias", "inout"}
+entries = []  # (caseName, vb, els, lucideName)
+for k in sorted(chosen):
+    c = camel(k)
+    entries.append((c, chosen[k][0], chosen[k][1], k))
+for k in sorted(brand):
+    entries.append((k, brand[k][0], brand[k][1], None))
+case_names = [e[0] for e in entries]
+assert len(set(case_names)) == len(case_names), "case name collision"
+
+out = []
+w = out.append
+w("// GENERATED by scripts/extract-icons. Do not edit.")
+w("// Lucide v0.564.0 (ISC, see LICENSE-lucide.txt) and brand glyphs from T3 Code apps/web/src/components/Icons.tsx.")
+w("")
+w("public enum IconName: String, CaseIterable, Sendable {")
+for c, _, _, ln in entries:
+    cn = "`%s`" % c if c in SWIFT_KW else c
+    w("    case %s" % cn)
+w("}")
+w("")
+w("extension IconName {")
+w("    /// Lucide file name (kebab-case) for lucide icons, nil for brand icons.")
+w("    public var lucideName: String? {")
+w("        switch self {")
+for c, _, _, ln in entries:
+    if ln:
+        cn = "`%s`" % c if c in SWIFT_KW else c
+        w("        case .%s: return %s" % (cn, sw(ln)))
+w("        default: return nil")
+w("        }")
+w("    }")
+w("")
+w("    public var definition: IconDefinition {")
+w("        switch self {")
+for c, vb, els, ln in entries:
+    cn = "`%s`" % c if c in SWIFT_KW else c
+    w("        case .%s:" % cn)
+    w("            return IconDefinition(viewBox: IconViewBox(x: %s, y: %s, width: %s, height: %s), elements: [" % tuple(vb))
+    for e in els: w("                " + e + ",")
+    w("            ])")
+w("        }")
+w("    }")
+w("}")
+w("")
+os.makedirs(os.path.dirname(args.out), exist_ok=True)
+open(args.out, "w", encoding="utf-8").write("\n".join(out))
+print("lucide icons: %d (of %d imported names, %d unique files), brand icons: %d" % (len(chosen), len(names), len(resolved), len(brand)), file=sys.stderr)
+print("missing lucide names:", missing, file=sys.stderr)
+print("skipped brand icons:", brand_skipped, file=sys.stderr)

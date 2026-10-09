@@ -1,0 +1,49 @@
+name: CandyWrapper
+options:
+  bundleIdPrefix: dev.candywrapper
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEAD_CODE_STRIPPING: YES
+packages:
+  CandyKit:
+    path: Packages/CandyKit
+targets:
+  CandyWrapper:
+    type: application
+    platform: macOS
+    sources:
+      - App/Sources
+    resources: []
+    dependencies:
+      - package: CandyKit
+        product: DesignSystem
+      - package: CandyKit
+        product: T3Protocol
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: CandyWrapper
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSSupportsAutomaticGraphicsSwitching: true
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        NSQuitAlwaysKeepsWindows: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.candywrapper.app
+        ARCHS: "$(ARCHS_STANDARD)"
+        ONLY_ACTIVE_ARCH[config=Debug]: YES
+        ONLY_ACTIVE_ARCH[config=Release]: NO
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO

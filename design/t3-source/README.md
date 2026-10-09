@@ -1,0 +1,1 @@
+Compiled stylesheet of the official T3 Code web client, version v0.0.46-nightly.20261009.2861, copied from the shipped client bundle. MIT licensed, see LICENSE. Input for scripts/extract-tokens. Replace it when T3_VERSION changes.

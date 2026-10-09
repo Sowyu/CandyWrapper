@@ -12,7 +12,7 @@ Update `PROGRESS.md` before you stop: tick what you finished, add what you learn
 
 ## Hard rules from the user
 
-- No Electron, Chromium, WKWebView, Tauri, React Native, Flutter or JS UI frameworks in the app. Ask before anything that would ship or launch a browser engine. The user approved one exception, headless Chromium for capturing reference screenshots of the official web client. It is a capture tool only.
+- No Electron, Chromium, Tauri, React Native, Flutter or JS UI frameworks in the app. WKWebView is allowed only for features that render web content in the official app (built-in browser, HTML replies, MCP apps, Mermaid, HTML file preview, Clerk sign-in), created while its pane is visible and destroyed when hidden. Nothing may run in the background. Headless Chromium is allowed as a build-time tool (reference captures, token extraction), never shipped.
 - Read the T3 source before writing code that depends on it. Do not guess protocol details.
 - Stay wire compatible with official T3 Code. Ask before anything that could break compatibility.
 - Demo each milestone to the user before starting the next. Milestone 2 needs the user's visual sign-off.
@@ -27,16 +27,18 @@ Update `PROGRESS.md` before you stop: tick what you finished, add what you learn
 ## Machine facts
 
 - Remote Mac mini M4, macOS 27, 16 GB RAM, on AC power. No battery.
-- Hosted by MyRemoteMac. No display is attached. WindowServer exposes a virtual 1920x1080 screen at 1x and 60 Hz. Screen Sharing is on, reachable at `vnc://<mac-public-ip>:59010` (the public IPv4 is the local address in `netstat -an | grep '\.22 '`; keep it out of committed files). The provider's pf anchor `com.myremotemac.vnc` drops TCP to port 5900, so SSH tunnels to 5900 hang. Don't edit the provider's pf, fail2ban or LaunchDaemons. A GUI login needs the user to connect over VNC. See `PROGRESS.md` for the state of that.
+- Hosted by MyRemoteMac. No display is attached; the GUI session (user mrm, automatic login) draws to a virtual 1920x1080 screen at 1x and 60 Hz. Screen Sharing is reachable at `vnc://<mac-public-ip>:59010` (the public IPv4 is the local address in `netstat -an | grep '\.22 '`; keep it out of committed files). The provider's pf anchor `com.myremotemac.vnc` drops TCP to port 5900, so SSH tunnels to 5900 hang. Don't edit the provider's pf, fail2ban or LaunchDaemons.
+- Run GUI work inside the desktop session with `sudo launchctl asuser 502 sudo -u mrm <cmd>`.
 - Passwordless sudo works. Use it only for things the user asked for.
-- Only Command Line Tools are installed. Xcode is pending, so there is no xcodebuild, XCTest or Instruments yet. `swift build`, `swiftc` and Swift Testing work.
+- Xcode 27.0 is installed and selected (license accepted). xcodebuild, XCTest and xctrace work. XcodeGen 2.46 lives at `../CandyWrapper-research/tools/xcodegen/bin/xcodegen` (Homebrew can't install it: `/opt/homebrew/var/log` belongs to root for the provider's fail2ban).
 - No node, npm or bun. Python 3.9 at /usr/bin/python3, Homebrew python3.14 at /opt/homebrew/bin.
 
 ## The live T3 install belongs to the user
 
 The user runs T3 Code from this machine, and this chat runs inside it.
 
-- `~/.t3` holds the user's real data and the running service (`com.t3tools.t3code.service`, port 3773). Never write to it, never open its SQLite files, never start a server against it, never restart the service.
+- `~/.t3` holds the user's real data. One T3 server runs it: T3's login agent `com.t3tools.t3code.service` in `gui/502`. Its port changes between restarts; read `~/.t3/userdata/server-runtime.json`. Never write to `~/.t3`, never open its SQLite files, never start a server against it, never restart the service.
+- A custom headless daemon and root watchdog (`com.t3tools.t3code.daemon`, `.watchdog`) ran a second server until 2026-10-09. The user chose to keep only the login agent. Their plists and scripts are backed up in `../CandyWrapper-research/backups/t3-daemon-2026-10-09/`. Two servers on one `~/.t3` is the failure to watch for: check `ps` for more than one `t3 serve` without `--base-dir`.
 - Never kill processes by name or pattern. Kill only a PID you started and recorded.
 - Shells inherit `T3CODE_HOME`, `T3_SERVICE_LAUNCHER_CONTEXT` and `T3_BOOT_SERVICE_UNIT` from the live service. Use `env -i` when starting any T3 binary, or it will try to attach to the live service launcher.
 
