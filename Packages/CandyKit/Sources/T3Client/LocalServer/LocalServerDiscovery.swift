@@ -59,6 +59,55 @@ public enum LocalServerDiscovery {
         return RunningLocalServer(runtime: runtime, origin: origin, descriptor: descriptor)
     }
 
+    /// Like `findRunning`, but never clears the way for a second server on a home that has one.
+    /// Nil only when nobody else runs a server for `home`. A server process that is alive but
+    /// doesn't answer, or a home that T3's background service owns, is waited for up to `wait`
+    /// (the service restarts its server by itself), then reported as an error.
+    public static func discover(home: URL, servicePlist: URL = servicePlistURL,
+                                wait: Duration = .seconds(20)) async throws -> RunningLocalServer? {
+        let deadline = ContinuousClock.now + wait
+        while true {
+            if let running = await findRunning(home: home) { return running }
+            let alive = runtimeProcessAlive(home: home)
+            let serviceOwned = serviceHome(plist: servicePlist)?.standardizedFileURL.path == home.standardizedFileURL.path
+            guard alive || serviceOwned else { return nil }
+            guard ContinuousClock.now < deadline else {
+                throw alive ? LocalServerDiscoveryError.unresponsive : LocalServerDiscoveryError.serviceNotRunning
+            }
+            try await Task.sleep(for: .seconds(1))
+        }
+    }
+
+    /// The runtime file names a live process. A pid that an unrelated, newer process took over
+    /// after a crash (the file outlives a killed server) doesn't count.
+    static func runtimeProcessAlive(home: URL) -> Bool {
+        guard let data = try? Data(contentsOf: runtimeStateURL(home: home)),
+              let runtime = try? parseRuntimeState(data), isProcessAlive(runtime.pid)
+        else { return false }
+        if let started = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(runtime.startedAt),
+           let process = ProcessIdentity.of(runtime.pid),
+           Double(process.startTime) / 1_000_000 > started.timeIntervalSince1970 + 5 {
+            return false
+        }
+        return true
+    }
+
+    /// T3's launch agent (apps/server/src/cloud/bootService.ts:43, 302-316).
+    public static var servicePlistURL: URL {
+        URL(filePath: NSHomeDirectory()).appending(path: "Library/LaunchAgents/com.t3tools.t3code.service.plist")
+    }
+
+    /// The home T3's background service runs, from its plist's `T3CODE_HOME`, the way
+    /// `bootServiceBaseDirOf` reads it back (bootService.ts:62-80). Nil when not installed.
+    public static func serviceHome(plist: URL = servicePlistURL) -> URL? {
+        guard let data = try? Data(contentsOf: plist),
+              let root = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let env = root["EnvironmentVariables"] as? [String: Any],
+              let home = env["T3CODE_HOME"] as? String, !home.isEmpty
+        else { return nil }
+        return URL(filePath: home, directoryHint: .isDirectory)
+    }
+
     /// `activeVersion` from `<home>/runtime/service-state.json` (cloud/serviceProtocol.ts:28-32).
     public static func parseActiveVersion(_ data: Data) -> String? {
         struct ServiceState: Decodable { var activeVersion: String? }
@@ -81,5 +130,20 @@ public enum LocalServerDiscovery {
             if fm.isExecutableFile(atPath: candidate.path) { return candidate }
         }
         return nil
+    }
+}
+
+public enum LocalServerDiscoveryError: Error, Sendable, Equatable, CustomStringConvertible {
+    /// A server for this home is running but didn't answer. Starting another would put two
+    /// servers on one database.
+    case unresponsive
+    /// T3's background service owns this home and its server isn't up.
+    case serviceNotRunning
+
+    public var description: String {
+        switch self {
+        case .unresponsive: "T3 Code's server on this Mac is running but not responding. Try again in a moment."
+        case .serviceNotRunning: "T3 Code's background service runs the server on this Mac, and it isn't running right now. Start T3 Code's service, then try again."
+        }
     }
 }

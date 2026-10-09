@@ -260,7 +260,11 @@ final class ServerController {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = "Couldn't reach T3 Code"
-        alert.informativeText = (error as? LocalServerLaunchError)?.description ?? ConnectionFailure.classify(error).detail
+        switch error {
+        case let e as LocalServerLaunchError: alert.informativeText = e.description
+        case let e as LocalServerDiscoveryError: alert.informativeText = e.description
+        default: alert.informativeText = ConnectionFailure.classify(error).detail
+        }
         alert.beginSheetModal(for: window)
     }
 }

@@ -164,6 +164,19 @@ struct ServerLifecycleTests {
         #expect(await rec.launches == 2)
     }
 
+    @Test func aServerThatCantBeUsedIsNeverJoinedByOurs() async throws {
+        let rec = self.rec
+        let lc = Lifecycle(dependencies: .init(
+            discover: { throw LocalServerDiscoveryError.unresponsive },
+            launch: { try await rec.launch() },
+            stop: { await rec.stop($0) },
+            setBackground: { _, _ in },
+            scheduler: scheduler), idleTimeout: .seconds(600), remoteAccess: false)
+        await #expect(throws: LocalServerDiscoveryError.unresponsive) { try await lc.ensureRunning() }
+        #expect(await lc.phase == .stopped)
+        #expect(await rec.launches == 0)
+    }
+
     // Rule 3b: idle stop, one timer per deadline
     @Test func stopsAfterIdleMinutesWithOneTimer() async throws {
         let lc = make(idle: .seconds(600))

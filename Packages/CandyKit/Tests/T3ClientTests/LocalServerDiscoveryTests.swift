@@ -102,4 +102,41 @@ struct LocalServerDiscoveryTests {
         setting.connectLinked = false
         #expect(setting.isOn == false)
     }
+
+    @Test func neverClearsTheWayForASecondServer() async throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appending(path: "t3home-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: home) }
+        try fm.createDirectory(at: home.appending(path: "userdata"), withIntermediateDirectories: true)
+        let noService = home.appending(path: "none.plist")
+        let runtimeFile = LocalServerDiscovery.runtimeStateURL(home: home)
+        func writeRuntime(startedAt: String) throws {
+            // This test process stands in for a server that is alive but answers nothing (port 9).
+            try Data(#"{"version":1,"pid":\#(getpid()),"port":9,"origin":"http://127.0.0.1:9","startedAt":"\#(startedAt)"}"#.utf8)
+                .write(to: runtimeFile)
+        }
+
+        // Nobody runs a server here: start ours.
+        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1)) == nil)
+
+        // A live server process that doesn't answer: wait, then refuse.
+        try writeRuntime(startedAt: Date.ISO8601FormatStyle(includingFractionalSeconds: true).format(.now))
+        await #expect(throws: LocalServerDiscoveryError.unresponsive) {
+            try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1))
+        }
+
+        // A file left by a killed server whose pid a newer process took: not a server.
+        try writeRuntime(startedAt: "2001-01-01T00:00:00.000Z")
+        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1)) == nil)
+
+        // T3's background service owns this home: leave it to the service.
+        try fm.removeItem(at: runtimeFile)
+        let plist = home.appending(path: "service.plist")
+        let unit: [String: Any] = ["Label": "com.t3tools.t3code.service", "EnvironmentVariables": ["T3CODE_HOME": home.path]]
+        try PropertyListSerialization.data(fromPropertyList: unit, format: .xml, options: 0).write(to: plist)
+        #expect(LocalServerDiscovery.serviceHome(plist: plist)?.path == home.path)
+        await #expect(throws: LocalServerDiscoveryError.serviceNotRunning) {
+            try await LocalServerDiscovery.discover(home: home, servicePlist: plist, wait: .seconds(1))
+        }
+    }
 }

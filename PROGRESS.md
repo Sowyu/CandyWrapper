@@ -82,6 +82,8 @@ Gotchas found so far:
 
 ## Decisions made
 
+- 2026-10-09: The app never starts a second server on a home that has one. `LocalServerDiscovery.discover` waits up to 20 s, then shows an error, when the runtime file names a live process that doesn't answer, or when T3's launch agent (`~/Library/LaunchAgents/com.t3tools.t3code.service.plist`, `T3CODE_HOME`) owns the home. On this Mac the service owns `~/.t3`, so the app only ever joins the live server there.
+
 - 2026-10-09: Allow Remote Access (app menu). On keeps the app's own server running while CandyWrapper is idle, so the user's phone can reach this Mac. Off lets it stop after 10 idle minutes. Until the user picks, it follows whether T3 Connect is linked (`GET /api/connect/link-state`). Proposed to the user after they asked about reaching the Mac from Android; not explicitly confirmed.
 - 2026-10-09: The app records the server it started (pid plus start time, and its own) in `~/Library/Application Support/CandyWrapper/owned-server.json`. On the next start, if that app process is gone, it stops exactly that server. Otherwise a crash would leave a server that later launches treat as someone else's and never stop.
 
