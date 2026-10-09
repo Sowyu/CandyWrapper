@@ -1,0 +1,137 @@
+{
+ "base": "http://127.0.0.1:47391",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark"
+ ],
+ "states": [
+  {
+   "name": "seed-input",
+   "path": "/",
+   "actions": [
+    {
+     "click": "[data-slot=popover-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Haiku 5.5\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Runtime mode\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Full access\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "Use your question tool (AskUserQuestion) to ask me two clarifying questions about a small CLI tool, one with options. Do not do anything else until I answer."
+    },
+    {
+     "wait": 300
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 25000
+    },
+    {
+     "js": "location.pathname",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "seed-kitchen",
+   "path": "/",
+   "actions": [
+    {
+     "click": "[data-slot=popover-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Haiku 5.5\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Runtime mode\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[role=option]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Full access\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "Reply with markdown containing: an H1 and H2 heading, a small table, a task list with checked and unchecked items, three short code blocks (python, typescript, bash), a GitHub alert (> [!NOTE]), and a bulleted list. Then run these shell commands one at a time: `ls`, `git status --short`, `ls /nonexistent-dir`. Keep everything very brief."
+    },
+    {
+     "wait": 300
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 45000
+    },
+    {
+     "js": "location.pathname",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "probe-composer-menu",
+   "path": "/",
+   "actions": [
+    {
+     "click": "[aria-label=\"More composer controls\"]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "[...document.querySelectorAll('[role^=menu]')].filter(b=>b.offsetParent).map(b=>b.getAttribute('role')+'|'+b.textContent.trim().slice(0,60)).join('\\n')",
+     "log": true
+    }
+   ]
+  }
+ ]
+}

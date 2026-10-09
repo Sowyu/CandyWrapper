@@ -1,0 +1,9 @@
+# Salvaged assistant text from agent ae09ba1e6cf66ca17
+
+Brief starts: 'You are doing READ-ONLY source research in /Users/mrm/CandyWrapper-research/t3code (T3 Code, checked out at tag v0.0.46-nightly.20261009.2861). The findings feed a protocol contract for a third-party'
+
+Files it wrote: []
+
+---
+
+I'll start by examining the imports in orchestrationV2.ts to determine every referenced symbol.

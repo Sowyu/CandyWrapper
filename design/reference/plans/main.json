@@ -1,0 +1,1285 @@
+{
+ "base": "http://127.0.0.1:47391",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "02-sidebar-populated",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "03a-kitchen-sink-top",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "03b-kitchen-sink-middle",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0.5;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "03c-kitchen-sink-bottom",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "03d-kitchen-sink-commands",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/e9ec2c7b-a21c-4651-89c2-276bf1c5fe84",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/e9ec2c7b-a21c-4651-89c2-276bf1c5fe84"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "04-new-thread-draft",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "05-approval-request",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/23245e8d-9f47-48e9-8fd2-69d6494acd8b",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/23245e8d-9f47-48e9-8fd2-69d6494acd8b"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "06-user-input-request",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/bdbff8f9-22f2-4f67-ba88-213a966febf0",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/bdbff8f9-22f2-4f67-ba88-213a966febf0"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "07-palette-default",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "k",
+     "meta": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "08-palette-search",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "k",
+     "meta": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "type": "hello"
+    },
+    {
+     "wait": 1200
+    }
+   ]
+  },
+  {
+   "name": "09-diff-split",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/c4ff4c86-9db4-4d8a-a846-a1493c31e49b",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/c4ff4c86-9db4-4d8a-a846-a1493c31e49b"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "d",
+     "meta": true
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "click": "text=Changes"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "text=Uncommitted"
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"button\")].filter(e=>e.offsetParent!==null).find(e=>(e.getAttribute('aria-label')||'').toLowerCase().includes(\"split\")).setAttribute('data-cap','1')"
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "10-diff-unified",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/c4ff4c86-9db4-4d8a-a846-a1493c31e49b",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/c4ff4c86-9db4-4d8a-a846-a1493c31e49b"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "d",
+     "meta": true
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "click": "text=Changes"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "text=Uncommitted"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "11-terminal-drawer",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "j",
+     "meta": true
+    },
+    {
+     "wait": 2000
+    }
+   ]
+  },
+  {
+   "name": "12-right-panel-files",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "b",
+     "meta": true,
+     "alt": true
+    },
+    {
+     "wait": 1000
+    },
+    {
+     "click": "text=Files"
+    },
+    {
+     "wait": 1000
+    },
+    {
+     "click": "text=hello.py"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "13-model-picker",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "key": "m",
+     "meta": true,
+     "shift": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "14-composer-slash-menu",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "/"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "15-composer-at-mention",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "type": "@hel"
+    },
+    {
+     "wait": 1000
+    }
+   ]
+  },
+  {
+   "name": "16a-settings-general",
+   "path": "/settings/general",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/general"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "16b-settings-general-mid",
+   "path": "/settings/general",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/general"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0.5;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "16c-settings-general-bottom",
+   "path": "/settings/general",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/general"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e.scrollTop})()",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "17-settings-appearance",
+   "path": "/settings/appearance",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/appearance"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1000
+    }
+   ]
+  },
+  {
+   "name": "18-settings-providers",
+   "path": "/settings/providers",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/providers"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "19-settings-keybindings",
+   "path": "/settings/keybindings",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/keybindings"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "20-sidebar-thread-context-menu",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "document.querySelectorAll('[data-cap]').forEach(e=>e.removeAttribute('data-cap')); [...document.querySelectorAll(\"[data-slot=tooltip-trigger]\")].filter(e=>e.offsetParent!==null).find(e=>e.textContent.includes(\"Reply with markdown only\")).setAttribute('data-cap','1')"
+    },
+    {
+     "js": "(()=>{const e=document.querySelector('[data-cap]');const r=e.getBoundingClientRect();e.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.x+60,clientY:r.y+30,button:2}));return 1})()"
+    },
+    {
+     "wait": 600
+    }
+   ]
+  },
+  {
+   "name": "21-git-actions-menu",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('button,[role=button]')].filter(b=>b.offsetParent&&b.textContent.trim()=='Commit').pop();const n=e.parentElement.querySelectorAll('button');n[n.length-1].setAttribute('data-cap','1');return n.length})()",
+     "log": true
+    },
+    {
+     "click": "[data-cap=\"1\"]"
+    },
+    {
+     "wait": 600
+    }
+   ]
+  },
+  {
+   "name": "22-commit-dialog",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "text=Commit"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "23-pull-requests-page",
+   "path": "/pull-requests",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/pull-requests"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "26a-usage-cost",
+   "path": "/usage",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/usage"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "26b-usage-tokens",
+   "path": "/usage",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/usage"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 2000
+    },
+    {
+     "click": "text=Tokens"
+    },
+    {
+     "wait": 1000
+    }
+   ]
+  },
+  {
+   "name": "26c-usage-limits",
+   "path": "/usage",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/usage"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 2000
+    },
+    {
+     "click": "text=Limits"
+    },
+    {
+     "wait": 1000
+    }
+   ]
+  },
+  {
+   "name": "27-welcome",
+   "path": "/welcome",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/welcome"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "31-sidebar-collapsed",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "b",
+     "meta": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "32-settings-source-control",
+   "path": "/settings/source-control",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/source-control"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "33-settings-projects",
+   "path": "/settings/projects",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/projects"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "34-settings-connections",
+   "path": "/settings/connections",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/connections"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "35-settings-archived",
+   "path": "/settings/archived",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/archived"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "36-settings-scheduled-tasks",
+   "path": "/settings/scheduled-tasks",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/scheduled-tasks"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "37-settings-snapshots",
+   "path": "/settings/snap-shot",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/snap-shot"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "38-settings-storage",
+   "path": "/settings/storage",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/storage"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "39-settings-diagnostics",
+   "path": "/settings/diagnostics",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/diagnostics"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 2000
+    }
+   ]
+  },
+  {
+   "name": "40-settings-integrations",
+   "path": "/settings/integrations",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/settings/integrations"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "41-traits-picker",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "text=Medium"
+    },
+    {
+     "wait": 600
+    }
+   ]
+  },
+  {
+   "name": "42-access-mode-picker",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "text=Full access"
+    },
+    {
+     "wait": 600
+    }
+   ]
+  },
+  {
+   "name": "43-find-in-thread",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "f",
+     "meta": true
+    },
+    {
+     "wait": 400
+    },
+    {
+     "type": "markdown"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "44-thread-details-panel",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "45-go-to-file",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "p",
+     "meta": true
+    },
+    {
+     "wait": 1200
+    }
+   ]
+  },
+  {
+   "name": "46-project-search",
+   "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/a959b73c-f2b2-4fe9-9ed0-1e1c976fb922"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "f",
+     "meta": true,
+     "shift": true
+    },
+    {
+     "wait": 400
+    },
+    {
+     "type": "hello"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  }
+ ]
+}
