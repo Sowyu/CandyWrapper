@@ -103,14 +103,16 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
     }
 
     public struct Dependencies: Sendable {
-        public var discover: @Sendable () async -> RunningLocalServer?
+        /// Nil means nobody else runs a server, so start ours. Throws when one exists but can't
+        /// be used; starting ours then would mean two servers on one home.
+        public var discover: @Sendable () async throws -> RunningLocalServer?
         public var launch: @Sendable () async throws -> Owned
         public var stop: @Sendable (Owned) async -> Void
         public var setBackground: @Sendable (Owned, Bool) -> Void
         public var scheduler: any LifecycleScheduler
         public var onPhase: @Sendable (Phase) -> Void
 
-        public init(discover: @escaping @Sendable () async -> RunningLocalServer?,
+        public init(discover: @escaping @Sendable () async throws -> RunningLocalServer?,
                     launch: @escaping @Sendable () async throws -> Owned,
                     stop: @escaping @Sendable (Owned) async -> Void,
                     setBackground: @escaping @Sendable (Owned, Bool) -> Void,
@@ -197,7 +199,14 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
     private func start() async throws -> Server {
         if let stopTask { await stopTask.value }
         phase = .starting
-        if let running = await deps.discover() {
+        let found: RunningLocalServer?
+        do {
+            found = try await deps.discover()
+        } catch {
+            phase = .stopped
+            throw error
+        }
+        if let running = found {
             let s = Server.reused(running)
             server = s
             phase = .running(owned: false)
@@ -298,7 +307,7 @@ extension ServerLifecycle where Owned == LaunchedLocalServer {
         ServerLifecycle(dependencies: Dependencies(
             discover: {
                 if let ownerRecord { await LocalServerLauncher.stopOrphan(recordedAt: ownerRecord) }
-                return await LocalServerDiscovery.findRunning(home: home)
+                return try await LocalServerDiscovery.discover(home: home)
             },
             launch: {
                 let server = try await LocalServerLauncher.launch(try configuration(), identity: identity, credentials: credentials)
