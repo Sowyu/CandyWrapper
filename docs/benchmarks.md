@@ -27,6 +27,20 @@ Sandbox server with its own home, no connected clients, one idle Claude provider
 
 The server alone wakes about 10 times per second when idle, ten times the app's target. CandyWrapper can't change the server, but it can avoid keeping provider sessions alive longer than the official app does. That needs checking in milestone 8.
 
+## Server tuning (`scripts/server-idle-bench`)
+
+Fresh server, throwaway home, no clients, 30 s window after 20 s settle. NODE_OPTIONS is honored by T3's packaged runtime, but only Node's allowlist: V8 tuning flags such as `--optimize-for-size` make the server exit at startup.
+
+| Variant | Server footprint | Interrupt wakeups/s | Notes |
+|---|---|---|---|
+| Default | 313 MB | 12.5 | first run, cold start 3.0 s |
+| `--max-semi-space-size=1` | 246 MB | 11.8 | chosen: 21% less memory, no visible cost |
+| plus `--max-old-space-size=192` | 216 MB | 11.8 | rejected: a heap cap can crash the server on large threads |
+| `T3CODE_TRACE_MIN_LEVEL=Error`, trace timing off | 314 MB | 11.4 | no meaningful change |
+| semi-space 1 plus quiet trace | 245 MB | 10.7 | |
+
+Warm starts take about 0.5 s. Idle wakeups stay at 11 to 12 per second regardless of options, which points at T3's internal timers. CandyWrapper's levers for those are stopping a server it started when idle, and background priority while no run is active.
+
 ## Official desktop app baseline
 
 T3 Code (Nightly) 0.0.46-nightly.20261009.2861 from the official notarized DMG, run in the GUI session with an isolated home (`T3CODE_HOME=../CandyWrapper-research/desktop-home`) seeded with a copy of the sandbox demo data: project demo-repo, 14 threads, two of them waiting on an approval and a question.

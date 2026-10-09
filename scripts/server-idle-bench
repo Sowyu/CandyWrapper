@@ -20,10 +20,11 @@ PROCSTAT = "/tmp/candywrapper-procstat"
 VARIANTS = {
     "baseline": {},
     "semi1": {"NODE_OPTIONS": "--max-semi-space-size=1"},
-    "size": {"NODE_OPTIONS": "--optimize-for-size --max-semi-space-size=1"},
-    "size-old128": {"NODE_OPTIONS": "--optimize-for-size --max-semi-space-size=1 --max-old-space-size=128"},
-    "lite": {"NODE_OPTIONS": "--lite-mode --max-semi-space-size=1"},
+    # V8 tuning flags such as --optimize-for-size are rejected in NODE_OPTIONS; heap limits are allowed.
+    "semi1-old192": {"NODE_OPTIONS": "--max-semi-space-size=1 --max-old-space-size=192"},
     "quiet-trace": {"T3CODE_TRACE_MIN_LEVEL": "Error", "T3CODE_TRACE_TIMING_ENABLED": "false"},
+    "semi1-quiet": {"NODE_OPTIONS": "--max-semi-space-size=1", "T3CODE_TRACE_MIN_LEVEL": "Error",
+                    "T3CODE_TRACE_TIMING_ENABLED": "false"},
 }
 
 
@@ -44,6 +45,32 @@ def ready(timeout=60):
     return False
 
 
+def children(pid):
+    out = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True).stdout
+    return [int(x) for x in out.split()]
+
+
+def stop_tree(proc):
+    """Stops the server we started and its descendants, by PID (never by name)."""
+    if proc.poll() is not None:
+        return
+    tree, queue = [], [proc.pid]
+    while queue:
+        pid = queue.pop()
+        tree.append(pid)
+        queue += children(pid)
+    proc.terminate()
+    try:
+        proc.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    for pid in tree[1:]:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+
 def run_variant(name, extra, settle, window):
     os.makedirs(BENCH_HOME, exist_ok=True)
     env = {"HOME": HOME, "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
@@ -55,8 +82,8 @@ def run_variant(name, extra, settle, window):
     proc = subprocess.Popen([T3, "serve", "--base-dir", BENCH_HOME, "--port", str(PORT), "--host", "127.0.0.1", "--no-browser"],
                             env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
     try:
-        if not ready():
-            return {"variant": name, "error": "server did not answer"}
+        if not ready() or proc.poll() is not None:
+            return {"variant": name, "error": "server exited or did not answer, see bench log"}
         startup = time.time() - started
         time.sleep(settle)
         out = subprocess.run([PROCSTAT, str(window), "--tree", str(proc.pid)], capture_output=True, text=True).stdout
@@ -68,11 +95,7 @@ def run_variant(name, extra, settle, window):
         return {"variant": name, "startup_s": round(startup, 2), "server": cols(server[0]) if server else None,
                 "tree": cols(total[0]) if total else None}
     finally:
-        try:
-            os.killpg(proc.pid, signal.SIGTERM)
-            proc.wait(timeout=20)
-        except Exception:
-            os.killpg(proc.pid, signal.SIGKILL)
+        stop_tree(proc)
 
 
 def main():
