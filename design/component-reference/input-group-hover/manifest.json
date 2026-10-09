@@ -1,0 +1,10 @@
+{
+  "default.search" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "ghost.search" : {
+    "height" : 32,
+    "width" : 240
+  }
+}

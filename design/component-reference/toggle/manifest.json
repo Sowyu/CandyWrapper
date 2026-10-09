@@ -1,0 +1,58 @@
+{
+  "default.off" : {
+    "height" : 32,
+    "width" : 82.2578125
+  },
+  "default.on" : {
+    "height" : 32,
+    "width" : 82.2578125
+  },
+  "ghost.off" : {
+    "height" : 32,
+    "width" : 73.59375
+  },
+  "ghost.on" : {
+    "height" : 32,
+    "width" : 73.59375
+  },
+  "outline.compact" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "outline.lg" : {
+    "height" : 36,
+    "width" : 36
+  },
+  "outline.off" : {
+    "height" : 32,
+    "width" : 80.9453125
+  },
+  "outline.on" : {
+    "height" : 32,
+    "width" : 80.9453125
+  },
+  "outline.sm" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "outline.xs" : {
+    "height" : 24,
+    "width" : 24
+  },
+  "pill.off" : {
+    "height" : 32,
+    "width" : 64.484375
+  },
+  "pill.on" : {
+    "height" : 32,
+    "width" : 64.484375
+  },
+  "segmented.off" : {
+    "height" : 24,
+    "width" : 116.1328125
+  },
+  "segmented.on" : {
+    "height" : 24,
+    "width" : 116.1328125
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "mixed" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "mixed.disabled" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "off" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "off.disabled" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "off.invalid" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "on" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "on.disabled" : {
+    "height" : 16,
+    "width" : 16
+  }
+}

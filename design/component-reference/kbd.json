@@ -1,0 +1,61 @@
+{
+ "component": "kbd",
+ "source": "apps/web/src/components/ui/kbd.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "esc",
+   "html": "<kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">Esc</kbd>",
+   "native": {
+    "keys": "Esc"
+   },
+   "wrapperStyle": "display:flex"
+  },
+  {
+   "name": "cmd",
+   "html": "<kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">\u2318</kbd>",
+   "native": {
+    "keys": "\u2318"
+   },
+   "wrapperStyle": "display:flex"
+  },
+  {
+   "name": "shortcut",
+   "html": "<kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">\u21e7\u2318K</kbd>",
+   "native": {
+    "keys": "\u21e7\u2318K"
+   },
+   "wrapperStyle": "display:flex"
+  },
+  {
+   "name": "enter",
+   "html": "<kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">Enter</kbd>",
+   "native": {
+    "keys": "Enter"
+   },
+   "wrapperStyle": "display:flex"
+  },
+  {
+   "name": "icon",
+   "html": "<kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-up\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7\"></path><path d=\"M12 19V5\"></path></svg></kbd>",
+   "native": {
+    "icon": "arrowUp"
+   },
+   "wrapperStyle": "display:flex"
+  },
+  {
+   "name": "group",
+   "html": "<kbd class=\"inline-flex items-center gap-1\" data-slot=\"kbd-group\"><kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">\u2318</kbd><kbd class=\"pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3\" data-slot=\"kbd\">K</kbd></kbd>",
+   "native": {
+    "group": "\u2318,K"
+   },
+   "wrapperStyle": "display:flex"
+  }
+ ]
+}

@@ -1,0 +1,50 @@
+{
+  "default.default" : {
+    "height" : 18,
+    "width" : 48.5546875
+  },
+  "destructive.default" : {
+    "height" : 18,
+    "width" : 73.421875
+  },
+  "error.default" : {
+    "height" : 18,
+    "width" : 36.4765625
+  },
+  "info.default" : {
+    "height" : 18,
+    "width" : 29.7890625
+  },
+  "outline.control" : {
+    "height" : 24,
+    "width" : 56.8046875
+  },
+  "outline.default" : {
+    "height" : 18,
+    "width" : 47.421875
+  },
+  "outline.lg" : {
+    "height" : 22,
+    "width" : 24.140625
+  },
+  "outline.sm" : {
+    "height" : 16,
+    "width" : 22.5234375
+  },
+  "secondary.count" : {
+    "height" : 18,
+    "width" : 18
+  },
+  "secondary.default" : {
+    "height" : 18,
+    "width" : 68.5234375
+  },
+  "success.default" : {
+    "height" : 18,
+    "width" : 55.0390625
+  },
+  "warning.default" : {
+    "height" : 18,
+    "width" : 54.0078125
+  }
+}

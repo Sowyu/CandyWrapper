@@ -8,8 +8,12 @@ public enum DSFont {
         .systemFont(ofSize: px, weight: weight)
     }
 
+    /// `ui-monospace`: Chromium resolves it to the user fixed-pitch font (Menlo), because SF Mono
+    /// is not an installed font. Measured against Chromium in the Input fidelity test.
     public static func mono(_ px: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        .monospacedSystemFont(ofSize: px, weight: weight)
+        let base = CTFontCreateUIFontForLanguage(.userFixedPitch, px, nil).map { $0 as NSFont }
+            ?? .monospacedSystemFont(ofSize: px, weight: weight)
+        return weight >= .semibold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
     }
 }
 
@@ -30,11 +34,14 @@ public struct TextLine {
     }
 
     /// Baseline y (top-left origin) for a line box starting at `top` with CSS `line-height`.
-    /// Blink rounds the font's ascent and descent to whole CSS px, then floors the half-leading
-    /// (FontMetrics and NGLineHeightMetrics::AddLeading), so the baseline lands on a whole px.
-    public func baseline(top: CGFloat, lineHeight: CGFloat) -> CGFloat {
-        let a = ascent.rounded(), d = descent.rounded()
-        return top + ((lineHeight - (a + d)) / 2).rounded(.down) + a
+    /// Blink rounds the font's ascent and descent to whole px, then floors the half-leading
+    /// (FontMetrics and NGLineHeightMetrics::AddLeading). It lays out in device pixels (zoom for DSF),
+    /// so at 2x the rounding is to half points: 12px text in a 16px line sits 0.5pt lower than a
+    /// 1x calculation says (Kbd fidelity test).
+    // ponytail: assumes the 2x backing store the references use; pass the window's scale for 1x screens
+    public func baseline(top: CGFloat, lineHeight: CGFloat, scale: CGFloat = 2) -> CGFloat {
+        let a = (ascent * scale).rounded(), d = (descent * scale).rounded()
+        return top + (((lineHeight * scale - (a + d)) / 2).rounded(.down) + a) / scale
     }
 }
 
@@ -75,7 +82,7 @@ public final class LabelView: DSView {
     }
 
     private func attributed() -> NSAttributedString {
-        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         return NSAttributedString(string: text, attributes: attributes)
     }
 

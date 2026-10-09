@@ -1,0 +1,30 @@
+{
+  "compact.placeholder" : {
+    "height" : 30,
+    "width" : 240
+  },
+  "default.placeholder" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "default.value" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "invalid.value" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "lg.placeholder" : {
+    "height" : 36,
+    "width" : 240
+  },
+  "mono.value" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "sm.placeholder" : {
+    "height" : 28,
+    "width" : 240
+  }
+}

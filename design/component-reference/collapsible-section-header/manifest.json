@@ -1,0 +1,34 @@
+{
+  "accent.closed" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "accent.open" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "emphasized.closed" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "emphasized.open" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "info.closed" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "info.open" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "muted.closed" : {
+    "height" : 32,
+    "width" : 240
+  },
+  "muted.open" : {
+    "height" : 32,
+    "width" : 240
+  }
+}

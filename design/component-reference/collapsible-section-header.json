@@ -1,0 +1,102 @@
+{
+ "component": "collapsible-section-header",
+ "source": "apps/web/src/components/ui/collapsible-section-header.tsx",
+ "states": [
+  "rest",
+  "focus-visible"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "muted.closed",
+   "html": "<button type=\"button\" aria-expanded=\"false\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-sidebar-muted-foreground/60\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-sidebar-border/60\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "muted",
+    "expanded": "false",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "muted.open",
+   "html": "<button type=\"button\" aria-expanded=\"true\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-sidebar-muted-foreground/60\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-sidebar-border/60\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform rotate-180\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "muted",
+    "expanded": "true",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "info.closed",
+   "html": "<button type=\"button\" aria-expanded=\"false\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-blue-600 dark:text-blue-400\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-blue-500/20 dark:bg-blue-400/15\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "info",
+    "expanded": "false",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "info.open",
+   "html": "<button type=\"button\" aria-expanded=\"true\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-blue-600 dark:text-blue-400\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-blue-500/20 dark:bg-blue-400/15\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform rotate-180\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "info",
+    "expanded": "true",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "emphasized.closed",
+   "html": "<button type=\"button\" aria-expanded=\"false\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-sidebar-foreground/80\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-sidebar-foreground/25\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "emphasized",
+    "expanded": "false",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "emphasized.open",
+   "html": "<button type=\"button\" aria-expanded=\"true\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-sidebar-foreground/80\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-sidebar-foreground/25\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform rotate-180\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "emphasized",
+    "expanded": "true",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "accent.closed",
+   "html": "<button type=\"button\" aria-expanded=\"false\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-primary\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-primary/50\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "accent",
+    "expanded": "false",
+    "title": "Projects",
+    "width": "240"
+   }
+  },
+  {
+   "name": "accent.open",
+   "html": "<button type=\"button\" aria-expanded=\"true\" class=\"flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 text-primary\"><span class=\"shrink-0\">Projects</span><span aria-hidden=\"true\" class=\"h-px min-w-2 flex-1 bg-primary/50\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 shrink-0 transition-transform rotate-180\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+   "wrapperStyle": "display:block;width:240px",
+   "native": {
+    "tone": "accent",
+    "expanded": "true",
+    "title": "Projects",
+    "width": "240"
+   }
+  }
+ ]
+}
