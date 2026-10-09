@@ -34,7 +34,7 @@ for r, _, fs in os.walk(SRC):
     for f in fs:
         if f.endswith((".ts", ".tsx")):
             t = open(os.path.join(r, f), encoding="utf-8").read()
-            for m in re.finditer(r'import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"lucide-react"', t):
+            for m in re.finditer(r'import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"lucide(?:-react)?"', t):
                 for n in m.group(1).split(","):
                     n = n.strip()
                     if n and not n.startswith("type "):

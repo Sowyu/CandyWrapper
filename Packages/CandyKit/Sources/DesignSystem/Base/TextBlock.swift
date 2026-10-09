@@ -77,6 +77,9 @@ public struct TextBlockLayout {
 /// Multi-line, word-wrapping text with CSS line boxes. Height follows the width:
 /// `height(forWidth:)` measures, and the layout is cached per width until the text or font changes.
 public final class TextBlockView: DSView {
+    /// Decoration: clicks go to the control or bar underneath.
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
     public var font: NSFont = DSFont.ui(14) { didSet { invalidate() } }
     public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { needsDisplay = true } }

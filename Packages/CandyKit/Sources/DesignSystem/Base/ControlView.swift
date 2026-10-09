@@ -104,6 +104,9 @@ open class ControlView: DSView {
 
     open func performAction() { action?() }
 
+    /// Controls in the window's top bar take their clicks instead of dragging the window.
+    open override var mouseDownCanMoveWindow: Bool { false }
+
     open override func accessibilityPerformPress() -> Bool {
         guard state.enabled else { return false }
         performAction()

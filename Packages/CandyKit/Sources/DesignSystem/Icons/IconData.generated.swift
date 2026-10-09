@@ -35,6 +35,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case chevronLeft
     case chevronRight
     case chevronUp
+    case chevronsDownUp
     case chevronsLeftRightEllipsis
     case chevronsUpDown
     case circle
@@ -51,6 +52,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case cloudDownload
     case cloudUpload
     case code
+    case code2
     case columns2
     case copy
     case cornerLeftUp
@@ -108,6 +110,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case listChecks
     case listFilter
     case listOrdered
+    case listPlus
     case listTodo
     case loaderCircle
     case lock
@@ -138,6 +141,8 @@ public enum IconName: String, CaseIterable, Sendable {
     case paintbrush
     case palette
     case panelBottom
+    case panelLeft
+    case panelLeftClose
     case panelRight
     case panelsTopLeft
     case paperclip
@@ -183,6 +188,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case squareSplitVertical
     case star
     case sun
+    case table2
     case tag
     case target
     case terminal
@@ -206,6 +212,8 @@ public enum IconName: String, CaseIterable, Sendable {
     case userRound
     case userRoundX
     case users
+    case volume2
+    case volumeOff
     case wifiOff
     case workflow
     case wrench
@@ -266,6 +274,7 @@ extension IconName {
         case .chevronLeft: return "chevron-left"
         case .chevronRight: return "chevron-right"
         case .chevronUp: return "chevron-up"
+        case .chevronsDownUp: return "chevrons-down-up"
         case .chevronsLeftRightEllipsis: return "chevrons-left-right-ellipsis"
         case .chevronsUpDown: return "chevrons-up-down"
         case .circle: return "circle"
@@ -282,6 +291,7 @@ extension IconName {
         case .cloudDownload: return "cloud-download"
         case .cloudUpload: return "cloud-upload"
         case .code: return "code"
+        case .code2: return "code-2"
         case .columns2: return "columns-2"
         case .copy: return "copy"
         case .cornerLeftUp: return "corner-left-up"
@@ -339,6 +349,7 @@ extension IconName {
         case .listChecks: return "list-checks"
         case .listFilter: return "list-filter"
         case .listOrdered: return "list-ordered"
+        case .listPlus: return "list-plus"
         case .listTodo: return "list-todo"
         case .loaderCircle: return "loader-circle"
         case .lock: return "lock"
@@ -369,6 +380,8 @@ extension IconName {
         case .paintbrush: return "paintbrush"
         case .palette: return "palette"
         case .panelBottom: return "panel-bottom"
+        case .panelLeft: return "panel-left"
+        case .panelLeftClose: return "panel-left-close"
         case .panelRight: return "panel-right"
         case .panelsTopLeft: return "panels-top-left"
         case .paperclip: return "paperclip"
@@ -414,6 +427,7 @@ extension IconName {
         case .squareSplitVertical: return "square-split-vertical"
         case .star: return "star"
         case .sun: return "sun"
+        case .table2: return "table-2"
         case .tag: return "tag"
         case .target: return "target"
         case .terminal: return "terminal"
@@ -437,6 +451,8 @@ extension IconName {
         case .userRound: return "user-round"
         case .userRoundX: return "user-round-x"
         case .users: return "users"
+        case .volume2: return "volume-2"
+        case .volumeOff: return "volume-off"
         case .wifiOff: return "wifi-off"
         case .workflow: return "workflow"
         case .wrench: return "wrench"
@@ -658,6 +674,11 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "m18 15-6-6-6 6")),
             ])
+        case .chevronsDownUp:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "m7 20 5-5 5 5")),
+                IconElement(.path(d: "m7 4 5 5 5-5")),
+            ])
         case .chevronsLeftRightEllipsis:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M12 12h.01")),
@@ -749,6 +770,12 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "m16 18 6-6-6-6")),
                 IconElement(.path(d: "m8 6-6 6 6 6")),
+            ])
+        case .code2:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "m18 16 4-4-4-4")),
+                IconElement(.path(d: "m6 8-4 4 4 4")),
+                IconElement(.path(d: "m14.5 4-5 16")),
             ])
         case .columns2:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -1133,6 +1160,14 @@ extension IconName {
                 IconElement(.path(d: "M4 9h2")),
                 IconElement(.path(d: "M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02")),
             ])
+        case .listPlus:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M16 5H3")),
+                IconElement(.path(d: "M11 12H3")),
+                IconElement(.path(d: "M16 19H3")),
+                IconElement(.path(d: "M18 9v6")),
+                IconElement(.path(d: "M21 12h-6")),
+            ])
         case .listTodo:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M13 5h8")),
@@ -1324,6 +1359,17 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.rect(x: 3, y: 3, w: 18, h: 18, rx: 2, ry: 2)),
                 IconElement(.path(d: "M3 15h18")),
+            ])
+        case .panelLeft:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.rect(x: 3, y: 3, w: 18, h: 18, rx: 2, ry: 2)),
+                IconElement(.path(d: "M9 3v18")),
+            ])
+        case .panelLeftClose:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.rect(x: 3, y: 3, w: 18, h: 18, rx: 2, ry: 2)),
+                IconElement(.path(d: "M9 3v18")),
+                IconElement(.path(d: "m16 15-3-3 3-3")),
             ])
         case .panelRight:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -1609,6 +1655,10 @@ extension IconName {
                 IconElement(.path(d: "m6.34 17.66-1.41 1.41")),
                 IconElement(.path(d: "m19.07 4.93-1.41 1.41")),
             ])
+        case .table2:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18")),
+            ])
         case .tag:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z")),
@@ -1751,6 +1801,20 @@ extension IconName {
                 IconElement(.path(d: "M16 3.128a4 4 0 0 1 0 7.744")),
                 IconElement(.path(d: "M22 21v-2a4 4 0 0 0-3-3.87")),
                 IconElement(.circle(cx: 9, cy: 7, r: 4)),
+            ])
+        case .volume2:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z")),
+                IconElement(.path(d: "M16 9a5 5 0 0 1 0 6")),
+                IconElement(.path(d: "M19.364 18.364a9 9 0 0 0 0-12.728")),
+            ])
+        case .volumeOff:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M16 9a5 5 0 0 1 .95 2.293")),
+                IconElement(.path(d: "M19.364 5.636a9 9 0 0 1 1.889 9.96")),
+                IconElement(.path(d: "m2 2 20 20")),
+                IconElement(.path(d: "m7 7-.587.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298V11")),
+                IconElement(.path(d: "M9.828 4.172A.686.686 0 0 1 11 4.657v.686")),
             ])
         case .wifiOff:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

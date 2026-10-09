@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37909056866A108B1B58D3C6 /* MainWindow.swift */; };
 		71718717C7EBF952C5C3D99D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A5E63032239ADD1C5F8E1C /* main.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
@@ -14,6 +15,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		92A5E63032239ADD1C5F8E1C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		9E2E782C1ADCF72BBE6BC1C4 /* CandyWrapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CandyWrapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -54,6 +56,7 @@
 			children = (
 				A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
+				37909056866A108B1B58D3C6 /* MainWindow.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -140,6 +143,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */,
+				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
