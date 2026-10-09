@@ -198,6 +198,16 @@ for v, title, desc in [(v, "Heads up", "Something needs your attention.") for v 
             f'<div class="flex flex-col gap-2.5 text-muted-foreground" data-slot="alert-description">{desc}</div></div></div></div>')
     cases.append({"name": v if title == "Heads up" else f"{v}.wrap", "html": html, "wrapperStyle": "display:block;width:360px",
                   "native": {"variant": v, "title": title, "description": desc, "icon": "circleAlert", "width": "360"}})
+# controlAlignment="first-line" (alert.tsx:88-104): row items-start, icon in a one-line box.
+for v in ["default", "error"]:
+    cls = merge(f"{A_BASE} {A_VARIANTS[v]}")
+    html = (f'<div data-slot="alert" data-variant="{v}" role="alert" class="{cls}"><div class="flex gap-2 items-start">'
+            f'<div class="flex shrink-0 items-center justify-center h-lh w-4 [&>svg]:size-4">{CIRCLE_ALERT}</div>'
+            f'<div class="flex min-w-0 flex-1 flex-col gap-0.5"><div class="font-medium" data-slot="alert-title">{LONG_TITLE}</div>'
+            f'<div class="flex flex-col gap-2.5 text-muted-foreground" data-slot="alert-description">{LONG_DESC}</div></div></div></div>')
+    cases.append({"name": f"{v}.firstline", "html": html, "wrapperStyle": "display:block;width:360px",
+                  "native": {"variant": v, "title": LONG_TITLE, "description": LONG_DESC, "icon": "circleAlert", "width": "360",
+                             "controlAlignment": "firstLine"}})
 specs["alert"] = {"source": "apps/web/src/components/ui/alert.tsx", "states": ["rest"], "cases": cases}
 
 # 13. Empty (empty.tsx)

@@ -40,10 +40,21 @@ enum TogglesGallery {
                     } + [RadioGroupView(radios: [RadioView(), RadioView()], selected: 1)],
                 ])
             },
-            .init(title: "Alert", height: 6 * 76) {
-                Stack(AlertView.Variant.allCases.map {
+            .init(title: "Alert (default, error, info, success, warning)", height: 5 * 76) {
+                Stack(AlertView.Variant.allCases.filter { $0 != .sidebar }.map {
                     AlertView("Heads up", message: "Something needs your attention.", icon: .circleAlert, variant: $0)
                 }, spacing: 8)
+            },
+            .init(title: "Alert, long message: icon centered (T3's default) and on the first line", height: 2 * 88 + 8) {
+                let title = "Your session expired while the agent was still running"
+                let message = "Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again."
+                let firstLine = AlertView(title, message: message, icon: .circleAlert)
+                firstLine.controlAlignment = .firstLine
+                return Stack([AlertView(title, message: message, icon: .circleAlert), firstLine], spacing: 8)
+            },
+            .init(title: "Alert, sidebar variant (T3 uses it only inside the sidebar)", height: 64) {
+                SidebarStrip(AlertView("Thread archived", message: "Undo is available for a few seconds.", icon: .circleAlert,
+                                       variant: .sidebar))
             },
             .init(title: "Empty (default, compact)", height: 208 + 256) {
                 Stack([EmptyView(title: "No threads yet", message: "Start a conversation to see it here.", icon: .inbox),
@@ -93,6 +104,27 @@ enum TogglesGallery {
     }
 
     /// Full-width views stacked vertically; keeps collapsible panels in step with their height.
+    /// Shows sidebar-only components on the sidebar's own surface (color and grain).
+    final class SidebarStrip: DSView {
+        private let surface = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
+        private let content: NSView
+
+        init(_ content: NSView) {
+            self.content = content
+            super.init(frame: .zero)
+            addSubview(surface)
+            addSubview(content)
+        }
+
+        override func layout() {
+            super.layout()
+            surface.frame = bounds
+            content.setFrameSize(NSSize(width: bounds.width - 16, height: content.frame.height))
+            let h = content.intrinsicContentSize.height
+            content.frame = NSRect(x: 8, y: (bounds.height - h) / 2, width: bounds.width - 16, height: h)
+        }
+    }
+
     final class Stack: DSView {
         private let views: [NSView]
         private let spacing: CGFloat

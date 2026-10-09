@@ -116,6 +116,32 @@
     "icon": "circleAlert",
     "width": "360"
    }
+  },
+  {
+   "name": "default.firstline",
+   "html": "<div data-slot=\"alert\" data-variant=\"default\" role=\"alert\" class=\"relative rounded-xl border px-3.5 py-3 text-card-foreground text-sm bg-transparent dark:bg-input/32 [&_svg]:text-muted-foreground\"><div class=\"flex gap-2 items-start\"><div class=\"flex shrink-0 items-center justify-center h-lh w-4 [&>svg]:size-4\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"></line><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"></line></svg></div><div class=\"flex min-w-0 flex-1 flex-col gap-0.5\"><div class=\"font-medium\" data-slot=\"alert-title\">Your session expired while the agent was still running</div><div class=\"flex flex-col gap-2.5 text-muted-foreground\" data-slot=\"alert-description\">Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again.</div></div></div></div>",
+   "wrapperStyle": "display:block;width:360px",
+   "native": {
+    "variant": "default",
+    "title": "Your session expired while the agent was still running",
+    "description": "Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again.",
+    "icon": "circleAlert",
+    "width": "360",
+    "controlAlignment": "firstLine"
+   }
+  },
+  {
+   "name": "error.firstline",
+   "html": "<div data-slot=\"alert\" data-variant=\"error\" role=\"alert\" class=\"relative rounded-xl border px-3.5 py-3 text-sm border-error/32 bg-error-surface text-error-foreground [&_[data-slot=alert-description]]:text-error-foreground/80 [&_svg]:text-error\"><div class=\"flex gap-2 items-start\"><div class=\"flex shrink-0 items-center justify-center h-lh w-4 [&>svg]:size-4\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"></line><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"></line></svg></div><div class=\"flex min-w-0 flex-1 flex-col gap-0.5\"><div class=\"font-medium\" data-slot=\"alert-title\">Your session expired while the agent was still running</div><div class=\"flex flex-col gap-2.5 text-muted-foreground\" data-slot=\"alert-description\">Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again.</div></div></div></div>",
+   "wrapperStyle": "display:block;width:360px",
+   "native": {
+    "variant": "error",
+    "title": "Your session expired while the agent was still running",
+    "description": "Reconnect to keep streaming. Anything the agent wrote while you were away is saved on the server and appears once the thread syncs again.",
+    "icon": "circleAlert",
+    "width": "360",
+    "controlAlignment": "firstLine"
+   }
   }
  ]
 }
