@@ -37,6 +37,24 @@ Milestone 2, design system. Milestone 1 was demoed and accepted on 2026-10-09. T
 - [x] Official desktop app baseline in `docs/benchmarks.md`: cold launch about 3.4 s to sidebar data, idle 2.6% CPU, 88 interrupt wakeups/s, Energy Impact 4.29, 544 MB, bundle 366 MB. Streaming and large-thread memory deferred to milestone 8
 - [x] Demo milestone 1 to the user (accepted)
 
+## Milestone 2 checklist
+
+- [x] `scripts/extract-tokens`: resolves every T3 CSS variable in headless Chromium from `design/t3-source/main.css` and generates `Tokens.generated.swift` (114 semantic colors, base palette, radii, type, shadows, easings) plus `docs/design-tokens.md`. Main-panel pixels match the references exactly
+- [x] `scripts/extract-icons`: 225 icons (lucide 0.564.0 plus 16 brand marks) with an SVG path renderer and `IconView`. 11 brand logos with gradients or masks are deferred
+- [x] Fonts: T3 uses the system stacks (SF Pro, SF Mono), so nothing to bundle. The terminal's Symbols Nerd Font comes with the terminal work
+- [x] Base views: `DSView`, `ControlView` (hover, press, focus-visible, disabled, popup-open), `BoxDecorationLayer` (CSS box painting order), `LabelView` (Chromium-style antialiasing), `Snapshot` (offscreen, window-hosted, 2x)
+- [x] `ButtonView`: 14 variants, 15 sizes, gallery sections
+- [ ] Fidelity harness: Chromium renders T3's real markup per component and state, a test diffs it against ours and writes an HTML report (agent running)
+- [ ] Remaining components, in batches, each checked by the harness: Input, Textarea, Kbd, Badge, Separator, Toggle, ToggleGroup, Switch, Checkbox, Radio, Tooltip, Popover, Menu, Select, Dialog, Sheet, AlertDialog, Toast, ScrollArea, Sidebar parts, Collapsible, SettingsGroup card, Skeleton, Spinner, Alert, Empty, Command palette rows, Table
+- [ ] `CandyWrapper.xcodeproj` from `project.yml` with XcodeGen, and the gallery window checked in the GUI session (`--gallery` or option-shift-command-G)
+- [ ] `docs/design.md`: token sheet link, component inventory, substitutions with side-by-side images
+- [ ] User visual sign-off
+
+Gotchas found so far:
+- Offscreen AppKit views only get a layer tree inside a window that has displayed once. `Snapshot` hosts the view in a hidden borderless window and calls `display()` first.
+- A non-final `@MainActor` closure property in an `open` class trips a Swift 6.4 bug (getter symbol never emitted, link fails). Make such properties `final`.
+- `NSGraphicsContext(bitmapImageRep:)` already scales points to pixels. Don't scale the context again.
+
 ## Waiting on the user
 
 - Nothing blocking right now. GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
