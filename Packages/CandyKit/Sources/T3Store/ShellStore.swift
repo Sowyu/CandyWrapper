@@ -22,7 +22,10 @@ public actor ShellStore {
     private var pending: ShellChangeSet?
     private let onChange: @Sendable () -> Void
 
-    public init(onChange: @escaping @Sendable () -> Void) {
+    /// `cached` seeds the reducer from `ShellCache` so the UI and the resume cursor are ready
+    /// before the server answers.
+    public init(cached: ShellSnapshot? = nil, onChange: @escaping @Sendable () -> Void) {
+        reducer = ShellReducer(snapshot: cached)
         self.onChange = onChange
     }
 
