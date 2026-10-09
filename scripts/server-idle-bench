@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Measures an idle T3 server under different Node options and environment settings.
+
+Starts each variant on its own port with a throwaway home (never ~/.t3), waits until the
+environment descriptor answers, settles, then samples footprint, CPU and wakeups with
+procstat over the server's process tree, and stops exactly the process group it started.
+
+Usage: scripts/server-idle-bench [--settle 20] [--window 30] [--variants all|name,name]
+"""
+import argparse, json, os, signal, subprocess, sys, time, urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOME = os.path.expanduser("~")
+VERSION = open(os.path.join(ROOT, "T3_VERSION")).read().strip().lstrip("v")
+T3 = f"{HOME}/.t3/runtime/versions/{VERSION}/t3"
+BENCH_HOME = os.path.join(os.path.dirname(ROOT), "CandyWrapper-research", "sandbox2", "t3home")
+PORT = 47392
+PROCSTAT = "/tmp/candywrapper-procstat"
+
+VARIANTS = {
+    "baseline": {},
+    "semi1": {"NODE_OPTIONS": "--max-semi-space-size=1"},
+    "size": {"NODE_OPTIONS": "--optimize-for-size --max-semi-space-size=1"},
+    "size-old128": {"NODE_OPTIONS": "--optimize-for-size --max-semi-space-size=1 --max-old-space-size=128"},
+    "lite": {"NODE_OPTIONS": "--lite-mode --max-semi-space-size=1"},
+    "quiet-trace": {"T3CODE_TRACE_MIN_LEVEL": "Error", "T3CODE_TRACE_TIMING_ENABLED": "false"},
+}
+
+
+def ensure_procstat():
+    if not os.path.exists(PROCSTAT):
+        subprocess.run(["swiftc", "-O", os.path.join(ROOT, "scripts/procstat.swift"), "-o", PROCSTAT], check=True)
+
+
+def ready(timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/.well-known/t3/environment", timeout=2) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+
+def run_variant(name, extra, settle, window):
+    os.makedirs(BENCH_HOME, exist_ok=True)
+    env = {"HOME": HOME, "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
+           "SHELL": "/bin/zsh", "LANG": "en_US.UTF-8", "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
+           "PATH": f"{HOME}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+           "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": BENCH_HOME, **extra}
+    log = open(os.path.join(os.path.dirname(BENCH_HOME), f"bench-{name}.log"), "w")
+    started = time.time()
+    proc = subprocess.Popen([T3, "serve", "--base-dir", BENCH_HOME, "--port", str(PORT), "--host", "127.0.0.1", "--no-browser"],
+                            env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    try:
+        if not ready():
+            return {"variant": name, "error": "server did not answer"}
+        startup = time.time() - started
+        time.sleep(settle)
+        out = subprocess.run([PROCSTAT, str(window), "--tree", str(proc.pid)], capture_output=True, text=True).stdout
+        total = [l for l in out.splitlines() if l.startswith("TOTAL")]
+        server = [l for l in out.splitlines() if l.split()[:1] == [str(proc.pid)]]
+        def cols(line):
+            p = line.split()
+            return {"cpu%": float(p[-5]), "idle_wk/s": float(p[-4]), "intr_wk/s": float(p[-3]), "footprint_mb": float(p[-2])}
+        return {"variant": name, "startup_s": round(startup, 2), "server": cols(server[0]) if server else None,
+                "tree": cols(total[0]) if total else None}
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            proc.wait(timeout=20)
+        except Exception:
+            os.killpg(proc.pid, signal.SIGKILL)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--settle", type=int, default=20)
+    ap.add_argument("--window", type=int, default=30)
+    ap.add_argument("--variants", default="all")
+    a = ap.parse_args()
+    ensure_procstat()
+    names = list(VARIANTS) if a.variants == "all" else a.variants.split(",")
+    for name in names:
+        result = run_variant(name, VARIANTS[name], a.settle, a.window)
+        print(json.dumps(result), flush=True)
+
+
+if __name__ == "__main__":
+    main()
