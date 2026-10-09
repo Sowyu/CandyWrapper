@@ -1,10 +1,12 @@
 import AppKit
 import DesignSystem
+import Features
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private var galleryWindow: NSWindow?
+    private var session: ShellSession?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -17,18 +19,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showMainWindow() {
         let window = MainWindow()
-        let layout = SidebarLayoutView(sidebarContent: TopbarDragView(), mainContent: TopbarDragView())
+        let sidebar = SidebarContentView()
+        let main = TopbarDragView()
+        let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
-        // Placeholder header control at T3's toggle position, used by --chrome-check.
-        let toggle = ButtonView(nil, icon: .panelLeft, variant: .ghost, size: .iconSm)
-        toggle.frame = NSRect(x: 80, y: 12, width: 28, height: 28)
-        layout.addSubview(toggle)
+        sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
         window.layoutTrafficLights()
         mainWindow = window
-        if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: toggle) }
+        if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
+        startSession(sidebar: sidebar)
+        scheduleSelfSnapshot(window)
+    }
+
+    /// Development: `--snapshot <png> [--snapshot-delay seconds]` renders the window's own layer
+    /// tree to a PNG (no screen-recording permission needed) and quits.
+    private func scheduleSelfSnapshot(_ window: NSWindow) {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
+        let path = args[i + 1]
+        let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                guard let view = window.contentView, let layer = view.layer else { return }
+                let scale: CGFloat = 2, size = view.bounds.size
+                let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                           bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                           colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+                rep.size = size
+                let ctx = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+                if view.isFlipped { ctx.translateBy(x: 0, y: size.height); ctx.scaleBy(x: 1, y: -1) }
+                layer.render(in: ctx)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                print("snapshot:", path)
+                fflush(stdout)
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    /// Development entry until the server manager lands:
+    /// `--server http://127.0.0.1:47391 --token-file <path to a bearer token>`.
+    private func startSession(sidebar: SidebarContentView) {
+        let args = CommandLine.arguments
+        guard let s = args.firstIndex(of: "--server"), s + 1 < args.count, let url = URL(string: args[s + 1]),
+              let t = args.firstIndex(of: "--token-file"), t + 1 < args.count,
+              let token = try? String(contentsOfFile: args[t + 1], encoding: .utf8)
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else { return }
+        let session = ShellSession(baseURL: url, token: token, sidebar: sidebar)
+        session.start()
+        self.session = session
     }
 
     /// Prints traffic light frames and what a click at header points would hit, then quits.
