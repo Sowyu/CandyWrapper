@@ -51,8 +51,10 @@ struct TogglesFidelityTests {
 
     @Test func alert() throws {
         try run("alert") { n in
-            AlertView(n["title"], message: n["description"], icon: n["icon"].flatMap(IconName.init(rawValue:)),
-                      variant: AlertView.Variant(rawValue: n["variant"]!)!)
+            let alert = AlertView(n["title"], message: n["description"], icon: n["icon"].flatMap(IconName.init(rawValue:)),
+                                  variant: AlertView.Variant(rawValue: n["variant"]!)!)
+            if n["controlAlignment"] == "firstLine" { alert.controlAlignment = .firstLine }
+            return alert
         }
     }
 

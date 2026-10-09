@@ -3,12 +3,20 @@
     "height" : 68,
     "width" : 360
   },
+  "default.firstline" : {
+    "height" : 148,
+    "width" : 360
+  },
   "default.wrap" : {
     "height" : 148,
     "width" : 360
   },
   "error" : {
     "height" : 68,
+    "width" : 360
+  },
+  "error.firstline" : {
+    "height" : 148,
     "width" : 360
   },
   "error.wrap" : {

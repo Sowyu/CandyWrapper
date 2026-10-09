@@ -9,6 +9,11 @@ public final class AlertView: DSView {
     public enum Variant: String, CaseIterable, Sendable { case `default`, sidebar, error, info, success, warning }
 
     public var variant: Variant = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
+
+    /// T3's `controlAlignment`: `.center` (the default) centers the icon and actions on the whole
+    /// text block; `.firstLine` pins them to the first line, as T3 does for long messages.
+    public enum ControlAlignment: Sendable { case center, firstLine }
+    public var controlAlignment: ControlAlignment = .center { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     public var icon: IconName? { didSet { updateIcon() } }
     public var title: String? { didSet { titleLabel.text = title ?? ""; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var message: String? { didSet { descriptionLabel.text = message ?? ""; invalidateIntrinsicContentSize(); needsLayout = true } }
@@ -67,8 +72,19 @@ public final class AlertView: DSView {
         return title + message + (hasTitle && hasMessage ? 2 : 0)
     }
 
+    /// First-line rows with actions get `min-h-6 pt-0.5` (desktop values).
+    private var rowPaddingTop: CGFloat { controlAlignment == .firstLine && !actions.isEmpty ? 2 : 0 }
+
     private func rowHeight(_ width: CGFloat) -> CGFloat {
-        max(contentHeight(width), iconView == nil ? 0 : 16, actions.map(\.intrinsicContentSize.height).max() ?? 0)
+        let line = metrics.line
+        switch controlAlignment {
+        case .center:
+            return max(contentHeight(width), iconView == nil ? 0 : 16, actions.map(\.intrinsicContentSize.height).max() ?? 0)
+        case .firstLine:
+            // Icon and action boxes are one line tall (`h-lh`), so they never exceed the text.
+            let children = max(contentHeight(width), iconView == nil && actions.isEmpty ? 0 : line)
+            return actions.isEmpty ? children : max(24, rowPaddingTop + children)
+        }
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat { rowHeight(width) + 2 * (metrics.py + 1) }
@@ -89,15 +105,22 @@ public final class AlertView: DSView {
         let m = metrics
         let top = m.py + 1, rowH = rowHeight(bounds.width)
         let (x, right) = textColumn(bounds.width)
-        iconView?.frame = NSRect(x: m.px + 1, y: top + (rowH - 16) / 2, width: 16, height: 16)
+        let firstLine = controlAlignment == .firstLine
+        // `.firstLine`: every child starts at the row top (after `pt-0.5` when actions exist) and
+        // the icon and actions center inside a one-line box (`h-lh`).
+        let lineTop = top + rowPaddingTop
+        func centered(_ height: CGFloat) -> CGFloat {
+            firstLine ? lineTop + (m.line - height) / 2 : top + (rowH - height) / 2
+        }
+        iconView?.frame = NSRect(x: m.px + 1, y: centered(16), width: 16, height: 16)
         var actionRight = bounds.width - m.px - 1
         for action in actions.reversed() {
             let size = action.intrinsicContentSize
-            action.frame = NSRect(x: actionRight - size.width, y: top + (rowH - size.height) / 2, width: size.width, height: size.height)
+            action.frame = NSRect(x: actionRight - size.width, y: centered(size.height), width: size.width, height: size.height)
             actionRight -= size.width + 4
         }
         let w = right - x
-        var y = top + (rowH - contentHeight(bounds.width)) / 2
+        var y = firstLine ? lineTop : top + (rowH - contentHeight(bounds.width)) / 2
         if hasTitle {
             let h = titleLabel.height(forWidth: w)
             titleLabel.frame = NSRect(x: x, y: y, width: w, height: h)
