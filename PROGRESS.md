@@ -44,11 +44,11 @@ Milestone 2, design system. Milestone 1 was demoed and accepted on 2026-10-09. T
 - [x] Fonts: T3 uses the system stacks (SF Pro, SF Mono), so nothing to bundle. The terminal's Symbols Nerd Font comes with the terminal work
 - [x] Base views: `DSView`, `ControlView` (hover, press, focus-visible, disabled, popup-open), `BoxDecorationLayer` (CSS box painting order), `LabelView` (Chromium-style antialiasing), `Snapshot` (offscreen, window-hosted, 2x)
 - [x] `ButtonView`: 14 variants, 15 sizes, gallery sections
-- [ ] Fidelity harness: Chromium renders T3's real markup per component and state, a test diffs it against ours and writes an HTML report (agent running)
-- [ ] Remaining components, in batches, each checked by the harness: Input, Textarea, Kbd, Badge, Separator, Toggle, ToggleGroup, Switch, Checkbox, Radio, Tooltip, Popover, Menu, Select, Dialog, Sheet, AlertDialog, Toast, ScrollArea, Sidebar parts, Collapsible, SettingsGroup card, Skeleton, Spinner, Alert, Empty, Command palette rows, Table
-- [ ] `CandyWrapper.xcodeproj` from `project.yml` with XcodeGen, and the gallery window checked in the GUI session (`--gallery` or option-shift-command-G)
-- [ ] `docs/design.md`: token sheet link, component inventory, substitutions with side-by-side images
-- [ ] User visual sign-off
+- [x] Fidelity harness: `scripts/component-reference` renders T3's real markup per component and state in Chromium; `swift test --filter Fidelity` diffs ours and writes report-<component>.html in /tmp/candywrapper-fidelity
+- [x] Component library: 47 components across 46 fidelity suites, mostly 0.6% to 3% differing pixels against T3, 78 tests in 13 suites. Inventory and numbers in `docs/design.md`
+- [x] `CandyWrapper.xcodeproj` from `project.yml` with XcodeGen; app builds with xcodebuild and opens in the GUI session (`--gallery` or option-shift-command-G for the gallery)
+- [x] `docs/design.md`: sources, fonts, architecture, inventory with fidelity numbers, substitutions with side-by-side images, known gaps
+- [ ] User visual sign-off. Review page: `../CandyWrapper-research/review/m2/index.html` (open in the GUI session)
 
 Gotchas found so far:
 - Offscreen AppKit views only get a layer tree inside a window that has displayed once. `Snapshot` hosts the view in a hidden borderless window and calls `display()` first.
