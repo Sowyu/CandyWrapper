@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private var galleryWindow: NSWindow?
     private var session: ShellSession?
+    private var server: ServerController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -16,6 +17,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        server?.shouldTerminate() ?? .terminateNow
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { mainWindow?.makeKeyAndOrderFront(nil) }
+        return true
+    }
 
     private func showMainWindow() {
         let window = MainWindow()
@@ -30,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.layoutTrafficLights()
         mainWindow = window
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
-        startSession(sidebar: sidebar)
+        startSession(sidebar: sidebar, window: window)
         scheduleSelfSnapshot(window)
     }
 
@@ -60,14 +70,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Development entry until the server manager lands:
-    /// `--server http://127.0.0.1:47391 --token-file <path to a bearer token>`.
-    private func startSession(sidebar: SidebarContentView) {
+    /// The local server through `ServerController`. Development: `--server <url> --token-file
+    /// <path>` connects straight to a running server instead, such as the sandbox on 47391.
+    private func startSession(sidebar: SidebarContentView, window: NSWindow) {
         let args = CommandLine.arguments
         guard let s = args.firstIndex(of: "--server"), s + 1 < args.count, let url = URL(string: args[s + 1]),
               let t = args.firstIndex(of: "--token-file"), t + 1 < args.count,
               let token = try? String(contentsOfFile: args[t + 1], encoding: .utf8)
-                  .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else { return }
+                  .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+            let server = ServerController(sidebar: sidebar, window: window)
+            server.start()
+            self.server = server
+            return
+        }
         let session = ShellSession(baseURL: url, token: token, sidebar: sidebar)
         session.start()
         self.session = session
@@ -117,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Allow Remote Access", action: #selector(toggleRemoteAccess(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit CandyWrapper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Hidden: the gallery is a developer tool, reachable only by shortcut or --gallery.
         let gallery = NSMenuItem(title: "Component Gallery", action: #selector(showGallery(_:)), keyEquivalent: "g")
@@ -126,5 +143,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(gallery)
         appItem.submenu = appMenu
         return main
+    }
+
+    /// On: T3 Code's server keeps running while CandyWrapper is idle, so other devices can reach
+    /// this Mac. Off: it stops after 10 idle minutes.
+    @objc func toggleRemoteAccess(_ sender: Any?) {
+        guard let server else { return }
+        server.setAllowsRemoteAccess(!server.allowsRemoteAccess)
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard item.action == #selector(toggleRemoteAccess(_:)) else { return true }
+        item.state = server?.allowsRemoteAccess == true ? .on : .off
+        return server != nil
     }
 }
