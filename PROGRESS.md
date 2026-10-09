@@ -6,6 +6,8 @@ Update this file at the end of every work session. Newest log entry first.
 
 Milestone 3, skeleton: connect to a T3 server and show real projects and threads in the sidebar. Milestone 2 was signed off by the user on 2026-10-09 after reviewing `../CandyWrapper-research/review/m2/index.html`.
 
+Next action: fix the header stars that leak into the top of the main panel, then ask the user before the M3 demo against their live T3 (pairing writes a device record into `~/.t3`). Open M3 items: connection status display, custom URL plus pairing link, the media-navigation sidebar toggle.
+
 ## Milestones
 
 | # | Milestone | Status |
@@ -39,11 +41,13 @@ Milestone 3, skeleton: connect to a T3 server and show real projects and threads
 
 ## Milestone 3 checklist
 
-- [ ] T3Protocol wire types: Effect RPC envelopes, auth and pairing HTTP types, typed errors (agent W)
-- [ ] T3Client: HTTP auth (token exchange, session, ws ticket), WebSocket RPC client (requests, streams with Ack per Chunk, Ping keepalive, Interrupt on cancel), reconnect supervisor with T3's backoff, Keychain credential store; integration test against the sandbox server (agent W)
-- [ ] T3Protocol domain types for the shell stream and server config subset; T3Store shell reducer (snapshot, deltas, sequence dedupe, resume cursor) and sidebar derived state (status, ordering, grouping, timestamps), tested against fixtures/transcripts (agent D)
-- [ ] App wiring: ServerManager. Reuse a running server found via `~/.t3/userdata/server-runtime.json` plus a health check; otherwise spawn `t3 serve` on demand with a bootstrap credential (`--bootstrap-fd`) and low-memory Node options; stop it after idle minutes with no active runs, pending requests or running terminals, and on quit; restart on use. Cached sidebar at launch. Also a custom URL plus pairing link. Connection status, main window with the sidebar showing real data
-- [ ] Window chrome matching the desktop app (traffic lights, title bar, drag regions)
+- [x] T3Protocol wire types: Effect RPC envelopes, auth and pairing HTTP types, typed errors (agent W)
+- [x] T3Client: HTTP auth (token exchange, session, ws ticket), WebSocket RPC client (requests, streams with Ack per Chunk, Interrupt on cancel; no keepalive, the server never pings or times out), reconnect supervisor with T3's backoff, Keychain credential store; integration test against the sandbox server (agent W)
+- [x] T3Protocol domain types for the shell stream and server config subset; T3Store shell reducer (snapshot, deltas, sequence dedupe, resume cursor) and sidebar derived state (status, ordering, grouping, timestamps), tested against fixtures/transcripts (agent D)
+- [x] Local server (`T3Client/LocalServer/`, `App/Sources/ServerController.swift`): reuses a server found through `<home>/userdata/server-runtime.json` (pairs once with the user's consent, token in the Keychain), else starts `t3 serve --bootstrap-fd 3` with `--max-semi-space-size=1`, stops it after 10 idle minutes and on quit (asks if a run or request is active), restarts it when the window comes back, shows the disk-cached sidebar before the server answers (full sidebar at 1.5 s while the server takes about 3 s). An owner record in Application Support lets the next launch stop a server whose app crashed. App menu has Allow Remote Access. Verified live against the sandbox home with `scripts/run-app`: start, sidebar, quit stops the server, a force-killed app's orphan is stopped on relaunch
+- [ ] App wiring still open: connection status display, custom URL plus pairing link. Original brief for this item: ServerManager. Reuse a running server found via `~/.t3/userdata/server-runtime.json` plus a health check; otherwise spawn `t3 serve` on demand with a bootstrap credential (`--bootstrap-fd`) and low-memory Node options; stop it after idle minutes with no active runs, pending requests or running terminals, and on quit; restart on use. Cached sidebar at launch. Also a custom URL plus pairing link. Connection status, main window with the sidebar showing real data
+- [x] Sidebar feature (`Packages/CandyKit/Sources/Features/Sidebar/`): `SidebarContentView` (nightly stage art, brand, search, filter, add project, new thread, footer Settings, Pull Requests, Usage), `SidebarListView` (virtualized, rows recycled per kind, 160pt overscan, only changed rows reconfigure, Sidebar.motion.ts slides and fades, arrows and Enter), one label timer aimed at the next visible label change with 10% tolerance and none while occluded, `SidebarPreview` (03-turn2 replay, reference and rich datasets). Whole-sidebar vs 02-sidebar-populated: 5.0% light, 5.3% dark differing pixels (`swift test --filter SidebarFidelityTests/wholeSidebar`, report in /tmp/candywrapper-fidelity/report-sidebar-whole.html). Open: per-state component specs through scripts/component-reference are not written yet; the toggle is ghost, T3 uses media-navigation over the art (needs a variant on `SidebarTriggerView`); search results, project filter popup, snooze menu, drag and drop, PR badge, terminal indicator and draft rows not built
+- [x] Window chrome matching the desktop app (traffic lights at x 16 centered in the 52 pt topbar, hidden title, drag regions, 1100x780 default, 840x620 minimum). Open bug: the sidebar header's stars draw into the top of the main panel
 - [ ] Demo: connect to the user's live T3 (ask first; pairing writes an auth session into the live install)
 
 ## Milestone 2 checklist
@@ -66,7 +70,9 @@ Gotchas found so far:
 
 ## Waiting on the user
 
-- Nothing blocking right now. GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
+- M3 demo needs the user's go-ahead: connecting CandyWrapper to the live T3 on this Mac pairs it, which writes a device record into `~/.t3`. Ask before running the app without `CANDY_T3_HOME`.
+- The user hasn't confirmed the Allow Remote Access design yet (see Decisions). Built as proposed.
+- GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
 
 ## Resolved environment issues
 
@@ -75,6 +81,9 @@ Gotchas found so far:
 - Duplicate T3 service: logging into the GUI made launchd load `com.t3tools.t3code.service` a second time in `gui/502`, next to the original in the background domain. Both servers shared `~/.t3` and the T3 Connect tunnel. With the user's approval: `launchctl bootout gui/502/com.t3tools.t3code.service` and `launchctl disable gui/502/com.t3tools.t3code.service`. Undo with `launchctl enable`. Side effect: the duplicate deleted `~/.t3/userdata/server-runtime.json` on exit. The original service rewrites it on its next restart. Until then `t3 pair` can't discover the live server.
 
 ## Decisions made
+
+- 2026-10-09: Allow Remote Access (app menu). On keeps the app's own server running while CandyWrapper is idle, so the user's phone can reach this Mac. Off lets it stop after 10 idle minutes. Until the user picks, it follows whether T3 Connect is linked (`GET /api/connect/link-state`). Proposed to the user after they asked about reaching the Mac from Android; not explicitly confirmed.
+- 2026-10-09: The app records the server it started (pid plus start time, and its own) in `~/Library/Application Support/CandyWrapper/owned-server.json`. On the next start, if that app process is gone, it stops exactly that server. Otherwise a crash would leave a server that later launches treat as someone else's and never stop.
 
 - 2026-10-09: Server lifecycle on the user's laptop: CandyWrapper starts T3's server only when needed and stops it when idle or on quit, never during a running turn or a pending approval. It reuses an already-running T3 server instead of starting a second one, and launches its own server with the lowest-memory Node settings that measure fine. Claude agents keep running locally through it, and threads stay compatible with official T3. The launch shows cached sidebar state while the server starts.
 
@@ -90,6 +99,11 @@ Gotchas found so far:
 
 ## Findings worth knowing before you code
 
+- `NSApp.terminate` called from inside a main-queue block (`asyncAfter`, a main-actor Task) runs AppKit's terminate loop inside that block. With `.terminateLater`, a reply that waits on main-actor work deadlocks. `ServerController.shouldTerminate` decides synchronously, shuts down in a detached task and replies with `CFRunLoopPerformBlock`.
+- The harness kills a background command's whole process tree at its time limit, setsid children included. Use `scripts/run-app` with `--snapshot` so the app quits on its own, and give background runs a long timeout.
+- `~/.local/bin/t3` points at runtime 0.0.45; the live service runs the nightly named in `~/.t3/runtime/service-state.json`. `LocalServerDiscovery.resolveBinary` prefers service-state, then PATH.
+- The app-owned server logs stderr to `~/Library/Logs/CandyWrapper/t3-server.log`.
+
 - WebSocket endpoint is `GET /ws?orchestrationProtocol=2&wsTicket=...`. Missing or wrong protocol version gives HTTP 426.
 - Framing is Effect RPC JSON: one JSON message or a JSON array of messages per text frame. Client sends `Request`, `Ack`, `Interrupt`, `Ping`, `Eof`. Server sends `Chunk`, `Exit`, `Defect`, `Pong`, `ClientProtocolError`.
 - The server waits for an `Ack` after every `Chunk` before sending the next chunk of that stream.
@@ -101,5 +115,7 @@ Gotchas found so far:
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
 ## Log
+
+- 2026-10-09: M3 local server. The agent built `T3Client/LocalServer/` (discovery, launcher with desktop bootstrap, lifecycle with idle stop, remote access setting) and `ShellCache`. Main session wired it into the app (`ServerController`), added the orphan record, fixed a quit deadlock, added `scripts/run-app`. 211 tests pass. Stopped the sandbox server and its two idle Claude sessions; restart it with `scripts/sandbox-server` when needed. Next: header stars bug, then ask the user about the live demo.
 
 - 2026-10-09: Research session 1. Cloned T3, built the recorder and procstat, recorded three transcripts, wrote CLAUDE.md, PROGRESS.md and docs/spec.md. Stopped all research agents on the user's request because of cost. Partial notes saved in `docs/research/`.

@@ -15,6 +15,8 @@ final class ShellSession {
     private var subscription: Task<Void, Never>?
     private var pulling = false
     private var pullAgain = false
+    /// After each sidebar pull, with the store's whole shell (for the disk cache and activity).
+    var onSnapshot: ((ShellSnapshot) -> Void)?
 
     init(baseURL: URL, token: String, sidebar: SidebarContentView, cached: ShellSnapshot? = nil) {
         let http = EnvironmentHTTP(baseURL: baseURL)
@@ -54,6 +56,7 @@ final class ShellSession {
         pulling = true
         Task { @MainActor in
             await sidebar.pull(from: store)
+            if let onSnapshot, let snapshot = await store.snapshot { onSnapshot(snapshot) }
             pulling = false
             if pullAgain { pullAgain = false; pull() }
         }
