@@ -63,6 +63,14 @@ struct LocalServerIntegrationTests {
         let config = try await supervisor.request("server.getConfig")
         #expect(config["environment"]?["environmentId"]?.stringValue == environmentId)
 
+        // Joining a server someone else started, as the app does with a running T3: mint a code
+        // with the CLI while the server runs, redeem it, and the new bearer works.
+        let code = try await LocalServerLauncher.mintPairingCode(binary: try Self.configuration().binary,
+                                                                 home: Self.home, path: Self.path)
+        let (pairedDescriptor, paired) = try await http.pair(code: code, identity: Self.identity)
+        #expect(pairedDescriptor.environmentId == environmentId)
+        #expect(try await http.session(token: paired.accessToken).authenticated)
+
         // Remote access default comes from the link state.
         let suite = "candykit-test-\(UUID().uuidString)"
         defer { UserDefaults().removePersistentDomain(forName: suite) }
