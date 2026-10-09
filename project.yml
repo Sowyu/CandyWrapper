@@ -41,9 +41,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.candywrapper.app
         ARCHS: "$(ARCHS_STANDARD)"
-        ONLY_ACTIVE_ARCH[config=Debug]: YES
-        ONLY_ACTIVE_ARCH[config=Release]: NO
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+        Release:
+          ONLY_ACTIVE_ARCH: NO
