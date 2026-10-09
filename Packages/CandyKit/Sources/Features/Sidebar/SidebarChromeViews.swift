@@ -50,6 +50,9 @@ final class StageBackdropView: DSView {
         ctx.saveGState()
         ctx.scaleBy(x: s, y: s)
         let unitsW = w / s
+        // The star tiles below are whole 288-unit tiles; without this the last one spills past
+        // the sidebar wherever the context isn't clipped to the view (layer.render(in:)).
+        ctx.clip(to: CGRect(x: 0, y: 0, width: unitsW, height: 96))
         let space = CGColorSpaceCreateDeviceRGB()
         // Sky: linear (24,0) to (264,96), spread reflect.
         // spreadMethod reflect: one long gradient whose segments alternate direction, no seams.
