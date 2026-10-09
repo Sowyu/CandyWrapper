@@ -140,18 +140,19 @@ open class ControlView: DSView {
     /// `transition-[box-shadow,scale]` 150ms `cubic-bezier(.4,0,.2,1)`, scale .97 while active.
     private func animatePressScale(_ pressed: Bool) {
         guard let layer else { return }
-        let target = CATransform3DMakeScale(pressed ? 0.97 : 1, pressed ? 0.97 : 1, 1)
-        if Motion.reduced {
-            layer.transform = target
-            return
-        }
         // Scale around the center: the layer's anchor stays at its origin under AppKit.
+        // sublayerTransform, because AppKit resets `transform` whenever it syncs the view's geometry
+        // (attaching to a window, frame changes). Controls draw only in sublayers and subviews.
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         var t = CATransform3DMakeTranslation(center.x, center.y, 0)
         t = CATransform3DScale(t, pressed ? 0.97 : 1, pressed ? 0.97 : 1, 1)
         t = CATransform3DTranslate(t, -center.x, -center.y, 0)
-        Motion.animate(layer, keyPath: "transform", to: NSValue(caTransform3D: t), duration: Motion.Durations.default)
-        layer.transform = t
+        if Motion.reduced {
+            layer.sublayerTransform = t
+            return
+        }
+        Motion.animate(layer, keyPath: "sublayerTransform", to: NSValue(caTransform3D: t), duration: Motion.Durations.default)
+        layer.sublayerTransform = t
     }
 }
 

@@ -1,0 +1,110 @@
+{
+  "default.sm" : {
+    "height" : 28,
+    "width" : 84.2578125
+  },
+  "destructive-outline.sm" : {
+    "height" : 28,
+    "width" : 164.125
+  },
+  "destructive.sm" : {
+    "height" : 28,
+    "width" : 112.671875
+  },
+  "ghost-destructive.sm" : {
+    "height" : 28,
+    "width" : 156.546875
+  },
+  "ghost-muted.sm" : {
+    "height" : 28,
+    "width" : 124.109375
+  },
+  "ghost.sm" : {
+    "height" : 28,
+    "width" : 75.59375
+  },
+  "glass.sm" : {
+    "height" : 28,
+    "width" : 72.5078125
+  },
+  "link.sm" : {
+    "height" : 28,
+    "width" : 61.03125
+  },
+  "media-close.sm" : {
+    "height" : 28,
+    "width" : 119.703125
+  },
+  "media-navigation.sm" : {
+    "height" : 28,
+    "width" : 152.9765625
+  },
+  "outline.compact" : {
+    "height" : 28,
+    "width" : 89.8046875
+  },
+  "outline.default" : {
+    "height" : 32,
+    "width" : 90.2578125
+  },
+  "outline.icon" : {
+    "height" : 32,
+    "width" : 32
+  },
+  "outline.icon-lg" : {
+    "height" : 36,
+    "width" : 36
+  },
+  "outline.icon-micro" : {
+    "height" : 20,
+    "width" : 20
+  },
+  "outline.icon-sm" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "outline.icon-tiny" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "outline.icon-xl" : {
+    "height" : 40,
+    "width" : 40
+  },
+  "outline.icon-xs" : {
+    "height" : 24,
+    "width" : 24
+  },
+  "outline.lg" : {
+    "height" : 36,
+    "width" : 60.140625
+  },
+  "outline.micro" : {
+    "height" : 20,
+    "width" : 54.0859375
+  },
+  "outline.sm" : {
+    "height" : 28,
+    "width" : 82.9453125
+  },
+  "outline.xl" : {
+    "height" : 40,
+    "width" : 66.3359375
+  },
+  "outline.xs" : {
+    "height" : 24,
+    "width" : 42.8203125
+  },
+  "overlay.sm" : {
+    "height" : 28,
+    "width" : 85.53125
+  },
+  "secondary.sm" : {
+    "height" : 28,
+    "width" : 107.2578125
+  },
+  "warning-outline.sm" : {
+    "height" : 28,
+    "width" : 142.078125
+  }
+}

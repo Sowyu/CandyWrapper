@@ -73,12 +73,14 @@ public final class ButtonView: ControlView {
     public override var intrinsicContentSize: NSSize {
         let m = size.metrics
         if size.isIconOnly { return NSSize(width: m.height, height: m.height) }
-        var width = 2 * m.padding + ceil(label.intrinsicContentSize.width)
+        // CSS: padding and the 1px border on both sides, plus the exact text advance.
+        var width = 2 * (m.padding + 1) + label.textWidth
         let icons = [leadingIconView, trailingIconView].compactMap { $0 }
         // Icons carry `-mx-0.5`, so each takes its size minus 4px of inline space.
         width += icons.reduce(0) { total, _ in total + m.icon - 4 + m.gap }
         if title?.isEmpty ?? true, !icons.isEmpty { width -= m.gap }
-        return NSSize(width: width, height: m.height)
+        // ponytail: Chromium snaps the border box to device pixels; this assumes a 2x backing store, use the window's scale if 1x screens matter
+        return NSSize(width: (width * 2).rounded() / 2, height: m.height)
     }
 
     public override func layout() {
@@ -91,7 +93,7 @@ public final class ButtonView: ControlView {
             return
         }
         // Content is centered as a group, like `justify-center` with `gap`.
-        let labelWidth = title?.isEmpty ?? true ? 0 : ceil(label.intrinsicContentSize.width)
+        let labelWidth = title?.isEmpty ?? true ? 0 : label.textWidth
         var parts: [CGFloat] = []
         if leadingIconView != nil { parts.append(m.icon - 4) }
         if labelWidth > 0 { parts.append(labelWidth) }
@@ -182,7 +184,7 @@ enum ButtonStyles {
 
         case .outline, .destructiveOutline:
             box.border = Themed.color(\.contrastInput)
-            box.fillClipsToPadding = true // light only: `not-dark:bg-clip-padding`
+            box.backgroundClip = .paddingInLight // `not-dark:bg-clip-padding`
             if variant == .outline {
                 box.fill = hover
                     ? Themed.color(light: \.accent, 0.5, dark: \.contrastInput, 0.64)
@@ -271,7 +273,9 @@ enum ButtonStyles {
 
         if state.focusVisible {
             let ringColor = variant == .mediaClose || variant == .mediaNavigation ? Themed.white(1) : Themed.color(\.ring)
-            box.shadows = BoxShadow.focusRing(ring: ringColor, offset: Themed.color(\.background)) + box.shadows
+            // media-navigation sets `focus-visible:ring-offset-transparent`, so its ring shows through the offset.
+            let offsetColor = variant == .mediaNavigation ? NSColor.clear : Themed.color(\.background)
+            box.shadows = BoxShadow.focusRing(ring: ringColor, offset: offsetColor) + box.shadows
         }
         look.box = box
         return look
