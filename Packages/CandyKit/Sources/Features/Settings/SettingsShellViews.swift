@@ -161,28 +161,23 @@ public final class SettingsSidebarView: DSView {
 }
 
 /// Clerk's `UserButton` trigger (`rounded-lg p-1 hover:bg-sidebar-row-hover`, avatar `size-7`).
-// ponytail: draws the email's initial on a muted circle; Clerk shows the account image, load it if users set one
 public final class T3ConnectAvatarButton: ControlView {
-    private let circle = CALayer()
-    private let initial = LabelView("", font: DSFont.ui(12, weight: .semibold), color: Themed.color(\.foreground))
+    private let avatar = ClerkAvatarView(size: 28)
     public var email = "" {
         didSet {
-            initial.text = email.first.map { String($0).uppercased() } ?? ""
             setAccessibilityLabel("Open user button")
             toolTip = email
-            needsLayout = true
         }
     }
+    /// The account image, decoded at display size, or nil for the initials.
+    public var image: CGImage? { get { avatar.image } set { avatar.image = newValue } }
+    public var initials: String { get { avatar.initials } set { avatar.initials = newValue } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
         layer?.cornerRadius = 10
-        circle.actions = ["position": NSNull(), "bounds": NSNull()]
-        layer?.addSublayer(circle)
-        initial.lineHeight = 16
-        initial.alignment = .center
-        addSubview(initial)
+        addSubview(avatar)
         setAccessibilityRole(.button)
     }
 
@@ -190,16 +185,51 @@ public final class T3ConnectAvatarButton: ControlView {
 
     public override func updateLayer() {
         layer?.backgroundColor = state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: true).cgColor(in: self) : nil
-        circle.backgroundColor = Themed.color(\.primary, 0.18).cgColor(in: self)
+    }
+
+    public override func layout() {
+        super.layout()
+        avatar.frame = NSRect(x: 4, y: 4, width: 28, height: 28)
+    }
+}
+
+/// Clerk's `Avatar` (clerk-js `ui/elements/Avatar.tsx`): the user's image in a circle, or their initials
+/// when there is no image or it failed to load.
+public final class ClerkAvatarView: DSView {
+    private let circle = CALayer()
+    private let initialsLabel: LabelView
+    private let size: CGFloat
+    public var image: CGImage? { didSet { circle.contents = image; initialsLabel.isHidden = image != nil; needsDisplay = true } }
+    public var initials = "" { didSet { initialsLabel.text = initials } }
+
+    public init(size: CGFloat) {
+        self.size = size
+        initialsLabel = LabelView("", font: DSFont.ui(size * 0.43, weight: .semibold), color: Themed.color(\.foreground))
+        super.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        circle.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull(), "backgroundColor": NSNull()]
+        circle.contentsGravity = .resizeAspectFill
+        circle.masksToBounds = true
+        layer?.addSublayer(circle)
+        initialsLabel.lineHeight = ceil(size * 0.57)
+        initialsLabel.alignment = .center
+        addSubview(initialsLabel)
+    }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    public override func updateLayer() {
+        circle.backgroundColor = image == nil ? Themed.color(\.primary, 0.18).cgColor(in: self) : nil
     }
 
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        circle.frame = CGRect(x: 4, y: 4, width: 28, height: 28)
-        circle.cornerRadius = 14
+        circle.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height)
+        circle.cornerRadius = bounds.width / 2
+        circle.contentsScale = window?.backingScaleFactor ?? 2
         CATransaction.commit()
-        initial.frame = NSRect(x: 4, y: 10, width: 28, height: 16)
+        let lh = initialsLabel.lineHeight ?? 16
+        initialsLabel.frame = NSRect(x: 0, y: (bounds.height - lh) / 2, width: bounds.width, height: lh)
     }
 }
 

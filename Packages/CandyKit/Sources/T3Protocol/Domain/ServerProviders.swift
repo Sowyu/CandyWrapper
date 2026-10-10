@@ -227,18 +227,24 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
 public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
     public var defaultModelSelection: ModelSelection?
     public var defaultRuntimeMode: RuntimeMode
+    /// `environmentIcon`: the machine kind the user picked for this environment, or nil for the detected one.
+    public var environmentIcon: String?
 
-    public init(defaultModelSelection: ModelSelection? = nil, defaultRuntimeMode: RuntimeMode = .fullAccess) {
+    public init(defaultModelSelection: ModelSelection? = nil, defaultRuntimeMode: RuntimeMode = .fullAccess, environmentIcon: String? = nil) {
         self.defaultModelSelection = defaultModelSelection
         self.defaultRuntimeMode = defaultRuntimeMode
+        self.environmentIcon = environmentIcon
     }
 
-    private enum CodingKeys: String, CodingKey { case defaultModelSelection, defaultRuntimeMode }
+    private enum CodingKeys: String, CodingKey { case defaultModelSelection, defaultRuntimeMode, environmentIcon }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         defaultModelSelection = try c.decodeIfPresent(ModelSelection.self, forKey: .defaultModelSelection)
         defaultRuntimeMode = try c.decodeIfPresent(RuntimeMode.self, forKey: .defaultRuntimeMode) ?? .fullAccess
+        // `ForwardCompatibleNullable`: an unknown kind reads as no override.
+        let icon = try? c.decodeIfPresent(String.self, forKey: .environmentIcon)
+        environmentIcon = icon.flatMap { ["server", "cloud", "linux", "desktop", "laptop", "mac-mini", "mac-studio"].contains($0) ? $0 : nil }
     }
 }
 

@@ -36,13 +36,54 @@ public struct T3ConnectAccountModel: Equatable {
 }
 
 public enum T3ConnectAccountDialog {
-    public static func make() -> (dialog: DialogView, page: T3ConnectAccountView) {
+    public static func make() -> (dialog: DialogView, page: T3ConnectAccountView, identity: AccountIdentityView) {
         let dialog = DialogView(title: "T3 Connect",
                                 message: "Environments registered to your account. Connections on this device are managed in Settings.")
         dialog.maxWidth = 560
         let page = T3ConnectAccountView()
-        dialog.panelContent = [page]
-        return (dialog, page)
+        let identity = AccountIdentityView()
+        dialog.panelContent = [identity, page]
+        return (dialog, page, identity)
+    }
+}
+
+/// Who is signed in, the way Clerk's account modal opens its profile: the avatar, the name, the address.
+// ponytail: stands in for Clerk's Profile section, which this dialog does not otherwise copy
+public final class AccountIdentityView: DSView {
+    public let avatar = ClerkAvatarView(size: 40)
+    private let name = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    private let email = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        name.lineHeight = 20
+        name.truncates = true
+        email.lineHeight = 16
+        email.truncates = true
+        for v in [avatar, name, email] as [NSView] { addSubview(v) }
+    }
+
+    public func set(name text: String?, email address: String, image: CGImage?, initials: String) {
+        name.text = text ?? address
+        email.text = text == nil ? "" : address
+        email.isHidden = text == nil
+        avatar.image = image
+        avatar.initials = initials
+        needsLayout = true
+    }
+
+    public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 40) }
+
+    public override func layout() {
+        super.layout()
+        avatar.frame = NSRect(x: 0, y: 0, width: 40, height: 40)
+        let x: CGFloat = 52, w = max(0, bounds.width - 52)
+        if email.isHidden {
+            name.frame = NSRect(x: x, y: 10, width: w, height: 20)
+        } else {
+            name.frame = NSRect(x: x, y: 2, width: w, height: 20)
+            email.frame = NSRect(x: x, y: 22, width: w, height: 16)
+        }
     }
 }
 

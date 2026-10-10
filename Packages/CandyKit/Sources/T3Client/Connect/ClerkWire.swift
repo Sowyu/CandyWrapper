@@ -92,10 +92,18 @@ struct ClerkClientObject: Decodable, Sendable {
 
 /// fapi `Client.Session`; clerk-ios `Domains/Auth/Session/Session.swift`.
 struct ClerkSessionObject: Decodable, Sendable {
-    struct User: Decodable, Sendable { var id: String }
+    struct User: Decodable, Sendable {
+        var id: String
+        var imageUrl: String?
+        var firstName: String?
+        var lastName: String?
+    }
     struct PublicUserData: Decodable, Sendable {
         var identifier: String?
         var userId: String?
+        var imageUrl: String?
+        var firstName: String?
+        var lastName: String?
     }
     var id: String
     var status: String
@@ -103,6 +111,12 @@ struct ClerkSessionObject: Decodable, Sendable {
     var publicUserData: PublicUserData?
 
     var userId: String? { user?.id ?? publicUserData?.userId }
+}
+
+/// `GET /v1/client`: `{response: Client}` (fapi `Client.ClientWrappedClient`). Some versions put it in `client`.
+struct ClerkClientEnvelope: Decodable, Sendable {
+    var response: ClerkClientObject?
+    var client: ClerkClientObject?
 }
 
 /// `{response, client}` (fapi `Client.ClientWrappedSignIn`; clerk-ios `Domains/Client/ClientResponse.swift`).

@@ -9,19 +9,37 @@ import T3Protocol
 /// works for now (WP6.3). Cmd+, and the sidebar footer's Settings button open it.
 @MainActor
 final class SettingsController {
-    private weak var window: NSWindow?
+    weak var window: NSWindow?
     private weak var layout: SidebarLayoutView?
     private let threadSidebar: NSView
     private let threadPanel: NSView
-    private let environments: Environments
-    private let t3: T3ConnectController
+    let environments: Environments
+    let t3: T3ConnectController
     private let nav = SettingsSidebarView()
     private let page = SettingsPageView()
     private let connections = ConnectionsSettingsView()
     private(set) var isOpen = false
     /// The local environment's descriptor, read when the page opens (label, machine, version).
-    private var primaryDescriptor: EnvironmentDescriptor?
-    private var modal: ModalHost?
+    var primaryDescriptor: EnvironmentDescriptor?
+    var modal: ModalHost?
+
+    // Host access (SettingsHostAccess.swift).
+    var hosts: [String: HostInfo] = [:]
+    var hostLoads: Set<String> = []
+    var linkState: CloudLinkState?
+    var linkLoading = false
+    var linkBusy = false
+    var linkError: String?
+    var access = AuthAccessSnapshot()
+    var accessLoaded = false
+    var accessError: String?
+    var accessTask: Task<Void, Never>?
+    /// Credentials of pairing links created while the page is open, by link id. Memory only.
+    var credentials: [String: String] = [:]
+    var revokingLink: String?
+    var revokingClient: String?
+    var revokingOthers = false
+    var ticker: Timer?
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
@@ -52,6 +70,13 @@ final class SettingsController {
         }
         actions.addCloud = { [weak t3] id in t3?.add(id) }
         actions.retryCloud = { [weak t3] in t3?.refreshMachines() }
+        actions.setHostSwitch = { [weak self] id, on in self?.setHostSwitch(id, on) }
+        actions.setIcon = { [weak self] id, kind in self?.setIcon(id, kind) }
+        actions.reorderRoutes = { [weak self] id, routes in self?.reorderRoutes(id, routes) }
+        actions.createPairingLink = { [weak self] in self?.presentCreateLink() }
+        actions.revokePairingLink = { [weak self] id in self?.revokePairingLink(id) }
+        actions.revokeClient = { [weak self] id in self?.revokeClient(id) }
+        actions.revokeOtherClients = { [weak self] in self?.revokeOtherClients() }
         connections.actions = actions
         environments.observe { [weak self] in self?.refresh() }
         nav.onSignIn = { [weak self] in
@@ -77,6 +102,7 @@ final class SettingsController {
         layout.main.addSubview(page)
         layout.needsLayout = true
         window?.makeFirstResponder(page)
+        startHostAccess()
         refresh()
         loadPrimaryDescriptor()
         // Connections refreshes the account's machines each time it opens (CloudEnvironmentConnectRows).
@@ -86,6 +112,7 @@ final class SettingsController {
     func close() {
         guard isOpen, let layout else { return }
         modal?.close()
+        stopHostAccess()
         isOpen = false
         layout.sidebar.content = threadSidebar
         page.removeFromSuperview()
@@ -103,9 +130,15 @@ final class SettingsController {
 
     // MARK: Model
 
+    func refreshPage() { refresh() }
+
     private func refresh() {
         guard isOpen else { return }
         nav.t3Connect = !t3.loaded ? .unavailable : t3.signedIn.map { .signedIn($0.identifier ?? "") } ?? .signedOut
+        nav.avatar.image = t3.avatar
+        nav.avatar.initials = t3.profile?.initials ?? t3.signedIn?.identifier?.first.map { String($0).uppercased() } ?? ""
+        loadHosts()
+        connections.primaryId = environments.primaryId
         connections.set(model())
         page.pageChanged()
     }
@@ -114,13 +147,8 @@ final class SettingsController {
         var m = ConnectionsPageModel()
         if let id = environments.primaryId {
             let d = primaryDescriptor?.environmentId == id ? primaryDescriptor : nil
-            let url = environments.routeInUse(id).map(EnvironmentRowStatus.displayURL)
-            let line = [d?.serverVersion, url].compactMap { $0 }.joined(separator: " · ")
-            m.thisMachine = .init(label: d?.label ?? environments.label(id) ?? "This machine",
-                                  machine: d?.platform?.machine ?? environments.machine(id) ?? "desktop",
-                                  versionLine: line.isEmpty ? "Loading…" : line,
-                                  // ponytail: "Up to date" whenever the version is known; T3 compares with its own app version and offers updates (M9)
-                                  upToDate: d != nil)
+            m.thisMachine = machineModel(id, descriptor: d)
+            m.access = accessModel()
         }
         m.environments = environments.saved.map { r in
             let state = environments.state(r.environmentId)
@@ -139,7 +167,8 @@ final class SettingsController {
                 subtitle: transport(r, inUse: inUse) + " · " + status.text,
                 statusIsError: status.isError, tooltip: EnvironmentRowStatus.tooltip(enabled: r.enabled, state: state),
                 routes: routes, mcpURL: EnvironmentRoute.origin(mcpBase) + "/mcp",
-                removing: environments.removing.contains(r.environmentId))
+                removing: environments.removing.contains(r.environmentId),
+                permissions: permissions(r.environmentId, routeContext: true), iconMenu: iconMenu(r.environmentId))
         }
         m.cloudEnabled = true
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
@@ -158,7 +187,7 @@ final class SettingsController {
 
     // MARK: Actions
 
-    private func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
+    func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
         page.toasts.show(ToastView(title: title, message: message, kind: kind))
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import DesignSystem
+import T3Protocol
 @testable import Features
 
 /// The settings shell, Settings > Connections and the Add Environment dialog against T3's markup in
@@ -44,6 +45,13 @@ struct ConnectionsFidelityTests {
             box.addSubview(header)
             header.layoutSubtreeIfNeeded()
             return box
+        case "create-link":
+            let (dialog, _, _, _) = CreatePairingLinkDialog.make(delegatable: AuthScopes.options.map(\.scope))
+            dialog.frame = NSRect(x: 0, y: 0, width: size.width, height: 10)
+            dialog.layoutSubtreeIfNeeded()
+            dialog.frame.size.height = dialog.height(forWidth: size.width)
+            dialog.layoutSubtreeIfNeeded()
+            return dialog
         case "dialog":
             let (dialog, form) = AddEnvironmentDialog.make(routeTarget: n["route"])
             form.error = n["error"]
@@ -65,6 +73,31 @@ struct ConnectionsFidelityTests {
                     env("b", "Studio", "server", "LAN · Reconnecting: The environment credential is invalid.", error: true),
                     env("c", "Old laptop", "laptop", "box.example.com · Off", enabled: false),
                 ]
+            case "this-machine-full":
+                let off = { (label: String) in ConnectionsPageModel.HostRow.Control.toggle(.init(isOn: false, isEnabled: false, tooltip: "x", label: label)) }
+                let denied: Set<String> = [AuthScopes.accessWrite, AuthScopes.relayWrite]
+                model.thisMachine = .init(label: "miniko", machine: "mac-mini", rows: [
+                    .init(id: "local-environment", title: "Local environment",
+                          detail: "Run agents on this computer. Turn off to use T3 Code only with remote environments.",
+                          control: .toggle(.init(isOn: true, isEnabled: false, tooltip: "x", label: "Local environment"))),
+                    .version("0.0.46-nightly.20261009.2861 · http://127.0.0.1:47391/", upToDate: true),
+                    .init(id: "network-access", title: "Network access", detail: "Limited to this machine.", control: off("n")),
+                    .init(id: "tailscale-https", title: "Tailscale HTTPS", detail: "Start Tailscale to set up HTTPS access through MagicDNS."),
+                    .init(id: "t3-connect", title: "T3 Connect", detail: "Make this environment available to your other devices through T3 Connect.", control: off("t")),
+                    .init(id: "publish-agent-activity", title: "Publish agent activity",
+                          detail: "Send activity to mobile notifications and Live Activities without T3 Connect.", control: off("p")),
+                ], permissions: .init(routeContext: false, grants: AuthScopes.options.map { .init(title: $0.title, allowed: !denied.contains($0.scope)) }),
+                   iconMenu: .init(resolved: "mac-mini", detected: "mac-mini", detectedTag: "detected", lock: nil))
+            case "access":
+                model.access = .init(summary: "2 clients · 1 pairing link", canRead: true, canWrite: true,
+                                     links: [.init(id: "l", label: "Living room iPad", createdTooltip: "", expires: "Expires in 4m 12s", expiresAbsolute: "",
+                                                   scopes: Array(repeating: "s", count: 13), credential: "CODE", shareURL: "http://127.0.0.1:47391/pair#token=CODE")],
+                                     clients: [.init(id: "a", label: "CandyWrapper", live: true, statusTooltip: "", current: true,
+                                                     info: "Desktop · macOS · 127.0.0.1", scopes: Array(repeating: "s", count: 16)),
+                                               .init(id: "b", label: "iPhone", live: false, statusTooltip: "", current: false,
+                                                     info: "Mobile · iOS · Safari", scopes: Array(repeating: "s", count: 13))])
+            case "env-permissions":
+                model.environments = [env("a", "Studio", "server", "LAN · Offline")]
             case "routes":
                 model.environments = [env("a", "Studio", "mac-mini", "via LAN · Connected", routes: [
                     .init(url: URL(string: "http://192.168.1.4:3773/")!, label: "LAN", address: "http://192.168.1.4:3773/", inUse: true),
@@ -74,7 +107,16 @@ struct ConnectionsFidelityTests {
             }
             view.set(model)
             if n["kind"] == "routes" { view.toggleRoutes("a") }
-            if n["kind"] == "this-machine", let section = view.machineSection {
+            if n["kind"] == "env-permissions" { view.togglePermissions("a") }
+            if n["kind"] == "this-machine-full" { view.open(permissions: n["permissions"] == "open") }
+            if n["kind"] == "access" {
+                view.open(access: n["open"] == "true")
+                let section = view.accessSection
+                section.frame = NSRect(x: 0, y: 0, width: size.width, height: section.height(forWidth: size.width))
+                section.layoutSubtreeIfNeeded()
+                return section
+            }
+            if n["kind"] == "this-machine" || n["kind"] == "this-machine-full", let section = view.machineSection {
                 // Only the machine section: the reference has no Environments section under it.
                 section.frame = NSRect(x: 0, y: 0, width: size.width, height: section.height(forWidth: size.width))
                 section.layoutSubtreeIfNeeded()

@@ -476,6 +476,17 @@ struct ClerkKeychainStoreTests {
         #expect(add[kSecAttrSynchronizable as String] == nil)
     }
 
+    @Test func profileReadsTheSessionUserImage() async throws {
+        let http = FakeClerk(), store = MemoryClerkStore()
+        try store.save(ClerkFixture.signedIn)
+        http.on("GET", "/v1/client", #"{"response":{"id":"client_1","sessions":[{"id":"sess_1","status":"active","user":{"id":"user_1","first_name":"Ada","last_name":null,"image_url":"https://img.clerk.com/abc"},"public_user_data":{"identifier":"ada@example.com","user_id":"user_1"}}]},"client":null}"#)
+        let profile = try #require(try await makeClient(http, store).profile())
+        #expect(profile.initials == "A")
+        #expect(profile.fetchURL?.absoluteString == "https://img.clerk.com/abc?width=80")
+        #expect(ClerkProfile(imageURL: URL(string: "https://example.com/a.png"), identifier: "bo@x.io").fetchURL?.absoluteString == "https://example.com/a.png")
+        #expect(ClerkProfile(imageURL: nil, identifier: "bo@x.io").initials == "B")
+    }
+
     @Test func formBodyMatchesClerksEncoder() {
         let body = ClerkWire.formBody(["strategy": "password", "identifier": "a+b@x.io", "password": "a b&c=d/?é"])
         #expect(String(decoding: body, as: UTF8.self) == "identifier=a%2Bb%40x.io&password=a%20b%26c%3Dd/?%C3%A9&strategy=password")

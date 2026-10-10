@@ -31,6 +31,7 @@ exec(prefix("gen-button-spec.py", "cases = []"), btn_ns)
 tog_ns = {"__file__": os.path.join(ROOT, "scripts/gen-toggles-spec.py")}
 exec(prefix("gen-toggles-spec.py", "# 4. Checkbox"), tog_ns)
 exec(between("gen-toggles-spec.py", "E_BASE =", "cases = []"), tog_ns)
+exec(between("gen-toggles-spec.py", "# 4. Checkbox", "for kind, values in"), tog_ns)
 form_ns = {"__file__": os.path.join(ROOT, "scripts/gen-forms-spec.py")}
 exec(prefix("gen-forms-spec.py", "W240 ="), form_ns)
 merge = btn_ns["merge"]
@@ -129,13 +130,13 @@ ADD = button("ghost-muted", "xs", lucide("plus", "size-3") + "<span>Add environm
 CHEVRON_BTN = "inline-flex shrink-0 items-center gap-0.5 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
 
 
-def env_row(kind, label, subtitle, error, enabled, routes=None):
+def env_row(kind, label, subtitle, error, enabled, routes=None, perms=None):
     status_cls = "min-w-0 truncate" + (" text-destructive" if error and enabled else "")
     n = len(routes) if routes else 1
     chevron = lambda open_: lucide("chevron-right", "size-3 shrink-0 transition-transform duration-150 motion-reduce:transition-none" + (" rotate-90" if open_ else ""))
     sub = (f'<span class="flex min-w-0 items-center gap-1"><span class="{status_cls}">{subtitle}</span><span aria-hidden="true" class="shrink-0">·</span>'
            f'<button type="button" class="{CHEVRON_BTN}">{"Routes" if n == 1 else f"{n} routes"}{chevron(routes is not None)}</button>'
-           f'<span aria-hidden="true" class="shrink-0">·</span><button type="button" class="{CHEVRON_BTN}">Permissions{chevron(False)}</button></span>')
+           f'<span aria-hidden="true" class="shrink-0">·</span><button type="button" class="{CHEVRON_BTN}">Permissions{chevron(perms is not None)}</button></span>')
     switch = tog_ns["switch"]("sm", "on" if enabled else "off", False)
     detail = ""
     if routes:
@@ -149,6 +150,8 @@ def env_row(kind, label, subtitle, error, enabled, routes=None):
                       f'{remove}</li>')
         detail = (f'<div class="col-span-2 col-start-2 min-w-0"><div class="mt-2 border-t border-border/50 py-2"><ol>{items}</ol>'
                   f'<div class="-ml-1.5 pt-1">{button("ghost-muted", "xs", lucide("plus", "size-3") + "Add route")}</div></div></div>')
+    if perms is not None:
+        detail = f'<div class="col-span-2 col-start-2 min-w-0"><div class="mt-2 border-t border-border/50">{perms}</div></div>'
     return (f'<div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2.5 sm:px-4{"" if enabled else " opacity-60"}">'
             f'{machine(kind, "size-4 text-muted-foreground")}<div class="min-w-0"><p class="truncate text-sm font-medium text-foreground">{label}</p>'
             f'<div class="truncate text-xs text-muted-foreground">{sub}</div></div><div class="flex shrink-0 items-center gap-1">{switch}{ELLIPSIS}</div>{detail}</div>')
@@ -211,6 +214,159 @@ def add_dialog(route_label=None, error=None):
             f'{CLOSE}</div>')
 
 
+# --- Host rows, Permissions, Authorized clients and Create pairing link (ConnectionsSettings.tsx:568-1312, 3613-3776,
+# SessionPermissions.tsx, settingsLayout.tsx SettingsRow). Switches CandyWrapper can't change render disabled, as
+# T3 renders a CloudLinkSwitch with a disabled reason.
+def disabled_switch(on):
+    return f'<span class="inline-flex">{tog_ns["switch"]("default", "on" if on else "off", True)}</span>'
+
+
+def host_row(title, desc, control=None):
+    if control is not None:
+        return settings_row(title, desc, control)
+    return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
+            '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
+            f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80">{desc}</p></div></div></div>')
+
+
+GRANTS = [("View environment", True), ("Operate tasks", True), ("Change environment settings", True), ("Manage providers", True),
+          ("Maintain environment", True), ("Control previews", True), ("View diagnostics and usage", True), ("View terminals", True),
+          ("Use terminals", True), ("Change source control", True), ("Read files", True), ("Write files", True),
+          ("View access", True), ("Manage access", False), ("View relay", True), ("Manage relay", False)]
+
+
+def session_permissions(grants, route):
+    if grants is None:
+        return '<p class="py-3 text-xs text-muted-foreground">Permissions not checked. Connect to this environment to view this session’s permissions.</p>'
+    note = ("These permissions apply to your active route. Other routes may have different permissions." if route
+            else "These permissions apply to this client’s current connection.")
+    items = "".join(f'<li class="flex items-start justify-between gap-3"><span>{t}</span><span class="shrink-0 text-muted-foreground">'
+                    f'{"Allowed" if a else "Not granted"}</span></li>' for t, a in grants)
+    return f'<div class="space-y-3 py-3 text-xs"><p class="text-muted-foreground">{note}</p><ul class="grid gap-x-6 gap-y-2 sm:grid-cols-2">{items}</ul></div>'
+
+
+def permissions_details(open_):
+    chevron = lucide("chevron-right", "size-3 text-muted-foreground group-open:rotate-90")
+    summary = ('<summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md text-sm font-medium outline-none '
+               f'[&::-webkit-details-marker]:hidden">Permissions{chevron}</summary>')
+    return f'<details class="group px-3 sm:px-4"{" open" if open_ else ""}>{summary}{session_permissions(GRANTS, False) if open_ else ""}</details>'
+
+
+def host_section(perms_open):
+    rows = (host_row("Local environment", "Run agents on this computer. Turn off to use T3 Code only with remote environments.", disabled_switch(True))
+            + host_row("Version", "0.0.46-nightly.20261009.2861 · http://127.0.0.1:47391/", '<span class="text-xs text-muted-foreground">Up to date</span>')
+            + host_row("Network access", "Limited to this machine.", disabled_switch(False))
+            + host_row("Tailscale HTTPS", "Start Tailscale to set up HTTPS access through MagicDNS.")
+            + host_row("T3 Connect", "Make this environment available to your other devices through T3 Connect.", disabled_switch(False))
+            + host_row("Publish agent activity", "Send activity to mobile notifications and Live Activities without T3 Connect.", disabled_switch(False))
+            + permissions_details(perms_open))
+    return section("miniko", rows, icon=machine("mac-mini", "size-4"), action=ELLIPSIS)
+
+
+this_machine_full = host_section(False)
+this_machine_perms = host_section(True)
+
+# Authorized clients (FoldedSettingsSection inside header, PairingLinkListRow, ConnectedClientListRow).
+FOLD = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5"
+ITEM_ROW = "first:rounded-t-xl last:rounded-b-xl px-3 py-3 sm:px-4"
+ITEM_INNER = "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+
+
+def dot(cls):
+    return (f'<button type="button" class="relative flex size-3 shrink-0 cursor-help items-center justify-center rounded-full outline-hidden">'
+            f'<span class="relative inline-flex size-2 rounded-full {cls}"></span></button>')
+
+
+def scope_summary(n):
+    return (f'<button type="button" class="cursor-help underline decoration-border underline-offset-2 outline-hidden">'
+            f'{n} {"scope" if n == 1 else "scopes"}</button>')
+
+
+def link_row(label, expires, scopes, note=None, share=False):
+    buttons = ""
+    if share:
+        buttons += button("outline", "xs", lucide("qr-code") + "Share")
+    buttons += button("destructive-outline", "xs", "Revoke")
+    note_html = f'<p class="text-2xs text-muted-foreground/70">{note}</p>' if note else ""
+    return (f'<div class="{ITEM_ROW}"><div class="{ITEM_INNER}"><div class="min-w-0 flex-1 space-y-1">'
+            f'<div class="flex min-h-5 items-center gap-1.5">{dot("bg-warning")}<h3 class="text-sm font-medium text-foreground">{label}</h3></div>'
+            f'<p class="text-xs text-muted-foreground"><span>{expires}</span><span aria-hidden="true"> · </span>{scope_summary(scopes)}</p>{note_html}</div>'
+            f'<div class="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">{buttons}</div></div></div>')
+
+
+def client_row(label, info, scopes, current, live):
+    chip = ('<span class="text-3xs text-muted-foreground/80 rounded-md border border-border/50 bg-muted/50 px-1 py-0.5">This device</span>'
+            if current else "")
+    revoke = "" if current else button("destructive-outline", "xs", "Revoke")
+    return (f'<div class="{ITEM_ROW}"><div class="{ITEM_INNER}"><div class="min-w-0 flex-1 space-y-1">'
+            f'<div class="flex min-h-5 items-center gap-1.5">{dot("bg-success" if live else "bg-muted-foreground/30")}'
+            f'<h3 class="text-sm font-medium text-foreground">{label}</h3>{chip}</div>'
+            f'<p class="text-xs text-muted-foreground">{info}<span aria-hidden="true"> · </span>{scope_summary(scopes)}</p></div>'
+            f'<div class="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">{revoke}</div></div></div>')
+
+
+def authorized(open_):
+    chevron = lucide("chevron-right", "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none" + (" rotate-90" if open_ else ""))
+    control = (f'<div class="flex shrink-0 items-center"><div class="flex items-center gap-2">{button("destructive-outline", "xs", "Revoke others")}'
+               f'{button("default", "xs", lucide("plus", "size-3") + "Create link")}</div></div>')
+    header = (f'<div class="flex items-center gap-4 px-3 sm:px-4"><button type="button" class="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 text-left outline-none rounded-md">'
+              f'{chevron}<span class="shrink-0 text-sm font-medium">Authorized clients</span>'
+              f'<span class="min-w-0 truncate text-xs text-muted-foreground">2 clients · 1 pairing link</span></button>{control}</div>')
+    panel = ""
+    if open_:
+        rows = (link_row("Living room iPad", "Expires in 4m 12s", 13, share=True)
+                + client_row("CandyWrapper", "Desktop · macOS · 127.0.0.1", 16, True, True)
+                + client_row("iPhone", "Mobile · iOS · Safari", 13, False, False))
+        panel = f'<div class="border-t border-border/50 [&>*+*]:border-t [&>*+*]:border-border/50">{rows}</div>'
+    return f'<section><div class="{FOLD}">{header}{panel}</div></section>'
+
+
+# A saved machine with its Permissions open (not connected: the "not checked" note).
+env_perms_html = section("Environments", env_row("server", "Studio", "LAN · Offline", False, True, perms=session_permissions(None, True)), action=ADD)
+
+# Create pairing link (AuthorizedClientsHeaderAction dialog, max-w-md, bare footer).
+CL_POPUP = f"dialog-glass {POPUP_BASE} rounded-2xl border row-start-2 text-popover-foreground max-h-full max-w-md"
+
+
+def create_link_dialog():
+    options = [("View environment", "Read threads, status, checkpoints, and configuration.", True),
+               ("Operate tasks", "Start, update, and stop tasks.", True),
+               ("Change environment settings", "Edit environment preferences and keybindings.", True),
+               ("Manage providers", "Configure, install, sign in to, and update providers and usage sources.", True),
+               ("Maintain environment", "Update the server and control environment processes.", True),
+               ("Control previews", "Open browser previews and host browser automation.", True),
+               ("View diagnostics and usage", "Read process diagnostics, resource history, and usage totals.", True),
+               ("View terminals", "Read existing terminal output and status.", True),
+               ("Use terminals", "Create terminals and send input to running shells.", True),
+               ("Change source control", "Commit, push, manage branches and repositories, and change pull requests.", True),
+               ("Read files", "Browse host files, search workspaces, and inspect local changes.", True),
+               ("Write files", "Edit workspace files and save plans to disk.", True),
+               ("View access", "Inspect pairing links and authorized clients.", False),
+               ("Manage access", "Issue and revoke credentials for other clients.", False),
+               ("View relay", "Inspect managed relay connectivity.", True),
+               ("Manage relay", "Change managed tunnel connectivity.", False)]
+    rows = "".join(f'<label class="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors">'
+                   f'<span class="mt-0.5 inline-flex">{tog_ns["choice"]("checkbox", "on" if on else "off")}</span>'
+                   f'<span class="min-w-0"><span class="block text-xs font-medium text-foreground">{t}</span>'
+                   f'<span class="block text-xs leading-snug text-muted-foreground">{d}</span></span></label>' for t, d, on in options)
+    panel = (f'<label class="block"><span class="mb-1.5 block text-xs font-medium text-foreground">Client label (optional)</span>'
+             f'{form_ns["input_html"]("default", "e.g. Living room iPad")}</label>'
+             f'<section class="space-y-3"><div class="flex items-center justify-between gap-3"><div><h3 class="text-xs font-medium text-foreground">Permissions</h3>'
+             f'<p class="text-xs text-muted-foreground">Limit what the paired client can do.</p></div><div class="flex gap-1">'
+             f'{button("outline", "xs", "Read only")}{button("outline", "xs", "Standard")}</div></div>'
+             f'<div class="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">{rows}</div></section>')
+    footer = (f'<div class="flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)] py-4" data-slot="dialog-footer">'
+              f'{button("outline", "default", "Cancel")}{button("default", "default", "Create link")}</div>')
+    return (f'<div role="dialog" data-slot="dialog-popup" class="{CL_POPUP}">'
+            f'<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
+            f'<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">Create pairing link</h2>'
+            f'<p class="text-muted-foreground text-sm" data-slot="dialog-description">Generate a one-time link that another device can use to pair with this backend as an authorized client.</p></div>'
+            f'<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">{panel}</div>'
+            f'{footer}{CLOSE}</div>')
+
+
 W796 = "display:block;width:796px"
 cases = [
     {"name": "nav", "html": nav, "wrapperStyle": "display:block", "native": {"kind": "nav"}},
@@ -220,6 +376,12 @@ cases = [
     {"name": "environments.empty", "html": empty_html, "wrapperStyle": W796, "native": {"kind": "empty"}},
     {"name": "environments.rows", "html": rows_html, "wrapperStyle": W796, "native": {"kind": "rows"}},
     {"name": "environments.routes", "html": routes_html, "wrapperStyle": W796, "native": {"kind": "routes"}},
+    {"name": "this-machine.full", "html": this_machine_full, "wrapperStyle": W796, "native": {"kind": "this-machine-full"}},
+    {"name": "this-machine.permissions", "html": this_machine_perms, "wrapperStyle": W796, "native": {"kind": "this-machine-full", "permissions": "open"}},
+    {"name": "authorized-clients", "html": authorized(False), "wrapperStyle": W796, "native": {"kind": "access"}},
+    {"name": "authorized-clients.open", "html": authorized(True), "wrapperStyle": W796, "native": {"kind": "access", "open": "true"}},
+    {"name": "environments.permissions", "html": env_perms_html, "wrapperStyle": W796, "native": {"kind": "env-permissions"}},
+    {"name": "create-link-dialog", "html": create_link_dialog(), "wrapperStyle": "display:grid;width:448px", "native": {"kind": "create-link"}},
     {"name": "add-dialog", "html": add_dialog(), "wrapperStyle": "display:grid;width:768px", "native": {"kind": "dialog"}},
     {"name": "add-dialog.error", "html": add_dialog(error="Enter a backend host."), "wrapperStyle": "display:grid;width:768px",
      "native": {"kind": "dialog", "error": "Enter a backend host."}},

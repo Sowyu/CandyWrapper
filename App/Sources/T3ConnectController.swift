@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import DesignSystem
 import Features
 import T3Client
@@ -21,11 +22,15 @@ final class T3ConnectController {
     private(set) var discovering = false
     private(set) var discoveryError: String?
     private(set) var adding: Set<String> = []
+    /// The signed-in user's Clerk profile and image, read once per sign-in and kept in memory only.
+    private(set) var profile: ClerkProfile?
+    private(set) var avatar: CGImage?
     private var observers: [UUID: () -> Void] = [:]
 
     private var modal: ModalHost?
     private var flow: T3ConnectSignInFlow?
     private var accountPage: (page: T3ConnectAccountView, model: T3ConnectAccountModel)?
+    private weak var accountIdentity: AccountIdentityView?
 
     /// Shows a toast on the open settings page.
     var toast: ((String, String?, ToastQueue.Kind) -> Void)?
@@ -42,7 +47,19 @@ final class T3ConnectController {
         return id
     }
 
-    private func changed() { for o in observers.values { o() } }
+    private func changed() {
+        updateIdentity()
+        for o in observers.values { o() }
+    }
+
+    /// The account page's avatar, name and address.
+    private func updateIdentity() {
+        guard let accountIdentity, let signedIn else { return }
+        let email = profile?.identifier ?? signedIn.identifier ?? ""
+        let name = [profile?.firstName, profile?.lastName].compactMap { $0 }.joined(separator: " ")
+        accountIdentity.set(name: name.isEmpty ? nil : name, email: email, image: avatar,
+                            initials: profile?.initials ?? email.first.map { String($0).uppercased() } ?? "")
+    }
 
     // MARK: Account
 
@@ -67,8 +84,39 @@ final class T3ConnectController {
             loaded = true
             environments.t3Connect = account?.authorizer
             changed()
-            if signedIn != nil { refreshMachines() }
+            if signedIn != nil { refreshMachines(); loadProfile() }
         }
+    }
+
+    // MARK: Profile image
+
+    /// Clerk's `UserButton` avatar: `GET /v1/client` for the user's `image_url`, then the image once,
+    /// decoded off the main thread at 80 px (Clerk's `imageFetchSize`, enough for a 28 or 40 pt circle at 2x).
+    /// No image or a failed load leaves the initials, as Clerk's `Avatar` does.
+    private func loadProfile() {
+        guard let account, signedIn != nil, profile == nil else { return }
+        let clerk = account.clerk
+        Task {
+            guard let profile = try? await clerk.profile() else { return }
+            self.profile = profile
+            changed()
+            guard let url = profile.fetchURL, let data = try? await clerk.image(url) else { return }
+            let image = await Task.detached(priority: .utility) { Self.decodeAvatar(data, pixels: 80) }.value
+            guard self.profile == profile else { return }
+            avatar = image
+            changed()
+        }
+    }
+
+    nonisolated static func decodeAvatar(_ data: Data, pixels: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: pixels,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// The account, created on first use. Keychain work runs off the main thread.
@@ -140,7 +188,10 @@ final class T3ConnectController {
         modal?.close()
         signedIn = clerkAccount
         machines = nil
+        profile = nil
+        avatar = nil
         changed()
+        loadProfile()
         // ponytail: T3 opens "Set up T3 Connect" (publish this machine, connect devices) here; CandyWrapper
         // hosts no server to publish, so it goes straight to the account's machines
         refreshMachines()
@@ -178,6 +229,8 @@ final class T3ConnectController {
             signedIn = nil
             machines = nil
             discoveryError = nil
+            profile = nil
+            avatar = nil
             changed()
         }
     }
@@ -259,7 +312,9 @@ final class T3ConnectController {
 
     func presentAccountPage(in window: NSWindow) {
         guard modal == nil else { return }
-        let (dialog, page) = T3ConnectAccountDialog.make()
+        let (dialog, page, identity) = T3ConnectAccountDialog.make()
+        accountIdentity = identity
+        updateIdentity()
         page.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         page.onConfirm = { [weak self] id in self?.updateAccountPage { $0.confirming = id } }
         page.onDeregister = { [weak self] id in self?.deregister(id) }

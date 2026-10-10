@@ -16,6 +16,8 @@ final class Environments {
     struct Entry {
         var label: String
         var machine: String?
+        /// The `environmentIcon` server setting, which overrides the detected machine.
+        var iconOverride: String?
         var session: ShellSession?
         /// The newest shell, unscoped.
         var snapshot: ShellSnapshot?
@@ -76,7 +78,25 @@ final class Environments {
     func hasShell(_ environmentId: String) -> Bool { entries[environmentId]?.snapshot != nil }
     func isRegistered(_ environmentId: String) -> Bool { entries[environmentId] != nil }
     func label(_ environmentId: String) -> String? { entries[environmentId]?.label ?? saved.first { $0.environmentId == environmentId }?.label }
-    func machine(_ environmentId: String) -> String? { entries[environmentId]?.machine }
+    /// `resolveEnvironmentMachineKind`: the `environmentIcon` setting, else the detected machine.
+    func machine(_ environmentId: String) -> String? { entries[environmentId].flatMap { $0.iconOverride ?? $0.machine } }
+    func detectedMachine(_ environmentId: String) -> String? { entries[environmentId]?.machine }
+
+    /// The environment's `environmentIcon` setting from its server config.
+    func setIconOverride(_ environmentId: String, _ kind: String?) {
+        guard entries[environmentId] != nil, entries[environmentId]?.iconOverride != kind else { return }
+        entries[environmentId]?.iconOverride = kind
+        publishEnvironments()
+        changed()
+    }
+
+    /// The primary's detected machine, from its descriptor.
+    func setDetectedMachine(_ environmentId: String, _ machine: String?) {
+        guard entries[environmentId] != nil, entries[environmentId]?.machine != machine else { return }
+        entries[environmentId]?.machine = machine
+        publishEnvironments()
+        changed()
+    }
     /// The session's connection state; nil when no session runs.
     func state(_ environmentId: String) -> ConnectionState? { entries[environmentId]?.state }
     /// The route the session uses.
@@ -224,6 +244,15 @@ final class Environments {
             drop(environmentId)
             connectSaved(updated)
         }
+        changed()
+    }
+
+    /// A dropped route order from the route list. The session stays on the route it uses.
+    func reorderRoutes(_ routes: [URL], environmentId: String) async throws {
+        let catalog = self.catalog
+        let updated = try await Task.detached { try catalog.reorderRoutes(routes, environmentId: environmentId) }.value
+        guard let updated else { return }
+        upsertSaved(updated)
         changed()
     }
 
@@ -453,7 +482,7 @@ final class Environments {
         var envs = SidebarEnvironments(primaryId: primaryId)
         for (id, entry) in entries {
             envs.labels[id] = entry.label
-            if let machine = entry.machine { envs.machines[id] = machine }
+            if let machine = entry.iconOverride ?? entry.machine { envs.machines[id] = machine }
         }
         sidebar.state.environments = envs
     }

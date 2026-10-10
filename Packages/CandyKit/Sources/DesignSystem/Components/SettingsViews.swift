@@ -12,6 +12,9 @@ public final class SettingsRowView: DSView {
     public var control: NSView? {
         didSet { oldValue?.removeFromSuperview(); control.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
+    /// `status`: a line under the description (`pt-0.5 text-xs text-muted-foreground`), destructive for errors.
+    public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
+    public var statusIsError = false { didSet { statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground) } }
     /// `aria-disabled`: opacity .64 (and muted text, which the dimmed foreground approximates).
     public var isDisabled = false { didSet { alphaValue = isDisabled ? 0.64 : 1 } }
     /// The 1px `border-t border-border/50` a divided group gives every row after the first.
@@ -19,6 +22,7 @@ public final class SettingsRowView: DSView {
 
     private let titleLabel = LabelView()
     private let detailText = TextBlockView()
+    private let statusText = TextBlockView()
     private let border = CALayer()
 
     public init(title: String, detail: String? = nil, control: NSView? = nil) {
@@ -35,15 +39,20 @@ public final class SettingsRowView: DSView {
         detailText.font = DSFont.ui(12)
         detailText.lineHeight = 18
         detailText.color = Themed.color(\.contrastMutedForeground, 0.8)
+        statusText.font = DSFont.ui(12)
+        statusText.lineHeight = 16
+        statusText.color = Themed.color(\.contrastMutedForeground)
+        statusText.isHidden = true
         addSubview(titleLabel)
         addSubview(detailText)
+        addSubview(statusText)
         control.map(addSubview)
         layer?.addSublayer(border)
     }
 
     static let paddingX: CGFloat = 16, paddingY: CGFloat = 12
 
-    private struct Frames { var title, detail, control: NSRect; var height: CGFloat }
+    private struct Frames { var title, detail, control: NSRect; var status = NSRect.zero; var height: CGFloat }
 
     private func frames(width: CGFloat) -> Frames {
         let top = Self.paddingY + (topBorder ? 1 : 0)
@@ -53,8 +62,10 @@ public final class SettingsRowView: DSView {
             return NSSize(width: s.width == NSView.noIntrinsicMetric ? c.frame.width : s.width,
                           height: s.height == NSView.noIntrinsicMetric ? c.frame.height : s.height)
         } ?? .zero
+        func detailHeight(_ w: CGFloat) -> CGFloat { detail == nil ? 0 : detailText.height(forWidth: min(576, w)) }
+        func statusHeight(_ w: CGFloat) -> CGFloat { status == nil ? 0 : statusText.height(forWidth: w) }
         func textHeight(_ w: CGFloat) -> CGFloat {
-            20 + (detail == nil ? 0 : 4 + detailText.height(forWidth: min(576, w)))
+            20 + (detail == nil ? 0 : 4 + detailHeight(w)) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
         }
         if width >= 512 {
             // grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] gap-8 items-center
@@ -64,16 +75,18 @@ public final class SettingsRowView: DSView {
             let rowHeight = max(th, controlSize.height)
             let textY = top + (rowHeight - th) / 2
             return Frames(title: NSRect(x: Self.paddingX, y: textY, width: textWidth, height: 20),
-                          detail: NSRect(x: Self.paddingX, y: textY + 24, width: min(576, textWidth), height: th - 24),
+                          detail: NSRect(x: Self.paddingX, y: textY + 24, width: min(576, textWidth), height: detailHeight(textWidth)),
                           control: NSRect(x: width - Self.paddingX - controlSize.width, y: top + (rowHeight - controlSize.height) / 2,
                                           width: controlSize.width, height: controlSize.height),
+                          status: NSRect(x: Self.paddingX, y: textY + th - statusHeight(textWidth), width: textWidth, height: statusHeight(textWidth)),
                           height: top + rowHeight + Self.paddingY)
         }
         let th = textHeight(inner)
         let controlY = top + th + 12
         return Frames(title: NSRect(x: Self.paddingX, y: top, width: inner, height: 20),
-                      detail: NSRect(x: Self.paddingX, y: top + 24, width: min(576, inner), height: th - 24),
+                      detail: NSRect(x: Self.paddingX, y: top + 24, width: min(576, inner), height: detailHeight(inner)),
                       control: NSRect(x: Self.paddingX, y: controlY, width: inner, height: controlSize.height),
+                      status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
                       height: (control == nil ? top + th : controlY + controlSize.height) + Self.paddingY)
     }
 
@@ -88,6 +101,7 @@ public final class SettingsRowView: DSView {
         let f = frames(width: bounds.width)
         titleLabel.frame = f.title
         detailText.frame = f.detail
+        statusText.frame = f.status
         control?.frame = f.control
         CATransaction.begin()
         CATransaction.setDisableActions(true)

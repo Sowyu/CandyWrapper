@@ -3,15 +3,22 @@ import DesignSystem
 
 /// What Settings > Connections shows. The app fills it from its environments; strings are final.
 public struct ConnectionsPageModel: Equatable {
-    /// "This machine": the local (primary) environment (ConnectionsSettings.tsx:3609-3713).
+    /// "This machine": the local (primary) environment (ConnectionsSettings.tsx:3609-3734). Rows in T3
+    /// desktop's order: Local environment, Version, Network access, Tailscale HTTPS, the T3 Connect rows,
+    /// then the Permissions disclosure.
     public struct Machine: Equatable {
         public var label: String
         public var machine: String
-        /// `<serverVersion> · <displayUrl>`, or "Loading…".
-        public var versionLine: String
-        public var upToDate: Bool
+        public var rows: [HostRow]
+        public var permissions: Permissions?
+        /// The header's ⋯ menu (`More actions for this machine`) with the Icon submenu.
+        public var iconMenu: IconMenu?
+        public init(label: String, machine: String, rows: [HostRow], permissions: Permissions? = nil, iconMenu: IconMenu? = nil) {
+            self.label = label; self.machine = machine; self.rows = rows; self.permissions = permissions; self.iconMenu = iconMenu
+        }
+        /// Only the Version row (`<serverVersion> · <displayUrl>`, or "Loading…").
         public init(label: String, machine: String, versionLine: String, upToDate: Bool) {
-            self.label = label; self.machine = machine; self.versionLine = versionLine; self.upToDate = upToDate
+            self.init(label: label, machine: machine, rows: [.version(versionLine, upToDate: upToDate)])
         }
     }
 
@@ -40,11 +47,15 @@ public struct ConnectionsPageModel: Equatable {
         public var traceId: String?
         public var mcpURL: String?
         public var removing: Bool
+        /// The `Permissions` disclosure's panel (`SessionPermissions` with `routeContext`).
+        public var permissions: Permissions
+        public var iconMenu: IconMenu?
         public init(id: String, label: String, machine: String, enabled: Bool, unsupported: Bool = false, subtitle: String,
-                    statusIsError: Bool, tooltip: String, routes: [Route], traceId: String? = nil, mcpURL: String? = nil, removing: Bool = false) {
+                    statusIsError: Bool, tooltip: String, routes: [Route], traceId: String? = nil, mcpURL: String? = nil, removing: Bool = false,
+                    permissions: Permissions = Permissions(routeContext: true, grants: nil), iconMenu: IconMenu? = nil) {
             self.id = id; self.label = label; self.machine = machine; self.enabled = enabled; self.unsupported = unsupported
             self.subtitle = subtitle; self.statusIsError = statusIsError; self.tooltip = tooltip; self.routes = routes
-            self.traceId = traceId; self.mcpURL = mcpURL; self.removing = removing
+            self.traceId = traceId; self.mcpURL = mcpURL; self.removing = removing; self.permissions = permissions; self.iconMenu = iconMenu
         }
     }
 
@@ -84,6 +95,8 @@ public struct ConnectionsPageModel: Equatable {
     }
 
     public var thisMachine: Machine?
+    /// "Authorized clients", shown with `access:read` or `access:write` on this machine.
+    public var access: Access?
     public var environments: [Environment]
     /// T3 Connect configured: the empty state mentions connecting from it.
     public var cloudEnabled: Bool
@@ -108,6 +121,16 @@ public struct ConnectionsActions {
     public var addCloud: (String) -> Void = { _ in }
     /// `Try again` after a failed discovery.
     public var retryCloud: () -> Void = {}
+    /// A "This machine" switch changed: (row id, on).
+    public var setHostSwitch: (String, Bool) -> Void = { _, _ in }
+    /// The Icon submenu picked a kind: (environment id, kind).
+    public var setIcon: (String, String) -> Void = { _, _ in }
+    /// A route was dragged to a new place: (environment id, routes preferred first).
+    public var reorderRoutes: (String, [URL]) -> Void = { _, _ in }
+    public var createPairingLink: () -> Void = {}
+    public var revokePairingLink: (String) -> Void = { _ in }
+    public var revokeClient: (String) -> Void = { _ in }
+    public var revokeOtherClients: () -> Void = {}
     public init() {}
 }
 
@@ -117,6 +140,31 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     public var actions = ConnectionsActions()
     public private(set) var model = ConnectionsPageModel()
     private(set) var machineSection: SettingsSectionView?
+    private var hostRows: [String: SettingsRowView] = [:]
+    private lazy var machineMore: ButtonView = {
+        let b = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs)
+        b.iconSize = 14
+        b.setAccessibilityLabel("More actions for this machine")
+        b.action = { [weak self, weak b] in
+            guard let self, let b, let menu = self.model.thisMachine?.iconMenu, let id = self.primaryId else { return }
+            let item = Self.iconMenuItem(menu) { [weak self] kind in self?.actions.setIcon(id, kind) }
+            MenuPopupView.show([item], from: b, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
+        }
+        return b
+    }()
+    private lazy var machinePermissions: PermissionsDisclosureRow = {
+        let row = PermissionsDisclosureRow()
+        row.onHeightChange = { [weak self] in self?.relayout() }
+        return row
+    }()
+    private(set) lazy var accessSection: AuthorizedClientsSectionView = {
+        let section = AuthorizedClientsSectionView()
+        section.onHeightChange = { [weak self] in self?.relayout() }
+        return section
+    }()
+    /// The primary environment's id, for the Icon submenu of This machine.
+    public var primaryId: String?
+    private var openPermissions: Set<String> = []
     private let environmentsSection: SettingsSectionView
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     private var rows: [String: EnvironmentRowView] = [:]
@@ -153,19 +201,36 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
                 addSubview(section)
             }
             section.title = m.label
-            let glyph = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+            let glyph = (section.icon as? EnvironmentMachineGlyphView) ?? EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
             glyph.color = Themed.color(\.foreground, 0.7)
             glyph.kind = m.machine
-            section.icon = glyph
-            // ponytail: the row menu (environment icon picker), Network access, Publish agent activity,
-            // Permissions and Authorized clients manage the host itself; they come with milestone 7
-            let upToDate = LabelView(m.upToDate ? "Up to date" : "", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-            upToDate.lineHeight = 16
-            upToDate.frame.size = NSSize(width: ceil(upToDate.textWidth) + 1, height: 16)
-            section.group.rows = [SettingsRowView(title: "Version", detail: m.versionLine, control: m.upToDate ? upToDate : nil)]
+            if section.icon !== glyph { section.icon = glyph }
+            section.headerAction = m.iconMenu == nil ? nil : machineMore
+            var next: [String: SettingsRowView] = [:]
+            var rows: [any SettingsGroupRow] = []
+            for r in m.rows {
+                let row = hostRows[r.id] ?? SettingsRowView(title: r.title)
+                configure(row, r)
+                next[r.id] = row
+                rows.append(row)
+            }
+            hostRows = next
+            if let p = m.permissions {
+                machinePermissions.panel.configure(p)
+                rows.append(machinePermissions)
+            }
+            section.group.rows = rows
         } else {
             machineSection?.removeFromSuperview()
             machineSection = nil
+        }
+        // Authorized clients, between This machine and Environments.
+        if let access = model.access {
+            if accessSection.superview == nil { addSubview(accessSection) }
+            accessSection.actions = actions
+            accessSection.configure(access)
+        } else if accessSection.superview != nil {
+            accessSection.removeFromSuperview()
         }
         // Environments, in catalog order.
         var next: [String: EnvironmentRowView] = [:]
@@ -173,6 +238,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         for env in model.environments {
             let row = rows[env.id] ?? EnvironmentRowView()
             row.routesOpen = openRoutes.contains(env.id)
+            row.permissionsOpen = openPermissions.contains(env.id)
             row.configure(env)
             wire(row, env)
             next[env.id] = row
@@ -180,6 +246,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         rows = next
         openRoutes = openRoutes.filter { next[$0] != nil }
+        openPermissions = openPermissions.filter { next[$0] != nil }
         // The T3 Connect rows (`CloudRemoteEnvironmentRows`) follow the saved ones. With nothing saved
         // they stand alone: a skeleton while loading, the failure, or the empty state.
         var nextCloud: [String: CloudMachineRowView] = [:]
@@ -217,17 +284,49 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         onHeightChange?()
     }
 
+    private func configure(_ row: SettingsRowView, _ r: ConnectionsPageModel.HostRow) {
+        row.title = r.title
+        row.detail = r.detail
+        row.status = r.status
+        row.statusIsError = r.statusIsError
+        switch r.control {
+        case .none:
+            row.control = nil
+        case .text(let text):
+            let label = (row.control as? LabelView) ?? LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+            label.lineHeight = 16
+            label.text = text
+            label.frame.size = NSSize(width: ceil(label.textWidth) + 1, height: 16)
+            if row.control !== label { row.control = label }
+        case .toggle(let s):
+            let view = (row.control as? HostSwitchView) ?? HostSwitchView()
+            view.configure(s)
+            let id = r.id
+            view.onChange = { [weak self] on in self?.actions.setHostSwitch(id, on) }
+            if row.control !== view { row.control = view }
+        }
+        row.needsLayout = true
+    }
+
+    private func relayout() {
+        needsLayout = true
+        onHeightChange?()
+    }
+
     private func wire(_ row: EnvironmentRowView, _ env: ConnectionsPageModel.Environment) {
         let id = env.id
         row.onToggleRoutes = { [weak self] in self?.toggleRoutes(id) }
+        row.onTogglePermissions = { [weak self] in self?.togglePermissions(id) }
+        row.onReorder = { [weak self] urls in self?.actions.reorderRoutes(id, urls) }
         row.onSwitch = { [weak self] on in self?.actions.setEnabled(id, on) }
         row.onAddRoute = { [weak self] in self?.actions.addRoute(id) }
         row.onRemoveRoute = { [weak self] route in self?.actions.removeRoute(id, route) }
         row.menuItems = { [weak self] in
             guard let self, let env = self.model.environments.first(where: { $0.id == id }) else { return [] }
             var items: [MenuItem] = []
-            // ponytail: the environment icon submenu (EnvironmentIconMenu) is not built; it comes with the
-            // `environmentIcon` setting in milestone 7
+            if let menu = env.iconMenu {
+                items.append(Self.iconMenuItem(menu) { [weak self] kind in self?.actions.setIcon(id, kind) })
+            }
             items.append(MenuItem(self.openRoutes.contains(id) ? "Hide routes" : "Routes", icon: .route, action: { [weak row] in
                 row?.onToggleRoutes?()
             }))
@@ -251,9 +350,21 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         set(model)
     }
 
+    func togglePermissions(_ id: String) {
+        if openPermissions.contains(id) { openPermissions.remove(id) } else { openPermissions.insert(id) }
+        set(model)
+    }
+
+    /// Opens the folded parts for a reference capture.
+    func open(permissions: Bool = false, access: Bool = false) {
+        if permissions { machinePermissions.isOpen = true }
+        if access { accessSection.isOpen = true }
+    }
+
     public func height(forWidth width: CGFloat) -> CGFloat {
         var h: CGFloat = 0
         if let machineSection { h += machineSection.height(forWidth: width) + 32 }
+        if accessSection.superview != nil { h += accessSection.height(forWidth: width) + 32 }
         return h + environmentsSection.height(forWidth: width)
     }
 
@@ -263,6 +374,13 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         if let machineSection {
             let h = machineSection.height(forWidth: bounds.width)
             machineSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
+            machineSection.needsLayout = true
+            machineSection.group.needsLayout = true
+            y += h + 32
+        }
+        if accessSection.superview != nil {
+            let h = accessSection.height(forWidth: bounds.width)
+            accessSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
             y += h + 32
         }
         environmentsSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: environmentsSection.height(forWidth: bounds.width))
@@ -409,25 +527,35 @@ final class CloudFailureRowView: DSView, SettingsGroupRow {
 }
 
 /// One saved machine (`EnvironmentRow` in `SavedBackendListRow`): machine glyph, name, one subtitle line
-/// (`<transport> · <status> · Routes`), the on/off switch and the row menu; the route list opens below.
+/// (`<transport> · <status> · Routes · Permissions`), the on/off switch and the row menu; the route list
+/// and the session's permissions open below.
 final class EnvironmentRowView: DSView, SettingsGroupRow {
     private let glyph = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
     private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
     private let status = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let dot = LabelView("·", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private let dot2 = LabelView("·", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     let routesButton = InlineDisclosureButton()
+    let permissionsButton = InlineDisclosureButton()
     let toggle = SwitchView(size: .sm)
     let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs)
     private let routesList = EnvironmentRoutesListView()
+    private let permissionsRule = CALayer()
+    private let permissions = SessionPermissionsView()
     private var statusTip: TooltipController?
     private var switchTip: TooltipController?
     private var isError = false
 
     var routesOpen = false { didSet { routesList.isHidden = !routesOpen; routesButton.isOpen = routesOpen; needsLayout = true } }
+    var permissionsOpen = false {
+        didSet { permissions.isHidden = !permissionsOpen; permissionsRule.isHidden = !permissionsOpen; permissionsButton.isOpen = permissionsOpen; needsLayout = true }
+    }
     var onToggleRoutes: (() -> Void)?
+    var onTogglePermissions: (() -> Void)?
     var onSwitch: ((Bool) -> Void)?
     var onAddRoute: (() -> Void)? { didSet { routesList.onAddRoute = onAddRoute } }
     var onRemoveRoute: ((ConnectionsPageModel.Route) -> Void)? { didSet { routesList.onRemove = onRemoveRoute } }
+    var onReorder: (([URL]) -> Void)? { didSet { routesList.onReorder = onReorder } }
     var menuItems: (() -> [MenuItem])?
 
     override init(frame frameRect: NSRect) {
@@ -436,10 +564,17 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         title.lineHeight = 20
         status.lineHeight = 16
         dot.lineHeight = 16
-        for v in [glyph, title, status, dot, routesButton, toggle, more, routesList] as [NSView] { addSubview(v) }
+        dot2.lineHeight = 16
+        permissionsButton.title = "Permissions"
+        for v in [glyph, title, status, dot, routesButton, dot2, permissionsButton, toggle, more, routesList, permissions] as [NSView] { addSubview(v) }
+        permissionsRule.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        layer?.addSublayer(permissionsRule)
         routesList.isHidden = true
+        permissions.isHidden = true
+        permissionsRule.isHidden = true
         more.iconSize = 14
         routesButton.action = { [weak self] in self?.onToggleRoutes?() }
+        permissionsButton.action = { [weak self] in self?.onTogglePermissions?() }
         toggle.onChange = { [weak self] on in self?.onSwitch?(on) }
         more.action = { [weak self] in
             guard let self, let items = self.menuItems?() else { return }
@@ -464,15 +599,24 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         more.isEnabled = !env.removing
         more.setAccessibilityLabel("More actions for \(env.label)")
         routesList.set(env.routes, label: env.label)
+        permissions.configure(env.permissions)
         // `opacity-60` on the whole row while switched off.
         alphaValue = env.enabled && !env.unsupported ? 1 : 0.6
         needsLayout = true
     }
 
+    /// The detail column (`col-span-2 col-start-2`): the text column plus the controls.
+    private func detailWidth(_ width: CGFloat) -> CGFloat { max(0, width - 44 - 16) }
+
+    /// `mt-2 border-t border-border/50` above `SessionPermissions`.
+    private func permissionsHeight(_ width: CGFloat) -> CGFloat { permissionsOpen ? 8 + 1 + permissions.height(forWidth: detailWidth(width)) : 0 }
+
     /// `px-4 py-2.5`, the 36pt text column; the routes list spans the text and control columns.
     func height(forWidth width: CGFloat) -> CGFloat {
-        10 + 36 + (routesOpen ? routesList.height(forWidth: max(0, width - 44 - 16)) : 0) + 10
+        10 + 36 + (routesOpen ? routesList.height(forWidth: detailWidth(width)) : 0) + permissionsHeight(width) + 10
     }
+
+    override func updateLayer() { permissionsRule.backgroundColor = Themed.color(\.border, 0.5).cgColor(in: self) }
 
     override func layout() {
         super.layout()
@@ -487,21 +631,33 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         let textX: CGFloat = 44
         let textWidth = max(0, textRight - textX)
         title.frame = NSRect(x: textX, y: 10, width: textWidth, height: 20)
-        // `flex items-center gap-1`: the status truncates; the dot and Routes keep their size.
+        // `flex items-center gap-1`: the status truncates; the dots and both disclosures keep their size.
         let routesW = routesButton.intrinsicContentSize.width
+        let permW = permissionsButton.intrinsicContentSize.width
         let dotW = ceil(dot.textWidth)
-        let statusW = max(0, min(ceil(status.textWidth) + 1, textWidth - routesW - dotW - 8))
+        let statusW = max(0, min(ceil(status.textWidth) + 1, textWidth - routesW - permW - 2 * dotW - 16))
         status.frame = NSRect(x: textX, y: 30, width: statusW, height: 16)
         dot.frame = NSRect(x: textX + statusW + 4, y: 30, width: dotW, height: 16)
         routesButton.frame = NSRect(x: dot.frame.maxX + 4, y: 30, width: routesW, height: 16)
+        dot2.frame = NSRect(x: routesButton.frame.maxX + 4, y: 30, width: dotW, height: 16)
+        permissionsButton.frame = NSRect(x: dot2.frame.maxX + 4, y: 30, width: permW, height: 16)
+        let lw = detailWidth(w)
+        var y: CGFloat = 46
         if routesOpen {
-            let lw = max(0, w - textX - 16)
-            routesList.frame = NSRect(x: textX, y: 46, width: lw, height: routesList.height(forWidth: lw))
+            let h = routesList.height(forWidth: lw)
+            routesList.frame = NSRect(x: textX, y: y, width: lw, height: h)
+            y += h
+        }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        permissionsRule.frame = CGRect(x: textX, y: y + 8, width: lw, height: 1)
+        CATransaction.commit()
+        if permissionsOpen {
+            permissions.frame = NSRect(x: textX, y: y + 9, width: lw, height: permissions.height(forWidth: lw))
         }
     }
 }
 
-/// The subtitle's "Routes" toggle: muted text with a `size-3` chevron that turns down when open.
+/// The subtitle's "Routes" and "Permissions" toggles: muted text with a `size-3` chevron that turns down when open.
 final class InlineDisclosureButton: ControlView {
     private let label = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let chevron = IconView(name: .chevronRight, size: 12)
@@ -533,18 +689,26 @@ final class InlineDisclosureButton: ControlView {
         super.layout()
         let lw = ceil(label.textWidth)
         label.frame = NSRect(x: 0, y: 0, width: lw, height: 16)
+        // A rotated view's frame is in rotated space: place it unrotated, then turn it.
+        chevron.frameCenterRotation = 0
         chevron.frame = NSRect(x: lw + 2, y: 2, width: 12, height: 12)
+        chevron.frameCenterRotation = isOpen ? 90 : 0
     }
 }
 
 /// `EnvironmentRoutesList`: the ways this client reaches one machine, preferred first, then "Add route".
+/// Drag a row by its grip to reorder; the new order shows until the catalog matches it.
 final class EnvironmentRoutesListView: DSView {
     private var routes: [ConnectionsPageModel.Route] = []
     private var rowViews: [RouteRow] = []
     private let border = CALayer()
     private let add = ButtonView("Add route", icon: .plus, variant: .ghostMuted, size: .xs)
+    private var drag: (index: Int, offset: CGFloat)?
+    /// The dropped order, kept until `set` brings the same order (`pending` in EnvironmentRoutesList.tsx).
+    private var pending: [URL]?
     var onAddRoute: (() -> Void)?
     var onRemove: ((ConnectionsPageModel.Route) -> Void)?
+    var onReorder: (([URL]) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -555,19 +719,60 @@ final class EnvironmentRoutesListView: DSView {
         addSubview(add)
     }
 
-    func set(_ routes: [ConnectionsPageModel.Route], label: String) {
-        self.routes = routes
+    func set(_ saved: [ConnectionsPageModel.Route], label: String) {
+        guard drag == nil else { return }
+        var ordered = saved
+        if let pending, pending.count == saved.count, pending != saved.map(\.url) {
+            ordered = pending.compactMap { url in saved.first { $0.url == url } }
+            if ordered.count != saved.count { ordered = saved; self.pending = nil }
+        } else {
+            pending = nil
+        }
+        routes = ordered
         rowViews.forEach { $0.removeFromSuperview() }
         // The last route goes with the machine ("Remove from this device"), so it has no remove button.
-        // ponytail: no drag handle; routes keep the order they were added in, add reordering if users ask
-        rowViews = routes.map { route in
-            let row = RouteRow(route, removable: routes.count > 1)
+        rowViews = ordered.enumerated().map { i, route in
+            let row = RouteRow(route, removable: ordered.count > 1, position: i + 1)
             row.remove.action = { [weak self] in self?.onRemove?(route) }
+            row.grip.onDrag = { [weak self] phase, dy in self?.dragRow(i, phase, dy) }
             addSubview(row)
             return row
         }
         setAccessibilityLabel("Routes to \(label), preferred first")
         needsLayout = true
+    }
+
+    private func dragRow(_ index: Int, _ phase: GripHandle.Phase, _ dy: CGFloat) {
+        switch phase {
+        case .began:
+            drag = (index, 0)
+            rowViews[index].isDragging = true
+        case .moved:
+            // `restrictToVerticalAxis, restrictToParentElement`.
+            let minY = -CGFloat(index) * RouteRow.height
+            let maxY = CGFloat(rowViews.count - 1 - index) * RouteRow.height
+            drag = (index, min(max(dy, minY), maxY))
+        case .ended:
+            let target = targetIndex()
+            rowViews[index].isDragging = false
+            drag = nil
+            if target != index {
+                var urls = routes.map(\.url)
+                let moved = urls.remove(at: index)
+                urls.insert(moved, at: target)
+                pending = urls
+                onReorder?(urls)
+                set(routes, label: accessibilityLabel()?.replacingOccurrences(of: "Routes to ", with: "").replacingOccurrences(of: ", preferred first", with: "") ?? "")
+            }
+        }
+        needsLayout = true
+    }
+
+    /// `closestCenter`: the slot nearest the dragged row's middle.
+    private func targetIndex() -> Int {
+        guard let drag else { return 0 }
+        let center = CGFloat(drag.index) * RouteRow.height + drag.offset + RouteRow.height / 2
+        return min(max(Int(center / RouteRow.height), 0), rowViews.count - 1)
     }
 
     /// `mt-2 border-t py-2`, rows of `py-2` text (16 + 16.5), then the `pt-1` button.
@@ -580,47 +785,113 @@ final class EnvironmentRoutesListView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         border.frame = CGRect(x: 0, y: 8, width: bounds.width, height: 1)
         CATransaction.commit()
-        var y: CGFloat = 17
-        for row in rowViews {
+        let target = drag.map { _ in targetIndex() }
+        for (i, row) in rowViews.enumerated() {
+            var slot = CGFloat(i)
+            if let drag, let target, i != drag.index {
+                // Rows between the origin and the target shift by one (`verticalListSortingStrategy`).
+                if drag.index < i, i <= target { slot -= 1 }
+                if target <= i, i < drag.index { slot += 1 }
+            }
+            var y = 17 + slot * RouteRow.height
+            if let drag, i == drag.index { y = 17 + CGFloat(i) * RouteRow.height + drag.offset }
             row.frame = NSRect(x: 0, y: y, width: bounds.width, height: RouteRow.height)
-            y += RouteRow.height
         }
+        if let drag { addSubview(rowViews[drag.index], positioned: .above, relativeTo: nil) }
         let s = add.intrinsicContentSize
-        add.frame = NSRect(x: -6, y: y + 4, width: s.width, height: s.height)
+        add.frame = NSRect(x: -6, y: 17 + CGFloat(rowViews.count) * RouteRow.height + 4, width: s.width, height: s.height)
     }
 
     override func updateLayer() { border.backgroundColor = Themed.color(\.border, 0.5).cgColor(in: self) }
+
+    /// The `GripVerticalIcon` button: `size-6`, `text-muted-foreground/70`, `cursor-grab`.
+    final class GripHandle: ControlView {
+        enum Phase { case began, moved, ended }
+        private let icon = IconView(name: .gripVertical, size: 14)
+        private var start: NSPoint?
+        var onDrag: ((Phase, CGFloat) -> Void)?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            scalesWhenPressed = false
+            icon.strokeColor = Themed.color(\.mutedForeground, 0.7)
+            addSubview(icon)
+            setAccessibilityRole(.button)
+        }
+
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+        override func stateDidChange(from old: State) {
+            super.stateDidChange(from: old)
+            icon.strokeColor = state.hovered ? Themed.color(\.foreground) : Themed.color(\.mutedForeground, 0.7)
+        }
+        override func layout() { super.layout(); icon.frame = NSRect(x: 5, y: 5, width: 14, height: 14) }
+
+        override func mouseDown(with event: NSEvent) {
+            start = event.locationInWindow
+            NSCursor.closedHand.push()
+            onDrag?(.began, 0)
+        }
+        override func mouseDragged(with event: NSEvent) {
+            guard let start else { return }
+            // Window coordinates grow upward; the list is flipped.
+            onDrag?(.moved, start.y - event.locationInWindow.y)
+        }
+        override func mouseUp(with event: NSEvent) {
+            guard start != nil else { return }
+            start = nil
+            NSCursor.pop()
+            onDrag?(.ended, 0)
+        }
+    }
 
     final class RouteRow: DSView {
         static let height: CGFloat = 8 + 16 + 16.5 + 8
         private let label = LabelView("", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
         private let chip = InUseChip()
         private let address = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
+        let grip = GripHandle()
         let remove = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconXs)
+        var isDragging = false {
+            didSet {
+                layer?.backgroundColor = isDragging ? Themed.color(\.background).cgColor(in: self) : nil
+                layer?.cornerRadius = 6
+                layer?.shadowOpacity = isDragging ? 0.12 : 0
+                layer?.shadowRadius = 6
+                layer?.shadowOffset = CGSize(width: 0, height: -2)
+            }
+        }
 
-        init(_ route: ConnectionsPageModel.Route, removable: Bool) {
+        init(_ route: ConnectionsPageModel.Route, removable: Bool, position: Int) {
             super.init(frame: .zero)
             label.text = route.label
             label.lineHeight = 16
             address.text = route.address
             address.lineHeight = 16.5
+            address.truncates = true
             chip.isHidden = !route.inUse
             remove.iconSize = 12
             remove.isHidden = !removable
             remove.setAccessibilityLabel("Remove \(route.label) route")
+            grip.setAccessibilityLabel("Reorder \(route.label), position \(position)")
             TooltipController.attach(to: remove, text: "Remove route")
-            for v in [label, chip, address, remove] as [NSView] { addSubview(v) }
+            for v in [label, chip, address, grip, remove] as [NSView] { addSubview(v) }
         }
 
         override func layout() {
             super.layout()
-            let right = remove.isHidden ? bounds.width : bounds.width - 24 - 8
+            // `flex items-center gap-2`: text, the grip, the remove button.
+            var right = bounds.width
+            if !remove.isHidden {
+                remove.frame = NSRect(x: right - 24, y: (bounds.height - 24) / 2, width: 24, height: 24)
+                right -= 24 + 8
+            }
+            grip.frame = NSRect(x: right - 24, y: (bounds.height - 24) / 2, width: 24, height: 24)
+            right -= 24 + 8
             let lw = min(ceil(label.textWidth) + 1, right)
             label.frame = NSRect(x: 0, y: 8, width: lw, height: 16)
             let cs = chip.intrinsicContentSize
             chip.frame = NSRect(x: lw + 6, y: 8 + (16 - cs.height) / 2, width: cs.width, height: cs.height)
             address.frame = NSRect(x: 0, y: 24, width: max(0, right), height: 16.5)
-            remove.frame = NSRect(x: bounds.width - 24, y: (bounds.height - 24) / 2, width: 24, height: 24)
         }
     }
 
@@ -638,3 +909,4 @@ final class EnvironmentRoutesListView: DSView {
         override func updateLayer() { layer?.backgroundColor = Themed.color(\.success, 0.12).cgColor(in: self) }
     }
 }
+

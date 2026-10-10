@@ -219,6 +219,19 @@ public struct EnvironmentCatalog: Sendable {
         return all[i]
     }
 
+    /// The dragged route order (registry.ts `reorderRoutes`). The same routes in a new order; anything
+    /// else is refused. Tokens are keyed by route, so they stay.
+    @discardableResult
+    public func reorderRoutes(_ routes: [URL], environmentId: String) throws -> EnvironmentRegistration? {
+        var all = load()
+        guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return nil }
+        let origins = { (urls: [URL]) in urls.map(EnvironmentRoute.origin) }
+        guard Set(origins(routes)) == Set(origins(all[i].routes)), routes.count == all[i].routes.count else { return nil }
+        all[i].routes = routes.compactMap { url in all[i].routes.first { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } }
+        try write(all)
+        return all[i]
+    }
+
     public func setEnabled(_ enabled: Bool, environmentId: String) throws {
         var all = load()
         guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return }
