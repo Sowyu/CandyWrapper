@@ -60,14 +60,21 @@ public func formatCompactDiffCount(_ value: Int) -> String {
 
 /// `toolOutputIndicatesFailure` (packages/shared/src/toolOutput.ts:211-224): providers can
 /// report completion while the output describes a failure.
+/// One compiled ICU expression and Foundation's case-insensitive search: Swift Regex with
+/// `ignoresCase()` was the hot spot of row derivation on long threads.
 public func toolOutputIndicatesFailure(_ text: String) -> Bool {
-    text.contains(/file not found|no files found|enoent|no such file|commandnotfoundexception|command not found|is not recognized as the name of a cmdlet|a parameter cannot be found that matches parameter name/.ignoresCase())
-        || (text.contains(/cannot find path/.ignoresCase()) && text.contains(/because it does not exist/.ignoresCase()))
-        || (text.contains(/is not recognized/.ignoresCase()) && text.contains(/the term '/.ignoresCase()))
-        || text.contains(/<exited with exit code\s+[1-9]\d*\s*>/.ignoresCase())
-        || text.contains(/exit(?:ed)? with exit code\s+[1-9]\d*/.ignoresCase())
-        || text.contains(/exit code\s*[:\s]\s*[1-9]\d*\b/.ignoresCase())
+    func has(_ phrase: String) -> Bool { text.range(of: phrase, options: .caseInsensitive) != nil }
+    return failurePattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+        || (has("cannot find path") && has("because it does not exist"))
+        || (has("is not recognized") && has("the term '"))
 }
+
+/// The single phrases and the three exit-code patterns of toolOutput.ts:211-224, as one alternation.
+private let failurePattern = try! NSRegularExpression(pattern: [
+    "file not found", "no files found", "enoent", "no such file", "commandnotfoundexception", "command not found",
+    "is not recognized as the name of a cmdlet", "a parameter cannot be found that matches parameter name",
+    #"<exited with exit code\s+[1-9]\d*\s*>"#, #"exit(?:ed)? with exit code\s+[1-9]\d*"#, #"exit code\s*[:\s]\s*[1-9]\d*\b"#,
+].joined(separator: "|"), options: [.caseInsensitive])
 
 /// `shouldCollapseUserMessage` (MessagesTimeline.logic.ts:2286-2311): long user messages clip
 /// behind an expand control.

@@ -322,6 +322,25 @@ public enum WorkLog {
     }
 
     static func indicatesFailure(_ entry: WorkLogEntry, includeCommand: Bool) -> Bool {
+        // Rows are derived again on every stream update, and checking every tool's output each
+        // time cost about 10% CPU on a long thread. An item gets a new `updatedAt` whenever it
+        // changes, so the answer is kept per item revision.
+        guard let revision = entry.structuredPayload?.updatedAt.raw else { return checkFailure(entry, includeCommand: includeCommand) }
+        let key = "\(entry.id)|\(revision)|\(includeCommand)|\(entry.tone)|\(entry.toolLifecycleStatus.map { "\($0)" } ?? "")" as NSString
+        if let known = failureCache.object(forKey: key) { return known.boolValue }
+        let failed = checkFailure(entry, includeCommand: includeCommand)
+        failureCache.setObject(NSNumber(value: failed), forKey: key)
+        return failed
+    }
+
+    // ponytail: process-wide cache with NSCache eviction, key it per thread if memory shows up in profiles
+    nonisolated(unsafe) private static let failureCache: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 20_000
+        return cache
+    }()
+
+    private static func checkFailure(_ entry: WorkLogEntry, includeCommand: Bool) -> Bool {
         if entry.tone == .error || entry.toolLifecycleStatus == .failed || entry.toolLifecycleStatus == .declined { return true }
         guard isToolLikeForPresentation(entry) else { return false }
         if T3McpTools.definition(toolName(entry)) != nil, t3ToolResultIndicatesFailure(toolOutput(entry)) { return true }

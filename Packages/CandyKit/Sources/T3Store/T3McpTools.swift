@@ -114,6 +114,21 @@ public enum T3McpTools {
     /// any provider's spelling (`mcp__t3-code__x`, `t3-code.x`, `t3_code:x`, OpenCode's
     /// `t3-code-<thread>_x`).
     static func toolName(_ value: String) -> String? {
+        // A handful of labels repeat across thousands of rows; resolve each once.
+        if let known = nameCache.object(forKey: value as NSString) { return known.name }
+        let name = resolveToolName(value)
+        nameCache.setObject(Resolved(name), forKey: value as NSString)
+        return name
+    }
+
+    private final class Resolved {
+        let name: String?
+        init(_ name: String?) { self.name = name }
+    }
+
+    nonisolated(unsafe) private static let nameCache = NSCache<NSString, Resolved>()
+
+    private static func resolveToolName(_ value: String) -> String? {
         let label = normalizeCompactToolLabel(value)
         if let match = label.wholeMatch(of: /mcp__(.+?)__(.+)/.ignoresCase()) {
             return serverAliases.contains(String(match.1).lowercased()) ? String(match.2) : nil
