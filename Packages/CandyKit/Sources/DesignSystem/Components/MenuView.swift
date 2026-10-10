@@ -288,6 +288,15 @@ public final class MenuPopupView: DSView, PopupContent {
         highlightedIndex = s[(pos + delta + s.count) % s.count] // base-ui menus loop focus
     }
 
+    /// Closes the whole menu tree, then runs row `i`'s action. Closing first keeps the menu from
+    /// staying drawn under a modal the action opens (an alert's run loop blocks until it ends).
+    private func choose(_ i: Int) {
+        let action = items[i].action
+        onChoose?(i)
+        closeTree()
+        action?()
+    }
+
     /// Chooses row `i`: toggles checkbox and radio rows in place, opens submenus, otherwise runs the
     /// action and closes the whole menu tree.
     public func activate(_ i: Int, byKeyboard: Bool = false) {
@@ -303,22 +312,14 @@ public final class MenuPopupView: DSView, PopupContent {
                     for j in radioGroup(of: i) { items[j].kind = .radio(j == i); rows[j].item = items[j] }
                     items[i].onToggle?(true)
                 }
-                if items[i].closesOnClick {
-                    items[i].action?()
-                    onChoose?(i)
-                    closeTree()
-                }
+                if items[i].closesOnClick { choose(i) }
             } else {
-                items[i].action?()
-                onChoose?(i)
-                closeTree()
+                choose(i)
             }
         case .submenu:
             openSubmenu(at: i, highlightFirst: byKeyboard)
         case .item:
-            items[i].action?()
-            onChoose?(i)
-            closeTree()
+            choose(i)
         case .label, .separator:
             break
         }
