@@ -58,6 +58,14 @@ struct EnvironmentCatalogTests {
         try catalog.add(again, token: "secret-a-public")
         #expect(catalog.load()[0].routes.map(EnvironmentRoute.origin) == ["http://10.0.0.2:3773", "https://studio.tail1234.ts.net", "https://studio.example.com"])
         #expect(catalog.load()[0].enabled == false)
+
+        // A dragged order is saved as is; a different set of routes is refused.
+        let dragged = [URL(string: "https://studio.example.com/")!, URL(string: "http://10.0.0.2:3773")!, tailnet]
+        try catalog.reorderRoutes(dragged, environmentId: "env-a")
+        #expect(catalog.load()[0].routes.map(EnvironmentRoute.origin) == ["https://studio.example.com", "http://10.0.0.2:3773", "https://studio.tail1234.ts.net"])
+        #expect(try catalog.reorderRoutes(Array(dragged.prefix(2)), environmentId: "env-a") == nil)
+        #expect(try catalog.token(environmentId: "env-a") == "secret-a-public")
+        try catalog.reorderRoutes([dragged[1], tailnet, dragged[0]], environmentId: "env-a")
         #expect(try catalog.token(environmentId: "env-a", route: tailnet) == "secret-a-tailnet")
         #expect(try catalog.token(environmentId: "env-a") == "secret-a2")
         try catalog.removeRoute(tailnet, environmentId: "env-a")

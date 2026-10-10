@@ -11,8 +11,24 @@
     "height" : 377,
     "width" : 768
   },
+  "authorized-clients" : {
+    "height" : 46,
+    "width" : 796
+  },
+  "authorized-clients.open" : {
+    "height" : 241,
+    "width" : 796
+  },
+  "create-link-dialog" : {
+    "height" : 1215,
+    "width" : 448
+  },
   "environments.empty" : {
     "height" : 248,
+    "width" : 796
+  },
+  "environments.permissions" : {
+    "height" : 145,
     "width" : 796
   },
   "environments.routes" : {
@@ -37,6 +53,14 @@
   },
   "this-machine" : {
     "height" : 106,
+    "width" : 796
+  },
+  "this-machine.full" : {
+    "height" : 486,
+    "width" : 796
+  },
+  "this-machine.permissions" : {
+    "height" : 722,
     "width" : 796
   }
 }

@@ -94,6 +94,44 @@ public struct EnvironmentHTTP: Sendable {
         try await send("GET", path, token: token, as: T.self)
     }
 
+    /// Authenticated JSON POST of a typed route. A nil body sends none.
+    public func post<B: Encodable, T: Decodable>(_ path: String, _ body: B?, token: String, as type: T.Type) async throws -> T {
+        let data = try body.map { try JSONEncoder().encode($0) }
+        return try await send("POST", path, token: token, body: data, contentType: data == nil ? nil : "application/json", as: T.self)
+    }
+
+    // MARK: Host access (Settings > Connections)
+
+    /// `GET /api/connect/link-state` (needs `relay:read`).
+    public func cloudLinkState(token: String) async throws -> CloudLinkState {
+        try await get("api/connect/link-state", token: token, as: CloudLinkState.self)
+    }
+
+    /// `POST /api/connect/preferences` (needs `relay:write`). The server applies it itself.
+    public func setCloudPreferences(_ request: CloudPreferencesRequest, token: String) async throws -> CloudLinkState {
+        try await post("api/connect/preferences", request, token: token, as: CloudLinkState.self)
+    }
+
+    /// `POST /api/auth/pairing-token`: a one-time pairing credential. Only this reply carries the secret.
+    public func createPairingCredential(_ request: PairingCredentialRequest, token: String) async throws -> PairingCredentialResult {
+        try await post("api/auth/pairing-token", request, token: token, as: PairingCredentialResult.self)
+    }
+
+    /// `POST /api/auth/pairing-links/revoke {id}`.
+    public func revokePairingLink(id: String, token: String) async throws {
+        _ = try await post("api/auth/pairing-links/revoke", ["id": id], token: token, as: JSONValue.self)
+    }
+
+    /// `POST /api/auth/clients/revoke {sessionId}`.
+    public func revokeClient(sessionId: String, token: String) async throws {
+        _ = try await post("api/auth/clients/revoke", ["sessionId": sessionId], token: token, as: JSONValue.self)
+    }
+
+    /// `POST /api/auth/clients/revoke-others`, the count of revoked sessions.
+    public func revokeOtherClients(token: String) async throws -> Int {
+        try await post("api/auth/clients/revoke-others", String?.none, token: token, as: RevokeOthersResult.self).revokedCount
+    }
+
     /// GET of a signed asset URL from `assets.createUrl` (`/api/assets/<token>/<name>`, protocol.md 5).
     /// The signed path is the credential. Bodies over `maxBytes` are refused, like T3's `readBounded`.
     public func asset(_ relativeURL: String, token: String?, maxBytes: Int) async throws -> Data {

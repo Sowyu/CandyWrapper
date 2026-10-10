@@ -196,6 +196,7 @@ final class ComposerController {
         case .other: return
         }
         serverConfigs[environmentId] = config
+        environments.setIconOverride(environmentId, config.settings.environmentIcon)
         if environmentId == targetEnvironmentId { refresh() }
     }
 

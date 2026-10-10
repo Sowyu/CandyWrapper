@@ -9,6 +9,34 @@ public struct ClerkAccount: Sendable, Equatable {
     public var identifier: String?
 }
 
+/// What Clerk's `UserButton` draws for the signed-in user: the image, else initials.
+public struct ClerkProfile: Sendable, Equatable {
+    /// `image_url`. Clerk sets it for every user; without an upload it is Clerk's default image.
+    public var imageURL: URL?
+    public var firstName: String?
+    public var lastName: String?
+    public var identifier: String?
+    public init(imageURL: URL?, firstName: String? = nil, lastName: String? = nil, identifier: String? = nil) {
+        self.imageURL = imageURL; self.firstName = firstName; self.lastName = lastName; self.identifier = identifier
+    }
+
+    /// clerk-js `getInitials`: first and last name initials, else the identifier's first letter.
+    public var initials: String {
+        let names = [firstName, lastName].compactMap { $0?.first.map { String($0) } }.joined()
+        if !names.isEmpty { return names.uppercased() }
+        return identifier?.first.map { String($0).uppercased() } ?? ""
+    }
+
+    /// clerk-js `Avatar` asks Clerk's image service for `imageFetchSize` (80) pixels: `?width=80` on
+    /// `img.clerk.com` URLs, other URLs unchanged.
+    public var fetchURL: URL? {
+        guard let imageURL, imageURL.host == "img.clerk.com",
+              var c = URLComponents(url: imageURL, resolvingAgainstBaseURL: false) else { return imageURL }
+        c.queryItems = (c.queryItems ?? []) + [URLQueryItem(name: "width", value: "80")]
+        return c.url ?? imageURL
+    }
+}
+
 /// A code Clerk emailed. Pass it back to `verifyCode(_:for:)` or `resendCode(_:)`.
 public struct ClerkCodeChallenge: Sendable, Equatable {
     public enum Factor: Sendable, Equatable {
@@ -104,6 +132,18 @@ public actor ClerkClient: CloudTokenProvider {
     public func account() -> ClerkAccount? {
         guard let s = session(), let sid = s.sessionId else { return nil }
         return ClerkAccount(sessionId: sid, userId: s.userId, identifier: s.identifier)
+    }
+
+    /// `GET /v1/client`: the signed-in session's user, for the avatar. Nil when signed out or the
+    /// session is gone from the client.
+    public func profile() async throws -> ClerkProfile? {
+        guard let sid = session()?.sessionId else { return nil }
+        let envelope = try decode(ClerkClientEnvelope.self, try await call("GET", "/v1/client"))
+        guard let s = (envelope.response ?? envelope.client)?.sessions.first(where: { $0.id == sid }) else { return nil }
+        let user = s.user, pub = s.publicUserData
+        let image = (user?.imageUrl ?? pub?.imageUrl).flatMap { URL(string: $0) }
+        return ClerkProfile(imageURL: image, firstName: user?.firstName ?? pub?.firstName,
+                            lastName: user?.lastName ?? pub?.lastName, identifier: pub?.identifier ?? session()?.identifier)
     }
 
     /// `GET /v1/environment`, kept for this launch.
@@ -280,6 +320,19 @@ public actor ClerkClient: CloudTokenProvider {
         cachedJWT = nil
         try persist(s)
         return ClerkAccount(sessionId: sessionId, userId: s.userId, identifier: s.identifier)
+    }
+
+    /// The bytes of a profile image (`ClerkProfile.fetchURL`): a plain GET with no Clerk headers, like an
+    /// `<img>`. Bodies over `maxBytes` are refused.
+    public func image(_ url: URL, maxBytes: Int = 2 * 1024 * 1024) async throws -> Data {
+        guard url.scheme == "https" else { throw ClerkAuthError(.invalidResponse) }
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.httpShouldHandleCookies = false
+        let (data, response) = try await send(request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), data.count <= maxBytes else {
+            throw ClerkAuthError(.invalidResponse)
+        }
+        return data
     }
 
     // MARK: HTTP

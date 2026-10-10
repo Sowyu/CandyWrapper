@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import T3Client
 
 /// Development only (`--fake-t3-connect`): plays Clerk's Frontend API and the T3 Connect relay inside the
@@ -48,6 +49,9 @@ enum FakeT3Connect {
         var send: HTTPSend {
             { [self] request in
                 try await Task.sleep(for: .milliseconds(350))
+                if request.url?.host == "img.fake.invalid" {
+                    return (Self.avatarPNG, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "image/png"])!)
+                }
                 let (status, body, headers) = answer(request)
                 return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!)
             }
@@ -90,6 +94,15 @@ enum FakeT3Connect {
                 let jwt = Base64URL.encode(Data(#"{"alg":"RS256"}"#.utf8)) + "."
                     + Base64URL.encode(Data(#"{"sub":"user_fake","aud":"t3-code-relay","exp":\#(exp)}"#.utf8)) + ".ZmFrZQ"
                 return (200, #"{"jwt":"\#(jwt)"}"#, [:])
+            case ("GET", "/v1/client"):
+                let email = lock.withLock { self.email }
+                return (200, """
+                    {"response":{"object":"client","id":"client_fake","last_active_session_id":"sess_fake","sessions":[
+                      {"object":"session","id":"sess_fake","status":"active",
+                       "user":{"id":"user_fake","first_name":"Candy","last_name":"Wrapper","image_url":"https://img.fake.invalid/avatar.png"},
+                       "public_user_data":{"identifier":"\(email)","user_id":"user_fake","image_url":"https://img.fake.invalid/avatar.png"}}]},
+                     "client":null}
+                    """, [:])
             case ("POST", "/v1/client/sessions/sess_fake/remove"), ("DELETE", "/v1/client/sessions"):
                 return (200, "{}", [:])
             case ("GET", "/v1/environments"):
@@ -117,6 +130,23 @@ enum FakeT3Connect {
             }
             return (404, #"{"errors":[{"message":"not found","code":"resource_not_found"}]}"#, [:])
         }
+
+        /// A 96 px two-tone image for the fake account.
+        static let avatarPNG: Data = {
+            let size = 96
+            guard let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return Data() }
+            ctx.setFillColor(CGColor(red: 0.95, green: 0.45, blue: 0.62, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+            ctx.setFillColor(CGColor(red: 0.98, green: 0.85, blue: 0.4, alpha: 1))
+            ctx.fillEllipse(in: CGRect(x: 24, y: 40, width: 48, height: 48))
+            guard let image = ctx.makeImage() else { return Data() }
+            let data = NSMutableData()
+            guard let dest = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { return Data() }
+            CGImageDestinationAddImage(dest, image, nil)
+            CGImageDestinationFinalize(dest)
+            return data as Data
+        }()
 
         private static func endpoint(_ host: String) -> String {
             #"{"httpBaseUrl":"https://\#(host)/","wsBaseUrl":"wss://\#(host)/","providerKind":"cloudflare_tunnel"}"#
