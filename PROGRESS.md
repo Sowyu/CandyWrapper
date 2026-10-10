@@ -6,7 +6,7 @@ Update this file at the end of every work session. Newest log entry first.
 
 Milestone 4, read-only thread view: open a thread from the sidebar and show its real history (messages, markdown, tool cards, diffs) in a virtualized timeline. Milestone 3 was accepted by the user on 2026-10-10 ("the sidebar looks awesome") after the live demo.
 
-Next action: when the research notes `docs/research/G-timeline-data.md` and `H-timeline-visuals.md` are done, start WP1 and WP2 of the Milestone 4 checklist.
+Next action: WP3 (timeline UI, agent) and WP4 (diff panel, agent) are running. When WP3 lands, wire it into the app: sidebar `openThread` subscribes the thread on the shell session's supervisor (`orchestration.subscribeThread` with `acceptBoundedSnapshot`), feeds `ThreadStore`, derives rows off the main thread, and replaces the `TopbarDragView` placeholder with the thread panel. Then the whole-panel fidelity loop and the demo.
 
 ## Milestones
 
@@ -43,9 +43,9 @@ Next action: when the research notes `docs/research/G-timeline-data.md` and `H-t
 
 Scope: open a thread from the sidebar; header (breadcrumb, title); timeline rows for user and assistant messages (markdown, highlighted code), assistant meta, thinking, working, work log groups and tool cards, turn and attempt folds, dividers, errors, plan card; load older history; stick to bottom and anchoring on prepend; changed files per turn; diff panel (unified and split). Later milestones: composer, approvals and questions, queue, find, minimap, selection toolbar, citations. Images and media are a stretch goal. Mermaid, HTML renders and MCP apps need a webview, so ask the user first.
 
-- [ ] Research (sonnet-medium agents): `docs/research/G-timeline-data.md` (row derivation, work log, diffs, T3 tests to port), `docs/research/H-timeline-visuals.md` (geometry, type, colors, markdown, Shiki, diff panel, motion)
-- [ ] WP1 data: thread detail domain types, `ThreadStore` (subscribeThread snapshot and deltas, history paging), timeline model ported from `MessagesTimeline.logic.ts` with T3's tests ported to Swift, tested against `fixtures/transcripts/`
-- [ ] WP2 markdown and code: Foundation's Markdown parser (`AttributedString(markdown:)`, full syntax) into TextKit 2 with T3's styles; native highlighter that approximates the Shiki theme colors (ponytail); fidelity tests against Chromium renders of T3's markdown markup
+- [x] Research (sonnet-medium agents): `docs/research/G-timeline-data.md` (row derivation, work log, diffs, T3 tests to port), `docs/research/H-timeline-visuals.md` (geometry, type, colors, markdown, Shiki, diff panel, motion)
+- [x] WP1 data (`cd62e2d`, 268 tests pass): thread detail domain types, `ThreadStore` (subscribeThread snapshot and deltas, history paging), timeline model ported from `MessagesTimeline.logic.ts` with T3's tests ported to Swift, tested against `fixtures/transcripts/`
+- [x] WP2 markdown and code (`2db230f`; 6 cases light and dark under 3%, mean 1.37%; gaps listed in docs/design.md): Foundation's Markdown parser (`AttributedString(markdown:)`, full syntax) into TextKit 2 with T3's styles; native highlighter that approximates the Shiki theme colors (ponytail); fidelity tests against Chromium renders of T3's markdown markup
 - [ ] WP3 timeline UI: virtualized timeline, row views, header, status line, connection status; sidebar selection opens the thread; the media-navigation sidebar toggle. Whole-panel fidelity against 03a-c, 03d and 01 using the sandbox server's kitchen-sink threads
 - [ ] WP4 diffs: `orchestration.getTurnDiff`, unified diff parser, changed files tree, diff panel unified and split; fidelity against 09 and 10
 - [ ] Demo to the user
@@ -130,6 +130,8 @@ Gotchas found so far:
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
 ## Log
+
+- 2026-10-10: WP1 and WP2 landed. Memory pass on the sidebar app: 153 MB to 27 MB (drawn full-size backgrounds, an unclipped off-canvas blur), then a font cache and a search field that measured on every layout. An empty AppKit window of the same size measures 17 MB on this Mac, so about 10 MB is ours. Tried and dropped: `malloc_zone_pressure_relief` (no effect), `translatesAutoresizingMaskIntoConstraints = false` on DSView (916 to 418 constraints, no measurable memory, four views rely on autoresizing), 8-bit `contentsFormat` (AppKit draws into its own ContentLayer). Left for M8: grain tile from a mapped file (1 MB, faster launch), fewer drawn text layers. SIGTERM now quits cleanly.
 
 - 2026-10-10: M3 accepted. Planned M4 and started two research agents. Keychain calls in `ServerController` moved off the main thread.
 
