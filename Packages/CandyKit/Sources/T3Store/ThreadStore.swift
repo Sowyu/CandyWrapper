@@ -14,8 +14,10 @@ public struct ThreadUpdate: Sendable {
 /// pages. Publishing is pull based: the first change after a `takeUpdate()` calls `onChange`
 /// once, and `takeUpdate()` returns every change since the last take folded together.
 ///
-/// // ponytail: no 5-minute retention or disk cache yet (RT/threadRetention.ts); the app keeps a
-/// store per open thread. Add a keyed cache when reopening a thread should skip the snapshot.
+/// The app keeps a closed thread's store for a while and reopens from it (T3's retention,
+/// RT/threadRetention.ts): the view shows the retained projection at once and the new
+/// subscription resumes after `lastSequence`.
+/// // ponytail: no disk cache (T3 persists settled snapshots); add it when cold opens of huge threads still feel slow
 public actor ThreadStore {
     private var reducer: ThreadReducer
     private var pending: ThreadChangeSet?
@@ -38,7 +40,7 @@ public actor ThreadStore {
 
     /// Applies items that arrived together, for example one RPC Chunk.
     public func apply(_ items: [ThreadStreamItem]) {
-        publish(reducer.apply(items))
+        publish(OpenTiming.measure("reducer", "\(items.count) items") { reducer.apply(items) })
     }
 
     /// Seeds the thread from `GET .../bounded` before the socket opens.
@@ -63,6 +65,20 @@ public actor ThreadStore {
 
     public func failHistoryLoad(requestCursor: String, message: String) {
         publish(reducer.failHistoryLoad(requestCursor: requestCursor, message: message))
+    }
+
+    /// Everything the store holds as one reset update, for a view that starts showing a retained
+    /// store. Clears what was pending, so the next change calls `onChange` again. Nil without data.
+    public func currentUpdate() -> ThreadUpdate? {
+        guard reducer.projection != nil else { return nil }
+        pending = nil
+        var changes = ThreadChangeSet()
+        changes.projectionChanged = true
+        changes.reset = true
+        changes.historyChanged = true
+        return ThreadUpdate(
+            projection: reducer.projection, history: reducer.history, status: reducer.status,
+            changes: changes, lastSequence: reducer.lastSequence)
     }
 
     /// Drains the coalesced changes. Nil when nothing changed since the last take.

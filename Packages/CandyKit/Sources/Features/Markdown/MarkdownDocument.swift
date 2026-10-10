@@ -221,19 +221,24 @@ private struct Node {
     }
 
     mutating func insert(_ run: InlineRun, along path: ArraySlice<(PresentationIntent.Kind, Int)>) {
+        // The last child comes out of the array before it changes, so its text and children are
+        // uniquely referenced and grow in place. Changing a copy while the array still held the
+        // original copied them on every run: quadratic, 67 ms for a 22 KB reply of short lines.
         guard let (kind, identity) = path.first else {
             // Merge with the previous run when the style matches, so a paragraph is a few runs, not one per token.
             if case .run(var last)? = children.last, last.sameStyle(as: run), !run.isBreak, !last.isBreak {
+                children.removeLast()
                 last.text += run.text
-                children[children.count - 1] = .run(last)
+                children.append(.run(last))
             } else {
                 children.append(.run(run))
             }
             return
         }
         if case .node(var last)? = children.last, last.identity == identity {
+            children.removeLast()
             last.insert(run, along: path.dropFirst())
-            children[children.count - 1] = .node(last)
+            children.append(.node(last))
         } else {
             var node = Node(kind: Self.kind(kind), identity: identity)
             node.insert(run, along: path.dropFirst())

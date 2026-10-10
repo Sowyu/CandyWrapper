@@ -25,15 +25,35 @@ final class ThreadSession {
     /// After each projection the panel shows (the composer reads runs and requests from it).
     var onProjection: ((ThreadProjection?) -> Void)?
 
-    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?) {
+    private let relay: ShellSession.ChangeRelay
+
+    /// A closed thread's store and its change relay, kept so a reopen paints at once and resumes
+    /// after the store's sequence instead of fetching a new snapshot.
+    struct Retained {
+        let store: ThreadStore
+        let relay: ShellSession.ChangeRelay
+    }
+
+    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil) {
         self.threadId = threadId
         environmentId = threadId.environmentId ?? ""
         self.panel = panel
         self.sidebar = sidebar
-        let relay = ShellSession.ChangeRelay()
-        store = ThreadStore(threadId: threadId.localId, onChange: { relay.fire() })
+        let relay = retained?.relay ?? ShellSession.ChangeRelay()
+        self.relay = relay
+        store = retained?.store ?? ThreadStore(threadId: threadId.localId, onChange: { relay.fire() })
         relay.set { [weak self] in Task { @MainActor in await self?.pull() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
+        if retained != nil {
+            Task { [weak self] in await self?.showRetained() }
+        }
+    }
+
+    /// The retained state, before the resumed stream catches up.
+    private func showRetained() async {
+        guard let update = await store.currentUpdate() else { return }
+        OpenTiming.mark("retained store", "\(update.projection?.visibleTurnItems.count ?? 0) rows")
+        render(update)
     }
 
     /// Subscribes on `shell`'s supervisor. Called again when the app replaces its shell session
@@ -53,7 +73,9 @@ final class ThreadSession {
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
             ThreadSession.encode(await store.subscribeInput())
         }, handler: { event in
-            guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
+            guard case .value(let json) = event,
+                  let item = OpenTiming.measure("typed decode", ThreadSession.label(json), { ThreadSession.decode(json) })
+            else { return }
             await store.apply([item])
         })
     }
@@ -68,16 +90,28 @@ final class ThreadSession {
     }
 
     /// Ends the subscription for good; the panel belongs to another thread or the window closed.
-    func end() {
+    /// Returns the store for retention.
+    @discardableResult
+    func end() -> Retained {
         detach()
         active = false
+        relay.set {}
+        return Retained(store: store, relay: relay)
     }
 
     /// The store calls `onChange` once per window between takes, so each pull renders every change since the last.
     private func pull() async {
-        guard let update = await store.takeUpdate(), active, let panel else { return }
+        guard let update = await store.takeUpdate() else { return }
+        OpenTiming.mark("panel pull", "\(update.projection?.visibleTurnItems.count ?? 0) rows")
+        render(update)
+    }
+
+    private func render(_ update: ThreadUpdate) {
+        guard active, let panel else { return }
         let (projectTitle, workspaceRoot) = place(update.projection)
-        panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
+        OpenTiming.measure("panel setProjection") {
+            panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
+        }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
         onProjection?(update.projection)
     }
@@ -107,12 +141,27 @@ final class ThreadSession {
             defer { self?.historyLoad = nil }
             guard let request = await store.beginLoadEarlier() else { return }
             do {
+                let start = ContinuousClock.now
                 let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
+                if OpenTiming.enabled {
+                    // History pages come after first paint; they print on their own clock.
+                    FileHandle.standardError.write(Data(String(
+                        format: "thread-timing history page %.1f ms (fetch and decode), %d rows, more %@\n",
+                        OpenTiming.ms(ContinuousClock.now - start), page.items.count, page.hasMoreHistory ? "yes" : "no").utf8))
+                }
                 await store.applyHistoryPage(page, requestCursor: request.cursor)
             } catch {
                 await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns.")
             }
         }
+    }
+
+    /// The stream item's kind and size for the timing lines.
+    nonisolated static func label(_ json: JSONValue) -> String {
+        let kind = json["kind"]?.stringValue ?? "?"
+        guard kind == "snapshot", let p = json["projection"] else { return kind }
+        let count = { (key: String) -> Int in if case .array(let a)? = p[key] { a.count } else { 0 } }
+        return "snapshot: \(count("visibleTurnItems")) rows, \(count("turnItems")) turn items, \(count("runs")) runs, \(count("nodes")) nodes, \(count("messages")) messages"
     }
 
     nonisolated static func decode(_ json: JSONValue) -> ThreadStreamItem? {
@@ -168,11 +217,19 @@ final class ThreadController {
     private(set) var composer: ComposerController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
-    private var session: ThreadSession?
+    private var session: ThreadSession? {
+        willSet { if let old = session, old !== newValue { retain(old) } }
+    }
+    /// Closed threads' stores, newest last, for T3's 5-minute retention (threadRetention.ts:3).
+    private var retained: [(id: ThreadId, store: ThreadSession.Retained, until: Date)] = []
     /// Development: `--open-thread <title prefix>` opens the first matching thread once the shell arrives.
     private var openPrefix: String?
     /// Development: `--open-diff` opens the right panel on that thread's newest turn that changed files.
     private var openDiff = CommandLine.arguments.contains("--open-diff")
+    /// Development: `--perf-open <seconds> <title prefix>` opens the first matching thread that long
+    /// after the first shell, as a click would, then 2 s later the thread open before it, then 2 s
+    /// later the match again (a reopen). scripts/perf-review times both with CANDY_THREAD_TIMING.
+    private var perfOpen: (delay: Double, prefix: String)?
     private var restored = false
     /// The environment the connection banner speaks for, and since when it is unavailable.
     private var bannerEnvironment: (id: String, since: Date)?
@@ -186,6 +243,7 @@ final class ThreadController {
         }
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open-thread"), i + 1 < args.count { openPrefix = args[i + 1] }
+        if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
         composer.openThread = { [weak self] id in self?.open(id) }
@@ -289,12 +347,14 @@ final class ThreadController {
         sidebar?.state.activeThreadId = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard id != session?.threadId || panel.isDraft else { return }
+        OpenTiming.begin(id.rawValue)
         session?.end()
         panel.setDraft(projectTitle: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         composer.showThread(id)
         panel.setRightPanelOpen(rightPanelWasOpen(id))
-        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar)
+        let kept = retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
+        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
@@ -304,6 +364,21 @@ final class ThreadController {
             panel.opensChangedTurnOnLoad = true
         }
     }
+
+    /// Keeps a closed thread's store for 5 minutes, like T3. Only the newest few: a huge thread's
+    /// bounded window holds about 12 MB (900 runs, 3,600 nodes).
+    // ponytail: count cap of 2, no byte budget; weigh retained stores by snapshot size if memory reviews flag it
+    private func retain(_ old: ThreadSession) {
+        let store = old.end()
+        retained.removeAll { $0.id == old.threadId }
+        retained.append((old.threadId, store, Date().addingTimeInterval(Self.retention)))
+        if retained.count > 2 { retained.removeFirst(retained.count - 2) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.retention + 1) { [weak self] in
+            MainActor.assumeIsolated { self?.retained.removeAll { $0.until <= Date() } }
+        }
+    }
+
+    private static let retention: TimeInterval = 5 * 60
 
     /// The sidebar's new-thread button: the draft page for the open thread's project.
     // ponytail: no projects means no draft; T3 shows "Add a project to start" there
@@ -390,6 +465,7 @@ final class ThreadController {
     /// goes (right panel, remembered thread, visits, scope). Composer state goes in the composer.
     private func environmentRemoved(_ environmentId: String) {
         let prefix = environmentId + ":"
+        retained.removeAll { $0.id.environmentId == environmentId }
         composer.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
         if let ids = defaults.stringArray(forKey: Self.rightPanelKey) {
@@ -412,6 +488,25 @@ final class ThreadController {
     /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
     private func shellChanged(_ snapshot: ShellSnapshot) {
         composer.projectsChanged()
+        if let perf = perfOpen {
+            perfOpen = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let match = self.sidebar?.snapshot?.threads.first(where: { $0.title.hasPrefix(perf.prefix) }) else { return }
+                    let before = self.session?.threadId
+                    self.open(match.id)
+                    guard let before else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                        MainActor.assumeIsolated {
+                            self?.open(before)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                                MainActor.assumeIsolated { self?.open(match.id) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if let prefix = openPrefix, let match = snapshot.threads.first(where: { $0.title.hasPrefix(prefix) }) {
             openPrefix = nil
             restored = true

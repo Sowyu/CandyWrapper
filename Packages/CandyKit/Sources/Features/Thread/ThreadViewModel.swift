@@ -79,7 +79,7 @@ public final class ThreadViewModel {
         guard projection != self.projection else { return }
         let threadChanged = projection?.thread.id != self.projection?.thread.id
         self.projection = projection
-        var fresh = projection.map(TimelineRowsInput.init(projection:))
+        var fresh = OpenTiming.measure("timeline entries") { projection.map(TimelineRowsInput.init(projection:)) }
         if let old = input, !threadChanged {
             fresh?.expandedRunIds = old.expandedRunIds
             fresh?.expandedAttemptIds = old.expandedAttemptIds
@@ -134,7 +134,7 @@ public final class ThreadViewModel {
             if source == nil { source = TimelineRowsInput(entries: []) }
             source?.entries += pending.map { TimelineEntry.message($0.id.rawValue, $0) }
         }
-        let rows = source.map(TimelineRows.derive) ?? []
+        let rows = OpenTiming.measure("timeline rows", "\(source?.entries.count ?? 0) entries") { source.map(TimelineRows.derive) ?? [] }
         items = rows.map { row in
             var ui = TimelineRowUI()
             switch row.kind {
@@ -155,7 +155,7 @@ public final class ThreadViewModel {
             }
             return TimelineItem(row: row, ui: ui)
         }
-        onChange?()
+        OpenTiming.measure("timeline apply", "\(items.count) rows") { onChange?() }
     }
 
     // MARK: Omitted tool output

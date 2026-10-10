@@ -61,6 +61,9 @@ THRESHOLDS = {
     "big_thread.scroll_cpu_ms": (0.25, 100, "ms"),
     "big_thread.after_scroll_footprint_mb": (0.10, 3, "MB"),
     "big_thread.after_scroll_peak_mb": (0.10, 5, "MB"),
+    # Click to the first display refresh after the rows are placed; the refresh adds up to two frames of noise.
+    "open.big_first_frame_ms": (0.25, 25, "ms"),
+    "open.big_reopen_first_frame_ms": (0.25, 25, "ms"),
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),
@@ -198,10 +201,10 @@ def probe(*args):
 
 
 class App:
-    def __init__(self, app_path, extra_args, tag):
+    def __init__(self, app_path, extra_args, tag, env_extra=None):
         self.log_path = "%s/app-%s.log" % (WORK, tag)
         before = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
-        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1")
+        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", **(env_extra or {}))
         self.proc = subprocess.Popen([REPO + "/scripts/run-app", "--server", SERVER, "--token-file", TOKEN, "--fake-t3-connect"] + extra_args,
                                      env=env, stdout=open(self.log_path, "w"), stderr=subprocess.STDOUT, start_new_session=True)
         self.pid = None
@@ -309,6 +312,34 @@ def scenario_big_thread(app_path, metrics, i, noise):
         add(metrics, "big_thread.after_scroll_peak_mb", mb(c["peak_footprint"]))
         if foreign_apps(app.pid):
             noise.append("big-thread run %d overlapped another CandyWrapper app" % i)
+    finally:
+        app.stop()
+
+
+def scenario_open(app_path, metrics, i, noise):
+    # --perf-open: 4 s after the shell the app opens the big thread as a click would, 2 s later the
+    # small one again, 2 s later the big one again (the second open comes from the retained store).
+    # CANDY_THREAD_TIMING prints `thread-timing <ms> open <id>` and `... first frame ...` per open.
+    app = App(app_path, ["--open-thread", IDLE_THREAD, "--perf-open", "4", BIG_THREAD], "open-%d" % i,
+              env_extra={"CANDY_THREAD_TIMING": "1"})
+    try:
+        probe("window", app.pid, 30)
+        app.timing("live sidebar", wait=20)
+        deadline = time.time() + 20
+        frames = []
+        while time.time() < deadline:
+            frames = re.findall(r"thread-timing\s+([0-9.]+) first frame", open(app.log_path).read())
+            if len(frames) >= 4:
+                break
+            time.sleep(0.2)
+        # Opens in order: the small thread at launch, big, small, big again.
+        if len(frames) >= 4:
+            add(metrics, "open.big_first_frame_ms", float(frames[1]))
+            add(metrics, "open.big_reopen_first_frame_ms", float(frames[3]))
+        else:
+            noise.append("open run %d: %d of 4 opens printed a first frame (no --perf-open in this build?)" % (i, len(frames)))
+        if foreign_apps(app.pid):
+            noise.append("open run %d overlapped another CandyWrapper app" % i)
     finally:
         app.stop()
 
@@ -432,6 +463,9 @@ def main():
             for i in range(args.repeat):
                 log("large thread, run %d of %d" % (i + 1, args.repeat))
                 scenario_big_thread(app_path, raw, i, noise)
+            for i in range(args.repeat):
+                log("thread open and reopen, run %d of %d" % (i + 1, args.repeat))
+                scenario_open(app_path, raw, i, noise)
             if args.stream:
                 log("streaming turn (one claude-haiku-5-5 turn)")
                 scenario_stream(app_path, raw, sha, noise)

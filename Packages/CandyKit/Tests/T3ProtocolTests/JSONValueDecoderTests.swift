@@ -53,6 +53,20 @@ struct JSONValueDecoderTests {
         #expect(v == (try old(JSONValue.self, Data(#"[true, false, 1, 0, -0, 1.5, 1e3, 18446744073709551615, "1", null]"#.utf8))))
     }
 
+    /// Strings come out of the CFString bytes: ASCII, short (tagged) and long, escaped NUL, Latin-1,
+    /// CJK, emoji (surrogate pairs) and non-ASCII keys must match JSONDecoder.
+    @Test func stringsMatchJSONDecoder() throws {
+        let long = String(repeating: "plain ascii text ", count: 400)
+        let values = ["", "a", "short", long, "nul\\u0000inside", "\\u0000", "caf\\u00e9", "café " + long, "日本語のテキスト",
+                      "emoji 🍬 and \\ud83c\\udf6c", "tab\\tquote\\\"slash\\\\", String(repeating: "é", count: 300)]
+        let json = "{" + values.enumerated().map { "\"k\($0.offset)\": \"\($0.element)\"" }.joined(separator: ", ") + ", \"ключ\": \"значение\"}"
+        let data = Data(json.utf8)
+        let tree = try JSONValue(parsing: data)
+        #expect(tree == (try old(JSONValue.self, data)))
+        #expect(tree["k4"]?.stringValue?.utf8.count == 10)
+        #expect(tree["ключ"]?.stringValue == "значение")
+    }
+
     struct Leaf<T: Decodable & Equatable>: Decodable, Equatable { var v: T }
 
     /// Both paths must succeed with the same value or fail with the same DecodingError case.

@@ -22,6 +22,7 @@ About 12 minutes per build: 3 to 5 for the Release build, 2 for the micro-benchm
 4. Runs three scenarios, each `--repeat` times (default 3), and reports the median and the range:
    - Launch and idle: opens the small finished thread "Reply with one word: candy". Window time comes from `probe window` (first on-screen window taller than 200 pt, measured from the process start time in the kernel). Sidebar times come from the app's `CANDY_LAUNCH_TIMING` lines. After 5 s of settling, 30 s of kernel counters (`proc_pid_rusage`): CPU, interrupt and package idle wakeups per second, footprint and lifetime peak footprint.
    - Large thread: opens "Numbers 1 to 1000 as words", footprint and peak 8 s after launch; then `--perf-scroll 12` makes the app scroll its timeline to the top and back, 300 pt per frame, 140 frames each way; CPU time of the whole window, then footprint and peak 3 s later. The app scrolls itself because scroll events posted to its PID never reach AppKit, and events through the HID tap would move the user's pointer.
+   - Thread open: launches on the small thread with `--perf-open 4 "Numbers 1 to 1000"` and `CANDY_THREAD_TIMING=1`. Four seconds after the shell the app opens the big thread as a click would, 2 s later the small one, 2 s later the big one again. `open.big_first_frame_ms` and `open.big_reopen_first_frame_ms` run from `open(id)` to the first display refresh after the rows are placed (a `CADisplayLink` on the window), so they carry up to two frames of display latency. The reopen paints from the retained store.
    - Streaming (`--stream`): a fresh haiku thread made through the RPC by `scripts/perf/turn.swift`, opened in the app, then one turn ("the numbers from 1 to 60 as English words") driven by the helper while the app only watches; CPU and wakeups across the turn, footprint and peak after.
 5. Bundle and binary size.
 6. Micro-benchmarks: `CW_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter PerfBenchmarks` in `Packages/CandyKit` (`Tests/FeaturesTests/PerfBenchmarks.swift`). Deterministic inputs, a warm-up pass, then the median, min and max of 9 runs:
@@ -29,6 +30,8 @@ About 12 minutes per build: 3 to 5 for the Release build, 2 for the micro-benchm
    - `thread_reducer` and `timeline_rows`: the largest recorded thread stream replayed through `ThreadReducer`, then `TimelineRows.derive` on its projection.
    - `markdown_parse` and `markdown_layout`: a generated 39 KB reply (headings, lists, code, tables) parsed, then laid out at 680 pt.
    - `sidebar_items_1000`: `SidebarListBuilder.items` for 1,000 threads in 20 projects.
+   - `markdown_parse_lines`: a reply of 2,400 short lines, one paragraph of soft breaks.
+   - `huge_open_*`: a synthetic huge thread, 300 copies of the largest recorded snapshot's turns (900 runs, 3,600 nodes), shaped like the server's bounded snapshot: the last 3 copies of rows and messages (57 rows) plus every run, attempt, node, checkpoint, request and provider turn of the thread, 8.3 MB as one Chunk frame. Stages: `parse` (frame to `JSONValue`), `decode` (typed `ThreadStreamItem`), `reduce`, `entries` (`TimelineRowsInput`), `derive` (`TimelineRows.derive`) and `panel` (a fresh `ThreadPanelView` at 1200x800: `setProjection` and layout). `huge_full_*` is the same thread with all 5,700 rows loaded (20 MB). `huge_open_long_*` gives every reply in the window 6 KB of markdown.
 
    An older checkout without the benchmark file gets today's copy.
 
@@ -89,6 +92,21 @@ Run on 2026-10-10, 3 launches per scenario, one haiku turn each. Full tables: `2
 Idle CPU and package idle wakeups looked worse in the two saved runs, but an interleaved check (`dd10f48`, `main`, three rounds, 30 s each, nothing else running) put both builds in the same band: CPU 0.029 to 0.047% for M5 and 0.030 to 0.046% for main, package idle wakeups 0.07 to 0.27/s and 0.13 to 0.30/s, interrupt wakeups 0.40 to 0.43/s and 0.37 to 0.40/s. Package idle wakeups count only wakeups that found the whole CPU package idle, so they depend on what else the machine does at that moment; the M5 run happened during a quieter window. Comparisons against a saved run from another time carry this noise, so the thresholds sit above it.
 
 Other spread inside one run: the first launch of a fresh build is cold (window 445 ms against 150 ms warm; the median hides it), footprint varies by 0.5 MB, scroll CPU by 8%, micro-benchmarks by 1 to 2%. No run overlapped another CandyWrapper app besides the user's demo app. Load average during the runs was 2.1 to 2.6 (the user's live T3 server and agents).
+
+## Opening a thread (2026-10-10)
+
+`CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.
+
+| Stage | Before | After |
+|---|---|---|
+| Synthetic huge thread, parse 8.3 MB snapshot | 87 ms | 48 ms |
+| typed decode | 10.8 ms | 8.7 ms |
+| entries + derive + panel | 9.4 ms | 7.1 ms |
+| same thread, all 5,700 rows: parse, decode, entries, derive, panel | 230, 34, 33, 38, 127 ms | 110, 28, 18, 29, 86 ms |
+| `markdown_parse_lines` (27 KB of short lines) | 302 ms | 34 ms |
+| Sandbox "Numbers 1 to 1000", click to first frame | 52 to 64 ms | 28 to 48 ms |
+| same, timeline tile (markdown parse and layout of the visible rows) | 18 to 21 ms | 7 to 8 ms |
+| same, reopen within 5 minutes | as a cold open | 23 to 31 ms, no network before the paint |
 
 ## Caveats
 
