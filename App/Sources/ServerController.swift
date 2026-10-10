@@ -49,7 +49,10 @@ final class ServerController {
     private func showCached(_ id: String) {
         environmentId = id
         latest = cache.load(environmentId: id)?.snapshot
-        if let latest { sidebar?.setSnapshot(latest, animated: false) }
+        if let latest {
+            sidebar?.setSnapshot(latest, animated: false)
+            LaunchTiming.mark("cached sidebar")
+        }
     }
 
     // MARK: Connecting
@@ -130,6 +133,7 @@ final class ServerController {
 
     private func shellChanged(_ snapshot: ShellSnapshot) {
         latest = snapshot
+        LaunchTiming.mark("live sidebar")
         if let environmentId { Task { await cache.noteChanged(snapshot, environmentId: environmentId) } }
         reportActivity()
     }
@@ -270,5 +274,23 @@ final class ServerController {
         default: alert.informativeText = ConnectionFailure.classify(error).detail
         }
         alert.beginSheetModal(for: window)
+    }
+}
+
+/// Development: with CANDY_LAUNCH_TIMING set, prints each launch milestone once to stderr as
+/// seconds since the process started (docs/benchmarks.md).
+@MainActor
+enum LaunchTiming {
+    private static let enabled = ProcessInfo.processInfo.environment["CANDY_LAUNCH_TIMING"] != nil
+    private static var seen = Set<String>()
+
+    static func mark(_ label: String) {
+        guard enabled, seen.insert(label).inserted else { return }
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return }
+        let start = info.kp_proc.p_un.__p_starttime
+        let elapsed = Date().timeIntervalSince1970 - (Double(start.tv_sec) + Double(start.tv_usec) / 1e6)
+        FileHandle.standardError.write(Data(String(format: "launch-timing %@ %.3f s\n", label, elapsed).utf8))
     }
 }
