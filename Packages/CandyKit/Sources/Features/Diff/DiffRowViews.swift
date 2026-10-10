@@ -479,7 +479,10 @@ final class DiffCodeTextView: DSView {
         ctx.textMatrix = .identity
         for piece in pieces {
             ctx.saveGState()
-            if !piece.clip.isInfinite { ctx.clip(to: piece.clip) }
+            // Bounded by the view: AppKit records this drawing and replays it at 2x, and the
+            // piece's unbounded height overflowed to an empty clip there (code never showed on
+            // screen while offscreen snapshots were fine).
+            if !piece.clip.isInfinite { ctx.clip(to: piece.clip.intersection(bounds)) }
             ctx.translateBy(x: piece.x, y: piece.y + baselineOffset)
             ctx.scaleBy(x: 1, y: -1)
             ctx.textPosition = .zero
