@@ -47,6 +47,11 @@ public final class ButtonView: ControlView {
     public var iconColor: NSColor? { didSet { restyle() } }
     /// `font-mono` on the label (the keybinding When trigger).
     public var monospaced = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// A view after the label in the content group, such as the count pill on the Pull Requests
+    /// page's Filters button. Sized by its intrinsic content size.
+    public var accessory: NSView? {
+        didSet { oldValue?.removeFromSuperview(); accessory.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+    }
     /// See `LabelView.smoothsFont`: off for buttons on glass (backdrop-filter) surfaces.
     public var smoothsFont: Bool {
         get { label.smoothsFont }
@@ -95,6 +100,7 @@ public final class ButtonView: ControlView {
         let icons = [leadingIconView, trailingIconView].compactMap { $0 }
         // Icons carry `-mx-0.5`, so each takes its size minus 4px of inline space.
         width += icons.reduce(0) { total, _ in total + m.icon - 4 + m.gap }
+        if let accessory { width += accessory.intrinsicContentSize.width + m.gap }
         if title?.isEmpty ?? true, !icons.isEmpty { width -= m.gap }
         // ponytail: Chromium snaps the border box to device pixels; this assumes a 2x backing store, use the window's scale if 1x screens matter
         return NSSize(width: (width * 2).rounded() / 2, height: m.height)
@@ -115,6 +121,8 @@ public final class ButtonView: ControlView {
         var parts: [CGFloat] = []
         if leadingIconView != nil { parts.append(m.icon - 4) }
         if labelWidth > 0 { parts.append(labelWidth) }
+        let accessoryWidth = accessory?.intrinsicContentSize.width ?? 0
+        if accessory != nil { parts.append(accessoryWidth) }
         if trailingIconView != nil { parts.append(m.icon - 4) }
         let total = parts.reduce(0, +) + m.gap * CGFloat(max(0, parts.count - 1))
         var x = (bounds.width - total) / 2 + CGFloat((joinedSides.leading ? 0 : 1) - (joinedSides.trailing ? 0 : 1)) / 2
@@ -124,6 +132,11 @@ public final class ButtonView: ControlView {
         }
         label.frame = NSRect(x: x, y: (bounds.height - m.line) / 2, width: labelWidth, height: m.line)
         x += labelWidth + (labelWidth > 0 ? m.gap : 0)
+        if let accessory {
+            let h = accessory.intrinsicContentSize.height
+            accessory.frame = NSRect(x: x, y: ((bounds.height - h) / 2).rounded(), width: accessoryWidth, height: h)
+            x += accessoryWidth + m.gap
+        }
         trailingIconView?.frame = NSRect(x: x - 2, y: iconY, width: m.icon, height: m.icon)
     }
 

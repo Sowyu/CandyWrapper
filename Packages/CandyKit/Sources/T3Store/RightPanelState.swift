@@ -1,30 +1,39 @@
 import Foundation
 
 /// One surface in a thread's right panel (`RightPanelSurface`, apps/web/src/rightPanelStore.ts:43-87).
-/// Only the kinds this app draws: the diff and files singletons and one tab per workspace file.
-// ponytail: browser, terminal, device and pull request surfaces are not modeled; add cases when
-// WP7.5b and WP7.6b build them (their ids are `browser:*`, `terminal:*`, `pull-request:*`)
+/// Only the kinds this app draws: the diff and files singletons, one tab per workspace file, one
+/// per pull request and the thread's linked pull requests.
+// ponytail: browser, terminal and device surfaces are not modeled; add cases when WP7.6b builds
+// them (their ids are `browser:*`, `terminal:*`, `device`)
 public enum RightPanelSurface: Codable, Sendable, Equatable {
     case diff
     case files
     /// `file:<path>`: workspace relative, or absolute for a host file. `revealRequestId` counts the
     /// opens of this path so the same line can be revealed again.
     case file(path: String, revealLine: Int?, revealRequestId: Int)
+    /// `pull-request:<scope>`: a change request beside a thread or on the Pull Requests page.
+    case pullRequest(PullRequestSurfaceTarget)
+    /// The thread's linked pull requests, one singleton tab.
+    case pullRequests
 
     public var id: String {
         switch self {
         case .diff: "diff"
         case .files: "files"
         case .file(let path, _, _): "file:" + path
+        case .pullRequest(let target): target.surfaceId
+        case .pullRequests: "pull-requests"
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests }
     public var kind: Kind {
         switch self {
         case .diff: .diff
         case .files: .files
         case .file: .file
+        case .pullRequest: .pullRequest
+        case .pullRequests: .pullRequests
         }
     }
 
@@ -37,12 +46,48 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
             let cut = max(path.lastIndex(of: "/").map { path.index(after: $0) } ?? path.startIndex,
                           path.lastIndex(of: "\\").map { path.index(after: $0) } ?? path.startIndex)
             return String(path[cut...])
+        case .pullRequest(let target): return "#\(target.number)"
+        case .pullRequests: return "Pull requests"
         }
     }
 
     public var filePath: String? {
         if case .file(let path, _, _) = self { return path }
         return nil
+    }
+
+    public var pullRequest: PullRequestSurfaceTarget? {
+        if case .pullRequest(let target) = self { return target }
+        return nil
+    }
+}
+
+/// The pull request a `pull-request` surface shows (rightPanelStore.ts:68-86). The environment is
+/// set on the Pull Requests page, whose panel spans servers; beside a thread it is the thread's.
+public struct PullRequestSurfaceTarget: Codable, Sendable, Hashable {
+    public var environmentId: String?
+    /// The server's own project id.
+    public var projectId: String
+    public var host: String?
+    public var repository: String
+    public var number: Int
+    public var url: String?
+
+    public init(environmentId: String? = nil, projectId: String, host: String? = nil, repository: String, number: Int, url: String? = nil) {
+        self.environmentId = environmentId; self.projectId = projectId; self.host = host?.lowercased()
+        self.repository = repository; self.number = number; self.url = url
+    }
+
+    /// `pullRequestSurfaceId`: environment, project, host, repository and number, URI encoded.
+    public var surfaceId: String {
+        func enc(_ s: String) -> String {
+            var allowed = CharacterSet.alphanumerics
+            allowed.insert(charactersIn: "-_.!~*'()")
+            return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+        }
+        let scope = environmentId.map { enc($0) + ":" } ?? ""
+        let h = host.map { enc($0.lowercased()) + ":" } ?? ""
+        return "pull-request:\(scope)\(enc(projectId)):\(h)\(enc(repository)):\(number)"
     }
 }
 
@@ -72,8 +117,16 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         switch kind {
         case .diff: upsert(.diff)
         case .files: upsert(.files)
-        case .file: break
+        case .pullRequests: upsert(.pullRequests)
+        case .file, .pullRequest: break
         }
+    }
+
+    /// `openPullRequest` (rightPanelStore.ts:675-689): a known tab takes the newer URL.
+    public mutating func openPullRequest(_ target: PullRequestSurfaceTarget) {
+        let surface = RightPanelSurface.pullRequest(target)
+        upsert(surface)
+        if target.url != nil { surfaces = surfaces.map { $0.id == surface.id ? surface : $0 } }
     }
 
     /// `openFile` (rightPanelStore.ts:690-723): "." is the explorer; a file tab replaces the
@@ -160,7 +213,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
 
     /// `reconcileFileSurfaces(ref, false)`: without a workspace the file tabs go.
     public mutating func dropFileSurfaces() {
-        let kept = surfaces.filter { $0.kind == .diff }
+        let kept = surfaces.filter { $0.kind != .file && $0.kind != .files }
         guard kept.count != surfaces.count else { return }
         surfaces = kept
         if surfaces.isEmpty { isOpen = false }
@@ -213,8 +266,9 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
     /// Restores the entry into `state` like `reopenClosedView`: a file reopens at its line.
     public static func restore(_ surface: RightPanelSurface, into state: inout RightPanelState) {
         switch surface {
-        case .diff, .files: state.open(surface.kind)
+        case .diff, .files, .pullRequests: state.open(surface.kind)
         case .file(let path, let line, _): state.openFile(path, line: line)
+        case .pullRequest(let target): state.openPullRequest(target)
         }
     }
 

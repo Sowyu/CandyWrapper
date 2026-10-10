@@ -39,6 +39,11 @@ final class DiffFileHeaderView: DiffRowView {
     var onToggle: (@MainActor (Int) -> Void)?
     var onOpenFile: (@MainActor (String) -> Void)?
     private var path = ""
+    /// The pull request Code tab's "Viewed" tick (PullRequestCodeTab.tsx:849-880): a checkbox and
+    /// its word, "Changed" when the file moved since it was ticked. Hidden outside that tab.
+    let viewedBox = CheckboxView()
+    let viewedLabel = LabelView("Viewed", font: DSFont.ui(12))
+    var onViewed: (@MainActor (String, Bool) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -46,7 +51,11 @@ final class DiffFileHeaderView: DiffRowView {
         hoverBar.isHidden = true
         hoverBar.actions = ["hidden": NSNull(), "frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(hoverBar)
-        [chevron, icon, title, copy, stat].forEach(addSubview)
+        [chevron, icon, title, copy, stat, viewedBox, viewedLabel].forEach(addSubview)
+        viewedLabel.lineHeight = 16
+        viewedBox.isHidden = true
+        viewedLabel.isHidden = true
+        viewedBox.onChange = { [weak self] value in if let self { self.onViewed?(self.path, value == .on) } }
         chevron.action = { [weak self] in if let self { self.onToggle?(self.file) } }
         copy.action = { [weak self] in
             guard let self else { return }
@@ -54,6 +63,15 @@ final class DiffFileHeaderView: DiffRowView {
             NSPasteboard.general.setString(path, forType: .string)
         }
         setAccessibilityRole(.button)
+    }
+
+    func configure(viewed: (viewed: Bool, stale: Bool)?) {
+        viewedBox.isHidden = viewed == nil
+        viewedLabel.isHidden = viewed == nil
+        viewedBox.value = viewed?.viewed == true ? .on : .off
+        viewedLabel.text = viewed?.stale == true ? "Changed" : "Viewed"
+        viewedLabel.color = viewed?.stale == true ? Themed.color(\.warningForeground) : Themed.color(\.mutedForeground)
+        needsLayout = true
     }
 
     func configure(file index: Int, _ file: UnifiedDiff.File, collapsed: Bool, statStyle: DiffStatStyle) {
@@ -74,7 +92,14 @@ final class DiffFileHeaderView: DiffRowView {
         chevron.frame = NSRect(x: 6, y: 6, width: 20, height: 20)
         icon.frame = NSRect(x: 34, y: 8, width: 16, height: 16)
         let statWidth = stat.preferredWidth
-        stat.frame = NSRect(x: bounds.width - 12 - statWidth, y: 0, width: statWidth, height: DiffStyle.headerHeight)
+        var statRight = bounds.width - 12
+        if !viewedBox.isHidden {
+            let lw = ceil(viewedLabel.textWidth)
+            viewedLabel.frame = NSRect(x: statRight - lw, y: 8, width: lw + 1, height: 16)
+            viewedBox.frame = NSRect(x: statRight - lw - 6 - 16, y: 8, width: 16, height: 16)
+            statRight = viewedBox.frame.minX - 12
+        }
+        stat.frame = NSRect(x: statRight - statWidth, y: 0, width: statWidth, height: DiffStyle.headerHeight)
         let titleMax = max(0, stat.frame.minX - (statWidth > 0 ? 8 : 0) - 8 - 20 - 58)
         let titleWidth = min(title.naturalWidth, titleMax)
         title.frame = NSRect(x: 58, y: 8, width: titleWidth, height: 16)
@@ -103,6 +128,7 @@ final class DiffFileHeaderView: DiffRowView {
     /// The name opens the file; anywhere else toggles the file (DiffPanel.tsx:1107-1160).
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if !viewedBox.isHidden, viewedBox.frame.union(viewedLabel.frame).contains(point) { return }
         if title.frame.contains(point), let onOpenFile { onOpenFile(path) } else { onToggle?(file) }
     }
     override func mouseDown(with event: NSEvent) {}

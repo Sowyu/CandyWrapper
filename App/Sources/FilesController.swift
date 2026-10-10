@@ -16,6 +16,8 @@ final class FilesController {
     private let environments: Environments
     /// Opens another thread (Mod+Shift+T restoring a tab that closed elsewhere).
     var openThread: ((ThreadId) -> Void)?
+    /// The panel's state or thread changed: the pull request surfaces follow.
+    var onSync: (() -> Void)?
 
     private var threadId: ThreadId?
     private var states: [String: RightPanelState] = [:]
@@ -147,6 +149,7 @@ final class FilesController {
 
     /// Loads what the active surface needs.
     private func syncSurfaces() {
+        onSync?()
         guard let active = panel.panelState.active, panel.panelState.isOpen else { return }
         switch active.kind {
         case .files:
@@ -155,7 +158,7 @@ final class FilesController {
         case .file:
             showActiveFile(force: false)
             ensureTree()
-        case .diff:
+        case .diff, .pullRequest, .pullRequests:
             break
         }
     }

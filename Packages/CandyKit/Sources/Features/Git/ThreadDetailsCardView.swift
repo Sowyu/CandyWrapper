@@ -16,6 +16,8 @@ public final class DetailsRowControl: ControlView {
     public var icons: [IconDefinition] = [] { didSet { if icons != oldValue { rebuildIcons() } } }
     public var text = "" { didSet { label.text = middleTruncates ? "" : text; middle.value = middleTruncates ? text : ""; needsLayout = true } }
     public var middleTruncates = false { didSet { label.isHidden = middleTruncates; middle.isHidden = !middleTruncates; let t = text; text = t } }
+    /// A tone for the icons in place of the muted one (a pull request row wears its state's).
+    public var iconColor: NSColor? { didSet { restyle() } }
     /// A view right of the label (`flex-1` label, then this at its natural size).
     public var trailing: NSView? { didSet { oldValue?.removeFromSuperview(); trailing.map(addSubview); needsLayout = true } }
     /// The hover tooltip (attached on first use; T3 shows the workspace path on the run context).
@@ -113,7 +115,7 @@ public final class DetailsRowControl: ControlView {
     private func restyle() {
         label.color = Themed.color(\.contrastForeground, 0.8)
         middle.color = Themed.color(\.contrastForeground, 0.8)
-        iconViews.forEach { $0.strokeColor = Themed.color(\.contrastMutedForeground) }
+        iconViews.forEach { $0.strokeColor = iconColor ?? Themed.color(\.contrastMutedForeground) }
         chevron.strokeColor = Themed.color(\.contrastMutedForeground)
         needsDisplay = true
     }
@@ -401,6 +403,11 @@ public final class ThreadDetailsCardView: DSView {
     public let changes = DetailsRowControl(kind: .row)
     public let initGit = DetailsRowControl(kind: .row)
     public let totals = DiffTotalsView()
+    /// The thread's pull request rows under the branch (ThreadDetailsPrRows.tsx): the current one,
+    /// then the rest of its links while expanded, then "Show N more" or "Show less".
+    public var pullRequestRows: [DetailsRowControl] = [] {
+        didSet { oldValue.forEach { $0.removeFromSuperview() }; pullRequestRows.forEach(addSubview); relayout() }
+    }
 
     /// Shows the Version Control section's rows for a repository; false shows "Initialize Git".
     public var isRepo = true { didSet { if isRepo != oldValue { updateRows() } } }
@@ -445,7 +452,7 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     private var versionRows: [NSView] {
-        [branch, gitActions, changes, initGit].filter { !$0.isHidden }
+        ([branch] + pullRequestRows.filter { _ in !branch.isHidden } + [gitActions, changes, initGit]).filter { !$0.isHidden }
     }
 
     public var preferredHeight: CGFloat {

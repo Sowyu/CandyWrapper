@@ -21,7 +21,13 @@ final class SidebarCommands {
     /// One settle and one snooze per thread at a time (Sidebar.tsx:3314-3317, 4173).
     private var settling: Set<ThreadId> = []
     private var snoozing: Set<ThreadId> = []
-    private var utilityPage: UtilityPlaceholderView?
+    private var utilityPage: NSView?
+    /// The Pull Requests page, made on first open and kept for the session (its panel is session state).
+    private lazy var pullRequestsPage: PullRequestsPageController = {
+        let c = PullRequestsPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
+        c.onAddProject = { [weak self] in self?.addProject() }
+        return c
+    }()
     private var utilityKind: UtilityPage?
     private var pickingFolder = false
 
@@ -73,8 +79,8 @@ final class SidebarCommands {
             }
             return true
         }
-        // `thread.copyReference`: the thread ID (`resolveThreadReferenceCopyTarget`, shared/threadReference.ts:13-40).
-        // ponytail: never the PR link; read the thread's current pull request with WP7.5
+        // `thread.copyReference`: the PR the panel shows, else the thread's current PR link, else the
+        // thread ID (`resolveThreadReferenceCopyTarget`, shared/threadReference.ts:13-40).
         shortcuts.on("thread.copyReference") { [weak self] call in
             guard let self, self.threads.panel.window != nil else { return false }
             if !call.isRepeat { self.copyThreadReference() }
@@ -86,16 +92,22 @@ final class SidebarCommands {
         }
     }
 
-    /// "Copy thread ID" for the open thread; nothing on a draft. Returns the copied value.
+    /// "Copy PR link" or "Copy thread ID" for the open thread; nothing on a draft. Returns the copied value.
     @discardableResult
     func copyThreadReference() -> String? {
+        guard let target = threadReferenceTarget else { return nil }
+        copy(target.value, title: target.title)
+        return target.value
+    }
+
+    /// What `thread.copyReference` copies, nil when there is none.
+    var threadReferenceTarget: (value: String, title: String)? {
         guard let id = threads.openThreadId else { return nil }
-        copy(id.localId.rawValue, title: "Thread ID copied")
-        return id.localId.rawValue
+        return threads.pullRequests.copyReferenceTarget(threadId: id.localId.rawValue)
     }
 
     /// The value `thread.copyReference` copies, nil when there is none.
-    var threadReference: String? { threads.openThreadId?.localId.rawValue }
+    var threadReference: String? { threadReferenceTarget?.value }
 
     var isUsagePageOpen: Bool { utilityPage != nil && utilityKind == .usage }
 
@@ -465,11 +477,11 @@ final class SidebarCommands {
 
     /// T3 routes to `/pull-requests` and `/usage`: the page replaces the thread panel and the sidebar
     /// footer shows Back.
-    // ponytail: a placeholder page; build the pull request list and usage pages in M7
+    // ponytail: Usage is a placeholder page; build it with WP7.7
     func openUtilityPage(_ page: UtilityPage) {
         guard let layout, let sidebar else { return }
-        let view = UtilityPlaceholderView(page == .pullRequests ? "Pull Requests" : "Usage",
-                                          icon: page == .pullRequests ? .gitPullRequestArrow : .chartNoAxesColumn)
+        let view: NSView = page == .pullRequests ? pullRequestsPage.container : UtilityPlaceholderView("Usage", icon: .chartNoAxesColumn)
+        if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
         layout.main.addSubview(view)
@@ -477,11 +489,16 @@ final class SidebarCommands {
         utilityKind = page
         sidebar.isOnUtilityPage = true
         layout.needsLayout = true
+        if page == .pullRequests {
+            pullRequestsPage.didShow()
+            window?.makeFirstResponder(pullRequestsPage.container)
+        }
     }
 
     /// Back (`navigateToMainApp`): the thread panel returns as it was.
     func closeUtilityPage() {
         guard let layout, let page = utilityPage else { return }
+        if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil
