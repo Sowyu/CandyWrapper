@@ -9,7 +9,7 @@ import DesignSystem
 /// Integration: the composer lane places the banner `drawerInset` (22) in from each side of the
 /// composer, its bottom `overlap` below the composer's top, and BELOW the composer in z-order.
 public class ComposerBannerView: DSView {
-    public enum Variant { case neutral, warning }
+    public enum Variant { case neutral, warning, error }
 
     /// `--chat-composer-attachment-overlap`: `calc(1rem + 1px)`.
     public static let overlap: CGFloat = 17
@@ -17,7 +17,7 @@ public class ComposerBannerView: DSView {
     public static let drawerInset: CGFloat = 22
     static let radius: CGFloat = 18
 
-    let variant: Variant
+    var variant: Variant { didSet { if variant != oldValue { needsDisplay = true } } }
     /// Docked under another attachment (the queue strip): no top corners and no top border, so
     /// the two share one outline (ComposerBanner.Attachment's adjacent-sibling rule).
     public var joinsAbove = false { didSet { if joinsAbove != oldValue { needsLayout = true } } }
@@ -58,6 +58,9 @@ public class ComposerBannerView: DSView {
         case .warning:
             tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)
+        case .error:
+            tint.backgroundColor = Themed.color(\.error, 0.08).cgColor(in: self)
+            surface.layer?.borderColor = Themed.color(\.error, 0.32).cgColor(in: self)
         }
         seam.isHidden = !dark
         seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]

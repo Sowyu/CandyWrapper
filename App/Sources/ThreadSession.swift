@@ -1,4 +1,5 @@
 import AppKit
+import DesignSystem
 import Features
 import T3Client
 import T3Protocol
@@ -174,6 +175,9 @@ final class ThreadController {
     private var openDiff = CommandLine.arguments.contains("--open-diff")
     private var restored = false
     private var keyMonitor: Any?
+    /// The environment the connection banner speaks for, and since when it is unavailable.
+    private var bannerEnvironment: (id: String, since: Date)?
+    private var bannerTimer: DispatchWorkItem?
 
     init(sidebar: SidebarContentView, window: NSWindow, environments: Environments) {
         self.sidebar = sidebar
@@ -197,6 +201,15 @@ final class ThreadController {
         environments.onSessionChange = { [weak self] env in self?.sessionChanged(env) }
         environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
         environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
+        environments.observe { [weak self] in self?.updateEnvironmentBanner() }
+        panel.environmentBanner.reconnect.action = { [weak self] in
+            guard let self, let id = self.bannerEnvironment?.id else { return }
+            self.environments.reconnect(id)
+        }
+        panel.environmentBanner.disconnect.action = { [weak self] in
+            guard let self, let id = self.bannerEnvironment?.id else { return }
+            self.disconnect(id)
+        }
         sidebar.scopeDefaults = .standard
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
@@ -254,6 +267,7 @@ final class ThreadController {
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
+        updateEnvironmentBanner()
         if openDiff {
             openDiff = false
             panel.opensChangedTurnOnLoad = true
@@ -272,6 +286,70 @@ final class ThreadController {
     func close() {
         session?.end()
         session = nil
+    }
+
+    /// "<label> is reconnecting|offline" over the composer while the open thread's environment is not
+    /// connected (ChatView.tsx:2668-2750, 3091-3142): reconnecting shows after a 2 s grace
+    /// (`ENVIRONMENT_RECONNECT_WARNING_GRACE_MS`), "Disconnect server" after 20 s on a remote machine
+    /// (`useEnvironmentDisconnectDelay`). No session (the local server stopped while idle) shows nothing.
+    private func updateEnvironmentBanner() {
+        bannerTimer?.cancel()
+        bannerTimer = nil
+        let banner = panel.environmentBanner
+        guard let id = session?.environmentId, let state = environments.state(id),
+              state.status != .connected, state.status != .available else {
+            bannerEnvironment = nil
+            panel.showsEnvironmentBanner = false
+            return
+        }
+        if bannerEnvironment?.id != id { bannerEnvironment = (id, Date()) }
+        let elapsed = Date().timeIntervalSince(bannerEnvironment!.since)
+        let reconnecting = state.status == .connecting || state.status == .reconnecting
+        let remote = id != environments.primaryId
+        var wake: TimeInterval?
+        if reconnecting && elapsed < 2 {
+            panel.showsEnvironmentBanner = false
+            wake = 2 - elapsed
+        } else {
+            banner.text = "\(environments.label(id) ?? "Remote") is \(reconnecting ? "reconnecting" : "offline")"
+            banner.isError = state.status == .error
+            banner.showsReconnect = !reconnecting
+            banner.showsDisconnect = remote && elapsed >= 20
+            panel.showsEnvironmentBanner = true
+            if remote && elapsed < 20 { wake = 20 - elapsed }
+        }
+        if let wake {
+            let item = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.updateEnvironmentBanner() } }
+            bannerTimer = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + wake + 0.05, execute: item)
+        }
+    }
+
+    /// "Disconnect server": switches the machine off and goes to the index, as T3 navigates to "/".
+    private func disconnect(_ environmentId: String) {
+        panel.environmentBanner.disconnect.isEnabled = false
+        Task {
+            defer { panel.environmentBanner.disconnect.isEnabled = true }
+            do {
+                try await environments.setEnabled(environmentId, false)
+            } catch {
+                panel.toasts.show(ToastView(title: "Could not disconnect server", message: "\(error)", kind: .error))
+                return
+            }
+            if session?.environmentId == environmentId { landOnIndex() }
+        }
+    }
+
+    /// Like T3's index route: a draft for the most recently active project, else nothing.
+    private func landOnIndex() {
+        session?.end()
+        session = nil
+        updateEnvironmentBanner()
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        if let snapshot = sidebar?.snapshot,
+           let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
+            _ = composer.newThread(in: project)
+        }
     }
 
     /// A removed environment: its open thread closes and the per-thread state the app keeps for it
@@ -293,14 +371,7 @@ final class ThreadController {
             if state.projectScopeKey?.hasPrefix(prefix) == true { sidebar.setProjectScope(nil) }
         }
         guard session?.environmentId == environmentId else { return }
-        session?.end()
-        session = nil
-        // Like T3's index route: a draft for the most recently active project left, else nothing.
-        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
-        if let snapshot = sidebar?.snapshot,
-           let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
-            _ = composer.newThread(in: project)
-        }
+        landOnIndex()
     }
 
     /// With the first shell: opens the `--open-thread` match or the remembered thread, else lands

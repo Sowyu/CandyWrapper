@@ -20,6 +20,8 @@ public final class EmptyView: DSView {
     }
 
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// A `min-h-*` class on the root, such as the Environments list's `min-h-52`. Nil keeps the size's.
+    public var minimumHeight: CGFloat? { didSet { invalidateIntrinsicContentSize() } }
     /// `EmptyContent` (buttons and so on), below the header with the size's gap.
     public var content: NSView? {
         didSet { oldValue?.removeFromSuperview(); content.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
@@ -63,7 +65,7 @@ public final class EmptyView: DSView {
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat {
-        max(size.metrics.minHeight, stackHeight(width) + 2 * size.metrics.padding)
+        max(minimumHeight ?? size.metrics.minHeight, stackHeight(width) + 2 * size.metrics.padding)
     }
 
     public override var intrinsicContentSize: NSSize {

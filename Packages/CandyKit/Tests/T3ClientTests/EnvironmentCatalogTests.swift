@@ -29,7 +29,7 @@ struct EnvironmentCatalogTests {
                                         createdAt: Date(timeIntervalSince1970: 1_800_000_100))
         try catalog.add(a, token: "secret-a")
         try catalog.add(b, token: "secret-b")
-        defer { try? catalog.credentials.delete(environmentId: "env-a"); try? catalog.credentials.delete(environmentId: "env-b") }
+        defer { try? catalog.remove(environmentId: "env-a"); try? catalog.remove(environmentId: "env-b") }
 
         // A fresh catalog on the same file reads the same registrations, in order.
         let reread = EnvironmentCatalog(file: catalog.file, credentials: catalog.credentials).load()
@@ -48,12 +48,30 @@ struct EnvironmentCatalogTests {
         #expect(catalog.load().map(\.label) == ["Studio 2", "Box"])
         #expect(try catalog.token(environmentId: "env-a") == "secret-a2")
 
+        // Pairing env-a again over another address adds a route, LAN ahead of a public name, and
+        // keeps the switch; the route has its own token.
+        try catalog.setEnabled(false, environmentId: "env-a")
+        let tailnet = URL(string: "https://studio.tail1234.ts.net/")!
+        var again = EnvironmentRegistration(environmentId: "env-a", label: "Studio 2", httpBaseURL: tailnet)
+        try catalog.add(again, token: "secret-a-tailnet")
+        again.httpBaseURL = URL(string: "https://studio.example.com/")!
+        try catalog.add(again, token: "secret-a-public")
+        #expect(catalog.load()[0].routes.map(EnvironmentRoute.origin) == ["http://10.0.0.2:3773", "https://studio.tail1234.ts.net", "https://studio.example.com"])
+        #expect(catalog.load()[0].enabled == false)
+        #expect(try catalog.token(environmentId: "env-a", route: tailnet) == "secret-a-tailnet")
+        #expect(try catalog.token(environmentId: "env-a") == "secret-a2")
+        try catalog.removeRoute(tailnet, environmentId: "env-a")
+        #expect(catalog.load()[0].routes.count == 2)
+        #expect(try catalog.token(environmentId: "env-a", route: tailnet) == nil)
+        try catalog.setEnabled(true, environmentId: "env-a")
+
         try catalog.setEnabled(false, environmentId: "env-b")
         #expect(catalog.load().map(\.enabled) == [true, false])
 
         try catalog.remove(environmentId: "env-a")
         #expect(catalog.load().map(\.environmentId) == ["env-b"])
         #expect(try catalog.token(environmentId: "env-a") == nil)
+        #expect(try catalog.credentials.load(environmentId: EnvironmentRoute.connectionId(environmentId: "env-a", again.httpBaseURL)) == nil)
     }
 
     @Test func corruptDocumentIsMovedAside() throws {

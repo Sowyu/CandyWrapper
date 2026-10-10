@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environments: Environments?
     private var server: ServerController?
     private var threads: ThreadController?
+    private var settings: SettingsController?
     private var terminationSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -57,6 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
+        let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments)
+        self.settings = settings
+        sidebar.actions.openSettings = { [weak settings] in settings?.open() }
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
@@ -116,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let servers = Self.developmentServers(args)
         guard servers.isEmpty else {
             for (i, server) in servers.enumerated() { environments.addDevelopment(baseURL: server.url, token: server.token, primary: i == 0) }
+            // Saved environments connect at launch whatever the primary is, as in T3.
+            environments.restoreSaved()
             return
         }
         let server = ServerController(environments: environments, window: window)
@@ -183,9 +189,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(appItem)
         // T3's menu template (apps/desktop/src/window/DesktopApplicationMenu.ts:166-245), the parts that
         // exist here.
-        // ponytail: no Check for Updates, Settings, File, View or Help yet; add them with settings and packaging (M7, M9)
+        // ponytail: no Check for Updates, File, View or Help yet; add them with packaging (M9)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About CandyWrapper", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        // `Settings...` with CmdOrCtrl+, sends `open-settings` (DesktopApplicationMenu.ts:176-180).
+        appMenu.addItem(withTitle: "Settings...", action: #selector(openSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
         let services = NSMenu(title: "Services")
         appMenu.addItem(withTitle: "Services", action: nil, keyEquivalent: "").submenu = services
@@ -211,12 +220,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timeline.isHidden = true
         timeline.allowsKeyEquivalentWhenHidden = true
         appMenu.addItem(timeline)
-        // Hidden, development: removes the newest remote environment, until Settings > Connections has a Remove item (WP6.3).
-        let remove = NSMenuItem(title: "Remove Last Environment", action: #selector(removeLastEnvironment(_:)), keyEquivalent: "r")
-        remove.keyEquivalentModifierMask = [.command, .option, .shift]
-        remove.isHidden = true
-        remove.allowsKeyEquivalentWhenHidden = true
-        appMenu.addItem(remove)
         appItem.submenu = appMenu
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = makeEditMenu()
         let window = NSMenu(title: "Window")
@@ -260,10 +263,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLog("timeline report written to %@", path)
     }
 
-    @objc func removeLastEnvironment(_ sender: Any?) {
-        guard let environments, let last = environments.environmentIds.last(where: { $0 != environments.primaryId }) else { return }
-        NSLog("removing environment %@", last)
-        environments.remove(last)
+    /// Cmd+, : the settings pages, Connections first while it is the only one built. T3 lands on General.
+    @objc func openSettings(_ sender: Any?) {
+        mainWindow?.makeKeyAndOrderFront(nil)
+        settings?.open()
     }
 
     /// On: T3 Code's server keeps running while CandyWrapper is idle, so other devices can reach
