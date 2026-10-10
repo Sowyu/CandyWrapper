@@ -37,6 +37,8 @@ public final class TimelineView: DSView {
     private var pillWork: DispatchWorkItem?
     private var lastNearTopId: String?
     private var laidOutWidth: CGFloat = 0
+    private var tiling = false
+    private var retile = false
 
     /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem).
     public var topInset: CGFloat = 24 { didSet { if topInset != oldValue { relayout() } } }
@@ -99,9 +101,19 @@ public final class TimelineView: DSView {
     /// below 640px), the lane at most 736px wide, centered.
     var laneFrame: (x: CGFloat, width: CGFloat) {
         let w = document.bounds.width
-        let padding: CGFloat = w >= 640 ? 48 : 12
+        // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
+        // keeps 48px beside an open right panel.
+        let padding: CGFloat = viewportWidth >= 640 ? 48 : 12
         let lane = max(0, min(Self.maxLane, w - padding * 2))
         return (((w - lane) / 2), lane)
+    }
+
+    /// The window's width, or the outermost view's when there is no window (tests).
+    private var viewportWidth: CGFloat {
+        if let window { return window.frame.width }
+        var view: NSView = self
+        while let parent = view.superview { view = parent }
+        return view.bounds.width
     }
 
     private func height(of item: TimelineItem) -> CGFloat {
@@ -116,9 +128,10 @@ public final class TimelineView: DSView {
             return text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { $0 + max(1, ceil(CGFloat($1.count) / chars)) }
         }
         switch item.row.kind {
-        case .message(let m, _, let meta, _, _, _):
+        case .message(let m, _, let meta, _, _, let summary):
             if m.role == .user { return min(176, lines(m.text, 7.5 / 0.8) * 22.75) + 24 + 44 }
-            return lines(m.text, 7.5) * 22.75 + 4 + (meta ? 46 : 8)
+            let card = summary.map { $0.files.isEmpty ? 0 : 16 + 56 + CGFloat($0.files.count) * 28 } ?? 0
+            return lines(m.text, 7.5) * 22.75 + 4 + card + (meta ? 46 : 8)
         case .assistantMeta: return 42
         case .proposedPlan(let p): return min(416, lines(p.planMarkdown, 7.5) * 22.75) + 140
         case .work(let entries, let group, _): return CGFloat(entries.count) * (group ? 24 : 28) + (group ? 4 : 8)
@@ -242,9 +255,19 @@ public final class TimelineView: DSView {
     /// height; the anchor then puts the viewport back, and the loop measures what came into view.
     private func tile(relayoutAll: Bool = false) {
         guard laneFrame.width > 0 else { return }
+        // A scroll notification during tiling (the document resizing, a row measuring itself)
+        // must not tile inside this pass: both would recycle the same views. Run once more after.
+        guard !tiling else { retile = true; return }
+        tiling = true
+        defer {
+            tiling = false
+            if retile { retile = false; tile() }
+        }
         let lane = laneFrame
         var wanted = range(viewport.insetBy(dx: 0, dy: -Self.overscan))
-        for _ in 0..<4 {
+        // Each pass that changes anything measured at least one new row, so this ends; the cap only
+        // bounds a pathological thread. Every placed row is measured below either way.
+        for _ in 0..<64 {
             let anchor = captureAnchor()
             var changed = false
             for i in wanted {
@@ -269,6 +292,15 @@ public final class TimelineView: DSView {
             visible[id] = nil
             recycle(view)
         }
+        // Rows that came into range on the last pass are measured before they are placed, or an
+        // estimated height would overlap the next row.
+        var late = false
+        for i in wanted where !isMeasured(items[i], lane.width) {
+            let h = viewFor(i).height(forWidth: lane.width)
+            measured[items[i].id] = (lane.width, items[i], h)
+            if h != heights[i] { heights[i] = h; late = true }
+        }
+        if late { recomputeTops() }
         for i in wanted {
             let view = viewFor(i)
             let frame = NSRect(x: TL.snap(lane.x), y: TL.snap(tops[i]), width: lane.width, height: heights[i])
@@ -276,11 +308,22 @@ public final class TimelineView: DSView {
         }
     }
 
+    private func isMeasured(_ item: TimelineItem, _ width: CGFloat) -> Bool {
+        guard let m = measured[item.id] else { return false }
+        return m.width == width && m.item == item
+    }
+
     private func viewFor(_ i: Int) -> TimelineRowView {
         let item = items[i]
         if let view = visible[item.id] {
-            if view.item != item { configureCount += 1; view.configure(item) }
-            return view
+            // An id can change kind (the live activity row is `thinking`, then `workLive`). The old
+            // view class can't draw the new kind, so it goes back to its own pool.
+            if view.kind == Self.kind(item.row) {
+                if view.item != item { configureCount += 1; view.configure(item) }
+                return view
+            }
+            visible[item.id] = nil
+            recycle(view)
         }
         let view = dequeue(Self.kind(item.row))
         configureCount += 1
@@ -308,6 +351,7 @@ public final class TimelineView: DSView {
 
     private func dequeue(_ kind: Kind) -> TimelineRowView {
         if let view = pools[kind]?.popLast() {
+            view.pooled = false
             view.isHidden = false
             return view
         }
@@ -328,14 +372,19 @@ public final class TimelineView: DSView {
         case .event: EventRowView()
         }
         view.context = context
+        view.kind = kind
         document.addSubview(view)
         return view
     }
 
     private func recycle(_ view: TimelineRowView) {
-        view.isHidden = true
+        guard !view.pooled else { return }
+        view.pooled = true
+        // NSView's `prepareForReuse` unhides the view and resets its alpha, so it runs first.
+        // The other order left every recycled row on screen at its old frame.
         view.prepareForReuse()
-        if let item = view.item { pools[Self.kind(item.row), default: []].append(view) }
+        view.isHidden = true
+        if let kind = view.kind { pools[kind, default: []].append(view) }
     }
 
     // MARK: Scroll to end (H-timeline-visuals.md 6.2)
@@ -366,7 +415,7 @@ public final class TimelineView: DSView {
         for (i, item) in items.enumerated() {
             if let m = measured[item.id], m.width == lane, m.item == item { heights[i] = m.height; continue }
             // Off-screen rows borrow a pooled view and give it back.
-            let view = visible[item.id] ?? dequeue(Self.kind(item.row))
+            let view = visible[item.id] != nil ? viewFor(i) : dequeue(Self.kind(item.row))
             if view.item != item { configureCount += 1; view.configure(item) }
             let h = view.height(forWidth: lane)
             measured[item.id] = (lane, item, h)
@@ -403,7 +452,72 @@ public final class TimelineView: DSView {
                             width: size.width, height: size.height)
     }
 
+    // MARK: Checks
+
+    /// What breaks the tiling contract: stray or misplaced row views, overlaps, pooled views on
+    /// screen, a wrong document height, subviews past a row's height. Empty when all is well.
+    /// The tests call it after every step; `debugReport()` prints it for the live app.
+    func layoutProblems() -> [String] {
+        var problems: [String] = []
+        let lane = laneFrame
+        if Set(items.map(\.id)).count != items.count { problems.append("duplicate row ids") }
+        let expectedHeight = topInset + heights.reduce(0, +) + Self.footer + bottomInset
+        if abs(document.frame.height - expectedHeight) > 0.01 { problems.append("document height \(document.frame.height), rows say \(expectedHeight)") }
+        let pooled = Set(pools.values.flatMap { $0 }.map(ObjectIdentifier.init))
+        var placed: [(String, NSRect)] = []
+        for case let view as TimelineRowView in document.subviews {
+            let id = view.item?.id ?? "nil"
+            if pooled.contains(ObjectIdentifier(view)) {
+                if !view.isHidden { problems.append("pooled view \(id) is on screen") }
+                continue
+            }
+            guard !view.isHidden else { continue }
+            guard let item = view.item, visible[item.id] === view, let i = indexById[item.id] else {
+                problems.append("stray view \(id) at \(view.frame)"); continue
+            }
+            if view.kind != Self.kind(items[i].row) { problems.append("view of kind \(String(describing: view.kind)) shows \(id)") }
+            if view.item != items[i] { problems.append("view \(id) shows an old item") }
+            let frame = NSRect(x: TL.snap(lane.x), y: TL.snap(tops[i]), width: lane.width, height: heights[i])
+            if view.frame != frame { problems.append("view \(id) at \(view.frame), row at \(frame)") }
+            // Pending layout is fine; what a laid-out row draws past its height is not.
+            view.layoutSubtreeIfNeeded()
+            let own = view.height(forWidth: lane.width)
+            if abs(own - heights[i]) > 0.01 { problems.append("view \(id) measures \(own), row has \(heights[i])") }
+            for sub in view.subviews where !sub.isHidden && sub.frame.height > 0 && sub.frame.maxY > own + 0.5 {
+                problems.append("view \(id): \(type(of: sub)) ends at \(sub.frame.maxY), past \(own)")
+            }
+            placed.append((id, view.frame))
+        }
+        placed.sort { $0.1.minY < $1.1.minY }
+        for (a, b) in zip(placed, placed.dropFirst()) where b.1.minY < a.1.maxY - 0.5 {
+            problems.append("\(a.0) \(a.1) overlaps \(b.0) \(b.1)")
+        }
+        for id in visible.keys where indexById[id] == nil { problems.append("visible holds gone row \(id)") }
+        return problems
+    }
+
+    /// Row ids, kinds and frames on screen plus `layoutProblems()`, for checking the live app.
+    public func debugReport() -> String {
+        var lines = ["timeline: \(items.count) rows, viewport \(viewport), document \(document.frame.size), followsEnd \(followsEnd)"]
+        let shown = visible.values.filter { !$0.isHidden }.sorted { $0.frame.minY < $1.frame.minY }
+        for view in shown {
+            lines.append("  \(view.item?.id ?? "nil") \(String(describing: view.kind)) \(view.frame)")
+        }
+        let problems = layoutProblems()
+        lines.append(problems.isEmpty ? "no problems" : "PROBLEMS:")
+        lines += problems.map { "  " + $0 }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: Test hooks
+
+    /// Scrolls by `dy` from the current position (tests line a row up with a reference).
+    func scroll(by dy: CGFloat) {
+        followsEnd = false
+        setScroll(viewport.minY + dy)
+        tile()
+        updatePill()
+    }
 
     func view(forRow id: String) -> TimelineRowView? { visible[id] }
     var liveViewCount: Int { visible.count }

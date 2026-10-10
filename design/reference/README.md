@@ -42,6 +42,8 @@ Plans are in `plans/`. `plans/capture-reference-extended.swift` is the repo capt
 | 44 | Thread details panel | 44-thread-details-panel | Header details button | extra |
 | 45 | Go to file | 45-go-to-file | Cmd+P | extra |
 | 46 | Project search | 46-project-search | Cmd+Shift+F, type "hello" | extra |
+| 47 | Changed files card | 47-changed-files-card | `plans/diff-turn.json`: thread "Add notes and docstring", toast closed, card scrolled to the middle (top at 317.5 CSS px) | Captured 2026-10-10. Turn 1 changed hello.py and notes.md. No folders in this card |
+| 48 | Turn diff from the card | 48-diff-turn-file | Same, then click notes.md in the card; pointer parked on the empty panel | Right panel inline at 484 px, scope "Turn 1", files collapsed (turn diffs only scroll to the file). Layout toggle shows split because the 09 capture changed the setting |
 | 03n, 04n, 11n | Narrow (800 px) kitchen sink, new thread, right panel | *-narrow | narrow.json | extra |
 
 Not every extra image was opened. Looked at: 01, 02, 03a, 03b, 04, 05, 06, 07, 09, 11, 12, 13, 14, 16a, 18, 20, 21, 22, 26, 27, 29, 44. Settings pages 32-40, 45, 46, 41 to 43 and the narrow set were not checked, so verify them before relying on them.

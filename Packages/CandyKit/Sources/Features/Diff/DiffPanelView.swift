@@ -114,7 +114,7 @@ public final class DiffPanelView: DSView {
         updateScopeLabel()
     }
 
-    /// Selects a run (nil: the latest) and, once its diff is loaded, expands and reveals `filePath`.
+    /// Selects a run (nil: the latest) and, once its diff is loaded, scrolls to `filePath`.
     /// This is what the changed files card's "Open diff" and file rows call (`onOpenTurnDiff`).
     public func open(runId: RunId?, filePath: String?) {
         let known = runId.flatMap { id in summaries.first { $0.runId == id }?.runId }
@@ -127,7 +127,7 @@ public final class DiffPanelView: DSView {
             reload()
         } else if let filePath {
             pendingFile = nil
-            list.reveal(path: filePath)
+            list.reveal(path: filePath, expand: false)
         }
     }
 
@@ -184,7 +184,7 @@ public final class DiffPanelView: DSView {
         if let file = pendingFile {
             pendingFile = nil
             layoutSubtreeIfNeeded()
-            list.reveal(path: file)
+            list.reveal(path: file, expand: false)
         }
     }
 

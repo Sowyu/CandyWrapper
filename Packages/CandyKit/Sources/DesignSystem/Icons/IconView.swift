@@ -4,8 +4,11 @@ import QuartzCore
 /// Layer-backed vector icon: one CAShapeLayer per SVG element, scaled from the icon's viewBox to the view size.
 /// lucide strokes are 2 viewBox units wide, so they scale with the size (1.33 px at 16 px), as in T3.
 public final class IconView: NSView {
-    public let name: IconName
+    /// Nil for an icon built from a definition, such as a file type icon.
+    public let name: IconName?
     private let definition: IconDefinition
+    /// Fixed-color glyph: unfilled shapes stay unfilled.
+    private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
 
     public var strokeColor: NSColor { didSet { applyColors() } }
@@ -14,9 +17,19 @@ public final class IconView: NSView {
 
     private let nominalSize: CGFloat
 
-    public init(name: IconName, size: CGFloat = 16, strokeColor: NSColor = .labelColor, fillColor: NSColor? = nil) {
+    public convenience init(name: IconName, size: CGFloat = 16, strokeColor: NSColor = .labelColor, fillColor: NSColor? = nil) {
+        self.init(name: name, definition: name.definition, brand: name.isBrand, size: size, strokeColor: strokeColor, fillColor: fillColor)
+    }
+
+    /// An icon outside the generated set. `currentColor` resolves to `strokeColor` (or `fillColor` for fills).
+    public convenience init(definition: IconDefinition, size: CGFloat = 16, color: NSColor = .labelColor) {
+        self.init(name: nil, definition: definition, brand: true, size: size, strokeColor: color, fillColor: nil)
+    }
+
+    private init(name: IconName?, definition: IconDefinition, brand: Bool, size: CGFloat, strokeColor: NSColor, fillColor: NSColor?) {
         self.name = name
-        self.definition = name.definition
+        self.definition = definition
+        self.isBrand = brand
         self.strokeColor = strokeColor
         self.fillColor = fillColor
         self.nominalSize = size
@@ -94,7 +107,7 @@ public final class IconView: NSView {
     private func resolve(_ c: IconColor, fillSlot: Bool) -> CGColor? {
         let color: NSColor?
         switch c {
-        case .none: color = (fillSlot && !name.isBrand) ? fillColor : nil
+        case .none: color = (fillSlot && !isBrand) ? fillColor : nil
         case .current: color = fillSlot ? (fillColor ?? strokeColor) : strokeColor
         case .rgba(let v):
             color = NSColor(

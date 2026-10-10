@@ -146,6 +146,9 @@ final class AssistantMessageRowView: TimelineRowView {
     private let empty = LabelView("(empty response)", font: TL.font(14), color: TL.c(\.foreground, 0.8))
     private let meta = AssistantMetaContent()
     private var showMeta = false
+    /// `AssistantChangedFilesSection`: the card when the run changed files.
+    private lazy var card = ChangedFilesCardView()
+    private var cardFiles: (files: [CheckpointFile], expanded: Bool, overrides: [String: Bool])?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -158,8 +161,18 @@ final class AssistantMessageRowView: TimelineRowView {
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .message(let m, let projected, let showMeta, let showCopy, let copyStreaming, _) = item.row.kind else { return }
+        guard case .message(let m, let projected, let showMeta, let showCopy, let copyStreaming, let summary) = item.row.kind else { return }
         self.showMeta = showMeta
+        if let summary, !summary.files.isEmpty {
+            cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
+            if card.superview == nil { addSubview(card) }
+            card.model = context.model
+            card.configure(summary, allExpanded: item.ui.filesExpanded, overrides: item.ui.folderOverrides)
+            card.isHidden = false
+        } else {
+            cardFiles = nil
+            if card.superview != nil { card.isHidden = true }
+        }
         let isEmpty = m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !m.streaming
         empty.isHidden = !isEmpty
         markdown.isHidden = isEmpty
@@ -173,8 +186,14 @@ final class AssistantMessageRowView: TimelineRowView {
         empty.isHidden ? markdown.height(forWidth: max(0, width - 8)) : TL.relaxed
     }
 
+    /// The card's height plus its `mt-4`, or 0.
+    private var cardSpace: CGFloat {
+        guard let cardFiles else { return 0 }
+        return 16 + ChangedFilesCardView.height(cardFiles.files, allExpanded: cardFiles.expanded, overrides: cardFiles.overrides)
+    }
+
     override func height(forWidth width: CGFloat) -> CGFloat {
-        2 + bodyHeight(width) + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
+        2 + bodyHeight(width) + cardSpace + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
     }
 
     override func layout() {
@@ -182,7 +201,9 @@ final class AssistantMessageRowView: TimelineRowView {
         let body = bodyHeight(bounds.width)
         markdown.frame = NSRect(x: 4, y: 2, width: max(0, bounds.width - 8), height: body)
         empty.frame = NSRect(x: 4, y: 2, width: bounds.width - 8, height: TL.relaxed)
-        meta.frame = NSRect(x: 4, y: 2 + body + 6, width: bounds.width - 8, height: 24)
+        let cardSpace = self.cardSpace
+        if cardSpace > 0 { card.frame = NSRect(x: 4, y: 2 + body + 16, width: max(0, bounds.width - 8), height: cardSpace - 16) }
+        meta.frame = NSRect(x: 4, y: 2 + body + cardSpace + 6, width: bounds.width - 8, height: 24)
     }
 
     override func hoverChanged() { Self.reveal([meta], hovered) }

@@ -65,6 +65,10 @@ final class TimelineContext {
 @MainActor
 class TimelineRowView: DSView {
     var item: TimelineItem?
+    /// The row kind this view class draws; it goes back to that kind's pool.
+    var kind: TimelineView.Kind?
+    /// Sitting in the timeline's pool; a pooled view must never be recycled twice.
+    var pooled = false
     var context: TimelineContext!
 
     /// Clicks on the background of the row land here when the whole row is a button.

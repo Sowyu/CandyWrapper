@@ -22,6 +22,14 @@ struct ThreadFidelityTests {
         return 172
     }()
 
+    /// The panel is transparent; in the app it sits on the main grain surface (SidebarLayoutView).
+    static func onSurface(_ panel: NSView) -> NSView {
+        let surface = GrainSurfaceView(fill: Themed.color(\.background))
+        surface.frame = panel.frame
+        surface.addSubview(panel)
+        return surface
+    }
+
     static func render(_ title: String, fraction: CGFloat, dark: Bool) throws -> NSBitmapImageRep {
         let projection = try #require(try ThreadPreview.projection(titled: title))
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
@@ -30,7 +38,7 @@ struct ThreadFidelityTests {
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: fraction)
-        return Snapshot.image(of: panel, size: size, scale: 2, dark: dark)
+        return Snapshot.image(of: onSurface(panel), size: size, scale: 2, dark: dark)
     }
 
     static func crop(_ rep: NSBitmapImageRep, x: Int, width: Int, height: Int) -> NSBitmapImageRep {
@@ -57,7 +65,7 @@ struct ThreadFidelityTests {
             }
             panel.layoutSubtreeIfNeeded()
             panel.timeline.scroll(toFraction: 1)
-            let image = Snapshot.image(of: panel, size: Self.size, scale: 2, dark: theme == "dark")
+            let image = Snapshot.image(of: Self.onSurface(panel), size: Self.size, scale: 2, dark: theme == "dark")
             try Snapshot.writePNG(image, to: Self.out.appendingPathComponent("expanded.\(theme).png"))
             #expect(panel.model.items.count > 4)
         }

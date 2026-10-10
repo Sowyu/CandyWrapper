@@ -173,8 +173,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gallery.isHidden = true
         gallery.allowsKeyEquivalentWhenHidden = true
         appMenu.addItem(gallery)
+        // Hidden: writes the timeline's row views, frames and layout problems for checking a live thread.
+        let timeline = NSMenuItem(title: "Log Timeline Rows", action: #selector(logTimeline(_:)), keyEquivalent: "l")
+        timeline.keyEquivalentModifierMask = [.command, .option, .shift]
+        timeline.isHidden = true
+        timeline.allowsKeyEquivalentWhenHidden = true
+        appMenu.addItem(timeline)
         appItem.submenu = appMenu
         return main
+    }
+
+    /// Cmd+Opt+Shift+L: the open thread's timeline report to /tmp/cw-timeline-<pid>.txt and stdout.
+    @objc func logTimeline(_ sender: Any?) {
+        guard let report = threads?.panel.timeline.debugReport() else { return }
+        let path = "/tmp/cw-timeline-\(getpid()).txt"
+        try? report.write(toFile: path, atomically: true, encoding: .utf8)
+        print(report)
+        NSLog("timeline report written to %@", path)
     }
 
     /// On: T3 Code's server keeps running while CandyWrapper is idle, so other devices can reach
