@@ -283,11 +283,15 @@ public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
     public var defaultRuntimeMode: RuntimeMode
     /// `environmentIcon`: the machine kind the user picked for this environment, or nil for the detected one.
     public var environmentIcon: String?
+    /// The whole settings object as sent, for the Settings pages (`ServerSettingsValues`).
+    public var raw: JSONValue = .null
 
-    public init(defaultModelSelection: ModelSelection? = nil, defaultRuntimeMode: RuntimeMode = .fullAccess, environmentIcon: String? = nil) {
+    public init(defaultModelSelection: ModelSelection? = nil, defaultRuntimeMode: RuntimeMode = .fullAccess, environmentIcon: String? = nil,
+                raw: JSONValue = .null) {
         self.defaultModelSelection = defaultModelSelection
         self.defaultRuntimeMode = defaultRuntimeMode
         self.environmentIcon = environmentIcon
+        self.raw = raw
     }
 
     private enum CodingKeys: String, CodingKey { case defaultModelSelection, defaultRuntimeMode, environmentIcon }
@@ -299,6 +303,7 @@ public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
         // `ForwardCompatibleNullable`: an unknown kind reads as no override.
         let icon = try? c.decodeIfPresent(String.self, forKey: .environmentIcon)
         environmentIcon = icon.flatMap { ["server", "cloud", "linux", "desktop", "laptop", "mac-mini", "mac-studio"].contains($0) ? $0 : nil }
+        raw = (try? JSONValue(from: decoder)) ?? .null
     }
 }
 
@@ -308,20 +313,30 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var settings: ServerThreadDefaults
     /// `keybindings`: the server's resolved rules (its defaults merged with the user's keybindings.json).
     public var keybindings: [ResolvedKeybindingRule]
+    /// `environment.capabilities` booleans (threadAutoSettlement, threadRestartContinuation, ...).
+    public var capabilities: Set<String> = []
+    /// `keybindingsConfigPath`: the server's keybindings.json.
+    public var keybindingsConfigPath: String?
 
-    public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = []) {
+    public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
+                capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
         self.providers = providers
         self.settings = settings
         self.keybindings = keybindings
+        self.capabilities = capabilities
+        self.keybindingsConfigPath = keybindingsConfigPath
     }
 
-    private enum CodingKeys: String, CodingKey { case providers, settings, keybindings }
+    private enum CodingKeys: String, CodingKey { case providers, settings, keybindings, environment, keybindingsConfigPath }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         providers = try c.decodeIfPresent([ServerProvider].self, forKey: .providers) ?? []
         settings = try c.decodeIfPresent(ServerThreadDefaults.self, forKey: .settings) ?? ServerThreadDefaults()
         keybindings = Keymap.decodeRules(try c.decodeIfPresent(JSONValue.self, forKey: .keybindings))
+        let environment = try? c.decodeIfPresent(JSONValue.self, forKey: .environment)
+        capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
+        keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
     }
 }
 

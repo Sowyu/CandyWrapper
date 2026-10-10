@@ -146,6 +146,12 @@ final class ComposerController {
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
         }
         sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
+        applyClientSettings()
+        ClientSettingsStore.shared.observe { [weak self] keys in
+            guard let self else { return }
+            self.applyClientSettings()
+            if keys.contains("planModeEnabled") { self.refresh() }
+        }
         composer.onSend = { [weak self] text, mode in self?.send(text, mode: mode) }
         composer.onStop = { [weak self] in self?.stop() }
         composer.onResume = { [weak self] in self?.resume() }
@@ -247,6 +253,40 @@ final class ComposerController {
         if environmentId == environments.primaryId { ActiveKeymap.setServerRules(config.keybindings) }
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         if environmentId == targetEnvironmentId { refresh() }
+        onConfigChange?(environmentId)
+    }
+
+    /// `sendShortcut` and `followUpBehavior` (client settings) drive the composer's Enter and follow-up rules.
+    private func applyClientSettings() {
+        let c = ClientSettingsStore.shared.current
+        composer.sendShortcut = ComposerLogic.SendShortcut(rawValue: c.string("sendShortcut")) ?? .enter
+        composer.steerByDefault = c.string("followUpBehavior") == "steer"
+    }
+
+    /// `activeProjectSettings.settings.newWorktreesStartFromOrigin` for the open draft: the project's
+    /// override, else the environment's setting (default on).
+    var newWorktreesStartFromOrigin: Bool {
+        guard case .draft(let session) = target, let env = targetEnvironmentId, let raw = serverConfigs[env]?.settings.raw else { return true }
+        let projectLocalId = ProjectId(session.projectId).localId.rawValue
+        return raw["projectSettingsOverrides"]?[projectLocalId]?["newWorktreesStartFromOrigin"]?.boolValue
+            ?? raw["newWorktreesStartFromOrigin"]?.boolValue ?? true
+    }
+
+    /// Called after an environment's server config changed (the Settings pages follow it).
+    var onConfigChange: ((String) -> Void)?
+    /// An environment's last `server.getConfig` snapshot with its updates.
+    func config(_ environmentId: String) -> ServerProviderConfig? { serverConfigs[environmentId] }
+
+    /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.
+    func applySettings(_ environmentId: String, _ raw: JSONValue) {
+        guard serverConfigs[environmentId] != nil, let settings = try? raw.decode(as: ServerThreadDefaults.self) else { return }
+        configChanged(.settingsUpdated(settings), environmentId: environmentId)
+    }
+
+    /// Applies the rules a keybinding upsert or removal returned.
+    func applyKeybindings(_ environmentId: String, _ rules: [ResolvedKeybindingRule]) {
+        guard serverConfigs[environmentId] != nil else { return }
+        configChanged(.keybindingsUpdated(rules), environmentId: environmentId)
     }
 
     /// A removed environment: its drafts, prompts, picks, question files, config and capabilities go
@@ -800,7 +840,8 @@ final class ComposerController {
             catalog: ProviderCatalog(serverConfig.providers), thread: thread, projectDefaultModel: project?.defaultModelSelection,
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
-            supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection))
+            supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection),
+            planModeEnabled: ClientSettingsStore.shared.current.bool("planModeEnabled"))
         pickers.update(draftKey: draftKey ?? "", context: context)
         // A new label (config arrived, thread switched) changes the controls' width.
         composer.needsLayout = true
@@ -1505,9 +1546,9 @@ extension ComposerController {
             let compact = before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && shellThread?.latestUserMessageAt != nil && !composer.runState.canInterrupt && requests.activeApproval == nil
             let planMode = provider != nil && pickers.context.planModeEnabled && provider?.showInteractionModeToggle != false
-            // ponytail: "Show skills in / menu" is T3's default (on); read the client setting when Settings lands
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
-                                                 skills: provider?.skills(cwd: cwd) ?? [], showSkills: true, planMode: planMode,
+                                                 skills: provider?.skills(cwd: cwd) ?? [],
+                                                 showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"), planMode: planMode,
                                                  compactAvailable: compact)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
         case .skill:

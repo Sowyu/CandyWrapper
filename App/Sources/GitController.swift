@@ -435,11 +435,12 @@ final class GitController {
     }
 
     /// `onEnvModeChange` for a draft (ChatView.tsx:10791-10822): a new worktree leaves any picked worktree.
-    // ponytail: start from origin resets to off; T3 seeds it from the project's `newWorktreesStartFromOrigin` (WP7.7 settings)
+    /// Start from origin follows the project's `newWorktreesStartFromOrigin` (`resolveNewDraftStartFromOrigin`).
     private func setEnvMode(_ mode: EnvMode) {
+        let fromOrigin = mode == .worktree && composer.newWorktreesStartFromOrigin
         composer.updateDraft { d in
             d.envMode = mode
-            d.startFromOrigin = false
+            d.startFromOrigin = fromOrigin
             if mode == .worktree, d.worktreePath != nil { d.worktreePath = nil }
         }
         refresh()

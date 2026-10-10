@@ -80,6 +80,7 @@ final class Environments {
     var environmentIds: [String] { order }
     /// Whether the environment's shell has arrived (from the disk cache or the server).
     func hasShell(_ environmentId: String) -> Bool { entries[environmentId]?.snapshot != nil }
+    func snapshot(_ environmentId: String) -> ShellSnapshot? { entries[environmentId]?.snapshot }
     func isRegistered(_ environmentId: String) -> Bool { entries[environmentId] != nil }
     func label(_ environmentId: String) -> String? { entries[environmentId]?.label ?? saved.first { $0.environmentId == environmentId }?.label }
     /// `resolveEnvironmentMachineKind`: the `environmentIcon` setting, else the detected machine.

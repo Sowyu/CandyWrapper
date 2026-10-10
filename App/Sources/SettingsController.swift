@@ -5,8 +5,8 @@ import T3Client
 import T3Protocol
 
 /// Settings as pages inside the main window (T3's `/settings/*` routes): the settings nav replaces the
-/// thread sidebar, the page replaces the thread panel, and Back or Escape returns. Only Connections
-/// works for now (WP6.3). Cmd+, and the sidebar footer's Settings button open it.
+/// thread sidebar, the page replaces the thread panel, and Back or Escape returns. General, Appearance,
+/// Keybindings (SettingsPages.swift) and Connections work. Cmd+, and the sidebar footer's Settings button open it.
 @MainActor
 final class SettingsController {
     weak var window: NSWindow?
@@ -16,10 +16,20 @@ final class SettingsController {
     let environments: Environments
     let t3: T3ConnectController
     // Built on first open: an app that never opens Settings never pays for its views.
-    private lazy var nav = SettingsSidebarView()
-    private lazy var page = SettingsPageView()
+    lazy var nav = SettingsSidebarView()
+    lazy var page = SettingsPageView()
     private lazy var connections = ConnectionsSettingsView()
     private var built = false
+    /// The open page; T3 opens `/settings` at General.
+    var section: SettingsSection = .general
+    // Pages and their shared context (SettingsPages.swift).
+    let pageContext = SettingsPageContext()
+    var scopeSelection = SettingsScopeSelection()
+    var general: GeneralSettingsView?
+    var appearance: AppearanceSettingsView?
+    var keybindingsPage: KeybindingsSettingsView?
+    weak var composer: ComposerController?
+    var clientObserver: Int?
     private(set) var isOpen = false
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
@@ -61,9 +71,11 @@ final class SettingsController {
     private func buildViews() {
         guard !built else { return }
         built = true
-        page.page = connections
-        page.header.section = .connections
         page.onEscape = { [weak self] in self?.close() }
+        nav.onSelect = { [weak self] section in self?.show(section) }
+        nav.onSearchResult = { [weak self] item in self?.jump(to: item) }
+        page.header.restore.action = { [weak self] in self?.confirmRestoreDefaults() }
+        setUpPageContext()
         nav.onBack = { [weak self] in self?.close() }
         nav.onToggleSidebar = { [weak layout = self.layout] in layout?.toggle() }
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
@@ -113,6 +125,7 @@ final class SettingsController {
         threadPanel.removeFromSuperview()
         layout.main.addSubview(page)
         layout.needsLayout = true
+        show(section)
         window?.makeFirstResponder(page)
         startHostAccess()
         refresh()
@@ -163,8 +176,12 @@ final class SettingsController {
         loadHosts()
         connections.primaryId = environments.primaryId
         connections.set(model())
+        refreshPages()
         page.pageChanged()
     }
+
+    /// The Connections page view, for `show(_:)`.
+    var connectionsPage: ConnectionsSettingsView { connections }
 
     private func model() -> ConnectionsPageModel {
         var m = ConnectionsPageModel()

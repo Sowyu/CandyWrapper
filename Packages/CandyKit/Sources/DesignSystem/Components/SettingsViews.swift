@@ -10,8 +10,14 @@ public final class SettingsRowView: DSView {
     public var title: String { didSet { titleLabel.text = title } }
     public var detail: String? { didSet { detailText.text = detail ?? ""; detailText.isHidden = detail == nil; invalidateIntrinsicContentSize() } }
     public var control: NSView? {
-        didSet { oldValue?.removeFromSuperview(); control.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+        didSet {
+            oldValue?.removeFromSuperview(); control.map(addSubview)
+            controlWidth = control?.frame.width ?? 0
+            invalidateIntrinsicContentSize(); needsLayout = true
+        }
     }
+    /// A control without an intrinsic width keeps the width it came with; the stacked layout stretches its frame.
+    private var controlWidth: CGFloat = 0
     /// `status`: a line under the description (`pt-0.5 text-xs text-muted-foreground`), destructive for errors.
     public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var statusIsError = false { didSet { statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground) } }
@@ -19,6 +25,24 @@ public final class SettingsRowView: DSView {
     public var isDisabled = false { didSet { alphaValue = isDisabled ? 0.64 : 1 } }
     /// The 1px `border-t border-border/50` a divided group gives every row after the first.
     var topBorder = false { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
+    /// 20pt slots after the title (`flex min-h-5 items-center gap-1.5`): the inheritance indicator and
+    /// the reset arrow. T3 always keeps the reset slot, so pass an empty view for an empty slot.
+    public var accessories: [NSView] = [] {
+        didSet { oldValue.forEach { $0.removeFromSuperview() }; accessories.forEach(addSubview); needsLayout = true }
+    }
+    /// A view in place of the description text, laid out at its frame height (the keybinding `When` line).
+    public var detailView: NSView? {
+        didSet { oldValue?.removeFromSuperview(); detailView.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+    }
+    /// A view under the row (`children`, `pt-3 pb-1`), such as an inline editor.
+    public var footer: (NSView & SettingsGroupRow)? {
+        didSet { oldValue?.removeFromSuperview(); footer.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+    }
+    /// The inert control of a server row nobody can save (`inertControl`): dimmed to .5 with this tooltip.
+    public var inertReason: String? { didSet { applyInert() } }
+    /// `bg-muted/15` (the new keybinding row).
+    public var fill: NSColor? { didSet { needsDisplay = true } }
+    private let inertCover = InertCoverView()
 
     private let titleLabel = LabelView()
     private let detailText = TextBlockView()
@@ -47,7 +71,24 @@ public final class SettingsRowView: DSView {
         addSubview(detailText)
         addSubview(statusText)
         control.map(addSubview)
+        controlWidth = control?.frame.width ?? 0
         layer?.addSublayer(border)
+        inertCover.isHidden = true
+        addSubview(inertCover)
+    }
+
+    private func applyInert() {
+        control?.alphaValue = inertReason == nil ? 1 : 0.5
+        inertCover.isHidden = inertReason == nil
+        inertCover.toolTip = inertReason
+        if inertReason != nil { addSubview(inertCover, positioned: .above, relativeTo: nil) }
+        needsLayout = true
+    }
+
+    /// Takes the clicks of an inert control and shows why.
+    final class InertCoverView: NSView {
+        override func mouseDown(with event: NSEvent) {}
+        override func mouseUp(with event: NSEvent) {}
     }
 
     static let paddingX: CGFloat = 16, paddingY: CGFloat = 12
@@ -59,13 +100,17 @@ public final class SettingsRowView: DSView {
         let inner = max(0, width - 2 * Self.paddingX)
         let controlSize = control.map { c -> NSSize in
             let s = c.intrinsicContentSize
-            return NSSize(width: s.width == NSView.noIntrinsicMetric ? c.frame.width : s.width,
+            return NSSize(width: s.width == NSView.noIntrinsicMetric ? (controlWidth > 0 ? controlWidth : c.frame.width) : s.width,
                           height: s.height == NSView.noIntrinsicMetric ? c.frame.height : s.height)
         } ?? .zero
-        func detailHeight(_ w: CGFloat) -> CGFloat { detail == nil ? 0 : detailText.height(forWidth: min(576, w)) }
+        func detailHeight(_ w: CGFloat) -> CGFloat {
+            if let detailView { return detailView.frame.height }
+            return detail == nil ? 0 : detailText.height(forWidth: min(576, w))
+        }
+        let hasDetail = detail != nil || detailView != nil
         func statusHeight(_ w: CGFloat) -> CGFloat { status == nil ? 0 : statusText.height(forWidth: w) }
         func textHeight(_ w: CGFloat) -> CGFloat {
-            20 + (detail == nil ? 0 : 4 + detailHeight(w)) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
+            20 + (hasDetail ? 4 + detailHeight(w) : 0) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
         }
         if width >= 512 {
             // grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] gap-8 items-center
@@ -79,7 +124,7 @@ public final class SettingsRowView: DSView {
                           control: NSRect(x: width - Self.paddingX - controlSize.width, y: top + (rowHeight - controlSize.height) / 2,
                                           width: controlSize.width, height: controlSize.height),
                           status: NSRect(x: Self.paddingX, y: textY + th - statusHeight(textWidth), width: textWidth, height: statusHeight(textWidth)),
-                          height: top + rowHeight + Self.paddingY)
+                          height: top + rowHeight + footerHeight(width))
         }
         let th = textHeight(inner)
         let controlY = top + th + 12
@@ -87,7 +132,13 @@ public final class SettingsRowView: DSView {
                       detail: NSRect(x: Self.paddingX, y: top + 24, width: min(576, inner), height: detailHeight(inner)),
                       control: NSRect(x: Self.paddingX, y: controlY, width: inner, height: controlSize.height),
                       status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
-                      height: (control == nil ? top + th : controlY + controlSize.height) + Self.paddingY)
+                      height: (control == nil ? top + th : controlY + controlSize.height) + footerHeight(width))
+    }
+
+    /// `pt-3 pb-1` with children, else `py-3`.
+    private func footerHeight(_ width: CGFloat) -> CGFloat {
+        guard let footer else { return Self.paddingY }
+        return 12 + footer.height(forWidth: width - 2 * Self.paddingX) + 4
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat { frames(width: width).height }
@@ -99,8 +150,28 @@ public final class SettingsRowView: DSView {
     public override func layout() {
         super.layout()
         let f = frames(width: bounds.width)
-        titleLabel.frame = f.title
+        // 20pt slots, or a view's own size (the keybinding source badge, `gap-2` after the title).
+        func size(_ a: NSView) -> NSSize {
+            let s = a.intrinsicContentSize
+            return s.width == NSView.noIntrinsicMetric ? NSSize(width: 20, height: 20) : s
+        }
+        let slots = accessories.reduce(0) { $0 + size($1).width + 6 }
+        let titleWidth = min(ceil(titleLabel.textWidth) + 1, max(0, f.title.width - slots))
+        titleLabel.frame = NSRect(x: f.title.minX, y: f.title.minY, width: titleWidth, height: 20)
+        var ax = f.title.minX + titleWidth + 6
+        for a in accessories {
+            let s = size(a)
+            if s.width > 20 { ax += 2 }
+            a.frame = NSRect(x: ax, y: f.title.minY + (20 - s.height) / 2, width: s.width, height: s.height)
+            ax += s.width + 6
+        }
         detailText.frame = f.detail
+        if let detailView { detailView.frame = NSRect(x: f.detail.minX, y: f.detail.minY, width: f.title.width, height: detailView.frame.height) }
+        if let footer {
+            let fh = footer.height(forWidth: bounds.width - 2 * Self.paddingX)
+            footer.frame = NSRect(x: Self.paddingX, y: bounds.height - 4 - fh, width: bounds.width - 2 * Self.paddingX, height: fh)
+        }
+        inertCover.frame = f.control
         statusText.frame = f.status
         control?.frame = f.control
         CATransaction.begin()
@@ -112,6 +183,7 @@ public final class SettingsRowView: DSView {
 
     public override func updateLayer() {
         border.backgroundColor = Themed.color(\.contrastBorder, 0.5).cgColor(in: self)
+        layer?.backgroundColor = fill?.cgColor(in: self)
     }
 }
 
@@ -154,7 +226,7 @@ public final class SettingsGroupView: BoxView {
         let count = variant == .grouped ? max(0, rows.count - 1) : 0
         while dividers.count < count {
             let l = CALayer()
-            l.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
+            l.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "hidden": NSNull()]
             layer?.addSublayer(l)
             dividers.append(l)
         }
@@ -165,8 +237,12 @@ public final class SettingsGroupView: BoxView {
     private var inset: CGFloat { variant == .grouped ? 1 : 0 }
     private var gap: CGFloat { variant == .plain ? 4 : 1 }  // `space-y-1`, or the 1px top border
 
+    /// Rows that render; a hidden row leaves the card like T3's conditional rows.
+    private var shown: [any SettingsGroupRow] { rows.filter { !$0.isHidden } }
+
     public func height(forWidth width: CGFloat) -> CGFloat {
-        rows.reduce(0) { $0 + $1.height(forWidth: width - 2 * inset) } + gap * CGFloat(max(0, rows.count - 1)) + 2 * inset
+        let shown = shown
+        return shown.reduce(0) { $0 + $1.height(forWidth: width - 2 * inset) } + gap * CGFloat(max(0, shown.count - 1)) + 2 * inset
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -178,9 +254,13 @@ public final class SettingsGroupView: BoxView {
         var y = inset
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (i, row) in rows.enumerated() {
+        for d in dividers { d.isHidden = true }
+        for (i, row) in shown.enumerated() {
             if i > 0 {
-                if variant == .grouped { dividers[i - 1].frame = CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1) }
+                if variant == .grouped {
+                    dividers[i - 1].frame = CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1)
+                    dividers[i - 1].isHidden = false
+                }
                 y += gap
             }
             let h = row.height(forWidth: bounds.width - 2 * inset)
@@ -237,3 +317,6 @@ public final class SettingsSectionView: DSView {
         group.frame = NSRect(x: 0, y: 38, width: bounds.width, height: group.height(forWidth: bounds.width))
     }
 }
+
+extension SettingsSectionView: SettingsGroupRow {}
+extension SettingsGroupView: SettingsGroupRow {}

@@ -84,6 +84,15 @@ public final class TimelineView: DSView {
         pill.setAccessibilityLabel("Scroll to end")
         pill.action = { [weak self] in self?.scrollToEnd(animated: true) }
         addSubview(pill)
+        // A new time format redraws the timestamps of the rows on screen (T3 re-renders them).
+        ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("timestampFormat") { self?.reconfigureVisible() }
+        }
+    }
+
+    /// Configures the visible rows again with the same items.
+    private func reconfigureVisible() {
+        for view in visible.values { if let item = view.item { view.configure(item) } }
     }
 
     isolated deinit {

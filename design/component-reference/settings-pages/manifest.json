@@ -1,0 +1,14 @@
+{
+  "general.behavior" : {
+    "height" : 392,
+    "width" : 796
+  },
+  "keybindings.navigation" : {
+    "height" : 258,
+    "width" : 796
+  },
+  "nav.search" : {
+    "height" : 332,
+    "width" : 255
+  }
+}

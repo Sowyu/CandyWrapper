@@ -19,13 +19,14 @@ enum TL {
     /// `shouldPreserveAssistantLineBreaks` (packages/shared/src/markdownPipeline.ts:291).
     static func preservesAssistantLineBreaks(_ text: String) -> Bool { text.contains(/(?m)^★ Insight(?:\s|─)/) }
 
-    /// `formatDayAwareTimestamp` (timestampFormat.ts:175-197) with the locale's hour cycle.
-    // ponytail: ignores the timestampFormat setting (12h, 24h); read it when settings exist
-    static func dayAwareTimestamp(_ ts: T3Timestamp?, now: Date = Date()) -> String {
+    /// `formatDayAwareTimestamp` (timestampFormat.ts:175-197) with the `timestampFormat` setting: the
+    /// locale's hour cycle, or 12 or 24 hours (`hour12`).
+    static func dayAwareTimestamp(_ ts: T3Timestamp?, now: Date = Date(),
+                                  format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> String {
         guard let ms = ts?.epochMs else { return "" }
         let date = Date(timeIntervalSince1970: Double(ms) / 1000)
         let calendar = Calendar.current
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = timeOfDay(date, format: format)
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
         if days <= 0 { return time }
         if days == 1 { return "yesterday at \(time)" }
@@ -33,6 +34,24 @@ enum TL {
         let day = sameYear ? date.formatted(.dateTime.month(.defaultDigits).day()) : date.formatted(.dateTime.month(.defaultDigits).day().year())
         return "\(day) \(time)"
     }
+
+    /// `getTimestampFormatter(format, false)`: hour and minute in the locale's cycle, or forced 12 or 24 hours.
+    static func timeOfDay(_ date: Date, format: String) -> String {
+        switch format {
+        case "12-hour": return twelveHour.string(from: date)
+        case "24-hour": return twentyFourHour.string(from: date)
+        default: return date.formatted(date: .omitted, time: .shortened)
+        }
+    }
+
+    private static func formatter(_ template: String) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = .current
+        f.dateFormat = DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: .current)
+        return f
+    }
+    private static let twelveHour = formatter("hmma")
+    private static let twentyFourHour = formatter("Hmm")
 
     /// Rounds to device pixels at 2x, as Blink snaps boxes.
     // ponytail: 2x like Text.swift's baselines; pass the backing scale for 1x screens

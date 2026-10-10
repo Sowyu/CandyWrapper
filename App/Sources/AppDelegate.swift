@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
+        settings.composer = threads.composer
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
@@ -114,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.registerShortcuts(shortcuts)
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }
         palette.registerShortcuts(shortcuts)
+        settings.registerShortcuts(shortcuts)
         self.shortcuts = shortcuts
         self.palette = palette
     }

@@ -48,6 +48,8 @@ final class Shortcuts {
 
     func handle(_ event: NSEvent) -> Bool {
         guard event.window === window else { return false }
+        // A shortcut recorder takes every key while it captures.
+        if (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing == true { return false }
         let paletteOpen = paletteOpen()
         if !paletteOpen, keyHandlers.contains(where: { $0(event) }) { return true }
         guard let command = ActiveKeymap.resolve(event, context: context()) else { return false }
