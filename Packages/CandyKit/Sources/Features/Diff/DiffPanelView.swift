@@ -218,10 +218,12 @@ public final class DiffPanelView: DSView {
         var turns: [MenuItem] = []
         for summary in summaries {
             var item = MenuItem("Turn \(summary.checkpointTurnCount)", kind: .radio(summary.runId == selectedRunId))
+            item.closesOnClick = true
             item.action = { [weak self] in self?.open(runId: summary.runId, filePath: nil) }
             turns.append(item)
         }
         var latestItem = MenuItem("Latest turn", kind: .radio(selectedRunId == latest))
+        latestItem.closesOnClick = true
         latestItem.action = { [weak self] in self?.open(runId: latest, filePath: nil) }
         MenuPopupView.show([latestItem, .submenu("Turn", turns)], from: scopeButton, placement: .dropdown)
     }
