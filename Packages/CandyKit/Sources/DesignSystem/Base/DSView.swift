@@ -18,7 +18,11 @@ open class DSView: NSView {
     open override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize != frame.size
         super.setFrameSize(newSize)
-        if changed { needsLayout = true }
+        guard changed else { return }
+        needsLayout = true
+        // Drawn content depends on the size (truncation, centering), and the redraw policy is
+        // onSetNeedsDisplay: without this a label that grew kept its old truncated image.
+        if !wantsUpdateLayer { needsDisplay = true }
     }
 
     /// Subclasses that only set layer properties override `updateLayer` and keep this true.
