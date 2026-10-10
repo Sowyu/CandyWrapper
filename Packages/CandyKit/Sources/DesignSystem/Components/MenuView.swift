@@ -43,6 +43,11 @@ public struct MenuItem {
     public var subtitle: String?
     /// A tooltip on the row, shown even while it is disabled (disabled reasons, side left).
     public var tooltip: String?
+    /// Controls at the row's end (the browser menu's zoom cluster), made when the row is built.
+    public var accessory: (@MainActor () -> NSView)?
+    public var accessoryWidth: CGFloat = 0
+    /// base-ui `closeOnClick={false}` on a plain item: a click on the row does nothing.
+    public var keepsOpen = false
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -336,7 +341,7 @@ public final class MenuPopupView: DSView, PopupContent {
         case .submenu:
             openSubmenu(at: i, highlightFirst: byKeyboard)
         case .item:
-            choose(i)
+            if !items[i].keepsOpen { choose(i) }
         case .label, .separator, .note:
             break
         }
@@ -477,6 +482,7 @@ final class MenuRowView: DSView {
     private var badgeView: IconView?
     private var check: CAShapeLayer?
     private var shortcut: TrackedLabelView?
+    private var accessoryView: NSView?
 
     init(item: MenuItem, style: MenuPopupView.Style) {
         self.item = item
@@ -522,6 +528,7 @@ final class MenuRowView: DSView {
         if badgeView != nil { w += 8 + 14 }
         if let shortcut { w += 8 + shortcut.intrinsicContentSize.width }
         if trailing != nil { w += 8 + 14 }
+        if accessoryView != nil { w += 8 + item.accessoryWidth }
         return w
     }
 
@@ -531,6 +538,8 @@ final class MenuRowView: DSView {
         glyphView?.removeFromSuperview(); glyphView = nil
         badgeView?.removeFromSuperview(); badgeView = nil
         shortcut?.removeFromSuperview(); shortcut = nil
+        accessoryView?.removeFromSuperview(); accessoryView = item.accessory?()
+        accessoryView.map(addSubview)
         check?.removeFromSuperlayer(); check = nil
         note?.removeFromSuperview(); note = nil
         subtitleLabel?.removeFromSuperview(); subtitleLabel = nil
@@ -693,6 +702,11 @@ final class MenuRowView: DSView {
             let gy = item.subtitle != nil ? 4 + 4 : (bounds.height - item.extraBottom - 12) / 2
             glyphView.frame = NSRect(x: x, y: gy, width: 12, height: 12)
             x += 12 + 6
+        }
+        if let accessoryView {
+            let w = item.accessoryWidth
+            accessoryView.frame = NSRect(x: trailingX - w, y: (bounds.height - 24) / 2, width: w, height: 24)
+            trailingX -= w + 8
         }
         if let badgeView {
             badgeView.frame = NSRect(x: trailingX - 14, y: (bounds.height - 14) / 2, width: 14, height: 14)

@@ -1,0 +1,22 @@
+{
+  "chrome" : {
+    "height" : 28,
+    "width" : 480
+  },
+  "empty" : {
+    "height" : 360,
+    "width" : 480
+  },
+  "lists" : {
+    "height" : 520,
+    "width" : 480
+  },
+  "search" : {
+    "height" : 420,
+    "width" : 576
+  },
+  "unreachable" : {
+    "height" : 480,
+    "width" : 480
+  }
+}

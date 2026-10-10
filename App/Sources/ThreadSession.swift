@@ -228,6 +228,7 @@ final class ThreadController {
     private(set) var git: GitController!
     private(set) var files: FilesController!
     private(set) var pullRequests: ThreadPullRequestsController!
+    private(set) var browser: BrowserController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -268,7 +269,8 @@ final class ThreadController {
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
-        files.onSync = { [weak self] in self?.pullRequests.sync() }
+        browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
+        files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync() }
         // A row's pull request badge: one link opens it beside the thread, a stack or several open
         // the thread's pull requests tab (`ThreadPullRequestBadgeControl`).
         sidebar.actions.openPullRequest = { [weak self, weak sidebar] id in
@@ -321,6 +323,7 @@ final class ThreadController {
         git.registerShortcuts(shortcuts)
         files.registerShortcuts(shortcuts)
         pullRequests.registerShortcuts(shortcuts)
+        browser.registerShortcuts(shortcuts)
         // `diff.toggle` (`toggle(ref, "diff")`) and `rightPanel.toggle` (`toggleRightPanel`).
         shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] call in
             guard let self, self.panel.window != nil else { return false }
@@ -360,6 +363,7 @@ final class ThreadController {
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
         git.sessionChanged(environmentId)
+        browser.sessionChanged(environmentId)
         guard let session, session.environmentId == environmentId else { return }
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
@@ -499,6 +503,7 @@ final class ThreadController {
         terminal.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
         files.environmentRemoved(environmentId)
+        browser.environmentRemoved(environmentId)
         if defaults.string(forKey: Self.lastThreadKey)?.hasPrefix(prefix) == true { defaults.removeObject(forKey: Self.lastThreadKey) }
         if let sidebar {
             var state = sidebar.state
