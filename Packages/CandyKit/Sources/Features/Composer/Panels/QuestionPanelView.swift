@@ -97,6 +97,14 @@ public final class QuestionPanelView: ComposerBannerView {
         refresh()
     }
 
+    /// Each question's files (count, still uploading or failed), from the composer's question drafts.
+    public func setAttachments(_ states: [String: UserInputSession.AttachmentState]) {
+        guard session != nil, session!.attachments != states else { return }
+        session!.attachments = states
+        refresh()
+        onChange?()
+    }
+
     /// The editor's text changed.
     public func setCustomAnswer(_ text: String) {
         guard session != nil, editorEnabled else { return }

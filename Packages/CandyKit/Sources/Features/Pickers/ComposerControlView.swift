@@ -15,6 +15,10 @@ public final class ComposerControlView: ControlView {
     public var tintsIcon = true { didSet { restyle() } }
     /// `min-w-13` on the model trigger: the label shrinks first, down to this width.
     public var minimumWidth: CGFloat = 0
+    /// False for an icon-only block at narrow widths: the label leaves the flow (ChatComposer.tsx:5604).
+    public var showsLabel = true { didSet { if showsLabel != oldValue { label.isHidden = !showsLabel; invalidateIntrinsicContentSize(); needsLayout = true } } }
+    /// False for the overflow trigger, which is just the ellipsis (CompactComposerControlsMenu.tsx:41-54).
+    public var showsChevron = true { didSet { chevron.isHidden = !showsChevron; invalidateIntrinsicContentSize(); needsLayout = true } }
 
     private let label = LabelView()
     private let chevron = IconView(definition: ComposerControlView.chevronDefinition, size: 14)
@@ -53,9 +57,13 @@ public final class ComposerControlView: ControlView {
 
     static let padding: CGFloat = 10, gap: CGFloat = 6
 
-    /// Border, padding, optional icon and gap, label, gap, chevron (14 - 4), padding, border.
-    public var naturalWidth: CGFloat {
-        2 + 2 * Self.padding + (icon == nil ? 0 : 16 + Self.gap) + label.textWidth + Self.gap + 10
+    /// Border, padding, then icon, label and chevron (14 - 4) with `gap-1.5` between those shown, padding, border.
+    public var naturalWidth: CGFloat { width(showingLabel: showsLabel) }
+
+    /// The width with or without the label, for the footer's fit decision.
+    public func width(showingLabel: Bool) -> CGFloat {
+        let parts = [icon == nil ? nil : CGFloat(16), showingLabel ? label.textWidth : nil, showsChevron ? CGFloat(10) : nil].compactMap { $0 }
+        return 2 + 2 * Self.padding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: (naturalWidth * 2).rounded(.up) / 2, height: 28) }
@@ -68,6 +76,10 @@ public final class ComposerControlView: ControlView {
         if let icon {
             icon.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 16 + Self.gap
+        }
+        guard showsLabel else {
+            chevron.frame = NSRect(x: x - 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
+            return
         }
         // The chevron box is 10 wide in flow; the 14px glyph overhangs it by 2 on each side.
         let chevronBox = bounds.width - 1 - Self.padding - 10

@@ -228,7 +228,8 @@ public struct PendingRequests: Hashable, Sendable {
 public struct UserInputDraft: Hashable, Sendable {
     public var selectedOptionValues: [String]?
     public var customAnswer: String?
-    /// Question attachments are out of M5 scope; kept for the resolution rules.
+    /// Files attached to this question's answer, and whether any of them is still uploading or
+    /// failed (`attachmentsBlocked`, ChatView.tsx:3400-3423). Merged in from `UserInputSession.attachments`.
     public var attachmentCount = 0
     public var attachmentsBlocked = false
 
@@ -365,13 +366,34 @@ public struct UserInputSession: Hashable, Sendable {
     public private(set) var drafts: [String: UserInputDraft]
     public private(set) var questionIndex = 0
 
+    /// One question's files: how many, and whether any isn't uploaded yet.
+    public struct AttachmentState: Hashable, Sendable {
+        public var count: Int
+        public var blocked: Bool
+        public init(count: Int, blocked: Bool) { self.count = count; self.blocked = blocked }
+    }
+    /// Files per question id, kept apart from the answer drafts like T3's per-question attachment drafts.
+    public var attachments: [String: AttachmentState] = [:]
+
+    /// The answer drafts with the attachment state merged in (`activePendingDraftAnswers`).
+    var effectiveDrafts: [String: UserInputDraft] {
+        var out = drafts
+        for (id, state) in attachments {
+            var d = out[id] ?? UserInputDraft()
+            d.attachmentCount = state.count
+            d.attachmentsBlocked = state.blocked
+            out[id] = d
+        }
+        return out
+    }
+
     public init(_ request: PendingUserInput) {
         self.request = request
         drafts = UserInputAnswers.seed(request.questions, [:])
     }
 
-    public var progress: UserInputProgress { UserInputAnswers.progress(request.questions, drafts, index: questionIndex) }
-    public var answers: [String: UserInputAnswer]? { UserInputAnswers.build(request.questions, drafts) }
+    public var progress: UserInputProgress { UserInputAnswers.progress(request.questions, effectiveDrafts, index: questionIndex) }
+    public var answers: [String: UserInputAnswer]? { UserInputAnswers.build(request.questions, effectiveDrafts) }
 
     /// Picks or toggles an option on the active question. Returns typed custom text the pick
     /// displaced, for `UserInputAnswers.carryDisplaced` into the thread draft.
@@ -441,12 +463,16 @@ public enum RuntimeRequestCommands {
     }
 
     /// Question answers: `{type, commandId, threadId, requestId, answers}`. No `decision`, and
-    /// `attachmentsByQuestionId` only with files (out of M5 scope).
+    /// `attachmentsByQuestionId` (uploaded `ChatAttachment`s per question) only with files.
     public static func respond(threadId: ThreadId, requestId: String, answers: [String: UserInputAnswer],
+                               attachmentsByQuestionId: [String: [JSONValue]] = [:],
                                commandId: String = newCommandId()) -> JSONValue {
-        .object(["type": .string("runtime-request.respond"), "commandId": .string(commandId),
-                 "threadId": .string(threadId.rawValue), "requestId": .string(requestId),
-                 "answers": .object(answers.mapValues(\.json))])
+        var fields: [String: JSONValue] = ["type": .string("runtime-request.respond"), "commandId": .string(commandId),
+                                           "threadId": .string(threadId.rawValue), "requestId": .string(requestId),
+                                           "answers": .object(answers.mapValues(\.json))]
+        let files = attachmentsByQuestionId.filter { !$0.value.isEmpty }
+        if !files.isEmpty { fields["attachmentsByQuestionId"] = .object(files.mapValues { .array($0) }) }
+        return .object(fields)
     }
 
     /// Closes a message-mode question without an answer.

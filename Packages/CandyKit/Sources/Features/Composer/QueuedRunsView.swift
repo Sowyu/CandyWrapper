@@ -26,6 +26,10 @@ public final class QueuedRunsView: ComposerBannerView {
     /// Move a run before another, or to the end (nil).
     public var onReorder: ((RunId, RunId?) -> Void)?
     public var onHeightChange: (() -> Void)?
+    /// `thread.editQueuedMessage` and `thread.steerQueuedMessage` labels for the last row's Edit and
+    /// the first row's Steer tooltips (ChatView.tsx:11638-11647, QueuedRunsControl.tsx:442, :468).
+    public var editShortcutLabel: String? = "\u{2325}Up"
+    public var steerShortcutLabel: String? = "\u{21E7}\u{2318}Enter"
 
     /// The strip's full height including the hidden overlap; 0 with nothing queued.
     public var preferredHeight: CGFloat {
@@ -64,6 +68,9 @@ public final class QueuedRunsView: ComposerBannerView {
         setAccessibilityRole(.group)
     }
 
+    /// `setExpanded(true)` before editing the latest queued message.
+    public func expand() { if !expanded { toggle() } }
+
     private func toggle() {
         expanded.toggle()
         header.expanded = expanded
@@ -84,13 +91,23 @@ public final class QueuedRunsView: ComposerBannerView {
             list.addSubview(row, positioned: .below, relativeTo: insertLine)
             rows.append(row)
         }
+        // Rows are reused by position; a focused grip follows its run, as React's keyed rows do.
+        let focused = rows.first { $0.window?.firstResponder === $0.grip && $0.runId != nil }
+        let focusedRun = focused?.runId, focusedVisibly = focused?.grip.state.focusVisible == true
         while rows.count > state.items.count { rows.removeLast().removeFromSuperview() }
+        let queued = state.items.filter { $0.runId != nil }.count
         for (i, item) in state.items.enumerated() {
             let row = rows[i]
             row.index = i
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           canReorder: state.canReorder && item.runId != nil, busy: isBusy || item.runId == nil,
-                          canSteer: state.canPromoteToSteer)
+                          canSteer: state.canPromoteToSteer,
+                          editTip: "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
+                          steerTip: "Send as a steer instead" + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
+        }
+        if let focusedRun, let row = rows.first(where: { $0.runId == focusedRun }), row !== focused, let window {
+            window.makeFirstResponder(row.grip)
+            if focusedVisibly { var s = row.grip.state; s.focusVisible = true; row.grip.previewState(s) }
         }
         needsLayout = true
         if preferredHeight != before { onHeightChange?() }
@@ -100,6 +117,23 @@ public final class QueuedRunsView: ComposerBannerView {
     fileprivate func cancelEdit() { onCancelEdit?() }
     fileprivate func steer(_ i: Int) { if let id = state.items[safe: i]?.runId { onSteer?(id) } }
     fileprivate func remove(_ i: Int) { if let id = state.items[safe: i]?.runId { onRemove?(id) } }
+
+    // MARK: Keyboard reorder (QueuedRunsControl.tsx:350-359)
+
+    /// ArrowUp on a focused grip moves the run before the previous one; ArrowDown moves it before the
+    /// run two below (or to the end). Nothing happens at the edges or while a queue command runs.
+    func moveByKey(_ i: Int, up: Bool) -> Bool {
+        let queued = state.items.compactMap(\.runId)
+        guard state.canReorder, !isBusy, let runId = state.items[safe: i]?.runId, let index = queued.firstIndex(of: runId) else { return false }
+        if up {
+            guard index > 0 else { return false }
+            onReorder?(runId, queued[index - 1])
+        } else {
+            guard index < queued.count - 1 else { return false }
+            onReorder?(runId, queued[safe: index + 2])
+        }
+        return true
+    }
 
     // MARK: Drag to reorder (QueuedRunsControl.tsx:168-206)
 
@@ -212,7 +246,8 @@ private final class HeaderRow: ControlView {
 private final class QueuedRowView: DSView {
     weak var owner: QueuedRunsView?
     var index = 0
-    private let grip = GripView()
+    private(set) var runId: RunId?
+    let grip = GripView()
     private let saving = IconView(name: .clock3, size: 12, strokeColor: Themed.color(\.mutedForeground, 0.6))
     private let text = bannerLabel(Themed.color(\.foreground, 0.8))
     private let edit = bannerButton(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs, tip: "Edit in the composer")
@@ -222,6 +257,7 @@ private final class QueuedRowView: DSView {
     private var editing = false
     private lazy var textTip = TooltipController.attach(to: text, text: "")
     private lazy var steerTip = TooltipController.attach(to: steer, text: "")
+    private lazy var editTip = TooltipController.attach(to: edit, text: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -229,18 +265,21 @@ private final class QueuedRowView: DSView {
         cancel.smoothsFont = false
         cancel.setAccessibilityLabel("Cancel editing queued message")
         [grip, saving, text, edit, steer, remove, cancel].forEach(addSubview)
-        TooltipController.attach(to: edit, text: "Edit in the composer")
         TooltipController.attach(to: remove, text: "Remove from queue")
         grip.onDrag = { [weak self] event in guard let self else { return }; owner?.dragMoved(index, event: event) }
         grip.onDragEnd = { [weak self] in self?.owner?.dragEnded() }
+        grip.onArrow = { [weak self] up in guard let self else { return false }; return owner?.moveByKey(index, up: up) ?? false }
         edit.action = { [weak self] in guard let self else { return }; owner?.edit(index) }
         steer.action = { [weak self] in guard let self else { return }; owner?.steer(index) }
         remove.action = { [weak self] in guard let self else { return }; owner?.remove(index) }
         cancel.action = { [weak self] in self?.owner?.cancelEdit() }
     }
 
-    func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, canReorder: Bool, busy: Bool, canSteer: Bool) {
+    func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, canReorder: Bool, busy: Bool, canSteer: Bool,
+                   editTip: String, steerTip steerText: String) {
         self.editing = editing
+        runId = item.runId
+        self.editTip.text = editTip
         text.text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         textTip.text = text.text
         text.color = editing ? Themed.color(\.accentForeground) : Themed.color(\.foreground, 0.8)
@@ -249,7 +288,7 @@ private final class QueuedRowView: DSView {
         grip.isEnabled = !busy
         for b in [edit, steer, remove] { b.isHidden = editing; b.isEnabled = !busy }
         steer.isEnabled = !busy && canSteer
-        steerTip.text = canSteer ? "Send as a steer instead" : "There is no active run to steer"
+        steerTip.text = canSteer ? steerText : "There is no active run to steer"
         cancel.isHidden = !editing
         needsDisplay = true
         needsLayout = true
@@ -283,35 +322,62 @@ private final class QueuedRowView: DSView {
 
 /// The reorder grip, drawn like a 24px `ghost-muted icon-xs` button: `grip-vertical` 14px in
 /// `muted`, hover fills `accent` and turns the icon `foreground`. A drag past 3pt moves its row.
-// ponytail: no arrow-key reordering on a focused grip (QueuedRunsControl.tsx:350-359); add with keyboard focus for banner rows
-private final class GripView: ControlView {
+/// A click focuses it (Chromium focuses buttons on click), then ArrowUp and ArrowDown move the row.
+final class GripView: ControlView {
     var onDrag: ((NSEvent) -> Void)?
     var onDragEnd: (() -> Void)?
+    /// ArrowUp (true) or ArrowDown; returns true when the key was used (`preventDefault`).
+    var onArrow: ((Bool) -> Bool)?
     private let icon = IconView(name: .gripVertical, size: 14, strokeColor: Themed.color(\.mutedForeground))
+    private let ring = CALayer()
     private var dragging = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
         layer?.cornerRadius = 8
+        layer?.masksToBounds = false
+        ring.actions = ["borderColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
+        ring.cornerRadius = 11
+        ring.borderWidth = 2
+        layer?.addSublayer(ring)
         addSubview(icon)
-        setAccessibilityLabel("Reorder queued message (drag)")
+        setAccessibilityLabel("Reorder queued message (drag, or press the arrow keys)")
     }
 
     override func layout() {
         super.layout()
         icon.frame = NSRect(x: (bounds.width - 14) / 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
+        ring.frame = bounds.insetBy(dx: -3, dy: -3)
     }
 
     override func updateLayer() {
         layer?.backgroundColor = state.hovered ? Themed.color(\.accent).cgColor(in: self) : nil
         icon.strokeColor = state.hovered ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
+        // `focus-visible:ring-2 ring-ring ring-offset-1`.
+        ring.isHidden = !state.focusVisible
+        ring.borderColor = Themed.color(\.ring).cgColor(in: self)
+    }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // ArrowUp 126, ArrowDown 125; the busy check lives in the strip (`busyRunId`).
+        if [125, 126].contains(event.keyCode), event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+           onArrow?(event.keyCode == 126) == true {
+            return
+        }
+        super.keyDown(with: event)
     }
 
     override func resetCursorRects() { if isEnabled { addCursorRect(bounds, cursor: dragging ? .closedHand : .openHand) } }
 
     override func mouseDown(with event: NSEvent) {
         guard isEnabled, let window else { return }
+        window.makeFirstResponder(self)
         let start = event.locationInWindow
         while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
             if next.type == .leftMouseUp { break }

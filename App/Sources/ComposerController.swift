@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import UniformTypeIdentifiers
 import Features
 import T3Client
 import T3Protocol
@@ -66,6 +67,14 @@ final class ComposerController {
     /// Thread errors by draft key and their session dismissals (the banner over the timeline).
     private var threadErrors = ThreadErrorState()
 
+    /// Files attached to question answers, by `questionKey` (T3's `questionAttachmentDraftId`).
+    fileprivate var questionFiles: [String: [QuestionFile]] = [:]
+    /// The environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
+    /// read from `/.well-known/t3/environment` when the shell changes.
+    fileprivate var supportsQuestionAttachments = false
+    fileprivate var fileUploadLimit: Int?
+    private var capabilitiesTask: Task<Void, Never>?
+
     // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by project.
     private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v1"
     private var prompts: [String: String]
@@ -106,7 +115,10 @@ final class ComposerController {
             self?.respond(payload, failure: ComposerFeedback.Failure.approval)
         }
         let question = panel.questionPanel
-        question.onSubmit = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.userInput) }
+        question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
+        composer.onAttach = { [weak self] in self?.attachToQuestion() }
+        composer.fileList.onRemove = { [weak self] id in self?.removeQuestionFile(id) }
+        composer.fileList.onRetry = { [weak self] id in self?.retryQuestionFile(id) }
         question.onDismiss = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.dismissQuestion) }
         question.onDisplacedAnswer = { [weak self] text in self?.carryDisplaced(text) }
         question.onChange = { [weak self] in self?.syncQuestion() }
@@ -120,6 +132,7 @@ final class ComposerController {
         if shell !== self.shell {
             configSubscription?.cancel()
             configSubscription = shell.map(subscribeConfig)
+            readCapabilities(shell)
         }
         self.shell = shell
         self.environment = environment
@@ -171,6 +184,17 @@ final class ComposerController {
             let queue = panel.queue.state
             if !event.isARepeat, case .thread = target, queue.canPromoteToSteer, !queueBusy, let first = queue.items.first?.runId {
                 promoteToSteer(first)
+            }
+            return true
+        }
+        // `thread.editQueuedMessage` (`alt+arrowup` while the composer has focus, ChatView.tsx:8232-8241):
+        // only from the very start of the draft; opens the latest queued run (`editLatest`,
+        // QueuedRunsControl.tsx:216-231), which declines while an edit is open or a command runs.
+        if mods == [.option], event.keyCode == 126, case .thread = target, composer.isEditorFocused, composer.isCaretAtStart,
+           let latest = panel.queue.state.items.last(where: { $0.runId != nil }), queuedEdit == nil, !queueBusy {
+            if !event.isARepeat {
+                panel.queue.expand()
+                beginEdit(latest)
             }
             return true
         }
@@ -395,6 +419,8 @@ final class ComposerController {
     private func leaveQuestion() {
         guard questionRequestId != nil else { return }
         questionRequestId = nil
+        composer.fileRows = []
+        pruneQuestionFiles()
         composer.text = draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
     }
@@ -402,7 +428,10 @@ final class ComposerController {
     /// The question card changed (pick, typing, next, previous): the editor, placeholder and
     /// footer follow its active question.
     private func syncQuestion() {
-        guard questionRequestId != nil, let session = panel.questionPanel.session else { return }
+        guard questionRequestId != nil, panel.questionPanel.session != nil else { return }
+        // Files first: their state feeds the session that the footer reads below.
+        syncQuestionFiles()
+        guard let session = panel.questionPanel.session else { return }
         let question = panel.questionPanel
         if composer.text != question.customAnswer { composer.text = question.customAnswer }
         var placeholder = composer.placeholderInput
@@ -414,7 +443,7 @@ final class ComposerController {
             compactLabel: session.primaryLabel(compact: true, responding: responding),
             enabled: session.canPressPrimary && !responding && shell != nil,
             showsPrevious: session.showsPrevious, responding: responding,
-            showsAttach: question.editorEnabled))
+            showsAttach: question.editorEnabled && supportsQuestionAttachments && fileUploadLimit != nil))
         panel.needsLayout = true
     }
 
@@ -789,5 +818,252 @@ extension ComposerController {
         }
         scheduleSave()
         syncSidebarDrafts()
+    }
+}
+
+// MARK: Question file answers (questionAttachments.ts, ChatComposer.tsx:5736-5880, ChatView.tsx:10148-10200)
+
+/// One file attached to a question's answer: picked, uploaded through `attachments.createUploadUrl`
+/// and the signed upload route, then sent in `attachmentsByQuestionId`.
+fileprivate struct QuestionFile {
+    let id: String
+    let url: URL
+    let name: String
+    let mimeType: String
+    let sizeBytes: Int
+    var status: ComposerFileRow.Status
+    /// The pending upload the server minted; it becomes the attachment id on submit.
+    var attachmentId: String?
+    var task: Task<Void, Never>?
+
+    var row: ComposerFileRow { ComposerFileRow(id: id, name: name, sizeBytes: sizeBytes, status: status) }
+    /// `ChatFileAttachment`: `{type, id, name, mimeType, sizeBytes}`.
+    var attachment: JSONValue? {
+        guard status == .ready, let attachmentId else { return nil }
+        return .object(["type": .string("file"), "id": .string(attachmentId), "name": .string(name),
+                        "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))])
+    }
+}
+
+/// Upload progress from the URL session, on the main actor.
+private final class UploadProgress: NSObject, URLSessionTaskDelegate, Sendable {
+    let report: @Sendable (Double) -> Void
+    init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        if totalBytesExpectedToSend > 0 { report(Double(totalBytesSent) / Double(totalBytesExpectedToSend)) }
+    }
+}
+
+extension ComposerController {
+    /// `PROVIDER_SEND_TURN_MAX_ATTACHMENTS` across one set of answers.
+    static let maxQuestionAttachments = 100
+
+    /// Thread, request and question, like `questionAttachmentDraftId`.
+    fileprivate static func questionKey(_ threadId: ThreadId, _ requestId: String, _ questionId: String) -> String {
+        requestPrefix(threadId, requestId) + questionId
+    }
+    fileprivate static func requestPrefix(_ threadId: ThreadId, _ requestId: String) -> String { threadId.rawValue + "\u{0}" + requestId + "\u{0}" }
+
+    fileprivate func readCapabilities(_ shell: ShellSession?) {
+        capabilitiesTask?.cancel()
+        supportsQuestionAttachments = false
+        fileUploadLimit = nil
+        guard let http = shell?.http else { return }
+        capabilitiesTask = Task { [weak self] in
+            guard let descriptor = try? await http.descriptor(), !Task.isCancelled, let self else { return }
+            supportsQuestionAttachments = descriptor.capability("questionAttachments")
+            if descriptor.capability("attachmentUploads"), case .number(let max)? = descriptor.capabilities["fileAttachments"]?["maxUploadBytes"] {
+                fileUploadLimit = Int(max)
+            }
+            refresh()
+        }
+    }
+
+    /// The active question's key, when it can take files.
+    private var activeQuestionKey: String? {
+        guard case .thread(let threadId) = target, let requestId = questionRequestId,
+              let question = panel.questionPanel.session?.progress.activeQuestion else { return nil }
+        return Self.questionKey(threadId, requestId, question.id)
+    }
+
+    /// The question's file list and the attachment state the answer rules read. Files of requests
+    /// that are no longer pending are released (ChatView.tsx:3374-3398).
+    fileprivate func syncQuestionFiles() {
+        pruneQuestionFiles()
+        composer.fileRows = activeQuestionKey.map { (questionFiles[$0] ?? []).map(\.row) } ?? []
+        guard let session = panel.questionPanel.session, case .thread(let threadId) = target else { return }
+        var states: [String: UserInputSession.AttachmentState] = [:]
+        for q in session.request.questions {
+            let files = questionFiles[Self.questionKey(threadId, session.request.requestId, q.id)] ?? []
+            if !files.isEmpty {
+                states[q.id] = .init(count: files.count, blocked: !supportsQuestionAttachments || files.contains { $0.status != .ready })
+            }
+        }
+        panel.questionPanel.setAttachments(states)
+    }
+
+    /// The open thread's files whose request is no longer pending go (other threads keep theirs).
+    fileprivate func pruneQuestionFiles() {
+        guard case .thread(let threadId) = target else { return }
+        let live = Set(requests.userInputs.flatMap { r in r.questions.map { Self.questionKey(threadId, r.requestId, $0.id) } })
+        for key in questionFiles.keys where key.hasPrefix(threadId.rawValue + "\u{0}") && !live.contains(key) { releaseQuestionFiles(key) }
+    }
+
+    private func releaseQuestionFiles(_ key: String) {
+        for file in questionFiles[key] ?? [] { discard(file) }
+        questionFiles[key] = nil
+    }
+
+    /// Cancels an upload and deletes its pending server copy (`releaseAttachmentUpload`; a claimed
+    /// upload is no longer pending, so the delete is a no-op).
+    private func discard(_ file: QuestionFile) {
+        file.task?.cancel()
+        guard let id = file.attachmentId, let supervisor = shell?.supervisor else { return }
+        Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(id)])) }
+    }
+
+    private func setThreadError(_ message: String) {
+        guard let key = draftKey else { return }
+        threadErrors.set(key, message)
+        refresh()
+    }
+
+    /// The attach button while a question that takes a custom answer is open: an open panel, then
+    /// T3's checks (count, empty, size) and an upload per accepted file.
+    // ponytail: images go up as plain files without thumbnails, compression or the image type, and there is no paste or drop; add them with the composer's own attachments
+    fileprivate func attachToQuestion() {
+        guard let requestId = questionRequestId, let session = panel.questionPanel.session, let key = activeQuestionKey,
+              session.progress.activeQuestion?.allowsCustomAnswer == true, supportsQuestionAttachments,
+              !responding.contains(requestId), let window = composer.window else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            MainActor.assumeIsolated { self?.addQuestionFiles(panel.urls, key: key, requestId: requestId) }
+        }
+    }
+
+    private func addQuestionFiles(_ urls: [URL], key: String, requestId: String) {
+        guard let session = panel.questionPanel.session, session.request.requestId == requestId, case .thread(let threadId) = target else { return }
+        var reserved = session.request.questions.reduce(0) { $0 + (questionFiles[Self.questionKey(threadId, requestId, $1.id)]?.count ?? 0) }
+        var error: String?
+        for url in urls {
+            let name = url.lastPathComponent.isEmpty ? "file" : url.lastPathComponent
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if reserved >= Self.maxQuestionAttachments {
+                error = "You can attach up to \(Self.maxQuestionAttachments) files per message."
+                continue
+            }
+            guard let limit = fileUploadLimit else { error = "This server does not support file attachments."; continue }
+            if size <= 0 { error = "'\(name)' is empty or could not be read."; continue }
+            if size > limit { error = Self.tooLargeMessage(name, limit); continue }
+            let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+            let file = QuestionFile(id: UUID().uuidString, url: url, name: name, mimeType: mime.lowercased(), sizeBytes: size, status: .uploading(0))
+            questionFiles[key, default: []].append(file)
+            reserved += 1
+            upload(file.id, key: key)
+        }
+        if let error { setThreadError(error) }
+        syncQuestion()
+    }
+
+    /// `fileAttachmentTooLargeMessage` (packages/client-runtime/src/state/attachments.ts:228-236).
+    static func tooLargeMessage(_ name: String, _ limit: Int) -> String {
+        let mb = 1024 * 1024
+        let size = limit >= mb && limit % mb == 0 ? "\(limit / mb) MB"
+            : limit >= 1024 && limit % 1024 == 0 ? "\(limit / 1024) KB" : "\(limit) \(limit == 1 ? "byte" : "bytes")"
+        return "'\(name)' exceeds the \(size) attachment limit."
+    }
+
+    private func updateFile(_ id: String, key: String, _ change: (inout QuestionFile) -> Void) {
+        guard let i = questionFiles[key]?.firstIndex(where: { $0.id == id }) else { return }
+        change(&questionFiles[key]![i])
+        syncQuestion()
+    }
+
+    /// `runUpload`: mint a signed upload URL, POST the bytes with their content type, report progress
+    /// in 5% steps, and fail with T3's reasons.
+    private func upload(_ id: String, key: String) {
+        guard let file = questionFiles[key]?.first(where: { $0.id == id }) else { return }
+        guard let shell else { updateFile(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }; return }
+        let supervisor = shell.supervisor, base = shell.http.baseURL
+        let task = Task { [weak self] in
+            let reason: String
+            do {
+                let minted = try await supervisor.request("attachments.createUploadUrl", payload: .object([
+                    "type": .string("file"), "name": .string(file.name), "mimeType": .string(file.mimeType), "sizeBytes": .number(Double(file.sizeBytes))]))
+                guard case .string(let attachmentId)? = minted["attachmentId"], case .string(let relative)? = minted["relativeUrl"],
+                      let url = URL(string: relative, relativeTo: base)?.absoluteURL else { throw URLError(.badServerResponse) }
+                if Task.isCancelled {
+                    _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(attachmentId)]))
+                    return
+                }
+                self?.updateFile(id, key: key) { $0.attachmentId = attachmentId }
+                var request = URLRequest(url: url, timeoutInterval: 600)
+                request.httpMethod = "POST"
+                request.setValue(file.mimeType, forHTTPHeaderField: "Content-Type")
+                let progress = UploadProgress { p in
+                    Task { @MainActor in
+                        self?.updateFile(id, key: key) { f in
+                            if case .uploading(let old) = f.status, Int(old * 20) == Int(p * 20) { return }
+                            f.status = .uploading(p)
+                        }
+                    }
+                }
+                let (_, response) = try await URLSession.shared.upload(for: request, fromFile: file.url, delegate: progress)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200..<300).contains(status) else { throw UploadRejected(status: status) }
+                self?.updateFile(id, key: key) { $0.status = .ready }
+                return
+            } catch let rejected as UploadRejected {
+                reason = "Upload rejected (\(rejected.status))"
+            } catch let error as URLError where error.code == .timedOut {
+                reason = "Upload timed out"
+            } catch {
+                if Task.isCancelled { return }
+                reason = "Upload failed"
+            }
+            self?.updateFile(id, key: key) { $0.status = .failed(reason) }
+        }
+        updateFile(id, key: key) { $0.task = task }
+    }
+
+    private struct UploadRejected: Error { let status: Int }
+
+    private func fileKey(_ id: String) -> String? { questionFiles.first { $0.value.contains { $0.id == id } }?.key }
+
+    fileprivate func removeQuestionFile(_ id: String) {
+        guard let key = fileKey(id), let i = questionFiles[key]?.firstIndex(where: { $0.id == id }) else { return }
+        discard(questionFiles[key]!.remove(at: i))
+        if questionFiles[key]?.isEmpty == true { questionFiles[key] = nil }
+        syncQuestion()
+    }
+
+    /// `retryAttachmentUpload`: drop the failed pending copy and upload again.
+    fileprivate func retryQuestionFile(_ id: String) {
+        guard let key = fileKey(id), let file = questionFiles[key]?.first(where: { $0.id == id }) else { return }
+        discard(file)
+        updateFile(id, key: key) { $0.attachmentId = nil; $0.task = nil; $0.status = .uploading(0) }
+        upload(id, key: key)
+    }
+
+    /// `onRespondToUserInput`: every question's files must be uploaded; they ride along in
+    /// `attachmentsByQuestionId`.
+    fileprivate func submitAnswers(_ payload: JSONValue) {
+        guard case .object(var fields) = payload, case .string(let requestId)? = payload["requestId"],
+              case .thread(let threadId) = target else { return }
+        let prefix = Self.requestPrefix(threadId, requestId)
+        var byQuestion: [String: JSONValue] = [:]
+        for (key, files) in questionFiles where key.hasPrefix(prefix) && !files.isEmpty {
+            let uploaded = files.compactMap(\.attachment)
+            guard uploaded.count == files.count else {
+                setThreadError("Wait for attachments to finish uploading, or remove failed uploads.")
+                return
+            }
+            byQuestion[String(key.dropFirst(prefix.count))] = .array(uploaded)
+        }
+        if !byQuestion.isEmpty { fields["attachmentsByQuestionId"] = .object(byQuestion) }
+        respond(.object(fields), failure: ComposerFeedback.Failure.userInput)
     }
 }

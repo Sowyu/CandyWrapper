@@ -86,6 +86,20 @@ public final class ComposerView: DSView {
     /// A question is open: Return or the pill moves to the next question or submits.
     public var onQuestionAdvance: (() -> Void)?
     public var onQuestionPrevious: (() -> Void)?
+    /// The attach button (`Attach files`); nil leaves it inert.
+    public var onAttach: (() -> Void)?
+    /// Files above the editor. Only question answers fill it for now (the composer's own attachments
+    /// come later); set `fileRows` to change it.
+    public let fileList = ComposerFileListView()
+    public var fileRows: [ComposerFileRow] {
+        get { fileList.rows }
+        set {
+            let before = fileList.preferredHeight
+            fileList.rows = newValue
+            fileList.isHidden = newValue.isEmpty
+            if fileList.preferredHeight != before { needsLayout = true; onHeightChange?() }
+        }
+    }
     /// The open thread's timeline messages, read on ArrowUp or ArrowDown for prompt history.
     public var historyMessages: (() -> [PromptHistory.Message])?
     /// The active prompt-history recall (`promptHistoryPositionRef`).
@@ -101,13 +115,16 @@ public final class ComposerView: DSView {
         switch pending {
         case .approval: Self.inset * 2 + Self.pad + editorHeight + Self.pad
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
-        case .question: Self.inset * 2 + Self.pad + editorHeight + 8 + 8 + 28 + Self.pad
-        case .none: Self.inset * 2 + Self.pad + editorHeight + 8 + Self.footerHeight + Self.pad
+        case .question: Self.inset * 2 + Self.pad + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
+        case .none: Self.inset * 2 + Self.pad + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
         }
     }
 
     /// `ComposerPrimaryActions` compact labels below a 780 form width when the footer holds wide actions.
-    private var compactActions: Bool { bounds.width < 780 }
+    private var compactActions: Bool { bounds.width < ComposerFooterLayout.wideActionsCompactBreakpoint }
+    /// `data-chat-composer-footer-compact`: the footer gap drops from 0 (`gap-2 sm:gap-0`) to `gap-1.5`.
+    // ponytail: no plan follow-up, so only a question counts as wide actions; add it with plan mode
+    private var compactFooter: Bool { ComposerFooterLayout.isCompact(width: bounds.width, hasWideActions: questionFooter != nil) }
     private var questionFooter: QuestionFooter? {
         if case .question(let footer) = pending { return footer }
         return nil
@@ -176,8 +193,11 @@ public final class ComposerView: DSView {
         validation.isHidden = true
         addSubview(validation)
 
-        // ponytail: attachments are out of M5 scope, so attach only shows its place and tooltip; wire the picker with uploads
+        // ponytail: only question answers take files; the composer's own attachments (chips, images, paste, drop) come later
         attach.iconColor = Themed.color(\.mutedForeground)
+        attach.action = { [weak self] in self?.onAttach?() }
+        fileList.isHidden = true
+        addSubview(fileList)
         TooltipController.attach(to: attach, text: "Attach files")
         attach.setAccessibilityLabel("Attach files")
         addSubview(attach)
@@ -212,6 +232,8 @@ public final class ComposerView: DSView {
 
     public func focus() { window?.makeFirstResponder(editor) }
     public var isEditorFocused: Bool { window?.firstResponder === editor }
+    /// `isCaretAtStart`: a collapsed selection at offset 0.
+    public var isCaretAtStart: Bool { editor.selectedRange() == NSRange(location: 0, length: 0) }
     public override var acceptsFirstResponder: Bool { true }
     public override func becomeFirstResponder() -> Bool { window?.makeFirstResponder(editor) ?? false }
 
@@ -385,8 +407,10 @@ public final class ComposerView: DSView {
         outline.frame = box
 
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
-        let textTop = Self.inset + Self.pad
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
+        fileList.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
+                                height: max(0, fileList.preferredHeight - ComposerFileListView.marginBottom))
+        let textTop = Self.inset + Self.pad + fileList.preferredHeight
         scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
         editor.textContainerInset = NSSize(width: 4, height: 4 + editor.lineTop)
         editor.minSize = NSSize(width: textWidth + 8, height: editorHeight + 8)
@@ -442,7 +466,8 @@ public final class ComposerView: DSView {
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,
         // separators 1x16 with 2px margins.
         var x = Self.inset + Self.pad - 10
-        let limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - 8
+        // The left cluster is `flex-1` up to the right cluster, less the footer gap.
+        let limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
         for (i, control) in footerControls.enumerated() {
             if i > 0 {
                 let sep = separators[i - 1]
@@ -451,7 +476,8 @@ public final class ComposerView: DSView {
                 x += 1 + 2 + 4
             }
             let size = control.intrinsicContentSize
-            let width = max(0, min(size.width, limit - x))
+            // The last control (the picker cluster) takes the rest and fits itself into it.
+            let width = i == footerControls.count - 1 ? max(0, limit - x) : max(0, min(size.width, limit - x))
             control.frame = NSRect(x: x, y: midY - size.height / 2, width: width, height: size.height)
             x += width
         }

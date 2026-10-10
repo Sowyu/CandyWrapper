@@ -45,6 +45,8 @@ struct PickerMenuEntry {
     var disabled = false
     /// `py-1.5` group labels (boolean descriptors) instead of `pt-1.5 pb-1`.
     var evenLabelPadding = false
+    /// A radio item without `closeOnClick`: picking it updates the menu in place.
+    var keepsOpen = false
     var onPick: (@MainActor () -> Void)?
 
     static func label(_ title: String, even: Bool = false) -> Self { Self(kind: .label, title: title, evenLabelPadding: even) }
@@ -67,6 +69,8 @@ final class PickerMenuView: DSView, PickerPopupBody {
     var minimumWidth: CGFloat
     var highlightedIndex: Int? { didSet { if highlightedIndex != oldValue { rows.forEach { $0.restyle() } } } }
     var onClose: (@MainActor () -> Void)?
+    /// Fresh entries after a `keepsOpen` pick (the checked row moves).
+    var refreshEntries: (@MainActor () -> [PickerMenuEntry])?
 
     private var rows: [PickerMenuRowView] = []
     private var tracking: NSTrackingArea?
@@ -122,8 +126,14 @@ final class PickerMenuView: DSView, PickerPopupBody {
 
     func pick(_ i: Int) {
         guard entries[i].kind == .option, !entries[i].disabled else { return }
+        let keepsOpen = entries[i].keepsOpen
         entries[i].onPick?()
-        onClose?()
+        guard keepsOpen, let refreshEntries else { onClose?(); return }
+        entries = refreshEntries()
+        rows.forEach { $0.removeFromSuperview() }
+        rows = entries.indices.map { PickerMenuRowView(menu: self, index: $0) }
+        rows.forEach(addSubview)
+        needsLayout = true
     }
 
     // MARK: Pointer
