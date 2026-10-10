@@ -6,7 +6,7 @@ Update this file at the end of every work session. Newest log entry first.
 
 Milestone 5, interactive: compose and send messages, watch them stream, stop a run, answer approvals and questions, queue and steer follow-ups, pick the model. Milestone 4 was accepted by the user on 2026-10-10 ("everything looks perfect"); they asked for a stress-testing milestone once everything else is done, added as 10: it proves CandyWrapper has every feature and the exact same behavior as T3 Code Nightly.
 
-Next action: demo milestone 5 to the user. Build, then `scripts/run-app --live` (the user clicks Connect; after a rebuild the old Keychain token is unreadable, so delete the live environment's item first with `security delete-generic-password -s dev.candywrapper.t3.environment-token -a <live environment id>` or the system shows a Keychain password prompt). Show: the draft landing, a send with the teddy button, stop, an approval, a question, queue and Cmd+Enter steer, the model and access pickers, the candy sidebar art in both appearances. After the user accepts, start milestone 6 (T3 Connect).
+Next action: get the user's milestone 5 sign-off (the demo ran 2026-10-10 side by side with the official web client, with the user's permission; every gap found since is fixed, see the M5 checklist notes). The demo app runs on the live T3 (pid in /tmp/cw-demo.pid; after a rebuild delete the live environment's Keychain item first, then Connect). After sign-off start milestone 6 (T3 Connect). Open M5 polish: image attachments and paste or drop, the file preview dialog, the Chat/Plan group in the compact menu, chip Open and Reveal, a disk cache for project icons.
 
 ## Milestones
 
