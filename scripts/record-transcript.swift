@@ -384,6 +384,20 @@ case "turn2":
     _ = try await http("GET", "api/orchestration/threads/\(threadId)", headers: auth)
     print("threadId \(threadId)")
 
+case "threads":
+    // The subscribeThread snapshot of every thread on the server: timeline fixtures.
+    let (_, shell) = try await http("GET", "api/orchestration/shell", headers: auth)
+    let root = (shell as? [String: Any]) ?? [:]
+    let threads = (root["threads"] as? [[String: Any]]) ?? ((root["snapshot"] as? [String: Any])?["threads"] as? [[String: Any]]) ?? []
+    for thread in threads {
+        guard let id = thread["id"] as? String else { continue }
+        try await request("orchestration.subscribeThread", ["threadId": id, "requestCompletionMarker": true,
+                                                            "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+        await pause(1)
+    }
+    await pause(2)
+    print("threads \(threads.count)")
+
 default:
     print("unknown scenario"); exit(2)
 }
