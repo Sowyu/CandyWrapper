@@ -39,11 +39,13 @@ extension SettingsController {
         loadHosts()
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                // `useRelativeTimeTick(1_000)`: expiry and connected-for labels count down.
+                // `useRelativeTimeTick(1_000)`: expiry and connected-for labels count down. Only the access
+                // section has them, so only it is rebuilt, and the page updates only when a label changed.
                 guard let self, self.isOpen, !self.access.pairingLinks.isEmpty || !self.access.clientSessions.isEmpty else { return }
-                self.refreshPage()
+                self.refreshAccess()
             }
         }
+        ticker?.tolerance = 0.2
     }
 
     /// Page closed: the stream stops and created credentials are forgotten (T3 keeps them only while the

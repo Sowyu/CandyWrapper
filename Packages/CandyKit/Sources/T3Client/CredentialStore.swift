@@ -22,11 +22,7 @@ public struct CredentialStore: Sendable {
         let attributes: [String: Any] = [kSecValueData as String: Data(token.utf8)]
         var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
-            var add = query
-            add[kSecValueData as String] = Data(token.utf8)
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            add[kSecAttrLabel as String] = "T3 Code environment token"
-            status = SecItemAdd(add as CFDictionary, nil)
+            status = SecItemAdd(addQuery(token, environmentId: environmentId) as CFDictionary, nil)
         }
         guard status == errSecSuccess else { throw KeychainError(status: status) }
     }
@@ -46,6 +42,19 @@ public struct CredentialStore: Sendable {
     public func delete(environmentId: String) throws {
         let status = SecItemDelete(baseQuery(environmentId) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError(status: status) }
+    }
+
+    /// The attributes of a new item: `ThisDeviceOnly`, like the Clerk session and the DPoP key, so a token
+    /// never syncs or moves to another Mac. Tests check this dictionary, as the login keychain doesn't
+    /// report `kSecAttrAccessible` back.
+    // ponytail: the file-based login keychain ignores the accessibility class; it applies only in the data
+    // protection keychain, which needs a signed build with an application identifier (milestone 9)
+    func addQuery(_ token: String, environmentId: String) -> [String: Any] {
+        var add = baseQuery(environmentId)
+        add[kSecValueData as String] = Data(token.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        add[kSecAttrLabel as String] = "T3 Code environment token"
+        return add
     }
 
     private func baseQuery(_ environmentId: String) -> [String: Any] {

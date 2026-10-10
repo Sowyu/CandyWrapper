@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import T3Client
 
@@ -20,5 +21,11 @@ struct CredentialStoreTests {
         try store.delete(environmentId: env)
         #expect(try store.load(environmentId: env) == nil)
         try store.delete(environmentId: env)
+    }
+
+    @Test func newTokensStayOnThisDevice() {
+        let add = CredentialStore(service: "test").addQuery("t", environmentId: "e")
+        #expect(add[kSecAttrAccessible as String] as? String == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+        #expect(add[kSecAttrSynchronizable as String] == nil)
     }
 }

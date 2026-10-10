@@ -436,7 +436,7 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
                 row.configure(link, canRevoke: a.canWrite)
                 row.onRevoke = { [weak self] in self?.actions.revokePairingLink(id) }
                 row.onShare = { [weak self] in self?.toggleShare(id) }
-                row.onCopy = { [weak self] text, title, description in self?.actions.copy(text, title, description) }
+                row.onCopy = { [weak self] text, title, description in self?.actions.copySecret(text, title, description) }
                 nextLinks[id] = row
                 next.append(row)
             }

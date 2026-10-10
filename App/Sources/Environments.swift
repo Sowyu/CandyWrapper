@@ -51,6 +51,8 @@ final class Environments {
     private(set) var saved: [EnvironmentRegistration] = []
     /// Ids being removed (the row menu reads "Removing…").
     private(set) var removing: Set<String> = []
+    /// Ids whose `connectSaved` is reading its route and token.
+    private var connecting: Set<String> = []
     /// Connects T3 Connect routes. Nil until the account loads; relay machines wait for it.
     var t3Connect: T3ConnectAuthorizer? {
         didSet {
@@ -155,7 +157,10 @@ final class Environments {
     /// A saved environment without a token in the Keychain stays listed and "Not connected".
     private func connectSaved(_ registration: EnvironmentRegistration) {
         let id = registration.environmentId
-        guard id != primaryId else { return }
+        // One connect per environment at a time (restoreSaved and the t3Connect didSet both call this
+        // while the session is nil), and none while the environment is being removed.
+        guard id != primaryId, !connecting.contains(id), !removing.contains(id) else { return }
+        connecting.insert(id)
         let catalog = self.catalog, cache = self.cache
         Task {
             let (route, token, cached) = await Task.detached { () -> (URL, String?, ShellSnapshot?) in
@@ -163,9 +168,14 @@ final class Environments {
                 let token = registration.isRelayRoute(route) ? nil : try? catalog.token(environmentId: id, route: route)
                 return (route, token, cache.load(environmentId: id)?.snapshot)
             }.value
+            connecting.remove(id)
+            // Switched off, removed or connected another way while the Keychain read ran.
+            guard let current = saved.first(where: { $0.environmentId == id }), current.enabled, !removing.contains(id),
+                  entries[id]?.session == nil else { return }
+            // Its routes changed meanwhile (a call skipped above carried the new list): start over.
+            guard current.routes == registration.routes else { connectSaved(current); return }
             if registration.isRelayRoute(route) {
                 guard let authorizer = t3Connect else { return }
-                guard saved.first(where: { $0.environmentId == id })?.enabled == true else { return }
                 addRemote(environmentId: id, label: registration.label, machine: registration.machine, cached: cached) {
                     ShellSession(environmentId: id, relayBaseURL: route, authorizer: authorizer, cached: $0)
                 }
@@ -175,8 +185,6 @@ final class Environments {
                 NSLog("environment %@ has no token in the Keychain for its route", id)
                 return
             }
-            // Switched off or removed while the Keychain read ran.
-            guard saved.first(where: { $0.environmentId == id })?.enabled == true else { return }
             addRemote(environmentId: id, label: registration.label, machine: registration.machine, baseURL: route, token: token, cached: cached)
         }
     }
@@ -205,8 +213,12 @@ final class Environments {
         let catalog = self.catalog, token = result.token
         let stored = try await Task.detached { try catalog.add(registration, token: token) }.value
         upsertSaved(stored)
-        // A new route to a machine that is already connected leaves its session on the route it uses.
-        if stored.enabled, entries[stored.environmentId]?.session == nil {
+        // A new route to a machine that is already connected leaves its session on the route it uses. A
+        // session keeps its token for life, so re-pairing the route it uses, or a session in error (a
+        // revoked token), replaces it with one on the new token.
+        let id = stored.environmentId
+        let pairedInUse = routeInUse(id).map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(result.baseURL) } ?? false
+        if stored.enabled, entries[id]?.session == nil || pairedInUse || entries[id]?.state?.status == .error {
             addRemote(environmentId: stored.environmentId, label: stored.label, machine: stored.machine,
                       baseURL: result.baseURL, token: token, cached: cache.load(environmentId: stored.environmentId)?.snapshot)
         }
@@ -350,6 +362,12 @@ final class Environments {
         changed()
     }
 
+    /// A sign-out whose catalog write failed: the relay token is gone, so close every session that uses
+    /// a T3 Connect route. Registrations stay as saved.
+    func detachRelaySessions() {
+        for r in saved where routeInUse(r.environmentId).map(r.isRelayRoute) ?? false { drop(r.environmentId) }
+    }
+
     /// Removes a saved or development environment: closes its socket, forgets its registration, token,
     /// cached shell and icons, and has every per-environment store drop its entries (`onRemove`).
     /// T3 clears only composer drafts here (L 3.5); this clears the rest too. The local environment
@@ -382,6 +400,7 @@ final class Environments {
         entries[id]?.session?.stop()
         entries[id]?.watch?.cancel()
         entries[id] = nil
+        optimistic.remove(environmentId: id)
         shells.remove(id)
         iconRoutes.set(id, nil)
         order.removeAll { $0 == id }

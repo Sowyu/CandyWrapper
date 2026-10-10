@@ -203,6 +203,11 @@ public struct OptimisticThreadOverlay: Sendable {
         entries.removeAll { $0.environmentId == environmentId && ($0.sequence.map { snapshotSequence >= $0 } ?? false) }
     }
 
+    /// The environment left the view: its updates go with it.
+    public mutating func remove(environmentId: String) {
+        entries.removeAll { $0.environmentId == environmentId }
+    }
+
     /// The environment's shell (unscoped) with its pending updates applied in order.
     public func apply(_ snapshot: ShellSnapshot, environmentId: String) -> ShellSnapshot {
         let pending = entries.filter { $0.environmentId == environmentId && ($0.sequence.map { $0 > snapshot.snapshotSequence } ?? true) }
