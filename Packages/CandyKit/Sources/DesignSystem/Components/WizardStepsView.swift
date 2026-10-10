@@ -6,6 +6,8 @@ import AppKit
 public final class WizardStepsView: BoxView {
     public let steps: [String]
     public var currentStep: Int { didSet { stepViews.forEach { $0.restyle() } } }
+    /// `showSummaries`: a finished step reads "Step: summary".
+    public var summaries: [String?] = [] { didSet { stepViews.forEach { $0.restyle() } } }
     public final var onStepChange: (@MainActor (Int) -> Void)?
     public private(set) var stepViews: [WizardStepView] = []
 
@@ -115,5 +117,7 @@ public final class WizardStepView: ControlView {
         check.strokeColor = Themed.color(\.primaryForeground)
         number.color = index == current ? Themed.color(\.primary) : Themed.color(\.contrastMutedForeground)
         label.color = index == current ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
+        let summary = index < owner.summaries.count ? owner.summaries[index] : nil
+        label.text = owner.steps[index] + (index < current ? summary.map { ": \($0)" } ?? "" : "")
     }
 }

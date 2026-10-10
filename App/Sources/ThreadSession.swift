@@ -225,6 +225,7 @@ final class ThreadController {
     let panel = ThreadPanelView()
     private(set) var terminal: TerminalController!
     private(set) var composer: ComposerController!
+    private(set) var git: GitController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -257,6 +258,8 @@ final class ThreadController {
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
+        git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
+        composer.onTargetChange = { [weak self] in self?.git.refresh() }
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
         sidebar.actions.openDraft = { [weak self] id in
@@ -292,6 +295,7 @@ final class ThreadController {
     func registerShortcuts(_ shortcuts: Shortcuts) {
         composer.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
+        git.registerShortcuts(shortcuts)
         // `diff.toggle` and `rightPanel.toggle`: the diff is the only right panel surface so far.
         shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] _ in
             guard let self, self.panel.window != nil else { return false }
@@ -353,6 +357,7 @@ final class ThreadController {
     private func sessionChanged(_ environmentId: String) {
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
+        git.sessionChanged(environmentId)
         guard let session, session.environmentId == environmentId else { return }
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
@@ -508,6 +513,7 @@ final class ThreadController {
     /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
     private func shellChanged(_ snapshot: ShellSnapshot) {
         composer.projectsChanged()
+        git.refresh()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

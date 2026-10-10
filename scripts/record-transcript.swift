@@ -625,6 +625,24 @@ case "queue":
     await pause(3)
     print("threadId \(threadId)")
 
+case "git":
+    // The branch toolbar's reads on a repo with a local bare remote (sandbox/git-demo): the project,
+    // the status stream, a refresh, the ref list with a query and a page limit, and source control
+    // discovery. Read-only except creating the project (skipped when PROJECT_ID is set).
+    let repo = ProcessInfo.processInfo.environment["GIT_REPO"]!
+    if ProcessInfo.processInfo.environment["PROJECT_ID"] == nil {
+        try await request("projects.mutate", ["type": "project.create", "commandId": uuid(), "projectId": uuid(),
+                                             "title": "git-demo", "workspaceRoot": repo])
+        await pause(1)
+    }
+    try await request("subscribeVcsStatus", ["cwd": repo])
+    await pause(3)
+    try await request("vcs.refreshStatus", ["cwd": repo])
+    try await request("vcs.listRefs", ["cwd": repo, "limit": 100])
+    try await request("vcs.listRefs", ["cwd": repo, "query": "feat", "limit": 100])
+    try await request("server.discoverSourceControl")
+    await pause(4)
+
 default:
     print("unknown scenario"); exit(2)
 }

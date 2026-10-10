@@ -74,6 +74,8 @@ public final class LabelView: DSView {
     /// Truncating labels clip to their box like CSS `truncate` (overflow: hidden). Unclipped,
     /// AppKit gave each one a backing store with room for overflow, about twice the label.
     public var truncates = true { didSet { clipsToBounds = truncates; needsDisplay = true } }
+    /// Where the ellipsis goes: `.start` is T3's `StartTruncatedPath` (`dir="rtl"` with `text-ellipsis`).
+    public var truncation: CTLineTruncationType = .end { didSet { if truncation != oldValue { needsDisplay = true } } }
     /// `underline` with T3's `underline-offset-4`.
     public var isUnderlined = false { didSet { if isUnderlined != oldValue { needsDisplay = true } } }
     /// CSS `letter-spacing` in points, added after every character like Chromium.
@@ -139,7 +141,7 @@ public final class LabelView: DSView {
         if truncates, line.width > bounds.width, bounds.width > 0 {
             let ellipsis = CTLineCreateWithAttributedString(
                 NSAttributedString(string: "\u{2026}", attributes: [.font: font, .foregroundColor: color]))
-            if let truncated = CTLineCreateTruncatedLine(line.line, Double(bounds.width), .end, ellipsis) {
+            if let truncated = CTLineCreateTruncatedLine(line.line, Double(bounds.width), truncation, ellipsis) {
                 line = TextLine(line: truncated)
             }
         }

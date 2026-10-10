@@ -11,7 +11,7 @@ public enum PopupSurface {
     /// `dropdown-glass` over a uniform `--background`: popover at 18% + 82% x 80% = 83.6% alpha, composited.
     // ponytail: solid color instead of a live 12/16px backdrop blur; identical over flat backgrounds, use an
     // NSVisualEffectView-like blur if popups ever sit over busy content and users notice
-    static let glassFill: NSColor = {
+    public static let glassFill: NSColor = {
         func mix(_ over: TokenColor, _ under: TokenColor) -> NSColor {
             let a = over.nsColor.usingColorSpace(.sRGB)!, b = under.nsColor.usingColorSpace(.sRGB)!
             let t = 0.836 * a.alphaComponent

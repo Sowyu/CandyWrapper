@@ -11,6 +11,8 @@ public struct MenuItem {
         case label
         case separator
         case submenu([MenuItem])
+        /// A wrapping 12pt paragraph (`px-2 py-1.5 text-xs`): warning, or destructive with `isDestructive`.
+        case note
     }
 
     public var kind: Kind
@@ -37,6 +39,10 @@ public struct MenuItem {
     /// Extra height under the content: an `inline-flex` span in a 20px line box sits on the baseline and
     /// grows the row by the 1px below it (BranchToolbarEnvironmentSelector.tsx:126-131 in a SelectItem).
     public var extraBottom: CGFloat = 0
+    /// A second, muted 12pt line under the title (`PreviousWorktreeItemContent`); the glyph aligns to the title.
+    public var subtitle: String?
+    /// A tooltip on the row, shown even while it is disabled (disabled reasons, side left).
+    public var tooltip: String?
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -45,6 +51,7 @@ public struct MenuItem {
     }
 
     public static var separator: MenuItem { MenuItem("", kind: .separator) }
+    public static func note(_ text: String, destructive: Bool = false) -> MenuItem { MenuItem(text, kind: .note, destructive: destructive) }
     public static func label(_ title: String, inset: Bool = false) -> MenuItem { MenuItem(title, kind: .label, inset: inset) }
     public static func checkbox(_ title: String, checked: Bool, onToggle: (@MainActor (Bool) -> Void)? = nil) -> MenuItem {
         var item = MenuItem(title, kind: .checkbox(checked))
@@ -61,7 +68,7 @@ public struct MenuItem {
     }
 
     var isSelectable: Bool {
-        switch kind { case .label, .separator: false; default: !isDisabled }
+        switch kind { case .label, .separator, .note: false; default: !isDisabled }
     }
     var isChecked: Bool {
         switch kind { case .checkbox(let on), .radio(let on): on; default: false }
@@ -82,7 +89,12 @@ public final class MenuPopupView: DSView, PopupContent {
         didSet { if highlightedIndex != oldValue { rowsDidChange(); scrollToHighlight() } }
     }
     /// Minimum width, for example the trigger width (`min-w-(--anchor-width)`).
-    public var minimumWidth: CGFloat = 0 { didSet { invalidateIntrinsicContentSize() } }
+    public var minimumWidth: CGFloat = 0 {
+        didSet {
+            rows.forEach { $0.wrapWidth = minimumWidth > 0 ? minimumWidth - 2 * Self.inset : 256 }
+            invalidateIntrinsicContentSize()
+        }
+    }
     /// Combobox and Autocomplete cap the list at 23rem.
     var maximumHeight: CGFloat = .greatestFiniteMagnitude
     /// Text shown when there are no items (ComboboxEmpty).
@@ -133,6 +145,8 @@ public final class MenuPopupView: DSView, PopupContent {
     private func rebuild() {
         rows.forEach { $0.removeFromSuperview() }
         rows = items.map { MenuRowView(item: $0, style: style) }
+        // Notes wrap at the anchor width, or `max-w-64` without one.
+        rows.forEach { $0.wrapWidth = minimumWidth > 0 ? minimumWidth - 2 * Self.inset : 256 }
         rows.forEach(clip.addSubview)
         emptyLabel?.removeFromSuperview()
         emptyLabel = nil
@@ -320,7 +334,7 @@ public final class MenuPopupView: DSView, PopupContent {
             openSubmenu(at: i, highlightFirst: byKeyboard)
         case .item:
             choose(i)
-        case .label, .separator:
+        case .label, .separator, .note:
             break
         }
     }
@@ -424,10 +438,12 @@ public extension MenuPopupView {
     /// Opens a dropdown menu under `trigger` (MenuTrigger + MenuPopup). Opened from the keyboard,
     /// the first item is highlighted, as in base-ui. Returns nil when the trigger has no window.
     @discardableResult
-    static func show(_ items: [MenuItem], from trigger: NSView, placement: PopupPlacement = .menu) -> MenuPopupView? {
+    static func show(_ items: [MenuItem], from trigger: NSView, placement: PopupPlacement = .menu,
+                     minimumWidth: CGFloat = 0, anchorRect: CGRect? = nil) -> MenuPopupView? {
         guard let host = trigger.popupHost else { return nil }
         let menu = MenuPopupView(items: items)
-        menu.hostPopup = host.open(menu, trigger: trigger, placement: placement, swallowsOutsideClick: true)
+        menu.minimumWidth = minimumWidth
+        menu.hostPopup = host.open(menu, trigger: trigger, anchorRect: anchorRect, placement: placement, swallowsOutsideClick: true)
         if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
         return menu
     }
@@ -472,9 +488,20 @@ final class MenuRowView: DSView {
     var isLabel: Bool { if case .label = item.kind { true } else { false } }
     var isSeparator: Bool { if case .separator = item.kind { true } else { false } }
     var isCheckbox: Bool { if case .checkbox = item.kind { true } else { false } }
+    var isNote: Bool { if case .note = item.kind { true } else { false } }
+    /// The width a note wraps at.
+    var wrapWidth: CGFloat = 256
+    private var note: TextBlockView?
+    private var subtitleLabel: LabelView?
+    private var tooltipController: TooltipController?
 
-    /// Row height: 28 for items and labels, 9 for separators (1px + 4px margins).
-    var height: CGFloat { isSeparator ? 9 : 28 + item.extraBottom }
+    /// Row height: 28 for items and labels, 9 for separators (1px + 4px margins), 44 with a subtitle, and a note's
+    /// wrapped lines plus 12.
+    var height: CGFloat {
+        if isSeparator { return 9 }
+        if isNote, let note { return note.height(forWidth: wrapWidth - 16) + 12 }
+        return (item.subtitle != nil ? 44 : 28) + item.extraBottom
+    }
 
     var paddingLeading: CGFloat {
         if isLabel { return item.inset ? 32 : 8 }
@@ -484,7 +511,7 @@ final class MenuRowView: DSView {
 
     /// max-content width of the row.
     var naturalWidth: CGFloat {
-        if isSeparator { return 16 }
+        if isSeparator || isNote { return 16 }
         var w = paddingLeading + paddingTrailing + label.textWidth
         if isCheckbox { w += 16 + 8 }
         if iconView != nil { w += 12 + 8 }
@@ -502,6 +529,29 @@ final class MenuRowView: DSView {
         badgeView?.removeFromSuperview(); badgeView = nil
         shortcut?.removeFromSuperview(); shortcut = nil
         check?.removeFromSuperlayer(); check = nil
+        note?.removeFromSuperview(); note = nil
+        subtitleLabel?.removeFromSuperview(); subtitleLabel = nil
+        label.isHidden = isNote
+        if isNote {
+            let t = TextBlockView()
+            t.text = item.title
+            t.font = DSFont.ui(12)
+            t.lineHeight = 16
+            addSubview(t)
+            note = t
+        }
+        if let subtitle = item.subtitle {
+            let l = LabelView(subtitle, font: DSFont.ui(12))
+            l.lineHeight = 16
+            addSubview(l)
+            subtitleLabel = l
+        }
+        if let tip = item.tooltip {
+            if tooltipController == nil {
+                tooltipController = TooltipController.attach(to: self, text: tip, placement: PopupPlacement(side: .left, align: .center, sideOffset: 4))
+            }
+            tooltipController?.text = tip
+        }
         label.text = item.title
         if isLabel {
             label.font = DSFont.ui(12, weight: .medium)
@@ -555,7 +605,7 @@ final class MenuRowView: DSView {
             layer?.addSublayer(shape)
             check = shape
         }
-        alphaValue = item.isDisabled ? 0.64 : 1
+        alphaValue = item.isDisabled && !isNote ? 0.64 : 1
         restyle()
         needsLayout = true
     }
@@ -596,6 +646,8 @@ final class MenuRowView: DSView {
         glyphView?.strokeColor = Themed.color(\.contrastMutedForeground)
         badgeView?.strokeColor = Themed.color(\.contrastMutedForeground)
         if let check { check.strokeColor = text.cgColor(in: self) }
+        note?.color = item.isDestructive ? Themed.color(\.destructive) : Themed.color(\.warning)
+        subtitleLabel?.color = Themed.color(\.contrastMutedForeground)
         needsDisplay = true
     }
 
@@ -619,6 +671,10 @@ final class MenuRowView: DSView {
             return
         }
         fill.layout(boxSize: bounds.size)
+        if let note {
+            note.frame = NSRect(x: 8, y: 6, width: bounds.width - 16, height: bounds.height - 12)
+            return
+        }
         var x = paddingLeading
         var trailingX = bounds.width - paddingTrailing
         if isCheckbox {
@@ -630,7 +686,9 @@ final class MenuRowView: DSView {
             x += 12 + 8
         }
         if let glyphView {
-            glyphView.frame = NSRect(x: x, y: (bounds.height - item.extraBottom - 12) / 2, width: 12, height: 12)
+            // With a subtitle the glyph sits at the title (`items-start`, `mt-1`).
+            let gy = item.subtitle != nil ? 4 + 4 : (bounds.height - item.extraBottom - 12) / 2
+            glyphView.frame = NSRect(x: x, y: gy, width: 12, height: 12)
             x += 12 + 6
         }
         if let badgeView {
@@ -647,6 +705,11 @@ final class MenuRowView: DSView {
             trailingX -= w + 8
         }
         let lh = label.lineHeight ?? 20
+        if let subtitleLabel {
+            label.frame = NSRect(x: x, y: 4, width: max(0, min(label.textWidth, trailingX - x)), height: lh)
+            subtitleLabel.frame = NSRect(x: x, y: 4 + lh, width: max(0, trailingX - x), height: 16)
+            return
+        }
         label.frame = NSRect(x: x, y: (bounds.height - item.extraBottom - lh) / 2, width: max(0, min(label.textWidth, trailingX - x)), height: lh)
     }
 }
