@@ -146,23 +146,42 @@ struct Turbulence {
 }
 
 /// A flat fill plus the grain tile on top: `bg-sidebar surface-grain`, or `bg-background surface-grain`.
+/// Layer properties only: the fill is the layer's background and replicator layers repeat one
+/// 256pt tile, so the GPU composites the grain and no surface-sized bitmap exists. Drawing it
+/// cost a 27 MB backing store per surface at 2x, plus as much again in scratch for the pattern.
 public final class GrainSurfaceView: DSView {
     public var fill: NSColor { didSet { needsDisplay = true } }
-    public var showsGrain = true { didSet { needsDisplay = true } }
+    public var showsGrain = true { didSet { columns.isHidden = !showsGrain } }
+    /// Repeats `rows` across; `rows` repeats `tile` down.
+    private let columns = CAReplicatorLayer(), rows = CAReplicatorLayer(), tile = CALayer()
 
     public init(fill: NSColor) {
         self.fill = fill
         super.init(frame: .zero)
+        let size = SurfaceGrain.tilePoints
+        tile.contents = SurfaceGrain.tile
+        tile.frame = CGRect(x: 0, y: 0, width: size, height: size)
+        rows.instanceTransform = CATransform3DMakeTranslation(0, size, 0)
+        columns.instanceTransform = CATransform3DMakeTranslation(size, 0, 0)
+        rows.addSublayer(tile)
+        columns.addSublayer(rows)
+        layer?.addSublayer(columns)
     }
 
-    public override var wantsUpdateLayer: Bool { false }
+    public override func updateLayer() {
+        layer?.backgroundColor = resolving { fill.cgColor }
+    }
 
-    public override func draw(_ dirtyRect: NSRect) {
-        fill.setFill()
-        dirtyRect.fill()
-        guard showsGrain else { return }
-        NSGraphicsContext.current?.patternPhase = convert(NSPoint(x: 0, y: bounds.height), to: nil)
-        SurfaceGrain.pattern.setFill()
-        dirtyRect.fill(using: .sourceOver)
+    // ponytail: tiles start at the layer origin, not T3's top left; invisible at 3.5% opacity
+    public override func layout() {
+        super.layout()
+        let size = SurfaceGrain.tilePoints
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        columns.frame = bounds
+        rows.frame = CGRect(x: 0, y: 0, width: size, height: bounds.height)
+        rows.instanceCount = max(1, Int((bounds.height / size).rounded(.up)))
+        columns.instanceCount = max(1, Int((bounds.width / size).rounded(.up)))
+        CATransaction.commit()
     }
 }

@@ -73,17 +73,21 @@ Bundle size: 366 MB, of which `Frameworks` (Electron) is 239 MB and `Resources` 
 
 | Metric | Target | Official app | CandyWrapper |
 |---|---|---|---|
-| Cold launch to interactive sidebar | < 300 ms | about 3.4 s (sidebar data at 3.36 s) | not built |
-| Idle CPU, window visible, no turns | ~0% | 2.6% total, 1.9% excluding the server | not built |
-| Idle wakeups, app process | < 1/s | 88 interrupt and 52 package idle per second total; 74 interrupt excluding the server | not built |
+| Cold launch to interactive sidebar | < 300 ms | about 3.4 s (sidebar data at 3.36 s) | 1.17 s after `purge`, 0.13 to 0.20 s warm (cached sidebar); live data 4.3 s cold, 2.9 s warm, bound by the server's start |
+| Idle CPU, window visible, no turns | ~0% | 2.6% total, 1.9% excluding the server | 0.00% app; own server 0.2 to 0.85% until it idle-stops |
+| Idle wakeups, app process | < 1/s | 88 interrupt and 52 package idle per second total; 74 interrupt excluding the server | 0.03 interrupt, 0 package idle |
 | CPU while streaming one turn | < 5% of one core | milestone 8 | not built |
-| Energy Impact idle | ~0 | 4.29 total, 1.92 excluding server and resource monitor | not built |
+| Energy Impact idle | ~0 | 4.29 total, 1.92 excluding server and resource monitor | 0.00 app, about 0.1 server |
 | Energy Impact streaming | < 1/5 of official | milestone 8 | not built |
-| RAM fresh launch | < 80 MB | 544 MB total, 408 MB excluding server and resource monitor | not built |
+| RAM fresh launch | < 80 MB | 544 MB total, 408 MB excluding server and resource monitor | 27 MB app (sidebar only, 2x screen); own server 182 MB |
 | RAM, 50 threads + 2,000-message thread | < 200 MB | milestone 8 | not built |
 | Scrolling 2,000 messages | 120 fps, no frame > 16 ms | not measurable here (60 Hz) | not built |
 | Keypress to glyph | < 16 ms | milestone 8 | not built |
-| Bundle size (no server runtime, no fonts) | < 25 MB | 366 MB with server; Electron alone is 239 MB | not built |
+| Bundle size (no server runtime, no fonts) | < 25 MB | 366 MB with server; Electron alone is 239 MB | 5.5 MB |
+
+CandyWrapper numbers are from 2026-10-10: Release build at M3 (sidebar only, no thread view yet), sandbox home with 14 threads, window open. The screen had switched to 2x (3840x2160 backing, looks like 1920x1080) after the official baseline was taken at 1x, which makes window buffers four times larger; the official app's numbers would grow too. Launch times come from `scripts/measure-launch.swift` plus the app's `CANDY_LAUNCH_TIMING` marks, memory from `footprint`, idle from `procstat` and `powermetrics`.
+
+Memory went from 153 MB to 27 MB after three fixes, all in drawing: the main panel and sidebar backgrounds were drawn into full-size bitmaps (27 MB each at 2x, since this screen uses 8 bytes per pixel) and are now a layer color plus replicated grain tiles; the nightly art's off-canvas blur made AppKit size its backing store to the whole window (views don't clip drawing by default since macOS 14) and is now clipped; and its transparency groups got explicit bounds.
 
 ## How each client number gets measured
 
