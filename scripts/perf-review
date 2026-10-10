@@ -49,6 +49,13 @@ TOKEN = SANDBOX + "/session.token"
 # Compile and test processes (other agents); each scenario waits until none of them runs.
 BUSY_PROCESSES = {"swift-frontend", "swift-build", "swiftc", "xcodebuild", "clang", "ld", "xctest", "swiftpm-testing-helper"}
 PID_FILE = "/tmp/candywrapper-app.pid"
+# Perf builds get their own bundle id, so their UserDefaults are a domain of their own, emptied before every
+# launch: on 2026-10-10 a file tab an agent left open on the big thread (rightPanel.states.v1 in the shared
+# dev.candywrapper.app domain) narrowed the timeline and read as a 30% scroll regression.
+PERF_BUNDLE_ID = "dev.candywrapper.perf"
+# The thread cache likewise: dev runs fill the shared one from the live sandbox, which has drifted from the
+# frozen dataset. This one only ever sees the perf server, so after the first launch it is warm and stable.
+PERF_THREAD_CACHE = os.path.join(os.path.dirname(SANDBOX), "perf-thread-cache-w%d" % WORKLOAD)
 DEMO_PID_FILE = "/tmp/cw-demo.pid"
 IDLE_THREAD = "Reply with one word: candy"
 BIG_THREAD = "Numbers 1 to 1000"
@@ -136,7 +143,8 @@ def build_app(src, sha):
     log("building Release app (log %s)" % build_log)
     with open(build_log, "w") as f:
         rc = subprocess.call(["xcodebuild", "-project", src + "/CandyWrapper.xcodeproj", "-scheme", "CandyWrapper",
-                              "-configuration", "Release", "-derivedDataPath", dd, "build"], stdout=f, stderr=subprocess.STDOUT)
+                              "-configuration", "Release", "-derivedDataPath", dd, "PRODUCT_BUNDLE_IDENTIFIER=" + PERF_BUNDLE_ID, "build"],
+                             stdout=f, stderr=subprocess.STDOUT)
     if rc != 0:
         sys.exit("perf-review: build failed, see " + build_log)
     return dd + "/Build/Products/Release/CandyWrapper.app"
@@ -312,7 +320,9 @@ class App:
     def __init__(self, app_path, extra_args, tag, env_extra=None):
         self.log_path = "%s/app-%s.log" % (WORK, tag)
         before = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
-        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", **(env_extra or {}))
+        subprocess.call(["defaults", "delete", PERF_BUNDLE_ID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", CANDY_THREAD_CACHE=PERF_THREAD_CACHE)
+        env.update(env_extra or {})
         self.proc = subprocess.Popen([REPO + "/scripts/run-app", "--server", SERVER, "--token-file", TOKEN, "--fake-t3-connect"] + extra_args,
                                      env=env, stdout=open(self.log_path, "w"), stderr=subprocess.STDOUT, start_new_session=True)
         self.pid = None
