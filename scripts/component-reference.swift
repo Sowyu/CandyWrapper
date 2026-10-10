@@ -133,7 +133,17 @@ for theme in themes {
     try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
     await sleep(1)
     _ = try await evaluate("document.fonts.ready.then(() => true)")
-    if let prepare = spec["prepare"] as? String, let result = try await evaluate(prepare) { print("prepare (\(theme)): \(result)") }
+    if let prepare = spec["prepare"] as? String {
+        // The first import of T3's client chunks in a fresh profile can navigate the page, which
+        // drops the evaluation. Reload once and run it again.
+        var result = try await evaluate(prepare)
+        if result == nil {
+            try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
+            await sleep(1)
+            result = try await evaluate(prepare)
+        }
+        print("prepare (\(theme)): \(result ?? "no result")")
+    }
     let docHeight = try await evaluate("document.documentElement.scrollHeight") as? Double ?? 900
     try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": Int(docHeight), "deviceScaleFactor": scale, "mobile": false])
     try await settle()

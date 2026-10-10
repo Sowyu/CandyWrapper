@@ -43,6 +43,8 @@ public final class ButtonView: ControlView {
     public var trailingIcon: IconName? { didSet { updateIcons() } }
     /// An explicit icon class such as `size-3`, which beats the size's default icon size.
     public var iconSize: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// Replaces the variant's icon color, for icons with their own `text-*` class.
+    public var iconColor: NSColor? { didSet { restyle() } }
     /// Set by GroupView: a joined side loses its radius and its border (`rounded-s-none border-s-0`).
     public var joinedSides: (leading: Bool, trailing: Bool) = (false, false) {
         didSet { restyle(); invalidateIntrinsicContentSize() }
@@ -156,7 +158,7 @@ public final class ButtonView: ControlView {
         decoration.boxStyle = look.box
         label.color = look.text
         for iconView in [leadingIconView, trailingIconView].compactMap({ $0 }) {
-            iconView.strokeColor = look.icon
+            iconView.strokeColor = iconColor ?? look.icon
         }
         if variant == .link {
             label.isUnderlined = state.hoverOrPressed
