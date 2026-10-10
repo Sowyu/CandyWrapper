@@ -1,0 +1,127 @@
+{
+ "component": "sidebar-search",
+ "source": "apps/web/src/components/Sidebar.tsx",
+ "states": [
+  "rest",
+  "hover"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "result",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li role=\"presentation\" class=\"list-none\"><button type=\"button\" role=\"option\" class=\"flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1 text-left text-sm outline-none text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"flex min-w-0 flex-1 flex-col\"><span class=\"flex min-w-0 items-center gap-2.5\"><span class=\"min-w-0 flex-1 truncate\">Reply with markdown containing a table</span><span class=\"shrink-0 text-xs text-muted-foreground/55 tabular-nums\">18m</span></span></span></button></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "result",
+    "title": "Reply with markdown containing a table",
+    "time": "18m"
+   },
+   "stateTarget": "button"
+  },
+  {
+   "name": "result.highlighted",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li role=\"presentation\" class=\"list-none\"><button type=\"button\" role=\"option\" class=\"flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1 text-left text-sm outline-none bg-sidebar-row-active text-sidebar-foreground\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"flex min-w-0 flex-1 flex-col\"><span class=\"flex min-w-0 items-center gap-2.5\"><span class=\"min-w-0 flex-1 truncate\">Reply with markdown containing a table</span><span class=\"shrink-0 text-xs text-muted-foreground/55 tabular-nums\">18m</span></span></span></button></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "result",
+    "title": "Reply with markdown containing a table",
+    "time": "18m",
+    "highlighted": "true"
+   }
+  },
+  {
+   "name": "result.user-match",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li role=\"presentation\" class=\"list-none\"><button type=\"button\" role=\"option\" class=\"flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1 text-left text-sm outline-none text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"flex min-w-0 flex-1 flex-col\"><span class=\"flex min-w-0 items-center gap-2.5\"><span class=\"min-w-0 flex-1 truncate\">Plan a migration</span><span class=\"shrink-0 text-xs text-muted-foreground/55 tabular-nums\">16m</span></span><span class=\"truncate text-xs text-muted-foreground/85\"><span class=\"text-info-foreground\">You:</span> move the <mark class=\"bg-transparent font-semibold text-foreground\">zero trust</mark> policies</span></span></button></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "result",
+    "title": "Plan a migration",
+    "time": "16m",
+    "source": "user",
+    "snippet": "move the zero trust policies",
+    "query": "zero trust"
+   },
+   "stateTarget": "button"
+  },
+  {
+   "name": "result.agent-match",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li role=\"presentation\" class=\"list-none\"><button type=\"button\" role=\"option\" class=\"flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1 text-left text-sm outline-none bg-sidebar-row-active text-sidebar-foreground\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"flex min-w-0 flex-1 flex-col\"><span class=\"flex min-w-0 items-center gap-2.5\"><span class=\"min-w-0 flex-1 truncate\">Write a story</span><span class=\"shrink-0 text-xs text-muted-foreground/55 tabular-nums\">2m</span></span><span class=\"truncate text-xs text-muted-foreground/85\"><span class=\"text-success-foreground\">Agent:</span> The <mark class=\"bg-transparent font-semibold text-foreground\">lighthouse</mark> keeper climbed</span></span></button></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "result",
+    "title": "Write a story",
+    "time": "2m",
+    "source": "assistant",
+    "snippet": "The lighthouse keeper climbed",
+    "query": "lighthouse",
+    "highlighted": "true"
+   }
+  },
+  {
+   "name": "draft",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li class=\"list-none py-0.5\"><div role=\"button\" tabindex=\"0\" data-testid=\"sidebar-draft-row\" class=\"group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring bg-warning/4 hover:bg-warning/8\"><span class=\"sr-only\">Add a dark mode toggle to the settings page</span><div class=\"relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)\"><div class=\"flex h-5 min-w-0 items-center gap-1.5\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3 shrink-0 text-warning-foreground\"><path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"></path><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"></path></svg><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"min-w-0 flex-1 truncate text-xs font-medium text-secondary-label\">demo-repo</span><span class=\"ml-auto flex h-5 min-w-5 shrink-0 items-center justify-end\"><button type=\"button\" aria-label=\"Discard draft\" class=\"pointer-events-none inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/sidebar-row:pointer-events-auto group-hover/sidebar-row:opacity-100\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg></button></span></div><div aria-hidden=\"true\" class=\"mt-0.5 truncate text-sm font-medium text-foreground/90\">Add a dark mode toggle to the settings page</div></div></div></li><li aria-hidden=\"true\" data-testid=\"sidebar-draft-divider\" class=\"mx-2.5 my-1.5 h-px list-none bg-sidebar-border/60\"></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "draft",
+    "project": "demo-repo",
+    "preview": "Add a dark mode toggle to the settings page",
+    "divider": "true"
+   },
+   "stateTarget": "[data-testid=sidebar-draft-row]"
+  },
+  {
+   "name": "draft.active",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><ul class=\"flex flex-col gap-px\"><li class=\"list-none py-0.5\"><div role=\"button\" tabindex=\"0\" data-testid=\"sidebar-draft-row\" class=\"group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring bg-sidebar-row-active\"><span class=\"sr-only\">Add a dark mode toggle</span><div class=\"relative z-10 h-[4.875rem] px-(--sidebar-row-content-inset) py-(--sidebar-content-inset)\"><div class=\"flex h-5 min-w-0 items-center gap-1.5\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3 shrink-0 text-warning-foreground\"><path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"></path><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"></path></svg><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"min-w-0 flex-1 truncate text-xs font-medium text-secondary-label\">demo-repo</span><span class=\"ml-auto flex h-5 min-w-5 shrink-0 items-center justify-end\"><button type=\"button\" aria-label=\"Discard draft\" class=\"pointer-events-none inline-flex cursor-pointer items-center rounded-md bg-transparent px-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/sidebar-row:pointer-events-auto group-hover/sidebar-row:opacity-100\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg></button></span></div><div aria-hidden=\"true\" class=\"mt-0.5 truncate text-sm font-medium text-foreground/90\">Add a dark mode toggle</div></div></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "draft",
+    "project": "demo-repo",
+    "preview": "Add a dark mode toggle",
+    "active": "true"
+   }
+  },
+  {
+   "name": "status.search",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><p role=\"status\" class=\"px-2 py-6 text-center text-xs text-sidebar-muted-foreground\">No threads found</p></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "status",
+    "text": "No threads found",
+    "search": "true"
+   }
+  },
+  {
+   "name": "status.empty",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60\">No threads in demo-repo yet</div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "status",
+    "text": "No threads in demo-repo yet"
+   }
+  },
+  {
+   "name": "scope.all",
+   "html": "<span class=\"dropdown-glass relative flex max-h-full origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] max-w-[min(18rem,var(--available-width))] overflow-hidden\" style=\"width:200px\"><div class=\"flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground\" data-slot=\"combobox-popup\"><div class=\"min-w-0 shrink-0 px-3 pt-2.5\"><div class=\"relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg><div class=\"relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-64 [&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5\"><span class=\"rounded-none bg-transparent text-sm\" data-size=\"sm\" data-slot=\"input-control\"><input class=\"h-7.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(2.5)-1px)] leading-7.5 outline-none placeholder:text-placeholder sm:h-6.5 sm:leading-6.5 [transition:background-color_5000000s_ease-in-out_0s]\" data-slot=\"input\" placeholder=\"Search projects...\" value=\"\"></span></div></div></div><div class=\"not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1\" data-slot=\"combobox-list\"><div role=\"option\" data-slot=\"combobox-item\" class=\"flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0\" data-selected=\"\"><div class=\"flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*='text-'])]:text-muted-foreground\" data-slot=\"combobox-item-content\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-4 shrink-0\"><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path></svg><span class=\"min-w-0 flex-1 truncate text-sm\">All projects</span></div></div><div role=\"option\" data-slot=\"combobox-item\" class=\"flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0\" data-highlighted=\"\"><div class=\"flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*='text-'])]:text-muted-foreground\" data-slot=\"combobox-item-content\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-yellow-600 dark:text-yellow-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">DR</text></svg></span><span class=\"min-w-0 flex-1 truncate text-sm\">demo-repo</span><button type=\"button\" tabindex=\"-1\" aria-hidden=\"true\" class=\"[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--control-radius)] border font-medium text-base outline-none transition-[box-shadow,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:text-sm [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 border-transparent text-muted-foreground data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground size-7 sm:size-6 not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-4 sm:not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-3.5 ml-auto\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3.5\"><path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"></path><circle cx=\"12\" cy=\"12\" r=\"3\"></circle></svg></button></div></div><div role=\"option\" data-slot=\"combobox-item\" class=\"flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0\"><div class=\"flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*='text-'])]:text-muted-foreground\" data-slot=\"combobox-item-content\"><span aria-hidden=\"true\" class=\"inline-flex size-4 shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-gray-600 dark:text-gray-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">CR</text></svg></span><span class=\"min-w-0 flex-1 truncate text-sm\">candywrapper</span><button type=\"button\" tabindex=\"-1\" aria-hidden=\"true\" class=\"[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--control-radius)] border font-medium text-base outline-none transition-[box-shadow,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:text-sm [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 border-transparent text-muted-foreground data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground size-7 sm:size-6 not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-4 sm:not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-3.5 ml-auto\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"size-3.5\"><path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"></path><circle cx=\"12\" cy=\"12\" r=\"3\"></circle></svg></button></div></div></div></div></span>",
+   "wrapperStyle": "display:inline-block",
+   "native": {
+    "kind": "scope",
+    "query": "",
+    "selected": "",
+    "highlighted": "1"
+   }
+  },
+  {
+   "name": "scope.empty",
+   "html": "<span class=\"dropdown-glass relative flex max-h-full origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] max-w-[min(18rem,var(--available-width))] overflow-hidden\" style=\"width:200px\"><div class=\"flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground\" data-slot=\"combobox-popup\"><div class=\"min-w-0 shrink-0 px-3 pt-2.5\"><div class=\"relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" class=\"pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg><div class=\"relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-64 [&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5\"><span class=\"rounded-none bg-transparent text-sm\" data-size=\"sm\" data-slot=\"input-control\"><input class=\"h-7.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(2.5)-1px)] leading-7.5 outline-none placeholder:text-placeholder sm:h-6.5 sm:leading-6.5 [transition:background-color_5000000s_ease-in-out_0s]\" data-slot=\"input\" placeholder=\"Search projects...\" value=\"zzz\"></span></div></div></div><div class=\"not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm\" data-slot=\"combobox-empty\">No matching projects.</div></div></span>",
+   "wrapperStyle": "display:inline-block",
+   "native": {
+    "kind": "scope",
+    "query": "zzz",
+    "selected": ""
+   }
+  }
+ ]
+}

@@ -171,6 +171,19 @@ final class ThreadController {
         composer = ComposerController(panel: panel, sidebar: sidebar)
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
+        sidebar.actions.openDraft = { [weak self] id in
+            guard let self, composer.openDraft(id) else { return }
+            session?.end()
+            session = nil
+        }
+        sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
+        sidebar.actions.searchThreads = { [weak self] query in
+            guard let supervisor = self?.shell?.supervisor,
+                  let json = try? await supervisor.request("orchestration.searchThreads", payload: .object(["query": .string(query)]))
+            else { return nil }
+            return (try? json.decode(as: ThreadSearchResult.self))?.matches
+        }
+        sidebar.scopeDefaults = .standard
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }

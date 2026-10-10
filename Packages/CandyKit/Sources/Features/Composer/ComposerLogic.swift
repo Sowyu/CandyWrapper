@@ -54,6 +54,7 @@ public enum ComposerLogic {
         public var questionChoiceOnly: Bool?
         public var projectRequired = false
         public var noProvider = false
+        /// T3's session phase `disconnected`: the thread has no runtime yet (a draft or an unstarted thread).
         public var disconnected = false
         public init(approvalPending: Bool = false, questionChoiceOnly: Bool? = nil, projectRequired: Bool = false,
                     noProvider: Bool = false, disconnected: Bool = false) {

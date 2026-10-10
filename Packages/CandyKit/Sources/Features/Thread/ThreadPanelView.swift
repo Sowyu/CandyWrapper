@@ -90,6 +90,10 @@ public final class ThreadPanelView: DSView {
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
+    /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
+    public let errorBanner = ThreadErrorBannerView()
+    /// T3's top-right toast stack (`ToastProvider`), placed against the window, above everything.
+    public let toasts = ToastViewport()
     /// Showing the new-thread draft page instead of a thread.
     public private(set) var isDraft = false
     private var composerShown = false
@@ -146,12 +150,15 @@ public final class ThreadPanelView: DSView {
             guard let self else { return }
             self.timeline.setItems(self.model.items)
         }
+        // Banners overlay the timeline without changing its content height (`z-20`).
+        addSubview(errorBanner)
         rightPanel.isHidden = true
         addSubview(rightPanel)
         maximize.setAccessibilityLabel("Maximize panel")
         maximize.isHidden = true
         maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
         addSubview(maximize)
+        addSubview(toasts)
         header.toggles[2].onPressedChange = { [weak self] _ in self?.userSetRightPanel(!(self?.rightPanelOpen ?? true)) }
         rightPanel.tab.close.action = { [weak self] in self?.userSetRightPanel(false) }
         model.onOpenTurnDiff = { [weak self] run, path in
@@ -335,10 +342,24 @@ public final class ThreadPanelView: DSView {
             }
         }
         layoutComposer(chat: chat)
+        // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
+        if !errorBanner.isHidden {
+            let w = errorBanner.fittingWidth(max: max(0, min(768, chat - 32)))
+            let h = errorBanner.height(forWidth: w)
+            errorBanner.frame = NSRect(x: ((chat - w) / 2).rounded(), y: ThreadHeaderView.height + 12, width: w, height: h)
+        }
+        if let content = window?.contentView {
+            toasts.frame = convert(ToastViewport.frame(in: content.bounds), from: content)
+        } else {
+            toasts.frame = ToastViewport.frame(in: bounds)
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        // The last 6px column (the scrollbar) stays unmasked.
+        // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
         fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
+        fade.isHidden = !errorBanner.isHidden
+        errorBanner.layer?.zPosition = 2
+        toasts.layer?.zPosition = 3
         CATransaction.commit()
     }
 }

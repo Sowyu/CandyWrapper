@@ -27,6 +27,11 @@ public final class SidebarListView: DSView {
     var onOpen: (@MainActor (ThreadId) -> Void)?
     var onToggleShelf: (@MainActor (SidebarShelf) -> Void)?
     var onShowMore: (@MainActor () -> Void)?
+    var onOpenDraft: (@MainActor (String) -> Void)?
+    var onDiscardDraft: (@MainActor (String) -> Void)?
+    var onOpenSearchResult: (@MainActor (ThreadId) -> Void)?
+    /// The pointer moved over a search result (`onMouseMove` highlights it).
+    var onHighlightSearchResult: (@MainActor (Int) -> Void)?
     var rowActions = SidebarRowActions()
     var onVisibleRowsChange: (@MainActor () -> Void)?
 
@@ -191,6 +196,16 @@ public final class SidebarListView: DSView {
             shelf.onToggle = { [weak self] in self?.onToggleShelf?($0) }
             view = shelf
         case .showMore: view = SidebarShowMoreRowView()
+        case .draft:
+            let draft = SidebarDraftRowView()
+            draft.onDiscard = { [weak self] id in self?.onDiscardDraft?(id) }
+            view = draft
+        case .divider: view = SidebarDividerRowView()
+        case .searchResult:
+            let result = SidebarSearchResultRowView()
+            result.onHover = { [weak self] index in self?.onHighlightSearchResult?(index) }
+            view = result
+        case .emptyText: view = SidebarEmptyTextRowView()
         }
         view.onOpen = { [weak self, weak view] in
             guard let self, let item = view?.item else { return }
@@ -309,12 +324,13 @@ public final class SidebarListView: DSView {
 
     func moveFocus(_ delta: Int) {
         guard !items.isEmpty else { return }
-        let current = focusedKey.flatMap { indexByKey[$0] } ?? (delta > 0 ? -1 : items.count)
-        focus(index: min(items.count - 1, max(0, current + delta)))
+        var i = focusedKey.flatMap { indexByKey[$0] } ?? (delta > 0 ? -1 : items.count)
+        repeat { i += delta } while items.indices.contains(i) && !items[i].isFocusable
+        if items.indices.contains(i) { focus(index: i) }
     }
 
     func focus(index: Int) {
-        guard items.indices.contains(index) else { return }
+        guard items.indices.contains(index), items[index].isFocusable else { return }
         setFocusedKey(items[index].key)
         scrollToVisible(frame(at: index).insetBy(dx: 0, dy: -4))
         tile(oldTops: nil)
@@ -331,7 +347,17 @@ public final class SidebarListView: DSView {
         case .row(let r): onOpen?(r.id)
         case .shelfHeader(let shelf, _, _): onToggleShelf?(shelf)
         case .showMore: onShowMore?()
+        case .draft(let d): onOpenDraft?(d.id)
+        case .searchResult(let r): onOpenSearchResult?(r.id)
+        case .draftDivider, .emptyText: break
         }
+    }
+
+    /// The frame of the item with this key, for scrolling a search highlight into view.
+    func scrollItemToVisible(_ key: String) {
+        guard let i = indexByKey[key] else { return }
+        scrollToVisible(frame(at: i))
+        tile(oldTops: nil)
     }
 
     /// The row view for a key if it is laid out (tests, previews).

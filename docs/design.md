@@ -82,6 +82,7 @@ Each row is diffed against T3's own markup in Chromium at 2x in light and dark, 
 | sidebar.tsx (SidebarMenuButton) | SidebarMenuButton | 60 | 0.72% |
 | sidebar.tsx (sub-menus) | SidebarMenuButton (sub) | 2 | 0.93% |
 | sidebar.tsx (container, rail, trigger) | SidebarView | behaviour tests | width limits and persistence |
+| Sidebar.tsx search result, draft rows, status lines; project scope combobox | SidebarSearchResultRowView, SidebarDraftRowView, SidebarEmptyTextRowView, SidebarProjectScopeView (Features/Sidebar) | 26 | 2.09% (spec `scripts/gen-sidebar-search-spec.py`) |
 | Sidebar grain (index.css) | SidebarGrain | crop vs real capture | mean 248.79 vs 248.78 light, 3.26 vs 3.29 dark |
 | command.tsx | CommandPaletteView | 8 | 0.99% (items) |
 | color-picker.tsx | ColorPickerView | 8 | 1.17% (hue slider) |

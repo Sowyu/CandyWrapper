@@ -86,6 +86,10 @@ public final class ComposerView: DSView {
     /// A question is open: Return or the pill moves to the next question or submits.
     public var onQuestionAdvance: (() -> Void)?
     public var onQuestionPrevious: (() -> Void)?
+    /// The open thread's timeline messages, read on ArrowUp or ArrowDown for prompt history.
+    public var historyMessages: (() -> [PromptHistory.Message])?
+    /// The active prompt-history recall (`promptHistoryPositionRef`).
+    private var historyPosition: PromptHistory.Position?
 
     public var text: String {
         get { editor.string }
@@ -195,6 +199,7 @@ public final class ComposerView: DSView {
 
         editor.onTextChange = { [weak self] in self?.textChanged() }
         editor.onSubmitKey = { [weak self] key in self?.submitKey(key) ?? false }
+        editor.onHistoryKey = { [weak self] backward in self?.navigateHistory(backward: backward) ?? false }
         editor.onModifierChange = { [weak self] held in
             guard let self, held != alternateHeld else { return }
             alternateHeld = held
@@ -278,7 +283,25 @@ public final class ComposerView: DSView {
         }
     }
 
+    /// The composer's target changed (thread, draft, queued edit): a recall from the old one is not active here.
+    public func resetPromptHistory() { historyPosition = nil }
+
+    /// `navigatePromptHistory` (ChatComposer.tsx:4393-4436).
+    private func navigateHistory(backward: Bool) -> Bool {
+        if pending != .none { return false }
+        if historyPosition == nil, !editor.string.isEmpty { return false }
+        guard editor.isCaretOnVisualEdge(start: backward), let messages = historyMessages?() else { return false }
+        guard let step = PromptHistory.step(backward ? .backward : .forward, entries: PromptHistory.entries(messages),
+                                            position: historyPosition, currentPrompt: editor.string) else { return false }
+        historyPosition = step.position
+        editor.setText(step.prompt)
+        editor.scrollRangeToVisible(editor.selectedRange())
+        return true
+    }
+
     private func textChanged() {
+        // Any edit ends browsing, even one later undone by hand.
+        if historyPosition?.recalled != editor.string { historyPosition = nil }
         placeholder.isHidden = !editor.string.isEmpty
         refresh()
         relayoutHeight()
