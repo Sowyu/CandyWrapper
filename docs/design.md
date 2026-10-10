@@ -112,7 +112,7 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 
 | T3 | CandyWrapper | Where |
 |---|---|---|
-| `NightlySkyArt` behind the sidebar header on Nightly servers | The teddy-and-milk corner of "Candy Town" by Aya_Lu ([Pixabay](https://pixabay.com/illustrations/candy-town-city-buildings-8579300/), Pixabay Content License) as a duotone: #2a1240 to #ffc4df under a plum #3a1a52 title and toggle in dark mode, #22103a to #dc8fbd under a white title and toggle in light mode. Chosen 2026-10-10. `scripts/gen-candy-art.swift` bakes the 8-bit luma from the 1280px public download; the app maps it and paints the duotone | `StageBackdropView`, `SidebarBrandView`, `SidebarTriggerView.mediaTint` |
+| `NightlySkyArt` behind the sidebar header on Nightly servers | The teddy-and-milk corner of "Candy Town" by Aya_Lu ([Pixabay](https://pixabay.com/illustrations/candy-town-city-buildings-8579300/), Pixabay Content License) as a duotone under a white title and toggle: #170a26 to #a45e8c in dark mode, #22103a to #dc8fbd in light mode. Chosen 2026-10-10; the first dark palette (#2a1240 to #ffc4df, plum title) was too light for dark mode. `scripts/gen-candy-art.swift` bakes the 8-bit luma from the 1280px public download; the app maps it and paints the duotone | `StageBackdropView`, `SidebarBrandView`, `SidebarTriggerView.mediaTint` |
 | `StageBackdropButtonArt`: the Nightly sky in the send button | The teddy from the same art, a circle of 196 source pixels with both ears in and its face above the arrow. The duotone follows the sidebar (light art in dark mode, deeper art in light mode); the arrow stays white with a soft plum halo. Chosen 2026-10-10 | `StageBackdropView.compact`, `ComposerPrimaryButton` |
 
 ## Known gaps
