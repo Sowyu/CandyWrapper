@@ -1,0 +1,26 @@
+{
+  "chips" : {
+    "height" : 22.75,
+    "width" : 560
+  },
+  "empty" : {
+    "height" : 75,
+    "width" : 692
+  },
+  "mention" : {
+    "height" : 145,
+    "width" : 692
+  },
+  "pull-request" : {
+    "height" : 89,
+    "width" : 692
+  },
+  "skill" : {
+    "height" : 93,
+    "width" : 692
+  },
+  "slash" : {
+    "height" : 147,
+    "width" : 692
+  }
+}
