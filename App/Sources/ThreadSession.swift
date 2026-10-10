@@ -175,6 +175,8 @@ final class ThreadController {
             MainActor.assumeIsolated { self?.close() }
         }
         panel.onRightPanelChange = { [weak self] open in self?.rememberRightPanel(open) }
+        // Nothing to show until the shell arrives; T3's index route renders nothing before bootstrap.
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         // Cmd+D is T3's `diff.toggle` (a web keydown handler, not a menu item in the desktop app).
         // ponytail: the default binding only; read the user's keybindings from server config in M7
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
@@ -253,7 +255,8 @@ final class ThreadController {
         session = nil
     }
 
-    /// Opens the `--open-thread` match or the remembered thread with the first shell that lists it.
+    /// With the first shell: opens the `--open-thread` match or the remembered thread, else lands
+    /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
     private func shellChanged(_ snapshot: ShellSnapshot) {
         if let prefix = openPrefix, let match = snapshot.threads.first(where: { $0.title.hasPrefix(prefix) }) {
             openPrefix = nil
@@ -263,8 +266,12 @@ final class ThreadController {
         }
         guard !restored, openPrefix == nil else { return }
         restored = true
-        guard session == nil, let lastThreadKey, let raw = UserDefaults.standard.string(forKey: lastThreadKey),
-              snapshot.threads.contains(where: { $0.id.rawValue == raw }) else { return }
-        open(ThreadId(raw))
+        guard session == nil, !panel.isDraft else { return }
+        if let lastThreadKey, let raw = UserDefaults.standard.string(forKey: lastThreadKey),
+           snapshot.threads.contains(where: { $0.id.rawValue == raw }) {
+            open(ThreadId(raw))
+        } else if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
+            _ = composer.newThread(in: project)
+        }
     }
 }
