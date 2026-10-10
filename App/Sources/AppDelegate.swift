@@ -151,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered, defer: false)
             window.title = "Component Gallery"
             window.isReleasedWhenClosed = false
-            ComponentGallery.extraSections = [MarkdownGallery.section] + DiffGallery.sections
+            ComponentGallery.extraSections = [MarkdownGallery.section] + DiffGallery.sections + PickersGallery.sections
             window.contentView = ComponentGallery.makeView()
             window.center()
             galleryWindow = window

@@ -22,9 +22,9 @@ public final class InputView: FieldView {
     public var size: Size = .default { didSet { configure() } }
     public var fontStyle: Font = .default { didSet { configure() } }
     /// `unstyled`: no frame. InputGroup draws it instead.
-    var unstyled = false { didSet { dimsWhenDisabled = !unstyled; restyle(); invalidateIntrinsicContentSize() } }
+    public var unstyled = false { didSet { dimsWhenDisabled = !unstyled; restyle(); invalidateIntrinsicContentSize() } }
     /// Extra inline padding InputGroup sets next to addons (`ps-2` / `pe-2`), replacing the size padding.
-    var paddingOverride: (leading: CGFloat?, trailing: CGFloat?) = (nil, nil) { didSet { needsLayout = true } }
+    public var paddingOverride: (leading: CGFloat?, trailing: CGFloat?) = (nil, nil) { didSet { needsLayout = true } }
 
     /// DraftInput: called with the value on Return or when focus leaves.
     public final var onCommit: (@MainActor (String) -> Void)?

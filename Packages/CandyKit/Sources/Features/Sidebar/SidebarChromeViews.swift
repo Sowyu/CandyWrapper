@@ -28,6 +28,8 @@ public enum SidebarStage: Sendable {
 // ponytail: Dev blueprint art is not drawn; port DevBlueprintArt if dev builds need it
 final class StageBackdropView: DSView {
     override var wantsUpdateLayer: Bool { false }
+    /// `StageBackdropButtonArt` (the send button): viewBox from x 96, no fade or mask.
+    var compact = false { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -58,7 +60,8 @@ final class StageBackdropView: DSView {
         ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
         ctx.saveGState()
         ctx.scaleBy(x: s, y: s)
-        let unitsW = w / s
+        if compact { ctx.translateBy(x: -96, y: 0) }
+        let unitsW = w / s + (compact ? 96 : 0)
         // The star tiles below are whole 288-unit tiles; without this the last one spills past
         // the sidebar wherever the context isn't clipped to the view (layer.render(in:)).
         ctx.clip(to: CGRect(x: 0, y: 0, width: unitsW, height: 96))
@@ -125,6 +128,11 @@ final class StageBackdropView: DSView {
             ctx.restoreGState()
         }
         ctx.restoreGState()
+        if compact {
+            ctx.endTransparencyLayer()
+            ctx.restoreGState()
+            return
+        }
         // ::after fade to --sidebar-stage-fade.
         let fade = SB.c(\.sidebarStageFade).cgColor(in: self)
         let stops: [(CGFloat, CGFloat)] = [(0, 0), (0.28, 0), (0.40, 0.1), (0.52, 0.3), (0.64, 0.58), (0.75, 0.82), (0.85, 0.96), (0.93, 1)]

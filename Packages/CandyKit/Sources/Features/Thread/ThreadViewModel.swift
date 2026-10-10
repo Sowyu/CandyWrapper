@@ -90,8 +90,22 @@ public final class ThreadViewModel {
         derive()
     }
 
+    /// Sent user messages the stream hasn't confirmed yet (`optimisticMessages`, ChatView.tsx:9763-9784).
+    /// Shown after the server's rows until the projection carries their id; queued ones stay hidden
+    /// (session-logic.ts:792-802).
+    public var optimisticMessages: [ChatMessage] = [] {
+        didSet { if optimisticMessages != oldValue { derive() } }
+    }
+
     private func derive() {
-        let rows = input.map(TimelineRows.derive) ?? []
+        var source = input
+        let confirmed = Set(projection?.messages.map(\.id) ?? [])
+        let pending = optimisticMessages.filter { $0.inputIntent != .queuedTurn && !confirmed.contains($0.id) }
+        if !pending.isEmpty {
+            if source == nil { source = TimelineRowsInput(entries: []) }
+            source?.entries += pending.map { TimelineEntry.message($0.id.rawValue, $0) }
+        }
+        let rows = source.map(TimelineRows.derive) ?? []
         items = rows.map { row in
             var ui = TimelineRowUI()
             switch row.kind {

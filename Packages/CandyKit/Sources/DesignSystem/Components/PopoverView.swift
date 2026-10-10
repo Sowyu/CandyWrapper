@@ -21,7 +21,8 @@ public final class PopoverView: DSView, PopupContent {
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
 
-    public init(content: NSView, padding: Padding = .default, width: Width = .auto) {
+    /// `beforeLine` false is `before:hidden` (the model picker, Select popups).
+    public init(content: NSView, padding: Padding = .default, width: Width = .auto, beforeLine: Bool = true) {
         self.content = content
         self.padding = padding
         self.width = width
@@ -31,7 +32,7 @@ public final class PopoverView: DSView, PopupContent {
         layer?.addSublayer(dropShadow)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
-        let look = PopupSurface.glass.split(radius: 10, beforeLine: true)
+        let look = PopupSurface.glass.split(radius: 10, beforeLine: beforeLine)
         decoration.boxStyle = look.box
         dropShadow.radius = 10
         dropShadow.shadows = look.shadows

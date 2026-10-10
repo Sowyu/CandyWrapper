@@ -19,6 +19,8 @@ final class ThreadSession {
     private var historyLoad: Task<Void, Never>?
     /// False once another thread took the panel.
     private var active = true
+    /// After each projection the panel shows (the composer reads runs and requests from it).
+    var onProjection: ((ThreadProjection?) -> Void)?
 
     init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?) {
         self.threadId = threadId
@@ -67,6 +69,7 @@ final class ThreadSession {
         guard let update = await store.takeUpdate(), active, let panel else { return }
         let (projectTitle, workspaceRoot) = place(update.projection)
         panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
+        onProjection?(update.projection)
     }
 
     /// Project title and workspace root from the shell (the worktree when the thread has one).
@@ -131,6 +134,7 @@ final class ThreadSession {
 @MainActor
 final class ThreadController {
     let panel = ThreadPanelView()
+    private(set) var composer: ComposerController!
     private weak var sidebar: SidebarContentView?
     private var session: ThreadSession?
     private var shell: ShellSession?
@@ -147,6 +151,9 @@ final class ThreadController {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open-thread"), i + 1 < args.count { openPrefix = args[i + 1] }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
+        composer = ComposerController(panel: panel, sidebar: sidebar)
+        composer.openThread = { [weak self] id in self?.open(id) }
+        sidebar.actions.newThread = { [weak self] in self?.newThread() }
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }
@@ -182,6 +189,7 @@ final class ThreadController {
 
     /// The app's current shell session, or nil while there is none. `environment` keys the remembered thread.
     func follow(_ shell: ShellSession?, environment: String?) {
+        composer.follow(shell, environment: shell == nil ? self.environment : environment)
         guard let shell else { session?.detach(); self.shell = nil; return }
         if environment != self.environment { restored = false }
         self.shell = shell
@@ -198,17 +206,29 @@ final class ThreadController {
     func open(_ id: ThreadId) {
         sidebar?.state.activeThreadId = id
         if let lastThreadKey { UserDefaults.standard.set(id.rawValue, forKey: lastThreadKey) }
-        guard id != session?.threadId else { return }
+        guard id != session?.threadId || panel.isDraft else { return }
         session?.end()
+        panel.setDraft(projectTitle: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        composer.showThread(id)
         panel.setRightPanelOpen(rightPanelWasOpen(id))
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar)
+        session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
         if let shell { session.attach(shell) }
         self.session = session
         if openDiff {
             openDiff = false
             panel.opensChangedTurnOnLoad = true
         }
+    }
+
+    /// The sidebar's new-thread button: the draft page for the open thread's project.
+    // ponytail: no projects means no draft; T3 shows "Add a project to start" there
+    func newThread() {
+        let previous = session
+        guard composer.newThread() else { return }
+        previous?.end()
+        session = nil
     }
 
     func close() {
