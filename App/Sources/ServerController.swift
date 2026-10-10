@@ -82,8 +82,11 @@ final class ServerController {
         case .owned(let server):
             return (server.origin, server.descriptor.environmentId, server.accessToken)
         case .reused(let server):
-            let id = server.descriptor.environmentId
-            if let token = try? credentials.load(environmentId: id) { return (server.origin, id, token) }
+            let id = server.descriptor.environmentId, credentials = self.credentials
+            // Off the main thread: a Keychain access prompt blocks the caller until it's answered.
+            if let token = await Task.detached(operation: { try? credentials.load(environmentId: id) }).value {
+                return (server.origin, id, token)
+            }
             guard let token = await pair(with: server) else { return nil }
             return (server.origin, id, token)
         }
@@ -106,7 +109,8 @@ final class ServerController {
             guard let binary = LocalServerDiscovery.resolveBinary(home: home, path: Self.userPath) else { throw Self.notInstalled }
             let code = try await LocalServerLauncher.mintPairingCode(binary: binary, home: home, path: Self.userPath)
             let (_, result) = try await EnvironmentHTTP(baseURL: server.origin).pair(code: code, identity: identity)
-            try? credentials.save(token: result.accessToken, environmentId: server.descriptor.environmentId)
+            let credentials = self.credentials, id = server.descriptor.environmentId
+            await Task.detached { try? credentials.save(token: result.accessToken, environmentId: id) }.value
             return result.accessToken
         } catch {
             present(error)

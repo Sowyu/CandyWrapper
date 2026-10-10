@@ -4,9 +4,9 @@ Update this file at the end of every work session. Newest log entry first.
 
 ## Current milestone
 
-Milestone 3, skeleton: connect to a T3 server and show real projects and threads in the sidebar. Milestone 2 was signed off by the user on 2026-10-09 after reviewing `../CandyWrapper-research/review/m2/index.html`.
+Milestone 4, read-only thread view: open a thread from the sidebar and show its real history (messages, markdown, tool cards, diffs) in a virtualized timeline. Milestone 3 was accepted by the user on 2026-10-10 ("the sidebar looks awesome") after the live demo.
 
-Next action: get the user's verdict on the M3 demo (CandyWrapper paired with their live T3 on 2026-10-10). Then the open M3 items: connection status display, custom URL plus pairing link, the media-navigation sidebar toggle.
+Next action: when the research notes `docs/research/G-timeline-data.md` and `H-timeline-visuals.md` are done, start WP1 and WP2 of the Milestone 4 checklist.
 
 ## Milestones
 
@@ -14,8 +14,8 @@ Next action: get the user's verdict on the M3 demo (CandyWrapper paired with the
 |---|---|---|
 | 1 | Research: protocol, parity checklist, reference screenshots, baseline benchmarks | done, accepted 2026-10-09 |
 | 2 | Design system and component gallery, user sign-off | done, signed off 2026-10-09 |
-| 3 | Skeleton: connect to server, sidebar shows real data | in progress |
-| 4 | Read-only thread view | not started |
+| 3 | Skeleton: connect to server, sidebar shows real data | done, accepted 2026-10-10 |
+| 4 | Read-only thread view | in progress |
 | 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | not started |
 | 6 | T3 Connect | not started |
 | 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
@@ -39,16 +39,27 @@ Next action: get the user's verdict on the M3 demo (CandyWrapper paired with the
 - [x] Official desktop app baseline in `docs/benchmarks.md`: cold launch about 3.4 s to sidebar data, idle 2.6% CPU, 88 interrupt wakeups/s, Energy Impact 4.29, 544 MB, bundle 366 MB. Streaming and large-thread memory deferred to milestone 8
 - [x] Demo milestone 1 to the user (accepted)
 
+## Milestone 4 checklist
+
+Scope: open a thread from the sidebar; header (breadcrumb, title); timeline rows for user and assistant messages (markdown, highlighted code), assistant meta, thinking, working, work log groups and tool cards, turn and attempt folds, dividers, errors, plan card; load older history; stick to bottom and anchoring on prepend; changed files per turn; diff panel (unified and split). Later milestones: composer, approvals and questions, queue, find, minimap, selection toolbar, citations. Images and media are a stretch goal. Mermaid, HTML renders and MCP apps need a webview, so ask the user first.
+
+- [ ] Research (sonnet-medium agents): `docs/research/G-timeline-data.md` (row derivation, work log, diffs, T3 tests to port), `docs/research/H-timeline-visuals.md` (geometry, type, colors, markdown, Shiki, diff panel, motion)
+- [ ] WP1 data: thread detail domain types, `ThreadStore` (subscribeThread snapshot and deltas, history paging), timeline model ported from `MessagesTimeline.logic.ts` with T3's tests ported to Swift, tested against `fixtures/transcripts/`
+- [ ] WP2 markdown and code: Foundation's Markdown parser (`AttributedString(markdown:)`, full syntax) into TextKit 2 with T3's styles; native highlighter that approximates the Shiki theme colors (ponytail); fidelity tests against Chromium renders of T3's markdown markup
+- [ ] WP3 timeline UI: virtualized timeline, row views, header, status line, connection status; sidebar selection opens the thread; the media-navigation sidebar toggle. Whole-panel fidelity against 03a-c, 03d and 01 using the sandbox server's kitchen-sink threads
+- [ ] WP4 diffs: `orchestration.getTurnDiff`, unified diff parser, changed files tree, diff panel unified and split; fidelity against 09 and 10
+- [ ] Demo to the user
+
 ## Milestone 3 checklist
 
 - [x] T3Protocol wire types: Effect RPC envelopes, auth and pairing HTTP types, typed errors (agent W)
 - [x] T3Client: HTTP auth (token exchange, session, ws ticket), WebSocket RPC client (requests, streams with Ack per Chunk, Interrupt on cancel; no keepalive, the server never pings or times out), reconnect supervisor with T3's backoff, Keychain credential store; integration test against the sandbox server (agent W)
 - [x] T3Protocol domain types for the shell stream and server config subset; T3Store shell reducer (snapshot, deltas, sequence dedupe, resume cursor) and sidebar derived state (status, ordering, grouping, timestamps), tested against fixtures/transcripts (agent D)
 - [x] Local server (`T3Client/LocalServer/`, `App/Sources/ServerController.swift`): reuses a server found through `<home>/userdata/server-runtime.json` (pairs once with the user's consent, token in the Keychain), else starts `t3 serve --bootstrap-fd 3` with `--max-semi-space-size=1`, stops it after 10 idle minutes and on quit (asks if a run or request is active), restarts it when the window comes back, shows the disk-cached sidebar before the server answers (full sidebar at 1.5 s while the server takes about 3 s). An owner record in Application Support lets the next launch stop a server whose app crashed. App menu has Allow Remote Access. Verified live against the sandbox home with `scripts/run-app`: start, sidebar, quit stops the server, a force-killed app's orphan is stopped on relaunch
-- [ ] App wiring still open: connection status display, custom URL plus pairing link. Original brief for this item: ServerManager. Reuse a running server found via `~/.t3/userdata/server-runtime.json` plus a health check; otherwise spawn `t3 serve` on demand with a bootstrap credential (`--bootstrap-fd`) and low-memory Node options; stop it after idle minutes with no active runs, pending requests or running terminals, and on quit; restart on use. Cached sidebar at launch. Also a custom URL plus pairing link. Connection status, main window with the sidebar showing real data
+- [x] App wiring: connection status display moved to M4 WP3, custom URL plus pairing link moved to M6 (T3 Connect: pairing, remote environments). Original brief for this item: ServerManager. Reuse a running server found via `~/.t3/userdata/server-runtime.json` plus a health check; otherwise spawn `t3 serve` on demand with a bootstrap credential (`--bootstrap-fd`) and low-memory Node options; stop it after idle minutes with no active runs, pending requests or running terminals, and on quit; restart on use. Cached sidebar at launch. Also a custom URL plus pairing link. Connection status, main window with the sidebar showing real data
 - [x] Sidebar feature (`Packages/CandyKit/Sources/Features/Sidebar/`): `SidebarContentView` (nightly stage art, brand, search, filter, add project, new thread, footer Settings, Pull Requests, Usage), `SidebarListView` (virtualized, rows recycled per kind, 160pt overscan, only changed rows reconfigure, Sidebar.motion.ts slides and fades, arrows and Enter), one label timer aimed at the next visible label change with 10% tolerance and none while occluded, `SidebarPreview` (03-turn2 replay, reference and rich datasets). Whole-sidebar vs 02-sidebar-populated: 5.0% light, 5.3% dark differing pixels (`swift test --filter SidebarFidelityTests/wholeSidebar`, report in /tmp/candywrapper-fidelity/report-sidebar-whole.html). Open: per-state component specs through scripts/component-reference are not written yet; the toggle is ghost, T3 uses media-navigation over the art (needs a variant on `SidebarTriggerView`); search results, project filter popup, snooze menu, drag and drop, PR badge, terminal indicator and draft rows not built
 - [x] Window chrome matching the desktop app (traffic lights at x 16 centered in the 52 pt topbar, hidden title, drag regions, 1100x780 default, 840x620 minimum).
-- [ ] Demo: connect to the user's live T3. 2026-10-10, with the user's go-ahead: `scripts/run-app --live`, the user clicked Connect, the app paired through `t3 auth pairing create` (same runtime version as the live server), saved the token in the login Keychain and streamed the shell (2 projects, 38 threads). Still one `t3 serve`. Waiting for the user's verdict
+- [x] Demo: connect to the user's live T3. 2026-10-10, with the user's go-ahead: `scripts/run-app --live`, the user clicked Connect, the app paired through `t3 auth pairing create` (same runtime version as the live server), saved the token in the login Keychain and streamed the shell (2 projects, 38 threads). Still one `t3 serve`. Accepted by the user
 
 ## Milestone 2 checklist
 
@@ -70,8 +81,8 @@ Gotchas found so far:
 
 ## Waiting on the user
 
-- M3 demo verdict. CandyWrapper is paired with the live T3 (one device record in `~/.t3`, token in the Keychain), so `scripts/run-app --live` no longer asks.
 - The user hasn't confirmed the Allow Remote Access design yet (see Decisions). Built as proposed.
+- Screen Recording permission for screenshots over SSH: the user tried on 2026-10-10 and couldn't grant it yet. Not blocking; use the app's `--snapshot`.
 - GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
 
 ## Resolved environment issues
@@ -101,6 +112,7 @@ Gotchas found so far:
 
 ## Findings worth knowing before you code
 
+- Debug builds are ad-hoc signed (designated requirement is the cdhash), and tokens live in the file-based login Keychain. Each rebuild is a new app to the Keychain: reading a token saved by an older build prompts the user, and from an SSH-launched process the read likely fails instead. So after a rebuild `scripts/run-app --live` may show the pairing sheet again, and each Connect adds a device record to `~/.t3`. Keep live runs rare. A Developer ID build (M9) has a stable requirement. Keychain calls run off the main thread so a prompt can't freeze the window.
 - `NSApp.terminate` called from inside a main-queue block (`asyncAfter`, a main-actor Task) runs AppKit's terminate loop inside that block. With `.terminateLater`, a reply that waits on main-actor work deadlocks. `ServerController.shouldTerminate` decides synchronously, shuts down in a detached task and replies with `CFRunLoopPerformBlock`.
 - The harness kills a background command's whole process tree at its time limit, setsid children included. Use `scripts/run-app` with `--snapshot` so the app quits on its own, and give background runs a long timeout.
 - `~/.local/bin/t3` points at runtime 0.0.45; the live service runs the nightly named in `~/.t3/runtime/service-state.json`. `LocalServerDiscovery.resolveBinary` prefers service-state, then PATH.
@@ -117,6 +129,8 @@ Gotchas found so far:
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
 ## Log
+
+- 2026-10-10: M3 accepted. Planned M4 and started two research agents. Keychain calls in `ServerController` moved off the main thread.
 
 - 2026-10-10: M3 demo against the live T3. Added `scripts/run-app --live`. Pairing, Keychain and shell stream worked on the first try; the app idles at 0.3% CPU after the snapshot. `screencapture` over SSH fails ("could not create image from display", no Screen Recording permission for the SSH chain), so check the screen through the app's `--snapshot` or ask the user.
 
