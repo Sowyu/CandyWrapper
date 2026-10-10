@@ -26,6 +26,32 @@ public final class CommandPaletteController {
 
     public let view = CommandPaletteView()
     public var source: Source
+
+    /// A palette mode other than commands (`SearchOverlayMode` "files", CommandPalette.tsx:440-450):
+    /// its own rows for the query, labels and empty text. Escape goes back to commands.
+    public struct Mode {
+        public var name: String
+        public var placeholder: String
+        public var footerActionLabel: String
+        /// The groups for a query, in the order to show, and the empty state's message.
+        public var results: (String) -> (groups: [PaletteGroup], empty: String)
+        public init(name: String, placeholder: String, footerActionLabel: String, results: @escaping (String) -> (groups: [PaletteGroup], empty: String)) {
+            self.name = name; self.placeholder = placeholder; self.footerActionLabel = footerActionLabel; self.results = results
+        }
+    }
+    public private(set) var mode: Mode?
+    /// Escape in a mode: the app switches back to commands (`toggleMode("command")`).
+    public var onLeaveMode: (() -> Void)?
+
+    /// Enters `mode` with an empty query, or back to commands with nil.
+    public func setMode(_ mode: Mode?) {
+        self.mode = mode
+        stack = []
+        setQuery("")
+        highlightedValue = nil
+        highlightCleared = false
+        refresh()
+    }
     /// The palette asks to close (Escape, an item that doesn't keep it open).
     public var onClose: (() -> Void)?
     /// The query changed: the app may start a message search for it.
@@ -66,6 +92,32 @@ public final class CommandPaletteController {
 
     /// Rebuilds the rows from the source for the current view and query.
     public func refresh() {
+        if let mode {
+            let result = mode.results(query)
+            displayed = result.groups
+            flat = displayed.flatMap(\.items)
+            view.content = displayed.isEmpty ? .empty(message: result.empty, actionsOnly: false) : .results(displayed.map { group in
+                CommandPaletteGroup(group.label.isEmpty ? nil : group.label, group.items.map { entry in
+                    var item = CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description)
+                    item.glyph = entry.glyph
+                    item.titleHighlights = entry.titleHighlights
+                    item.descriptionHighlights = entry.descriptionHighlights
+                    return item
+                })
+            })
+            view.input.placeholder = mode.placeholder
+            view.showsBackButton = false
+            view.showsBackHint = false
+            view.footerActionLabel = mode.footerActionLabel
+            view.escapeLabel = "Back"
+            // `autoHighlight="always"`: the first row stays highlighted as results change.
+            // The reference capture (45) shows no highlight before typing.
+            if let value = highlightedValue, flat.contains(where: { $0.value == value }) {} else { highlightedValue = query.isEmpty ? nil : firstEnabled?.value }
+            view.superview?.needsLayout = true
+            applyHighlight()
+            return
+        }
+        view.escapeLabel = "Close"
         let active = stack.last?.groups ?? source.rootGroups()
         let searching = !isInSubmenu && !query.hasPrefix(">")
         displayed = PaletteSearch.filter(active, query: query, isInSubmenu: isInSubmenu,
@@ -105,7 +157,7 @@ public final class CommandPaletteController {
         query = text
         highlightCleared = true
         highlightedValue = nil
-        if text.isEmpty, stack.last?.initialQuery != nil { pop(); return }
+        if mode == nil, text.isEmpty, stack.last?.initialQuery != nil { pop(); return }
         onQueryChange?(text)
         refresh()
     }
@@ -160,6 +212,7 @@ public final class CommandPaletteController {
             pop()
             return true
         case #selector(NSResponder.cancelOperation(_:)):
+            if mode != nil, let onLeaveMode { onLeaveMode(); return true }
             onClose?()
             return true
         default:

@@ -241,7 +241,7 @@ public final class ComposerView: DSView {
         fileDrop.onHighlight = { [weak self] on in self?.dropHighlight.isHidden = !on }
         fileDrop.onFiles = { [weak self] urls in self?.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         editor.fileDrop = fileDrop
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .composerMention])
         editor.onPasteAttachments = { [weak self] pboard in
             guard let self, let onFiles = self.onFiles else { return false }
             let files = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory)
@@ -478,12 +478,30 @@ public final class ComposerView: DSView {
     // MARK: Drops on the padding
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.entered(sender) : []
+        if Self.mention(in: sender) != nil { return .copy }
+        return ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.entered(sender) : []
     }
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
     public override func draggingExited(_ sender: (any NSDraggingInfo)?) { fileDrop.exited() }
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.perform(sender) : false
+        if let mention = Self.mention(in: sender) { return insertMentionAtEnd(mention) }
+        return ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.perform(sender) : false
+    }
+
+    /// A file tree row's mention (`COMPOSER_MENTION_DRAG_TYPE`, composerMentionDrag.ts).
+    static func mention(in sender: any NSDraggingInfo) -> String? {
+        sender.draggingPasteboard.string(forType: .composerMention).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// `insertMentionAtEnd("<mention> ")`: appended with a leading boundary, caret after it.
+    @discardableResult
+    public func insertMentionAtEnd(_ mention: String) -> Bool {
+        guard !editorDisabled else { return false }
+        let end = (editor.string as NSString).length
+        editor.setSelectedRange(NSRange(location: end, length: 0))
+        insertAtCaret(mention + " ")
+        window?.makeFirstResponder(editor)
+        return true
     }
 
     // MARK: Drawing and layout

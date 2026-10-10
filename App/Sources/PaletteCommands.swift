@@ -19,6 +19,9 @@ final class PaletteCommands {
     private var search: (query: String, matches: [ThreadId: ThreadSearchMatch])?
     private var searchTask: Task<Void, Never>?
     private var pendingQuery: String?
+    /// Go to file's server results (`useProjectFilePickerQuery`): the query they answer.
+    private var picker: (query: String, entries: [ProjectEntry]?)?
+    private var pickerTask: Task<Void, Never>?
 
     init(window: NSWindow, sidebar: SidebarContentView, environments: Environments, threads: ThreadController,
          commands: SidebarCommands, settings: SettingsController) {
@@ -52,6 +55,12 @@ final class PaletteCommands {
             if call.command == "chat.new", self.projectGroups().count > 1 { self.open(newThreadIn: true) } else { self.newThreadFromContext() }
             return true
         }
+        // `filePicker.toggle` (`ToggleMode "files"`, CommandPalette.tsx:440-450, 574-580).
+        shortcuts.on("filePicker.toggle") { [weak self] call in
+            guard let self, !call.isRepeat else { return true }
+            if self.overlay?.controller.mode?.name == "files" { self.close() } else { self.openFilePicker() }
+            return true
+        }
         // The palette input's own commands (CommandPalette.tsx:3090-3122).
         shortcuts.paletteCommand = { [weak self] call in
             guard let self, let controller = self.overlay?.controller else { return false }
@@ -70,14 +79,65 @@ final class PaletteCommands {
         let controller = CommandPaletteController(source: makeSource())
         let overlay = CommandPaletteOverlay(controller: controller)
         controller.onClose = { [weak self] in self?.close() }
-        controller.onQueryChange = { [weak self] query in self?.searchMessages(query) }
+        controller.onQueryChange = { [weak self, weak controller] query in
+            if controller?.mode?.name == "files" { self?.searchFiles(query) } else { self?.searchMessages(query) }
+        }
         overlay.onDismiss = { [weak self, weak overlay] in if self?.overlay === overlay { self?.overlay = nil } }
         self.overlay = overlay
         if newThreadIn, let page = newThreadInPage() { controller.push(page) }
         overlay.present(in: window)
     }
 
+    /// Go to file (ProjectFilePicker.tsx): the palette in "files" mode.
+    func openFilePicker() {
+        if overlay == nil { open() }
+        guard let controller = overlay?.controller else { return }
+        picker = nil
+        controller.onLeaveMode = { [weak controller] in controller?.setMode(nil) }
+        controller.setMode(filesMode())
+        searchFiles("")
+    }
+
+    private func filesMode() -> CommandPaletteController.Mode {
+        CommandPaletteController.Mode(name: "files", placeholder: "Search files\u{2026}", footerActionLabel: "Open file") { [weak self] query in
+            guard let self, let files = self.threads.files, let project = files.pickerProjectName else {
+                return ([], "Open a project to search its files.")
+            }
+            let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
+            guard let picker = self.picker, picker.query == query else {
+                return ([], searching ? "Searching workspace files\u{2026}" : "Indexing workspace files\u{2026}")
+            }
+            guard let entries = picker.entries else { return ([], "Unable to search workspace files.") }
+            let highlight = !FilePicker.normalize(picker.query).isEmpty
+            let items = FilePicker.matches(entries, query: picker.query).map { match in
+                var entry = PaletteEntry(value: "file:\(match.path)", searchTerms: [match.name, match.path], title: match.name,
+                                         description: match.path, icon: .file,
+                                         action: .run({ [weak self] in self?.threads.files.openFile(match.path, line: nil) }, keepOpen: false))
+                entry.glyph = FileTypeIcon.icon(for: match.path)
+                if highlight { entry.titleHighlights = match.nameMatches; entry.descriptionHighlights = match.pathMatches }
+                return entry
+            }
+            return (items.isEmpty ? [] : [PaletteGroup(value: "project-files", label: project, items: items)],
+                    searching ? "No matching files." : "No files found.")
+        }
+    }
+
+    /// 120 ms debounce, 200 files, an empty query lists recent files.
+    private func searchFiles(_ query: String) {
+        pickerTask?.cancel()
+        pickerTask = Task { [weak self] in
+            if !query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
+            guard !Task.isCancelled, let self else { return }
+            let entries = await self.threads.files.searchFiles(query)
+            guard !Task.isCancelled else { return }
+            self.pickerTask = nil
+            self.picker = (query, entries)
+            if self.overlay?.controller.mode?.name == "files", self.overlay?.controller.query == query { self.overlay?.controller.refresh() }
+        }
+    }
+
     func close() {
+        pickerTask?.cancel()
         searchTask?.cancel()
         search = nil
         pendingQuery = nil
@@ -147,13 +207,16 @@ final class PaletteCommands {
                                             title: "New thread in...", icon: .squarePen, action: .submenu(page)))
             }
         }
-        // ponytail: no "New thread without a project", "Find in current thread", PR, restart session, Go to file,
+        // ponytail: no "New thread without a project", "Find in current thread", PR, restart session,
         // project search, New project, theme and project settings entries; each lands with its work package
         if let reference = commands.threadReference {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread id", "reference"],
                                         title: "Copy thread ID", description: reference, icon: .link, shortcutCommand: "thread.copyReference",
                                         action: .run({ [weak self] in self?.commands.copyThreadReference() }, keepOpen: false)))
         }
+        actions.append(PaletteEntry(value: "action:open-file-picker", searchTerms: ["go to file", "open file", "file picker", "find file", "quick open"],
+                                    title: "Go to file", icon: .fileSearch, shortcutCommand: "filePicker.toggle",
+                                    action: .run({ [weak self] in self?.openFilePicker() }, keepOpen: true)))
         actions.append(PaletteEntry(value: "action:add-project", searchTerms: ["add project", "folder", "directory", "browse", "clone", "remote",
                                                                                 "repository", "repo", "git", "github", "gitlab", "forgejo", "bitbucket",
                                                                                 "azure", "devops", "url", "environment"],

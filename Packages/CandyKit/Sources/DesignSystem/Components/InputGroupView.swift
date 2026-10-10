@@ -34,6 +34,9 @@ public final class InputGroupView: DSView {
         self.leading = leading
         self.trailing = trailing
         rebuildAddons()
+        // Observers don't run for properties set in the class's own initializers, so the variant
+        // set above would keep the default frame.
+        restyle()
     }
 
     public override init(frame frameRect: NSRect) {

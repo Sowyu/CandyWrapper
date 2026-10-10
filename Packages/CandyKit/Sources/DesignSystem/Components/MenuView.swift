@@ -101,6 +101,8 @@ public final class MenuPopupView: DSView, PopupContent {
     public var emptyText: String? { didSet { rebuild() } }
     /// Called after an item is chosen; Select and Combobox use it.
     public final var onChoose: (@MainActor (Int) -> Void)?
+    /// Letter keys handled before typeahead (the right panel's + menu picks a surface by letter).
+    public final var characterOverride: (@MainActor (String) -> Bool)?
 
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
@@ -264,6 +266,7 @@ public final class MenuPopupView: DSView, PopupContent {
         case .tab:
             return false
         case .character(let c):
+            if let characterOverride, characterOverride(c) { return true }
             // Comboboxes filter as the user types; only menus and selects use typeahead.
             guard style == .menu || style == .select else { return false }
             return typeAhead(c)
@@ -347,7 +350,7 @@ public final class MenuPopupView: DSView, PopupContent {
         return Array(lo...hi)
     }
 
-    private func closeTree() {
+    public func closeTree() {
         guard let popup = hostPopup, let host = popup.container.superview as? PopupHost else { return }
         var root = popup
         while let parent = root.parent { root = parent }

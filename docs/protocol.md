@@ -1696,6 +1696,14 @@ Project snapshot and mutations are in sections 5 and 7.3. File access RPCs:
 | `mcpApps.readResource` | unary | `McpAppReadResourceInput` | `McpAppReadResourceResult` | `McpAppRequestError`, ... | `orchestration:read` | 1275 |
 | `mcpApps.updateModelContext` | unary | `McpAppUpdateModelContextInput` | `void` | `McpAppRequestError`, ... | `orchestration:operate` | 1270 |
 
+Payloads the files panel uses (packages/contracts/src/project.ts:250-520, checked against the sandbox server 2026-10-10):
+
+- `projects.listEntries {cwd, directoryPath}` returns `{entries: [{path, kind: "file"|"directory", ignored?}], truncated}`. With `directoryPath` ("" is the root) the server lists that folder's immediate children, ignored entries included and flagged, `.git` left out, sorted by name. Without it the server returns the indexed recursive listing older clients used.
+- `projects.searchEntries {cwd, query, limit ≤ 200, kind?, imageOnly?}`: server-ranked paths. An empty query is a bounded browse in frecency order (the file picker's first view).
+- `projects.readFile {cwd, relativePath}` returns `{relativePath, contents, byteLength, truncated}`; text is cut at 1 MB. `relativePath` may be absolute for a host file outside the workspace. Errors carry `failure` (`path_not_file`, `binary_file`, `workspace_path_outside_root`, `resolved_path_outside_root`, `operation_failed`), `operation`, `resolvedPath`, `operationPath`.
+- `projects.writeFile {cwd, relativePath, contents}` returns `{relativePath}`; workspace-relative paths only.
+- Media, PDFs and rendered HTML come from `assets.createUrl` with `{_tag: "workspace-file", threadId, path}` (absolute path; `media-file` for audio, video and paths outside the workspace; `draft-workspace-file {cwd, path}` for drafts).
+
 `orchestration.searchThreads`, `searchThread` and `searchThreadStream` implement thread find (`threadFind`, `threadFindProgressive` flags): see the catalog for payloads (`OrchestrationSearchThreadsInput`, `OrchestrationV2SearchThreadInput`).
 
 ---

@@ -1,5 +1,5 @@
+import AppKit
 import DesignSystem
-import Foundation
 
 /// One palette entry (`CommandPaletteActionItem` / `CommandPaletteSubmenuItem`,
 /// apps/web/src/components/CommandPalette.logic.ts:131-171).
@@ -25,6 +25,10 @@ public struct PaletteEntry {
     public var shortcutCommand: String?
     public var secondary = false
     public var action: Action
+    /// The file picker's rows: a file type glyph and fuzzy highlights.
+    public var glyph: (IconDefinition, NSColor)?
+    public var titleHighlights: [Int]?
+    public var descriptionHighlights: [Int]?
 
     public init(value: String, searchTerms: [String], title: String, titleEmphasis: String? = nil, description: String? = nil,
                 match: String? = nil, timestamp: String? = nil, searchRecency: Int64? = nil, icon: IconName, isDisabled: Bool = false,

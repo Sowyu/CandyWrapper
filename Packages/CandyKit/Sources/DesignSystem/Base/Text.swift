@@ -85,6 +85,9 @@ public final class LabelView: DSView {
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
     /// Text appended after `text` in the semibold weight of `font` (a `<span class="font-semibold">`).
     public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
+    /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
+    public var highlightedIndices: [Int]? { didSet { if highlightedIndices != oldValue { invalidate() } } }
+    public var highlightColor: NSColor? { didSet { needsDisplay = true } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -120,6 +123,13 @@ public final class LabelView: DSView {
         if let emphasizedSuffix {
             attributes[.font] = DSFont.ui(font.pointSize, weight: .semibold)
             result.append(NSAttributedString(string: emphasizedSuffix, attributes: attributes))
+        }
+        if let highlightedIndices {
+            let bold = DSFont.ui(font.pointSize, weight: .semibold)
+            for i in highlightedIndices where i < result.length {
+                let range = (result.string as NSString).rangeOfComposedCharacterSequence(at: i)
+                result.addAttributes([.font: bold, .foregroundColor: highlightColor ?? color], range: range)
+            }
         }
         return result
     }

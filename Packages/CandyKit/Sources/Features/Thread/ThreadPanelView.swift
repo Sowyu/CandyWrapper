@@ -147,10 +147,7 @@ public final class ThreadPanelView: DSView {
     public private(set) var detailsOpen = false
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
-    public private(set) var rightPanelOpen = false
     public private(set) var rightPanelMaximized = false
-    /// The user opened or closed the right panel.
-    public var onRightPanelChange: (@MainActor (Bool) -> Void)?
     private var summaries: [TurnDiffSummary] = []
     /// Development (`--open-diff`): open the panel on the newest run that changed files once the
     /// thread's checkpoints arrive.
@@ -225,16 +222,29 @@ public final class ThreadPanelView: DSView {
             onDetailsToggle?()
         }
         detailsCard.gitActions.primary.onStateChange = { [weak self] in self?.needsLayout = true }
-        header.toggles[2].onPressedChange = { [weak self] _ in self?.userSetRightPanel(!(self?.rightPanelOpen ?? true)) }
+        header.toggles[2].onPressedChange = { [weak self] _ in
+            guard let self else { return }
+            header.toggles[2].isPressed = rightPanelOpen // a toggle flips itself; the state decides
+            toggleRightPanel()
+        }
         header.toggles[1].onPressedChange = { [weak self] _ in
             guard let self else { return }
             header.toggles[1].isPressed = terminalOpen // the controller decides
             onTerminalToggle?()
         }
-        rightPanel.tab.close.action = { [weak self] in self?.userSetRightPanel(false) }
+        rightPanel.onActivate = { [weak self] id in self?.mutatePanel { $0.activate(id); return [] } }
+        rightPanel.onClose = { [weak self] id in self?.mutatePanel { $0.close(id) } }
+        rightPanel.onCloseOthers = { [weak self] id in self?.mutatePanel { $0.closeOthers(id) } }
+        rightPanel.onCloseToRight = { [weak self] id in self?.mutatePanel { $0.closeToRight(id) } }
+        rightPanel.onCloseAll = { [weak self] in self?.mutatePanel { $0.closeAll() } }
+        rightPanel.onAdd = { [weak self] kind in self?.mutatePanel { $0.open(kind); return [] } }
+        rightPanel.onCopyPath = { path in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(path, forType: .string)
+        }
         model.onOpenTurnDiff = { [weak self] run, path in
             guard let self else { return }
-            if !rightPanelOpen { userSetRightPanel(true) }
+            mutatePanel { $0.open(.diff); return [] }
             diffPanel.open(runId: run, filePath: path)
         }
     }
@@ -251,20 +261,63 @@ public final class ThreadPanelView: DSView {
 
     // MARK: Right panel
 
-    /// Opens or closes the right panel without telling `onRightPanelChange` (restoring a thread's state).
-    public func setRightPanelOpen(_ open: Bool) {
-        guard open != rightPanelOpen else { return }
-        rightPanelOpen = open
+    /// The open thread's panel (rightPanelStore.ts `ThreadRightPanelState`).
+    public private(set) var panelState = RightPanelState()
+    public var rightPanelOpen: Bool { panelState.isOpen }
+    /// The user changed the panel: the new state and the tabs that closed (the active one last),
+    /// for the store and the reopen stack.
+    public var onPanelChange: (@MainActor (RightPanelState, [RightPanelSurface]) -> Void)?
+    /// The files surfaces, for the app to fill.
+    public var filesPanel: FilesPanelView { rightPanel.files }
+    public var fileSurface: FileSurfaceView { rightPanel.file }
+    /// The launcher's letters (`B`, `F`, `D`...) while it shows.
+    public func launcherKey(_ characters: String) -> Bool { rightPanel.launcher.handleKey(characters) }
+    public var filesAvailable: Bool {
+        get { rightPanel.filesAvailable }
+        set { rightPanel.filesAvailable = newValue }
+    }
+    /// Opens the + menu (`rightPanel.new`).
+    public func showAddSurfaceMenu() { rightPanel.showAddMenu() }
+
+    /// Shows `state` without telling `onPanelChange` (restoring a thread's state).
+    public func setPanelState(_ state: RightPanelState) {
+        let wasOpen = rightPanel.isHidden == false
+        panelState = state
+        let open = state.isOpen
         if !open { rightPanelMaximized = false; maximize.isPressed = false }
         rightPanel.isHidden = !open
+        rightPanel.apply(state)
         maximize.isHidden = !open
         header.toggles[2].isPressed = open
-        // The terminal and panel toggles move to the panel's tab bar and back, at the same place.
-        for toggle in header.toggles.dropFirst() { (open ? self : header).addSubview(toggle) }
+        if open != wasOpen {
+            // The terminal and panel toggles move to the panel's tab bar and back, at the same place.
+            // A thread switch hides the header's subviews until its projection arrives; the
+            // toggles leaving the header must not stay hidden.
+            for toggle in header.toggles.dropFirst() {
+                (open ? self : header).addSubview(toggle)
+                toggle.isHidden = !open && model.projection == nil
+            }
+        }
         // The panel asks for a diff only while it shows.
-        if open { diffPanel.setSummaries(summaries) }
+        if open, state.active?.kind == .diff { diffPanel.setSummaries(summaries) }
         needsLayout = true
         header.needsLayout = true
+    }
+
+    /// A user action on the panel: applies it and reports the new state.
+    public func mutatePanel(_ change: (inout RightPanelState) -> [RightPanelSurface]) {
+        var next = panelState
+        let closed = change(&next)
+        guard next != panelState || !closed.isEmpty else { return }
+        setPanelState(next)
+        onPanelChange?(next, closed)
+    }
+
+    /// Opens or closes the panel without telling `onPanelChange`.
+    public func setRightPanelOpen(_ open: Bool) {
+        var next = panelState
+        next.isOpen = open
+        setPanelState(next)
     }
 
     /// Shows or hides the terminal drawer at `height`.
@@ -277,22 +330,28 @@ public final class ThreadPanelView: DSView {
         needsLayout = true
     }
 
-    /// Cmd+D (`diff.toggle`): the panel on the diff, or closed.
+    /// Cmd+D (`diff.toggle`, `toggle(ref, "diff")`): the panel on the diff, or closed.
     public func toggleDiff() {
         guard model.projection != nil else { return }
-        userSetRightPanel(!rightPanelOpen)
+        mutatePanel { $0.toggle(.diff); return [] }
     }
 
-    /// `rightPanel.close`: closes the panel as its tab's close button does.
-    public func closeRightPanel() {
-        guard rightPanelOpen else { return }
-        userSetRightPanel(false)
+    /// `rightPanel.toggle` (`toggleRightPanel`, ChatView.tsx:6047-6054): hides an open panel, else
+    /// shows what it had, or the launcher.
+    public func toggleRightPanel() {
+        guard model.projection != nil else { return }
+        mutatePanel { s in
+            if s.isOpen { s.isOpen = false } else { s.toggleVisibility() }
+            return []
+        }
     }
 
-    private func userSetRightPanel(_ open: Bool) {
-        header.toggles[2].isPressed = rightPanelOpen // a toggle flips itself; the state decides
-        setRightPanelOpen(open)
-        onRightPanelChange?(open)
+    /// `rightPanel.close` (ChatView.tsx:8093-8100): closes the active tab. False with nothing open.
+    @discardableResult
+    public func closeRightPanel() -> Bool {
+        guard panelState.isOpen, let id = panelState.activeSurfaceId else { return false }
+        mutatePanel { $0.close(id) }
+        return true
     }
 
     private func toggleMaximized() {
@@ -348,10 +407,12 @@ public final class ThreadPanelView: DSView {
         summaries = projection.map(TurnDiffs.summaries) ?? []
         if opensChangedTurnOnLoad, let changed = TurnDiffs.sortedForPanel(summaries).first(where: { !$0.files.isEmpty }) {
             opensChangedTurnOnLoad = false
-            setRightPanelOpen(true)
+            var next = panelState
+            next.open(.diff)
+            setPanelState(next)
             diffPanel.open(runId: changed.runId, filePath: nil)
         }
-        if rightPanelOpen { diffPanel.setSummaries(summaries) }
+        if rightPanelOpen, panelState.active?.kind == .diff { diffPanel.setSummaries(summaries) }
         model.setProjection(projection)
         if projection != nil, isDraft { setDraft(projectTitle: nil) }
         updateComposerShown()
