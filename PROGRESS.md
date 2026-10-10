@@ -21,7 +21,7 @@ Next action: research for M6 with sonnet-medium agents: how the official app fin
 | 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
 | 8 | Performance and battery pass | not started |
 | 9 | Polish and packaging | not started |
-| 10 | Stress test: glitches and performance under load, failure and long sessions, behavior parity with T3 Code Nightly | not started |
+| 10 | Stress test (glitches and performance under load, failure and long sessions) plus the side-by-side UI and behavior check against T3 Code Nightly | not started |
 
 ## Milestone 1 checklist
 
@@ -92,7 +92,9 @@ Scope: remote environments the way the official app shows them (docs/research/K-
 
 ## Milestone 10: stress test for glitches and performance (planned, last)
 
-The user's definition, sharpened 2026-10-10: the stress test is less about the UI and mostly about glitches and performance. Hammer the app until it breaks, fix what breaks, and prove it stays fast and light under abuse. Feature parity still counts, checked by behavior rather than by pixels.
+The user's definition, 2026-10-10: two halves, both required. First, a stress test for glitches and performance: hammer the app until it breaks, fix what breaks, and prove it stays fast and light under abuse. Second, a side-by-side UI and behavior check against T3 Code Nightly (the user: "ui side by side also important ofc").
+
+- UI side by side: every row of `docs/parity-checklist.md` exercised on the same sandbox data, the official client (desktop app or web client in the capture browser) next to CandyWrapper driven by `scripts/ui/`, comparing screens in both appearances and outcomes per action, shortcut, state and error case; a row turns ✅ only when both match.
 
 - Load: threads with 2,000+ messages and huge tool outputs and diffs, 1,000+ threads in the sidebar, 5+ environments at once (local, paired, T3 Connect), long streaming turns, many runs in parallel.
 - Abuse: rapid thread switching, resizing and scrolling during streams, fast repeated clicks and shortcuts, queue and steer spam, approvals and questions arriving while switching threads, the same thread driven from the official app at the same time.
@@ -100,7 +102,7 @@ The user's definition, sharpened 2026-10-10: the stress test is less about the U
 - Endurance: hours-long sessions watched for memory growth, CPU and wakeup creep and Energy Impact, with `scripts/perf-review` numbers before and after.
 - Glitches: flicker, stale or wrong state, layout jumps, focus loss, hangs over 100 ms (spin dumps), crashes (zero tolerated).
 - Re-pin to the then-current Nightly first (`T3_VERSION`, source fetch) so new Nightly behavior gets checked too.
-- The result is a stress report: every scenario run, every glitch found and fixed or listed for the user, and the performance numbers under load.
+- The result is a report in two parts: the stress scenarios with every glitch found and fixed or listed and the performance numbers under load, and the parity checklist with every row ✅ or its difference fixed or listed for the user.
 
 ## Milestone 4 checklist
 
