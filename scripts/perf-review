@@ -1,10 +1,11 @@
 #!/usr/bin/python3
 """Repeatable performance review: build a Release app from one commit, run a fixed workload against
-the sandbox server, save the numbers and compare them with the previous saved run.
+a private copy of the frozen perf dataset, save the numbers and compare them with earlier runs.
 
 Usage:
   scripts/perf-review [--commit REV | --source DIR] [--baseline FILE] [--repeat N] [--stream]
-                      [--idle-seconds S] [--no-bench] [--no-app] [--out-dir DIR]
+                      [--idle-seconds S] [--no-bench] [--no-app] [--out-dir DIR] [--max-load L]
+  scripts/perf-review --make-workload    copy the sandbox home into the pristine perf dataset (once)
 
   --commit REV   build REV (default HEAD) from its own worktree in /tmp/cw-perf/src-<sha>
   --source DIR   build a checkout as it is, uncommitted changes included (sha gets "-dirty")
@@ -13,8 +14,9 @@ Usage:
   --repeat N     app launches per scenario (default 3); the report gives the median and the range
 
 Writes <out-dir>/<date>-<sha>.json and .md (default docs/perf) and prints the comparison table.
-Method, metrics and thresholds: docs/perf/README.md. Needs the sandbox server (scripts/sandbox-server);
-the script starts it if nothing answers on 47391 and stops only a server it started.
+Method, metrics and thresholds: docs/perf/README.md. Each run copies the pristine dataset (PRISTINE)
+to a temporary home, starts its own T3 server on a free port, and deletes both at the end. It never
+uses the shared sandbox server on 47391.
 """
 import argparse
 import datetime
@@ -24,6 +26,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import statistics
 import subprocess
 import sys
@@ -36,8 +39,15 @@ SANDBOX = os.path.normpath(os.path.join(REPO, "..", "CandyWrapper-research", "sa
 # A worktree under .claude/worktrees still shares the research folder next to the main checkout.
 if not os.path.isdir(SANDBOX):
     SANDBOX = "/Users/mrm/CandyWrapper-research/sandbox"
-SERVER = "http://127.0.0.1:47391"
+# The frozen workload. Bump WORKLOAD when the pristine dataset changes; runs compare only with runs
+# of the same workload. Workload 1: the sandbox home as of 2026-10-10 12:55.
+WORKLOAD = 1
+PRISTINE = os.path.join(os.path.dirname(SANDBOX), "perf-home-pristine")
+SERVER = None  # set by PerfServer.start
+# The sandbox's session token; the pristine copy has the same auth tables, so it works there too.
 TOKEN = SANDBOX + "/session.token"
+# Compile and test processes (other agents); each scenario waits until none of them runs.
+BUSY_PROCESSES = {"swift-frontend", "swift-build", "swiftc", "xcodebuild", "clang", "ld", "xctest", "swiftpm-testing-helper"}
 PID_FILE = "/tmp/candywrapper-app.pid"
 DEMO_PID_FILE = "/tmp/cw-demo.pid"
 IDLE_THREAD = "Reply with one word: candy"
@@ -143,16 +153,22 @@ def sizes(app):
 # MARK: micro-benchmarks
 
 
-def benchmarks(src):
+def benchmarks(src, wait_quiet_fn):
     target = src + "/Packages/CandyKit/Tests/FeaturesTests/PerfBenchmarks.swift"
     overlaid = False
     if not os.path.exists(target):
         # ponytail: copies today's benchmark file into older checkouts; breaks once the APIs it calls change, pin a copy per baseline then
         shutil.copy(REPO + "/Packages/CandyKit/Tests/FeaturesTests/PerfBenchmarks.swift", target)
         overlaid = True
-    log("micro-benchmarks (release build of the package)")
+    log("micro-benchmarks: release build of the package")
+    flags = ["-c", "release", "-Xswiftc", "-enable-testing"]
+    # Build first, then wait for a quiet machine (our own compile counts as busy), then measure.
+    subprocess.run(["swift", "build", "--build-tests"] + flags, cwd=src + "/Packages/CandyKit",
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    wait_quiet_fn()
+    log("micro-benchmarks: running")
     env = dict(os.environ, CW_BENCH="1")
-    out = subprocess.run(["swift", "test", "-c", "release", "-Xswiftc", "-enable-testing", "--filter", "PerfBenchmarks"],
+    out = subprocess.run(["swift", "test"] + flags + ["--filter", "PerfBenchmarks"],
                          cwd=src + "/Packages/CandyKit", env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          universal_newlines=True).stdout
     results = {}
@@ -182,19 +198,108 @@ def foreign_apps(own=None):
     return pids
 
 
-def wait_quiet(limit=600):
+def busy_processes():
+    names = set()
+    for line in run(["ps", "-axo", "comm="]).splitlines():
+        name = os.path.basename(line.strip())
+        if name in BUSY_PROCESSES:
+            names.add(name)
+    return sorted(names)
+
+
+def wait_quiet(label, quiet, max_load, limit=600):
+    """Waits until no compile or test process and no other CandyWrapper app runs and the 1-minute load
+    average is under max_load, for at most limit seconds. Records the wait in quiet["waits"]."""
     start = time.time()
-    while foreign_apps():
+    load_before = os.getloadavg()[0]
+    while True:
+        busy, apps, load = busy_processes(), foreign_apps(), os.getloadavg()[0]
+        if not busy and not apps and load < max_load:
+            ok = True
+            break
         if time.time() - start > limit:
-            log("another CandyWrapper app keeps running; measuring anyway, numbers are marked noisy")
-            return False
-        log("waiting for other CandyWrapper apps to quit: %s" % foreign_apps())
+            ok = False
+            log("%s: machine not quiet after %d s (busy %s, apps %s, load %.2f); measuring anyway, run marked noisy"
+                % (label, limit, busy, apps, load))
+            break
+        log("%s: waiting for a quiet machine (busy %s, apps %s, load %.2f)" % (label, busy, apps, load))
         time.sleep(10)
-    return True
+    entry = {"before": label, "waited_s": round(time.time() - start), "load_before": round(load_before, 2),
+             "load": round(os.getloadavg()[0], 2), "quiet": ok}
+    if not ok:
+        entry.update(busy=busy, apps=apps)
+        quiet["noisy"] = True
+    quiet["waits"].append(entry)
+    return ok
 
 
-def server_up():
-    return subprocess.call(["curl", "-sf", "-o", "/dev/null", SERVER + "/.well-known/t3/environment"]) == 0
+class PerfServer:
+    """A T3 server of its own on a copy of the pristine dataset, with the env -i and detach pattern of
+    scripts/sandbox-server. Stops only the PID it started, then deletes the copy."""
+
+    def __init__(self):
+        if not os.path.isdir(PRISTINE):
+            sys.exit("perf-review: no perf dataset at %s; run scripts/perf-review --make-workload once" % PRISTINE)
+        self.home = "%s/home-%d" % (WORK, os.getpid())
+        self.pid = None
+
+    def start(self):
+        global SERVER
+        shutil.rmtree(self.home, ignore_errors=True)
+        shutil.copytree(PRISTINE, self.home, symlinks=True)
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+        s.close()
+        version = open(REPO + "/T3_VERSION").read().strip().lstrip("v")
+        binary = os.path.expanduser("~/.t3/runtime/versions/%s/t3" % version)
+        home = os.environ["HOME"]
+        # env -i: the shell inherits the live service's T3 variables, which would make this server try
+        # to attach to the live service launcher.
+        env = {"HOME": home, "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
+               "SHELL": "/bin/zsh", "LANG": "en_US.UTF-8", "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
+               "PATH": home + "/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+               "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": self.home}
+        self.proc = subprocess.Popen([binary, "serve", "--base-dir", self.home, "--port", str(port), "--host", "127.0.0.1", "--no-browser"],
+                                     env=env, stdin=subprocess.DEVNULL, stdout=open(self.home + ".log", "wb"), stderr=subprocess.STDOUT,
+                                     start_new_session=True, close_fds=True)
+        self.pid = self.proc.pid
+        open(WORK + "/server.pid", "w").write(str(self.pid))
+        SERVER = "http://127.0.0.1:%d" % port
+        log("perf server pid %d on %s, home %s" % (self.pid, SERVER, self.home))
+        deadline = time.time() + 60
+        # --max-time: a server still booting can accept the connection and never answer (seen once, 17 minutes).
+        while subprocess.call(["curl", "-sf", "--max-time", "2", "-o", "/dev/null", SERVER + "/.well-known/t3/environment"]) != 0:
+            if self.proc.poll() is not None or time.time() > deadline:
+                self.stop()
+                sys.exit("perf-review: the perf server did not start; see %s.log" % self.home)
+            time.sleep(0.5)
+
+    def stop(self):
+        if self.pid:
+            try:
+                os.kill(self.pid, signal.SIGTERM)
+                self.proc.wait(timeout=20)
+            except ProcessLookupError:
+                pass
+            except subprocess.TimeoutExpired:
+                os.kill(self.pid, signal.SIGKILL)
+                self.proc.wait()
+            self.pid = None
+        shutil.rmtree(self.home, ignore_errors=True)
+
+
+def make_workload():
+    """Copies the sandbox home into PRISTINE: the SQLite database through .backup, so a running server
+    can't tear it, and the rest as files, without the logs."""
+    if os.path.exists(PRISTINE):
+        sys.exit("perf-review: %s exists; move it away and bump WORKLOAD to make a new one" % PRISTINE)
+    source = SANDBOX + "/t3home"
+    skip = lambda d, names: [n for n in names if n.startswith("statev2.sqlite") or (n == "logs" and d.endswith("userdata"))]
+    shutil.copytree(source, PRISTINE, symlinks=True, ignore=skip)
+    os.makedirs(PRISTINE + "/userdata/logs")
+    run(["sqlite3", source + "/userdata/statev2.sqlite", ".backup '%s/userdata/statev2.sqlite'" % PRISTINE])
+    log("made %s, integrity %s" % (PRISTINE, run(["sqlite3", PRISTINE + "/userdata/statev2.sqlite", "pragma integrity_check"]).strip()))
 
 
 def probe(*args):
@@ -439,9 +544,11 @@ def latest_saved(out_dir, exclude):
             continue
         try:
             data = json.load(open(path))
-            runs.append((data.get("created", ""), path, data))
         except ValueError:
             continue
+        # Runs on another workload (or the shared sandbox, before workloads) measured other threads.
+        if data.get("workload") == WORKLOAD:
+            runs.append((data.get("created", ""), path, data))
     if not runs:
         return (None, None)
     # Compare with the median of the last three runs, not the newest alone: on 2026-10-10 one
@@ -470,60 +577,75 @@ def main():
     p.add_argument("--no-bench", action="store_true")
     p.add_argument("--no-app", action="store_true")
     p.add_argument("--out-dir", default=REPO + "/docs/perf")
+    # The M4 sits near 2 with the user's live T3 server and idle agents; a compile pushes it past 5.
+    p.add_argument("--max-load", type=float, default=3.0, help="quiet means a 1-minute load average under this")
+    p.add_argument("--make-workload", action="store_true")
     args = p.parse_args()
+    if args.make_workload:
+        make_workload()
+        return
 
     os.makedirs(WORK, exist_ok=True)
     src, sha = prepare_source(args)
     build_helpers()
     noise = []
     raw = {}
+    quiet = {"max_load": args.max_load, "noisy": False, "waits": []}
     result = {"commit": sha, "source": src, "created": datetime.datetime.now().isoformat(timespec="seconds"),
-              "machine": run(["sysctl", "-n", "hw.model"]).strip(), "repeat": args.repeat, "idle_seconds": args.idle_seconds}
+              "machine": run(["sysctl", "-n", "hw.model"]).strip(), "repeat": args.repeat, "idle_seconds": args.idle_seconds,
+              "workload": WORKLOAD}
 
     if not args.no_app:
         app_path = build_app(src, sha)
         raw.update(sizes(app_path))
-        started_server = None
-        if not server_up():
-            run([REPO + "/scripts/sandbox-server"])
-            started_server = int(open(SANDBOX + "/server.pid").read().strip())
-            time.sleep(3)
+        server = PerfServer()
+        quiet_wait = lambda label: wait_quiet(label, quiet, args.max_load)
         try:
-            wait_quiet()
+            # Inside the try: an interrupt while the server boots must still stop it.
+            server.start()
             for i in range(args.repeat):
+                quiet_wait("idle-%d" % i)
                 log("launch and idle, run %d of %d" % (i + 1, args.repeat))
                 scenario_idle(app_path, raw, args.idle_seconds, i, noise)
             for i in range(args.repeat):
+                quiet_wait("big-%d" % i)
                 log("large thread, run %d of %d" % (i + 1, args.repeat))
                 scenario_big_thread(app_path, raw, i, noise)
             for i in range(args.repeat):
+                quiet_wait("open-%d" % i)
                 log("thread open and reopen, run %d of %d" % (i + 1, args.repeat))
                 scenario_open(app_path, raw, i, noise)
             if args.stream:
+                quiet_wait("stream")
                 log("streaming turn (one claude-haiku-5-5 turn)")
                 scenario_stream(app_path, raw, sha, noise)
         finally:
-            if started_server:
-                os.kill(started_server, signal.SIGTERM)
+            server.stop()
         result["load_average"] = os.getloadavg()
 
     metrics = {}
     for name, values in raw.items():
         metrics[name] = summarize(values) if isinstance(values, list) else values
     if not args.no_bench:
-        benches, overlaid = benchmarks(src)
+        benches, overlaid = benchmarks(src, lambda: wait_quiet("bench", quiet, args.max_load))
         for name, b in benches.items():
             metrics[name] = {"median": b["median_ms"], "min": b["min_ms"], "max": b["max_ms"], "runs": b["runs"],
                              "detail": {k: v for k, v in b.items() if k not in ("median_ms", "min_ms", "max_ms", "runs", "name")}}
         if overlaid:
             noise.append("micro-benchmarks: copied today's PerfBenchmarks.swift into this checkout")
     result["metrics"] = metrics
+    result["quiet"] = quiet
+    if quiet["noisy"]:
+        noise.append("the machine was not quiet before every scenario within 10 minutes; see quiet.waits")
     result["notes"] = noise
 
     os.makedirs(args.out_dir, exist_ok=True)
-    stem = "%s/%s-%s" % (args.out_dir, datetime.date.today().isoformat(), sha)
+    stem = "%s/%s-%s-w%d" % (args.out_dir, datetime.date.today().isoformat(), sha, WORKLOAD)
     if args.baseline:
         base_path, baseline = args.baseline, json.load(open(args.baseline))
+        if baseline.get("workload") != WORKLOAD:
+            noise.append("baseline %s ran workload %s, this run workload %d: the threads differ"
+                         % (os.path.basename(base_path), baseline.get("workload"), WORKLOAD))
     else:
         base_path, baseline = latest_saved(args.out_dir, stem + ".json")
     result["baseline"] = os.path.basename(base_path) if base_path else None
@@ -532,8 +654,13 @@ def main():
     json.dump(result, open(stem + ".json", "w"), indent=1, sort_keys=True)
     with open(stem + ".md", "w") as f:
         f.write("# Perf review %s\n\n" % sha)
-        f.write("Run %s on %s, %d launches per scenario, %d s idle window. Baseline: %s.\n\n"
-                % (result["created"], result["machine"], args.repeat, args.idle_seconds, result["baseline"] or "none"))
+        f.write("Run %s on %s, workload %d, %d launches per scenario, %d s idle window. Baseline: %s.%s\n\n"
+                % (result["created"], result["machine"], WORKLOAD, args.repeat, args.idle_seconds, result["baseline"] or "none",
+                   " NOISY: the machine did not get quiet." if quiet["noisy"] else ""))
+        if quiet["waits"]:
+            f.write("Quiet waits (s, 1-minute load when measuring started): %s\n\n"
+                    % ", ".join("%s %d s, load %.2f%s" % (w["before"], w["waited_s"], w["load"], "" if w["quiet"] else " NOT QUIET")
+                                for w in quiet["waits"]))
         f.write(text + "\n")
         if regressions:
             f.write("\nRegressions: %s\n" % ", ".join(regressions))
