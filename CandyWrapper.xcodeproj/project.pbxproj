@@ -19,6 +19,7 @@
 		66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */; };
 		6853335632C49221DEDD17A8 /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA413FF2F602E6306049C36 /* ServerController.swift */; };
 		6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812D0A51D97E799EF04BF25 /* Environments.swift */; };
+		70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045DDA2A8C6CDD4119BB7447 /* FilesController.swift */; };
 		71718717C7EBF952C5C3D99D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A5E63032239ADD1C5F8E1C /* main.swift */; };
 		7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */ = {isa = PBXBuildFile; productRef = 8A26017E3FA14E25E7143DA8 /* T3Store */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
@@ -32,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		045DDA2A8C6CDD4119BB7447 /* FilesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesController.swift; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 				8812D0A51D97E799EF04BF25 /* Environments.swift */,
 				53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */,
 				55FB4EFB4DBDAF423D7789DC /* GitController.swift */,
+				045DDA2A8C6CDD4119BB7447 /* FilesController.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
@@ -198,6 +201,7 @@
 				6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */,
 				0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */,
 				46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */,
+				70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,

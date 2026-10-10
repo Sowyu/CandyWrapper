@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-10: 109 🟡, 51 ➖, 280 ⏳.
+Status 2026-10-10: 124 🟡, 52 ➖, 267 ⏳.
 
 Status legend:
 
@@ -100,7 +100,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Markdown: Mermaid diagrams | comp/chat/MermaidDiagram.tsx | ⏳ | needs webview: ask user (mermaid is a JS library) |
 | Markdown: images and image gallery, zoomable image, expanded image dialog | comp/chat/markdownImageGallery.ts, comp/chat/ZoomableImage.tsx, comp/chat/ExpandedImageDialog.tsx | ➖ | Missing: images are a loading slot, no gallery or zoom |
 | Markdown: video/audio attachments and media actions | comp/media/MediaVideoPlayer.tsx, comp/media/MediaActions.tsx, comp/files/AudioPreview.tsx | ⏳ | AVKit natively |
-| Markdown: file links (path:line) open in file panel; external links open in browser | web/markdown-links.ts, comp/chat/MarkdownThreadLink.tsx, comp/chat/externalLinkContextMenu.ts | ➖ | Missing: click does not open a file panel; chip menu copies paths only |
+| Markdown: file links (path:line) open in file panel; external links open in browser | web/markdown-links.ts, comp/chat/MarkdownThreadLink.tsx, comp/chat/externalLinkContextMenu.ts | ➖ | WP7.6a: a click opens the file tab at its line (`panelPath`), user bubbles included. Missing: Cmd-click to the preferred editor (opens the panel too), the chip menu's Open and Reveal items |
 | Markdown: thread links, PR link previews | comp/chat/MarkdownThreadLink.tsx, comp/pullRequest/PullRequestLinkPreview.tsx | ⏳ | Right-click PR link: Link to thread / Unlink |
 | Markdown: assistant citation chips with comments | comp/chat/AssistantCitationChip.tsx, comp/chat/AssistantCitationCommentEditor.tsx | ⏳ | |
 | Markdown: skill inline text, shell command block | comp/chat/SkillInlineText.tsx, comp/chat/ShellCommandBlock.tsx, comp/CommandBlock.tsx | ⏳ | |
@@ -186,7 +186,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ➖ | Tab kinds: preview(browser), device, terminal, diff, files, file, pull-request, pull-requests; Missing: Diff tab only; + menu inert, no reopen |
+| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ➖ | WP7.6a: `T3Store/RightPanelState.swift` ports the store (surfaces, open, openFile, activate, close, close others, close to the right, close all, toggle, visibility) and the closed tab stack (20, newest first, skips open tabs, restores across threads); per-thread state persisted. Tab strip clipped at `pr-28` and following the active tab, tab context menu, middle click closes, + menu with letters, `mod+t`, "Open a surface" launcher with letters. Kinds drawn: diff, files, file. Missing: browser, terminal, device, pull request tabs (shown disabled), scroll buttons, maximize state per tab, drafts. Fidelity `files` (tabs, launcher) |
 | Right panel resize handle, sheet mode on narrow windows | comp/preview/RightPanelResizeHandle.tsx, comp/RightPanelSheet.tsx, web/rightPanelLayout.ts | ⏳ | |
 | Diff panel (`diff.toggle`): turn selector, file tree, unified/split, wrap, whitespace toggle | comp/DiffPanel.tsx, comp/DiffPanelShell.tsx, web/diffPanelStore.ts | ➖ | Diffs rendered by @pierre/diffs (web worker pool); needs native renderer; Missing: file tree aside (toggle is inert) |
 | Diff file tree with status icons | comp/diffs/DiffFileTree.tsx, comp/diffs/DiffFileStatus.tsx | ⏳ | |
@@ -195,12 +195,12 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Diff find (`mod+f`, not configurable) | comp/diffs/codeViewSearch.test.ts, docs/keybindings.md | ⏳ | |
 | Diff copy path, open in editor, revert file actions | comp/DiffFilePathCopyButton.tsx, web/diffFileActions.ts | ⏳ | |
 | Settings: diff colors, layout, whitespace, default file state | comp/settings/SettingsPanels.tsx | ⏳ | See Settings > General and Appearance |
-| Files panel (project tree) | comp/files/FileBrowserPanel.tsx, web/pierre-icons.ts | ⏳ | Tree by @pierre/trees; drag file to composer to mention |
-| File editor/viewer tab: edit, save, breadcrumbs, line reveal | comp/files/FilePreviewPanel.tsx, comp/files/fileSaveCoordinator.ts, comp/files/FileBreadcrumbs.tsx | ⏳ | Save conflicts handled by revision check |
-| File preview modes: source, Markdown rendered, CSV/TSV table, image, audio | comp/files/FileMarkdownPreview.tsx, comp/files/DelimitedTablePreview.tsx, comp/files/ReadOnlySourcePreview.tsx | ⏳ | |
-| File preview: HTML and PDF rendered | comp/files/BrowserDocumentFrame.tsx, docs/composer.md | ⏳ | HTML needs webview: ask user. PDF can use PDFKit |
+| Files panel (project tree) | comp/files/FileBrowserPanel.tsx, web/pierre-icons.ts | 🟡 | WP7.6a: `Features/Files/FileTreeModel.swift`, `FilesPanelView.swift`: Pierre compact rows (24px, folders first, natural order, flattened single-folder chains, indent guides on hover, ignored entries dimmed), lazy `projects.listEntries` per folder, refresh, expand and collapse all, path search (`projects.searchEntries`, 120 ms, 200, hide non-matches), reveal of the open file, drag a file row into the composer as a mention. Missing: row context menu (open with, copy mention, add to chat), sticky folders, keyboard navigation, git status lane. Fidelity `files` |
+| File editor/viewer tab: edit, save, breadcrumbs, line reveal | comp/files/FilePreviewPanel.tsx, comp/files/fileSaveCoordinator.ts, comp/files/FileBreadcrumbs.tsx | 🟡 | WP7.6a: `CodeFileView` (TextKit 2, diff code look, gutter, pierre colors off the main thread, wrap toggle), autosave through `projects.writeFile` with T3's coordinator (500 ms, one write at a time, newest wins, unsaved edits kept per file), truncated reads read-only with the 1 MB notice, breadcrumbs with folder menus, `path:line` reveal and mark, explorer aside (remembered), read errors with the attempted path. Missing: review comments on lines, Open in editor picker, re-read on workspace mutations (re-read on tab activation instead) |
+| File preview modes: source, Markdown rendered, CSV/TSV table, image, audio | comp/files/FileMarkdownPreview.tsx, comp/files/DelimitedTablePreview.tsx, comp/files/ReadOnlySourcePreview.tsx | 🟡 | WP7.6a: rendered Markdown (MarkdownView), CSV/TSV table (`parseDelimitedPreview`, 100 rows, 30 columns), image, audio and video (AVKit) from `assets.createUrl`, render preferences remembered like T3. Missing: task list toggles in rendered Markdown, media actions menu |
+| File preview: HTML and PDF rendered | comp/files/BrowserDocumentFrame.tsx, docs/composer.md | 🟡 | WP7.6a: PDF in PDFKit; HTML in a WKWebView with a non-persistent store, created while its tab shows and torn down when hidden or closed (WebContent and Networking exit at once, the GPU process within a minute). Missing: "Open file in preview browser" (WP7.6b) |
 | File comments (review annotations in files) | comp/files/fileCommentAnnotations.ts | ⏳ | |
-| Go to file picker (`mod+p`) | comp/files/ProjectFilePicker.tsx | ⏳ | |
+| Go to file picker (`mod+p`) | comp/files/ProjectFilePicker.tsx | 🟡 | WP7.6a: the palette in "files" mode: `projects.searchEntries` (kind file, 200, 120 ms; empty query lists recent files), server order kept, fuzzy highlights (`getProjectFilePickerMatches`), file icons, Enter opens the file tab, Escape back to commands, "Open a project to search its files." |
 | Search project contents (`mod+shift+f`) | comp/search/ProjectContentSearchDialog.tsx, comp/search/HighlightedSearchLine.tsx | ⏳ | |
 | Browser/preview panel: URL bar, tabs, back/forward/reload, zoom, favicon, incognito | comp/preview/PreviewPanel.tsx, comp/preview/PreviewView.tsx, comp/preview/PreviewChromeRow.tsx, comp/preview/PreviewMoreMenu.tsx | ⏳ | needs webview: ask user |
 | Browser: empty state with discovered local servers and recent URLs | comp/preview/PreviewEmptyState.tsx, comp/preview/PreviewLocalServerCard.tsx, comp/preview/PreviewRecentUrlCard.tsx, web/portDiscoveryState.ts | ⏳ | needs webview: ask user |
@@ -438,7 +438,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | Find in current thread | comp/CommandPalette.tsx (line ~1940) | ⏳ | |
 | Link pull request to thread; Show linked pull requests | comp/CommandPalette.tsx (lines ~1973-1990) | ⏳ | |
 | Restart agent session | comp/CommandPalette.tsx (line ~2000) | ⏳ | |
-| Go to file | comp/CommandPalette.tsx (line ~2041) | ⏳ | Same as `filePicker.toggle` |
+| Go to file | comp/CommandPalette.tsx (line ~2041) | 🟡 | WP7.6a, keeps the palette open in files mode |
 | Search project contents | comp/CommandPalette.tsx (line ~2054) | ⏳ | |
 | New project (name, optional private GitHub repo) | comp/CommandPalette.tsx (line ~2068) | ⏳ | |
 | Add project: local folder browser (directories list with ".."), clone from provider or URL, existing project | comp/CommandPalette.tsx (lines ~2099, 2840, 2935) | ➖ | "Add project" runs the desktop folder picker; browse, clone and the environment step wait |
@@ -463,14 +463,14 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | navigation.back | mod+[ | !terminalFocus | ⏳ no route history yet |
 | navigation.forward | mod+] | !terminalFocus | ⏳ no route history yet |
 | terminal.toggle | mod+j | (none) | 🟡 |
-| rightPanel.toggle | mod+alt+b | (none) | ➖ the diff is the only surface |
-| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | ⏳ WP7.6 |
+| rightPanel.toggle | mod+alt+b | (none) | 🟡 WP7.6a: hides an open panel, else shows its tabs or the launcher |
+| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | 🟡 WP7.6a: the + menu |
 | terminal.split | mod+d | terminalFocus | ⏳ splits not drawn |
 | terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ splits not drawn |
 | terminal.new | mod+n | terminalFocus | 🟡 one terminal shows |
 | terminal.close | mod+w | terminalFocus | 🟡 |
-| rightPanel.close | mod+w | !terminalFocus | 🟡 |
-| view.reopenClosed | mod+shift+t | (none) | ⏳ WP7.6 |
+| rightPanel.close | mod+w | !terminalFocus | 🟡 WP7.6a: closes the active tab |
+| view.reopenClosed | mod+shift+t | (none) | 🟡 WP7.6a: panel tabs only |
 | diff.toggle | mod+d | !terminalFocus | 🟡 |
 | preview.toggle | mod+shift+j | (none) | ⏳ WP7.6 |
 | preview.refresh | mod+r | previewFocus | ⏳ WP7.6 |
@@ -479,8 +479,8 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | preview.zoomOut | mod+- | previewFocus | ⏳ WP7.6 |
 | preview.resetZoom | mod+0 | previewFocus | ⏳ WP7.6 |
 | commandPalette.toggle | mod+k | !terminalFocus | 🟡 |
-| filePicker.toggle | mod+p | !terminalFocus | ⏳ WP7.6 |
-| projectSearch.toggle | mod+shift+f | !terminalFocus | ⏳ WP7.6 |
+| filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a |
+| projectSearch.toggle | mod+shift+f | !terminalFocus | ⏳ WP7.6b: T3 draws a palette dialog, not a panel |
 | usage.open | mod+u | !terminalFocus | ➖ placeholder page |
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
 | appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |

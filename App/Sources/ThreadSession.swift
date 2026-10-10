@@ -226,6 +226,7 @@ final class ThreadController {
     private(set) var terminal: TerminalController!
     private(set) var composer: ComposerController!
     private(set) var git: GitController!
+    private(set) var files: FilesController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -260,6 +261,11 @@ final class ThreadController {
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         composer.onTargetChange = { [weak self] in self?.git.refresh() }
+        files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
+        files.openThread = { [weak self] id in self?.open(id) }
+        // A chat file chip opens the file tab at its line (ChatMarkdown.tsx `fileLinkChip`).
+        // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
+        panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
         sidebar.actions.openDraft = { [weak self] id in
@@ -267,6 +273,7 @@ final class ThreadController {
             session?.end()
             session = nil
             terminal.show(nil)
+            files.show(nil)
         }
         sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
         sidebar.actions.searchThreads = { [weak environments] query in await environments?.searchThreads(query) }
@@ -286,7 +293,6 @@ final class ThreadController {
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }
-        panel.onRightPanelChange = { [weak self] open in self?.rememberRightPanel(open) }
         // Nothing to show until the shell arrives; T3's index route renders nothing before bootstrap.
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
     }
@@ -296,16 +302,11 @@ final class ThreadController {
         composer.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
         git.registerShortcuts(shortcuts)
-        // `diff.toggle` and `rightPanel.toggle`: the diff is the only right panel surface so far.
-        shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] _ in
+        files.registerShortcuts(shortcuts)
+        // `diff.toggle` (`toggle(ref, "diff")`) and `rightPanel.toggle` (`toggleRightPanel`).
+        shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] call in
             guard let self, self.panel.window != nil else { return false }
-            self.panel.toggleDiff()
-            return true
-        }
-        // `rightPanel.close`: with nothing open the key keeps its native meaning.
-        shortcuts.on("rightPanel.close") { [weak self] call in
-            guard let self, self.panel.window != nil, self.panel.rightPanelOpen, !self.panel.isDraft else { return false }
-            if !call.isRepeat { self.panel.closeRightPanel() }
+            if call.command == "diff.toggle" { self.panel.toggleDiff() } else { self.panel.toggleRightPanel() }
             return true
         }
         // `thread.previous`, `thread.next`, `thread.jump.N` walk the sidebar's rows; ignored on repeat.
@@ -333,23 +334,6 @@ final class ThreadController {
         return ids.indices.contains(next) ? ids[next] : nil
     }
 
-    /// T3 keeps the right panel's state per thread and persists it (rightPanelStore.ts,
-    /// `t3code:right-panel-state:v2`). Only open threads are stored.
-    private static let rightPanelKey = "thread.rightPanelOpen"
-
-    private func rememberRightPanel(_ open: Bool) {
-        guard let id = session?.threadId else { return }
-        var ids = UserDefaults.standard.stringArray(forKey: Self.rightPanelKey) ?? []
-        ids.removeAll { $0 == id.rawValue }
-        // ponytail: newest 200 threads; T3 keeps every thread's entry
-        if open { ids = Array(([id.rawValue] + ids).prefix(200)) }
-        UserDefaults.standard.set(ids, forKey: Self.rightPanelKey)
-    }
-
-    private func rightPanelWasOpen(_ id: ThreadId) -> Bool {
-        UserDefaults.standard.stringArray(forKey: Self.rightPanelKey)?.contains(id.rawValue) == true
-    }
-
     /// The open thread across launches, scoped. T3 routes by `_chat.$environmentId.$threadId`.
     private static let lastThreadKey = "thread.lastOpenScoped"
 
@@ -371,7 +355,7 @@ final class ThreadController {
         panel.setDraft(projectTitle: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         composer.showThread(id)
-        panel.setRightPanelOpen(rightPanelWasOpen(id))
+        files.show(id)
         let kept = retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
@@ -409,6 +393,7 @@ final class ThreadController {
         previous?.end()
         session = nil
         terminal.show(nil)
+        files.show(nil)
     }
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
@@ -418,6 +403,7 @@ final class ThreadController {
         session?.end()
         session = nil
         terminal.show(nil)
+        files.show(nil)
     }
 
     /// "<label> is reconnecting|offline" over the composer while the open thread's environment is not
@@ -477,6 +463,7 @@ final class ThreadController {
         session?.end()
         session = nil
         terminal.show(nil)
+        files.show(nil)
         updateEnvironmentBanner()
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         if let snapshot = sidebar?.snapshot,
@@ -493,9 +480,7 @@ final class ThreadController {
         composer.environmentRemoved(environmentId)
         terminal.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
-        if let ids = defaults.stringArray(forKey: Self.rightPanelKey) {
-            defaults.set(ids.filter { !$0.hasPrefix(prefix) }, forKey: Self.rightPanelKey)
-        }
+        files.environmentRemoved(environmentId)
         if defaults.string(forKey: Self.lastThreadKey)?.hasPrefix(prefix) == true { defaults.removeObject(forKey: Self.lastThreadKey) }
         if let sidebar {
             var state = sidebar.state
@@ -514,6 +499,7 @@ final class ThreadController {
     private func shellChanged(_ snapshot: ShellSnapshot) {
         composer.projectsChanged()
         git.refresh()
+        files.shellChanged()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

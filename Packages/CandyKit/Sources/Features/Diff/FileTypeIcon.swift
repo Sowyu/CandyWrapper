@@ -3,7 +3,12 @@ import DesignSystem
 
 /// `PierreEntryIcon` for files (PierreEntryIcon.tsx, pierre-icons.ts): the @pierre/trees
 /// "complete" icon for a path, tinted with T3's per-language color.
-enum FileTypeIcon {
+public enum FileTypeIcon {
+    /// The icon and its theme color for a file path, for rows built outside this module.
+    public static func icon(for path: String) -> (IconDefinition, NSColor) {
+        (definition(for: path), color(token(for: path)))
+    }
+
     /// The icon token for a path: the file name table, then each extension suffix (`a.test.ts`
     /// tries `test.ts`, then `ts`), the complete set's overrides first; else `default`.
     // ponytail: T3's own extra icons (C#, Java, Kotlin, TOML, video and a few more) fall back to
@@ -21,9 +26,11 @@ enum FileTypeIcon {
 
     @MainActor
     static func view(for path: String, size: CGFloat = 14) -> IconView {
-        let token = token(for: path)
-        let definition = FileIcons.symbols[token] ?? FileIcons.symbols["default"]!
-        return IconView(definition: definition, size: size, color: color(token))
+        IconView(definition: definition(for: path), size: size, color: color(token(for: path)))
+    }
+
+    static func definition(for path: String) -> IconDefinition {
+        FileIcons.symbols[token(for: path)] ?? FileIcons.symbols["default"]!
     }
 
     static func color(_ token: String) -> NSColor {

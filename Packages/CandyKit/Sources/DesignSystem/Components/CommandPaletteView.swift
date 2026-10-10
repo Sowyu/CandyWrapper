@@ -15,6 +15,11 @@ public struct CommandPaletteItem: Sendable {
     public var note: String?
     public var isSubmenu = false
     public var isDisabled = false
+    /// A colored glyph in place of `icon` (a file type icon in the file picker).
+    public var glyph: (IconDefinition, NSColor)?
+    /// Fuzzy match positions (UTF-16): set, the text is muted with these characters semibold.
+    public var titleHighlights: [Int]?
+    public var descriptionHighlights: [Int]?
 
     public init(_ title: String, icon: IconName? = nil, description: String? = nil, shortcut: String? = nil,
                 timestamp: String? = nil, isSubmenu: Bool = false, isDisabled: Bool = false,
@@ -403,7 +408,12 @@ final class CommandRowView: DSView {
             noteLabel.text = n; noteLabel.font = DSFont.ui(12); noteLabel.lineHeight = 16; noteLabel.truncates = false
             addSubview(noteLabel)
         }
-        if let icon = item.icon { iconView = IconView(name: icon); addSubview(iconView!) }
+        if let (definition, color) = item.glyph {
+            iconView = IconView(definition: definition, size: 16, color: color)
+            addSubview(iconView!)
+        } else if let icon = item.icon { iconView = IconView(name: icon); addSubview(iconView!) }
+        title.highlightedIndices = item.titleHighlights
+        detail.highlightedIndices = item.descriptionHighlights
         if item.isSubmenu { chevron = IconView(name: .chevronRight); addSubview(chevron!) }
         alphaValue = item.isDisabled ? 0.64 : 1
         setAccessibilityRole(.button)
@@ -450,13 +460,15 @@ final class CommandRowView: DSView {
 
     private func restyle() {
         let fg = isHighlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
-        title.color = fg
+        title.color = item.titleHighlights == nil ? fg : Themed.color(\.contrastMutedForeground)
+        title.highlightColor = Themed.color(\.contrastForeground)
         matchLine.color = Themed.color(\.contrastMutedForeground)
-        detail.color = Themed.color(\.contrastMutedForeground, 0.7)
+        detail.color = item.descriptionHighlights == nil ? Themed.color(\.contrastMutedForeground, 0.7) : Themed.color(\.contrastMutedForeground)
+        detail.highlightColor = Themed.color(\.contrastForeground)
         shortcut.color = Themed.color(\.contrastSecondaryLabel)
         trailing.color = Themed.color(\.contrastMutedForeground, 0.7)
         noteLabel.color = Themed.color(\.contrastMutedForeground, 0.7)
-        iconView?.strokeColor = Themed.color(\.contrastIconMuted) // ITEM_ICON_CLASS `size-4 text-icon-muted`
+        if item.glyph == nil { iconView?.strokeColor = Themed.color(\.contrastIconMuted) } // ITEM_ICON_CLASS `size-4 text-icon-muted`
         chevron?.strokeColor = Themed.color(\.contrastMutedForeground, 0.7)
     }
 

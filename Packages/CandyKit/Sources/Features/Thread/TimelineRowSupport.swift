@@ -131,7 +131,11 @@ final class FillView: DSView {
     var border: NSColor? { didSet { needsDisplay = true } }
     var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius } }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// The fill takes no clicks; what sits inside it (a user bubble's file chips) still does.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
 
     override func updateLayer() {
         layer?.backgroundColor = fill?.cgColor(in: self)

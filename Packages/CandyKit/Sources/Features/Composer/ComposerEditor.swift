@@ -248,14 +248,21 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     var onPasteText: ((String, Bool) -> Bool)?
     /// Cmd+Shift+V (`isPasteAsTextShortcut`): the next paste stays text.
     private var pasteAsTextPending = false
+    private var enclosingComposer: ComposerView? {
+        var v = superview
+        while let view = v { if let c = view as? ComposerView { return c }; v = view.superview }
+        return nil
+    }
     /// Files dragged over the editor go to the composer, never into the text as paths.
     var fileDrop: ComposerFileDrop?
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if ComposerView.mention(in: sender) != nil { return .copy }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
         return super.draggingEntered(sender)
     }
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if ComposerView.mention(in: sender) != nil { return .copy }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
         return super.draggingUpdated(sender)
     }
@@ -264,6 +271,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         super.draggingExited(sender)
     }
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let mention = ComposerView.mention(in: sender), let composer = enclosingComposer {
+            return composer.insertMentionAtEnd(mention)
+        }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.perform(sender) }
         return super.performDragOperation(sender)
     }
