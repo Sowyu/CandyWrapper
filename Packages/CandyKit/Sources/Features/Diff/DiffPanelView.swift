@@ -49,7 +49,9 @@ public final class DiffPanelView: DSView {
     private let wrapToggle = ToggleView(nil, icon: .textWrap, variant: .ghost, size: .sm, pressed: true)
     private let whitespaceToggle = ToggleView(nil, icon: .pilcrow, variant: .ghost, size: .sm, pressed: true)
     private let treeToggle = ToggleView(nil, icon: .folderTree, variant: .ghost, size: .sm)
-    private let message = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
+    let message = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
+    /// The failed request's message above the empty state (DiffPanel.tsx:1093-1097, `text-2xs text-error/80`).
+    let errorLine = LabelView("", font: DSFont.ui(11), color: Themed.color(\.error, 0.8))
     private let headerBorder = CALayer()
 
     private var summaries: [TurnDiffSummary] = []
@@ -93,8 +95,10 @@ public final class DiffPanelView: DSView {
         layer?.addSublayer(headerBorder)
         message.alignment = .center
         message.lineHeight = 16
-        [scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message].forEach(addSubview)
+        errorLine.lineHeight = 16.5
+        [scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine].forEach(addSubview)
         message.isHidden = true
+        errorLine.isHidden = true
         totals.isHidden = true
         updateCollapseButton()
     }
@@ -166,8 +170,13 @@ public final class DiffPanelView: DSView {
                     self.show(parsed, collapsed: true)
                 }
             } catch {
+                // T3 shows the RPC error's message, then the no-patch state under it
+                // (DiffPanel.tsx:1093-1117, state/query.ts:20-25). An interrupted latest run gets
+                // "Failed to load turn diff": its checkpoint is past the server's turn count.
                 guard !Task.isCancelled, let self else { return }
-                self.showMessage((error as? LocalizedError)?.errorDescription ?? "Failed to load diff: \(error)")
+                let text = (error as? LocalizedError)?.errorDescription ?? ""
+                self.showMessage("No patch available for this selection.",
+                                 error: text.trimmingCharacters(in: .whitespaces).isEmpty ? "The environment request failed." : text)
             }
         }
     }
@@ -175,6 +184,7 @@ public final class DiffPanelView: DSView {
     private func show(_ diff: UnifiedDiff, collapsed: Bool) {
         hasDiff = true
         message.isHidden = true
+        errorLine.isHidden = true
         scroll.isHidden = false
         list.setDiff(diff, collapsedByDefault: collapsed)
         totals.setInline(additions: diff.additions, deletions: diff.deletions)
@@ -188,10 +198,12 @@ public final class DiffPanelView: DSView {
         }
     }
 
-    private func showMessage(_ text: String) {
+    private func showMessage(_ text: String, error: String? = nil) {
         hasDiff = false
         message.text = text
         message.isHidden = false
+        errorLine.text = error ?? ""
+        errorLine.isHidden = error == nil
         scroll.isHidden = true
         totals.isHidden = true
         needsLayout = true
@@ -262,7 +274,10 @@ public final class DiffPanelView: DSView {
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
         scroll.frame = NSRect(x: 0, y: bodyTop, width: bounds.width, height: max(0, bounds.height - bodyTop))
-        message.frame = NSRect(x: 20, y: bodyTop + (bounds.height - bodyTop - 16) / 2, width: max(0, bounds.width - 40), height: 16)
+        // The error paragraph (`px-3`, `mb-2`) takes its height off the top of the centered area.
+        errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)
+        let messageTop = bodyTop + (errorLine.isHidden ? 0 : 16.5 + 8)
+        message.frame = NSRect(x: 20, y: messageTop + (bounds.height - messageTop - 16) / 2, width: max(0, bounds.width - 40), height: 16)
     }
 
     public override func updateLayer() {

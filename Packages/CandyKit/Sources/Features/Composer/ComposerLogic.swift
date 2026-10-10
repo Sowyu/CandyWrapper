@@ -104,6 +104,24 @@ public enum ComposerLogic {
         return head.trimmingCharacters(in: .whitespacesAndNewlines) + "..."
     }
 
+    /// The first send of a draft (`startThreadTurn` with `bootstrap.createThread`,
+    /// client-runtime/src/operations/commands.ts:640-686). A draft in "Current checkout" mode has
+    /// `branch: null` unless the user picked one in the branch toolbar (ChatView.tsx:9875-9892,
+    /// BranchToolbarBranchSelector.tsx:541-554 seeds a branch only in worktree mode), so the
+    /// strategy is a bare `root`. The server stores exactly that branch (ThreadLaunchService.ts:764-784).
+    /// Checked 2026-10-10 against the official web client on the sandbox: same keys, same values.
+    public static func launchThreadPayload(commandId: String, threadId: String, projectId: String, title: String,
+                                           modelSelection: JSONValue, runtimeMode: String, interactionMode: String,
+                                           messageId: String, text: String) -> JSONValue {
+        .object([
+            "commandId": .string(commandId), "creationSource": .string("web"), "threadId": .string(threadId),
+            "projectId": .string(projectId), "title": .string(title), "generateTitle": .bool(true),
+            "modelSelection": modelSelection, "runtimeMode": .string(runtimeMode),
+            "interactionMode": .string(interactionMode), "workspaceStrategy": .object(["type": .string("root")]),
+            "initialMessage": .object(["messageId": .string(messageId), "text": .string(text), "attachments": .array([])]),
+        ])
+    }
+
     // MARK: Run state
 
     /// What the primary action and the editor read from the thread's runs.

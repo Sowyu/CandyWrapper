@@ -508,13 +508,10 @@ final class ComposerController {
             // First send of a draft: one launchThread; the thread exists after the reply (05-composer.jsonl).
             panel.setDraft(projectTitle: nil)
             refresh()
-            let payload: JSONValue = .object([
-                "commandId": .string(commandId), "creationSource": .string("web"), "threadId": .string(session.threadId),
-                "projectId": .string(session.projectId), "title": .string(title), "generateTitle": .bool(true),
-                "modelSelection": selectionJSON, "runtimeMode": .string(picks.runtimeMode.rawValue),
-                "interactionMode": .string(picks.interactionMode.rawValue), "workspaceStrategy": .object(["type": .string("root")]),
-                "initialMessage": .object(["messageId": .string(messageId.rawValue), "text": .string(trimmed), "attachments": .array([])]),
-            ])
+            let payload = ComposerLogic.launchThreadPayload(
+                commandId: commandId, threadId: session.threadId, projectId: session.projectId, title: title,
+                modelSelection: selectionJSON, runtimeMode: picks.runtimeMode.rawValue,
+                interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: trimmed)
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
