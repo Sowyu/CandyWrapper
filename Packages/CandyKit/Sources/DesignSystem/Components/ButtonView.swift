@@ -41,6 +41,8 @@ public final class ButtonView: ControlView {
     public var title: String? { didSet { label.text = title ?? ""; invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
+    /// An explicit icon class such as `size-3`, which beats the size's default icon size.
+    public var iconSize: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Set by GroupView: a joined side loses its radius and its border (`rounded-s-none border-s-0`).
     public var joinedSides: (leading: Bool, trailing: Bool) = (false, false) {
         didSet { restyle(); invalidateIntrinsicContentSize() }
@@ -75,7 +77,8 @@ public final class ButtonView: ControlView {
     // MARK: Layout
 
     public override var intrinsicContentSize: NSSize {
-        let m = size.metrics
+        var m = size.metrics
+        if let iconSize { m.icon = iconSize }
         let joined = CGFloat((joinedSides.leading ? 1 : 0) + (joinedSides.trailing ? 1 : 0))
         if size.isIconOnly { return NSSize(width: m.height - joined, height: m.height) }
         // CSS: padding and the 1px border on both sides, plus the exact text advance.
@@ -91,7 +94,8 @@ public final class ButtonView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        let m = size.metrics
+        var m = size.metrics
+        if let iconSize { m.icon = iconSize }
         let iconY = (bounds.height - m.icon) / 2
         if size.isIconOnly {
             leadingIconView?.frame = NSRect(x: (bounds.width - m.icon) / 2, y: iconY, width: m.icon, height: m.icon)

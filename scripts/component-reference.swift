@@ -8,6 +8,8 @@
 //              "cases": [ { "name": "outline.sm", "html": "<button ...>", "wrapperStyle": "...", "stateTarget": "input" } ] }
 // `stateTarget` (optional) is a selector inside the case element that receives the forced state and the
 // `disabled` attribute, for wrappers styled with `:has()` (Input, Textarea, InputGroup).
+// `prepare` (optional) is a JS expression run once per theme after load, awaited if it returns a
+// promise, for markup that T3 builds at runtime (Shiki highlighting in the markdown spec).
 // States: rest, hover, active (hover + active), focus-visible (focus + focus-visible), disabled
 // (the `disabled` attribute). Pseudo classes are forced with CSS.forcePseudoState.
 // Output: design/component-reference/<component>/<case>.<state>.<theme>.png at 2x, clipped to the
@@ -131,6 +133,7 @@ for theme in themes {
     try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
     await sleep(1)
     _ = try await evaluate("document.fonts.ready.then(() => true)")
+    if let prepare = spec["prepare"] as? String, let result = try await evaluate(prepare) { print("prepare (\(theme)): \(result)") }
     let docHeight = try await evaluate("document.documentElement.scrollHeight") as? Double ?? 900
     try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": Int(docHeight), "deviceScaleFactor": scale, "mobile": false])
     try await settle()
