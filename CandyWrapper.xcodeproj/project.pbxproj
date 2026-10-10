@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */; };
+		357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */; };
 		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
 		50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21423E229A8AD862537E9ECA /* SettingsController.swift */; };
 		54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37909056866A108B1B58D3C6 /* MainWindow.swift */; };
@@ -30,6 +31,7 @@
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
 		56396DA448A1952FDC05BF3E /* ComposerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerController.swift; sourceTree = "<group>"; };
+		5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCommands.swift; sourceTree = "<group>"; };
 		606083DF126114F0273EEEDD /* ShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSession.swift; sourceTree = "<group>"; };
 		8812D0A51D97E799EF04BF25 /* Environments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Environments.swift; sourceTree = "<group>"; };
 		92A5E63032239ADD1C5F8E1C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 				CDA413FF2F602E6306049C36 /* ServerController.swift */,
 				21423E229A8AD862537E9ECA /* SettingsController.swift */,
 				606083DF126114F0273EEEDD /* ShellSession.swift */,
+				5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */,
 				92B1A20A927434B822A78FBE /* T3ConnectController.swift */,
 				C28281CD4D81D6A990C1B210 /* ThreadSession.swift */,
 			);
@@ -183,6 +186,7 @@
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,
 				50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */,
 				430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */,
+				357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */,
 				EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */,
 				5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,

@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: ServerController?
     private var threads: ThreadController?
     private var settings: SettingsController?
+    private var sidebarCommands: SidebarCommands?
     private var t3Connect: T3ConnectController?
     private var terminationSignal: DispatchSourceSignal?
 
@@ -67,7 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
         self.settings = settings
-        sidebar.actions.openSettings = { [weak settings] in settings?.open() }
+        let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
+        self.sidebarCommands = commands
+        sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
@@ -276,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cmd+, : the settings pages, Connections first while it is the only one built. T3 lands on General.
     @objc func openSettings(_ sender: Any?) {
         mainWindow?.makeKeyAndOrderFront(nil)
+        sidebarCommands?.closeUtilityPage()
         settings?.open()
     }
 

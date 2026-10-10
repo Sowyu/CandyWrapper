@@ -12,6 +12,12 @@ public struct SidebarActions {
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     public var unsnooze: (ThreadId) -> Void = { _ in }
     public var unpin: (ThreadId) -> Void = { _ in }
+    /// Right click on a thread row: the row view and the event, for the native menu.
+    public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
+    /// The undo notice's button (`undoLatestThreadAction`).
+    public var undo: () -> Void = {}
+    /// The footer's Back on a utility page (SidebarChrome.tsx:203-210).
+    public var back: () -> Void = {}
     public var toggleSidebar: () -> Void = {}
     /// `orchestration.searchThreads {query}`; nil when the request failed or there is no connection, which
     /// leaves title search on its own (threadSearch.ts:58-62).
@@ -46,6 +52,8 @@ public final class SidebarContentView: DSView {
     let settingsButton = SidebarContentView.footerButton(.settings, "Settings")
     let pullRequestsButton = SidebarContentView.footerButton(.gitPullRequestArrow, "Pull Requests")
     let usageButton = SidebarContentView.footerButton(.chartNoAxesColumn, "Usage")
+    let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
+    let undoNotice = SidebarUndoNoticeView()
 
     public var actions = SidebarActions() { didSet { wireActions() } }
     public private(set) var snapshot: ShellSnapshot?
@@ -54,6 +62,18 @@ public final class SidebarContentView: DSView {
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
     public var showsPullRequests = true { didSet { needsLayout = true } }
+    /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
+    public var isOnUtilityPage = false { didSet { needsLayout = true } }
+    /// "Settled 2 threads," with its undo button; nil hides the notice.
+    public var undoNoticeText: String? {
+        didSet {
+            undoNotice.text = undoNoticeText ?? ""
+            undoNotice.isHidden = undoNoticeText == nil
+            needsLayout = true
+        }
+    }
+    /// The undo button's label, `⌘Z to undo` when `thread.undo` has a shortcut.
+    public var undoShortcut: String? = "⌘Z" { didSet { undoNotice.shortcut = undoShortcut } }
     /// The clock, injectable for tests and previews.
     public var now: () -> Date = Date.init
 
@@ -90,7 +110,11 @@ public final class SidebarContentView: DSView {
         addSubview(scrollArea)
         addSubview(brand)
         addSubview(trigger)
-        for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton] as [NSView] {
+        undoNotice.isHidden = true
+        undoNotice.shortcut = undoShortcut
+        backButton.isHidden = true
+        for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton,
+                  backButton, undoNotice] as [NSView] {
             addSubview(v)
         }
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
@@ -135,8 +159,13 @@ public final class SidebarContentView: DSView {
             self.state.activeThreadId = id
             self.actions.openThread(id)
         }
-        let a = actions
-        list.rowActions = SidebarRowActions(settle: a.settle, unsettle: a.unsettle, snooze: a.snooze, unsnooze: a.unsnooze, unpin: a.unpin)
+        // Rows keep these closures across reuse, so they read `actions` when they fire.
+        list.rowActions = SidebarRowActions(
+            settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },
+            snooze: { [weak self] in self?.actions.snooze($0, $1) }, unsnooze: { [weak self] in self?.actions.unsnooze($0) },
+            unpin: { [weak self] in self?.actions.unpin($0) }, contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
+        undoNotice.onUndo = { [weak self] in self?.actions.undo() }
+        backButton.action = { [weak self] in self?.actions.back() }
         list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }
         list.onDiscardDraft = { [weak self] id in self?.actions.discardDraft(id) }
         trigger.action = { [weak self] in self?.actions.toggleSidebar() }
@@ -411,15 +440,23 @@ public final class SidebarContentView: DSView {
         }
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: 32)
-        // Footer: `px-2 py-1`, 32px icon buttons 4px apart.
-        let footerTop = h - 40
+        // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
+        let menuTop = h - 36
+        var footerTop = h - 40
+        if !undoNotice.isHidden {
+            let nh = undoNotice.height(forWidth: w - 16)
+            undoNotice.frame = NSRect(x: 8, y: menuTop - 8 - nh, width: w - 16, height: nh)
+            footerTop = undoNotice.frame.minY - 4
+        }
         var fx: CGFloat = 8
         for b in [settingsButton, pullRequestsButton, usageButton] {
-            b.isHidden = b === pullRequestsButton && !showsPullRequests
+            b.isHidden = isOnUtilityPage || b === pullRequestsButton && !showsPullRequests
             if b.isHidden { continue }
-            b.frame = NSRect(x: fx, y: footerTop + 4, width: 32, height: 32)
+            b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
         }
+        backButton.isHidden = !isOnUtilityPage
+        backButton.frame = NSRect(x: 8, y: menuTop, width: w - 16, height: 32)
         scrollArea.frame = NSRect(x: 0, y: 100, width: w, height: max(0, footerTop - 100))
         list.frame.size.width = w
         list.needsLayout = true

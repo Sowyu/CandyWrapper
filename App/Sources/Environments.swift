@@ -30,6 +30,8 @@ final class Environments {
     private(set) var primaryId: String?
     private var entries: [String: Entry] = [:]
     private var shells = MergedShell()
+    /// Sidebar commands not yet reflected in their environment's shell (settle, snooze, pin).
+    private var optimistic = OptimisticThreadOverlay()
     /// Registration order, the primary first. The merge follows it; sorting doesn't depend on it.
     private var order: [String] = []
     private let iconRoutes = IconRoutes()
@@ -395,8 +397,49 @@ final class Environments {
     private func shellChanged(_ id: String, _ snapshot: ShellSnapshot) {
         guard entries[id] != nil else { return }
         entries[id]?.snapshot = snapshot
-        shells.set(snapshot, environmentId: id)
+        optimistic.reconcile(environmentId: id, snapshotSequence: snapshot.snapshotSequence)
+        shells.set(optimistic.apply(snapshot, environmentId: id), environmentId: id)
         merge()
+    }
+
+    /// Re-merges an environment's last shell after its optimistic updates changed.
+    private func reapplyOptimistic(_ id: String) {
+        guard let snapshot = entries[id]?.snapshot else { return }
+        shellChanged(id, snapshot)
+    }
+
+    // MARK: Commands
+
+    enum CommandError: LocalizedError {
+        case notConnected
+        var errorDescription: String? { "This environment is not connected." }
+    }
+
+    /// One unary call on the environment's own socket.
+    func request(_ environmentId: String, _ method: String, _ payload: JSONValue) async throws -> JSONValue {
+        guard let session = session(environmentId) else { throw CommandError.notConnected }
+        return try await session.supervisor.request(method, payload: payload)
+    }
+
+    /// `orchestration.dispatchCommand` on the environment of `threadId` (a scoped id). With `update`, the
+    /// sidebar shows the change at once; a failure takes it back, a success keeps it until the shell
+    /// reaches the command's sequence (`createOptimisticThreadLifecycle`).
+    @discardableResult
+    func dispatch(_ threadId: ThreadId, _ payload: JSONValue, optimistic update: OptimisticThreadUpdate? = nil) async throws -> JSONValue {
+        guard let env = threadId.environmentId else { throw CommandError.notConnected }
+        let token = update.map { optimistic.begin($0, threadId: threadId.localId, environmentId: env) }
+        if token != nil { reapplyOptimistic(env) }
+        do {
+            let result = try await request(env, "orchestration.dispatchCommand", payload)
+            if let token {
+                if let sequence = ThreadCommands.sequence(result) { optimistic.confirm(token, sequence: sequence) } else { optimistic.cancel(token) }
+                reapplyOptimistic(env)
+            }
+            return result
+        } catch {
+            if let token { optimistic.cancel(token); reapplyOptimistic(env) }
+            throw error
+        }
     }
 
     private func merge() {

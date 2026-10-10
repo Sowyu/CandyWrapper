@@ -276,12 +276,15 @@ final class ThreadController {
 
     /// The sidebar's new-thread button: the draft page for the open thread's project.
     // ponytail: no projects means no draft; T3 shows "Add a project to start" there
-    func newThread() {
+    func newThread(in project: ProjectShell? = nil) {
         let previous = session
-        guard composer.newThread() else { return }
+        guard composer.newThread(in: project) else { return }
         previous?.end()
         session = nil
     }
+
+    /// The thread the panel shows, nil on a draft (the route's thread in T3).
+    var openThreadId: ThreadId? { panel.isDraft ? nil : session?.threadId }
 
     func close() {
         session?.end()
