@@ -2,9 +2,9 @@ import Foundation
 
 /// One surface in a thread's right panel (`RightPanelSurface`, apps/web/src/rightPanelStore.ts:43-87).
 /// Only the kinds this app draws: the diff and files singletons, one tab per workspace file, one
-/// per pull request and the thread's linked pull requests.
-// ponytail: browser, terminal and device surfaces are not modeled; add cases when WP7.6b builds
-// them (their ids are `browser:*`, `terminal:*`, `device`)
+/// per pull request, the thread's linked pull requests and browser tabs.
+// ponytail: terminal and device surfaces are not modeled; add cases when the terminal tab and the
+// device panel are built (their ids are `terminal:*`, `device`)
 public enum RightPanelSurface: Codable, Sendable, Equatable {
     case diff
     case files
@@ -15,6 +15,9 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     case pullRequest(PullRequestSurfaceTarget)
     /// The thread's linked pull requests, one singleton tab.
     case pullRequests
+    /// `browser:<tabId>`: a server browser tab; nil is the `browser:new` placeholder that shows the
+    /// empty state until a tab exists.
+    case browser(tabId: String?)
 
     public var id: String {
         switch self {
@@ -23,10 +26,11 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .file(let path, _, _): "file:" + path
         case .pullRequest(let target): target.surfaceId
         case .pullRequests: "pull-requests"
+        case .browser(let tabId): "browser:" + (tabId ?? "new")
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser }
     public var kind: Kind {
         switch self {
         case .diff: .diff
@@ -34,6 +38,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .file: .file
         case .pullRequest: .pullRequest
         case .pullRequests: .pullRequests
+        case .browser: .browser
         }
     }
 
@@ -48,7 +53,14 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
             return String(path[cut...])
         case .pullRequest(let target): return "#\(target.number)"
         case .pullRequests: return "Pull requests"
+        case .browser: return "Browser"
         }
+    }
+
+    /// A browser surface's server tab id.
+    public var browserTabId: String? {
+        if case .browser(let id) = self { return id }
+        return nil
     }
 
     public var filePath: String? {
@@ -118,7 +130,31 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         case .diff: upsert(.diff)
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
+        case .browser: upsert(surfaces.first { $0.kind == .browser } ?? .browser(tabId: nil))
         case .file, .pullRequest: break
+        }
+    }
+
+    /// `openBrowser` (rightPanelStore.ts:665-673): a real tab replaces the placeholder.
+    public mutating func openBrowser(_ tabId: String?) {
+        if tabId != nil { surfaces.removeAll { $0.id == "browser:new" } }
+        upsert(.browser(tabId: tabId))
+    }
+
+    /// `reconcileBrowserSurfaces` (rightPanelStore.ts:882-908): the server's tabs minus the ones an
+    /// agent opened hidden. Tabs gone from the server drop out, as does the placeholder. It does not
+    /// open the panel.
+    public mutating func reconcileBrowser(tabIds: [String], hidden: Set<String>) {
+        let valid = Set(tabIds.map { "browser:" + $0 })
+        let nonBrowser = surfaces.filter { $0.kind != .browser }
+        let existing = surfaces.filter { $0.kind == .browser && $0.id != "browser:new" && valid.contains($0.id) }
+        let known = Set(existing.map(\.id))
+        let added = tabIds.filter { !known.contains("browser:" + $0) && !hidden.contains($0) }.map { RightPanelSurface.browser(tabId: $0) }
+        let next = nonBrowser + existing + added
+        guard next != surfaces else { return }
+        surfaces = next
+        if !surfaces.contains(where: { $0.id == activeSurfaceId }) {
+            activeSurfaceId = surfaces.first { $0.kind == .browser }?.id ?? surfaces.first?.id
         }
     }
 
@@ -233,7 +269,11 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
     public struct Entry: Codable, Sendable, Equatable {
         public var threadKey: String
         public var surface: RightPanelSurface
-        public init(threadKey: String, surface: RightPanelSurface) { self.threadKey = threadKey; self.surface = surface }
+        /// A closed server tab's page (`{kind: "browser", snapshot}`), opened again with `preview.open`.
+        public var browserURL: String?
+        public init(threadKey: String, surface: RightPanelSurface, browserURL: String? = nil) {
+            self.threadKey = threadKey; self.surface = surface; self.browserURL = browserURL
+        }
     }
 
     public static let limit = 20
@@ -242,8 +282,8 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
     public init(entries: [Entry] = []) { self.entries = entries }
 
     /// `remember`.
-    public mutating func remember(_ surface: RightPanelSurface, threadKey: String) {
-        let entry = Entry(threadKey: threadKey, surface: surface)
+    public mutating func remember(_ surface: RightPanelSurface, threadKey: String, browserURL: String? = nil) {
+        let entry = Entry(threadKey: threadKey, surface: surface, browserURL: browserURL)
         entries.removeAll { $0.threadKey == threadKey && $0.surface.id == surface.id }
         entries.insert(entry, at: 0)
         if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
@@ -267,6 +307,8 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
     public static func restore(_ surface: RightPanelSurface, into state: inout RightPanelState) {
         switch surface {
         case .diff, .files, .pullRequests: state.open(surface.kind)
+        // A closed server tab reopens through `preview.open` in the app (`reopenClosedView`).
+        case .browser(let tabId): if tabId == nil { state.openBrowser(nil) }
         case .file(let path, let line, _): state.openFile(path, line: line)
         case .pullRequest(let target): state.openPullRequest(target)
         }

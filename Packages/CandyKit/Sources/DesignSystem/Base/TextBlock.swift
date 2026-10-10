@@ -92,6 +92,9 @@ public final class TextBlockView: DSView {
     public var balanced = false { didSet { invalidate() } }
     /// See `LabelView.smoothsFont`.
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
+    /// A leading run drawn semibold in `boldColor` (`<span class="font-semibold text-foreground">`).
+    public var boldPrefix: String? { didSet { if boldPrefix != oldValue { invalidate() } } }
+    public var boldColor: NSColor? { didSet { if boldPrefix != nil { invalidate() } } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -123,8 +126,18 @@ public final class TextBlockView: DSView {
         // ponytail: unbounded per-width cache, cleared on any text change; cap it if a resize drag measures hundreds of widths
         // Color comes from the context at draw time, so one cached layout serves both themes.
         let attributes: [NSAttributedString.Key: Any] = [.font: font, NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true]
-        let made = TextBlockLayout(NSAttributedString(string: text, attributes: attributes), width: width,
-                                   lineHeight: resolvedLineHeight, maxLines: maxLines, balanced: balanced)
+        let string = NSMutableAttributedString(string: text, attributes: attributes)
+        if let boldPrefix, text.hasPrefix(boldPrefix), !boldPrefix.isEmpty {
+            let range = NSRange(location: 0, length: (boldPrefix as NSString).length)
+            let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+            string.addAttribute(.font, value: NSFont(descriptor: font.fontDescriptor.addingAttributes(
+                [.traits: [NSFontDescriptor.TraitKey.weight: NSFont.Weight.semibold]]), size: font.pointSize) ?? bold, range: range)
+            if let boldColor {
+                string.removeAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), range: range)
+                string.addAttribute(NSAttributedString.Key(kCTForegroundColorAttributeName as String), value: boldColor.cgColor(in: self), range: range)
+            }
+        }
+        let made = TextBlockLayout(string, width: width, lineHeight: resolvedLineHeight, maxLines: maxLines, balanced: balanced)
         cache[width] = made
         return made
     }

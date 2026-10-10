@@ -35,8 +35,26 @@ public final class CommandPaletteController {
         public var footerActionLabel: String
         /// The groups for a query, in the order to show, and the empty state's message.
         public var results: (String) -> (groups: [PaletteGroup], empty: String)
+        /// A mode with its own body (`panelSize="fill"`), such as Search project contents.
+        public var custom: Custom?
         public init(name: String, placeholder: String, footerActionLabel: String, results: @escaping (String) -> (groups: [PaletteGroup], empty: String)) {
             self.name = name; self.placeholder = placeholder; self.footerActionLabel = footerActionLabel; self.results = results
+        }
+        public init(name: String, placeholder: String, footerActionLabel: String, custom: Custom) {
+            self.init(name: name, placeholder: placeholder, footerActionLabel: footerActionLabel, results: { _ in ([], "") })
+            self.custom = custom
+        }
+    }
+
+    /// A custom mode's body, the controls in its input, and where the query and keys go.
+    public struct Custom {
+        public var view: NSView
+        public var accessory: NSView?
+        public var onQuery: (String) -> Void
+        /// Arrows and Return; true when handled.
+        public var onCommand: (Selector) -> Bool
+        public init(view: NSView, accessory: NSView? = nil, onQuery: @escaping (String) -> Void, onCommand: @escaping (Selector) -> Bool) {
+            self.view = view; self.accessory = accessory; self.onQuery = onQuery; self.onCommand = onCommand
         }
     }
     public private(set) var mode: Mode?
@@ -92,6 +110,19 @@ public final class CommandPaletteController {
 
     /// Rebuilds the rows from the source for the current view and query.
     public func refresh() {
+        if view.inputAccessory !== mode?.custom?.accessory { view.inputAccessory = mode?.custom?.accessory }
+        if let mode, let custom = mode.custom {
+            displayed = []
+            flat = []
+            if case .custom(let v) = view.content, v === custom.view {} else { view.content = .custom(custom.view) }
+            view.input.placeholder = mode.placeholder
+            view.showsBackButton = false
+            view.showsBackHint = false
+            view.footerActionLabel = mode.footerActionLabel
+            view.escapeLabel = "Back"
+            view.superview?.needsLayout = true
+            return
+        }
         if let mode {
             let result = mode.results(query)
             displayed = result.groups
@@ -155,6 +186,7 @@ public final class CommandPaletteController {
     private func queryChanged(_ text: String) {
         guard !settingText else { return }
         query = text
+        if let custom = mode?.custom { custom.onQuery(text); return }
         highlightCleared = true
         highlightedValue = nil
         if mode == nil, text.isEmpty, stack.last?.initialQuery != nil { pop(); return }
@@ -190,6 +222,7 @@ public final class CommandPaletteController {
     /// The input's editing commands: arrows move the highlight, Return runs it, Backspace on an
     /// empty query leaves a submenu, Escape closes (CommandPalette.tsx:3160-3201).
     func handleCommand(_ selector: Selector) -> Bool {
+        if let custom = mode?.custom, selector != #selector(NSResponder.cancelOperation(_:)) { return custom.onCommand(selector) }
         switch selector {
         case #selector(NSResponder.moveDown(_:)):
             if highlightCleared || highlightedValue == nil, let first = firstEnabled {

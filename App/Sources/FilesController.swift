@@ -18,6 +18,18 @@ final class FilesController {
     var openThread: ((ThreadId) -> Void)?
     /// The panel's state or thread changed: the pull request surfaces follow.
     var onSync: (() -> Void)?
+    /// Browser tabs: the page a closing server tab shows (remembered for Mod+Shift+T), the tabs
+    /// the user closed (`preview.close`), and a closed tab to open again (`reopenClosedView`).
+    var browserURL: ((String) -> String?)?
+    var onBrowserTabsClosed: (([String]) -> Void)?
+    var onReopenBrowser: ((ThreadId, String?) -> Void)?
+
+    /// The thread the panel follows (nil on a draft).
+    var currentThreadId: ThreadId? { threadId }
+    /// The open thread's workspace for project-wide searches.
+    var workspaceTarget: (environmentId: String, cwd: String, projectName: String)? {
+        workspace.map { ($0.environmentId, $0.cwd, $0.projectName) }
+    }
 
     private var threadId: ThreadId?
     private var states: [String: RightPanelState] = [:]
@@ -139,11 +151,19 @@ final class FilesController {
 
     private func panelChanged(_ state: RightPanelState, closed removed: [RightPanelSurface]) {
         guard let key = threadId?.rawValue else { return }
+        var browserTabs: [String] = []
         for surface in removed {
+            if let tabId = surface.browserTabId {
+                // A server tab is remembered with its page (`{kind: "browser", snapshot}`).
+                closed.remember(surface, threadKey: key, browserURL: browserURL?(tabId) ?? "")
+                browserTabs.append(tabId)
+                continue
+            }
             closed.remember(surface, threadKey: key)
             if let path = surface.filePath { flushEdits(path: path) }
         }
         store(state, for: key)
+        if !browserTabs.isEmpty { onBrowserTabsClosed?(browserTabs) }
         syncSurfaces()
     }
 
@@ -158,7 +178,7 @@ final class FilesController {
         case .file:
             showActiveFile(force: false)
             ensureTree()
-        case .diff, .pullRequest, .pullRequests:
+        case .diff, .pullRequest, .pullRequests, .browser:
             break
         }
     }
@@ -275,6 +295,14 @@ final class FilesController {
     }
 
     var pickerProjectName: String? { workspace?.projectName }
+
+    /// `projects.searchContents` in the open thread's workspace (Search project contents).
+    func searchContents(_ query: String, options: ContentSearchView.Options) async throws -> ProjectContentSearchResult? {
+        guard let ws = workspace, let shell = environments.session(ws.environmentId) else { return nil }
+        let reply = try await shell.supervisor.request("projects.searchContents", payload: ProjectContentSearchResult.payload(
+            cwd: ws.cwd, query: query, caseSensitive: options.caseSensitive, wholeWord: options.wholeWord, useRegex: options.useRegex))
+        return try JSONValueDecoder().decode(ProjectContentSearchResult.self, from: reply)
+    }
 
     // MARK: File tab
 
@@ -437,6 +465,12 @@ final class FilesController {
                                    panel: { [states, panel] key in key == current ? panel.panelState : states[key] ?? RightPanelState() })
         save()
         guard let entry else { return }
+        if entry.surface.browserTabId != nil {
+            if entry.threadKey != current { openThread?(ThreadId(entry.threadKey)) }
+            let url = entry.browserURL.flatMap { $0.isEmpty ? nil : $0 }
+            onReopenBrowser?(ThreadId(entry.threadKey), url)
+            return
+        }
         if entry.threadKey == current {
             panel.mutatePanel { ClosedPanelTabs.restore(entry.surface, into: &$0); return [] }
         } else {

@@ -53,12 +53,19 @@ public final class DiscoveryListView: BoxView {
 /// `DiscoveryListRow`: padding 12, gap 12, hover accent/40, an inset 2px ring on keyboard focus.
 public final class DiscoveryRowView: ControlView {
     private let decoration = BoxDecorationLayer()
-    private let icon: IconView
+    private let icon: NSView
+    private let iconSize: CGFloat
     private let titleLabel = LabelView()
     private let detailLabel = LabelView()
 
-    public init(icon: IconName, title: String, detail: String) {
-        self.icon = IconView(name: icon, size: 16, strokeColor: Themed.color(\.contrastMutedForeground))
+    public convenience init(icon: IconName, title: String, detail: String) {
+        self.init(iconView: IconView(name: icon, size: 16, strokeColor: Themed.color(\.contrastMutedForeground)), iconSize: 16, title: title, detail: detail)
+    }
+
+    /// Any leading view, such as the browser's 28px favicon (`PreviewFaviconIcon`).
+    public init(iconView: NSView, iconSize: CGFloat, title: String, detail: String) {
+        icon = iconView
+        self.iconSize = iconSize
         super.init(frame: .zero)
         scalesWhenPressed = false
         decoration.host = self
@@ -80,8 +87,8 @@ public final class DiscoveryRowView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        icon.frame = NSRect(x: 12, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        let x: CGFloat = 12 + 16 + 12, w = max(0, bounds.width - x - 12)
+        icon.frame = NSRect(x: 12, y: (bounds.height - iconSize) / 2, width: iconSize, height: iconSize)
+        let x: CGFloat = 12 + iconSize + 12, w = max(0, bounds.width - x - 12)
         let top = (bounds.height - 36) / 2
         titleLabel.frame = NSRect(x: x, y: top, width: w, height: 20)
         detailLabel.frame = NSRect(x: x, y: top + 20, width: w, height: 16)

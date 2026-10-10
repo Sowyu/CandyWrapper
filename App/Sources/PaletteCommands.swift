@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import Features
+import T3Client
 import T3Protocol
 import T3Store
 
@@ -59,6 +60,12 @@ final class PaletteCommands {
         shortcuts.on("filePicker.toggle") { [weak self] call in
             guard let self, !call.isRepeat else { return true }
             if self.overlay?.controller.mode?.name == "files" { self.close() } else { self.openFilePicker() }
+            return true
+        }
+        // `projectSearch.toggle` (`ToggleMode "content"`).
+        shortcuts.on("projectSearch.toggle") { [weak self] call in
+            guard let self, !call.isRepeat else { return true }
+            if self.overlay?.controller.mode?.name == "content" { self.close() } else { self.openContentSearch() }
             return true
         }
         // The palette input's own commands (CommandPalette.tsx:3090-3122).
@@ -122,6 +129,75 @@ final class PaletteCommands {
         }
     }
 
+    // MARK: Search project contents
+
+    private var contentTask: Task<Void, Never>?
+
+    /// `ProjectContentSearchDialog`: the palette in "content" mode with its own body.
+    func openContentSearch() {
+        if overlay == nil { open() }
+        guard let controller = overlay?.controller else { return }
+        controller.onLeaveMode = { [weak self, weak controller] in
+            self?.contentTask?.cancel()
+            controller?.view.input.isEnabled = true
+            controller?.view.setAccessibilityLabel("Command palette")
+            controller?.setMode(nil)
+        }
+        let body = ContentSearchView()
+        guard let target = threads.files.workspaceTarget else {
+            // `EmptyContentSearchDialog`: the input is disabled.
+            body.apply(matches: [], status: .idle, empty: "Open a project to search its files.")
+            body.accessory.isHidden = true
+            controller.setMode(.init(name: "content", placeholder: "Search project contents\u{2026}", footerActionLabel: "Open file",
+                                     custom: .init(view: body, onQuery: { _ in }, onCommand: { _ in true })))
+            controller.view.input.isEnabled = false
+            return
+        }
+        var query = ""
+        let run = { [weak self, weak body] in
+            guard let self, let body else { return }
+            self.contentTask?.cancel()
+            let q = query
+            // Whitespace is significant in content queries; it only decides whether the input is blank.
+            guard !q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                body.canOpen = true
+                body.apply(matches: [], status: .idle, empty: "Type to search across your project.")
+                return
+            }
+            body.canOpen = false
+            body.apply(matches: body.matches, status: .pending, empty: body.matches.isEmpty ? "Type to search across your project." : body.emptyMessage)
+            let options = body.options
+            self.contentTask = Task { [weak self, weak body] in
+                try? await Task.sleep(for: ProjectContentSearchResult.debounce)
+                guard !Task.isCancelled, let self else { return }
+                do {
+                    guard let result = try await self.threads.files.searchContents(q, options: options), !Task.isCancelled, let body else { return }
+                    let files = Set(result.matches.map(\.path)).count
+                    body.canOpen = true
+                    body.apply(matches: result.matches,
+                               status: options.useRegex && result.regexFallbackError != nil ? .invalidRegex
+                                   : .results(count: result.matches.count, truncated: result.truncated, files: files),
+                               empty: "No results found.")
+                } catch {
+                    guard !Task.isCancelled, let body else { return }
+                    let message = (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "\(error)"
+                    body.canOpen = false
+                    body.apply(matches: [], status: .error(message), empty: message)
+                }
+            }
+        }
+        body.onOptionsChange = { _ in run() }
+        body.onOpen = { [weak self] match in
+            self?.close()
+            self?.threads.files.openFile(match.path, line: match.lineNumber)
+        }
+        controller.setMode(.init(name: "content", placeholder: "Search in \(target.projectName)", footerActionLabel: "Open file",
+                                 custom: .init(view: body, accessory: body.accessory,
+                                               onQuery: { text in query = text; run() },
+                                               onCommand: { [weak body] selector in body?.handleCommand(selector) ?? false })))
+        controller.view.setAccessibilityLabel("Search file contents in \(target.projectName)")
+    }
+
     /// 120 ms debounce, 200 files, an empty query lists recent files.
     private func searchFiles(_ query: String) {
         pickerTask?.cancel()
@@ -138,6 +214,7 @@ final class PaletteCommands {
 
     func close() {
         pickerTask?.cancel()
+        contentTask?.cancel()
         searchTask?.cancel()
         search = nil
         pendingQuery = nil
@@ -236,6 +313,10 @@ final class PaletteCommands {
         actions.append(PaletteEntry(value: "action:open-file-picker", searchTerms: ["go to file", "open file", "file picker", "find file", "quick open"],
                                     title: "Go to file", icon: .fileSearch, shortcutCommand: "filePicker.toggle",
                                     action: .run({ [weak self] in self?.openFilePicker() }, keepOpen: true)))
+        actions.append(PaletteEntry(value: "action:search-project-contents",
+                                    searchTerms: ["search project", "find in files", "grep", "content search", "text search"],
+                                    title: "Search project contents", icon: .textSearch, shortcutCommand: "projectSearch.toggle",
+                                    action: .run({ [weak self] in self?.openContentSearch() }, keepOpen: true)))
         actions.append(PaletteEntry(value: "action:add-project", searchTerms: ["add project", "folder", "directory", "browse", "clone", "remote",
                                                                                 "repository", "repo", "git", "github", "gitlab", "forgejo", "bitbucket",
                                                                                 "azure", "devops", "url", "environment"],

@@ -239,6 +239,7 @@ public final class ThreadPanelView: DSView {
         rightPanel.onCloseAll = { [weak self] in self?.mutatePanel { $0.closeAll() } }
         rightPanel.onAdd = { [weak self] kind in
             if kind == .pullRequest { self?.onAddPullRequest?(); return }
+            if kind == .browser, let add = self?.onAddBrowser { add(); return }
             self?.mutatePanel { $0.open(kind); return [] }
         }
         rightPanel.onCopyPath = { path in
@@ -301,6 +302,39 @@ public final class ThreadPanelView: DSView {
     }
     /// "Pull request" from the + menu or launcher: the app opens the thread's current one.
     public var onAddPullRequest: (@MainActor () -> Void)?
+
+    // MARK: Browser
+
+    /// The browser surface, for the app to fill.
+    public var browserPanel: BrowserPanelView { rightPanel.browser }
+    /// Whether the + menu and launcher offer "Browser" (`browserAvailable`).
+    public var browserAvailable: Bool {
+        get { rightPanel.browserAvailable }
+        set { rightPanel.browserAvailable = newValue }
+    }
+    /// Browser tab titles and favicons by surface id.
+    public var browserTitles: [String: String] {
+        get { rightPanel.browserTitles }
+        set { rightPanel.browserTitles = newValue }
+    }
+    public var browserFavicons: [String: NSImage] {
+        get { rightPanel.browserFavicons }
+        set { rightPanel.browserFavicons = newValue }
+    }
+    /// "Browser" from the + menu or launcher: the app opens a server tab (`createBrowserSurface`).
+    public var onAddBrowser: (@MainActor () -> Void)?
+    /// The floating browser over the chat column; the app shows it and feeds its viewer.
+    public let miniPlayer = BrowserMiniPlayerView()
+    /// The page size the player mirrors, and where the user dragged it.
+    public var miniPlayerSource: CGSize? { didSet { if miniPlayerSource != oldValue { needsLayout = true } } }
+    public var miniPlayerOrigin: CGPoint? { didSet { needsLayout = true } }
+    public var miniPlayerShown = false {
+        didSet {
+            if miniPlayerShown, miniPlayer.superview !== self { addSubview(miniPlayer) }
+            if !miniPlayerShown { miniPlayer.removeFromSuperview() }
+            needsLayout = true
+        }
+    }
 
     /// Shows `state` without telling `onPanelChange` (restoring a thread's state).
     public func setPanelState(_ state: RightPanelState) {
@@ -592,6 +626,16 @@ public final class ThreadPanelView: DSView {
             let w = ThreadDetailsCardView.width, h = min(detailsCard.preferredHeight, max(0, chatHeight - ThreadHeaderView.height - 16))
             detailsCard.frame = NSRect(x: max(8, chat - 8 - w), y: ThreadHeaderView.height + 8, width: w, height: h)
             detailsCard.isHidden = chat < w + 16
+        }
+        // The floating browser keeps to the chat canvas, top right by default (previewMiniPlayerLayout.ts).
+        // ponytail: no composer or details-card obstacles and no resize handles; add them from
+        // previewMiniPlayerLayout.ts when the player is used beside long threads
+        if miniPlayerShown {
+            let canvas = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
+            let size = BrowserMiniPlayerView.size(source: miniPlayerSource)
+            miniPlayer.frame = BrowserMiniPlayerView.frame(size: size, origin: miniPlayerOrigin, container: canvas)
+            miniPlayer.isHidden = chat < size.width + 24
+            miniPlayer.layer?.zPosition = 2
         }
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         if !errorBanner.isHidden {

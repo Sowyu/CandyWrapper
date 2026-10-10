@@ -1622,7 +1622,7 @@ Covered in section 5.3 (upload and download flow) and section 7.3 (`ChatAttachme
 
 ### 9.8 Preview, server browser and devices
 
-Preview tabs can be hosted by the server (`serverBrowser` capability, headless Chromium) and streamed over `/api/preview-stream/ws`. Devices (emulators, simulators) stream through `/api/device-hub/*`. A native client without a web view can omit both; the official clients render them in web content (see `PROGRESS.md` decisions). Field-level shapes: **UNVERIFIED** (not summarised).
+Preview tabs can be hosted by the server (`serverBrowser` capability, headless Chromium) and streamed over `/api/preview-stream/ws`. Devices (emulators, simulators) stream through `/api/device-hub/*`. CandyWrapper views server tabs natively (below); device shapes: **UNVERIFIED** (not summarised).
 
 | Method | Kind | Payload | Success | Errors (besides `EnvironmentAuthorizationError`) | Scope | `rpc.ts` |
 |---|---|---|---|---|---|---|
@@ -1647,6 +1647,16 @@ Preview tabs can be hosted by the server (`serverBrowser` capability, headless C
 | `device.detail` | unary | `DeviceDetailInput` | `DeviceDetail` | `DeviceError` | `orchestration:read` | 1540 |
 | `device.action` | unary | `DeviceActionInput` | `DeviceDetail` | `DeviceError` | `orchestration:operate` | 1546 |
 | `subscribeDeviceState` | stream | `{}` | `DeviceServiceState` | - | `orchestration:read` | 1552 |
+
+Verified 2026-10-10 against the sandbox (WP7.6b, `T3Protocol/Domain/Preview.swift`; full notes in `docs/research/browser-preview.md`):
+
+- `preview.open {threadId, url?, viewport: {_tag:"fill"}, profileId: "default", runtime: "server"}` returns a `PreviewSessionSnapshot` (`navStatus` tagged `Idle|Loading|Success|LoadFailed`, `canGoBack`, `canGoForward`, `runtime`, `reveal?`, `revealRequest?{id,force}`, `zoomFactor?`, `colorScheme?`, `updatedAt`). Clients without a desktop browser open only `server` tabs (`apps/web/src/browser/previewRuntime.ts:20-29`).
+- `preview.list {threadId}` returns `{sessions, serverEpoch, revision}`; `subscribePreviewEvents {}` streams every thread's `opened|navigated|resized|failed|closed` with `serverEpoch` and `revision`. A different epoch means fetch the list again.
+- `preview.adjust {threadId, tabId, hardReload?|colorScheme?|zoomFactor?|clear?}` returns the snapshot. Zoom factors are Chrome's 17 levels.
+- `preview.navigate` on a server tab needs control; viewers navigate with the stream's `navigate` message instead.
+- `subscribeDiscoveredLocalServers {configuredUrls?}` streams `{servers[{host,port,url,processName,pid,terminal}], scannedAt, configuredUrlProbing?}` while subscribed.
+- `GET /api/preview-stream/ws?threadId&tabId&maxWidth&maxHeight&wsTicket`: binary messages are whole JPEG frames, each answered with `{"type":"ack"}`; the first interactive viewer of an unclaimed tab gets control automatically. Text messages and input are listed in the research note (section 2). Close 4404 tab gone, 4503 host setup (JSON reason), 1006 before open or 1008/4401 refused.
+- `preview.reportProfiles` is not sent: the server keeps one list in memory, so a client without profiles would erase the desktop app's.
 
 ### 9.9 Scheduled tasks
 

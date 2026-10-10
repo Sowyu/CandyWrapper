@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-10: 124 🟡, 52 ➖, 267 ⏳.
+Status 2026-10-10: 138 🟡, 55 ➖, 250 ⏳.
 
 Status legend:
 
@@ -135,7 +135,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Context window meter | comp/chat/ContextWindowMeter.tsx | ⏳ | Click offers compact |
 | Thread automations panel (scheduled tasks, PR watch) | comp/chat/ThreadAutomationsPanel.tsx | ⏳ | |
 | Thread-linked pull requests panel | comp/pullRequest/ThreadPullRequestsPanel.tsx | 🟡 | WP7.5b: the `pull-requests` tab, rows stepped by stack depth newest chain first, unsynced rows muted, footer counts and Link, row menu (Copy link, Open, Watch, Unlink or Dismiss), empty state. Missing: Shift quick actions on rows, hover menu button |
-| Agent browser cursor overlay (agent clicking in a preview) | comp/preview/AgentBrowserCursor.tsx | ⏳ | needs webview: ask user |
+| Agent browser cursor overlay (agent clicking in a preview) | comp/preview/AgentBrowserCursor.tsx | 🟡 | WP7.6b: `pointer` messages from the stream place `AgentCursorView` over the letterboxed frame (`placeAgentCursor`): mouse-pointer-2 in primary, a ping on clicks, full opacity for 700 ms, then 35%. Seen on screen while a haiku turn drove a tab |
 | Drag files onto thread to attach | comp/chat/workspaceFileDrop.ts, comp/chat/folderDrop.ts | ⏳ | |
 
 ## Composer
@@ -186,7 +186,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ➖ | WP7.6a: `T3Store/RightPanelState.swift` ports the store (surfaces, open, openFile, activate, close, close others, close to the right, close all, toggle, visibility) and the closed tab stack (20, newest first, skips open tabs, restores across threads); per-thread state persisted. Tab strip clipped at `pr-28` and following the active tab, tab context menu, middle click closes, + menu with letters, `mod+t`, "Open a surface" launcher with letters. Kinds drawn: diff, files, file. Missing: browser, terminal, device, pull request tabs (shown disabled), scroll buttons, maximize state per tab, drafts. Fidelity `files` (tabs, launcher) |
+| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ➖ | WP7.6a: `T3Store/RightPanelState.swift` ports the store (surfaces, open, openFile, activate, close, close others, close to the right, close all, toggle, visibility) and the closed tab stack (20, newest first, skips open tabs, restores across threads); per-thread state persisted. Tab strip clipped at `pr-28` and following the active tab, tab context menu, middle click closes, + menu with letters, `mod+t`, "Open a surface" launcher with letters. Kinds drawn: diff, files, file, pull request, browser (WP7.6b). Missing: terminal and device tabs (shown disabled), scroll buttons, maximize state per tab, drafts. Fidelity `files` (tabs, launcher) |
 | Right panel resize handle, sheet mode on narrow windows | comp/preview/RightPanelResizeHandle.tsx, comp/RightPanelSheet.tsx, web/rightPanelLayout.ts | ⏳ | |
 | Diff panel (`diff.toggle`): turn selector, file tree, unified/split, wrap, whitespace toggle | comp/DiffPanel.tsx, comp/DiffPanelShell.tsx, web/diffPanelStore.ts | ➖ | Diffs rendered by @pierre/diffs (web worker pool); needs native renderer; Missing: file tree aside (toggle is inert) |
 | Diff file tree with status icons | comp/diffs/DiffFileTree.tsx, comp/diffs/DiffFileStatus.tsx | ⏳ | |
@@ -201,16 +201,16 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | File preview: HTML and PDF rendered | comp/files/BrowserDocumentFrame.tsx, docs/composer.md | 🟡 | WP7.6a: PDF in PDFKit; HTML in a WKWebView with a non-persistent store, created while its tab shows and torn down when hidden or closed (WebContent and Networking exit at once, the GPU process within a minute). Missing: "Open file in preview browser" (WP7.6b) |
 | File comments (review annotations in files) | comp/files/fileCommentAnnotations.ts | ⏳ | |
 | Go to file picker (`mod+p`) | comp/files/ProjectFilePicker.tsx | 🟡 | WP7.6a: the palette in "files" mode: `projects.searchEntries` (kind file, 200, 120 ms; empty query lists recent files), server order kept, fuzzy highlights (`getProjectFilePickerMatches`), file icons, Enter opens the file tab, Escape back to commands, "Open a project to search its files." |
-| Search project contents (`mod+shift+f`) | comp/search/ProjectContentSearchDialog.tsx, comp/search/HighlightedSearchLine.tsx | ⏳ | |
-| Browser/preview panel: URL bar, tabs, back/forward/reload, zoom, favicon, incognito | comp/preview/PreviewPanel.tsx, comp/preview/PreviewView.tsx, comp/preview/PreviewChromeRow.tsx, comp/preview/PreviewMoreMenu.tsx | ⏳ | needs webview: ask user |
-| Browser: empty state with discovered local servers and recent URLs | comp/preview/PreviewEmptyState.tsx, comp/preview/PreviewLocalServerCard.tsx, comp/preview/PreviewRecentUrlCard.tsx, web/portDiscoveryState.ts | ⏳ | needs webview: ask user |
-| Browser: unreachable page state | comp/preview/PreviewUnreachable.tsx | ⏳ | needs webview: ask user |
-| Browser: pick element and annotate (adds chip to composer) | desk/preview/PickPreload.ts, desk/preview/Annotation.css, desk/preview/PickedElementPayload.ts | ⏳ | needs webview: ask user |
-| Browser: agent control via CDP (click, type, screenshot, recording) | desk/preview/CdpRelay.ts, desk/preview/BrowserSession.ts, desk/preview/RecordingCursor.ts | ⏳ | needs webview: ask user |
-| Browser: floating mini player (PiP) | comp/preview/ThreadPreviewMiniPlayer.tsx, web/previewMiniPlayerStore.ts, desk/preview-pip-preload.ts | ⏳ | needs webview: ask user |
-| Browser: remote-environment browser (server headless Chromium streamed) | docs/remote-access.md, `/api/preview-stream` | ⏳ | needs webview: ask user |
+| Search project contents (`mod+shift+f`) | comp/search/ProjectContentSearchDialog.tsx, comp/search/HighlightedSearchLine.tsx | 🟡 | WP7.6b: the palette in "content" mode (`ContentSearchView`): `projects.searchContents` (120 ms, 500 matches, whitespace kept), Aa/ab/.* toggles in the input, status line, groups by file with count, mono rows with line numbers, pierre token colors and `bg-primary/25` marks, windows of 100 growing on scroll, arrows wrap, Enter opens the file tab at the line. Fidelity `browser` (search). Missing: sticky group headers, the ab underline, the file-access check |
+| Browser/preview panel: URL bar, tabs, back/forward/reload, zoom, favicon, incognito | comp/preview/PreviewPanel.tsx, comp/preview/PreviewView.tsx, comp/preview/PreviewChromeRow.tsx, comp/preview/PreviewMoreMenu.tsx | ➖ | WP7.6b: server tabs only (previewRuntime.ts:20-29). Chrome row (back, forward, refresh with spin and the 5.3 s loading bar, address bar with select-all on focus and DuckDuckGo search, Open in system browser on hover, float toggle, more menu: Hard reload, Appearance, zoom row, Clear cookies/cache via `preview.adjust`), tabs from `preview.list` + `subscribePreviewEvents` (`reconcileBrowserSurfaces`), titles, Google favicons for public hosts, close sends `preview.close`, Mod+Shift+T reopens at the page. Viewer: JPEG frames decoded off the main thread (newest only), control bar (Take/Release control), mouse, wheel, keys, paste, copy back, dialogs, file chooser upload, downloads, popups, host setup and refused states. Fidelity `browser` (chrome). Missing: device toolbar, profiles (no `preview.reportProfiles`: it would overwrite the desktop app's list), DevTools and separate window (Electron only), IME |
+| Browser: empty state with discovered local servers and recent URLs | comp/preview/PreviewEmptyState.tsx, comp/preview/PreviewLocalServerCard.tsx, comp/preview/PreviewRecentUrlCard.tsx, web/portDiscoveryState.ts | 🟡 | WP7.6b: "No preview yet" or Recently used (per project, 50, 8 shown) and Local servers from `subscribeDiscoveredLocalServers` (only while the empty state shows, configured script URLs first). Fidelity `browser` (empty, lists) |
+| Browser: unreachable page state | comp/preview/PreviewUnreachable.tsx | 🟡 | WP7.6b: Chromium's page in T3's styles with Details and Reload, and the file-not-shown variant with Download. Fidelity `browser` (unreachable) |
+| Browser: pick element and annotate (adds chip to composer) | desk/preview/PickPreload.ts, desk/preview/Annotation.css, desk/preview/PickedElementPayload.ts | ⏳ | Not offered for streamed server tabs in T3 either (desktop `<webview>` only); CandyWrapper has no desktop tabs |
+| Browser: agent control via CDP (click, type, screenshot, recording) | desk/preview/CdpRelay.ts, desk/preview/BrowserSession.ts, desk/preview/RecordingCursor.ts | ➖ | WP7.6b: agents drive the server's own headless Chrome; this app views and steers those tabs (research note: no client can host). Missing: screenshot and recording buttons (desktop tabs only in T3) |
+| Browser: floating mini player (PiP) | comp/preview/ThreadPreviewMiniPlayer.tsx, web/previewMiniPlayerStore.ts, desk/preview-pip-preload.ts | ➖ | WP7.6b: `BrowserMiniPlayerView` over the chat column, 320 box at the page's aspect, control bar at the bottom, dot handle with Open in right panel and Close, drag to move; opens for an agent's revealed tab and from the chrome row. Missing: resize handles, composer and details-card obstacles, system Picture in Picture |
+| Browser: remote-environment browser (server headless Chromium streamed) | docs/remote-access.md, `/api/preview-stream` | 🟡 | WP7.6b: every tab streams over `/api/preview-stream/ws` with a fresh `wsTicket` per connect, T3's backoff, 4404/4503/refusal handling, frame cap that grows with the panel |
 | Browser: import sessions from other browsers | docs/browser-import.md, comp/settings/BrowserImportWizard.tsx, desk/preview/BrowserImport | ⏳ | needs webview: ask user |
-| Browser: zoom shortcuts, refresh, focus URL | web/keybindings.ts (`preview.*`) | ⏳ | needs webview: ask user |
+| Browser: zoom shortcuts, refresh, focus URL | web/keybindings.ts (`preview.*`) | 🟡 | WP7.6b: `preview.refresh`, `preview.focusUrl`, `preview.zoomIn/Out/resetZoom` with `previewFocus` (focus inside the browser panel), `preview.toggle` |
 | Device panel (iOS Simulator / Android Emulator stream, tabs, rename) | comp/device/DevicePanel.tsx, comp/device/DeviceWorkspace.tsx, comp/device/DeviceStreamView.tsx | ⏳ | Video stream via /api/device-hub; verify transport before deciding on webview |
 | Device setup flow (hub install, platform check, agent access) | comp/device/DeviceSetup.tsx, comp/device/DeviceHostAvailability.tsx | ⏳ | |
 | Device controls rail (home, back, recents, rotate, power, fold, 3D view) | comp/device/DeviceControlsRail.tsx, comp/device/DeviceAndroidFoldControls.tsx, comp/device/DeviceDuoControls.tsx | ⏳ | 3D view uses WebGL (likely needs webview or SceneKit): ask user |
@@ -439,7 +439,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | Link pull request to thread; Show linked pull requests | comp/CommandPalette.tsx (lines ~1973-1990) | ✅ | Capability-gated like T3 |
 | Restart agent session | comp/CommandPalette.tsx (line ~2000) | ⏳ | |
 | Go to file | comp/CommandPalette.tsx (line ~2041) | 🟡 | WP7.6a, keeps the palette open in files mode |
-| Search project contents | comp/CommandPalette.tsx (line ~2054) | ⏳ | |
+| Search project contents | comp/CommandPalette.tsx (line ~2054) | 🟡 | WP7.6b: the "Search project contents" action (`projectSearch.toggle`) |
 | New project (name, optional private GitHub repo) | comp/CommandPalette.tsx (line ~2068) | ⏳ | |
 | Add project: local folder browser (directories list with ".."), clone from provider or URL, existing project | comp/CommandPalette.tsx (lines ~2099, 2840, 2935) | ➖ | "Add project" runs the desktop folder picker; browse, clone and the environment step wait |
 | Open WSL folder | comp/CommandPalette.tsx (line ~2112) | ⏳ | Windows only; skip |
@@ -472,15 +472,15 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | rightPanel.close | mod+w | !terminalFocus | 🟡 WP7.6a: closes the active tab |
 | view.reopenClosed | mod+shift+t | (none) | 🟡 WP7.6a: panel tabs only |
 | diff.toggle | mod+d | !terminalFocus | 🟡 |
-| preview.toggle | mod+shift+j | (none) | ⏳ WP7.6 |
-| preview.refresh | mod+r | previewFocus | ⏳ WP7.6 |
-| preview.focusUrl | mod+l | previewFocus | ⏳ WP7.6 |
-| preview.zoomIn | mod+= and mod++ | previewFocus | ⏳ WP7.6 |
-| preview.zoomOut | mod+- | previewFocus | ⏳ WP7.6 |
-| preview.resetZoom | mod+0 | previewFocus | ⏳ WP7.6 |
+| preview.toggle | mod+shift+j | (none) | 🟡 WP7.6b |
+| preview.refresh | mod+r | previewFocus | 🟡 WP7.6b |
+| preview.focusUrl | mod+l | previewFocus | 🟡 WP7.6b |
+| preview.zoomIn | mod+= and mod++ | previewFocus | 🟡 WP7.6b |
+| preview.zoomOut | mod+- | previewFocus | 🟡 WP7.6b |
+| preview.resetZoom | mod+0 | previewFocus | 🟡 WP7.6b |
 | commandPalette.toggle | mod+k | !terminalFocus | 🟡 |
 | filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a |
-| projectSearch.toggle | mod+shift+f | !terminalFocus | ⏳ WP7.6b: T3 draws a palette dialog, not a panel |
+| projectSearch.toggle | mod+shift+f | !terminalFocus | 🟡 WP7.6b: the palette's content mode |
 | usage.open | mod+u | !terminalFocus | ➖ placeholder page |
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
 | appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |

@@ -29,6 +29,8 @@ public final class ToggleView: ControlView {
     /// Icon size for icons with their own `size-*` class (16 otherwise).
     public var iconSize: CGFloat = 16 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     public var isPressed = false { didSet { if isPressed != oldValue { restyle(); setAccessibilityValue(isPressed) } } }
+    /// `font-mono` on the label (the content search options).
+    public var monospaced = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
     /// Called after a click flips `isPressed`.
     public final var onPressedChange: (@MainActor (Bool) -> Void)?
 
@@ -122,7 +124,7 @@ public final class ToggleView: ControlView {
     }
 
     private func restyle() {
-        label.font = DSFont.ui(14, weight: variant == .pill ? .regular : .medium)
+        label.font = monospaced ? DSFont.mono(14, weight: .medium) : DSFont.ui(14, weight: variant == .pill ? .regular : .medium)
         label.lineHeight = 20
         disabledOpacity = variant == .ghost ? 1 : 0.64 // ghost: `disabled:opacity-100`
         alphaValue = state.enabled ? 1 : CGFloat(disabledOpacity)

@@ -45,6 +45,19 @@ public final class CommandPaletteView: DSView {
         case empty(message: String?, actionsOnly: Bool)
         /// The browse-mode status row, "Loading folders...".
         case loading(String)
+        /// A mode that lays out its own body (`panelSize="fill"`): the dialog is 420 tall (`h-105`).
+        case custom(NSView)
+    }
+
+    /// Controls inside the input's end (`inputAccessory`, `absolute inset-e-2.5 top-1/2`); the
+    /// input keeps `pe-30` clear for them.
+    public var inputAccessory: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            inputAccessory.map(addSubview)
+            input.paddingOverride = (32, inputAccessory == nil ? 11 : 120)
+            needsLayout = true
+        }
     }
 
     /// `getCommandPaletteInputPlaceholder("root")`.
@@ -77,6 +90,7 @@ public final class CommandPaletteView: DSView {
     private var rows: [CommandRowView] = []
     private var footerGroups: [NSView] = []
     private var pendingHighlightScroll = false
+    private var customView: NSView?
 
     public static let width: CGFloat = 576
     public static let maxHeight: CGFloat = 420
@@ -147,8 +161,17 @@ public final class CommandPaletteView: DSView {
             let l = LabelView(message, font: DSFont.ui(14))
             l.lineHeight = 20
             panelViews.append(l)
+        case .custom:
+            break
         }
         panelViews.forEach(document.addSubview)
+        if case .custom(let view) = content {
+            if customView !== view { customView?.removeFromSuperview(); customView = view; addSubview(view) }
+        } else {
+            customView?.removeFromSuperview()
+            customView = nil
+        }
+        scroll.isHidden = customView != nil
         restyle()
         highlightedIndex = highlightedIndex.flatMap { rows.isEmpty ? nil : min($0, rows.count - 1) }
         invalidateIntrinsicContentSize()
@@ -214,12 +237,14 @@ public final class CommandPaletteView: DSView {
             return 16 + panelViews.map { ($0 as! GroupView).contentHeight }.reduce(0, +) + CGFloat(max(0, groups.count - 1)) * 6
         case .empty: return 100   // `py-10` around a 20px line
         case .loading: return 44  // `py-3`
+        case .custom: return Self.maxHeight
         }
     }
 
     /// `max-h-105` on the popup and `max-h-[min(28rem,70vh)]` on the panel; the panel scrolls past it.
     public override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.width, height: min(Self.maxHeight, 2 + Self.inputRow + min(448, panelContentHeight) + Self.footerHeight))
+        if case .custom = content { return NSSize(width: Self.width, height: Self.maxHeight) }
+        return NSSize(width: Self.width, height: min(Self.maxHeight, 2 + Self.inputRow + min(448, panelContentHeight) + Self.footerHeight))
     }
 
     public override func layout() {
@@ -248,6 +273,13 @@ public final class CommandPaletteView: DSView {
             panelViews.first?.frame = NSRect(x: 0, y: 40, width: width, height: 20)
         case .loading:
             panelViews.first?.frame = NSRect(x: 16, y: 12, width: width - 32, height: 20)
+        case .custom(let view):
+            view.frame = scroll.frame
+        }
+        if let inputAccessory {
+            let s = inputAccessory.intrinsicContentSize
+            inputAccessory.frame = NSRect(x: inner.maxX - 10 - s.width, y: inner.minY + (Self.inputRow - s.height) / 2,
+                                          width: s.width, height: s.height)
         }
         if pendingHighlightScroll, scroll.frame.height > 0 {
             pendingHighlightScroll = false

@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             values["rightPanelOpen"] = threads?.panel.rightPanelOpen ?? false
             values["terminalFocus"] = threads?.terminal.isFocused ?? false
             values["terminalOpen"] = threads?.panel.terminalOpen ?? false
+            values["previewFocus"] = threads?.browser.isFocused ?? false
             values["usagePageOpen"] = commands?.isUsagePageOpen ?? false
             return KeybindingContext(values)
         }
