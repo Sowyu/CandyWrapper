@@ -93,9 +93,38 @@ public final class ComposerView: DSView {
     public var onQuestionPrevious: (() -> Void)?
     /// The attach button (`Attach files`); nil leaves it inert.
     public var onAttach: (() -> Void)?
-    /// Files above the editor. Only question answers fill it for now (the composer's own attachments
-    /// come later); set `fileRows` to change it.
+    /// Files above the editor: a question's answer files, and draft files without a chip.
     public let fileList = ComposerFileListView()
+    /// The draft's images above the files (`expandedComposerImages`).
+    public let imageShelf = ComposerImageShelfView()
+    public var imageTiles: [ComposerImageShelfView.Tile] {
+        get { imageShelf.tiles }
+        set {
+            let before = shelfHeight
+            imageShelf.tiles = newValue
+            imageShelf.isHidden = newValue.isEmpty
+            if shelfHeight != before { needsLayout = true; onHeightChange?() }
+        }
+    }
+    /// Draft attachments: a prompt with only attachments can still send (`hasSendableContent`).
+    public var attachmentCount = 0 { didSet { if attachmentCount != oldValue { refresh() } } }
+    /// Files dropped on the composer or pasted into it (images always, other files when the paste
+    /// has no text). The app classifies and uploads them.
+    public var onFiles: (([ComposerIncomingFile]) -> Void)?
+    /// Pasted text and whether Cmd+Shift+V kept it inline; true when the app folded it into a file.
+    public var onPasteText: ((String, Bool) -> Bool)? {
+        get { editor.onPasteText }
+        set { editor.onPasteText = newValue }
+    }
+    /// The selection's length in prompt characters, for the paste limit check.
+    public var selectedPromptLength: Int { editor.expanded(editor.selectedRange()).utf16.count }
+    /// Where pasted image data is written before it uploads.
+    public var pasteDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperPaste", isDirectory: true)
+    private let fileDrop = ComposerFileDrop()
+    /// `bg-accent/45 ring-1 ring-primary/70` while files hover over the composer.
+    private let dropHighlight = CALayer()
+    private var laidOutShelfHeight: CGFloat = 0
+    private var shelfHeight: CGFloat { imageShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
     public var fileRows: [ComposerFileRow] {
         get { fileList.rows }
         set {
@@ -120,8 +149,8 @@ public final class ComposerView: DSView {
         switch pending {
         case .approval: Self.inset * 2 + Self.pad + editorHeight + Self.pad
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
-        case .question: Self.inset * 2 + Self.pad + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
-        case .none: Self.inset * 2 + Self.pad + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
+        case .question: Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
+        case .none: Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
         }
     }
 
@@ -198,11 +227,29 @@ public final class ComposerView: DSView {
         validation.isHidden = true
         addSubview(validation)
 
-        // ponytail: only question answers take files; the composer's own attachments (chips, images, paste, drop) come later
         attach.iconColor = Themed.color(\.mutedForeground)
         attach.action = { [weak self] in self?.onAttach?() }
         fileList.isHidden = true
         addSubview(fileList)
+        imageShelf.isHidden = true
+        addSubview(imageShelf)
+        dropHighlight.cornerRadius = Self.radius
+        dropHighlight.borderWidth = 1
+        dropHighlight.isHidden = true
+        dropHighlight.actions = ["hidden": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        glass.layer?.addSublayer(dropHighlight)
+        fileDrop.onHighlight = { [weak self] on in self?.dropHighlight.isHidden = !on }
+        fileDrop.onFiles = { [weak self] urls in self?.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
+        editor.fileDrop = fileDrop
+        registerForDraggedTypes([.fileURL])
+        editor.onPasteAttachments = { [weak self] pboard in
+            guard let self, let onFiles = self.onFiles else { return false }
+            let files = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory)
+            let text = pboard.string(forType: .string) ?? ""
+            guard ComposerAttachmentRules.shouldHandlePaste(files: files.map { ($0.name, $0.mimeType) }, plainText: text) else { return false }
+            onFiles(files)
+            return true
+        }
         TooltipController.attach(to: attach, text: "Attach files")
         attach.setAccessibilityLabel("Attach files")
         addSubview(attach)
@@ -260,7 +307,7 @@ public final class ComposerView: DSView {
     private var hasContent: Bool {
         let text = prompt
         return !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !ComposerContext.referencedIds(text).isEmpty
+            || !ComposerContext.referencedIds(text).isEmpty || attachmentCount > 0
     }
 
     /// The look of each chip; the default knows mentions and skills, and shows context links as
@@ -341,6 +388,19 @@ public final class ComposerView: DSView {
         }
     }
 
+    /// Inserts prompt text at the caret, with a space before it unless the caret follows whitespace
+    /// (`insertComposerText(..., { ensureLeadingBoundary: true })`). Its tokens become chips.
+    public func insertAtCaret(_ text: String) {
+        let range = editor.selectedRange()
+        let ns = editor.string as NSString
+        var insert = text
+        if range.location > 0, range.location <= ns.length,
+           let scalar = Unicode.Scalar(ns.character(at: range.location - 1)), !CharacterSet.whitespacesAndNewlines.contains(scalar) {
+            insert = " " + insert
+        }
+        editor.insertText(insert, replacementRange: range)
+    }
+
     /// The composer's target changed (thread, draft, queued edit): a recall from the old one is not active here.
     public func resetPromptHistory() { historyPosition = nil }
 
@@ -415,6 +475,17 @@ public final class ComposerView: DSView {
         onSend?(prompt, mode)
     }
 
+    // MARK: Drops on the padding
+
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.entered(sender) : []
+    }
+    public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { fileDrop.exited() }
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.perform(sender) : false
+    }
+
     // MARK: Drawing and layout
 
     public override func updateLayer() {
@@ -422,6 +493,8 @@ public final class ComposerView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         glass.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+        dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
+        dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         shadowLayer.shadowOpacity = dark ? 0 : 0.4
         CATransaction.commit()
     }
@@ -460,9 +533,17 @@ public final class ComposerView: DSView {
 
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
-        fileList.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        dropHighlight.frame = box
+        CATransaction.commit()
+        let shelf = shelfHeight
+        // The shelf wraps by width: a new width can change the box height the parent planned with.
+        if shelf != laidOutShelfHeight { laidOutShelfHeight = shelf; DispatchQueue.main.async { [weak self] in self?.onHeightChange?() } }
+        imageShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
+                                  height: max(0, shelf - ComposerImageShelfView.marginBottom))
+        fileList.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad + shelf, width: textWidth,
                                 height: max(0, fileList.preferredHeight - ComposerFileListView.marginBottom))
-        let textTop = Self.inset + Self.pad + fileList.preferredHeight
+        let textTop = Self.inset + Self.pad + shelf + fileList.preferredHeight
         scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
         editor.textContainerInset = NSSize(width: 4, height: 4 + editor.lineTop)
         editor.minSize = NSSize(width: textWidth + 8, height: editorHeight + 8)

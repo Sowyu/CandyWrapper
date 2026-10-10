@@ -108,6 +108,15 @@ public final class ThreadPanelView: DSView {
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
+    /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero and during approvals.
+    public let stashBadge = ComposerStashBadgeView()
+    public var showsStashBadge = false { didSet { if showsStashBadge != oldValue { needsLayout = true } } }
+    /// The stash list, docked where the `/` menu goes; the `/` menu wins when both are open.
+    public let stashMenu = ComposerStashMenuView()
+    public var stashMenuOpen = false { didSet { if stashMenuOpen != oldValue { needsLayout = true } } }
+    /// "Loading messages..." over the composer while the thread syncs (`ComposerActivityRow`).
+    public let activityRow = ComposerActivityRowView()
+    public var showsActivity = false { didSet { if showsActivity != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
     /// The draft's context strip under the composer, with the "Run on" control.
     public let contextStrip = ComposerContextStripView()
@@ -162,11 +171,17 @@ public final class ThreadPanelView: DSView {
         addSubview(queue)
         environmentBanner.isHidden = true
         addSubview(environmentBanner)
+        activityRow.isHidden = true
+        addSubview(activityRow)
+        stashBadge.isHidden = true
+        addSubview(stashBadge)
         addSubview(approvalPanel)
         addSubview(questionPanel)
         contextStrip.isHidden = true
         addSubview(contextStrip)
         addSubview(commandMenu)
+        stashMenu.isHidden = true
+        addSubview(stashMenu)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         menus.onLayoutChange = { [weak self] in self?.needsLayout = true }
@@ -341,9 +356,27 @@ public final class ThreadPanelView: DSView {
             commandMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
                                        width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
         }
+        let stashShown = !menuShown && stashMenuOpen && !composer.isHidden && drawer != .approval
+        stashMenu.isHidden = !stashShown
+        if stashShown {
+            let maxList = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let h = min(stashMenu.preferredHeight(maxList: maxList), max(96, y - 24 + ComposerBannerView.overlap))
+            stashMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
+                                     width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
+        }
         let docked = !composer.isHidden && !isDraft
+        // The dock (`ComposerBanner.Dock`, `flex items-end gap-1`): the column of attachments, then
+        // the stash tab at the right, both ending 17pt under the composer's top.
+        let badgeShown = showsStashBadge && !composer.isHidden && drawer != .approval
+        stashBadge.isHidden = !badgeShown
+        let badgeWidth = badgeShown ? stashBadge.preferredWidth : 0
+        let dockRight = x + width - ComposerBannerView.drawerInset
+        if badgeShown {
+            stashBadge.frame = NSRect(x: dockRight - badgeWidth, y: y + ComposerBannerView.overlap - stashBadge.preferredHeight,
+                                      width: badgeWidth, height: stashBadge.preferredHeight)
+        }
         let bannerX = x + ComposerBannerView.drawerInset
-        let bannerWidth = max(0, width - 2 * ComposerBannerView.drawerInset)
+        let bannerWidth = max(0, width - 2 * ComposerBannerView.drawerInset - (badgeShown ? badgeWidth + 4 : 0))
         let overlap = ComposerBannerView.overlap
         var top = y
         let shown: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
@@ -356,6 +389,14 @@ public final class ThreadPanelView: DSView {
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
         }
+        let activityShown = docked && showsActivity
+        activityRow.isHidden = !activityShown
+        if activityShown {
+            let h = activityRow.preferredHeight
+            activityRow.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = activityRow.frame.minY
+        }
+        activityRow.joinsAbove = false
         let bannerShown = docked && showsEnvironmentBanner
         environmentBanner.isHidden = !bannerShown
         if bannerShown {
@@ -368,9 +409,10 @@ public final class ThreadPanelView: DSView {
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
         environmentBanner.joinsAbove = queueHeight > 0
-        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown
-        questionPanel.joinsAbove = queueHeight > 0 || bannerShown
-        let above = y - top
+        activityRow.joinsAbove = queueHeight > 0 || bannerShown
+        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown
+        questionPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown
+        let above = max(y - top, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }

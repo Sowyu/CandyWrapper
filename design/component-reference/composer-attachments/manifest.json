@@ -1,0 +1,22 @@
+{
+  "preview" : {
+    "height" : 480,
+    "width" : 720
+  },
+  "shelf" : {
+    "height" : 64,
+    "width" : 300
+  },
+  "stash-badge" : {
+    "height" : 51,
+    "width" : 95.96875
+  },
+  "stash-empty" : {
+    "height" : 69,
+    "width" : 692
+  },
+  "stash-menu" : {
+    "height" : 98,
+    "width" : 692
+  }
+}

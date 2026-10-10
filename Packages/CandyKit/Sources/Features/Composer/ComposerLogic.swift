@@ -124,8 +124,9 @@ public enum ComposerLogic {
     /// Checked 2026-10-10 against the official web client on the sandbox: same keys, same values.
     public static func launchThreadPayload(commandId: String, threadId: String, projectId: String, title: String,
                                            modelSelection: JSONValue, runtimeMode: String, interactionMode: String,
-                                           messageId: String, text: String, context: JSONValue? = nil) -> JSONValue {
-        var message: [String: JSONValue] = ["messageId": .string(messageId), "text": .string(text), "attachments": .array([])]
+                                           messageId: String, text: String, context: JSONValue? = nil,
+                                           attachments: [JSONValue] = []) -> JSONValue {
+        var message: [String: JSONValue] = ["messageId": .string(messageId), "text": .string(text), "attachments": .array(attachments)]
         // Inline chips' records ride only when there are any (commands.ts:680-684).
         if let context { message["context"] = context }
         return .object([

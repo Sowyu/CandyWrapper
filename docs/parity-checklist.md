@@ -75,7 +75,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ➖ | Missing: editor picker, git actions, project scripts; only the diff toggle works |
 | Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ⏳ | |
 | Thread status line (running, elapsed, agent activity) | comp/chat/ThreadStatusLine.tsx, comp/chat/AgentElapsed.tsx | ➖ | Missing: agent activity text; only the "Working for Ns" row exists |
-| Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ➖ | Missing: chips, image shelf |
+| Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ➖ | Image grid (`max-w-[210px]` 2 columns, 4:3, `assets.createUrl` then decoded at cell size; a click opens the preview) and rows for files without a chip. Missing: chips in the text (links still), file row preview and download, videos |
 | Timeline: assistant message with markdown | comp/chat/MessagesTimeline.tsx, comp/ChatMarkdown.tsx | 🟡 | Incremental streaming render (web/markdown-incremental.ts) |
 | Timeline: assistant meta row (model, duration, copy, timestamps) | comp/chat/MessagesTimeline.logic.ts (`assistant-meta`) | 🟡 | |
 | Timeline: thinking / reasoning row | comp/chat/MessagesTimeline.logic.ts (`thinking`) | 🟡 | Collapsible |
@@ -151,10 +151,10 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Skill picker (`$`) and skills in slash menu | comp/chat/ComposerCommandMenu.tsx, web/providerSkillSearch.ts | 🟡 | Source badges; "Show skills in / menu" setting assumed on |
 | File mention picker (`@`) with workspace file search and thread mentions | comp/chat/ComposerCommandMenu.tsx, web/composer-editor-mentions.ts | 🟡 | `projects.searchEntries` (120 ms debounce, 80 rows), up to 5 thread matches first; picks insert `[name](path)` or a thread context link with its record in `context` |
 | Pull request picker (`#`) | docs/composer.md, comp/chat/ComposerCommandMenu.tsx | ➖ | `pullRequests.list` for the project's repository; picks a review-comment record. Missing: `pullRequests.detail` lookup for a number outside the 99 listed; not tried on screen (sandbox repo has no remote) |
-| Inline context chips: terminal excerpt, review comment, preview annotation, file, PR, thread, image | comp/composerInlineChip.ts, comp/ContextChip.tsx, comp/ThreadContextChip.tsx, comp/chat/FileTagChip.tsx, comp/chat/TerminalContextInlineChip.tsx | ➖ | File/folder mention, skill, thread, PR and unresolved chips in the editor, one character each (deletes as a unit); a token becomes a chip once whitespace follows. Missing: terminal, review comment, annotation and image chips (their producers come later), hover brief, click to open, chips in sent message bubbles |
+| Inline context chips: terminal excerpt, review comment, preview annotation, file, PR, thread, image | comp/composerInlineChip.ts, comp/ContextChip.tsx, comp/ThreadContextChip.tsx, comp/chat/FileTagChip.tsx, comp/chat/TerminalContextInlineChip.tsx | ➖ | File/folder mention, skill, thread, PR, attached image and file (size, upload percent or "upload failed") and unresolved chips in the editor, one character each (deletes as a unit); a token becomes a chip once whitespace follows. Missing: terminal, review comment and annotation chips (their producers come later), the image chip's average-color accent, hover brief, click to open, chips in sent message bubbles |
 | Chip copy/paste across drafts | web/composerHandleContext.ts, comp/composerInlineTokenPaste.ts | 🟡 | Copy writes the expanded text plus T3's `data-t3-context-fragment` HTML flavor; paste imports the records the pasted links reference |
-| Image thumbnail shelf, expanded preview | comp/chat/ComposerImageThumbnail.tsx, comp/chat/ExpandedImagePreview.tsx | ⏳ | |
-| Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | ⏳ | Only question-answer files are built |
+| Image thumbnail shelf, expanded preview | comp/chat/ComposerImageThumbnail.tsx, comp/chat/ExpandedImagePreview.tsx | 🟡 | 64pt tiles decoded off the main thread at tile size (ImageIO thumbnails), upload percent strip, retry, remove (asks when the text mentions the image); preview with arrows, Escape, backdrop click, decoded at the box size. Fidelity `composer-attachments`. Missing: zoom and pan, media context menu (save, copy), videos |
+| Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | 🟡 | Paperclip, drop on the composer, paste (images always, files without text, pasted image data as `image.png`); T3's classification, 100 files, 10 MiB images (HEIC to JPEG, oversized images re-encoded), 80 MiB of images, staging limit from `fileAttachments.maxUploadBytes`; `attachments.createUploadUrl` and the signed POST; files are chips (the last chip deleted drops the file); 32 KiB pastes fold into `pasted-text.txt` (Cmd+Shift+V keeps them inline); send waits for uploads; `attachments` plus image/file records in `context`. Missing: persisting draft attachments across relaunch, "Attach again" rows, inline base64 images for servers without `attachmentUploads`, attachments on queued-message edits |
 | Attached file preview panel | comp/files/AttachmentFilePreview.tsx | ⏳ | |
 | SnapShot attachment details | comp/chat/SnapShotAttachmentDetails.tsx | ⏳ | |
 | Model picker (providers sidebar, search, favorites, multi-select with shift-click) | comp/chat/ProviderModelPicker.tsx, comp/chat/ModelPickerContent.tsx, comp/chat/ModelPickerSidebar.tsx, comp/chat/ModelListRow.tsx | ➖ | `mod+shift+m`; provider keys `mod+shift+up/down`; Missing: shift-click multi-select |
@@ -169,9 +169,9 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Previous worktree item | comp/PreviousWorktreeItemContent.tsx | ⏳ | |
 | Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | 🟡 | |
 | Composer banners stack (clone progress, server update, provider issues) | comp/chat/ComposerBannerStack.tsx, comp/chat/ComposerBanner.tsx, comp/chat/ComposerServerUpdateStatus.tsx | ➖ | Missing: only the environment reconnecting banner exists |
-| Composer activity status | comp/chat/ComposerActivityStatus.tsx | ⏳ | |
-| Composer usage limits chip | comp/chat/ComposerUsageLimits.tsx | ⏳ | |
-| Prompt stash (save, restore, menu, badge) `composer.stash` | comp/chat/ComposerStashMenu.tsx, comp/chat/ComposerStashBadge.tsx, web/promptStashStore.ts | ⏳ | |
+| Composer activity status | comp/chat/ComposerActivityStatus.tsx | 🟡 | "Loading messages..." / "Syncing messages..." with the spinner from the thread store's status, shown after 400 ms and kept 400 ms (`useDelayedStatus`) |
+| Composer usage limits chip | comp/chat/ComposerUsageLimits.tsx | ⏳ | The `/usage-limits` banner renders the Limits windows (`LimitWindows`, `ResetCredits` from the usage page); build it with the usage page (WP7.7) |
+| Prompt stash (save, restore, menu, badge) `composer.stash` | comp/chat/ComposerStashMenu.tsx, comp/chat/ComposerStashBadge.tsx, web/promptStashStore.ts | 🟡 | Cmd+S stashes (files must be uploaded and keep their reference; images saved under the 1.3 M / 2.7 M char budgets as files), empty composer restores one entry or opens the menu, 20 entries newest first in Application Support, restore checks file uploads first (24 h expiry) and only in their environment, badge pulse, menu keys. Fidelity `composer-attachments`. Missing: expired files as "Attach again" rows |
 | Prompt history recall (arrow up/down) | comp/chat/composerPromptHistory.ts | 🟡 | |
 | Prompt length validation | comp/chat/ComposerPromptLengthValidation.tsx | 🟡 | |
 | Collapse composer on scroll (setting) | comp/chat/composerScrollGesture.ts | ⏳ | |
@@ -485,7 +485,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
 | appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |
 | themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ WP7.7 |
-| composer.stash | mod+s | !terminalFocus | ⏳ WP7.3 |
+| composer.stash | mod+s | !terminalFocus | 🟡 WP7.3 |
 | thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | 🟡 |
 | thread.editQueuedMessage | alt+arrowup | composerFocus | 🟡 |
 | composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 |

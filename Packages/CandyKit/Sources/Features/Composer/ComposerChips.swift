@@ -13,12 +13,17 @@ public struct ComposerChipLook: Equatable, Sendable {
         case thread
         /// `open`, `draft`, `merged`, `closed`, or nil for a pull request whose state is unknown.
         case pullRequest(state: String?)
+        /// A draft attachment (`ImageChipButton`, `FileChip`): label middle-truncated to 36, then the size.
+        case image
+        case file(name: String)
         case unresolved
     }
     public var kind: Kind
     public var label: String
+    /// `text-3xs` after the label: the size, then the upload state ("42%", "upload failed").
+    public var detail: String?
 
-    public init(kind: Kind, label: String) { self.kind = kind; self.label = label }
+    public init(kind: Kind, label: String, detail: String? = nil) { self.kind = kind; self.label = label; self.detail = detail }
 
     /// Mentions and skills only; every context link shows as unavailable.
     public static func basic(_ token: ComposerInlineToken) -> ComposerChipLook {
@@ -55,6 +60,9 @@ public struct ComposerChipLook: Equatable, Sendable {
         switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
         case .skill: OKLab.oklch(0.62, 0.16, 322)
+        // ponytail: the image accent stays T3's default; T3 tints it with the picture's average color once loaded
+        case .image: OKLab.oklch(0.62, 0.16, 16)
+        case .file: OKLab.oklch(0.62, 0.136, 237)
         case .thread: OKLab.oklch(0.62, 0.12, 190)
         case .pullRequest(let state):
             switch state {
@@ -76,6 +84,10 @@ public struct ComposerChipLook: Equatable, Sendable {
             let (definition, color) = FileChipStyle.icon(for: meta)
             return (definition, color)
         case .skill: return (IconName.package.definition, nil)
+        case .image: return (IconName.image.definition, nil)
+        case .file(let name):
+            let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
+            return FileChipStyle.icon(for: meta)
         case .thread: return (IconName.messagesSquare.definition, nil)
         case .pullRequest(let state):
             let name: IconName = switch state {
@@ -120,8 +132,10 @@ final class ComposerChipAttachment: NSTextAttachment {
     @MainActor init(look: ComposerChipLook, source: String, maxWidth: CGFloat) {
         self.look = look
         self.source = source
-        let font = Self.chipFont, reserve = FileChipStyle.leading(Self.size) + FileChipStyle.trailing(Self.size)
+        let font = Self.chipFont
         func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
+        let detailWidth = look.detail.map { 0.33 * FileChipStyle.em(Self.size) + TextLine(NSAttributedString(string: $0, attributes: [.font: Self.detailFont])).width } ?? 0
+        let reserve = FileChipStyle.leading(Self.size) + FileChipStyle.trailing(Self.size) + detailWidth
         var text = look.label
         if width(text) + reserve > maxWidth {
             while !text.isEmpty, width(text + "…") + reserve > maxWidth { text.removeLast() }
@@ -137,6 +151,8 @@ final class ComposerChipAttachment: NSTextAttachment {
 
     static let size: CGFloat = 14
     @MainActor static var chipFont: NSFont { FileChipStyle.font(size) }
+    /// `text-3xs`.
+    @MainActor static var detailFont: NSFont { DSFont.ui(10) }
 
     /// `vertical-align: middle`: the chip's center sits x-height / 2 above the baseline.
     var chipBounds: CGRect { CGRect(x: 0, y: parentXHeight / 2 - size.height / 2, width: size.width, height: size.height) }
@@ -208,6 +224,11 @@ final class ComposerChipAttachment: NSTextAttachment {
         ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         ctx.textPosition = CGPoint(x: iconRect.maxX + 0.33 * em, y: baseline)
         CTLineDraw(line.line, ctx)
+        if let detail = look.detail {
+            let d = TextLine(NSAttributedString(string: detail, attributes: [.font: detailFont, .foregroundColor: look.foreground]))
+            ctx.textPosition = CGPoint(x: iconRect.maxX + 0.33 * em + line.width + 0.33 * em, y: d.baseline(top: rect.minY + (rect.height - 14) / 2, lineHeight: 14))
+            CTLineDraw(d.line, ctx)
+        }
         ctx.restoreGState()
     }
 }
