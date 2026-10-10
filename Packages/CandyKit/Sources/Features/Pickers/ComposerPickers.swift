@@ -81,22 +81,6 @@ public final class ComposerPickers {
         if notify { onChange?(current) }
     }
 
-    // MARK: Shortcuts (packages/shared/src/keybindings.ts:175-178)
-
-    /// `mod+shift+m`, `mod+shift+e`, `mod+shift+a` (when the terminal doesn't have focus). Returns
-    /// true when the event was one of them.
-    public func handleShortcut(_ event: NSEvent) -> Bool {
-        guard event.type == .keyDown, !event.isARepeat,
-              event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] else { return false }
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "m": toggleModelPicker()
-        case "e": openTraits()
-        case "a": openAccessMode()
-        default: return false
-        }
-        return true
-    }
-
     // MARK: Model picker
 
     /// `modelPicker.toggle`.
@@ -121,9 +105,14 @@ public final class ComposerPickers {
 
     /// The model picker's provider rail (`modelPicker.previousProvider` / `nextProvider`) while it is open.
     public func selectAdjacentProvider(_ direction: Int) {
-        guard let picker = modelPicker else { return }
-        picker.selectRail(ModelPickerSections.adjacentRail(picker.rail, direction: direction, catalog: context.catalog))
+        modelPicker?.selectAdjacentProvider(direction)
     }
+
+    /// `modelPickerOpen` for the keybinding context.
+    public var isModelPickerOpen: Bool { modelPicker?.window != nil }
+
+    /// `modelPicker.jump.N` while the picker is open.
+    public func jumpModel(_ index: Int) { modelPicker?.jump(index) }
 
     private func pickModel(_ id: ProviderInstanceId, _ slug: String) {
         closeOpenPopup()

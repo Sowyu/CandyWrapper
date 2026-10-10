@@ -174,7 +174,6 @@ final class ThreadController {
     /// Development: `--open-diff` opens the right panel on that thread's newest turn that changed files.
     private var openDiff = CommandLine.arguments.contains("--open-diff")
     private var restored = false
-    private var keyMonitor: Any?
     /// The environment the connection banner speaks for, and since when it is unavailable.
     private var bannerEnvironment: (id: String, since: Date)?
     private var bannerTimer: DispatchWorkItem?
@@ -217,14 +216,46 @@ final class ThreadController {
         panel.onRightPanelChange = { [weak self] open in self?.rememberRightPanel(open) }
         // Nothing to show until the shell arrives; T3's index route renders nothing before bootstrap.
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
-        // Cmd+D is T3's `diff.toggle` (a web keydown handler, not a menu item in the desktop app).
-        // ponytail: the default binding only; read the user's keybindings from server config in M7
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
-            guard event.window === window, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-                  event.charactersIgnoringModifiers == "d", let self else { return event }
-            MainActor.assumeIsolated { self.panel.toggleDiff() }
-            return nil
+    }
+
+    /// The thread view's keybindings (ChatView.tsx:8030-8180, Sidebar.tsx:4872-4910).
+    func registerShortcuts(_ shortcuts: Shortcuts) {
+        composer.registerShortcuts(shortcuts)
+        // `diff.toggle` and `rightPanel.toggle`: the diff is the only right panel surface so far.
+        shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] _ in
+            guard let self, self.panel.window != nil else { return false }
+            self.panel.toggleDiff()
+            return true
         }
+        // `rightPanel.close`: with nothing open the key keeps its native meaning.
+        shortcuts.on("rightPanel.close") { [weak self] call in
+            guard let self, self.panel.window != nil, self.panel.rightPanelOpen, !self.panel.isDraft else { return false }
+            if !call.isRepeat { self.panel.closeRightPanel() }
+            return true
+        }
+        // `thread.previous`, `thread.next`, `thread.jump.N` walk the sidebar's rows; ignored on repeat.
+        shortcuts.on(["thread.previous", "thread.next"] + Keymap.threadJumpCommands) { [weak self] call in
+            guard let self, !call.isRepeat, let sidebar = self.sidebar, sidebar.window != nil else { return false }
+            let ids = sidebar.orderedThreadIds
+            let target: ThreadId?
+            if let index = Keymap.jumpIndex(call.command, prefix: "thread.jump.") {
+                target = index < ids.count ? ids[index] : nil
+            } else {
+                target = Self.adjacentThread(ids, current: self.openThreadId, previous: call.command == "thread.previous")
+            }
+            guard let target else { return false }
+            self.open(target)
+            return true
+        }
+    }
+
+    /// `resolveAdjacentThreadId` (Sidebar.logic.ts:873-898).
+    static func adjacentThread(_ ids: [ThreadId], current: ThreadId?, previous: Bool) -> ThreadId? {
+        guard !ids.isEmpty else { return nil }
+        guard let current else { return previous ? ids.last : ids.first }
+        guard let index = ids.firstIndex(of: current) else { return nil }
+        let next = index + (previous ? -1 : 1)
+        return ids.indices.contains(next) ? ids[next] : nil
     }
 
     /// T3 keeps the right panel's state per thread and persists it (rightPanelStore.ts,

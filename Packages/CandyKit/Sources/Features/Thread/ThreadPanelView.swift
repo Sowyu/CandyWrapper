@@ -216,6 +216,12 @@ public final class ThreadPanelView: DSView {
         userSetRightPanel(!rightPanelOpen)
     }
 
+    /// `rightPanel.close`: closes the panel as its tab's close button does.
+    public func closeRightPanel() {
+        guard rightPanelOpen else { return }
+        userSetRightPanel(false)
+    }
+
     private func userSetRightPanel(_ open: Bool) {
         header.toggles[2].isPressed = rightPanelOpen // a toggle flips itself; the state decides
         setRightPanelOpen(open)

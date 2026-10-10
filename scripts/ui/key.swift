@@ -2,7 +2,9 @@
 import CoreGraphics
 import Foundation
 let a = CommandLine.arguments
-let codes: [String: CGKeyCode] = ["l": 37, "d": 2, "end": 119, "home": 115, "return": 36, "escape": 53, "m": 46, "e": 14, "a": 0, "v": 9, "z": 6, "c": 8, "x": 7, "delete": 51, "up": 126, "down": 125]
+let codes: [String: CGKeyCode] = ["l": 37, "d": 2, "end": 119, "home": 115, "return": 36, "escape": 53, "m": 46, "e": 14, "a": 0, "v": 9, "z": 6, "c": 8, "x": 7, "delete": 51, "up": 126, "down": 125,
+    "k": 40, "n": 45, "b": 11, "o": 31, "j": 38, "s": 1, "p": 35, "u": 32, "h": 4, "f": 3, "t": 17, "w": 13,
+    "[": 33, "]": 30, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25, "tab": 48, "space": 49]
 guard a.count >= 2, let code = codes[a[1]] else { print("usage"); exit(2) }
 var flags: CGEventFlags = []
 for m in (a.count > 2 ? a[2] : "").split(separator: ",") {

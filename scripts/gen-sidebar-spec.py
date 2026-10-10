@@ -61,7 +61,7 @@ def command_item(active, shortcut):
     cls = ITEM + (" bg-accent! text-accent-foreground!" if active else "")
     sc = f'<kbd class="{SHORTCUT}">{shortcut}</kbd>' if shortcut else ""
     title = '<span class="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-foreground"><span class="truncate">New thread</span></span>'
-    icon = FOLDER.replace('aria-hidden="true"', 'class="size-4 shrink-0" aria-hidden="true"')  # palette icons carry size-4
+    icon = FOLDER.replace('aria-hidden="true"', 'class="size-4 text-icon-muted" aria-hidden="true"')  # ITEM_ICON_CLASS (CommandPalette.logic.ts)
     return f'<div role="option" data-slot="command-item" class="{cls}">{icon}{title}{sc}</div>'
 cases = []
 for active in (False, True):

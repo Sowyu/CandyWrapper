@@ -1,0 +1,18 @@
+{
+  "empty" : {
+    "height" : 190,
+    "width" : 576
+  },
+  "root" : {
+    "height" : 294,
+    "width" : 576
+  },
+  "search" : {
+    "height" : 312,
+    "width" : 576
+  },
+  "submenu" : {
+    "height" : 230,
+    "width" : 576
+  }
+}

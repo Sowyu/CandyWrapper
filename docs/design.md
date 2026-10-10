@@ -85,6 +85,7 @@ Each row is diffed against T3's own markup in Chromium at 2x in light and dark, 
 | Sidebar.tsx search result, draft rows, status lines; project scope combobox | SidebarSearchResultRowView, SidebarDraftRowView, SidebarEmptyTextRowView, SidebarProjectScopeView (Features/Sidebar) | 26 | 2.09% (spec `scripts/gen-sidebar-search-spec.py`) |
 | Sidebar grain (index.css) | SidebarGrain | crop vs real capture | mean 248.79 vs 248.78 light, 3.26 vs 3.29 dark |
 | command.tsx | CommandPaletteView | 8 | 0.99% (items) |
+| CommandPaletteContent.tsx, CommandPaletteResults.tsx (whole popup: root, submenu, search, empty) | CommandPaletteView, CommandPaletteController (Features/CommandPalette) | 8 | 2.19% (spec `scripts/gen-command-palette-spec.py`; light cases 3.4 to 4.3%, glyph antialiasing and the light shadow band above the popup) |
 | color-picker.tsx | ColorPickerView | 8 | 1.17% (hue slider) |
 | calendar.tsx | CalendarView | gallery only | |
 | Wrapped text | TextBlockView | 16 | 7.53% (line breaks identical; glyph antialiasing) |

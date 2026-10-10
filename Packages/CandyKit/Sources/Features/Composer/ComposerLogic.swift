@@ -16,6 +16,8 @@ public enum ComposerLogic {
         case foreground
         /// Cmd/Ctrl+Enter while a turn runs: the follow-up action that isn't the default.
         case alternate
+        /// `composer.sendBackground` (a draft) or `composer.sendAndNewThread` (a thread).
+        case background
     }
 
     /// One Return keydown, as `composerSubmissionIntentForKey` sees it.
@@ -23,25 +25,35 @@ public enum ComposerLogic {
         public var isReturn: Bool
         public var shift = false
         public var option = false
-        /// Cmd or Ctrl.
+        /// Command (`mod` on macOS).
         public var mod = false
+        public var control = false
         public var isRepeat = false
         public var composing = false
-        public init(isReturn: Bool, shift: Bool = false, option: Bool = false, mod: Bool = false, isRepeat: Bool = false, composing: Bool = false) {
-            self.isReturn = isReturn; self.shift = shift; self.option = option; self.mod = mod
+        public init(isReturn: Bool, shift: Bool = false, option: Bool = false, mod: Bool = false, control: Bool = false,
+                    isRepeat: Bool = false, composing: Bool = false) {
+            self.isReturn = isReturn; self.shift = shift; self.option = option; self.mod = mod; self.control = control
             self.isRepeat = isRepeat; self.composing = composing
         }
     }
 
     /// `composerSubmissionIntentForKey` (composer-logic.ts:39-72), pinned by composer-logic.test.ts:80-158.
+    /// The keybindings decide first (`composer.sendAlternate`, `composer.sendBackground`,
+    /// `composer.sendAndNewThread` in the composer's context); any other bound command is not a send.
     /// Nil means "not a send": the editor handles the key (a newline for Return).
-    public static func submitIntent(_ key: Key, prompt: String, mode: SendShortcut, turnRunning: Bool) -> SubmitIntent? {
-        guard key.isReturn, !key.composing, !key.isRepeat, !key.shift, !key.option else { return nil }
-        // `composer.sendAlternate` is mod+enter with `when: turnRunning`.
-        if turnRunning, key.mod { return .alternate }
+    public static func submitIntent(_ key: Key, prompt: String, mode: SendShortcut, turnRunning: Bool,
+                                    isDraft: Bool = false, keymap: Keymap = .default) -> SubmitIntent? {
+        guard key.isReturn, !key.composing, !key.isRepeat else { return nil }
+        let stroke = KeyStroke(key: "enter", meta: key.mod, ctrl: key.control, shift: key.shift, alt: key.option)
+        let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraft, "turnRunning": turnRunning])
+        let command = keymap.resolve(stroke, context: context)
+        if command == "composer.sendAlternate", turnRunning { return .alternate }
+        if command == "composer.sendBackground", isDraft { return .background }
+        if command == "composer.sendAndNewThread", !isDraft { return .background }
+        guard command == nil, !key.shift, !key.option else { return nil }
         let multiline = prompt.contains("\n") || prompt.contains("\r")
         let needsModifier = mode == .modEnter || (mode == .modEnterMultiline && multiline)
-        if needsModifier, !key.mod { return nil }
+        if needsModifier, !key.mod, !key.control { return nil }
         return .foreground
     }
 

@@ -198,6 +198,14 @@ public final class SidebarContentView: DSView {
 
     private var nowMs: Int64 { TimestampFormat.nowMs(now()) }
 
+    /// The thread rows in display order, outside search (`orderedThreadKeys`, Sidebar.tsx:3073-3079):
+    /// what `thread.previous`, `thread.next` and `thread.jump.N` walk.
+    public var orderedThreadIds: [ThreadId] {
+        SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs).compactMap {
+            if case .row(let row) = $0 { row.id } else { nil }
+        }
+    }
+
     private func rebuild(animated: Bool) {
         let ms = nowMs
         list.nowMs = ms

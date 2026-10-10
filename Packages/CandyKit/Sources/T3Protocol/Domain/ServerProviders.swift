@@ -252,18 +252,22 @@ public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
 public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var providers: [ServerProvider]
     public var settings: ServerThreadDefaults
+    /// `keybindings`: the server's resolved rules (its defaults merged with the user's keybindings.json).
+    public var keybindings: [ResolvedKeybindingRule]
 
-    public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults()) {
+    public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = []) {
         self.providers = providers
         self.settings = settings
+        self.keybindings = keybindings
     }
 
-    private enum CodingKeys: String, CodingKey { case providers, settings }
+    private enum CodingKeys: String, CodingKey { case providers, settings, keybindings }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         providers = try c.decodeIfPresent([ServerProvider].self, forKey: .providers) ?? []
         settings = try c.decodeIfPresent(ServerThreadDefaults.self, forKey: .settings) ?? ServerThreadDefaults()
+        keybindings = Keymap.decodeRules(try c.decodeIfPresent(JSONValue.self, forKey: .keybindings))
     }
 }
 
@@ -273,17 +277,27 @@ public enum ServerConfigEvent: Decodable, Sendable {
     case snapshot(ServerProviderConfig)
     case providerStatuses([ServerProvider])
     case settingsUpdated(ServerThreadDefaults)
+    /// `keybindingsUpdated` (server.ts:791-796): the whole resolved list after keybindings.json changed.
+    case keybindingsUpdated([ResolvedKeybindingRule])
     case other(String)
 
-    private enum CodingKeys: String, CodingKey { case type, config, providers, settings }
+    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let type = try c.decode(String.self, forKey: .type)
         switch type {
         case "snapshot": self = .snapshot(try c.decode(ServerProviderConfig.self, forKey: .config))
-        case "providerStatuses": self = .providerStatuses(try c.decode([ServerProvider].self, forKey: .providers))
-        case "settingsUpdated": self = .settingsUpdated(try c.decode(ServerThreadDefaults.self, forKey: .settings))
+        // Updates carry their fields in `payload` (apps/server/src/ws.ts:2955-3035).
+        case "providerStatuses":
+            let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
+            self = .providerStatuses(try payload.decode([ServerProvider].self, forKey: .providers))
+        case "settingsUpdated":
+            let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
+            self = .settingsUpdated(try payload.decode(ServerThreadDefaults.self, forKey: .settings))
+        case "keybindingsUpdated":
+            let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
+            self = .keybindingsUpdated(Keymap.decodeRules(try payload.decodeIfPresent(JSONValue.self, forKey: .keybindings)))
         default: self = .other(type)
         }
     }

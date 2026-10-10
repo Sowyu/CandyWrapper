@@ -21,8 +21,8 @@ final class SidebarCommands {
     /// One settle and one snooze per thread at a time (Sidebar.tsx:3314-3317, 4173).
     private var settling: Set<ThreadId> = []
     private var snoozing: Set<ThreadId> = []
-    private var keyMonitor: Any?
     private var utilityPage: UtilityPlaceholderView?
+    private var utilityKind: UtilityPage?
     private var pickingFolder = false
 
     /// Thread menu items this client does not have yet.
@@ -47,22 +47,62 @@ final class SidebarCommands {
         sidebar.actions.openUsage = { [weak self] in self?.openUtilityPage(.usage) }
         sidebar.actions.back = { [weak self] in self?.closeUtilityPage() }
         ledger.onChange = { [weak self] in self?.undoNoticeChanged() }
-        // `thread.undo` is Mod+Z outside editable fields and the terminal (packages/shared/src/keybindings.ts:191),
-        // and only consumes the key when there is something to undo (_chat.tsx:89).
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
-            guard event.window === window, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-                  event.charactersIgnoringModifiers == "z", let self else { return event }
-            let undone = MainActor.assumeIsolated {
-                (window?.firstResponder as? NSTextView)?.isEditable != true && self.ledger.undoLatest()
+    }
+
+    /// Thread lifecycle keybindings for the open thread (_chat.tsx:84-93, ChatView.tsx:8000-8063).
+    func registerShortcuts(_ shortcuts: Shortcuts, modelPickerOpen: @escaping () -> Bool) {
+        // `thread.undo` (Mod+Z outside editable fields by default) only consumes the key when there
+        // is something to undo, and never on repeat or with the model picker open (_chat.tsx:84-93).
+        shortcuts.on("thread.undo") { [weak self] call in
+            guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil else { return false }
+            return self.ledger.undoLatest()
+        }
+        // `thread.settle` settles the open thread, or unsettles a settled one.
+        shortcuts.on("thread.settle") { [weak self] _ in
+            guard let self, self.threads.panel.window != nil else { return false }
+            if let id = self.threads.openThreadId, let thread = self.shell(id) {
+                if thread.settledOverride == .settled { self.unsettle(id) } else { self.settle(id) }
             }
-            return undone ? nil : event
+            return true
+        }
+        // `thread.pin` pins the open thread, or unpins a pinned one.
+        shortcuts.on("thread.pin") { [weak self] _ in
+            guard let self, self.threads.panel.window != nil else { return false }
+            if let id = self.threads.openThreadId, let thread = self.shell(id) {
+                if thread.pinnedAt != nil { self.unpin(id) } else { self.pin(id) }
+            }
+            return true
+        }
+        // `thread.copyReference`: the thread ID (`resolveThreadReferenceCopyTarget`, shared/threadReference.ts:13-40).
+        // ponytail: never the PR link; read the thread's current pull request with WP7.5
+        shortcuts.on("thread.copyReference") { [weak self] call in
+            guard let self, self.threads.panel.window != nil else { return false }
+            if !call.isRepeat { self.copyThreadReference() }
+            return true
+        }
+        shortcuts.on("usage.open") { [weak self] _ in
+            self?.openUtilityPage(.usage)
+            return true
         }
     }
+
+    /// "Copy thread ID" for the open thread; nothing on a draft. Returns the copied value.
+    @discardableResult
+    func copyThreadReference() -> String? {
+        guard let id = threads.openThreadId else { return nil }
+        copy(id.localId.rawValue, title: "Thread ID copied")
+        return id.localId.rawValue
+    }
+
+    /// The value `thread.copyReference` copies, nil when there is none.
+    var threadReference: String? { threads.openThreadId?.localId.rawValue }
+
+    var isUsagePageOpen: Bool { utilityPage != nil && utilityKind == .usage }
 
     // MARK: Lookup
 
     private var snapshot: ShellSnapshot? { sidebar?.snapshot }
-    private func shell(_ id: ThreadId) -> ThreadShell? { snapshot?.threads.first { $0.id == id } }
+    func shell(_ id: ThreadId) -> ThreadShell? { snapshot?.threads.first { $0.id == id } }
     private var nowMs: Int64 { TimestampFormat.nowMs() }
 
     private func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
@@ -82,7 +122,7 @@ final class SidebarCommands {
 
     // MARK: Lifecycle commands (useThreadActions.ts:658-976)
 
-    private func settle(_ id: ThreadId) {
+    func settle(_ id: ThreadId) {
         guard !settling.contains(id), let thread = shell(id) else { return }
         settling.insert(id)
         let navigate = planForwardNavigation(id)
@@ -120,7 +160,7 @@ final class SidebarCommands {
         }
     }
 
-    private func unsettle(_ id: ThreadId) {
+    func unsettle(_ id: ThreadId) {
         ledger.invalidate("settle", id.rawValue)
         Task {
             do { try await environments.dispatch(id, ThreadCommands.unsettle(id.localId), optimistic: .unsettle) } catch {
@@ -168,7 +208,7 @@ final class SidebarCommands {
     }
 
     /// Fresh pins go to the top of the pinned run, ahead of every keyed pin in any environment.
-    private func pin(_ id: ThreadId, orderKey: String? = nil) {
+    func pin(_ id: ThreadId, orderKey: String? = nil) {
         ledger.invalidate("pin", id.rawValue)
         let key = orderKey ?? PinOrderKey.topOfPinnedRun(snapshot?.threads ?? [])
         Task {
@@ -180,7 +220,7 @@ final class SidebarCommands {
 
     /// `confirmAndUnpinThread` without the confirm (`confirmThreadUnpin` defaults to off).
     // ponytail: no unpin confirmation; read confirmThreadUnpin once client settings exist (M7)
-    private func unpin(_ id: ThreadId) {
+    func unpin(_ id: ThreadId) {
         let orderKey = shell(id)?.pinOrderKey
         let claim = ledger.begin("pin", id.rawValue)
         Task {
@@ -375,7 +415,7 @@ final class SidebarCommands {
     /// T3 opens the command palette's add-project view; its "Open in Finder" footer is the desktop folder
     /// picker on the primary environment. The project lands in that environment.
     // ponytail: the folder picker only; the palette's browse, clone and new-project flows and the environment picker come with the command palette (M7)
-    private func addProject() {
+    func addProject() {
         guard !pickingFolder, let window else { return }
         guard let env = environments.primaryId, environments.session(env) != nil else {
             let label = environments.primaryId.flatMap { environments.label($0) } ?? "The selected environment"
@@ -399,7 +439,7 @@ final class SidebarCommands {
 
     /// `handleAddProjectForEnvironment`: an existing project opens its latest unsettled thread or a
     /// draft; a new one is created with `project.create`, then a draft opens in it.
-    private func addProject(path: String, environmentId env: String) {
+    func addProject(path: String, environmentId env: String) {
         let projects = (snapshot?.projects ?? []).filter { $0.id.environmentId == env }
         if let existing = ProjectCommands.existing(projects, workspaceRoot: path) {
             let latest = (snapshot?.threads ?? []).filter { $0.projectId == existing.id }
@@ -426,7 +466,7 @@ final class SidebarCommands {
     /// T3 routes to `/pull-requests` and `/usage`: the page replaces the thread panel and the sidebar
     /// footer shows Back.
     // ponytail: a placeholder page; build the pull request list and usage pages in M7
-    private func openUtilityPage(_ page: UtilityPage) {
+    func openUtilityPage(_ page: UtilityPage) {
         guard let layout, let sidebar else { return }
         let view = UtilityPlaceholderView(page == .pullRequests ? "Pull Requests" : "Usage",
                                           icon: page == .pullRequests ? .gitPullRequestArrow : .chartNoAxesColumn)
@@ -434,6 +474,7 @@ final class SidebarCommands {
         threads.panel.removeFromSuperview()
         layout.main.addSubview(view)
         utilityPage = view
+        utilityKind = page
         sidebar.isOnUtilityPage = true
         layout.needsLayout = true
     }
@@ -443,6 +484,7 @@ final class SidebarCommands {
         guard let layout, let page = utilityPage else { return }
         page.removeFromSuperview()
         utilityPage = nil
+        utilityKind = nil
         layout.main.addSubview(threads.panel)
         sidebar?.isOnUtilityPage = false
         layout.needsLayout = true

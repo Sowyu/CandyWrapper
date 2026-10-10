@@ -85,7 +85,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         if returnKeys.contains(event.keyCode) {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let key = ComposerLogic.Key(isReturn: true, shift: flags.contains(.shift), option: flags.contains(.option),
-                                        mod: flags.contains(.command) || flags.contains(.control),
+                                        mod: flags.contains(.command), control: flags.contains(.control),
                                         isRepeat: event.isARepeat, composing: hasMarkedText())
             if onSubmitKey?(key) == true { return }
         }

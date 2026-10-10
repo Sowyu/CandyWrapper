@@ -20,6 +20,8 @@ public final class ComposerView: DSView {
     // MARK: Inputs
 
     /// The thread's runs as the primary action reads them.
+    /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
+    public var isDraftRoute = false
     public var runState = ComposerLogic.RunState() { didSet { if runState != oldValue { refresh() } } }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
@@ -345,7 +347,8 @@ public final class ComposerView: DSView {
     // MARK: Actions
 
     private func submitKey(_ key: ComposerLogic.Key) -> Bool {
-        guard let intent = ComposerLogic.submitIntent(key, prompt: editor.string, mode: sendShortcut, turnRunning: runState.canInterrupt) else {
+        guard let intent = ComposerLogic.submitIntent(key, prompt: editor.string, mode: sendShortcut, turnRunning: runState.canInterrupt,
+                                                      isDraft: isDraftRoute, keymap: ActiveKeymap.keymap) else {
             return false
         }
         // An open question: the send key answers it (`submissionTarget: "pending-user-input"`, no length check).
@@ -355,6 +358,7 @@ public final class ComposerView: DSView {
             return true
         }
         if pending == .approval { return true }
+        // ponytail: `.background` sends in the foreground; starting in the background and opening a fresh composer waits for its own package
         let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault)
         send(mode)
         // A send key never inserts a newline, even when nothing was sent.

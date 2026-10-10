@@ -81,6 +81,8 @@ public final class LabelView: DSView {
     /// Core Text font smoothing (stem darkening). Chromium draws text on transparent composited
     /// layers (backdrop-filter surfaces such as the composer) without it, so those labels turn it off.
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
+    /// Text appended after `text` in the semibold weight of `font` (a `<span class="font-semibold">`).
+    public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -112,7 +114,12 @@ public final class LabelView: DSView {
     private func attributed() -> NSAttributedString {
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         if tracking != 0 { attributes[.kern] = tracking }
-        return NSAttributedString(string: text, attributes: attributes)
+        let result = NSMutableAttributedString(string: text, attributes: attributes)
+        if let emphasizedSuffix {
+            attributes[.font] = DSFont.ui(font.pointSize, weight: .semibold)
+            result.append(NSAttributedString(string: emphasizedSuffix, attributes: attributes))
+        }
+        return result
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -123,7 +130,7 @@ public final class LabelView: DSView {
     public var textWidth: CGFloat { TextLine(attributed()).width }
 
     public override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty else { return }
+        guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty || emphasizedSuffix != nil else { return }
         // Core Text's smoothing (stem darkening) matches Chromium's glyph weight better than
         // plain antialiasing: Button fidelity 2.91% differing pixels with it, 3.27% without.
         ctx.setShouldSmoothFonts(smoothsFont)

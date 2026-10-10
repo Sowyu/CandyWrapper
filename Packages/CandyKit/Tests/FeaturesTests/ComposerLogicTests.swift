@@ -26,6 +26,18 @@ struct ComposerLogicTests {
         for mode in L.SendShortcut.allCases {
             #expect(L.submitIntent(mod, prompt: "hi", mode: mode, turnRunning: true) == .alternate)
         }
+        // The keybindings decide first (composer-logic.test.ts): mod+enter in a draft starts in the
+        // background, mod+alt+enter on a thread sends and opens a new thread.
+        let modAlt = L.Key(isReturn: true, option: true, mod: true)
+        #expect(L.submitIntent(mod, prompt: "hi", mode: .enter, turnRunning: false, isDraft: true) == .background)
+        #expect(L.submitIntent(modAlt, prompt: "hi", mode: .enter, turnRunning: false, isDraft: true) == .background)
+        #expect(L.submitIntent(modAlt, prompt: "hi", mode: .enter, turnRunning: false, isDraft: false) == .background)
+        #expect(L.submitIntent(modAlt, prompt: "hi", mode: .enter, turnRunning: true, isDraft: false) == .background)
+        // A user rule that rebinds Enter to another command makes it not a send.
+        let rebound = Keymap(rules: Keymap.defaultRules + [ResolvedKeybindingRule(key: "enter", command: "chat.new", when: "composerFocus")!])
+        #expect(L.submitIntent(L.Key(isReturn: true), prompt: "hi", mode: .enter, turnRunning: false, keymap: rebound) == nil)
+        // Control+Enter counts as the modifier for the mod-enter send modes.
+        #expect(L.submitIntent(L.Key(isReturn: true, control: true), prompt: "hi", mode: .modEnter, turnRunning: false) == .foreground)
     }
 
     @Test func sendModesAndActions() {

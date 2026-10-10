@@ -189,7 +189,7 @@ public final class ModalHost: DSView {
     /// One blurred snapshot of the window content for `backdrop-filter: blur(4px)`: drawn at a quarter
     /// of the point size and blurred with sigma 1, which is 4pt at full size. Taken once, when the dialog opens.
     // ponytail: frozen snapshot, content under the backdrop stops updating while the dialog is open; live blur (NSVisualEffectView) if that ever shows
-    static func blurredSnapshot(of view: NSView) -> CGImage? {
+    public static func blurredSnapshot(of view: NSView) -> CGImage? {
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
         view.cacheDisplay(in: view.bounds, to: rep)
         return rep.cgImage.flatMap { blurred($0, pointSize: view.bounds.size) }
