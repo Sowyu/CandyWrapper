@@ -69,7 +69,9 @@ struct SidebarFidelityTests {
 
     @Test func wholeSidebar() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
-        let bands = [("titlebar", 0, 52), ("search", 52, 100), ("first card", 100, 184), ("list", 100, 740), ("footer", 740, 780)]
+        // The 80pt header band is CandyWrapper's candy art, not T3's NightlySkyArt, so it differs by design.
+        let bands = [("titlebar", 0, 52), ("search", 52, 100), ("first card", 100, 184), ("list", 100, 740), ("footer", 740, 780),
+                     ("below the art", 80, 780)]
         var lines: [String] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(

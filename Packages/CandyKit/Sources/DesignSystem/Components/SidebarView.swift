@@ -282,6 +282,9 @@ public final class SidebarRailView: DSView {
 // ponytail: the icon swaps instead of the spring path morph (MorphIcon); add the morph if the user notices
 public final class SidebarTriggerView: ControlView {
     public var isSidebarOpen = true { didSet { updateIcon(); setAccessibilityValue(isSidebarOpen) } }
+    /// T3's `media-navigation` variant over header art (`text-white/90`, hover `bg-white/10` and full
+    /// text), in this color instead of white. Nil is the ghost button.
+    public var mediaTint: NSColor? { didSet { needsDisplay = true } }
     private let decoration = BoxDecorationLayer()
     private let icon = CAShapeLayer()
 
@@ -313,7 +316,12 @@ public final class SidebarTriggerView: ControlView {
     }
 
     public override func updateLayer() {
-        let look = ButtonStyles.look(variant: .ghost, state: state, radius: 8)
+        var look = ButtonStyles.look(variant: .ghost, state: state, radius: 8)
+        if let mediaTint {
+            let hover = state.hoverOrPressed
+            look.box.fill = hover ? mediaTint.withAlphaComponent(0.1) : nil
+            look.icon = mediaTint.withAlphaComponent(hover ? 1 : 0.9)
+        }
         decoration.boxStyle = look.box
         icon.strokeColor = look.icon.cgColor(in: self)
     }

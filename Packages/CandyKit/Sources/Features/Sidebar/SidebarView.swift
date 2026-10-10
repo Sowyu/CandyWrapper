@@ -92,6 +92,7 @@ public final class SidebarContentView: DSView {
     private func applyStage() {
         backdrop.isHidden = stage != .nightly
         brand.onBackdrop = stage == .nightly
+        trigger.mediaTint = stage == .nightly ? StageBackdropView.ink() : nil
     }
 
     private func wireActions() {

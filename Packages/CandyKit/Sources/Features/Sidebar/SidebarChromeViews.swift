@@ -22,14 +22,44 @@ public enum SidebarStage: Sendable {
     }
 }
 
-/// `NightlySkyArt` (SidebarStageBackdrop.tsx:98-200) under `.sidebar-stage-backdrop` (index.css:498-518):
-/// 80px tall, viewBox height 96 sliced from the left, masked to fade out from 55% to 92%, with the
-/// `--sidebar-stage-fade` overlay. Drawn once per size and appearance.
+/// `.sidebar-stage-backdrop` (index.css:498-518): 80px tall, masked to fade out from 55% to 92%, with
+/// the `--sidebar-stage-fade` overlay. Drawn once per size and appearance.
+/// CandyWrapper's own art replaces T3's `NightlySkyArt` here: the teddy-and-milk corner of "Candy Town"
+/// by Aya_Lu (pixabay.com/illustrations/candy-town-city-buildings-8579300, Pixabay Content License)
+/// as a duotone, placed like CSS `background-size: 122%; background-position: 97% 95%`.
 // ponytail: Dev blueprint art is not drawn; port DevBlueprintArt if dev builds need it
 final class StageBackdropView: DSView {
     override var wantsUpdateLayer: Bool { false }
-    /// `StageBackdropButtonArt` (the send button): viewBox from x 96, no fade or mask.
+    /// `StageBackdropButtonArt` (the send button): `NightlySkyArt` from viewBox x 96, no fade or mask.
     var compact = false { didSet { needsDisplay = true } }
+
+    /// Title and toggle color over the art: plum on the light dark-mode art, white on the deeper light-mode art.
+    static func ink(_ alpha: CGFloat = 1) -> NSColor {
+        NSColor(name: nil) { $0.isDark ? srgb(0x3a1a52, alpha) : .white.withAlphaComponent(alpha) }
+    }
+    /// The duotone ends: luma 0 paints `shadow`, luma 255 paints `light`.
+    static let candyShadow = NSColor(name: nil) { $0.isDark ? srgb(0x2a1240) : srgb(0x22103a) }
+    static let candyLight = NSColor(name: nil) { $0.isDark ? srgb(0xffc4df) : srgb(0xdc8fbd) }
+    static func srgb(_ hex: Int, _ alpha: CGFloat = 1) -> NSColor {
+        NSColor(srgbRed: CGFloat(hex >> 16) / 255, green: CGFloat(hex >> 8 & 0xff) / 255, blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
+    }
+
+    /// What scripts/gen-candy-art.swift keeps of the 1280x905 source, top-left origin: the band shows
+    /// x 17.5% to 99.5% at any width and y 53% to 97% at the narrowest sidebar (208pt).
+    static let candySource = CGSize(width: 1280, height: 905)
+    static let candyCrop = CGRect(x: 223, y: 440, width: 1057, height: 465)
+    /// 8-bit luma (Rec. 709 on sRGB), mapped from the bundle: its pages stay clean, so they don't
+    /// count against the app's memory, and there is nothing to decode.
+    static let candyLuma: CGImage? = {
+        let w = Int(candyCrop.width), h = Int(candyCrop.height)
+        guard let url = Bundle.module.url(forResource: "candy-town", withExtension: "gray"),
+              let data = try? NSData(contentsOf: url, options: .alwaysMapped), data.length == w * h,
+              let provider = CGDataProvider(data: data)
+        else { return nil }
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: w,
+                       space: CGColorSpaceCreateDeviceGray(), bitmapInfo: [], provider: provider,
+                       decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -48,16 +78,50 @@ final class StageBackdropView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.saveGState()
+        // Explicit bounds: under AppKit's recorded drawing an unbounded group got a window-sized
+        // scratch layer (27 MB at 2x).
+        ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
+        if compact {
+            drawSky(ctx)
+        } else {
+            drawCandyTown(ctx)
+            drawFadeAndMask(ctx)
+        }
+        ctx.endTransparencyLayer()
+        ctx.restoreGState()
+    }
+
+    /// The duotone: the shadow color everywhere, then the light color through the luma as a mask.
+    private func drawCandyTown(_ ctx: CGContext) {
+        let w = bounds.width, h = bounds.height
+        ctx.setFillColor(Self.candyShadow.cgColor(in: self))
+        ctx.fill(bounds)
+        guard let luma = Self.candyLuma else { return }
+        let scale = 1.22 * w / Self.candySource.width
+        let full = CGSize(width: Self.candySource.width * scale, height: Self.candySource.height * scale)
+        let origin = CGPoint(x: (w - full.width) * 0.97, y: (h - full.height) * 0.95)
+        let crop = Self.candyCrop
+        let rect = CGRect(x: origin.x + crop.minX * scale, y: origin.y + crop.minY * scale,
+                          width: crop.width * scale, height: crop.height * scale)
+        ctx.saveGState()
+        // The view is flipped; flip the rect back so the image's first row lands at its top.
+        ctx.translateBy(x: 0, y: rect.minY + rect.maxY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.interpolationQuality = .high
+        ctx.clip(to: rect, mask: luma)
+        ctx.setFillColor(Self.candyLight.cgColor(in: self))
+        ctx.fill(rect)
+        ctx.restoreGState()
+    }
+
+    private func drawSky(_ ctx: CGContext) {
         func col(_ k: KeyPath<Palette, TokenColor>, _ a: CGFloat = 1) -> CGColor {
             let c = SB.c(k).cgColor(in: self)
             return c.copy(alpha: c.alpha * a) ?? c
         }
         let w = bounds.width, h = bounds.height
         let s = h / 96 // xMinYMin slice: height decides the scale for any sidebar width
-        ctx.saveGState()
-        // Explicit bounds: under AppKit's recorded drawing an unbounded group got a window-sized
-        // scratch layer (27 MB at 2x).
-        ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
         ctx.saveGState()
         ctx.scaleBy(x: s, y: s)
         if compact { ctx.translateBy(x: -96, y: 0) }
@@ -128,11 +192,10 @@ final class StageBackdropView: DSView {
             ctx.restoreGState()
         }
         ctx.restoreGState()
-        if compact {
-            ctx.endTransparencyLayer()
-            ctx.restoreGState()
-            return
-        }
+    }
+
+    private func drawFadeAndMask(_ ctx: CGContext) {
+        let h = bounds.height, space = CGColorSpaceCreateDeviceRGB()
         // ::after fade to --sidebar-stage-fade.
         let fade = SB.c(\.sidebarStageFade).cgColor(in: self)
         let stops: [(CGFloat, CGFloat)] = [(0, 0), (0.28, 0), (0.40, 0.1), (0.52, 0.3), (0.64, 0.58), (0.75, 0.82), (0.85, 0.96), (0.93, 1)]
@@ -144,8 +207,6 @@ final class StageBackdropView: DSView {
         let mask = CGGradient(colorsSpace: space, colors: [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)] as CFArray,
                               locations: [0, 0.55, 0.92])!
         ctx.drawLinearGradient(mask, start: .zero, end: CGPoint(x: 0, y: h), options: [.drawsAfterEndLocation])
-        ctx.endTransparencyLayer()
-        ctx.restoreGState()
     }
 
     /// Gaussian blur by drawing far off-canvas and letting the shadow land in place.
@@ -194,7 +255,8 @@ final class StageBackdropView: DSView {
 }
 
 /// `SidebarBrandMark` (SidebarChrome.tsx:126-142): the T3 wordmark at cap height, `gap-1`, then "Code"
-/// in muted text, `text-sm font-medium tracking-tight`. White and white/70 over the stage art.
+/// in muted text, `text-sm font-medium tracking-tight`. Over the stage art T3 uses white and white/70;
+/// over the candy art the colors are `StageBackdropView.ink`.
 final class SidebarBrandView: DSView {
     var onBackdrop = false { didSet { needsDisplay = true } }
     override var wantsUpdateLayer: Bool { false }
@@ -222,8 +284,12 @@ final class SidebarBrandView: DSView {
         let cap = Self.font.capHeight
         // `items-baseline` in a 28px box with the 20px line centred: baseline as for the text line.
         let baseline = TextLine(NSAttributedString(string: "Code", attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
-        let fg = onBackdrop ? NSColor.white : SB.c(\.foreground)
-        let muted = onBackdrop ? NSColor.white.withAlphaComponent(0.7) : SB.c(\.mutedForeground)
+        let fg = onBackdrop ? StageBackdropView.ink() : SB.c(\.foreground)
+        let muted = onBackdrop ? StageBackdropView.ink(0.7) : SB.c(\.mutedForeground)
+        if onBackdrop, !effectiveAppearance.isDark {
+            // The white title lifts off the candy art: `text-shadow: 0 1px 2px rgb(20 6 30 / 35%)`.
+            ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(srgbRed: 20 / 255, green: 6 / 255, blue: 30 / 255, alpha: 0.35))
+        }
         ctx.saveGState()
         ctx.translateBy(x: 0, y: baseline - cap)
         let s = cap / 56.96
