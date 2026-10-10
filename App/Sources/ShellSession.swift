@@ -11,6 +11,9 @@ import T3Store
 final class ShellSession {
     let supervisor: ConnectionSupervisor
     let store: ShellStore
+    /// The same server and token for HTTP routes, such as thread history pages.
+    let http: EnvironmentHTTP
+    let token: String
     private weak var sidebar: SidebarContentView?
     private var subscription: Task<Void, Never>?
     private var pulling = false
@@ -20,6 +23,8 @@ final class ShellSession {
 
     init(baseURL: URL, token: String, sidebar: SidebarContentView, cached: ShellSnapshot? = nil) {
         let http = EnvironmentHTTP(baseURL: baseURL)
+        self.http = http
+        self.token = token
         let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
         supervisor = ConnectionSupervisor(dependencies: .init(
             connect: ConnectionSupervisor.directConnector(http: http, environmentId: nil, identity: identity,
@@ -63,7 +68,7 @@ final class ShellSession {
     }
 
     /// Lets the store's Sendable change callback reach a session created after the store.
-    private final class ChangeRelay: @unchecked Sendable {
+    final class ChangeRelay: @unchecked Sendable {
         private let lock = NSLock()
         private var action: (@Sendable () -> Void)?
         func set(_ action: @escaping @Sendable () -> Void) { lock.withLock { self.action = action } }

@@ -11,6 +11,11 @@ public final class MarkdownView: DSView {
         didSet { if document != oldValue { unwrappedCode = []; invalidate() } }
     }
 
+    /// Body text color; nil is T3's 80% foreground. Headings, links and code keep their own colors.
+    public var bodyColor: NSColor? {
+        didSet { if bodyColor != oldValue { invalidate() } }
+    }
+
     /// Parses and shows `markdown`. User messages pass `preservesLineBreaks`.
     public func setMarkdown(_ markdown: String, preservesLineBreaks: Bool = false) {
         document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
@@ -38,7 +43,7 @@ public final class MarkdownView: DSView {
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
-        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode)
+        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor)
         cache[width] = made
         return made
     }

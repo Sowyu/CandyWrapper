@@ -129,6 +129,6 @@ private let projectionJSON = """
         let diff = try JSONDecoder().decode(ThreadTurnDiff.self, from: Data(
             #"{"threadId":"t1","fromTurnCount":0,"toTurnCount":1,"diff":"diff --git a/x b/x\n"}"#.utf8))
         #expect(diff.toTurnCount == 1 && diff.diff.hasPrefix("diff --git"))
-        #expect(ThreadHistoryRequest(threadId: "t 1", cursor: "a+b").path == "/api/orchestration/threads/t%201/history?cursor=a+b")
+        #expect(ThreadHistoryRequest(threadId: "t 1", cursor: "a+b").path == "/api/orchestration/threads/t%201/history?cursor=a%2Bb")
     }
 }

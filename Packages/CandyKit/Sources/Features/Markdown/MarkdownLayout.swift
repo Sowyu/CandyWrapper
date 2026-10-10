@@ -114,11 +114,12 @@ public final class MarkdownLayout {
     private(set) var items: [Item] = []
     private(set) var controls: [Control] = []
 
-    /// `unwrappedCode`: indices of code blocks whose wrap toggle is off.
-    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = []) {
+    /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
+    /// 80% foreground of body text (user bubbles and plan cards draw at 100%).
+    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil) {
         self.width = width
         var builder = Builder(unwrapped: unwrappedCode)
-        let flow = builder.flow(document.blocks, width: width, context: .init(color: MarkdownStyle.body), root: true)
+        let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
         items = flow.items
         controls = flow.controls
         height = flow.height

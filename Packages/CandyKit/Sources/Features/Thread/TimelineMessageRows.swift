@@ -55,6 +55,8 @@ final class UserMessageRowView: TimelineRowView {
         bubble.fill = TL.c(\.messageSurface)
         bubble.radius = 18
         addSubview(bubble)
+        // `text-foreground` on the bubble, where assistant markdown sits at 80%.
+        markdown.bodyColor = TL.c(\.foreground)
         bubble.addSubview(markdown)
         bubble.addSubview(toggle)
         time.lineHeight = 16
@@ -286,6 +288,7 @@ final class PlanRowView: TimelineRowView {
         actionsButton.setAccessibilityLabel("Plan actions")
         // ponytail: the menu (copy, download, save to workspace) is not built; it arrives with file writes
         for view in [badge, title, actionsButton, markdown, fadeView, toggle] as [NSView] { card.addSubview(view) }
+        markdown.bodyColor = TL.c(\.foreground)
         fadeView.layer?.addSublayer(fade)
         toggle.action = { [weak self] in
             guard let self, case .proposedPlan(let p)? = self.item?.row.kind else { return }
