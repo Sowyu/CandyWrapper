@@ -274,7 +274,10 @@ final class Environments {
                     let id = descriptor.environmentId
                     if primary {
                         setPrimaryId(id)
-                        if let cached = cache.load(environmentId: id)?.snapshot { shellChanged(id, cached) }
+                        if let cached = cache.load(environmentId: id)?.snapshot {
+                            shellChanged(id, cached)
+                            LaunchTiming.mark("cached sidebar")
+                        }
                         entries[id]?.label = descriptor.label
                         entries[id]?.machine = descriptor.platform?.machine
                         attach(ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: entries[id]?.snapshot), to: id)
@@ -414,6 +417,7 @@ final class Environments {
                 previous?(snapshot)
                 guard let self, let session, self.entries[id]?.session === session else { return }
                 self.shellChanged(id, snapshot)
+                if id == self.primaryId { LaunchTiming.mark("live sidebar") }
                 if id != self.primaryId { Task { await self.cache.noteChanged(snapshot, environmentId: id) } }
             }
             iconRoutes.set(id, IconRoutes.Route(supervisor: session.supervisor, http: session.http, token: session.token))

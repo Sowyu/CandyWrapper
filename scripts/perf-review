@@ -1,0 +1,473 @@
+#!/usr/bin/python3
+"""Repeatable performance review: build a Release app from one commit, run a fixed workload against
+the sandbox server, save the numbers and compare them with the previous saved run.
+
+Usage:
+  scripts/perf-review [--commit REV | --source DIR] [--baseline FILE] [--repeat N] [--stream]
+                      [--idle-seconds S] [--no-bench] [--no-app] [--out-dir DIR]
+
+  --commit REV   build REV (default HEAD) from its own worktree in /tmp/cw-perf/src-<sha>
+  --source DIR   build a checkout as it is, uncommitted changes included (sha gets "-dirty")
+  --baseline F   compare with this saved JSON instead of the newest other run in the out dir
+  --stream       also measure one tiny claude-haiku-5-5 turn (costs a real turn on the user's plan)
+  --repeat N     app launches per scenario (default 3); the report gives the median and the range
+
+Writes <out-dir>/<date>-<sha>.json and .md (default docs/perf) and prints the comparison table.
+Method, metrics and thresholds: docs/perf/README.md. Needs the sandbox server (scripts/sandbox-server);
+the script starts it if nothing answers on 47391 and stops only a server it started.
+"""
+import argparse
+import datetime
+import glob
+import json
+import os
+import re
+import shutil
+import signal
+import statistics
+import subprocess
+import sys
+import time
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WORK = "/tmp/cw-perf"
+BIN = WORK + "/bin"
+SANDBOX = os.path.normpath(os.path.join(REPO, "..", "CandyWrapper-research", "sandbox"))
+# A worktree under .claude/worktrees still shares the research folder next to the main checkout.
+if not os.path.isdir(SANDBOX):
+    SANDBOX = "/Users/mrm/CandyWrapper-research/sandbox"
+SERVER = "http://127.0.0.1:47391"
+TOKEN = SANDBOX + "/session.token"
+PID_FILE = "/tmp/candywrapper-app.pid"
+DEMO_PID_FILE = "/tmp/cw-demo.pid"
+IDLE_THREAD = "Reply with one word: candy"
+BIG_THREAD = "Numbers 1 to 1000"
+STREAM_PROMPT = "Without using any tools, write the numbers from 1 to 60 as English words, one per line."
+
+# Lower is better for every metric. A change counts as a regression (or an improvement) only when it
+# passes both the relative and the absolute threshold, and, with 3 or more samples on each side, the
+# two ranges don't overlap. (relative, absolute, unit)
+THRESHOLDS = {
+    "launch.window_ms": (0.15, 50, "ms"),
+    "launch.cached_sidebar_ms": (0.15, 50, "ms"),
+    "launch.live_sidebar_ms": (0.15, 50, "ms"),
+    "idle.cpu_pct": (0.50, 0.05, "%"),
+    "idle.interrupt_wakeups_per_s": (0.25, 1.0, "/s"),
+    "idle.package_idle_wakeups_per_s": (0.25, 1.0, "/s"),
+    "idle.footprint_mb": (0.10, 3, "MB"),
+    "idle.peak_footprint_mb": (0.10, 5, "MB"),
+    "big_thread.footprint_mb": (0.10, 3, "MB"),
+    "big_thread.peak_footprint_mb": (0.10, 5, "MB"),
+    "big_thread.scroll_cpu_ms": (0.25, 100, "ms"),
+    "big_thread.after_scroll_footprint_mb": (0.10, 3, "MB"),
+    "big_thread.after_scroll_peak_mb": (0.10, 5, "MB"),
+    "stream.cpu_pct": (0.25, 1.0, "%"),
+    "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
+    "stream.footprint_mb": (0.10, 3, "MB"),
+    "stream.peak_footprint_mb": (0.10, 5, "MB"),
+    "size.bundle_mb": (0.10, 0.5, "MB"),
+    "size.binary_mb": (0.10, 0.5, "MB"),
+}
+BENCH_THRESHOLD = (0.20, 0.05, "ms")
+
+
+def log(msg):
+    print("perf-review: " + msg, file=sys.stderr, flush=True)
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, **kw).stdout
+
+
+def git(*args, cwd=REPO):
+    return run(["git", "-C", cwd] + list(args)).strip()
+
+
+# MARK: build
+
+
+def prepare_source(args):
+    if args.source:
+        src = os.path.abspath(args.source)
+        sha = git("rev-parse", "--short=7", "HEAD", cwd=src)
+        if git("status", "--porcelain", "--untracked-files=no", cwd=src) or git("ls-files", "--others", "--exclude-standard", cwd=src):
+            sha += "-dirty"
+        return src, sha
+    sha = git("rev-parse", "--short=7", args.commit)
+    src = "%s/src-%s" % (WORK, sha)
+    if not os.path.isdir(src):
+        log("worktree for %s at %s" % (sha, src))
+        run(["git", "-C", REPO, "worktree", "add", "--detach", src, sha])
+    return src, sha
+
+
+def build_helpers():
+    os.makedirs(BIN, exist_ok=True)
+    for name in ("probe", "turn"):
+        source, out = "%s/scripts/perf/%s.swift" % (REPO, name), "%s/%s" % (BIN, name)
+        if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(source):
+            run(["swiftc", "-O", source, "-o", out])
+
+
+def build_app(src, sha):
+    dd = "%s/dd-%s" % (WORK, sha)
+    build_log = "%s/build-%s.log" % (WORK, sha)
+    log("building Release app (log %s)" % build_log)
+    with open(build_log, "w") as f:
+        rc = subprocess.call(["xcodebuild", "-project", src + "/CandyWrapper.xcodeproj", "-scheme", "CandyWrapper",
+                              "-configuration", "Release", "-derivedDataPath", dd, "build"], stdout=f, stderr=subprocess.STDOUT)
+    if rc != 0:
+        sys.exit("perf-review: build failed, see " + build_log)
+    return dd + "/Build/Products/Release/CandyWrapper.app"
+
+
+def sizes(app):
+    total = 0
+    for root, _, files in os.walk(app):
+        for name in files:
+            path = os.path.join(root, name)
+            if not os.path.islink(path):
+                total += os.path.getsize(path)
+    return {"size.bundle_mb": [total / 1048576], "size.binary_mb": [os.path.getsize(app + "/Contents/MacOS/CandyWrapper") / 1048576]}
+
+
+# MARK: micro-benchmarks
+
+
+def benchmarks(src):
+    target = src + "/Packages/CandyKit/Tests/FeaturesTests/PerfBenchmarks.swift"
+    overlaid = False
+    if not os.path.exists(target):
+        # ponytail: copies today's benchmark file into older checkouts; breaks once the APIs it calls change, pin a copy per baseline then
+        shutil.copy(REPO + "/Packages/CandyKit/Tests/FeaturesTests/PerfBenchmarks.swift", target)
+        overlaid = True
+    log("micro-benchmarks (release build of the package)")
+    env = dict(os.environ, CW_BENCH="1")
+    out = subprocess.run(["swift", "test", "-c", "release", "-Xswiftc", "-enable-testing", "--filter", "PerfBenchmarks"],
+                         cwd=src + "/Packages/CandyKit", env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         universal_newlines=True).stdout
+    results = {}
+    for line in out.splitlines():
+        m = re.search(r"PERF (\{.*\})", line)
+        if m:
+            b = json.loads(m.group(1))
+            results["bench." + b["name"]] = b
+    if not results:
+        log("no benchmark output; tail:\n" + "\n".join(out.splitlines()[-15:]))
+    return results, overlaid
+
+
+# MARK: app runs
+
+
+def foreign_apps(own=None):
+    """CandyWrapper processes other than the user's demo app and our own."""
+    demo = open(DEMO_PID_FILE).read().strip() if os.path.exists(DEMO_PID_FILE) else ""
+    out = run(["ps", "-axo", "pid=,command="])
+    pids = []
+    for line in out.splitlines():
+        pid, _, command = line.strip().partition(" ")
+        executable = command.split(" ")[0]
+        if executable.endswith("CandyWrapper.app/Contents/MacOS/CandyWrapper") and pid not in (demo, str(own)):
+            pids.append(int(pid))
+    return pids
+
+
+def wait_quiet(limit=600):
+    start = time.time()
+    while foreign_apps():
+        if time.time() - start > limit:
+            log("another CandyWrapper app keeps running; measuring anyway, numbers are marked noisy")
+            return False
+        log("waiting for other CandyWrapper apps to quit: %s" % foreign_apps())
+        time.sleep(10)
+    return True
+
+
+def server_up():
+    return subprocess.call(["curl", "-sf", "-o", "/dev/null", SERVER + "/.well-known/t3/environment"]) == 0
+
+
+def probe(*args):
+    return [json.loads(l) for l in run([BIN + "/probe"] + [str(a) for a in args]).splitlines() if l.startswith("{")]
+
+
+class App:
+    def __init__(self, app_path, extra_args, tag):
+        self.log_path = "%s/app-%s.log" % (WORK, tag)
+        before = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
+        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1")
+        self.proc = subprocess.Popen([REPO + "/scripts/run-app", "--server", SERVER, "--token-file", TOKEN, "--fake-t3-connect"] + extra_args,
+                                     env=env, stdout=open(self.log_path, "w"), stderr=subprocess.STDOUT, start_new_session=True)
+        self.pid = None
+        binary = app_path + "/Contents/MacOS/CandyWrapper"
+        deadline = time.time() + 15
+        while time.time() < deadline and self.pid is None:
+            now = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
+            if now and now != before:
+                command = subprocess.run(["ps", "-o", "command=", "-p", now], stdout=subprocess.PIPE, universal_newlines=True).stdout
+                if binary in command:
+                    self.pid = int(now)
+            time.sleep(0.02)
+        if self.pid is None:
+            self.proc.kill()
+            sys.exit("perf-review: the app did not start; see " + self.log_path)
+
+    def timing(self, label, wait=0):
+        deadline = time.time() + wait
+        while True:
+            m = re.search(r"launch-timing %s ([0-9.]+) s" % label, open(self.log_path).read())
+            if m:
+                return float(m.group(1)) * 1000
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.1)
+
+    def rusage(self):
+        return probe("rusage", self.pid)[0]
+
+    def stop(self):
+        # Only the PID this run launched and verified.
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        for _ in range(100):
+            try:
+                os.kill(self.pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(self.pid, signal.SIGKILL)
+        self.proc.wait()
+
+
+def rates(a, b):
+    seconds = (b["t_ns"] - a["t_ns"]) / 1e9
+    return {"cpu_pct": (b["cpu_ns"] - a["cpu_ns"]) / 1e9 / seconds * 100,
+            "interrupt_wakeups_per_s": (b["interrupt_wakeups"] - a["interrupt_wakeups"]) / seconds,
+            "package_idle_wakeups_per_s": (b["idle_wakeups"] - a["idle_wakeups"]) / seconds}
+
+
+def mb(n):
+    return n / 1048576
+
+
+def add(metrics, name, value):
+    if value is not None:
+        metrics.setdefault(name, []).append(value)
+
+
+def scenario_idle(app_path, metrics, idle_seconds, i, noise):
+    app = App(app_path, ["--open-thread", IDLE_THREAD], "idle-%d" % i)
+    try:
+        window = probe("window", app.pid, 30)[0]
+        add(metrics, "launch.window_ms", window.get("ms"))
+        add(metrics, "launch.live_sidebar_ms", app.timing("live sidebar", wait=20))
+        add(metrics, "launch.cached_sidebar_ms", app.timing("cached sidebar"))
+        time.sleep(5)  # settle: thread opened, first layout done
+        a = app.rusage()
+        time.sleep(idle_seconds)
+        b = app.rusage()
+        if foreign_apps(app.pid):
+            noise.append("idle run %d overlapped another CandyWrapper app" % i)
+        for k, v in rates(a, b).items():
+            add(metrics, "idle." + k, v)
+        add(metrics, "idle.footprint_mb", mb(b["footprint"]))
+        add(metrics, "idle.peak_footprint_mb", mb(b["peak_footprint"]))
+    finally:
+        app.stop()
+
+
+def scenario_big_thread(app_path, metrics, i, noise):
+    # The app scrolls itself (--perf-scroll): events posted to its pid don't reach AppKit, and events
+    # through the HID tap would move the user's pointer.
+    app = App(app_path, ["--open-thread", BIG_THREAD, "--perf-scroll", "12"], "big-%d" % i)
+    try:
+        probe("window", app.pid, 30)
+        app.timing("live sidebar", wait=20)
+        time.sleep(8)  # the thread's history loads and lays out; scrolling starts 12 s after launch
+        a = app.rusage()
+        add(metrics, "big_thread.footprint_mb", mb(a["footprint"]))
+        add(metrics, "big_thread.peak_footprint_mb", mb(a["peak_footprint"]))
+        deadline = time.time() + 30
+        while "perf-scroll done" not in open(app.log_path).read() and time.time() < deadline:
+            time.sleep(0.1)
+        if "perf-scroll done" not in open(app.log_path).read():
+            noise.append("big-thread run %d: this build has no --perf-scroll, scroll numbers are idle numbers" % i)
+        b = app.rusage()
+        add(metrics, "big_thread.scroll_cpu_ms", (b["cpu_ns"] - a["cpu_ns"]) / 1e6)
+        time.sleep(3)
+        c = app.rusage()
+        add(metrics, "big_thread.after_scroll_footprint_mb", mb(c["footprint"]))
+        add(metrics, "big_thread.after_scroll_peak_mb", mb(c["peak_footprint"]))
+        if foreign_apps(app.pid):
+            noise.append("big-thread run %d overlapped another CandyWrapper app" % i)
+    finally:
+        app.stop()
+
+
+def scenario_stream(app_path, metrics, sha, noise):
+    title = "Perf stream %s %s" % (sha, datetime.datetime.now().strftime("%H%M%S"))
+    thread_id = run([BIN + "/turn", SERVER, TOKEN, "create", title]).strip().splitlines()[-1]
+    app = App(app_path, ["--open-thread", title], "stream")
+    try:
+        probe("window", app.pid, 30)
+        app.timing("live sidebar", wait=20)
+        time.sleep(5)
+        a = app.rusage()
+        result = json.loads(run([BIN + "/turn", SERVER, TOKEN, "send", thread_id, STREAM_PROMPT]).strip().splitlines()[-1])
+        time.sleep(1)  # the last events reach the app
+        b = app.rusage()
+        for k, v in rates(a, b).items():
+            add(metrics, "stream." + k, v)
+        add(metrics, "stream.footprint_mb", mb(b["footprint"]))
+        add(metrics, "stream.peak_footprint_mb", mb(b["peak_footprint"]))
+        metrics["stream.turn"] = result
+        if foreign_apps(app.pid):
+            noise.append("stream run overlapped another CandyWrapper app")
+    finally:
+        app.stop()
+
+
+# MARK: report
+
+
+def summarize(values):
+    return {"median": statistics.median(values), "min": min(values), "max": max(values), "values": values}
+
+
+def verdict(name, new, old):
+    rel, absolute, _ = THRESHOLDS.get(name, BENCH_THRESHOLD)
+    if old is None:
+        return "new"
+    delta = new["median"] - old["median"]
+    big = abs(delta) > absolute and (old["median"] == 0 or abs(delta) / abs(old["median"]) > rel)
+    if not big:
+        return "same"
+    if len(new.get("values", [])) >= 3 and len(old.get("values", [])) >= 3:
+        if new["min"] <= old["max"] and old["min"] <= new["max"]:
+            return "same (ranges overlap)"
+    return "WORSE" if delta > 0 else "better"
+
+
+def fmt(v):
+    if v is None:
+        return "-"
+    return "%.3f" % v if abs(v) < 1 else "%.1f" % v
+
+
+def table(result, baseline):
+    rows = ["| Metric | This run | Range | Baseline | Delta | Verdict |", "|---|---|---|---|---|---|"]
+    old_metrics = baseline["metrics"] if baseline else {}
+    regressions = []
+    for name, new in result["metrics"].items():
+        if not isinstance(new, dict) or "median" not in new:
+            continue
+        old = old_metrics.get(name)
+        v = verdict(name, new, old)
+        if v == "WORSE":
+            regressions.append(name)
+        delta = "-" if old is None else ("%+.1f%%" % ((new["median"] - old["median"]) / old["median"] * 100) if old["median"] else fmt(new["median"] - old["median"]))
+        spread = "%s to %s" % (fmt(new["min"]), fmt(new["max"])) if len(new.get("values", [])) > 1 or new.get("runs", 1) > 1 else ""
+        rows.append("| %s | %s | %s | %s | %s | %s |" % (name, fmt(new["median"]), spread, fmt(old["median"]) if old else "-", delta, v))
+    return "\n".join(rows), regressions
+
+
+def latest_saved(out_dir, exclude):
+    runs = []
+    for path in glob.glob(out_dir + "/*.json"):
+        if os.path.abspath(path) == os.path.abspath(exclude):
+            continue
+        try:
+            data = json.load(open(path))
+            runs.append((data.get("created", ""), path, data))
+        except ValueError:
+            continue
+    return max(runs)[1:] if runs else (None, None)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--commit", default="HEAD")
+    p.add_argument("--source")
+    p.add_argument("--baseline")
+    p.add_argument("--repeat", type=int, default=3)
+    p.add_argument("--idle-seconds", type=float, default=30)
+    p.add_argument("--stream", action="store_true")
+    p.add_argument("--no-bench", action="store_true")
+    p.add_argument("--no-app", action="store_true")
+    p.add_argument("--out-dir", default=REPO + "/docs/perf")
+    args = p.parse_args()
+
+    os.makedirs(WORK, exist_ok=True)
+    src, sha = prepare_source(args)
+    build_helpers()
+    noise = []
+    raw = {}
+    result = {"commit": sha, "source": src, "created": datetime.datetime.now().isoformat(timespec="seconds"),
+              "machine": run(["sysctl", "-n", "hw.model"]).strip(), "repeat": args.repeat, "idle_seconds": args.idle_seconds}
+
+    if not args.no_app:
+        app_path = build_app(src, sha)
+        raw.update(sizes(app_path))
+        started_server = None
+        if not server_up():
+            run([REPO + "/scripts/sandbox-server"])
+            started_server = int(open(SANDBOX + "/server.pid").read().strip())
+            time.sleep(3)
+        try:
+            wait_quiet()
+            for i in range(args.repeat):
+                log("launch and idle, run %d of %d" % (i + 1, args.repeat))
+                scenario_idle(app_path, raw, args.idle_seconds, i, noise)
+            for i in range(args.repeat):
+                log("large thread, run %d of %d" % (i + 1, args.repeat))
+                scenario_big_thread(app_path, raw, i, noise)
+            if args.stream:
+                log("streaming turn (one claude-haiku-5-5 turn)")
+                scenario_stream(app_path, raw, sha, noise)
+        finally:
+            if started_server:
+                os.kill(started_server, signal.SIGTERM)
+        result["load_average"] = os.getloadavg()
+
+    metrics = {}
+    for name, values in raw.items():
+        metrics[name] = summarize(values) if isinstance(values, list) else values
+    if not args.no_bench:
+        benches, overlaid = benchmarks(src)
+        for name, b in benches.items():
+            metrics[name] = {"median": b["median_ms"], "min": b["min_ms"], "max": b["max_ms"], "runs": b["runs"],
+                             "detail": {k: v for k, v in b.items() if k not in ("median_ms", "min_ms", "max_ms", "runs", "name")}}
+        if overlaid:
+            noise.append("micro-benchmarks: copied today's PerfBenchmarks.swift into this checkout")
+    result["metrics"] = metrics
+    result["notes"] = noise
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    stem = "%s/%s-%s" % (args.out_dir, datetime.date.today().isoformat(), sha)
+    if args.baseline:
+        base_path, baseline = args.baseline, json.load(open(args.baseline))
+    else:
+        base_path, baseline = latest_saved(args.out_dir, stem + ".json")
+    result["baseline"] = os.path.basename(base_path) if base_path else None
+    text, regressions = table(result, baseline)
+    result["regressions"] = regressions
+    json.dump(result, open(stem + ".json", "w"), indent=1, sort_keys=True)
+    with open(stem + ".md", "w") as f:
+        f.write("# Perf review %s\n\n" % sha)
+        f.write("Run %s on %s, %d launches per scenario, %d s idle window. Baseline: %s.\n\n"
+                % (result["created"], result["machine"], args.repeat, args.idle_seconds, result["baseline"] or "none"))
+        f.write(text + "\n")
+        if regressions:
+            f.write("\nRegressions: %s\n" % ", ".join(regressions))
+        for n in noise:
+            f.write("\nNote: %s\n" % n)
+    print(text)
+    print("\nsaved %s.json and .md; baseline %s; regressions: %s" % (stem, result["baseline"] or "none", ", ".join(regressions) or "none"))
+
+
+if __name__ == "__main__":
+    main()
