@@ -1,15 +1,23 @@
 #!/bin/sh
-# Runs the Debug build in the GUI session against the sandbox T3 home, never ~/.t3. The app
-# reuses the sandbox server if one runs (and asks to pair), else it starts and owns its own.
-# Arguments go to the app: `--snapshot /tmp/x.png --snapshot-delay 12` renders the window to a
-# PNG and quits. The app's pid goes to /tmp/candywrapper-app.pid.
+# Runs the Debug build in the GUI session against the sandbox T3 home. The app reuses the
+# sandbox server if one runs (and asks to pair), else it starts and owns its own.
+# `--live` uses ~/.t3 instead, as a Dock launch would. T3's service owns that home, so the app
+# only joins its server, and pairing asks first.
+# Other arguments go to the app: `--snapshot /tmp/x.png --snapshot-delay 12` renders the window
+# to a PNG and quits. The app's pid goes to /tmp/candywrapper-app.pid.
 # Build first: xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd build
-# Usage: scripts/run-app [app arguments]
+# Usage: scripts/run-app [--live] [app arguments]
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 version="$(sed 's/^v//' "$here/T3_VERSION")"
 app="${CANDY_APP:-/tmp/cw-dd/Build/Products/Debug/CandyWrapper.app}"
 bin=/tmp/candywrapper-bin
+home="CANDY_T3_HOME=$here/../CandyWrapper-research/sandbox/t3home"
+if [ "${1-}" = "--live" ]; then
+  shift
+  # A harmless stand-in for the variable, so env still gets one NAME=VALUE argument.
+  home="CANDY_LIVE=1"
+fi
 # The sandbox home has no runtime/service-state.json, so the app looks for t3 on PATH.
 mkdir -p "$bin"
 ln -sf "$HOME/.t3/runtime/versions/$version/t3" "$bin/t3"
@@ -17,5 +25,5 @@ user="$(id -un)"
 # launchctl asuser puts the app in the GUI session. env -i drops the live service's T3 variables.
 exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; exec "$@"' sh \
   env -i HOME="$HOME" USER="$user" LOGNAME="$user" LANG=en_US.UTF-8 T3CODE_TELEMETRY_ENABLED=false \
-  CANDY_T3_HOME="$here/../CandyWrapper-research/sandbox/t3home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+  "$home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" \
   "$app/Contents/MacOS/CandyWrapper" "$@"

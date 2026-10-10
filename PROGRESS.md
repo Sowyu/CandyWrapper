@@ -6,7 +6,7 @@ Update this file at the end of every work session. Newest log entry first.
 
 Milestone 3, skeleton: connect to a T3 server and show real projects and threads in the sidebar. Milestone 2 was signed off by the user on 2026-10-09 after reviewing `../CandyWrapper-research/review/m2/index.html`.
 
-Next action: ask the user before the M3 demo against their live T3 (pairing writes a device record into `~/.t3`). Open M3 items: connection status display, custom URL plus pairing link, the media-navigation sidebar toggle.
+Next action: get the user's verdict on the M3 demo (CandyWrapper paired with their live T3 on 2026-10-10). Then the open M3 items: connection status display, custom URL plus pairing link, the media-navigation sidebar toggle.
 
 ## Milestones
 
@@ -48,7 +48,7 @@ Next action: ask the user before the M3 demo against their live T3 (pairing writ
 - [ ] App wiring still open: connection status display, custom URL plus pairing link. Original brief for this item: ServerManager. Reuse a running server found via `~/.t3/userdata/server-runtime.json` plus a health check; otherwise spawn `t3 serve` on demand with a bootstrap credential (`--bootstrap-fd`) and low-memory Node options; stop it after idle minutes with no active runs, pending requests or running terminals, and on quit; restart on use. Cached sidebar at launch. Also a custom URL plus pairing link. Connection status, main window with the sidebar showing real data
 - [x] Sidebar feature (`Packages/CandyKit/Sources/Features/Sidebar/`): `SidebarContentView` (nightly stage art, brand, search, filter, add project, new thread, footer Settings, Pull Requests, Usage), `SidebarListView` (virtualized, rows recycled per kind, 160pt overscan, only changed rows reconfigure, Sidebar.motion.ts slides and fades, arrows and Enter), one label timer aimed at the next visible label change with 10% tolerance and none while occluded, `SidebarPreview` (03-turn2 replay, reference and rich datasets). Whole-sidebar vs 02-sidebar-populated: 5.0% light, 5.3% dark differing pixels (`swift test --filter SidebarFidelityTests/wholeSidebar`, report in /tmp/candywrapper-fidelity/report-sidebar-whole.html). Open: per-state component specs through scripts/component-reference are not written yet; the toggle is ghost, T3 uses media-navigation over the art (needs a variant on `SidebarTriggerView`); search results, project filter popup, snooze menu, drag and drop, PR badge, terminal indicator and draft rows not built
 - [x] Window chrome matching the desktop app (traffic lights at x 16 centered in the 52 pt topbar, hidden title, drag regions, 1100x780 default, 840x620 minimum).
-- [ ] Demo: connect to the user's live T3 (ask first; pairing writes an auth session into the live install)
+- [ ] Demo: connect to the user's live T3. 2026-10-10, with the user's go-ahead: `scripts/run-app --live`, the user clicked Connect, the app paired through `t3 auth pairing create` (same runtime version as the live server), saved the token in the login Keychain and streamed the shell (2 projects, 38 threads). Still one `t3 serve`. Waiting for the user's verdict
 
 ## Milestone 2 checklist
 
@@ -70,7 +70,7 @@ Gotchas found so far:
 
 ## Waiting on the user
 
-- M3 demo needs the user's go-ahead: connecting CandyWrapper to the live T3 on this Mac pairs it, which writes a device record into `~/.t3`. Ask before running the app without `CANDY_T3_HOME`.
+- M3 demo verdict. CandyWrapper is paired with the live T3 (one device record in `~/.t3`, token in the Keychain), so `scripts/run-app --live` no longer asks.
 - The user hasn't confirmed the Allow Remote Access design yet (see Decisions). Built as proposed.
 - GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
 
@@ -117,6 +117,8 @@ Gotchas found so far:
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
 ## Log
+
+- 2026-10-10: M3 demo against the live T3. Added `scripts/run-app --live`. Pairing, Keychain and shell stream worked on the first try; the app idles at 0.3% CPU after the snapshot. `screencapture` over SSH fails ("could not create image from display", no Screen Recording permission for the SSH chain), so check the screen through the app's `--snapshot` or ask the user.
 
 - 2026-10-09: M3 local server. The agent built `T3Client/LocalServer/` (discovery, launcher with desktop bootstrap, lifecycle with idle stop, remote access setting) and `ShellCache`. Main session wired it into the app (`ServerController`), added the orphan record, fixed a quit deadlock, added `scripts/run-app`. 211 tests pass. Stopped the sandbox server and its two idle Claude sessions; restart it with `scripts/sandbox-server` when needed. Next: header stars bug, then ask the user about the live demo.
 
