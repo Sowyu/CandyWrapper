@@ -178,4 +178,29 @@ private func question(_ id: String, multi: Bool = false, custom: Bool? = nil, in
         _ = gone.select("A")
         #expect(gone.advance() == .blocked && !gone.canPressPrimary)
     }
+
+    /// Files alone answer a custom-answer question once uploaded; an upload in flight blocks the
+    /// answer even with text; the command carries `attachmentsByQuestionId` only with files.
+    @Test func fileAnswers() {
+        var session = UserInputSession(PendingUserInput(requestId: "r", createdAt: nil, questions: [question("a")],
+                                                        responseCapability: "live", dismissible: false))
+        #expect(!session.canPressPrimary)
+        session.attachments = ["a": .init(count: 1, blocked: true)]
+        #expect(!session.canPressPrimary)
+        session.setCustomAnswer("see file")
+        #expect(session.answers == nil)
+        session.attachments = ["a": .init(count: 1, blocked: false)]
+        #expect(session.answers == ["a": .text("see file")])
+        session.setCustomAnswer("")
+        #expect(session.answers == ["a": .text("")] && session.canPressPrimary)
+
+        let file: JSONValue = .object(["type": .string("file"), "id": .string("up1"), "name": .string("a.txt"),
+                                       "mimeType": .string("text/plain"), "sizeBytes": .number(3)])
+        let with = RuntimeRequestCommands.respond(threadId: ThreadId("t"), requestId: "r", answers: ["a": .text("")],
+                                                  attachmentsByQuestionId: ["a": [file]], commandId: "c")
+        #expect(with["attachmentsByQuestionId"]?["a"] == .array([file]))
+        let without = RuntimeRequestCommands.respond(threadId: ThreadId("t"), requestId: "r", answers: ["a": .text("x")],
+                                                     attachmentsByQuestionId: ["a": []], commandId: "c")
+        #expect(without["attachmentsByQuestionId"] == nil)
+    }
 }

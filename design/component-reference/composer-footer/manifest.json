@@ -1,0 +1,30 @@
+{
+  "cluster.access-icon" : {
+    "height" : 28,
+    "width" : 188.8828125
+  },
+  "cluster.both-icon" : {
+    "height" : 28,
+    "width" : 130
+  },
+  "cluster.overflow-access" : {
+    "height" : 28,
+    "width" : 105
+  },
+  "cluster.overflow-both" : {
+    "height" : 28,
+    "width" : 38
+  },
+  "files.question" : {
+    "height" : 104,
+    "width" : 360
+  },
+  "menu.access" : {
+    "height" : 150,
+    "width" : 160
+  },
+  "menu.traits-access" : {
+    "height" : 353,
+    "width" : 160
+  }
+}

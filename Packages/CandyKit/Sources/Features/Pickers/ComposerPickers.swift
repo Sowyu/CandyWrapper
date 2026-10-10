@@ -47,6 +47,8 @@ public final class ComposerPickers {
         modelButton.action = { [weak self] in self?.toggleModelPicker() }
         traitsButton.action = { [weak self] in self?.openTraits() }
         accessButton.action = { [weak self] in self?.openAccessMode() }
+        controlsView.overflow.action = { [weak self] in self?.toggleOverflowMenu() }
+        controlsView.onFitChange = { [weak self] in self?.closeHiddenPopup() }
         refresh(notify: false)
     }
 
@@ -69,7 +71,7 @@ public final class ComposerPickers {
         let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled)
         traitsButton.title = label
         traitsButton.toolTip = label
-        traitsButton.isHidden = current.descriptors.isEmpty
+        controlsView.showsTraits = !current.descriptors.isEmpty
         let mode = Self.modes[current.runtimeMode] ?? Self.modes[.fullAccess]!
         accessButton.title = mode.label
         accessButton.icon = IconView(name: mode.icon, size: 16)
@@ -139,10 +141,13 @@ public final class ComposerPickers {
         return (primary?.promptInjectedValues?.isEmpty == false) && ModelTraits.isUltrathinkPrompt(prompt)
     }
 
-    /// `composer.effort`: opens the traits menu (no-op when the model has no traits).
+    /// `composer.effort`: opens the traits menu (no-op when the model has no traits), or the overflow
+    /// menu while traits sit there (the trigger carrying `data-composer-shortcut~="composer.effort"`).
     public func openTraits() {
+        guard controlsView.showsTraits else { return }
+        if controlsView.traitsInOverflow { toggleOverflowMenu(); return }
         if closeIfOpen(traitsButton) { return }
-        guard !traitsButton.isHidden, let host = traitsButton.popupHost else { return }
+        guard let host = traitsButton.popupHost else { return }
         let menu = PickerMenuView(entries: traitsEntries(), style: .menu, minimumWidth: 160 - 2)
         let popup = host.open(PickerPopupView(menu), trigger: traitsButton,
                               placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
@@ -217,8 +222,9 @@ public final class ComposerPickers {
         .fullAccess: ModeInfo(label: "Full access", description: "Allow commands and edits without prompts.", icon: .lockOpen),
     ]
 
-    /// `composer.mode`: opens the access select.
+    /// `composer.mode`: opens the access select, or the overflow menu while access sits there.
     public func openAccessMode() {
+        if controlsView.accessInOverflow { toggleOverflowMenu(); return }
         if closeIfOpen(accessButton) { return }
         guard let host = accessButton.popupHost else { return }
         let list = PickerMenuView(entries: accessEntries(), style: .select, minimumWidth: 256 + 8)
@@ -237,6 +243,50 @@ public final class ComposerPickers {
                 self.refresh(notify: true)
             }
         }
+    }
+
+    // MARK: Overflow menu (CompactComposerControlsMenu.tsx)
+
+    /// Opens the "..." menu below its trigger, start-aligned like the traits menu.
+    public func toggleOverflowMenu() {
+        let trigger = controlsView.overflow
+        if closeIfOpen(trigger) { return }
+        guard !trigger.isHidden, let host = trigger.popupHost else { return }
+        let menu = PickerMenuView(entries: overflowEntries(), style: .menu, minimumWidth: 160 - 2)
+        menu.refreshEntries = { [weak self] in self?.overflowEntries() ?? [] }
+        let popup = host.open(PickerPopupView(menu), trigger: trigger,
+                              placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+                              swallowsOutsideClick: true)
+        menu.onClose = { [weak self] in self?.closeOpenPopup() }
+        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
+        track(popup)
+    }
+
+    /// The traits content and a divider when traits moved here, then "Access" and its radio items
+    /// (labels only). Access picks keep the menu open: Base UI radio items don't close on click and
+    /// T3 sets no `closeOnClick` there, unlike the traits items.
+    // ponytail: no "Mode" group (Chat / Plan); add it with the plan mode toggle
+    func overflowEntries() -> [PickerMenuEntry] {
+        var out: [PickerMenuEntry] = []
+        if controlsView.traitsInOverflow { out += traitsEntries() + [.separator] }
+        out.append(.label("Access", even: true))
+        for mode in current.runtimeModeOptions {
+            let info = Self.modes[mode] ?? ModeInfo(label: mode.rawValue, description: "", icon: .lock)
+            var entry = PickerMenuEntry.option(info.label, checked: mode == current.runtimeMode) { [weak self] in
+                guard let self, mode != self.current.runtimeMode else { return }
+                self.store.setRuntimeMode(self.draftKey, mode)
+                self.refresh(notify: true)
+            }
+            entry.keepsOpen = true
+            out.append(entry)
+        }
+        return out
+    }
+
+    /// `useComposerMenuState(hidden)`: a menu whose trigger just hid closes.
+    private func closeHiddenPopup() {
+        guard let trigger = openPopup?.trigger as? ComposerControlView, trigger.isHidden else { return }
+        closeOpenPopup()
     }
 
     // MARK: Popup bookkeeping
@@ -261,32 +311,79 @@ public final class ComposerPickers {
     }
 }
 
-/// The footer's left cluster (`data-chat-composer-controls="left"`): model, separator, traits,
-/// separator, access, 4pt apart. The model label shrinks first, down to 52pt.
-// ponytail: no narrow-width overflow menu (J 3.7: hide labels, then the "..." menu); add it with the composer's narrow layout
+/// The footer's left cluster (`data-chat-composer-controls="left"`): model, then the trailing blocks
+/// (separator plus traits, separator plus access) 4pt apart, then the "..." overflow trigger when a
+/// block moved there. Give it the whole width up to the right cluster: at narrow widths it drops the
+/// access label, then the traits label, then moves access, then traits, into the overflow menu
+/// (`resolveRestingComposerControlsLayout`, ChatComposer.tsx:5426-5636). After that the model label
+/// shrinks, down to 52pt.
 public final class PickerControlsView: DSView {
     public let model: ComposerControlView, traits: ComposerControlView, access: ComposerControlView
+    /// "More composer controls" (CompactComposerControlsMenu.tsx:41-54).
+    public let overflow = ComposerControlView(icon: IconView(name: .ellipsis, size: 16))
     private let separators = [ComposerControlSeparatorView(), ComposerControlSeparatorView()]
+    /// False when the model has no trait descriptors (`shouldRenderTraitsControls`).
+    public var showsTraits = true { didSet { if showsTraits != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
+    /// The current fit; kept between passes for the promotion slack.
+    public private(set) var fit = ComposerFooterLayout.Fit()
+    /// The blocks in the overflow menu changed; ComposerPickers closes a popup whose trigger hid.
+    var onFitChange: (() -> Void)?
 
     init(model: ComposerControlView, traits: ComposerControlView, access: ComposerControlView) {
         self.model = model; self.traits = traits; self.access = access
         super.init(frame: .zero)
-        for v in [model, separators[0], traits, separators[1], access] as [NSView] { addSubview(v) }
+        overflow.showsChevron = false
+        overflow.setAccessibilityLabel("More composer controls")
+        for v in [model, separators[0], traits, separators[1], access, overflow] as [NSView] { addSubview(v) }
     }
 
-    private var items: [NSView] {
-        traits.isHidden ? [model, separators[1], access] : [model, separators[0], traits, separators[1], access]
+    /// The trailing blocks in order: separator and trigger each.
+    private var blocks: [(ComposerControlSeparatorView, ComposerControlView)] {
+        showsTraits ? [(separators[0], traits), (separators[1], access)] : [(separators[1], access)]
     }
 
-    private func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
+    /// Whether the traits or access trigger sits in the overflow menu.
+    public var traitsInOverflow: Bool { showsTraits && fit.hiddenCount >= 2 }
+    public var accessInOverflow: Bool { fit.hiddenCount >= 1 }
+
+    /// Each block is its 5pt separator, `gap-1` and the trigger (`flex w-max gap-1`).
+    var measurement: ComposerFooterLayout.Measurement {
+        let b = blocks.map(\.1)
+        return ComposerFooterLayout.Measurement(gap: 4, naturalFixedWidth: model.naturalWidth, minimumFixedWidth: model.minimumWidth,
+                                                blockWidths: b.map { 9 + $0.width(showingLabel: true) },
+                                                iconOnlyBlockWidths: b.map { 9 + $0.width(showingLabel: false) },
+                                                overflowWidth: overflow.naturalWidth)
+    }
 
     public override var intrinsicContentSize: NSSize {
-        NSSize(width: items.map(natural).reduce(0, +) + CGFloat(items.count - 1) * 4, height: 28)
+        let m = measurement
+        return NSSize(width: ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 0), height: 28)
+    }
+
+    // Empty space in the cluster is not a control.
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
     }
 
     public override func layout() {
         super.layout()
-        separators[0].isHidden = traits.isHidden
+        let old = fit
+        // The expanded footer never hides the cluster; the model keeps shrinking and then clips.
+        fit = ComposerFooterLayout.resolve(measurement, hostWidth: bounds.width, previous: fit)
+        let blocks = self.blocks
+        let shown = blocks.count - fit.hiddenCount
+        for (i, (sep, trigger)) in blocks.enumerated() {
+            trigger.showsLabel = i < blocks.count - fit.iconOnlyCount
+            sep.isHidden = i >= shown
+            trigger.isHidden = i >= shown
+        }
+        if !showsTraits { separators[0].isHidden = true; traits.isHidden = true }
+        overflow.isHidden = fit.hiddenCount == 0
+        var items: [NSView] = [model]
+        for (sep, trigger) in blocks.prefix(shown) { items += [sep, trigger] }
+        if !overflow.isHidden { items.append(overflow) }
+        func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
         let fixed = items.dropFirst().map(natural).reduce(0, +) + CGFloat(items.count - 1) * 4
         // Fractional widths like CSS; boxes snap to device pixels the way Chromium paints them.
         func snap(_ v: CGFloat) -> CGFloat { (v * 2).rounded() / 2 }
@@ -298,5 +395,6 @@ public final class PickerControlsView: DSView {
             v.frame = NSRect(x: snap(x), y: (bounds.height - h) / 2, width: snap(x + w) - snap(x), height: h)
             x += w + 4
         }
+        if fit != old { onFitChange?() }
     }
 }
