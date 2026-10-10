@@ -39,15 +39,57 @@ enum MarkdownStyle {
     /// CSS `font-weight: bolder` from a parent weight.
     static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
 
+    /// Inline text: the attributed string, the inline code ranges and the file chips in it.
+    struct Inline {
+        var string: NSAttributedString
+        var code: [NSRange]
+        var files: [(range: NSRange, meta: FileLinkMeta, label: String)]
+    }
+
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
     /// on the character before it and on its own last character; the ranges come back for the chips.
+    /// With `files`, path-shaped inline code and file links become file chips (`FileChipStyle`).
     static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
-                       alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil) -> (NSAttributedString, [NSRange]) {
+                       alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
+                       files: FileChipResolver? = nil, maxChipWidth: CGFloat = .greatestFiniteMagnitude) -> Inline {
         let out = NSMutableAttributedString()
         var chips: [NSRange] = []
+        var fileChips: [(range: NSRange, meta: FileLinkMeta, label: String)] = []
         let pad = chipPaddingX + 1
         var leadingChip = false
-        for run in runs {
+        let parent = font(size, weight: weight)
+        func appendFile(_ meta: FileLinkMeta) {
+            let label = files!.label(meta)
+            let start = out.length
+            out.append(FileChipStyle.string(label: label, size: size, parent: parent, maxWidth: maxChipWidth))
+            fileChips.append((NSRange(location: start, length: out.length - start), meta, label))
+        }
+        var i = 0
+        while i < runs.count {
+            var run = runs[i]
+            if let files, run.code, run.link == nil, let meta = files.inlineCode(run.text) {
+                appendFile(meta)
+                i += 1
+                continue
+            }
+            if let files, let link = run.link, let meta = files.link(link) {
+                // T3 renders the link's label as plain text followed by the chip, or only the chip when
+                // the label already names the file (`isMarkdownFileLinkLabel`).
+                var end = i
+                while end < runs.count, runs[end].link == link { end += 1 }
+                let label = runs[i..<end].map(\.text).joined()
+                if !FileLinks.isFileLinkLabel(label, href: link.absoluteString) {
+                    let plain = runs[i..<end].map { r -> InlineRun in var r = r; r.link = nil; return r }
+                    let inner = inline(Array(plain), size: size, weight: weight, color: color)
+                    // ponytail: inline code inside such a label loses its code box; keep `inner.code` if that shows up
+                    out.append(inner.string)
+                    out.append(NSAttributedString(string: " ", attributes: [.font: parent, .foregroundColor: color]))
+                }
+                appendFile(meta)
+                i = end
+                continue
+            }
+            i += 1
             let start = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]
             if run.code {
@@ -59,7 +101,8 @@ enum MarkdownStyle {
             }
             if run.strikethrough { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             // An image inside running text shows its alt text, like a broken inline image.
-            out.append(NSAttributedString(string: run.isBreak && run.text == "\n" ? "\u{2028}" : run.text, attributes: attributes))
+            if run.isBreak, run.text == "\n" { run.text = "\u{2028}" }
+            out.append(NSAttributedString(string: run.text, attributes: attributes))
             if run.code, out.length > start {
                 chips.append(NSRange(location: start, length: out.length - start))
                 if start > 0 {
@@ -78,7 +121,7 @@ enum MarkdownStyle {
         paragraph.firstLineHeadIndent = (firstLineIndent ?? headIndent) + (leadingChip ? pad : 0)
         paragraph.headIndent = headIndent
         out.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: out.length))
-        return (out, chips)
+        return Inline(string: out, code: chips, files: fileChips)
     }
 }
 
@@ -98,6 +141,8 @@ public final class MarkdownLayout {
         case symbol(Int, CGRect, NSColor)
         case checkbox(CGRect, checked: Bool)
         case icon(IconName, CGRect, NSColor)
+        /// A file path chip's box and icon; its label is part of the text item drawn after it.
+        case fileChip(FileChip)
         /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
         case clip(CGRect)
         case endClip
@@ -113,15 +158,20 @@ public final class MarkdownLayout {
 
     private(set) var items: [Item] = []
     private(set) var controls: [Control] = []
+    /// File chips in drawing order, for hit testing.
+    public private(set) var fileChips: [FileChip] = []
 
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
-    /// 80% foreground of body text (user bubbles and plan cards draw at 100%).
-    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil) {
+    /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
+    /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
+    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil) {
         self.width = width
-        var builder = Builder(unwrapped: unwrappedCode)
+        let files = FileChipResolver(document: document, cwd: cwd)
+        var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files)
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
         items = flow.items
         controls = flow.controls
+        fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
         height = flow.height
     }
 }
@@ -153,9 +203,10 @@ private struct Context {
 
 private struct Builder {
     let unwrapped: Set<Int>
+    let files: FileChipResolver?
     var codeIndex = 0
 
-    init(unwrapped: Set<Int>) { self.unwrapped = unwrapped }
+    init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
 
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
@@ -231,16 +282,30 @@ private struct Builder {
     @MainActor
     func text(_ runs: [InlineRun], width: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular, lineHeight: CGFloat,
               color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil) -> Box {
-        let (string, chips) = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
-                                                   headIndent: headIndent, firstLineIndent: firstLineIndent)
-        let textBox = MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
-                                      chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
+        let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
+                                          headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, maxChipWidth: width)
+        let textBox = MarkdownTextBox(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
+                                      chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
         for chip in textBox.chips {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
         }
+        box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
         box.items.append(.text(textBox, .zero))
         return box
+    }
+
+    @MainActor
+    static func fileChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
+        let parent = MarkdownStyle.font(size, weight: weight)
+        let top = FileChipStyle.top(parent: parent, size: size), height = FileChipStyle.height(size)
+        let em = FileChipStyle.em(size), iconSize = 1.17 * em
+        return inline.files.compactMap { file in
+            guard let span = textBox.spans(file.range).first else { return nil }
+            let frame = CGRect(x: span.x0, y: span.baseline + top, width: span.x1 - span.x0, height: height)
+            let icon = CGRect(x: frame.minX + 1 + 0.5 * em, y: frame.midY - iconSize / 2, width: iconSize, height: iconSize)
+            return .fileChip(FileChip(frame: frame, icon: icon, meta: file.meta, label: file.label))
+        }
     }
 
     // MARK: Lists
@@ -435,13 +500,13 @@ private struct Builder {
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let columns = table.alignments.count
         let size = MarkdownStyle.tableFontSize, line = MarkdownStyle.tableLineHeight
-        func cellString(_ runs: [InlineRun], header: Bool, column: Int) -> (NSAttributedString, [NSRange]) {
+        func cellString(_ runs: [InlineRun], header: Bool, column: Int) -> MarkdownStyle.Inline {
             let alignment: NSTextAlignment = switch table.alignments[column] {
             case .center: .center
             case .right: .right
             default: .left
             }
-            return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment)
+            return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment, files: files)
         }
         func natural(_ s: NSAttributedString) -> CGFloat {
             MarkdownTextBox(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
@@ -449,7 +514,7 @@ private struct Builder {
         var widths = [CGFloat](repeating: 0, count: columns)
         for row in [table.header] + table.rows {
             for (c, runs) in row.enumerated() where c < columns {
-                widths[c] = max(widths[c], natural(cellString(runs, header: row == table.header, column: c).0) + 24)
+                widths[c] = max(widths[c], natural(cellString(runs, header: row == table.header, column: c).string) + 24)
             }
         }
         let total = widths.reduce(0, +)
@@ -466,7 +531,8 @@ private struct Builder {
             var cells: [(Box, CGFloat)] = []
             for c in 0..<columns {
                 let runs = c < row.count ? row[c] : []
-                let (s, chips) = cellString(runs, header: r == 0, column: c)
+                let inline = cellString(runs, header: r == 0, column: c)
+                let s = inline.string, chips = inline.code
                 // Columns are at least max-content wide, so the cell never wraps; it must still wrap at its width
                 // for TextKit to place centered and right-aligned text inside the column.
                 let textBox = MarkdownTextBox(s, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
@@ -475,6 +541,7 @@ private struct Builder {
                 for chip in textBox.chips {
                     cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
                 }
+                cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items.append(.text(textBox, .zero))
                 rowHeight = max(rowHeight, textBox.height)
                 cells.append((cell, x + 12))
@@ -522,6 +589,8 @@ private extension MarkdownLayout.Item {
         case .symbol(let kind, let r, let color): .symbol(kind, r.offsetBy(dx: p.x, dy: p.y), color)
         case .checkbox(let r, let checked): .checkbox(r.offsetBy(dx: p.x, dy: p.y), checked: checked)
         case .icon(let name, let r, let color): .icon(name, r.offsetBy(dx: p.x, dy: p.y), color)
+        case .fileChip(let chip):
+            .fileChip(FileChip(frame: chip.frame.offsetBy(dx: p.x, dy: p.y), icon: chip.icon.offsetBy(dx: p.x, dy: p.y), meta: chip.meta, label: chip.label))
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
         case .endClip: .endClip
         }

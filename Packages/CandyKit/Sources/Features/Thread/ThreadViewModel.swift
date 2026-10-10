@@ -43,6 +43,9 @@ public final class ThreadViewModel {
     public var projectTitle = ""
     /// Makes read paths workspace relative in labels and details.
     public var workspaceRoot: String?
+    /// File chip clicks in messages (`MarkdownView.onOpenFile`); nil shows the chip's copy menu.
+    // ponytail: unwired; the app sets it once the files panel and open-in-editor exist
+    public var openFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
 
     private var input: TimelineRowsInput?
     private var expandedEntries: Set<String> = []

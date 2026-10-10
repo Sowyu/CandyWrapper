@@ -91,6 +91,29 @@ public struct EnvironmentHTTP: Sendable {
         try await send("GET", path, token: token, as: T.self)
     }
 
+    /// GET of a signed asset URL from `assets.createUrl` (`/api/assets/<token>/<name>`, protocol.md 5).
+    /// The signed path is the credential. Bodies over `maxBytes` are refused, like T3's `readBounded`.
+    public func asset(_ relativeURL: String, token: String?, maxBytes: Int) async throws -> Data {
+        guard let url = URL(string: relativeURL, relativeTo: baseURL)?.absoluteURL else {
+            throw EnvironmentHTTPError.invalidResponse("asset URL \(relativeURL)")
+        }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpShouldHandleCookies = false
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let e as URLError where e.code == .timedOut {
+            throw EnvironmentHTTPError.timedOut
+        } catch {
+            throw EnvironmentHTTPError.network(error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else { throw EnvironmentHTTPError.invalidResponse("not HTTP") }
+        guard (200..<300).contains(http.statusCode) else { throw EnvironmentHTTPError.status(http.statusCode, nil) }
+        guard data.count <= maxBytes else { throw EnvironmentHTTPError.invalidResponse("asset larger than \(maxBytes) bytes") }
+        return data
+    }
+
     /// `ws(s)://host/ws?wsTicket=...&client...&orchestrationProtocol=2`, in the official order
     /// (authorization/remote.ts:40-84, compatibility.ts:38-42).
     public func webSocketURL(ticket: String, identity: ClientIdentity) -> URL {

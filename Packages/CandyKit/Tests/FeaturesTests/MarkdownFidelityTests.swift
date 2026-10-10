@@ -33,6 +33,7 @@ struct MarkdownFidelityTests {
                 let file = "\(name).rest.\(theme).png"
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                 let view = MarkdownView(frame: .zero)
+                view.cwd = native["cwd"]
                 view.setMarkdown(native["markdown"]!)
                 let height = view.height(forWidth: width)
                 let canvas = Canvas(frame: .zero)

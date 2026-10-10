@@ -37,6 +37,7 @@ final class ShellSession {
     }
 
     func start() {
+        ProjectIconStore.shared.loader = Self.projectIconLoader(supervisor, http: http, token: token)
         Task { await supervisor.observePlatform(); await supervisor.connect() }
         let store = self.store
         subscription = supervisor.subscribe("orchestration.subscribeShell", payload: {
@@ -52,6 +53,29 @@ final class ShellSession {
     func stop() {
         subscription?.cancel()
         Task { await supervisor.disconnect() }
+    }
+
+    /// A project's icon file: `assets.createUrl` with a `project-favicon` resource, then the signed URL
+    /// (client-runtime state/assets.ts, projectFaviconCache.ts). Waits for the socket when it is down,
+    /// so icons asked for while the cached sidebar shows still arrive. Runs off the main thread.
+    nonisolated static func projectIconLoader(_ supervisor: ConnectionSupervisor, http: EnvironmentHTTP, token: String) -> ProjectIconStore.Loader {
+        { cwd, faviconPath in
+            var resource: [String: JSONValue] = ["_tag": .string("project-favicon"), "cwd": .string(cwd)]
+            if let faviconPath { resource["path"] = .string(faviconPath) }
+            let payload = JSONValue.object(["resource": .object(resource)])
+            let result: JSONValue
+            do {
+                result = try await supervisor.request("assets.createUrl", payload: payload)
+            } catch RPCClientError.transport {
+                guard let (connection, _) = await supervisor.waitForConnection(after: 0) else { throw CancellationError() }
+                result = try await connection.request("assets.createUrl", payload: payload)
+            }
+            guard case .string(let relativeURL)? = result.objectValue?["relativeUrl"] else { return nil }
+            // `isProjectFaviconFallbackUrl`: the server found no icon file.
+            if relativeURL.split(separator: "?").first?.split(separator: "/").last == "project-favicon-missing" { return nil }
+            // PROJECT_FAVICON_MAX_SOURCE_BYTES: larger files are not worth decoding for an icon.
+            return try await http.asset(relativeURL, token: token, maxBytes: 4 * 1024 * 1024)
+        }
     }
 
     /// One pull at a time; changes that arrive meanwhile trigger exactly one more pull.

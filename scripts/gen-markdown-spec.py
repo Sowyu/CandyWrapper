@@ -20,7 +20,7 @@ Needs the installed T3 app (for its client assets) and lucide-static (for icon m
 import glob, html, json, os, struct
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.path.join(os.path.dirname(ROOT), "CandyWrapper-research")
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.join(os.path.dirname(ROOT), "CandyWrapper-research")
 ASAR = os.path.join(RESEARCH, "apps/T3 Code (Nightly).app/Contents/Resources/app.asar")
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")  # outside the repo, re-extracted when missing
@@ -106,9 +106,11 @@ def table(header, aligns, rows):
             + button("ghost-muted", "copy", ' aria-label="Copy table"') + "</div></div>")
 
 CASES = []
-def case(name, markdown, body):
+def case(name, markdown, body, cwd=None, width=640):
+    native = {"markdown": markdown, "width": str(width)}
+    if cwd: native["cwd"] = cwd
     CASES.append({"name": name, "html": f'<div class="{ROOT_CLASS}">{body}</div>',
-                  "wrapperStyle": "display:block;width:640px;--font-size-code:13px", "native": {"markdown": markdown, "width": "640"}})
+                  "wrapperStyle": f"display:block;width:{width}px;--font-size-code:13px", "native": native})
 
 case("text", """# Release notes
 
@@ -249,10 +251,44 @@ After the rule, an image:
 <p>After the rule, an image:</p>
 <p><span class="inline-block! aspect-video w-full overflow-hidden bg-muted/60 max-w-[min(100%,30rem)] rounded-lg border border-border/40 relative" role="status" aria-label="Loading image"></span></p>""")
 
+# File chips: MarkdownFileLink renders a ContextChip kind="mention" (ContextChip.tsx) around FileTagChipContent
+# (chat/FileTagChip.tsx): lucide folder at text-icon-muted for paths without an extension, else the pierre icon
+# tinted per theme (PierreEntryIcon.tsx; the prepare hook below picks the theme's color).
+CHIP = ("inline-flex h-[1.41em] max-w-full items-center gap-[0.33em] rounded-[0.5em] border px-[0.5em] align-middle font-medium "
+        "text-[0.86em] leading-none [&_svg]:block [&_svg]:size-[1.17em] [&_svg]:shrink-0 [&_svg]:self-center "
+        "[button&,a&,[data-popup-open]&]:cursor-pointer [button&,a&]:transition-colors [button&,a&]:motion-reduce:transition-none "
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:cursor-default "
+        "[--context-chip-accent:oklch(0.62_0.11_215)] "
+        "[--context-chip-border:color-mix(in_oklab,var(--context-chip-accent)_34%,var(--contrast-border))] "
+        "[--context-chip-border-hover:color-mix(in_oklab,var(--context-chip-accent)_48%,var(--contrast-border))] "
+        "[--context-chip-foreground:color-mix(in_oklab,var(--context-chip-accent)_22%,var(--contrast-foreground))] "
+        "border-(--context-chip-border) bg-(--context-chip-accent)/11 text-(--context-chip-foreground) "
+        "[button:enabled&,a&]:hover:border-(--context-chip-border-hover) [button:enabled&,a&]:hover:bg-(--context-chip-accent)/17 "
+        "chat-markdown-file-link")
 extract_assets()
+PIERRE = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()
+ICON_COLORS = {"typescript": ("#1a85d4", "#69b1ff"), "npm": ("#d52c36", "#ff6762")}
+def pierre(token):
+    import re
+    m = re.search(r'<symbol id="file-tree-builtin-' + token + r'" viewBox="([^"]*)">(.*?)</symbol>', PIERRE, re.S)
+    light, dark = ICON_COLORS[token]
+    return (f'<svg aria-hidden="true" data-light="{light}" data-dark="{dark}" class="size-4 shrink-0" '
+            f'viewBox="{m.group(1)}">{m.group(2)}</svg>')
+def chip(href, icon, label):
+    return (f'<a href="{html.escape(href)}" class="{CHIP}" data-slot="context-chip">{icon}'
+            f'<span class="block min-w-0 self-center truncate leading-tight" data-slot="context-chip-label">{html.escape(label)}</span></a>')
+FOLDER = lucide("folder", "size-4 text-icon-muted")
+
+case("file-chips", """Created `/tmp/cw-approval-demo`.
+
+The entry point is `src/main.ts:12`, see [the manifest](package.json) and run `npm test` before you ship it.""",
+f"""<p>Created {chip("/tmp/cw-approval-demo", FOLDER, "cw-approval-demo")}.</p>
+<p>The entry point is {chip("/repo/src/main.ts:12", pierre("typescript"), "main.ts · L12")}, see <span>the manifest {chip("/repo/package.json", pierre("npm"), "package.json")}</span> and run <code>npm test</code> before you ship it.</p>""",
+cwd="/repo")
+
 diff_rendering = glob.glob(os.path.join(ASSETS, "diffRendering-*.js"))[0]
 # getSharedHighlighter is exported as `g` from the diffRendering chunk at this T3 version.
-PREPARE = f"""import('file://{diff_rendering}').then(async m => {{
+PREPARE = f"""(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), import('file://{diff_rendering}')).then(async m => {{
   const pres = [...document.querySelectorAll('pre[data-shiki-lang]')];
   const h = await m.g({{themes: ['pierre-light', 'pierre-dark'], langs: [...new Set(pres.map(p => p.dataset.shikiLang))], preferredHighlighter: 'shiki-wasm'}});
   const theme = document.documentElement.classList.contains('dark') ? 'pierre-dark' : 'pierre-light';

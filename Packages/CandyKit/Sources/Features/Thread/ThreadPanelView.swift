@@ -20,7 +20,18 @@ public final class ThreadHeaderView: TopbarDragView {
 
     public var projectTitle: String {
         get { project.text }
-        set { project.text = newValue; favicon.projectTitle = newValue; needsLayout = true }
+        set {
+            project.text = newValue
+            if favicon.source?.title != newValue { favicon.source = nil }
+            favicon.projectTitle = newValue
+            needsLayout = true
+        }
+    }
+
+    /// The project's icon inputs; set after `projectTitle`. A different title clears it.
+    public var projectIcon: ProjectIconSource? {
+        get { favicon.source }
+        set { favicon.source = newValue }
     }
 
     public var threadTitle: String {
@@ -224,11 +235,16 @@ public final class ThreadPanelView: DSView {
         hero.projectTitle = projectTitle ?? ""
         if let projectTitle {
             setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil)
+            header.projectIcon = projectIconForTitle?(projectTitle)
             header.threadTitle = "New thread"
             for view in header.subviews { view.isHidden = false }
         }
         updateComposerShown()
     }
+
+    /// The header icon for a draft, which only names its project by title.
+    // ponytail: by title, so two projects with one title can show the wrong icon on a draft; pass the project to setDraft when ComposerController changes next
+    public var projectIconForTitle: ((String) -> ProjectIconSource?)?
 
     /// Shows a thread. Pass nil to clear.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?) {
