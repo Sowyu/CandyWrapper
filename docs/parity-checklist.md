@@ -430,10 +430,10 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Palette dialog, input, virtualized grouped results, footer hints, back navigation (sub-pages) | comp/CommandPaletteContent.tsx, comp/CommandPaletteResults.tsx | ⏳ | Dialog component exists in the gallery, no commands wired |
-| Group: Actions (default page), Recent Threads | comp/CommandPalette.logic.ts | ⏳ | |
-| Search groups: Projects, Threads (title and message search, 2+ chars), Settings | comp/CommandPalette.logic.ts | ⏳ | Settings results come from settingsSearch |
-| New thread in... (project chooser incl. No project) | comp/CommandPalette.tsx (line ~1917) | ⏳ | |
+| Palette dialog, input, virtualized grouped results, footer hints, back navigation (sub-pages) | comp/CommandPaletteContent.tsx, comp/CommandPaletteResults.tsx | 🟡 | WP7.1: `Features/CommandPalette`, `CommandPaletteView`; every row is built (no virtualization), the panel scrolls with fades; fidelity 2.19% over 8 cases |
+| Group: Actions (default page), Recent Threads | comp/CommandPalette.logic.ts | 🟡 | First row highlighted on open; typing or a submenu hides the highlight until ArrowDown |
+| Search groups: Projects, Threads (title and message search, 2+ chars), Settings | comp/CommandPalette.logic.ts | ➖ | Projects and Threads with `orchestration.searchThreads` (2+ chars, 200 ms debounce) and T3's ranking; Settings waits for settings search (WP7.7); thread rows use a text subtitle |
+| New thread in... (project chooser incl. No project) | comp/CommandPalette.tsx (line ~1917) | ➖ | Project groups with `thread.jump.N` shortcuts; no "No project" (scratch threads) |
 | New thread without a project | comp/CommandPalette.tsx (line ~1929) | ⏳ | |
 | Find in current thread | comp/CommandPalette.tsx (line ~1940) | ⏳ | |
 | Link pull request to thread; Show linked pull requests | comp/CommandPalette.tsx (lines ~1973-1990) | ⏳ | |
@@ -441,15 +441,16 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | Go to file | comp/CommandPalette.tsx (line ~2041) | ⏳ | Same as `filePicker.toggle` |
 | Search project contents | comp/CommandPalette.tsx (line ~2054) | ⏳ | |
 | New project (name, optional private GitHub repo) | comp/CommandPalette.tsx (line ~2068) | ⏳ | |
-| Add project: local folder browser (directories list with ".."), clone from provider or URL, existing project | comp/CommandPalette.tsx (lines ~2099, 2840, 2935) | ⏳ | Clone: repo lookup, destination chooser, create private repo option |
+| Add project: local folder browser (directories list with ".."), clone from provider or URL, existing project | comp/CommandPalette.tsx (lines ~2099, 2840, 2935) | ➖ | "Add project" runs the desktop folder picker; browse, clone and the environment step wait |
 | Open WSL folder | comp/CommandPalette.tsx (line ~2112) | ⏳ | Windows only; skip |
 | Change theme (sub-page with live preview) | comp/CommandPalette.tsx (line ~2126) | ⏳ | `theme.select` |
-| Change appearance (System, Light, Dark) | comp/CommandPalette.tsx (line ~2175) | ⏳ | `appearance.cycle` |
+| Change appearance (System, Light, Dark) | comp/CommandPalette.tsx (line ~2175) | 🟡 | Kept in UserDefaults `appearance.mode`; `--appearance` still wins for development |
 | Toggle theme editor | comp/CommandPalette.tsx (line ~2221) | ⏳ | |
-| Open pull requests; Open usage; Open settings; Project settings | comp/CommandPalette.tsx (lines ~2242-2299) | ⏳ | |
+| Open pull requests; Open usage; Open settings; Project settings | comp/CommandPalette.tsx (lines ~2242-2299) | ➖ | Pull requests and usage open the placeholder pages; Project settings waits for WP7.7 |
 | Environment picker inside multi-env flows | comp/CommandPalette.tsx (lines ~1803, 2906) | ⏳ | |
-| Command palette bus (open to a given page from elsewhere) | web/commandPaletteBus.ts | ⏳ | |
-| Thread find/search within palette using server `thread.find` | comp/ThreadSearchMatch.tsx | ⏳ | |
+| Command palette bus (open to a given page from elsewhere) | web/commandPaletteBus.ts | ➖ | `chat.new` opens "New thread in..." with several projects; the sidebar's new-thread button still creates directly |
+| Copy thread ID (`thread.copyReference`) | comp/CommandPalette.tsx (line ~1950) | 🟡 | Never the PR link yet (WP7.5) |
+| Thread find/search within palette using server `thread.find` | comp/ThreadSearchMatch.tsx | ➖ | Message search through `orchestration.searchThreads`; the match line is plain text |
 
 ## Keyboard shortcuts
 
@@ -457,74 +458,75 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 
 | Command | Key | When | Status |
 |---|---|---|---|
+| Engine: defaults, the primary environment's resolved rules merged per command, `keybindingsUpdated` live, last matching rule wins, when-clauses, shortcut labels | (system) | (all) | 🟡 WP7.1: `T3Protocol/Domain/Keybindings.swift`, `Features/Keyboard/ActiveKeymap.swift`, `App/Sources/Shortcuts.swift` (one dispatcher) |
 | sidebar.toggle | mod+b | (none) | 🟡 |
-| navigation.back | mod+[ | !terminalFocus | ⏳ |
-| navigation.forward | mod+] | !terminalFocus | ⏳ |
-| terminal.toggle | mod+j | (none) | ⏳ |
-| rightPanel.toggle | mod+alt+b | (none) | ⏳ |
-| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | ⏳ |
-| terminal.split | mod+d | terminalFocus | ⏳ |
-| terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ |
-| terminal.new | mod+n | terminalFocus | ⏳ |
-| terminal.close | mod+w | terminalFocus | ⏳ |
-| rightPanel.close | mod+w | !terminalFocus | ⏳ |
-| view.reopenClosed | mod+shift+t | (none) | ⏳ |
+| navigation.back | mod+[ | !terminalFocus | ⏳ no route history yet |
+| navigation.forward | mod+] | !terminalFocus | ⏳ no route history yet |
+| terminal.toggle | mod+j | (none) | ⏳ WP7.4 |
+| rightPanel.toggle | mod+alt+b | (none) | ➖ the diff is the only surface |
+| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | ⏳ WP7.6 |
+| terminal.split | mod+d | terminalFocus | ⏳ WP7.4 |
+| terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ WP7.4 |
+| terminal.new | mod+n | terminalFocus | ⏳ WP7.4 |
+| terminal.close | mod+w | terminalFocus | ⏳ WP7.4 |
+| rightPanel.close | mod+w | !terminalFocus | 🟡 |
+| view.reopenClosed | mod+shift+t | (none) | ⏳ WP7.6 |
 | diff.toggle | mod+d | !terminalFocus | 🟡 |
-| preview.toggle | mod+shift+j | (none) | ⏳ |
-| preview.refresh | mod+r | previewFocus | ⏳ |
-| preview.focusUrl | mod+l | previewFocus | ⏳ |
-| preview.zoomIn | mod+= and mod++ | previewFocus | ⏳ |
-| preview.zoomOut | mod+- | previewFocus | ⏳ |
-| preview.resetZoom | mod+0 | previewFocus | ⏳ |
-| commandPalette.toggle | mod+k | !terminalFocus | ⏳ |
-| filePicker.toggle | mod+p | !terminalFocus | ⏳ |
-| projectSearch.toggle | mod+shift+f | !terminalFocus | ⏳ |
-| usage.open | mod+u | !terminalFocus | ⏳ |
-| theme.select | mod+alt+a | !terminalFocus | ⏳ |
-| appearance.cycle | mod+alt+shift+a | !terminalFocus | ⏳ |
-| themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ |
-| composer.stash | mod+s | !terminalFocus | ⏳ |
+| preview.toggle | mod+shift+j | (none) | ⏳ WP7.6 |
+| preview.refresh | mod+r | previewFocus | ⏳ WP7.6 |
+| preview.focusUrl | mod+l | previewFocus | ⏳ WP7.6 |
+| preview.zoomIn | mod+= and mod++ | previewFocus | ⏳ WP7.6 |
+| preview.zoomOut | mod+- | previewFocus | ⏳ WP7.6 |
+| preview.resetZoom | mod+0 | previewFocus | ⏳ WP7.6 |
+| commandPalette.toggle | mod+k | !terminalFocus | 🟡 |
+| filePicker.toggle | mod+p | !terminalFocus | ⏳ WP7.6 |
+| projectSearch.toggle | mod+shift+f | !terminalFocus | ⏳ WP7.6 |
+| usage.open | mod+u | !terminalFocus | ➖ placeholder page |
+| theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
+| appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |
+| themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ WP7.7 |
+| composer.stash | mod+s | !terminalFocus | ⏳ WP7.3 |
 | thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | 🟡 |
 | thread.editQueuedMessage | alt+arrowup | composerFocus | 🟡 |
 | composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 |
-| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | ⏳ |
-| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | ⏳ |
-| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | ⏳ |
-| chat.new | mod+n | !terminalFocus | ⏳ |
-| chat.new | mod+shift+o | !terminalFocus | ⏳ |
-| chat.newLocal | mod+shift+n | !terminalFocus | ⏳ |
-| chat.newWithoutProject | mod+alt+n | !terminalFocus | ⏳ |
-| chat.find | mod+f | !terminalFocus && !previewFocus | ⏳ |
+| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | ➖ resolved; sends in the foreground until start-in-background lands |
+| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | ➖ resolved; sends in the foreground until start-in-background lands |
+| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | ➖ resolved; sends without opening a new thread yet |
+| chat.new | mod+n | !terminalFocus | 🟡 |
+| chat.new | mod+shift+o | !terminalFocus | 🟡 |
+| chat.newLocal | mod+shift+n | !terminalFocus | 🟡 |
+| chat.newWithoutProject | mod+alt+n | !terminalFocus | ⏳ scratch threads |
+| chat.find | mod+f | !terminalFocus && !previewFocus | ⏳ thread find, WP7.8 |
 | modelPicker.toggle | mod+shift+m | !terminalFocus | 🟡 |
 | composer.host | mod+shift+h | !terminalFocus | 🟡 |
 | composer.effort | mod+shift+e | !terminalFocus | 🟡 |
 | composer.mode | mod+shift+a | !terminalFocus | 🟡 |
-| composer.workspace | mod+shift+x | !terminalFocus | ⏳ |
-| composer.branch | mod+shift+g | !terminalFocus | ⏳ |
-| composer.previousWorktree | mod+shift+l | !terminalFocus | ⏳ |
-| pullRequest.copyNumber | mod+shift+k | !terminalFocus | ⏳ |
-| modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | ⏳ |
-| modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | ⏳ |
-| editor.openFavorite | mod+o | (none) | ⏳ |
-| thread.previous | mod+shift+[ | (none) | ⏳ |
-| thread.next | mod+shift+] | (none) | ⏳ |
-| thread.copyReference | mod+shift+c | !terminalFocus | ⏳ |
-| thread.settle | mod+shift+s | !terminalFocus | ⏳ |
-| thread.pin | mod+shift+p | !terminalFocus | ⏳ |
-| thread.undo | mod+z | !terminalFocus && !editableFocus | ⏳ |
-| thread.jump.1 to thread.jump.9 (`THREAD_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | isDesktop | ⏳ |
-| modelPicker.jump.1 to .9 (`MODEL_PICKER_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | modelPickerOpen && isDesktop | ⏳ |
-| usage.cost | c | usagePageOpen | ⏳ |
-| usage.tokens | t | usagePageOpen | ⏳ |
-| usage.limits | l | usagePageOpen | ⏳ |
-| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | usagePageOpen | ⏳ |
-| thread.stop | (no default) | (none) | ⏳ |
+| composer.workspace | mod+shift+x | !terminalFocus | ⏳ WP7.5 |
+| composer.branch | mod+shift+g | !terminalFocus | ⏳ WP7.5 |
+| composer.previousWorktree | mod+shift+l | !terminalFocus | ⏳ WP7.5 |
+| pullRequest.copyNumber | mod+shift+k | !terminalFocus | ⏳ WP7.5 |
+| modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | 🟡 |
+| modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | 🟡 |
+| editor.openFavorite | mod+o | (none) | ⏳ WP7.8 |
+| thread.previous | mod+shift+[ | (none) | 🟡 |
+| thread.next | mod+shift+] | (none) | 🟡 |
+| thread.copyReference | mod+shift+c | !terminalFocus | ➖ thread ID only, PR link with WP7.5 |
+| thread.settle | mod+shift+s | !terminalFocus | 🟡 |
+| thread.pin | mod+shift+p | !terminalFocus | 🟡 |
+| thread.undo | mod+z | !terminalFocus && !editableFocus | 🟡 |
+| thread.jump.1 to thread.jump.9 (`THREAD_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | isDesktop | 🟡 |
+| modelPicker.jump.1 to .9 (`MODEL_PICKER_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | modelPickerOpen && isDesktop | ➖ no hint labels on the rows |
+| usage.cost | c | usagePageOpen | ⏳ usage page |
+| usage.tokens | t | usagePageOpen | ⏳ usage page |
+| usage.limits | l | usagePageOpen | ⏳ usage page |
+| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | usagePageOpen | ⏳ usage page |
+| thread.stop | (no default) | (none) | 🟡 |
 | composer.cycleHost | (no default) | (none) | ⏳ |
-| script.<id>.run | (no default, user-assigned) | (none) | ⏳ |
+| script.<id>.run | (no default, user-assigned) | (none) | ⏳ project scripts, WP7.4 |
 | Fixed, not configurable: diff find | mod+f inside a diff | diff focused | ⏳ |
-| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | ⏳ |
-| Fixed: quit | mod+q (hold 1.2 s, or double press within 500 ms) | desktop | ⏳ |
-| When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | ⏳ |
+| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | ⏳ WP7.5 |
+| Fixed: quit | mod+q (hold 1.2 s, or double press within 500 ms) | desktop | ⏳ WP7.8 |
+| When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | ➖ composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop, isWeb set; terminal and preview keys read false until WP7.4 and WP7.6 |
 
 Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread.copyReference`; the app picks the PR URL when a PR is the selected context.
 

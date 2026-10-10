@@ -110,16 +110,9 @@ public final class SidebarLayoutView: DSView {
         onOpenChange?(open)
     }
 
-    /// `sidebar.toggle`, Mod+B.
+    /// `sidebar.toggle` (Mod+B by default; the app's shortcut dispatcher calls it).
     public func toggle() { setOpen(!isOpen) }
 
-    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers == "b" {
-            toggle()
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
 
     // MARK: Width
 

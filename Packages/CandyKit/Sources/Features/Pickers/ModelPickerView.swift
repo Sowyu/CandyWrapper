@@ -147,6 +147,19 @@ final class ModelPickerView: DSView, PickerPopupBody {
         resizePopup()
     }
 
+    /// `modelPicker.previousProvider` / `nextProvider`: the adjacent provider, search cleared
+    /// (ModelPickerContent.tsx:783-795).
+    func selectAdjacentProvider(_ direction: Int) {
+        selectRail(ModelPickerSections.adjacentRail(rail, direction: direction, catalog: catalog))
+    }
+
+    /// `modelPicker.jump.N`: picks the Nth model in the list (ModelPickerContent.tsx:797-811).
+    // ponytail: no jump hint labels on the rows while the modifier is held; add them with the picker's hint overlay
+    public func jump(_ index: Int) {
+        let models = sections.rows.indices.filter { if case .model = sections.rows[$0] { true } else { false } }
+        if index < models.count { activate(models[index]) }
+    }
+
     func activate(_ i: Int) {
         guard i < sections.rows.count else { return }
         switch sections.rows[i] {
@@ -260,9 +273,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     func handleKey(_ key: PopupKey) -> Bool {
         let flags = NSApp.currentEvent?.modifierFlags.intersection([.command, .shift, .option, .control]) ?? []
-        // `modelPicker.previousProvider` / `nextProvider`: mod+shift+arrowup / arrowdown.
-        if flags == [.command, .shift], key == .up || key == .down {
-            selectRail(ModelPickerSections.adjacentRail(rail, direction: key == .down ? 1 : -1, catalog: catalog))
+        // `modelPicker.previousProvider` / `nextProvider` (mod+shift+arrowup / arrowdown by default).
+        if let event = NSApp.currentEvent,
+           let command = ActiveKeymap.resolve(event, context: KeybindingContext(["modelPickerOpen": true])),
+           command == "modelPicker.previousProvider" || command == "modelPicker.nextProvider" {
+            selectAdjacentProvider(command == "modelPicker.nextProvider" ? 1 : -1)
             return true
         }
         if let focus = railFocus { return handleRailKey(key, focus: focus) }

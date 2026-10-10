@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import Features
+import T3Protocol
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: SettingsController?
     private var sidebarCommands: SidebarCommands?
     private var t3Connect: T3ConnectController?
+    private var shortcuts: Shortcuts?
+    private var palette: PaletteCommands?
     private var terminationSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -20,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--appearance"), i + 1 < args.count {
             NSApp.appearance = NSAppearance(named: args[i + 1] == "dark" ? .darkAqua : .aqua)
+        } else {
+            AppearanceMode.applySaved()
         }
         quitOnSIGTERM()
         showMainWindow()
@@ -71,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
+        installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
+                         commands: commands, settings: settings)
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
@@ -81,6 +88,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
         PerfScroll.schedule(window)
+    }
+
+    /// One keyboard shortcut dispatcher for the window, fed by T3's keybindings (`Shortcuts`).
+    private func installShortcuts(window: NSWindow, layout: SidebarLayoutView, sidebar: SidebarContentView, environments: Environments,
+                                  threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
+        let shortcuts = Shortcuts(window: window)
+        let palette = PaletteCommands(window: window, sidebar: sidebar, environments: environments, threads: threads,
+                                      commands: commands, settings: settings)
+        shortcuts.context = { [weak window, weak threads, weak commands] in
+            var values = threads?.composer.shortcutContext ?? [:]
+            values["editableFocus"] = Shortcuts.editableFocused(in: window)
+            values["draftThreadRoute"] = threads?.panel.isDraft ?? false
+            values["rightPanelOpen"] = threads?.panel.rightPanelOpen ?? false
+            values["usagePageOpen"] = commands?.isUsagePageOpen ?? false
+            return KeybindingContext(values)
+        }
+        // `sidebar.toggle` (AppSidebarLayout.tsx:96-135).
+        shortcuts.on("sidebar.toggle") { [weak layout] _ in
+            layout?.toggle()
+            return true
+        }
+        threads.registerShortcuts(shortcuts)
+        commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }
+        palette.registerShortcuts(shortcuts)
+        self.shortcuts = shortcuts
+        self.palette = palette
     }
 
     /// Development: `--thread-preview [title prefix]` shows a recorded thread from

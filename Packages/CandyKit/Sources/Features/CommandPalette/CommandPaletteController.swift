@@ -1,0 +1,313 @@
+import AppKit
+import DesignSystem
+import T3Protocol
+
+/// The palette's state and keyboard handling (CommandPalette.tsx `OpenCommandPaletteDialog`): a view
+/// stack of submenus, the query, the tracked highlight and item execution. The app supplies the
+/// entries; this class only renders and routes them.
+@MainActor
+public final class CommandPaletteController {
+    /// Where the entries come from. Called again whenever the palette refreshes.
+    public struct Source {
+        /// `buildRootGroups`: Actions and Recent Threads.
+        public var rootGroups: () -> [PaletteGroup]
+        /// `projectSearchItems`.
+        public var projectItems: () -> [PaletteEntry]
+        /// `allThreadItems` for a query, with message matches folded in.
+        public var threadItems: (String) -> [PaletteEntry]
+        /// True while the thread message search for the query has not settled.
+        public var threadSearchPending: (String) -> Bool
+        public init(rootGroups: @escaping () -> [PaletteGroup], projectItems: @escaping () -> [PaletteEntry] = { [] },
+                    threadItems: @escaping (String) -> [PaletteEntry] = { _ in [] }, threadSearchPending: @escaping (String) -> Bool = { _ in false }) {
+            self.rootGroups = rootGroups; self.projectItems = projectItems
+            self.threadItems = threadItems; self.threadSearchPending = threadSearchPending
+        }
+    }
+
+    public let view = CommandPaletteView()
+    public var source: Source
+    /// The palette asks to close (Escape, an item that doesn't keep it open).
+    public var onClose: (() -> Void)?
+    /// The query changed: the app may start a message search for it.
+    public var onQueryChange: ((String) -> Void)?
+
+    private(set) var stack: [PalettePage] = []
+    public private(set) var query = ""
+    /// `highlightedItemValue`.
+    private(set) var highlightedValue: String?
+    /// Typing or entering a submenu hides the highlight; Enter still runs the first row and the
+    /// first ArrowDown lands on it (CommandPalette.tsx:710-717, 3166-3183).
+    private var highlightCleared = false
+    private(set) var displayed: [PaletteGroup] = []
+    private var flat: [PaletteEntry] = []
+    private var settingText = false
+
+    public init(source: Source) {
+        self.source = source
+        view.input.onChange = { [weak self] text in self?.queryChanged(text) }
+        view.input.onCommand = { [weak self] selector in self?.handleCommand(selector) ?? false }
+        view.onExecute = { [weak self] index in self?.execute(at: index) }
+        view.onHighlight = { [weak self] index in
+            guard let self, index < self.flat.count else { return }
+            self.highlightCleared = false
+            self.highlightedValue = self.flat[index].value
+        }
+        view.onBack = { [weak self] in self?.pop() }
+        refresh()
+        // Base UI's `autoHighlight="always"` puts the first row on show.
+        highlightedValue = firstEnabled?.value
+        applyHighlight()
+    }
+
+    public var isInSubmenu: Bool { !stack.isEmpty }
+    private var firstEnabled: PaletteEntry? { flat.first { !$0.isDisabled } }
+
+    // MARK: State
+
+    /// Rebuilds the rows from the source for the current view and query.
+    public func refresh() {
+        let active = stack.last?.groups ?? source.rootGroups()
+        let searching = !isInSubmenu && !query.hasPrefix(">")
+        displayed = PaletteSearch.filter(active, query: query, isInSubmenu: isInSubmenu,
+                                         projectItems: searching ? source.projectItems() : [],
+                                         threadItems: searching && !PaletteSearch.normalize(query).isEmpty ? source.threadItems(query) : [])
+        flat = displayed.flatMap(\.items)
+        let keymap = ActiveKeymap.keymap
+        if displayed.isEmpty {
+            let pending = searching && source.threadSearchPending(query)
+            view.content = .empty(message: pending ? "Searching thread messages\u{2026}" : nil, actionsOnly: query.hasPrefix(">"))
+        } else {
+            view.content = .results(displayed.map { group in
+                CommandPaletteGroup(group.label.isEmpty ? nil : group.label, group.items.map { entry in
+                    CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description,
+                                       shortcut: entry.shortcutCommand.flatMap { keymap.label(for: $0) },
+                                       timestamp: entry.timestamp, isSubmenu: entry.isSubmenu, isDisabled: entry.isDisabled,
+                                       titleEmphasis: entry.titleEmphasis, match: entry.match, note: entry.note)
+                })
+            })
+        }
+        view.input.placeholder = PaletteSearch.placeholder(inSubmenu: isInSubmenu)
+        view.showsBackButton = isInSubmenu
+        view.showsBackHint = isInSubmenu
+        view.footerActionLabel = "Select"
+        if let value = highlightedValue, !flat.contains(where: { $0.value == value && !$0.isDisabled }) { highlightedValue = nil }
+        view.superview?.needsLayout = true
+        applyHighlight()
+    }
+
+    private func applyHighlight() {
+        view.highlightedIndex = highlightedValue.flatMap { value in flat.firstIndex { $0.value == value } }
+        view.scrollHighlightIntoView()
+    }
+
+    private func queryChanged(_ text: String) {
+        guard !settingText else { return }
+        query = text
+        highlightCleared = true
+        highlightedValue = nil
+        if text.isEmpty, stack.last?.initialQuery != nil { pop(); return }
+        onQueryChange?(text)
+        refresh()
+    }
+
+    private func setQuery(_ text: String) {
+        settingText = true
+        view.input.text = text
+        settingText = false
+        query = text
+    }
+
+    public func push(_ page: PalettePage) {
+        stack.append(page)
+        highlightCleared = true
+        highlightedValue = nil
+        setQuery(page.initialQuery ?? "")
+        refresh()
+    }
+
+    public func pop() {
+        guard !stack.isEmpty else { return }
+        stack.removeLast()
+        highlightedValue = nil
+        setQuery("")
+        refresh()
+    }
+
+    // MARK: Keys
+
+    /// The input's editing commands: arrows move the highlight, Return runs it, Backspace on an
+    /// empty query leaves a submenu, Escape closes (CommandPalette.tsx:3160-3201).
+    func handleCommand(_ selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)):
+            if highlightCleared || highlightedValue == nil, let first = firstEnabled {
+                highlightCleared = false
+                highlightedValue = first.value
+                applyHighlight()
+            } else {
+                move(1)
+            }
+            return true
+        case #selector(NSResponder.moveUp(_:)):
+            if highlightCleared { highlightCleared = false; highlightedValue = nil }
+            move(-1)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            if let entry = highlightedEntry ?? firstEnabled { execute(entry) }
+            return true
+        case #selector(NSResponder.deleteBackward(_:)):
+            guard query.isEmpty, isInSubmenu else { return false }
+            pop()
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            onClose?()
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var highlightedEntry: PaletteEntry? {
+        highlightedValue.flatMap { value in flat.first { $0.value == value && !$0.isDisabled } }
+    }
+
+    private func move(_ delta: Int) {
+        view.moveHighlight(by: delta)
+        highlightedValue = view.highlightedIndex.map { flat[$0].value }
+    }
+
+    /// Palette-level keybindings while it is open (`handleKeyDown`, CommandPalette.tsx:3090-3122):
+    /// `thread.jump.N` runs the item showing that shortcut. Returns true when used.
+    public func handleJump(_ command: String) -> Bool {
+        guard Keymap.jumpIndex(command, prefix: "thread.jump.") != nil else { return false }
+        if let item = flat.first(where: { $0.shortcutCommand == command }) { execute(item) }
+        return true
+    }
+
+    // MARK: Running
+
+    private func execute(at index: Int) {
+        guard index < flat.count else { return }
+        execute(flat[index])
+    }
+
+    /// `executeItem` (CommandPalette.tsx:3203-3225).
+    public func execute(_ entry: PaletteEntry) {
+        guard !entry.isDisabled else { return }
+        switch entry.action {
+        case .submenu(let page):
+            push(page)
+        case .run(let run, let keepOpen):
+            if !keepOpen { onClose?() }
+            run()
+        }
+    }
+}
+
+/// The dialog viewport around the palette (`CommandDialogPopup`, ui/command.tsx:50-80): the dialog
+/// backdrop, the popup centered horizontally at `py-[10vh]`, `max-w-xl`, `px-4`. A click outside
+/// closes it, as does the controller (Escape, a run item).
+@MainActor
+public final class CommandPaletteOverlay: DSView {
+    public let controller: CommandPaletteController
+    public var onDismiss: (() -> Void)?
+    private let tint = CALayer()
+    private let blurred = CALayer()
+    private weak var previousResponder: NSResponder?
+    private var isClosing = false
+
+    public init(controller: CommandPaletteController) {
+        self.controller = controller
+        super.init(frame: .zero)
+        layer?.addSublayer(blurred)
+        layer?.addSublayer(tint)
+        for l in [tint, blurred] { l.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()] }
+        blurred.contentsGravity = .resize
+        addSubview(controller.view)
+        setAccessibilityRole(.group)
+    }
+
+    /// Shows the palette over `window`'s content and focuses its input.
+    public func present(in window: NSWindow) {
+        guard let container = window.contentView else { return }
+        previousResponder = window.firstResponder
+        blurred.contents = ModalHost.blurredSnapshot(of: container)
+        frame = container.bounds
+        autoresizingMask = [.width, .height]
+        container.addSubview(self)
+        layoutSubtreeIfNeeded()
+        window.makeFirstResponder(controller.view.input)
+        animate(entering: true)
+    }
+
+    public func close() {
+        guard !isClosing else { return }
+        isClosing = true
+        if let window {
+            if let previousResponder, previousResponder !== controller.view.input, (previousResponder as? NSView)?.window === window {
+                window.makeFirstResponder(previousResponder)
+            } else {
+                window.makeFirstResponder(nil)
+            }
+        }
+        animate(entering: false) { [weak self] in
+            self?.removeFromSuperview()
+            self?.onDismiss?()
+        }
+    }
+
+    public override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tint.frame = bounds
+        blurred.frame = bounds
+        CATransaction.commit()
+        let width = min(CommandPaletteView.width, bounds.width - 32)
+        let top = max(16, (bounds.height * 0.1).rounded())
+        let height = min(controller.view.intrinsicContentSize.height, bounds.height - 2 * top)
+        controller.view.frame = NSRect(x: ((bounds.width - width) / 2).rounded(), y: top, width: width, height: height)
+    }
+
+    public override func updateLayer() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        tint.backgroundColor = Themed.color(\.background, dark ? 0.64 : 0.6).cgColor(in: self)
+    }
+
+    public override func mouseDown(with event: NSEvent) {
+        if !controller.view.frame.contains(convert(event.locationInWindow, from: nil)) { close() }
+    }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard bounds.contains(local) else { return nil }
+        return super.hitTest(point) ?? self
+    }
+
+    public override func scrollWheel(with event: NSEvent) {}
+
+    /// The dialog popup's motion: scale from .98 and fade, backdrop fade, 200ms.
+    private func animate(entering: Bool, completion: (@MainActor () -> Void)? = nil) {
+        guard let layer, let panelLayer = controller.view.layer, !Motion.reduced else { completion?(); return }
+        let f = controller.view.frame
+        var hidden = CATransform3DMakeTranslation(f.width / 2, f.height / 2, 0)
+        hidden = CATransform3DScale(hidden, 0.98, 0.98, 1)
+        hidden = CATransform3DTranslate(hidden, -f.width / 2, -f.height / 2, 0)
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion?() } }
+        for (target, key, from, to) in [
+            (layer, "opacity", entering ? 0 : 1, entering ? 1 : 0) as (CALayer, String, Any, Any),
+            (panelLayer, "transform", entering ? hidden : CATransform3DIdentity, entering ? CATransform3DIdentity : hidden),
+        ] {
+            let a = CABasicAnimation(keyPath: key)
+            a.fromValue = from
+            a.toValue = to
+            a.duration = 0.2
+            a.timingFunction = Motion.easeInOut
+            a.fillMode = .forwards
+            a.isRemovedOnCompletion = entering
+            target.add(a, forKey: key)
+        }
+        CATransaction.commit()
+    }
+}

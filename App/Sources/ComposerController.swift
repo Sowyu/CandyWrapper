@@ -62,7 +62,6 @@ final class ComposerController {
     private var queuedEdit: QueuedEdit?
     /// A queue command is in flight: the strip's actions wait (`busyRunId`).
     private var queueBusy = false
-    private var keyMonitor: Any?
 
     /// The open thread's pending approvals and questions (`derivePendingThreadRequests`).
     private var requests = PendingRequests()
@@ -139,7 +138,6 @@ final class ComposerController {
         question.onChange = { [weak self] in self?.syncQuestion() }
         composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
-        installShortcuts()
         refresh()
     }
 
@@ -193,9 +191,12 @@ final class ComposerController {
         case .snapshot(let snapshot): config = snapshot
         case .providerStatuses(let providers): config.providers = providers
         case .settingsUpdated(let settings): config.settings = settings
+        case .keybindingsUpdated(let rules): config.keybindings = rules
         case .other: return
         }
         serverConfigs[environmentId] = config
+        // App shortcuts follow the primary environment's keybindings (`primaryServerKeybindingsAtom`).
+        if environmentId == environments.primaryId { ActiveKeymap.setServerRules(config.keybindings) }
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         if environmentId == targetEnvironmentId { refresh() }
     }
@@ -222,50 +223,87 @@ final class ComposerController {
 
     // MARK: Shortcuts
 
-    /// `modelPicker.toggle` (⇧⌘M), `composer.effort` (⇧⌘E), `composer.mode` (⇧⌘A) and
-    /// `thread.steerQueuedMessage` (⇧⌘↩, steers the first queued message) while the composer shows.
-    // ponytail: T3's default bindings only; read the user's keybindings from server config in M7
-    private func installShortcuts() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, MainActor.assumeIsolated({ self.handleKey(event) }) else { return event }
-            return nil
+    /// The composer's keybindings, run by the app's dispatcher (ChatView.tsx:8030-8255).
+    func registerShortcuts(_ shortcuts: Shortcuts) {
+        // Digits 1 to 9 pick a question's option unless focus is in an editable field
+        // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener, not a keybinding).
+        shortcuts.onKey { [weak self] event in
+            guard let self, self.isActive, self.panel.drawer == .question, !self.panel.questionPanel.isHidden,
+                  !Shortcuts.editableFocused(in: event.window) else { return false }
+            return self.panel.questionPanel.handleKey(event)
+        }
+        // `modelPicker.toggle`, `composer.effort`, `composer.mode`: swallowed, repeats ignored.
+        shortcuts.on(["modelPicker.toggle", "composer.effort", "composer.mode"]) { [weak self] call in
+            guard let self, self.isActive else { return false }
+            if !call.isRepeat {
+                switch call.command {
+                case "modelPicker.toggle": self.pickers.toggleModelPicker()
+                case "composer.effort": self.pickers.openTraits()
+                default: self.pickers.openAccessMode()
+                }
+            }
+            return true
+        }
+        // `composer.host`: opens "Run on" when it can choose (ChatView.tsx:8183-8192).
+        shortcuts.on("composer.host") { [weak self] call in
+            guard let self, self.isActive else { return false }
+            if !call.isRepeat, !self.panel.contextStrip.isHidden { self.panel.contextStrip.runOn.open() }
+            return true
+        }
+        // `modelPicker.jump.N` while the picker is open (ModelPickerContent.tsx:797-811).
+        shortcuts.on(Keymap.modelPickerJumpCommands) { [weak self] call in
+            guard let self, self.pickers.isModelPickerOpen,
+                  let index = Keymap.jumpIndex(call.command, prefix: "modelPicker.jump.") else { return false }
+            if !call.isRepeat { self.pickers.jumpModel(index) }
+            return true
+        }
+        // `thread.steerQueuedMessage`: steers the first queued message; swallowed even on repeat or
+        // with nothing to steer (QueuedRunsControl.tsx:208-214). A draft leaves the key alone.
+        shortcuts.on("thread.steerQueuedMessage") { [weak self] call in
+            guard let self, self.isActive, case .thread = self.target else { return false }
+            let queue = self.panel.queue.state
+            if !call.isRepeat, queue.canPromoteToSteer, !self.queueBusy, let first = queue.items.first?.runId {
+                self.promoteToSteer(first)
+            }
+            return true
+        }
+        // `thread.editQueuedMessage` (alt+arrowup while the composer has focus, ChatView.tsx:8232-8241):
+        // only from the very start of the draft; opens the latest queued run (`editLatest`,
+        // QueuedRunsControl.tsx:216-231), which declines while an edit is open or a command runs.
+        shortcuts.on("thread.editQueuedMessage") { [weak self] call in
+            guard let self, self.isActive, case .thread = self.target, self.composer.isCaretAtStart,
+                  let latest = self.panel.queue.state.items.last(where: { $0.runId != nil }),
+                  self.queuedEdit == nil, !self.queueBusy else { return false }
+            if !call.isRepeat {
+                self.panel.queue.expand()
+                self.beginEdit(latest)
+            }
+            return true
+        }
+        // `thread.stop` (no default key): interrupts a running turn, else leaves the key alone.
+        shortcuts.on("thread.stop") { [weak self] call in
+            guard let self, self.isActive, self.composer.runState.canInterrupt else { return false }
+            if !call.isRepeat { self.stop() }
+            return true
         }
     }
 
-    private func handleKey(_ event: NSEvent) -> Bool {
-        guard event.window === panel.window, !composer.isHidden, target != nil else { return false }
-        // Digits 1 to 9 pick a question's option unless focus is in an editable field
-        // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener).
-        if panel.drawer == .question, !panel.questionPanel.isHidden, !Self.editableTextFocused(in: event.window),
-           panel.questionPanel.handleKey(event) {
-            return true
+    /// The composer shows for a thread or draft in this window.
+    private var isActive: Bool { !composer.isHidden && target != nil && composer.window != nil }
+
+    /// Keybinding context keys the composer owns.
+    var shortcutContext: [String: Bool] {
+        ["composerFocus": composer.isEditorFocused, "modelPickerOpen": pickers.isModelPickerOpen,
+         "turnRunning": composer.runState.canInterrupt]
+    }
+
+    /// The project the open thread or draft belongs to (`contextualProjectRef`).
+    var activeProjectId: ProjectId? {
+        switch target {
+        case .thread(let id): sidebar?.snapshot?.threads.first { $0.id == id }?.projectId
+        case .draft(let s): ProjectId(s.projectId)
+        case nil: nil
         }
-        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if mods == [.command, .shift], event.keyCode == 36 || event.keyCode == 76 {
-            // Swallowed even on repeat or with nothing to steer (QueuedRunsControl.tsx:208-214).
-            let queue = panel.queue.state
-            if !event.isARepeat, case .thread = target, queue.canPromoteToSteer, !queueBusy, let first = queue.items.first?.runId {
-                promoteToSteer(first)
-            }
-            return true
-        }
-        // `thread.editQueuedMessage` (`alt+arrowup` while the composer has focus, ChatView.tsx:8232-8241):
-        // only from the very start of the draft; opens the latest queued run (`editLatest`,
-        // QueuedRunsControl.tsx:216-231), which declines while an edit is open or a command runs.
-        if mods == [.option], event.keyCode == 126, case .thread = target, composer.isEditorFocused, composer.isCaretAtStart,
-           let latest = panel.queue.state.items.last(where: { $0.runId != nil }), queuedEdit == nil, !queueBusy {
-            if !event.isARepeat {
-                panel.queue.expand()
-                beginEdit(latest)
-            }
-            return true
-        }
-        // `composer.host` (mod+shift+h, keybindings.ts:176): opens "Run on" when it can choose (ChatView.tsx:8183-8192).
-        if mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
-            if !event.isARepeat, !panel.contextStrip.isHidden { panel.contextStrip.runOn.open() }
-            return true
-        }
-        return pickers.handleShortcut(event)
     }
 
     // MARK: Targets
@@ -553,6 +591,7 @@ final class ComposerController {
     private func refresh() {
         let runs = projection?.runs ?? []
         composer.runState = ComposerLogic.RunState(runs: runs)
+        composer.isDraftRoute = panel.isDraft
         composer.isBusy = pendingMessageId != nil || resuming
         var placeholder = ComposerLogic.PlaceholderInput()
         // T3's `phase === "disconnected"` means the thread has no runtime (`derivePhase(activeRuntime)`,
@@ -672,10 +711,6 @@ final class ComposerController {
             self?.responding.remove(requestId)
             self?.refresh()
         }
-    }
-
-    private static func editableTextFocused(in window: NSWindow?) -> Bool {
-        (window?.firstResponder as? NSTextView)?.isEditable == true
     }
 
     /// The pickers follow the draft key, the server config and the open thread.
