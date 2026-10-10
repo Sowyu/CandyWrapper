@@ -1854,6 +1854,20 @@ A relay `environment_link_not_found` is a host state, not a credential problem (
 
 `POST /api/t3-connect/mint-credential` and `/health` are called by the relay, not by clients. They verify an Ed25519 relay JWT (`typ` `t3-cloud-mint+jwt` or `t3-cloud-health+jwt`, `iss` relay issuer, `aud` `t3-env:<environmentId>`, lifetime at most 5 min with 60 s skew, scope exactly `environment:connect` or `environment:status`, `cnf.jkt` equal to the client key thumbprint, one-time `jti` and `nonce`) and answer with an Ed25519-signed `t3-env-mint+jwt` (`apps/server/src/cloud/CloudLink.ts:1449-1660`, `apps/server/src/cloud/linkChecks.ts:122-139`). A T3 Connect session never holds `access:*` or `relay:write`.
 
+### 10.11 Details found while building the client (WP6.2, 2026-10-10)
+
+Implemented in `Packages/CandyKit/Sources/T3Client/Connect/`. Each point was read in source.
+
+- **The CLI's OAuth token cannot connect.** `POST /v1/client/dpop-token` calls only `verifyClerkBearerToken` (Clerk `verifyToken` with audience `t3-code-relay`) and checks the audience again (`infra/relay/src/http/Api.ts:1020-1025,1638-1656`). The OAuth fallback lives only in `verifyRelayClientBearerToken`, which only the `client` group's Bearer middleware uses (`Api.ts:310-336,1682-1697`; groups in `packages/contracts/src/relay.ts`: `client` uses `RelayClientAuth`, `token` has none, `dpopClient` uses `RelayDpopClientAuth`). Nothing in `apps` or `packages` sends a CLI token to `/v1/client/dpop-token`; the CLI uses its token only to link (`apps/server/src/cloud/CloudLink.ts:897-902`). So a sign-in route that yields only a Clerk OAuth access token can list and deregister environments but cannot connect. Connecting needs a Clerk session that can mint the `t3-relay` template JWT. The mobile app gets one through the Clerk Expo SDK (`apps/mobile/src/features/cloud/CloudAuthProvider.tsx:54,136`), which talks to Clerk's Frontend API natively; whether a third-party native client may do the same against `clerk.t3.codes` is **UNVERIFIED**.
+- `resource` must equal the relay origin and the scopes must be allowed for the client id; otherwise the relay answers a bare 401 with no tagged body (`Api.ts:1016-1018`). T3's client treats an untagged error as transient ("Could not exchange relay DPoP access token.").
+- The relay keeps its own DPoP replay store: one row per `(thumbprint, jti)`, kept 5 minutes (`infra/relay/src/auth/DpopProofs.ts:100-140`). Relay 401s on DPoP routes carry `WWW-Authenticate: DPoP` (`Api.ts:104-110,385`).
+- On a relay `invalid_bearer` the client drops the token and retries once, even when the token was not cached (`packages/client-runtime/src/relay/managedRelay.ts:655-692`). A token without a JWT `sub` bypasses the cache (`:527-546`).
+- Desktop clients use client id `t3-web` (`apps/web/src/cloud/managedRelayLayer.ts:80`). Connect asks for scope `environment:connect`; status asks for `environment:status environment:connect`, and a cached token serves any request whose scopes it covers.
+- A learned direct route still opens the socket with `connectionMethod=relay` (`authorization/service.ts:217-245`), and its descriptor is checked before any credential goes there (`:142-181`).
+- Cached-token fallback (`service.ts:488-534`): the ticket gets 3 s. On the tunnel any environment failure replaces the token; on a direct route only an `EnvironmentAuthInvalidError` does, and other failures keep it for the tunnel.
+- ES256 signatures: the verifier is `@noble/curves` 1.9.1 `p256.verify(..., {prehash:false, format:"compact"})` (`packages/shared/src/dpop.ts:163-176`, `pnpm-lock.yaml:21-23`). The web client signs with WebCrypto, which does not normalize `s`, so high-`s` signatures are accepted; CryptoKit's raw signatures work as they are. Proofs from the client library pass a Swift port of `verifyDpopProof` in `T3ConnectTests`.
+- Test vectors that the thumbprint and `ath` code pass: RFC 9449 section 4.1 key with `jkt` `0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I` (section 6.1), and `ath` `fUHyO2r2Z3DZ53EsNrWBb0xWXoaNy59IiKCAqksmQEo` for the section 7.1 token.
+
 ---
 
 ## 11. Local server
