@@ -71,7 +71,9 @@ public final class LabelView: DSView {
     /// CSS line-height in points. Defaults to the font's natural height.
     public var lineHeight: CGFloat? { didSet { invalidate() } }
     public var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
-    public var truncates = true { didSet { needsDisplay = true } }
+    /// Truncating labels clip to their box like CSS `truncate` (overflow: hidden). Unclipped,
+    /// AppKit gave each one a backing store with room for overflow, about twice the label.
+    public var truncates = true { didSet { clipsToBounds = truncates; needsDisplay = true } }
     /// `underline` with T3's `underline-offset-4`.
     public var isUnderlined = false { didSet { if isUnderlined != oldValue { needsDisplay = true } } }
     /// CSS `letter-spacing` in points, added after every character like Chromium.
@@ -92,6 +94,7 @@ public final class LabelView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         layer?.isOpaque = false
+        clipsToBounds = truncates
     }
 
     private func invalidate() {
