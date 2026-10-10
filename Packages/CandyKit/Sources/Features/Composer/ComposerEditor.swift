@@ -12,6 +12,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     /// Asked on Return; true when it handled the key as a send.
     var onSubmitKey: ((ComposerLogic.Key) -> Bool)?
     var onTextChange: (() -> Void)?
+    /// Plain ArrowUp (true) or ArrowDown (false); true when it handled the key (prompt history).
+    var onHistoryKey: ((Bool) -> Bool)?
     /// The Cmd/Ctrl modifier went down or up (the queue and steer icons swap while it is held).
     var onModifierChange: ((Bool) -> Void)?
 
@@ -87,6 +89,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
                                         isRepeat: event.isARepeat, composing: hasMarkedText())
             if onSubmitKey?(key) == true { return }
         }
+        // ArrowUp 126, ArrowDown 125, without modifiers or an IME composition (ChatComposer.tsx:4393-4400).
+        if event.keyCode == 126 || event.keyCode == 125,
+           event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty, !hasMarkedText(),
+           onHistoryKey?(event.keyCode == 126) == true {
+            return
+        }
         super.keyDown(with: event)
     }
 
@@ -108,6 +116,31 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     override func resignFirstResponder() -> Bool {
         onModifierChange?(false)
         return super.resignFirstResponder()
+    }
+
+    /// `isCaretOnVisualEdge` (ComposerPromptEditorTiptap.tsx:1673-1705): an empty editor, or a
+    /// collapsed caret on the first visual line (start) or the last (end), no newline between.
+    func isCaretOnVisualEdge(start: Bool) -> Bool {
+        let text = string as NSString
+        if text.length == 0 { return true }
+        let sel = selectedRange()
+        guard sel.length == 0 else { return false }
+        let caret = sel.location
+        let newline = start ? text.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: caret))
+                            : text.range(of: "\n", range: NSRange(location: caret, length: text.length - caret))
+        if newline.location != NSNotFound { return false }
+        guard let tlm = textLayoutManager, let storage = tlm.textContentManager,
+              let location = storage.location(storage.documentRange.location, offsetBy: caret) else { return false }
+        tlm.ensureLayout(for: storage.documentRange)
+        // The caret's paragraph starts after the last newline before it (0 for the start edge).
+        let paragraphStart = text.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: caret)).location
+        let offset = caret - (paragraphStart == NSNotFound ? 0 : paragraphStart + 1)
+        guard let fragment = tlm.textLayoutFragment(for: location) ?? (caret == text.length
+                ? tlm.textLayoutFragment(for: storage.location(location, offsetBy: -1) ?? location) : nil) else { return true }
+        let lines = fragment.textLineFragments
+        guard lines.count > 1 else { return true }
+        // A caret on a soft wrap shows at the start of the next line.
+        return start ? offset < NSMaxRange(lines[0].characterRange) : offset >= lines[lines.count - 1].characterRange.location
     }
 
     /// The laid-out text height (one line box when empty).

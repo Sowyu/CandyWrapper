@@ -228,10 +228,38 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     private let surface = CALayer()
     private var hovered = false { didSet { restyle() } }
     private var fieldHeight: CGFloat = 0
+    /// "Clear thread search" (SidebarThreadHeader.tsx:110-123): `icon-micro ghost-muted`, a `size-3` x, while searching.
+    let clearButton = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
     var onChange: (@MainActor (String) -> Void)?
+    /// Field editor commands (moveDown:, moveUp:, insertNewline:, cancelOperation:). True when handled.
+    var onCommand: (@MainActor (Selector) -> Bool)?
+
+    var text: String {
+        get { field.stringValue }
+        set { field.stringValue = newValue; syncClear() }
+    }
+
+    private func syncClear() {
+        let searching = !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if clearButton.isHidden == searching { clearButton.isHidden = !searching; needsLayout = true }
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        onCommand?(commandSelector) ?? false
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        clearButton.iconSize = 12
+        clearButton.setAccessibilityLabel("Clear thread search")
+        clearButton.isHidden = true
+        clearButton.action = { [weak self] in
+            guard let self else { return }
+            self.text = ""
+            self.onChange?("")
+            self.window?.makeFirstResponder(self.field)
+        }
+        addSubview(clearButton)
         surface.cornerRadius = 8
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(surface)
@@ -251,7 +279,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
 
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
-    func controlTextDidChange(_ obj: Notification) { onChange?(field.stringValue) }
+    func controlTextDidChange(_ obj: Notification) { syncClear(); onChange?(field.stringValue) }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
@@ -274,6 +302,9 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         // Measured once: each intrinsicContentSize call kept about 47 KB of text layout alive.
         if fieldHeight == 0 { fieldHeight = ceil(field.intrinsicContentSize.height) }
         let fh = fieldHeight
-        field.frame = NSRect(x: 30, y: (bounds.height - fh) / 2, width: bounds.width - 38, height: fh)
+        // `gap-2`, then the 20pt clear button before the `px-2` edge.
+        let clear: CGFloat = clearButton.isHidden ? 0 : 20 + 8
+        field.frame = NSRect(x: 30, y: (bounds.height - fh) / 2, width: max(0, bounds.width - 38 - clear), height: fh)
+        clearButton.frame = NSRect(x: bounds.width - 8 - 20, y: (bounds.height - 20) / 2, width: 20, height: 20)
     }
 }

@@ -13,8 +13,15 @@ public struct SidebarActions {
     public var unsnooze: (ThreadId) -> Void = { _ in }
     public var unpin: (ThreadId) -> Void = { _ in }
     public var toggleSidebar: () -> Void = {}
-    public var search: (String) -> Void = { _ in }
-    public var filterProjects: (NSView) -> Void = { _ in }
+    /// `orchestration.searchThreads {query}`; nil when the request failed or there is no connection, which
+    /// leaves title search on its own (threadSearch.ts:58-62).
+    public var searchThreads: (String) async -> [ThreadSearchMatch]? = { _ in nil }
+    /// Opens a new-thread draft (`/draft/$draftId`, Sidebar.tsx:3188-3201).
+    public var openDraft: (String) -> Void = { _ in }
+    /// `discardComposerDraft` from a draft row's x.
+    public var discardDraft: (String) -> Void = { _ in }
+    /// The scope popup's settings button and context menu (`/projects/$projectKey`), with the group key.
+    public var openProjectSettings: (String) -> Void = { _ in }
     public var addProject: () -> Void = {}
     public var newThread: () -> Void = {}
     public var openSettings: () -> Void = {}
@@ -53,6 +60,27 @@ public final class SidebarContentView: DSView {
     private var labelTimer: Timer?
     private var occlusionObserver: NSObjectProtocol?
 
+    /// The scope trigger shows the scoped project's favicon in place of the folder (SidebarThreadHeader.tsx:5).
+    let filterMonogram = ProjectMonogramView()
+    /// Where the project scope persists, as T3's persisted UI store does. Nil in tests and previews.
+    public var scopeDefaults: UserDefaults? {
+        didSet { state.projectScopeKey = scopeDefaults?.string(forKey: Self.scopeDefaultsKey) }
+    }
+    static let scopeDefaultsKey = "sidebar.projectScopeKey"
+    private var scopePopup: OpenPopup?
+
+    /// The search field's text. Searching starts at one non-blank character (Sidebar.tsx:2896).
+    public private(set) var searchQuery = ""
+    public var isSearching: Bool { !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// `activeSearchResultIndex`.
+    public private(set) var searchHighlight = 0
+    private var searchMatches: [ThreadSearchMatch] = []
+    private var searchPending = false
+    private var searchTask: Task<Void, Never>?
+    private var searchOrderKey = ""
+    /// The open draft as it was when it opened (`frozenActive`, Sidebar.tsx:972-995).
+    private var frozenDraft: (id: String?, draft: SidebarDraft?) = (nil, nil)
+
     public override init(frame frameRect: NSRect) {
         scrollArea = ScrollAreaView(documentView: list, scrollFade: true)
         super.init(frame: frameRect)
@@ -74,6 +102,12 @@ public final class SidebarContentView: DSView {
             }
         }
         list.onShowMore = { [weak self] in self?.state.settledVisibleCount += SidebarListBuilder.settledPageCount }
+        list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
+        list.onOpenSearchResult = { [weak self] id in self?.selectSearchResult(id) }
+        filterButton.addSubview(filterMonogram)
+        filterMonogram.isHidden = true
+        search.onChange = { [weak self] in self?.setSearchQuery($0) }
+        search.onCommand = { [weak self] in self?.searchCommand($0) ?? false }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Threads")
         applyStage()
@@ -103,9 +137,10 @@ public final class SidebarContentView: DSView {
         }
         let a = actions
         list.rowActions = SidebarRowActions(settle: a.settle, unsettle: a.unsettle, snooze: a.snooze, unsnooze: a.unsnooze, unpin: a.unpin)
+        list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }
+        list.onDiscardDraft = { [weak self] id in self?.actions.discardDraft(id) }
         trigger.action = { [weak self] in self?.actions.toggleSidebar() }
-        search.onChange = { [weak self] in self?.actions.search($0) }
-        filterButton.action = { [weak self] in guard let self else { return }; self.actions.filterProjects(self.filterButton) }
+        filterButton.action = { [weak self] in self?.toggleScopePopup() }
         addProjectButton.action = { [weak self] in self?.actions.addProject() }
         newThreadButton.action = { [weak self] in self?.actions.newThread() }
         settingsButton.action = { [weak self] in self?.actions.openSettings() }
@@ -137,9 +172,172 @@ public final class SidebarContentView: DSView {
     private func rebuild(animated: Bool) {
         let ms = nowMs
         list.nowMs = ms
-        list.setItems(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms), animated: animated)
+        if isSearching {
+            var items = searchItems(nowMs: ms)
+            // A new result order puts the highlight back on the first result (Sidebar.tsx:2924-2930).
+            let order = items.map(\.key).joined(separator: "\0")
+            if order != searchOrderKey {
+                searchOrderKey = order
+                if searchHighlight != 0 { searchHighlight = 0; items = searchItems(nowMs: ms) }
+            }
+            list.setItems(items, animated: false)
+        } else {
+            searchOrderKey = ""
+            list.setItems(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms), animated: animated)
+        }
+        updateScopeTrigger()
         scheduleLabelTimer()
     }
+
+    private func searchItems(nowMs: Int64) -> [SidebarItem] {
+        SidebarListBuilder.searchItems(snapshot: snapshot, state: state, query: searchQuery, matches: searchMatches,
+                                       pending: searchPending, highlighted: searchHighlight, nowMs: nowMs)
+    }
+
+    // MARK: Search (Sidebar.tsx:2893-2937, 3203-3250)
+
+    /// Types into the search field programmatically (tests, previews).
+    public func setSearchText(_ query: String) {
+        search.text = query
+        setSearchQuery(query)
+    }
+
+    func setSearchQuery(_ query: String) {
+        searchQuery = query
+        searchHighlight = 0
+        searchTask?.cancel()
+        searchMatches = []
+        // `useThreadSearch`: the server search waits for a settled query of two or more characters.
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchPending = q.count >= SidebarModel.threadSearchMinLength
+        if searchPending {
+            searchTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(SidebarModel.threadSearchDebounceMs))
+                guard !Task.isCancelled, let search = self?.actions.searchThreads else { return }
+                let matches = await search(q)
+                guard !Task.isCancelled, let self,
+                      self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == q else { return }
+                self.searchMatches = matches ?? []
+                self.searchPending = false
+                self.rebuild(animated: false)
+            }
+        }
+        // The results list replaces the thread list outright; neither slides.
+        rebuild(animated: false)
+    }
+
+    public func clearSearch() {
+        search.text = ""
+        setSearchQuery("")
+    }
+
+    func setSearchHighlight(_ index: Int, scroll: Bool) {
+        guard isSearching, index != searchHighlight else { return }
+        searchHighlight = index
+        rebuild(animated: false)
+        if scroll, let item = list.items.first(where: { if case .searchResult(let r) = $0 { r.index == index } else { false } }) {
+            list.scrollItemToVisible(item.key) // `scrollIntoView({ block: "nearest" })`
+        }
+    }
+
+    private var searchResultCount: Int {
+        list.items.reduce(0) { n, item in if case .searchResult = item { n + 1 } else { n } }
+    }
+
+    func selectSearchResult(_ id: ThreadId) {
+        clearSearch()
+        state.activeThreadId = id
+        actions.openThread(id)
+    }
+
+    /// `handleThreadSearchKeyDown`: Escape clears, arrows move the highlight with wrap, Enter opens it.
+    /// Focus stays in the field.
+    func searchCommand(_ selector: Selector) -> Bool {
+        guard isSearching else { return false }
+        if selector == #selector(NSResponder.cancelOperation(_:)) { clearSearch(); return true }
+        let n = searchResultCount
+        guard n > 0 else { return false }
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)): setSearchHighlight((searchHighlight + 1) % n, scroll: true)
+        case #selector(NSResponder.moveUp(_:)): setSearchHighlight((searchHighlight - 1 + n) % n, scroll: true)
+        case #selector(NSResponder.insertNewline(_:)):
+            for case .searchResult(let r) in list.items where r.index == searchHighlight { selectSearchResult(r.id) }
+        default: return false
+        }
+        return true
+    }
+
+    // MARK: Drafts
+
+    /// The composer's drafts with a prompt, and the open one. The open draft's row keeps the content it had
+    /// when it opened and never repaints while the user types; a draft opened empty shows no row until
+    /// it is left (`SidebarDraftBlock`, Sidebar.tsx:962-1034).
+    public func setDrafts(_ drafts: [SidebarDraft], activeDraftId: String?) {
+        if activeDraftId != frozenDraft.id {
+            frozenDraft = (activeDraftId, drafts.first { $0.id == activeDraftId && !SidebarListBuilder.draftPreview($0.prompt).isEmpty })
+        }
+        var shown = drafts.filter { $0.id != activeDraftId }
+        // Gated on the live draft, so a send or discard removes the row at once.
+        if let frozen = frozenDraft.draft, drafts.contains(where: { $0.id == frozen.id }) { shown.append(frozen) }
+        var next = state
+        next.drafts = shown
+        next.activeDraftId = activeDraftId
+        state = next
+    }
+
+    // MARK: Project scope
+
+    public func setProjectScope(_ key: String?) {
+        state.projectScopeKey = key
+        if let key { scopeDefaults?.set(key, forKey: Self.scopeDefaultsKey) } else { scopeDefaults?.removeObject(forKey: Self.scopeDefaultsKey) }
+    }
+
+    private var scopedGroup: SidebarModel.ProjectGroup? {
+        guard let key = state.projectScopeKey, let snapshot else { return nil }
+        return SidebarModel.buildProjectGroups(snapshot.projects).first { $0.key == key }
+    }
+
+    private func updateScopeTrigger() {
+        let group = scopedGroup
+        filterMonogram.isHidden = group == nil
+        if let group { filterMonogram.projectTitle = group.representative.title }
+        if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .folder : nil }
+        let label = group.map { "Filter threads by project: \($0.label)" } ?? "Filter threads by project"
+        filterButton.setAccessibilityLabel(label)
+        filterButton.toolTip = label
+        let hasProjects = !(snapshot?.projects.isEmpty ?? true)
+        if filterButton.isHidden == hasProjects { needsLayout = true }
+    }
+
+    /// Opens the scope combobox under the search field, or closes it when it is open.
+    func toggleScopePopup() {
+        guard let host = filterButton.popupHost else { return }
+        if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
+        let view = SidebarProjectScopeView(groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot),
+                                           selectedKey: state.projectScopeKey, minimumWidth: search.frame.width)
+        view.onSelect = { [weak self] key in
+            self?.setProjectScope(key)
+            self?.closeScopePopup()
+        }
+        view.onSettings = { [weak self] key in
+            self?.closeScopePopup()
+            self?.actions.openProjectSettings(key)
+        }
+        let anchor = filterButton.convert(search.bounds, from: search)
+        let popup = host.open(PickerPopupView(view), trigger: filterButton, anchorRect: anchor, placement: .dropdown,
+                              swallowsOutsideClick: true)
+        popup.onClose = { [weak self] in self?.scopePopup = nil }
+        scopePopup = popup
+        window?.makeFirstResponder(view.search)
+    }
+
+    private func closeScopePopup() {
+        if let scopePopup { filterButton.popupHost?.close(scopePopup) }
+        scopePopup = nil
+    }
+
+    /// The open scope popup's body, for tests.
+    var scopePopupView: SidebarProjectScopeView? { (scopePopup?.content as? PickerPopupView)?.body as? SidebarProjectScopeView }
 
     // MARK: Label refresh
 
@@ -202,10 +400,15 @@ public final class SidebarContentView: DSView {
         // Fixed header group, `p-2`: search, then the 28px icon buttons.
         let rowY: CGFloat = 52 + 8
         var right = w - 8
+        // Without projects there is nothing to scope, so scope and add project stay out (SidebarThreadHeader.tsx:127-135).
+        let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         for b in [newThreadButton, addProjectButton, filterButton] {
+            b.isHidden = b !== newThreadButton && !hasProjects
+            if b.isHidden { continue }
             b.frame = NSRect(x: right - 28, y: rowY + 2, width: 28, height: 28)
             right -= 28
         }
+        filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: 32)
         // Footer: `px-2 py-1`, 32px icon buttons 4px apart.
         let footerTop = h - 40
