@@ -43,7 +43,6 @@ public final class ThreadHeaderView: TopbarDragView {
         super.init(frame: frameRect)
         for label in [project, slash, title] { label.lineHeight = 20; addSubview(label) }
         addSubview(favicon)
-        // ponytail: the thread details toggle only reserves its place and look; its panel comes later in M7
         toggles[0].setAccessibilityLabel("Thread panel")
         toggles[1].setAccessibilityLabel("Toggle terminal")
         toggles[2].setAccessibilityLabel("Toggle right panel")
@@ -143,6 +142,11 @@ public final class ThreadPanelView: DSView {
     public private(set) var terminalHeight: CGFloat = 0
     /// The header's terminal toggle was clicked (`terminal.toggle`).
     public var onTerminalToggle: (@MainActor () -> Void)?
+    /// The thread details card (`ThreadDetailsPanel`): workspace, branch and git actions.
+    public let detailsCard = ThreadDetailsCardView()
+    public private(set) var detailsOpen = false
+    /// The header's details toggle was clicked.
+    public var onDetailsToggle: (@MainActor () -> Void)?
     public private(set) var rightPanelOpen = false
     public private(set) var rightPanelMaximized = false
     /// The user opened or closed the right panel.
@@ -212,7 +216,15 @@ public final class ThreadPanelView: DSView {
         maximize.isHidden = true
         maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
         addSubview(maximize)
+        detailsCard.isHidden = true
+        addSubview(detailsCard)
         addSubview(toasts)
+        header.toggles[0].onPressedChange = { [weak self] _ in
+            guard let self else { return }
+            header.toggles[0].isPressed = detailsOpen // the controller decides
+            onDetailsToggle?()
+        }
+        detailsCard.gitActions.primary.onStateChange = { [weak self] in self?.needsLayout = true }
         header.toggles[2].onPressedChange = { [weak self] _ in self?.userSetRightPanel(!(self?.rightPanelOpen ?? true)) }
         header.toggles[1].onPressedChange = { [weak self] _ in
             guard let self else { return }
@@ -225,6 +237,16 @@ public final class ThreadPanelView: DSView {
             if !rightPanelOpen { userSetRightPanel(true) }
             diffPanel.open(runId: run, filePath: path)
         }
+    }
+
+    // MARK: Thread details
+
+    /// Shows or hides the details card.
+    public func setDetailsOpen(_ open: Bool) {
+        detailsOpen = open
+        header.toggles[0].isPressed = open
+        detailsCard.isHidden = !open
+        needsLayout = true
     }
 
     // MARK: Right panel
@@ -478,6 +500,15 @@ public final class ThreadPanelView: DSView {
             }
         }
         layoutComposer(chat: chat, height: chatHeight)
+        // The details card as T3's popover (ThreadDetailsCard.tsx:132-150): under the header, end-aligned
+        // with it, inside the viewport's 8pt padding, 264 wide.
+        // ponytail: always the popover placement over the timeline; T3 pins the card inline at the canvas's top
+        // right (and shifts the chat lane) when 1012pt of chat column fit. Add with a lane-aware timeline layout
+        if detailsOpen {
+            let w = ThreadDetailsCardView.width, h = min(detailsCard.preferredHeight, max(0, chatHeight - ThreadHeaderView.height - 16))
+            detailsCard.frame = NSRect(x: max(8, chat - 8 - w), y: ThreadHeaderView.height + 8, width: w, height: h)
+            detailsCard.isHidden = chat < w + 16
+        }
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         if !errorBanner.isHidden {
             let w = errorBanner.fittingWidth(max: max(0, min(768, chat - 32)))
@@ -495,6 +526,7 @@ public final class ThreadPanelView: DSView {
         fade.zPosition = 1
         fade.isHidden = !errorBanner.isHidden
         errorBanner.layer?.zPosition = 2
+        detailsCard.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
         CATransaction.commit()
     }

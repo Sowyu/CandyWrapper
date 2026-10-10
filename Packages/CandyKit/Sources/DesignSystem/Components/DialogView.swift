@@ -24,6 +24,8 @@ public final class DialogView: DSView {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; footerButtons.forEach(addSubview); changed() }
     }
     public var footerVariant: FooterVariant = .default { didSet { changed() } }
+    /// The first this many footer buttons sit at the start of the row (`sm:mr-auto` on the last of them).
+    public var footerLeadingCount = 0 { didSet { changed() } }
     public var showsCloseButton: Bool { didSet { closeButton.isHidden = !showsCloseButton } }
     /// The popup's `max-w-*` for dialogs (`max-w-lg` by default; Add Environment uses `sm:max-w-3xl`).
     public var maxWidth: CGFloat = 512
@@ -140,8 +142,14 @@ public final class DialogView: DSView {
             let rowHeight = sizes.map(\.height).max() ?? 0
             let footerTop = y
             var x = width - b.right - 24
-            for s in sizes.reversed() {
-                x -= s.width
+            for (i, s) in sizes.enumerated().reversed() {
+                if i < footerLeadingCount {
+                    // `sm:mr-auto`: the leading buttons sit at the start.
+                    let lead = sizes[..<i].reduce(b.left + 24) { $0 + $1.width + 8 }
+                    x = lead
+                } else {
+                    x -= s.width
+                }
                 f.buttons.insert(CGRect(x: x, y: footerTop + top + footerVariant.borderTop + (rowHeight - s.height) / 2,
                                         width: s.width, height: s.height), at: 0)
                 x -= 8

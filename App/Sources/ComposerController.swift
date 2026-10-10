@@ -25,6 +25,11 @@ final class ComposerController {
         var threadId: String
         var projectId: String
         var createdAt: Date
+        /// The branch toolbar's picks (`DraftThreadState`: `envMode`, `branch`, `worktreePath`, `startFromOrigin`).
+        var envMode: EnvMode?
+        var branch: String?
+        var worktreePath: String?
+        var startFromOrigin: Bool?
     }
 
     enum Target: Equatable {
@@ -45,6 +50,27 @@ final class ComposerController {
     private var resuming = false
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
+    /// The open draft's project is a Git repository: the strip shows the run context and branch.
+    var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
+    /// The target changed (a thread or draft opened, or the draft's workspace changed).
+    var onTargetChange: (() -> Void)?
+
+    /// The open draft, if the panel shows one.
+    var currentDraft: DraftSession? { if case .draft(let s) = target { s } else { nil } }
+    /// The open server thread.
+    var openThreadId: ThreadId? { if case .thread(let id) = target { id } else { nil } }
+
+    func focusComposer() { DispatchQueue.main.async { [weak self] in self?.composer.focus() } }
+
+    /// Changes the open draft's workspace picks and stores them.
+    func updateDraft(_ change: (inout DraftSession) -> Void) {
+        guard case .draft(var session) = target else { return }
+        change(&session)
+        if let key = sessions.first(where: { $0.value.draftId == session.draftId })?.key { sessions[key] = session }
+        target = .draft(session)
+        scheduleSave()
+        onTargetChange?()
+    }
 
     /// Model, traits and access: the footer controls and the per-draft picks they own.
     let pickers = ComposerPickers(store: ComposerSelectionStore(), draftKey: "", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
@@ -269,7 +295,9 @@ final class ComposerController {
         // `composer.host`: opens "Run on" when it can choose (ChatView.tsx:8183-8192).
         shortcuts.on("composer.host") { [weak self] call in
             guard let self, self.isActive else { return false }
-            if !call.isRepeat, !self.panel.contextStrip.isHidden { self.panel.contextStrip.runOn.open() }
+            if !call.isRepeat, !self.panel.contextStrip.isHidden {
+                if self.panel.contextStrip.showsGitControls { self.panel.contextStrip.runContext.performAction() } else { self.panel.contextStrip.runOn.open() }
+            }
             return true
         }
         // `modelPicker.jump.N` while the picker is open (ModelPickerContent.tsx:797-811).
@@ -361,6 +389,7 @@ final class ComposerController {
         resuming = false
         loadPrompt()
         syncSidebarDrafts()
+        onTargetChange?()
     }
 
     /// Sidebar new-thread button (`handleNewThread`, useHandleNewThread.ts:64-390): the open
@@ -420,6 +449,7 @@ final class ComposerController {
         loadPrompt()
         scheduleSave()
         syncSidebarDrafts()
+        onTargetChange?()
     }
 
     /// The group's session. Sessions saved under a project id (before groups) move to the group key.
@@ -494,7 +524,9 @@ final class ComposerController {
         runOn.options = targets.map(\.option)
         runOn.selectedId = env
         runOn.locked = targets.count < 2 || pendingMessageId != nil
-        panel.showsContextStrip = targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
+        // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
+        panel.contextStrip.showsGitControls = draftIsGitRepo
+        panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
     }
 
     /// `onEnvironmentChange` (ChatView.tsx:4450-4517): the open draft moves to the group's member on that
@@ -512,6 +544,7 @@ final class ComposerController {
         scheduleSave()
         refresh()
         syncSidebarDrafts()
+        onTargetChange?()
     }
 
     /// The hero's project menu (DraftHeroHeadline.tsx:236-310): one radio row per project group, the open
@@ -805,6 +838,12 @@ final class ComposerController {
             report(.noModel, key: picksKey)
             return
         }
+        // In worktree mode a base branch is required (ChatView.tsx:9223-9230).
+        if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
+            if let picksKey { threadErrors.set(picksKey, "Select a base branch before sending in New worktree mode.") }
+            refresh()
+            return
+        }
         // The send goes ahead: the thread's local error clears (ChatView.tsx:9782).
         if let picksKey { threadErrors.set(picksKey, nil) }
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).
@@ -840,7 +879,10 @@ final class ComposerController {
                 projectId: EnvironmentScope.localId(of: session.projectId), title: title,
                 modelSelection: selectionJSON, runtimeMode: picks.runtimeMode.rawValue,
                 interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: messageText, context: context,
-                attachments: uploaded)
+                attachments: uploaded,
+                workspaceStrategy: BranchToolbarLogic.workspaceStrategy(
+                    mode: draftIsGitRepo ? session.envMode ?? .local : .local, branch: session.branch,
+                    worktreePath: session.worktreePath, startFromOrigin: session.startFromOrigin ?? false))
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)

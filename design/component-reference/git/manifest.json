@@ -1,0 +1,30 @@
+{
+  "card.commit" : {
+    "height" : 167,
+    "width" : 264
+  },
+  "card.push" : {
+    "height" : 167,
+    "width" : 264
+  },
+  "dialog.commit" : {
+    "height" : 570,
+    "width" : 512
+  },
+  "menu.publish" : {
+    "height" : 66,
+    "width" : 248
+  },
+  "menu.remote" : {
+    "height" : 66,
+    "width" : 248
+  },
+  "strip.checkout" : {
+    "height" : 96,
+    "width" : 600
+  },
+  "strip.worktree" : {
+    "height" : 96,
+    "width" : 600
+  }
+}

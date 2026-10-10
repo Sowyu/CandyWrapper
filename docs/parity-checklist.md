@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-10: 101 🟡, 47 ➖, 292 ⏳.
+Status 2026-10-10: 109 🟡, 51 ➖, 280 ⏳.
 
 Status legend:
 
@@ -72,8 +72,8 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 |---|---|---|---|
 | Chat canvas layout, chat width setting (comfortable, wide, full) | comp/chat/ChatCanvas.tsx, comp/chat/chatCanvasLayout.ts, comp/ChatView.tsx | ➖ | Missing: chat width setting |
 | Thread header: breadcrumb (project > thread), editable title, thread actions menu | comp/chat/ChatHeader.tsx, comp/WorkspaceBreadcrumb.tsx | ➖ | Missing: editable title, thread actions menu |
-| Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ➖ | Missing: editor picker, git actions, project scripts; only the diff toggle works |
-| Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ⏳ | |
+| Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ➖ | The details toggle opens the thread details card with the git actions (WP7.5a). Missing: editor picker, project scripts |
+| Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ➖ | Workspace (run context) and Version Control (branch, git actions, Changes or Initialize Git). Always the popover placement under the header; T3 pins it inline and shifts the chat lane from a 1012pt column. Missing: Open in, project scripts, PR rows, automations, lineage, compact densities |
 | Thread status line (running, elapsed, agent activity) | comp/chat/ThreadStatusLine.tsx, comp/chat/AgentElapsed.tsx | ➖ | Missing: agent activity text; only the "Working for Ns" row exists |
 | Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ➖ | Image grid (`max-w-[210px]` 2 columns, 4:3, `assets.createUrl` then decoded at cell size; a click opens the preview) and rows for files without a chip. Missing: chips in the text (links still), file row preview and download, videos |
 | Timeline: assistant message with markdown | comp/chat/MessagesTimeline.tsx, comp/ChatMarkdown.tsx | 🟡 | Incremental streaming render (web/markdown-incremental.ts) |
@@ -162,11 +162,11 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Custom models editor | comp/settings/CustomModelEditor.tsx | ⏳ | |
 | Access / permission mode picker | comp/chat/CompactComposerControlsMenu.tsx, comp/chat/runtimeModeConfig.ts | 🟡 | `mod+shift+a` |
 | Compact controls menu (narrow widths) | comp/chat/CompactComposerControlsMenu.tsx, comp/composerFooterLayout.ts | 🟡 | |
-| Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | 🟡 | `mod+shift+h`, cycle host unbound |
-| Workspace mode selector (current checkout / new worktree / previous worktree) | comp/BranchToolbarEnvModeSelector.tsx | ⏳ | `mod+shift+x`, `mod+shift+l` |
-| Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | ⏳ | `mod+shift+g` |
-| Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ⏳ | |
-| Previous worktree item | comp/PreviousWorktreeItemContent.tsx | ⏳ | |
+| Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | 🟡 | `mod+shift+h`, cycle host unbound. In a Git project the "Run on" group sits in the run context menu |
+| Workspace mode selector (current checkout / new worktree / previous worktree) | comp/BranchToolbarEnvModeSelector.tsx, comp/BranchToolbar.tsx (RunContextSelector) | 🟡 | `mod+shift+x`, `mod+shift+l`. The composer is never wider than `@3xl`, so T3 shows RunContextSelector there; the draft sends `worktree`, `existing_worktree` or `root` strategies (sent a real worktree turn on the sandbox). Start from origin does not read the project setting yet (WP7.7) |
+| Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | 🟡 | `mod+shift+g`. Search with the sanitized query, paging, create and switch refs, worktree reuse, start from origin. Fidelity: scripts/gen-git-spec.py. Missing: checkout PR row (WP7.5b), PR badge, the context menu "Copy branch name", label collapse at narrow widths |
+| Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ➖ | T3 uses it only in Scheduled Tasks settings (WP7.7); `BranchPickerView` with the origin switch is ready for it |
+| Previous worktree item | comp/PreviousWorktreeItemContent.tsx | 🟡 | History glyph, title and the branch as a muted second line |
 | Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | 🟡 | |
 | Composer banners stack (clone progress, server update, provider issues) | comp/chat/ComposerBannerStack.tsx, comp/chat/ComposerBanner.tsx, comp/chat/ComposerServerUpdateStatus.tsx | ➖ | Missing: only the environment reconnecting banner exists |
 | Composer activity status | comp/chat/ComposerActivityStatus.tsx | 🟡 | "Loading messages..." / "Syncing messages..." with the spinner from the thread store's status, shown after 400 ms and kept 400 ms (`useDelayedStatus`) |
@@ -223,10 +223,10 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Git actions menu (commit, push, pull, create PR, publish, init repo) | comp/GitActionsControl.tsx, comp/GitActionsControl.logic.ts | ⏳ | |
-| Commit dialog with generated message and file selection | comp/GitActionsControl.tsx | ⏳ | AI text generation via configured writer model |
-| Publish repository (public/private, provider choice) | comp/GitActionsControl.tsx | ⏳ | Providers: GitHub, GitLab, Bitbucket, Azure DevOps, Forgejo/Gitea |
-| Create pull request / change request | comp/GitActionsControl.tsx, comp/pullRequest/PullRequestComposer.tsx | ⏳ | |
+| Git actions menu (commit, push, pull, create PR, publish, init repo) | comp/GitActionsControl.tsx, comp/GitActionsControl.logic.ts | 🟡 | Panel form in the details card: quick action, menu with disabled reasons and notes, progress with hook output and elapsed time, inline success for 10 s, error toasts, the default-ref confirmation. Commit, push, pull tested on a sandbox repo with a local bare remote. Missing: the toolbar and menu presentations T3 no longer mounts, toast CTAs |
+| Commit dialog with generated message and file selection | comp/GitActionsControl.tsx | 🟡 | AI text generation via configured writer model (server side when the message is blank). Fidelity in gen-git-spec.py |
+| Publish repository (public/private, provider choice) | comp/GitActionsControl.tsx | ➖ | Providers: GitHub, GitLab, Bitbucket, Azure DevOps, Forgejo/Gitea. Three-step wizard built; never published. Missing: wizard header layout and tint, Bitbucket and Azure glyphs, opening Source Control settings, no fidelity spec |
+| Create pull request / change request | comp/GitActionsControl.tsx, comp/pullRequest/PullRequestComposer.tsx | ➖ | The menu and quick action run `create_pr` and the stacked forms through `git.runStackedAction` (payload unit tested, never run against a real host). PullRequestComposer is the PR page's form (WP7.5b) |
 | PR stack actions (GitHub stacks) | comp/pullRequest/PullRequestStackMenu.tsx, comp/pullRequest/PullRequestStackLayers.tsx, comp/pullRequest/PullRequestStackHeader.tsx | ⏳ | |
 | Pull requests page: list, filters, grouping, speed actions (Shift) | web/routes/_chat.pull-requests.tsx, comp/pullRequest/PullRequestListRow.tsx, comp/pullRequest/PullRequestListFilters.tsx, comp/pullRequest/PullRequestSpeedActions.tsx | ⏳ | Drag-select Close |
 | PR list empty/unavailable states | comp/pullRequest/PullRequestListEmptyState.tsx, comp/pullRequest/PullRequestsUnavailableState.tsx, comp/pullRequest/PullRequestActivityUnavailableState.tsx | ⏳ | |
@@ -501,9 +501,9 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | composer.host | mod+shift+h | !terminalFocus | 🟡 |
 | composer.effort | mod+shift+e | !terminalFocus | 🟡 |
 | composer.mode | mod+shift+a | !terminalFocus | 🟡 |
-| composer.workspace | mod+shift+x | !terminalFocus | ⏳ WP7.5 |
-| composer.branch | mod+shift+g | !terminalFocus | ⏳ WP7.5 |
-| composer.previousWorktree | mod+shift+l | !terminalFocus | ⏳ WP7.5 |
+| composer.workspace | mod+shift+x | !terminalFocus | 🟡 |
+| composer.branch | mod+shift+g | !terminalFocus | 🟡 |
+| composer.previousWorktree | mod+shift+l | !terminalFocus | 🟡 |
 | pullRequest.copyNumber | mod+shift+k | !terminalFocus | ⏳ WP7.5 |
 | modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | 🟡 |
 | modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | 🟡 |
