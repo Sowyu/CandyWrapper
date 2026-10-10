@@ -92,4 +92,39 @@ struct EnvironmentCatalogTests {
         let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
         #expect(names.contains { $0.hasPrefix("environments.corrupt-") })
     }
+
+    /// Two quick "Add" clicks or sign-out racing a switch: every read-modify-write keeps the others' writes.
+    @Test func concurrentMutationsLoseNoWrite() throws {
+        let (catalog, dir) = makeCatalog()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let records = (0..<40).map { i in
+            RelayEnvironmentRecord(environmentId: "env-\(i)", label: "M\(i)",
+                                   endpoint: RelayEndpoint(httpBaseUrl: "https://m\(i).tunnel.example/", wsBaseUrl: "wss://m\(i).tunnel.example/",
+                                                           providerKind: "cloudflare_tunnel"), linkedAt: "x")
+        }
+        DispatchQueue.concurrentPerform(iterations: records.count) { i in
+            _ = try? catalog.addRelay(records[i], accountId: "user_1")
+        }
+        #expect(Set(catalog.load().map(\.environmentId)) == Set(records.map(\.environmentId)))
+        DispatchQueue.concurrentPerform(iterations: records.count) { i in
+            try? catalog.setEnabled(false, environmentId: "env-\(i)")
+        }
+        #expect(catalog.load().allSatisfy { !$0.enabled } && catalog.load().count == records.count)
+    }
+
+    /// A downgrade keeps a newer document: it reads what it understands and refuses to write.
+    @Test func newerDocumentIsKeptAndNeverOverwritten() throws {
+        let (catalog, dir) = makeCatalog()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let text = #"{"version": 99, "environments": [{"environmentId": "env-a", "label": "A", "httpBaseURL": "http://10.0.0.2:3773", "enabled": true, "createdAt": "2027-01-01T00:00:00Z"}], "future": 1}"#
+        try Data(text.utf8).write(to: catalog.file)
+        #expect(catalog.load().map(\.environmentId) == ["env-a"])
+        #expect(throws: EnvironmentCatalog.CatalogError.newerVersion(99)) { try catalog.setEnabled(false, environmentId: "env-a") }
+        #expect(try String(contentsOf: catalog.file, encoding: .utf8) == text)
+        let futureOnly = #"{"version": 99, "machines": []}"#
+        try Data(futureOnly.utf8).write(to: catalog.file)
+        #expect(catalog.load().isEmpty)
+        #expect(try String(contentsOf: catalog.file, encoding: .utf8) == futureOnly)
+    }
 }

@@ -19,6 +19,7 @@ final class ShellSession {
     private var pulling = false
     private var pullAgain = false
     private var started = false
+    private var stopped = false
     /// After each change window, with the store's whole shell, unscoped (merge, disk cache, activity).
     var onSnapshot: ((ShellSnapshot) -> Void)?
 
@@ -38,7 +39,9 @@ final class ShellSession {
     /// every 80 s (T3ConnectAuthorizer.connector).
     convenience init(environmentId: String, relayBaseURL baseURL: URL, authorizer: T3ConnectAuthorizer, cached: ShellSnapshot? = nil) {
         var http = EnvironmentHTTP(baseURL: baseURL)
-        http.authorize = { method, url in try await authorizer.authorizationHeaders(environmentId: environmentId, method: method, url: url) }
+        http.authorize = { method, url, rejected in
+            try await authorizer.authorizationHeaders(environmentId: environmentId, method: method, url: url, rejected: rejected)
+        }
         self.init(environmentId: environmentId, http: http, token: "", cached: cached,
                   supervisor: ConnectionSupervisor(dependencies: .init(connect: authorizer.connector(environmentId: environmentId)),
                                                    keepalive: .ping(interval: .seconds(80))))
@@ -56,9 +59,13 @@ final class ShellSession {
 
     /// Connects and subscribes once; later calls do nothing.
     func start() {
-        guard !started else { return }
+        guard !started, !stopped else { return }
         started = true
-        Task { await supervisor.observePlatform(); await supervisor.connect() }
+        // `stop` can run before this task reaches the supervisor; its disconnect must win.
+        Task { [supervisor] in
+            await supervisor.observePlatform()
+            await supervisor.connect(unlessStopped: { @MainActor [weak self] in self?.stopped ?? true })
+        }
         let store = self.store
         subscription = supervisor.subscribe("orchestration.subscribeShell", payload: {
             var payload: [String: JSONValue] = ["requestCompletionMarker": .bool(true)]
@@ -70,7 +77,9 @@ final class ShellSession {
         })
     }
 
+    /// Final: a stopped session never connects again.
     func stop() {
+        stopped = true
         subscription?.cancel()
         Task { await supervisor.disconnect() }
     }

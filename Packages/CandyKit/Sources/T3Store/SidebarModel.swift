@@ -1,4 +1,5 @@
 import Foundation
+import os
 import T3Protocol
 
 // Sidebar derived state, ported from the official web sidebar v2 and the shared client runtime.
@@ -662,8 +663,27 @@ public enum SidebarModel {
     /// Port of `buildProjectGroups` (projectGrouping.ts:255-326). Projects with the same environment and
     /// workspace root collapse to the freshest; groups keep first-seen order. The representative is the
     /// member in `preferredEnvironmentId` (the primary environment) when there is one, else the first.
+    /// Remembers the last result: every sidebar build, scope lookup and composer update asks with the
+    /// same projects until one changes.
+    // ponytail: one entry; key by caller if two callers start alternating different project lists
     public static func buildProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode = .repository,
                                           preferredEnvironmentId: String? = nil) -> [ProjectGroup] {
+        let key = GroupsKey(projects: projects, mode: mode, preferred: preferredEnvironmentId)
+        if let hit = groupsCache.withLock({ $0?.key == key ? $0?.groups : nil }) { return hit }
+        let groups = computeProjectGroups(projects, mode: mode, preferredEnvironmentId: preferredEnvironmentId)
+        groupsCache.withLock { $0 = (key, groups) }
+        return groups
+    }
+
+    struct GroupsKey: Equatable, Sendable {
+        var projects: [ProjectShell]
+        var mode: ProjectGroupingMode
+        var preferred: String?
+    }
+    static let groupsCache = OSAllocatedUnfairLock<(key: GroupsKey, groups: [ProjectGroup])?>(initialState: nil)
+
+    static func computeProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode,
+                                             preferredEnvironmentId: String?) -> [ProjectGroup] {
         func freshness(_ p: ProjectShell) -> Int64 { p.updatedAt.epochMs ?? p.createdAt.epochMs ?? 0 }
         func replaces(_ existing: ProjectShell, _ candidate: ProjectShell) -> Bool {
             let delta = freshness(candidate) - freshness(existing)

@@ -364,9 +364,21 @@ final class ComposerController {
     }
 
     /// The merged shell changed: a group may have gained or lost a machine.
+    /// After every shell update. "Run on" depends only on the projects and environments, so a thread
+    /// change (most updates) skips the regrouping.
     func projectsChanged() {
-        if case .draft = target { updateRunOn() }
+        guard case .draft = target else { return }
+        let inputs = RunOnInputs(projects: sidebar?.snapshot?.projects ?? [], environments: sidebarEnvironments)
+        guard inputs != lastRunOnInputs else { return }
+        lastRunOnInputs = inputs
+        updateRunOn()
     }
+
+    private struct RunOnInputs: Equatable {
+        var projects: [ProjectShell]
+        var environments: SidebarEnvironments
+    }
+    private var lastRunOnInputs: RunOnInputs?
 
     /// Points a draft at another member: same draft and local thread id, the member's environment.
     static func retarget(_ session: inout DraftSession, to project: ProjectShell) {

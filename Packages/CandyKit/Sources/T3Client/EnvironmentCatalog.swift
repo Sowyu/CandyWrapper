@@ -111,11 +111,35 @@ public struct EnvironmentCatalog: Sendable {
         var environments: [EnvironmentRegistration] = []
     }
 
+    private struct Header: Decodable { var version: Int }
+
+    public enum CatalogError: Error, Equatable {
+        /// A newer CandyWrapper wrote the document. This build reads it but never overwrites it.
+        case newerVersion(Int)
+    }
+
+    /// Every mutation reads, changes and writes the document under this lock, so two at once (two quick
+    /// "Add" clicks, sign-out racing a switch) can't lose a write. One lock for every catalog value.
+    // ponytail: one process-wide lock for every file; per-file locks if tests or a second catalog contend
+    private static let lock = NSLock()
+
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return try body()
+    }
+
     /// Registrations in the order they were added. A missing file is an empty catalog. A document that
     /// doesn't decode is moved aside, as T3 copies a corrupt one to `document:corrupt:<timestamp>`.
-    public func load() -> [EnvironmentRegistration] {
+    /// A document from a newer version stays where it is (a downgrade must not wipe it).
+    public func load() -> [EnvironmentRegistration] { locked { read() } }
+
+    private func read() -> [EnvironmentRegistration] {
         guard let data = try? Data(contentsOf: file) else { return [] }
-        if let document = try? JSONDecoder.catalog.decode(Document.self, from: data), document.version <= Document.currentVersion {
+        if let header = try? JSONDecoder.catalog.decode(Header.self, from: data), header.version > Document.currentVersion {
+            return (try? JSONDecoder.catalog.decode(Document.self, from: data))?.environments ?? []
+        }
+        if let document = try? JSONDecoder.catalog.decode(Document.self, from: data) {
             return document.environments
         }
         let aside = file.deletingLastPathComponent()
@@ -129,21 +153,23 @@ public struct EnvironmentCatalog: Sendable {
     /// the route with the same origin (registry.ts `register`, routes.ts `upsertRoute`).
     @discardableResult
     public func add(_ registration: EnvironmentRegistration, token: String) throws -> EnvironmentRegistration {
-        let route = registration.httpBaseURL
-        try credentials.save(token: token, environmentId: EnvironmentRoute.connectionId(environmentId: registration.environmentId, route))
-        var all = load()
-        var saved = registration
-        if let i = all.firstIndex(where: { $0.environmentId == registration.environmentId }) {
-            saved = all[i]
-            saved.label = registration.label
-            saved.machine = registration.machine ?? saved.machine
-            saved.routes = EnvironmentRoute.upsert(route, into: saved.routes)
-            all[i] = saved
-        } else {
-            all.append(saved)
+        try locked {
+            let route = registration.httpBaseURL
+            try credentials.save(token: token, environmentId: EnvironmentRoute.connectionId(environmentId: registration.environmentId, route))
+            var all = read()
+            var saved = registration
+            if let i = all.firstIndex(where: { $0.environmentId == registration.environmentId }) {
+                saved = all[i]
+                saved.label = registration.label
+                saved.machine = registration.machine ?? saved.machine
+                saved.routes = EnvironmentRoute.upsert(route, into: saved.routes)
+                all[i] = saved
+            } else {
+                all.append(saved)
+            }
+            try write(all)
+            return saved
         }
-        try write(all)
-        return saved
     }
 
     /// Saves a machine from the T3 Connect account (`RelayConnectionRegistration`). A machine already
@@ -151,26 +177,28 @@ public struct EnvironmentCatalog: Sendable {
     /// (routes.ts:110-117). New machines start switched on.
     @discardableResult
     public func addRelay(_ record: RelayEnvironmentRecord, accountId: String, machine: String? = nil) throws -> EnvironmentRegistration {
-        guard let tunnel = URL(string: record.endpoint.httpBaseUrl), tunnel.host != nil else {
-            throw RelayError(.invalidResponse("Relay returned an environment without an endpoint."), action: .connect)
+        try locked {
+            guard let tunnel = URL(string: record.endpoint.httpBaseUrl), tunnel.host != nil else {
+                throw RelayError(.invalidResponse("Relay returned an environment without an endpoint."), action: .connect)
+            }
+            var all = read()
+            let link = RelayLink(accountId: accountId, endpoint: record.endpoint)
+            var saved: EnvironmentRegistration
+            if let i = all.firstIndex(where: { $0.environmentId == record.environmentId }) {
+                saved = all[i]
+                let direct = saved.routes.filter { !saved.isRelayRoute($0) && EnvironmentRoute.origin($0) != EnvironmentRoute.origin(tunnel) }
+                saved.relay = link
+                saved.routes = direct + [tunnel]
+                saved.machine = machine ?? saved.machine
+                all[i] = saved
+            } else {
+                saved = EnvironmentRegistration(environmentId: record.environmentId, label: record.label, httpBaseURL: tunnel, machine: machine)
+                saved.relay = link
+                all.append(saved)
+            }
+            try write(all)
+            return saved
         }
-        var all = load()
-        let link = RelayLink(accountId: accountId, endpoint: record.endpoint)
-        var saved: EnvironmentRegistration
-        if let i = all.firstIndex(where: { $0.environmentId == record.environmentId }) {
-            saved = all[i]
-            let direct = saved.routes.filter { !saved.isRelayRoute($0) && EnvironmentRoute.origin($0) != EnvironmentRoute.origin(tunnel) }
-            saved.relay = link
-            saved.routes = direct + [tunnel]
-            saved.machine = machine ?? saved.machine
-            all[i] = saved
-        } else {
-            saved = EnvironmentRegistration(environmentId: record.environmentId, label: record.label, httpBaseURL: tunnel, machine: machine)
-            saved.relay = link
-            all.append(saved)
-        }
-        try write(all)
-        return saved
     }
 
     /// Sign-out or an account switch (managedAuth.tsx:46-57): machines reached only through T3 Connect
@@ -178,30 +206,34 @@ public struct EnvironmentCatalog: Sendable {
     /// Returns the removed ids and the registrations that changed.
     @discardableResult
     public func removeRelay(keepingAccount: String? = nil) throws -> (removed: [String], updated: [EnvironmentRegistration]) {
-        var removed: [String] = [], updated: [EnvironmentRegistration] = []
-        var kept: [EnvironmentRegistration] = []
-        for var r in load() {
-            guard let link = r.relay, link.accountId != keepingAccount else { kept.append(r); continue }
-            if r.isRelayOnly {
-                removed.append(r.environmentId)
-                continue
+        try locked {
+            var removed: [String] = [], updated: [EnvironmentRegistration] = []
+            var kept: [EnvironmentRegistration] = []
+            for var r in read() {
+                guard let link = r.relay, link.accountId != keepingAccount else { kept.append(r); continue }
+                if r.isRelayOnly {
+                    removed.append(r.environmentId)
+                    continue
+                }
+                r.routes = r.routes.filter { !r.isRelayRoute($0) }
+                r.relay = nil
+                updated.append(r)
+                kept.append(r)
             }
-            r.routes = r.routes.filter { !r.isRelayRoute($0) }
-            r.relay = nil
-            updated.append(r)
-            kept.append(r)
+            guard !removed.isEmpty || !updated.isEmpty else { return ([], []) }
+            try write(kept)
+            return (removed, updated)
         }
-        guard !removed.isEmpty || !updated.isEmpty else { return ([], []) }
-        try write(kept)
-        return (removed, updated)
     }
 
     /// Forgets the registration and every route's token. There is no server-side logout (protocol.md 4.7).
     public func remove(environmentId: String) throws {
-        let routes = load().first { $0.environmentId == environmentId }?.routes ?? []
-        try write(load().filter { $0.environmentId != environmentId })
-        for route in routes {
-            try credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: environmentId, route))
+        try locked {
+            let routes = read().first { $0.environmentId == environmentId }?.routes ?? []
+            try write(read().filter { $0.environmentId != environmentId })
+            for route in routes {
+                try credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: environmentId, route))
+            }
         }
     }
 
@@ -209,34 +241,40 @@ public struct EnvironmentCatalog: Sendable {
     /// environment through `remove`, so this refuses it.
     @discardableResult
     public func removeRoute(_ route: URL, environmentId: String) throws -> EnvironmentRegistration? {
-        var all = load()
-        guard let i = all.firstIndex(where: { $0.environmentId == environmentId }), all[i].routes.count > 1 else { return nil }
-        let origin = EnvironmentRoute.origin(route)
-        if all[i].isRelayRoute(route) { all[i].relay = nil }
-        all[i].routes = all[i].routes.filter { EnvironmentRoute.origin($0) != origin }
-        try write(all)
-        try credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: environmentId, route))
-        return all[i]
+        try locked {
+            var all = read()
+            guard let i = all.firstIndex(where: { $0.environmentId == environmentId }), all[i].routes.count > 1 else { return nil }
+            let origin = EnvironmentRoute.origin(route)
+            if all[i].isRelayRoute(route) { all[i].relay = nil }
+            all[i].routes = all[i].routes.filter { EnvironmentRoute.origin($0) != origin }
+            try write(all)
+            try credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: environmentId, route))
+            return all[i]
+        }
     }
 
     /// The dragged route order (registry.ts `reorderRoutes`). The same routes in a new order; anything
     /// else is refused. Tokens are keyed by route, so they stay.
     @discardableResult
     public func reorderRoutes(_ routes: [URL], environmentId: String) throws -> EnvironmentRegistration? {
-        var all = load()
-        guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return nil }
-        let origins = { (urls: [URL]) in urls.map(EnvironmentRoute.origin) }
-        guard Set(origins(routes)) == Set(origins(all[i].routes)), routes.count == all[i].routes.count else { return nil }
-        all[i].routes = routes.compactMap { url in all[i].routes.first { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } }
-        try write(all)
-        return all[i]
+        try locked {
+            var all = read()
+            guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return nil }
+            let origins = { (urls: [URL]) in urls.map(EnvironmentRoute.origin) }
+            guard Set(origins(routes)) == Set(origins(all[i].routes)), routes.count == all[i].routes.count else { return nil }
+            all[i].routes = routes.compactMap { url in all[i].routes.first { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } }
+            try write(all)
+            return all[i]
+        }
     }
 
     public func setEnabled(_ enabled: Bool, environmentId: String) throws {
-        var all = load()
-        guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return }
-        all[i].enabled = enabled
-        try write(all)
+        try locked {
+            var all = read()
+            guard let i = all.firstIndex(where: { $0.environmentId == environmentId }) else { return }
+            all[i].enabled = enabled
+            try write(all)
+        }
     }
 
     /// The token for `route`, or for the preferred route.
@@ -246,6 +284,10 @@ public struct EnvironmentCatalog: Sendable {
     }
 
     private func write(_ environments: [EnvironmentRegistration]) throws {
+        if let data = try? Data(contentsOf: file), let header = try? JSONDecoder.catalog.decode(Header.self, from: data),
+           header.version > Document.currentVersion {
+            throw CatalogError.newerVersion(header.version)
+        }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONEncoder.catalog.encode(Document(environments: environments))
         try data.write(to: file, options: .atomic)

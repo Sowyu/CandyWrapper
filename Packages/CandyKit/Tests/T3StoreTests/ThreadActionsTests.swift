@@ -163,6 +163,16 @@ struct OptimisticThreadUpdateTests {
         overlay.reconcile(environmentId: "env", snapshotSequence: 12)
         #expect(overlay.isEmpty)
     }
+
+    @Test func removingAnEnvironmentDropsOnlyItsUpdates() {
+        var overlay = OptimisticThreadOverlay()
+        _ = overlay.begin(.settle, threadId: ThreadId("t"), environmentId: "gone")
+        _ = overlay.begin(.settle, threadId: ThreadId("t"), environmentId: "kept")
+        overlay.remove(environmentId: "gone")
+        let snapshot = ShellSnapshot(schemaVersion: 2, snapshotSequence: 10, threads: [thread("t")])
+        #expect(overlay.apply(snapshot, environmentId: "gone").threads[0].settledOverride == nil)
+        #expect(overlay.apply(snapshot, environmentId: "kept").threads[0].settledOverride == .settled)
+    }
 }
 
 @Suite("Pin order keys")

@@ -67,6 +67,29 @@ final class Harness: @unchecked Sendable {
 struct SupervisorTests {
     let transient = ConnectionFailure.transient("refused")
 
+    /// `ShellSession.stop` right after `start`: its disconnect lands first, so the late connect must not open.
+    @Test func connectAfterAStopLandsDoesNothing() async {
+        let h = Harness([.succeed])
+        let s = ConnectionSupervisor(dependencies: h.dependencies)
+        await s.disconnect()
+        await s.connect(unlessStopped: { true })
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(h.attemptCount == 0)
+        #expect(await s.state.phase == .available)
+    }
+
+    /// The stop lands between the flag check and the connect: the second check disconnects.
+    @Test func aStopDuringConnectEndsDisconnected() async {
+        let h = Harness([.succeed, .succeed])
+        let s = ConnectionSupervisor(dependencies: h.dependencies)
+        let checks = CallCounter()
+        await s.connect(unlessStopped: { await checks.next() > 1 })
+        #expect(await eventually { await s.state.phase == .available })
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await s.currentConnection == nil)
+        #expect(h.attemptCount <= 1)
+    }
+
     @Test func transientFailuresClimbTheLadder() async {
         let h = Harness([.fail(transient), .fail(transient), .fail(transient), .fail(transient)])
         let s = ConnectionSupervisor(dependencies: h.dependencies)
@@ -190,4 +213,9 @@ actor EventLog {
     var events: [SubscriptionEvent] = []
     func append(_ e: SubscriptionEvent) { events.append(e) }
     func count(where p: (SubscriptionEvent) -> Bool) -> Int { events.filter(p).count }
+}
+
+actor CallCounter {
+    var count = 0
+    func next() -> Int { count += 1; return count }
 }

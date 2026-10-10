@@ -59,6 +59,41 @@ struct EnvironmentScopeTests {
         #expect(shells.merged(order: ["a", "b"]) == nil)
     }
 
+    /// A shell update with 1,000 threads rescopes only what changed, and the result equals a full rescope.
+    @Test func anUpdateRescopesOnlyChangedThreads() {
+        var shells = MergedShell()
+        var snapshot = ShellSnapshot(schemaVersion: 1, snapshotSequence: 1, threads: (0..<1_000).map { thread("t\($0)") },
+                                     projects: [project("p")])
+        shells.set(snapshot, environmentId: "a")
+        #expect(shells.lastRescoped == 1_001)
+        snapshot.threads[500].title = "renamed"
+        shells.set(snapshot, environmentId: "a")
+        #expect(shells.lastRescoped == 1)
+        #expect(shells.merged(order: ["a"])?.threads == EnvironmentScope.scope(snapshot, environmentId: "a").threads)
+        // A new thread first shifts every other one; they are still reused.
+        snapshot.threads.insert(thread("new"), at: 0)
+        shells.set(snapshot, environmentId: "a")
+        #expect(shells.lastRescoped == 1)
+        #expect(shells.merged(order: ["a"])?.threads == EnvironmentScope.scope(snapshot, environmentId: "a").threads)
+        snapshot.threads.removeLast()
+        shells.set(snapshot, environmentId: "a")
+        #expect(shells.lastRescoped == 0)
+    }
+
+    /// The remembered groups never outlive a change of projects or primary.
+    @Test func cachedProjectGroupsFollowEveryChange() {
+        let a = [EnvironmentScope.scope(project("p1") { $0.workspaceRoot = "/w/a" }, "local"),
+                 EnvironmentScope.scope(project("p2") { $0.workspaceRoot = "/w/b" }, "remote")]
+        var b = a
+        b[1].workspaceRoot = "/w/a"
+        b[1].repositoryIdentity = identity("github.com/x/a")
+        b[0].repositoryIdentity = identity("github.com/x/a")
+        for (projects, primary) in [(a, "local"), (a, "local"), (b, "local"), (b, "remote"), (a, "remote")] {
+            #expect(SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: primary)
+                == SidebarModel.computeProjectGroups(projects, mode: .repository, preferredEnvironmentId: primary))
+        }
+    }
+
     @Test func sameRepositoryMergesAcrossEnvironmentsWithThePrimaryAsRepresentative() {
         let remote = EnvironmentScope.scope(project("p1") { $0.title = "repo"; $0.workspaceRoot = "/srv/repo"; $0.repositoryIdentity = identity("github.com/x/repo") }, "remote")
         let local = EnvironmentScope.scope(project("p9") { $0.title = "repo"; $0.workspaceRoot = "/Users/me/repo"; $0.repositoryIdentity = identity("github.com/x/repo") }, "local")

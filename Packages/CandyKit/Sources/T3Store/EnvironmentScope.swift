@@ -66,21 +66,66 @@ public enum EnvironmentScope {
 /// `snapshotSequence` means nothing in the merge; each environment's store keeps its own cursor.
 /// Thread order needs nothing extra: T3 sorts threads across environments by timestamp only
 /// (threadSort.ts:98-139), which the sidebar already does.
+///
+/// Each environment keeps its last unscoped shell next to the scoped one, so an update rescopes only
+/// the projects and threads whose value changed and reuses the rest.
 public struct MergedShell: Sendable {
+    private var raw: [String: ShellSnapshot] = [:]
     private var scoped: [String: ShellSnapshot] = [:]
+    /// Projects and threads the last `set` scoped anew (the rest were reused). For tests.
+    public private(set) var lastRescoped = 0
 
     public init() {}
 
-    public mutating func set(_ snapshot: ShellSnapshot, environmentId: String) {
-        scoped[environmentId] = EnvironmentScope.scope(snapshot, environmentId: environmentId)
+    public mutating func set(_ snapshot: ShellSnapshot, environmentId env: String) {
+        guard let oldRaw = raw[env], let oldScoped = scoped[env] else {
+            raw[env] = snapshot
+            scoped[env] = EnvironmentScope.scope(snapshot, environmentId: env)
+            lastRescoped = snapshot.projects.count + snapshot.threads.count + snapshot.archivedThreads.count
+            return
+        }
+        var count = 0
+        var out = snapshot
+        out.projects = Self.rescope(snapshot.projects, oldRaw.projects, oldScoped.projects, &count) { EnvironmentScope.scope($0, env) }
+        out.threads = Self.rescope(snapshot.threads, oldRaw.threads, oldScoped.threads, &count) { EnvironmentScope.scope($0, env) }
+        out.archivedThreads = Self.rescope(snapshot.archivedThreads, oldRaw.archivedThreads, oldScoped.archivedThreads, &count) {
+            EnvironmentScope.scope($0, env)
+        }
+        raw[env] = snapshot
+        scoped[env] = out
+        lastRescoped = count
     }
 
-    public mutating func remove(_ environmentId: String) { scoped[environmentId] = nil }
+    /// `new` scoped, reusing the scoped copy of every item equal to its previous value. Items usually
+    /// keep their place, so that is checked first; the id index is built only when one moved.
+    private static func rescope<T: Identifiable & Equatable>(_ new: [T], _ oldRaw: [T], _ oldScoped: [T], _ count: inout Int,
+                                                             scope: (T) -> T) -> [T] where T.ID: Hashable {
+        // Unchanged keeps the same array, so later equality checks (the composer's projects) stay cheap.
+        if new == oldRaw { return oldScoped }
+        var index: [T.ID: Int]?
+        return new.enumerated().map { i, item in
+            if i < oldRaw.count, oldRaw[i] == item { return oldScoped[i] }
+            if index == nil { index = Dictionary(oldRaw.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+            if let j = index?[item.id], oldRaw[j] == item { return oldScoped[j] }
+            count += 1
+            return scope(item)
+        }
+    }
+
+    public mutating func remove(_ environmentId: String) {
+        raw[environmentId] = nil
+        scoped[environmentId] = nil
+    }
 
     /// The environments in `order` that have a shell, concatenated. Nil when none has one.
     public func merged(order: [String]) -> ShellSnapshot? {
         let parts = order.compactMap { scoped[$0] }
         guard !parts.isEmpty else { return nil }
+        if parts.count == 1 {
+            var only = parts[0]
+            only.snapshotSequence = 0
+            return only
+        }
         var merged = ShellSnapshot(schemaVersion: parts.map(\.schemaVersion).max() ?? 1, snapshotSequence: 0)
         for part in parts {
             merged.projects += part.projects

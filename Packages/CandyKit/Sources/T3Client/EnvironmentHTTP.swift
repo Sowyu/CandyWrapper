@@ -40,8 +40,9 @@ public struct EnvironmentHTTP: Sendable {
     /// T3's auth request timeout (authorization/remote.ts:25).
     public var timeout: TimeInterval = 10
     /// Headers for an authenticated request, used instead of `Bearer <token>` when set. T3 Connect
-    /// sets it to `Authorization: DPoP <token>` plus a proof for that method and URL.
-    public var authorize: (@Sendable (_ method: String, _ url: URL) async throws -> [String: String])?
+    /// sets it to `Authorization: DPoP <token>` plus a proof for that method and URL. After a 401,
+    /// `send` asks once more with `rejected` set to the refused token, then retries.
+    public var authorize: (@Sendable (_ method: String, _ url: URL, _ rejected: String?) async throws -> [String: String])?
 
     /// Cookie-free ephemeral session. A cookie would beat the Authorization header (protocol.md 4.2).
     public static let defaultSession: URLSession = {
@@ -174,12 +175,12 @@ public struct EnvironmentHTTP: Sendable {
         return c.url!
     }
 
-    private func setAuthorization(_ request: inout URLRequest, token: String) async throws {
+    private func setAuthorization(_ request: inout URLRequest, token: String, rejected: String? = nil) async throws {
         guard let authorize, let url = request.url else {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             return
         }
-        for (name, value) in try await authorize(request.httpMethod ?? "GET", url) { request.setValue(value, forHTTPHeaderField: name) }
+        for (name, value) in try await authorize(request.httpMethod ?? "GET", url, rejected) { request.setValue(value, forHTTPHeaderField: name) }
     }
 
     private func send<T: Decodable>(_ method: String, _ path: String, token: String?, body: Data? = nil,
@@ -200,7 +201,17 @@ public struct EnvironmentHTTP: Sendable {
         if let token { try await setAuthorization(&request, token: token) }
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         request.httpBody = body
+        do {
+            return try await perform(request, as: T.self)
+        } catch EnvironmentHTTPError.status(401, _) where authorize != nil && token != nil {
+            // The DPoP token was refused: once more with a fresh one (environmentHttpAuth.ts:148-207).
+            let sent = request.value(forHTTPHeaderField: "Authorization")?.split(separator: " ").last.map(String.init)
+            try await setAuthorization(&request, token: token!, rejected: sent)
+            return try await perform(request, as: T.self)
+        }
+    }
 
+    private func perform<T: Decodable>(_ request: URLRequest, as: T.Type) async throws -> T {
         let data: Data, response: URLResponse
         do {
             (data, response) = try await session.data(for: request)

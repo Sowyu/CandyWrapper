@@ -117,6 +117,19 @@ public struct ConnectionsActions {
     public var removeRoute: (String, ConnectionsPageModel.Route) -> Void = { _, _ in }
     /// Copies text and shows T3's toast: (text, toast title, toast description).
     public var copy: (String, String, String) -> Void = { _, _, _ in }
+    /// The same for a pairing credential, which clipboard managers should skip.
+    public var copySecret: (String, String, String) -> Void = { _, _, _ in }
+
+    /// Puts `text` on the pasteboard with the nspasteboard.org concealed and transient markers, which
+    /// clipboard managers read as "don't record this".
+    @MainActor
+    public static func copySecret(_ text: String, to pasteboard: NSPasteboard = .general) {
+        pasteboard.clearContents()
+        pasteboard.declareTypes([.string, .init("org.nspasteboard.ConcealedType"), .init("org.nspasteboard.TransientType")], owner: nil)
+        pasteboard.setString(text, forType: .string)
+        pasteboard.setString("", forType: .init("org.nspasteboard.ConcealedType"))
+        pasteboard.setString("", forType: .init("org.nspasteboard.TransientType"))
+    }
     /// A T3 Connect row's `Add` or `Add route`.
     public var addCloud: (String) -> Void = { _ in }
     /// `Try again` after a failed discovery.

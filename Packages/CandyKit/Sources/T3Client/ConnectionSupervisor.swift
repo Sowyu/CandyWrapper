@@ -209,6 +209,15 @@ public actor ConnectionSupervisor {
         evaluate()
     }
 
+    /// Connects unless the owner stopped meanwhile. An owner that stops sets its flag at once and sends
+    /// `disconnect` in its own task, which can land here before or after this call; checking the flag
+    /// on both sides of `connect` leaves a stopped owner disconnected in every order.
+    public func connect(unlessStopped isStopped: @Sendable () async -> Bool) async {
+        guard await !isStopped() else { return }
+        connect()
+        if await isStopped() { disconnect() }
+    }
+
     /// The user's "Reconnect" button: resets the ladder and tries now, or quick-probes a live session.
     public func retryNow() {
         failures = 0

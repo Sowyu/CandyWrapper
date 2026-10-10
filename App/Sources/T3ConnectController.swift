@@ -26,6 +26,8 @@ final class T3ConnectController {
     private(set) var profile: ClerkProfile?
     private(set) var avatar: CGImage?
     private var observers: [UUID: () -> Void] = [:]
+    /// The account being created, so concurrent callers share it.
+    private var creating: Task<T3ConnectAccount?, Never>?
 
     private var modal: ModalHost?
     private var flow: T3ConnectSignInFlow?
@@ -120,18 +122,25 @@ final class T3ConnectController {
     }
 
     /// The account, created on first use. Keychain work runs off the main thread.
+    /// Single flight: launch and a quick sign-in click share one creation.
     private func ensureAccount() async -> T3ConnectAccount? {
         if let account { return account }
+        if let creating { return await creating.value }
         let identity = self.identity
-        do {
-            let made = try await Task.detached { try T3ConnectAccount.production(identity: identity, device: .current) }.value
-            account = made
-            environments.t3Connect = made.authorizer
-            return made
-        } catch {
-            NSLog("T3 Connect unavailable: %@", String(describing: error))
-            return nil
+        let task = Task { () -> T3ConnectAccount? in
+            do {
+                let made = try await Task.detached { try T3ConnectAccount.production(identity: identity, device: .current) }.value
+                account = made
+                environments.t3Connect = made.authorizer
+                return made
+            } catch {
+                NSLog("T3 Connect unavailable: %@", String(describing: error))
+                return nil
+            }
         }
+        creating = task
+        defer { creating = nil }
+        return await task.value
     }
 
     // MARK: Sign in
@@ -192,6 +201,16 @@ final class T3ConnectController {
         avatar = nil
         changed()
         loadProfile()
+        // Clerk ended the last session server-side and another account signed in: the old account's
+        // relay routes would be refused forever (managedAuth.tsx:46-57 drops them on an account switch).
+        if let userId = clerkAccount.userId {
+            let catalog = environments.catalog, environments = self.environments
+            Task {
+                guard let result = try? await Task.detached(operation: { try catalog.removeRelay(keepingAccount: userId) }).value,
+                      !result.removed.isEmpty || !result.updated.isEmpty else { return }
+                await environments.appliedRelayRemoval(removed: result.removed, updated: result.updated)
+            }
+        }
         // ponytail: T3 opens "Set up T3 Connect" (publish this machine, connect devices) here; CandyWrapper
         // hosts no server to publish, so it goes straight to the account's machines
         refreshMachines()
@@ -224,6 +243,7 @@ final class T3ConnectController {
                 let result = try await account.signOut(catalog: catalog)
                 await environments.appliedRelayRemoval(removed: result.removed, updated: result.updated)
             } catch {
+                environments.detachRelaySessions()
                 toast?("Could not sign out", "\(error)", .error)
             }
             signedIn = nil

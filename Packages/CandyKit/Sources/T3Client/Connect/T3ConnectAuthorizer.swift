@@ -170,10 +170,10 @@ public actor T3ConnectAuthorizer {
 
     /// `Authorization` and `DPoP` headers for one later HTTP call to the environment
     /// (`Authorization: DPoP <token>` plus a fresh proof for that exact URL, with `ath`).
-    /// On a 401 `invalid_credential`, call `token(environmentId:rejected:)` and retry once with new
-    /// headers (client-runtime/src/state/environmentHttpAuth.ts:148-207).
-    public func authorizationHeaders(environmentId: String, method: String, url: URL) async throws -> [String: String] {
-        let token = try await token(environmentId: environmentId)
+    /// After a 401, `EnvironmentHTTP` asks again with the refused token as `rejected`, which skips the
+    /// cache, and retries once (client-runtime/src/state/environmentHttpAuth.ts:148-207).
+    public func authorizationHeaders(environmentId: String, method: String, url: URL, rejected: String? = nil) async throws -> [String: String] {
+        let token = try await token(environmentId: environmentId, rejected: rejected)
         return ["Authorization": "DPoP \(token.accessToken)",
                 "DPoP": try DPoP.proof(method: method, url: url, accessToken: token.accessToken, key: relay.key, now: now())]
     }

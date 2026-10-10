@@ -15,9 +15,11 @@ final class SettingsController {
     private let threadPanel: NSView
     let environments: Environments
     let t3: T3ConnectController
-    private let nav = SettingsSidebarView()
-    private let page = SettingsPageView()
-    private let connections = ConnectionsSettingsView()
+    // Built on first open: an app that never opens Settings never pays for its views.
+    private lazy var nav = SettingsSidebarView()
+    private lazy var page = SettingsPageView()
+    private lazy var connections = ConnectionsSettingsView()
+    private var built = false
     private(set) var isOpen = false
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
@@ -51,11 +53,19 @@ final class SettingsController {
         self.threadPanel = threadPanel
         self.environments = environments
         self.t3 = t3
+        environments.observe { [weak self] in self?.refresh() }
+        t3.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
+        t3.observe { [weak self] in self?.refresh() }
+    }
+
+    private func buildViews() {
+        guard !built else { return }
+        built = true
         page.page = connections
         page.header.section = .connections
         page.onEscape = { [weak self] in self?.close() }
         nav.onBack = { [weak self] in self?.close() }
-        nav.onToggleSidebar = { [weak layout] in layout?.toggle() }
+        nav.onToggleSidebar = { [weak layout = self.layout] in layout?.toggle() }
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
@@ -68,6 +78,10 @@ final class SettingsController {
             NSPasteboard.general.setString(text, forType: .string)
             self?.toast(title, description, .success)
         }
+        actions.copySecret = { [weak self] text, title, description in
+            ConnectionsActions.copySecret(text)
+            self?.toast(title, description, .success)
+        }
         actions.addCloud = { [weak t3] id in t3?.add(id) }
         actions.retryCloud = { [weak t3] in t3?.refreshMachines() }
         actions.setHostSwitch = { [weak self] id, on in self?.setHostSwitch(id, on) }
@@ -78,7 +92,6 @@ final class SettingsController {
         actions.revokeClient = { [weak self] id in self?.revokeClient(id) }
         actions.revokeOtherClients = { [weak self] in self?.revokeOtherClients() }
         connections.actions = actions
-        environments.observe { [weak self] in self?.refresh() }
         nav.onSignIn = { [weak self] in
             guard let self, let window = self.window else { return }
             self.t3.presentSignIn(in: window)
@@ -87,14 +100,13 @@ final class SettingsController {
             guard let self, let window = self.window else { return }
             self.t3.showAccountMenu(from: trigger, window: window)
         }
-        t3.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
-        t3.observe { [weak self] in self?.refresh() }
     }
 
     // MARK: Open and close
 
     func open() {
         guard !isOpen, let layout else { return }
+        buildViews()
         isOpen = true
         nav.windowedMac = (threadSidebar as? SidebarContentView)?.windowedMac ?? true
         layout.sidebar.content = nav
@@ -131,6 +143,17 @@ final class SettingsController {
     // MARK: Model
 
     func refreshPage() { refresh() }
+
+    /// The 1 s tick: rebuilds only the access section and updates the page only when it changed.
+    func refreshAccess() {
+        guard isOpen, environments.primaryId != nil else { return }
+        let access = accessModel()
+        guard access != connections.model.access else { return }
+        var model = connections.model
+        model.access = access
+        connections.set(model)
+        page.pageChanged()
+    }
 
     private func refresh() {
         guard isOpen else { return }
@@ -188,6 +211,7 @@ final class SettingsController {
     // MARK: Actions
 
     func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
+        guard isOpen else { return }
         page.toasts.show(ToastView(title: title, message: message, kind: kind))
     }
 
