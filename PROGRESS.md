@@ -134,7 +134,6 @@ Gotchas found so far:
 
 ## Waiting on the user
 
-- M6 T3 Connect sign-in route (asked 2026-10-10): T3's Clerk only redirects to `t3code://app/`, so the official in-app sign-in can't come back to CandyWrapper. Options: the CLI's public OAuth client with PKCE in the system browser and a loopback callback (what `t3 connect` does, no webview, recommended); claiming `t3code://` (clashes with the official app if both are installed); loading the hosted web app in a WKWebView and reading its session (fragile).
 - Screen Recording permission: granted 2026-10-10.
 - The user hasn't confirmed the Allow Remote Access design yet (see Decisions). Built as proposed.
 - GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
@@ -147,6 +146,7 @@ Gotchas found so far:
 
 ## Decisions made
 
+- 2026-10-10: T3 Connect sign-in uses the CLI route, T3's public CLI OAuth client with PKCE in the system browser and the loopback callback (`http://127.0.0.1:34338/callback`), no webview. The user left the choice to us ("whatever is best"). The alternatives were claiming `t3code://` (clashes with the official app) and reading the hosted web app's session in a WKWebView (fragile). Condition: the relay must accept the CLI OAuth token for listing and connecting; WP6.2 reports on that.
 - 2026-10-09: The app never starts a second server on a home that has one. `LocalServerDiscovery.discover` waits up to 20 s, then shows an error, when the runtime file names a live process that doesn't answer, or when T3's launch agent (`~/Library/LaunchAgents/com.t3tools.t3code.service.plist`, `T3CODE_HOME`) owns the home. On this Mac the service owns `~/.t3`, so the app only ever joins the live server there.
 
 - 2026-10-09: Allow Remote Access (app menu). On keeps the app's own server running while CandyWrapper is idle, so the user's phone can reach this Mac. Off lets it stop after 10 idle minutes. Until the user picks, it follows whether T3 Connect is linked (`GET /api/connect/link-state`). Proposed to the user after they asked about reaching the Mac from Android; not explicitly confirmed.
