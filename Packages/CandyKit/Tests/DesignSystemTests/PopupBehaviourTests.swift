@@ -203,3 +203,22 @@ struct PopupBehaviourTests {
         #expect(!MenuPopupView.inSafeTriangle(CGPoint(x: 110, y: 190), from: CGPoint(x: 100, y: 100), toward: sub))
     }
 }
+
+@MainActor
+struct MenuRadioCloseTests {
+    /// base-ui `closeOnClick`: a radio item that closes on click runs its action; without it,
+    /// only the radio state and `onToggle` change (the diff panel's turn picker used `action`
+    /// and did nothing).
+    @Test func radioItemsRunTheirActionWhenTheyCloseOnClick() {
+        var ran: [String] = []
+        var closing = MenuItem("Turn 2", kind: .radio(false))
+        closing.closesOnClick = true
+        closing.action = { ran.append("closing") }
+        var staying = MenuItem("Turn 1", kind: .radio(true))
+        staying.action = { ran.append("staying") }
+        let menu = MenuPopupView(items: [staying, closing])
+        menu.activate(1)
+        menu.activate(0)
+        #expect(ran == ["closing"])
+    }
+}

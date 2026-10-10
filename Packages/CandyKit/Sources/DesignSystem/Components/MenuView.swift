@@ -25,6 +25,9 @@ public struct MenuItem {
     /// Called on activation. Checkbox and radio items get their new state through `onToggle`.
     public var action: (@MainActor () -> Void)?
     public var onToggle: (@MainActor (Bool) -> Void)?
+    /// base-ui `closeOnClick` on checkbox and radio items: picking one runs `action` and closes
+    /// the menu. Off by default, as in base-ui.
+    public var closesOnClick = false
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -290,6 +293,11 @@ public final class MenuPopupView: DSView, PopupContent {
                 if !on {
                     for j in radioGroup(of: i) { items[j].kind = .radio(j == i); rows[j].item = items[j] }
                     items[i].onToggle?(true)
+                }
+                if items[i].closesOnClick {
+                    items[i].action?()
+                    onChoose?(i)
+                    closeTree()
                 }
             } else {
                 items[i].action?()
