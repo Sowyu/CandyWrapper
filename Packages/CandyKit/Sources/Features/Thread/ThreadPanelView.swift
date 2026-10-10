@@ -83,6 +83,12 @@ public final class ThreadPanelView: DSView {
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
     public let queue = QueuedRunsView()
+    /// The runtime request docked between the queue and the composer (ChatComposer.tsx's top
+    /// drawer). Show one through `drawer`; the composer controller configures them.
+    public let approvalPanel = ApprovalPanelView()
+    public let questionPanel = QuestionPanelView()
+    public enum Drawer: Sendable { case none, approval, question }
+    public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
     /// Showing the new-thread draft page instead of a thread.
     public private(set) var isDraft = false
@@ -122,7 +128,12 @@ public final class ThreadPanelView: DSView {
         addSubview(hero)
         composer.isHidden = true
         queue.isHidden = true
+        approvalPanel.isHidden = true
+        questionPanel.isHidden = true
+        // Back to front: queue, request panel, composer (each slides under the next).
         addSubview(queue)
+        addSubview(approvalPanel)
+        addSubview(questionPanel)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         queue.onHeightChange = { [weak self] in self?.needsLayout = true }
@@ -265,13 +276,31 @@ public final class ThreadPanelView: DSView {
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
-        // The queue slides 17pt under the composer, 22pt in from each side (ComposerBanner.Attachment).
-        let queueHeight = composer.isHidden || isDraft ? 0 : queue.preferredHeight
+        // Attachments, 22pt in from each side, each sliding 17pt under the one below it: the
+        // request panel under the composer, the queue under the panel (ComposerBanner.Column).
+        let docked = !composer.isHidden && !isDraft
+        let bannerX = x + ComposerBannerView.drawerInset
+        let bannerWidth = max(0, width - 2 * ComposerBannerView.drawerInset)
+        let overlap = ComposerBannerView.overlap
+        var top = y
+        let shown: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
+        approvalPanel.isHidden = shown !== approvalPanel
+        questionPanel.isHidden = shown !== questionPanel
+        if let shown {
+            // `max-h-[min(24rem,40dvh)]` for the question body.
+            questionPanel.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
+            shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = shown.frame.minY
+        }
+        let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
-        queue.frame = NSRect(x: x + QueuedRunsView.inset, y: y - queueHeight + QueuedRunsView.overlap,
-                             width: max(0, width - 2 * QueuedRunsView.inset), height: queueHeight)
-        let above = queueHeight == 0 ? 0 : queueHeight - QueuedRunsView.overlap
-        let inset = composer.isHidden || isDraft ? 0 : 8 + above + height + 20
+        queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
+        if queueHeight > 0 { top = queue.frame.minY }
+        approvalPanel.joinsAbove = queueHeight > 0
+        questionPanel.joinsAbove = queueHeight > 0
+        let above = y - top
+        let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }
     }

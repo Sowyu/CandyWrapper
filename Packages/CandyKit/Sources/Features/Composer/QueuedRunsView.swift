@@ -6,16 +6,10 @@ import T3Protocol
 /// a header that folds the list, then one row per queued message with a reorder grip, the text,
 /// Edit, Steer and Remove. J-composer-visuals section 7, behavior I-composer-flow 4.5 to 4.7.
 ///
-/// The banner surface is the composer's glass with a 1px outline and 18px top corners; its
-/// bottom 17px slide under the composer (`-mb-[calc(1rem+1px)]`) and the bottom 16px of the
-/// fill are masked away. The parent places it `overlap` points into the composer and 22 in from
-/// each side, below the composer in z-order.
-// ponytail: draws its own banner surface; share it with the approval and question panels (Composer/Panels) once both land
-public final class QueuedRunsView: DSView {
-    /// `--chat-composer-attachment-overlap`: 1rem + 1px under the composer.
-    public static let overlap: CGFloat = 17
-    /// `--chat-composer-drawer-inset`: 1.375rem on each side.
-    public static let inset: CGFloat = 22
+/// The surface is T3's shared `ComposerBanner.Root` (neutral), so this is a `ComposerBannerView`
+/// like the approval and question panels. The parent places it `overlap` points into whatever
+/// sits below it (the composer or a request panel) and `drawerInset` in from each side.
+public final class QueuedRunsView: ComposerBannerView {
     static let row: CGFloat = 24, pad: CGFloat = 4, listMax: CGFloat = 128
 
     public var state = ComposerLogic.QueueState() { didSet { if state != oldValue { rebuild() } } }
@@ -45,13 +39,6 @@ public final class QueuedRunsView: DSView {
         return min(Self.listMax, n * Self.row + (n - 1))
     }
 
-    // Surface: the clip cuts the glass and outline 16px above the bottom (`mask-t-from-4`).
-    private let clip = DSView()
-    private let glass = DSView()
-    private let outline = DSView()
-    /// Dark only: `composer-seam-above`, 10px of black/18% fading up from the overlap line.
-    private let seam = CAGradientLayer()
-
     private let header = HeaderRow()
     private let scroll = NSScrollView()
     private let list = DSView()
@@ -59,24 +46,8 @@ public final class QueuedRunsView: DSView {
     private var drag: (index: Int, insert: Int?)?
     private let insertLine = DSView()
 
-    public override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        clip.clipsToBounds = true
-        addSubview(clip)
-        // The composer's glass: `card` / `surface-raised` at 80% over a 12px blur, saturate 1.14.
-        glass.layerUsesCoreImageFilters = true
-        glass.layer?.cornerRadius = 18
-        glass.layer?.masksToBounds = true
-        if let blur = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 12]),
-           let saturate = CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 1.14, "inputBrightness": 0, "inputContrast": 1]) {
-            glass.layer?.backgroundFilters = [saturate, blur]
-        }
-        clip.addSubview(glass)
-        outline.layer?.cornerRadius = 18
-        outline.layer?.borderWidth = 1
-        clip.addSubview(outline)
-        clip.layer?.addSublayer(seam)
-
+    public init() {
+        super.init(variant: .neutral)
         header.action = { [weak self] in self?.toggle() }
         addSubview(header)
         scroll.drawsBackground = false
@@ -158,26 +129,13 @@ public final class QueuedRunsView: DSView {
     // MARK: Drawing and layout
 
     public override func updateLayer() {
-        let dark = effectiveAppearance.isDark
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        glass.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
-        outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
-        seam.isHidden = !dark
-        seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
+        super.updateLayer()
         insertLine.layer?.backgroundColor = Themed.color(\.primary, 0.7).cgColor(in: self)
-        CATransaction.commit()
     }
 
     public override func layout() {
         super.layout()
-        let w = bounds.width, h = bounds.height
-        clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - 16))
-        glass.frame = NSRect(x: 0, y: 0, width: w, height: h)
-        outline.frame = glass.frame
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        // Flipped: the gradient runs from y (top, clear) to the overlap line (black/18%).
-        seam.frame = CGRect(x: 0, y: h - Self.overlap - 10, width: w, height: 10)
-        CATransaction.commit()
+        let w = bounds.width
         let inner = w - 2 * Self.pad
         header.frame = NSRect(x: Self.pad, y: Self.pad, width: inner, height: Self.row)
         scroll.frame = NSRect(x: Self.pad, y: Self.pad + Self.row, width: inner, height: listHeight)

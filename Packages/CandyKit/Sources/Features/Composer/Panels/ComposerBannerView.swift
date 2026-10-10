@@ -18,8 +18,13 @@ public class ComposerBannerView: DSView {
     static let radius: CGFloat = 18
 
     let variant: Variant
+    /// Docked under another attachment (the queue strip): no top corners and no top border, so
+    /// the two share one outline (ComposerBanner.Attachment's adjacent-sibling rule).
+    public var joinsAbove = false { didSet { if joinsAbove != oldValue { needsLayout = true } } }
     /// Clips the surface 16px above the bottom (the mask).
     private let clip = DSView()
+    /// The backdrop blur under the 80% fill.
+    private let blur = BackdropBlurView()
     private let surface = DSView()
     private let tint = CALayer()
     /// Dark only: `--background-image-composer-seam-above`, a 10px shade fading up from the seam.
@@ -31,12 +36,9 @@ public class ComposerBannerView: DSView {
         clipsToBounds = true
         clip.clipsToBounds = true
         addSubview(clip)
-        // Glass: the composer surface at 80% over a backdrop blur (12px light, 16px dark; one value here).
-        surface.layerUsesCoreImageFilters = true
-        if let blur = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 12]),
-           let saturate = CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 1.14, "inputBrightness": 0, "inputContrast": 1]) {
-            surface.layer?.backgroundFilters = [saturate, blur]
-        }
+        // Glass: the composer surface at 80% over a 12px backdrop blur, saturate 1.14.
+        blur.cornerRadius = Self.radius
+        clip.addSubview(blur)
         surface.layer?.cornerRadius = Self.radius
         surface.layer?.masksToBounds = true
         surface.layer?.borderWidth = 1
@@ -66,12 +68,17 @@ public class ComposerBannerView: DSView {
         super.layout()
         let w = bounds.width, h = bounds.height
         clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - 16))
-        // Taller than the clip so the bottom corners never show.
-        surface.frame = NSRect(x: 0, y: 0, width: w, height: h + Self.radius)
+        // Taller than the clip so the bottom corners never show. Joined: 1pt above the clip, so
+        // the top border falls outside it, and square.
+        let top: CGFloat = joinsAbove ? -1 : 0
+        surface.frame = NSRect(x: 0, y: top, width: w, height: h + Self.radius - top)
+        blur.frame = surface.frame
+        surface.layer?.cornerRadius = joinsAbove ? 0 : Self.radius
+        blur.cornerRadius = joinsAbove ? 0 : Self.radius
         CATransaction.begin(); CATransaction.setDisableActions(true)
         tint.frame = surface.bounds
         // The shade sits just above the overlap line, darkest at the seam.
-        seam.frame = CGRect(x: 0, y: h - Self.overlap - 10, width: w, height: 10)
+        seam.frame = CGRect(x: 0, y: h - Self.overlap - 10 - top, width: w, height: 10)
         seam.startPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 0 : 1)
         seam.endPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 1 : 0)
         CATransaction.commit()

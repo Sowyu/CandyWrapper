@@ -57,6 +57,17 @@ final class ComposerPrimaryButton: ControlView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds
         highlight.frame = bounds
+        // 32 normally, 28 as the question footer's Stop (`size-7`).
+        let r = bounds.height / 2
+        if r > 0, layer?.cornerRadius != r {
+            layer?.cornerRadius = r
+            fill.cornerRadius = r
+            art.layer?.cornerRadius = r
+            let crescent = CGMutablePath()
+            crescent.addEllipse(in: bounds)
+            crescent.addEllipse(in: bounds.offsetBy(dx: 0, dy: 1))
+            highlight.path = crescent
+        }
         CATransaction.commit()
         art.frame = bounds
         if let icon {

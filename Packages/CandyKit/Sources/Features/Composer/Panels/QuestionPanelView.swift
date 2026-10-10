@@ -54,7 +54,10 @@ public final class QuestionPanelView: ComposerBannerView {
     private let headerLabel = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
     private let collapsedQuestion = glassLabel(font: DSFont.ui(12), color: Themed.color(\.secondaryLabel), lineHeight: 16)
     private let counter = glassLabel(font: SB.tabular(10, .medium), color: Themed.color(\.mutedForeground), lineHeight: 14)
-    private let toggle = ButtonView(nil, icon: .chevronDown, variant: .ghost, size: .iconXs)
+    /// `ComposerBanner.ToggleIcon`: a ghost icon-xs button drawn `pointer-events-none`, so only
+    /// its chevron (ghost icon color) shows and the header row takes the click.
+    private let chevronDown = IconView(name: .chevronDown, size: 14, strokeColor: Themed.color(\.contrastMutedForeground))
+    private let chevronUp = IconView(name: .chevronUp, size: 14, strokeColor: Themed.color(\.contrastMutedForeground))
     private let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
 
     private let body = DSView()
@@ -69,10 +72,9 @@ public final class QuestionPanelView: ComposerBannerView {
         addSubview(header)
         [headerLabel, collapsedQuestion, counter].forEach(addSubview)
         header.scalesWhenPressed = false
-        // T3's chevron is decoration over the header button; here it toggles too.
-        toggle.iconSize = 14
-        toggle.action = { [weak self] in self?.toggleCollapsed() }
-        addSubview(toggle)
+        chevronUp.isHidden = true
+        addSubview(chevronDown)
+        addSubview(chevronUp)
         dismiss.iconSize = 14
         dismiss.setAccessibilityLabel("Dismiss question without answering")
         TooltipController.attach(to: dismiss, text: "Dismiss question without answering")
@@ -138,7 +140,19 @@ public final class QuestionPanelView: ComposerBannerView {
     private var isCollapsed: Bool { collapsedQuestionId != nil && collapsedQuestionId == session?.progress.activeQuestion?.id }
     private var keysActive: Bool { !responseDisabled && !isCollapsed }
 
+    /// The whole header row is one button: its labels and chevron pass clicks to it; only the
+    /// dismiss X keeps its own.
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard let hit, hit !== header, hit !== dismiss, !hit.isDescendant(of: dismiss), !hit.isDescendant(of: scroll),
+              header.frame.contains(convert(point, from: superview)) else { return hit }
+        return header
+    }
+
     public override var acceptsFirstResponder: Bool { true }
+    /// A click on the card's text moves focus out of the editor, like a browser blurring the
+    /// contenteditable, so the number keys work next.
+    public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
     public override func keyDown(with event: NSEvent) {
         if !handleKey(event) { super.keyDown(with: event) }
     }
@@ -190,7 +204,8 @@ public final class QuestionPanelView: ComposerBannerView {
         counter.text = "\(progress.questionIndex + 1)/\(count)"
         counter.isHidden = count <= 1
         // `rotate-180` when collapsed: the up chevron.
-        toggle.icon = collapsed ? .chevronUp : .chevronDown
+        chevronDown.isHidden = collapsed
+        chevronUp.isHidden = !collapsed
         header.toolTip = collapsed ? "Show the question and its options" : "Hide the question and its options"
         dismiss.isHidden = !session.request.dismissible
         dismiss.isEnabled = !isResponding
@@ -245,7 +260,7 @@ public final class QuestionPanelView: ComposerBannerView {
             dismiss.frame = NSRect(x: right - 24, y: pad, width: 24, height: 24)
             right -= 24 + 4
         }
-        toggle.frame = NSRect(x: right - 24, y: pad, width: 24, height: 24)
+        for chevron in [chevronDown, chevronUp] { chevron.frame = NSRect(x: right - 19, y: pad + 5, width: 14, height: 14) }
         right -= 24
         if !counter.isHidden {
             let cw = ceil(counter.textWidth)

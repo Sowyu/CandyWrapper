@@ -122,4 +122,62 @@ struct PanelsFidelityTests {
         #expect(submitted?["answers"] == .object([
             Self.purpose.id: .string("Query data"), Self.language.id: .string("Rust please")]))
     }
+
+    /// The docked states in the real thread panel: the banner in the drawer slot and the composer
+    /// under it (66 tall with an approval; `pt-2`, Stop and the Next pill with a question). The
+    /// band runs from the banner's top to the panel's bottom.
+    @Test func dockedInPanel() throws {
+        try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
+        var lines: [String] = [], images = ""
+        let pickers = PickersPreview.pickers()
+        for reference in ["05-approval-request", "06-user-input-request"] {
+            for theme in ["light", "dark"] {
+                let dark = theme == "dark"
+                let panel = ComposerFidelityTests.panel(width: Self.panelWidth, dark: dark)
+                let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
+                panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
+                panel.composer.footerControls = [pickers.controlsView]
+                panel.composer.runState = ComposerLogic.RunState(activeRunId: RunId("run"), running: true)
+                var placeholder = ComposerLogic.PlaceholderInput()
+                if reference == "05-approval-request" {
+                    panel.approvalPanel.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil,
+                        detail: "approval-demo.txt", appName: nil, options: nil, canRespond: true), pendingCount: 1, threadId: "t")
+                    panel.drawer = .approval
+                    placeholder.approvalPending = true
+                    panel.composer.pending = .approval
+                } else {
+                    panel.questionPanel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [Self.purpose, Self.language],
+                        responseCapability: "live", dismissible: false), threadId: "t")
+                    panel.drawer = .question
+                    placeholder.questionChoiceOnly = false
+                    panel.composer.pending = .question(.init(label: "Next question", compactLabel: "Next", enabled: false,
+                                                             showsPrevious: false, responding: false, showsAttach: true))
+                }
+                panel.composer.placeholderInput = placeholder
+                panel.layoutSubtreeIfNeeded()
+                panel.timeline.scroll(toFraction: 1)
+                let banner: NSView = reference == "05-approval-request" ? panel.approvalPanel : panel.questionPanel
+                let top = banner.frame.minY - 8
+                let rendered = Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
+                let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
+                    "design/reference/\(reference).\(theme).png"))))
+                let w = Int(Self.panelWidth * 2), h = Int((780 - top) * 2)
+                let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: CGRect(x: full.pixelsWide - w, y: Int(top * 2), width: w, height: h))!)
+                let ours = NSBitmapImageRep(cgImage: rendered.cgImage!.cropping(to: CGRect(x: 0, y: Int(top * 2), width: w, height: h))!)
+                let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [("all", 0, h / 2)])
+                let base = "\(reference).docked.\(theme)"
+                try ref.representation(using: .png, properties: [:])!.write(to: Self.out.appendingPathComponent("\(base).ref.png"))
+                try Snapshot.writePNG(ours, to: Self.out.appendingPathComponent("\(base).ours.png"))
+                try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent("\(base).diff.png"))
+                let line = "\(base): \(String(format: "%.2f", total * 100))% differ, composer \(panel.composer.frame.height) tall"
+                print("panels", line)
+                lines.append(line)
+                images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='panels/\(base).\($0).png'>" }.joined() + "</p>"
+                // Light carries the composer's drop shadow, which offscreen snapshots don't draw (about 5 points of it).
+                #expect(total < 0.09, "\(line)")
+            }
+        }
+        let html = "<!doctype html><meta charset=utf-8><title>Docked panels</title><body style='font:13px -apple-system'>" + images
+        try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-panels-docked.html"), atomically: true, encoding: .utf8)
+    }
 }
