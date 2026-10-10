@@ -278,6 +278,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     private let icon = IconView(name: .search, size: 16)
     private let surface = CALayer()
     private var hovered = false { didSet { restyle() } }
+    private var fieldHeight: CGFloat = 0
     var onChange: (@MainActor (String) -> Void)?
 
     override init(frame frameRect: NSRect) {
@@ -321,7 +322,9 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         surface.frame = bounds
         icon.frame = NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
         // NSTextField adds 2pt of cell inset on the left; pull it back so text starts at 32.
-        let fh = ceil(field.intrinsicContentSize.height)
+        // Measured once: each intrinsicContentSize call kept about 47 KB of text layout alive.
+        if fieldHeight == 0 { fieldHeight = ceil(field.intrinsicContentSize.height) }
+        let fh = fieldHeight
         field.frame = NSRect(x: 30, y: (bounds.height - fh) / 2, width: bounds.width - 38, height: fh)
     }
 }

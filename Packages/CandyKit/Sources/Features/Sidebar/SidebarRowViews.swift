@@ -49,6 +49,10 @@ enum SB {
 
     /// `tabular-nums`, for time and duration labels.
     static func tabular(_ px: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
+        DSFont.cached("tabular", px, weight) { makeTabular(px, weight) }
+    }
+
+    private static func makeTabular(_ px: CGFloat, _ weight: NSFont.Weight) -> NSFont {
         let f = DSFont.ui(px, weight: weight)
         let d = f.fontDescriptor.addingAttributes([.featureSettings: [[
             NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
