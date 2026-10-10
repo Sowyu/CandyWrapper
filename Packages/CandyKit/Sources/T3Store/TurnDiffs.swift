@@ -15,6 +15,19 @@ public struct TurnDiffSummary: Sendable, Hashable {
     public var files: [CheckpointFile]
     public var assistantMessageId: MessageId?
     public var completedAt: T3Timestamp
+
+    public init(checkpointId: CheckpointId, scopeId: CheckpointScopeId, runId: RunId, checkpointTurnCount: Int, checkpointRef: String,
+                status: String, files: [CheckpointFile], assistantMessageId: MessageId?, completedAt: T3Timestamp) {
+        self.checkpointId = checkpointId
+        self.scopeId = scopeId
+        self.runId = runId
+        self.checkpointTurnCount = checkpointTurnCount
+        self.checkpointRef = checkpointRef
+        self.status = status
+        self.files = files
+        self.assistantMessageId = assistantMessageId
+        self.completedAt = completedAt
+    }
 }
 
 public enum TurnDiffs {

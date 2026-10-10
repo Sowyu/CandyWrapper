@@ -26,6 +26,8 @@ public final class ToggleView: ControlView {
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var title: String? { didSet { label.text = title ?? ""; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var icon: IconName? { didSet { updateIcon() } }
+    /// Icon size for icons with their own `size-*` class (16 otherwise).
+    public var iconSize: CGFloat = 16 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     public var isPressed = false { didSet { if isPressed != oldValue { restyle(); setAccessibilityValue(isPressed) } } }
     /// Called after a click flips `isPressed`.
     public final var onPressedChange: (@MainActor (Bool) -> Void)?
@@ -72,7 +74,7 @@ public final class ToggleView: ControlView {
 
     private var contentWidth: CGFloat {
         var parts: [CGFloat] = []
-        if iconView != nil { parts.append(12) } // 16px icon with `-mx-0.5`
+        if iconView != nil { parts.append(iconSize - 4) } // the icon with `-mx-0.5`
         if hasTitle { parts.append(label.textWidth) }
         return parts.reduce(0, +) + 8 * CGFloat(max(0, parts.count - 1))
     }
@@ -92,8 +94,8 @@ public final class ToggleView: ControlView {
         decoration.layout(boxSize: bounds.size)
         var x = (bounds.width - contentWidth) / 2
         if let iconView {
-            iconView.frame = NSRect(x: x - 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
-            x += 12 + 8
+            iconView.frame = NSRect(x: x - 2, y: (bounds.height - iconSize) / 2, width: iconSize, height: iconSize)
+            x += iconSize - 4 + 8
         }
         label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: hasTitle ? label.textWidth : 0, height: 20)
     }

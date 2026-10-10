@@ -1,0 +1,38 @@
+{
+  "added.split" : {
+    "height" : 140,
+    "width" : 700
+  },
+  "added.unified" : {
+    "height" : 140,
+    "width" : 460
+  },
+  "collapsed" : {
+    "height" : 96,
+    "width" : 460
+  },
+  "deleted.split" : {
+    "height" : 120,
+    "width" : 700
+  },
+  "deleted.unified" : {
+    "height" : 120,
+    "width" : 460
+  },
+  "modified.split" : {
+    "height" : 328,
+    "width" : 700
+  },
+  "modified.unified" : {
+    "height" : 368,
+    "width" : 460
+  },
+  "wrap.split" : {
+    "height" : 140,
+    "width" : 700
+  },
+  "wrap.unified" : {
+    "height" : 180,
+    "width" : 460
+  }
+}
