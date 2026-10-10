@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         let window = MainWindow()
         let sidebar = SidebarContentView()
-        let main = TopbarDragView()
+        let main: NSView = Self.threadPreview() ?? TopbarDragView()
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
@@ -54,6 +54,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
         startSession(sidebar: sidebar, window: window)
         scheduleSelfSnapshot(window)
+    }
+
+    /// Development: `--thread-preview [title prefix]` shows a recorded thread from
+    /// fixtures/transcripts/04-threads.jsonl in the main panel (default: the markdown thread).
+    private static func threadPreview() -> NSView? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--thread-preview") else { return nil }
+        let title = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ThreadPreview.markdownThread
+        guard let projection = try? ThreadPreview.projection(titled: title) else { return nil }
+        let panel = ThreadPanelView()
+        panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
+        return panel
     }
 
     /// Development: `--snapshot <png> [--snapshot-delay seconds]` renders the window's own layer
@@ -86,6 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// <path>` connects straight to a running server instead, such as the sandbox on 47391.
     private func startSession(sidebar: SidebarContentView, window: NSWindow) {
         let args = CommandLine.arguments
+        // A preview never connects, so it never starts or joins a server.
+        if args.contains("--thread-preview") { return }
         guard let s = args.firstIndex(of: "--server"), s + 1 < args.count, let url = URL(string: args[s + 1]),
               let t = args.firstIndex(of: "--token-file"), t + 1 < args.count,
               let token = try? String(contentsOfFile: args[t + 1], encoding: .utf8)

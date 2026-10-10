@@ -5,14 +5,14 @@ import QuartzCore
 /// visible, unoccluded window, not hidden, and Reduce Motion is off (T3's `motion-safe:` and
 /// `observeVisibleAnimation`). The render server drives the frames; this process does no per-frame work.
 @MainActor
-final class LoopingAnimation {
+public final class LoopingAnimation {
     private weak var view: NSView?
     private let layer: () -> CALayer?
     private let make: () -> CAAnimation
     private let key: String
     private var observers: [NSObjectProtocol] = []
 
-    init(view: NSView, key: String, layer: @escaping () -> CALayer?, make: @escaping () -> CAAnimation) {
+    public init(view: NSView, key: String, layer: @escaping () -> CALayer?, make: @escaping () -> CAAnimation) {
         self.view = view
         self.key = key
         self.layer = layer
@@ -28,7 +28,7 @@ final class LoopingAnimation {
     }
 
     /// Call from viewDidMoveToWindow, viewDidHide and viewDidUnhide.
-    func windowChanged() {
+    public func windowChanged() {
         observers.dropFirst().forEach { NotificationCenter.default.removeObserver($0) }
         observers = Array(observers.prefix(1))
         if let window = view?.window {
@@ -40,7 +40,7 @@ final class LoopingAnimation {
         update()
     }
 
-    func update() {
+    public func update() {
         guard let view, let layer = layer() else { return }
         let visible = view.window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false
         let run = visible && !view.isHiddenOrHasHiddenAncestor && !Motion.reduced
