@@ -78,15 +78,17 @@ THRESHOLDS = {
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),
+    "stream.settled_footprint_mb": (0.10, 3, "MB"),
     "stream.peak_footprint_mb": (0.10, 5, "MB"),
     "size.bundle_mb": (0.10, 0.5, "MB"),
     "size.binary_mb": (0.10, 0.5, "MB"),
 }
 BENCH_THRESHOLD = (0.20, 0.05, "ms")
-# Reported but never a verdict: one sample each, and a 2026-10-10 A/B (3 rounds per build) showed the
-# footprint 1 s after a turn lands on either about 36-56 MB or about 86 MB in the same build, depending
-# on whether the allocator has returned freed pages yet; package idle wakeups follow the whole machine.
-# stream.peak_footprint_mb and stream.cpu_pct still gate.
+# Reported but never a verdict: one sample each. The footprint 1 s after a turn lands is about 36-56 MB
+# or about 86 MB in the same build: while a large view keeps redrawing, macOS draws it on the GPU and
+# the process holds about 50 MB of GPU memory ("owned unmapped (graphics)" in vmmap) until redraws
+# have stopped for about 5 s. stream.settled_footprint_mb, sampled 8 s after the turn, gates instead.
+# Package idle wakeups follow the whole machine. stream.peak_footprint_mb and stream.cpu_pct gate.
 INFORMATIONAL = {"stream.footprint_mb", "stream.package_idle_wakeups_per_s"}
 
 
@@ -484,6 +486,8 @@ def scenario_stream(app_path, metrics, sha, noise):
             add(metrics, "stream." + k, v)
         add(metrics, "stream.footprint_mb", mb(b["footprint"]))
         add(metrics, "stream.peak_footprint_mb", mb(b["peak_footprint"]))
+        time.sleep(7)  # macOS frees the GPU drawing memory about 5 s after the last redraw
+        add(metrics, "stream.settled_footprint_mb", mb(app.rusage()["footprint"]))
         metrics["stream.turn"] = result
         if foreign_apps(app.pid):
             noise.append("stream run overlapped another CandyWrapper app")

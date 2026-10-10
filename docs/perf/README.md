@@ -126,7 +126,11 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 
 ## Noise found 2026-10-10
 
-The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_idle_wakeups_per_s` (+67%). An A/B of the streaming scenario, three rounds alternating ef84b1d and 903e0a2, showed both builds landing on either about 36-56 MB or about 86 MB one second after the turn (ef84b1d: 87.4, 86.9, 36.2; 903e0a2: 85.9, 51.4, 86.3), with the same peak (86.5 to 88.2 MB), and package idle wakeups overlapping (0.97 to 1.27 against 1.07 to 1.46). Both metrics are now informational; the stream peak and CPU still gate. Open question for milestone 8: why the stream scenario peaks near 87 MB when the idle scenario peaks at 31 MB.
+The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_idle_wakeups_per_s` (+67%). An A/B of the streaming scenario, three rounds alternating ef84b1d and 903e0a2, showed both builds landing on either about 36-56 MB or about 86 MB one second after the turn (ef84b1d: 87.4, 86.9, 36.2; 903e0a2: 85.9, 51.4, 86.3), with the same peak (86.5 to 88.2 MB), and package idle wakeups overlapping (0.97 to 1.27 against 1.07 to 1.46). Both metrics are now informational; the stream peak and CPU still gate.
+
+### GPU drawing memory (answered 2026-10-10)
+
+Why the stream scenario peaks near 87 MB when the idle scenario peaks at 31 MB: while a large view keeps redrawing, macOS draws it on the GPU, and the process then holds about 50 MB of GPU memory, shown as `owned unmapped (graphics)` in `vmmap -summary`. It is freed about 5 s after the last redraw. The cost is fixed per process: a bare AppKit window redrawing 17 lines of text once a second (`/tmp/cw-termmem/gpu/main.swift`, not kept) held 50.6 MB of it at 600x290 pt, 51 MB at 1150x290 and 51.4 MB at 1800x900, and none at 300x60. `drawsAsynchronously` changes nothing. Drawing into our own bitmap and setting `layer.contents` avoids it (36 MB instead of 85 to 96 MB) but costs 3.6 times the CPU at 30 redraws a second (28% against 7.6% of a core), so the app keeps AppKit's path: the spec's CPU and energy targets are hard, and the RAM targets (80 MB at launch, 200 MB with a heavy thread) leave room. The terminal drawer shows the same thing: 63.6 MB open and idle, 114.4 MB while `top` or any steady output redraws it, 52 to 54 MB 5 s after it stops. `stream.settled_footprint_mb` samples 8 s after the turn, past the release, and gates; `stream.footprint_mb` (1 s after) stays informational.
 
 ## Baseline: median of the last three runs (2026-10-10)
 
