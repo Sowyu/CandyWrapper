@@ -136,7 +136,7 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
 
     /// Builds an item from its wire object, for tests and synthesized rows.
     public init(json: JSONValue) throws {
-        self = try JSONDecoder().decode(TurnItem.self, from: JSONEncoder().encode(json))
+        self = try json.decode(as: TurnItem.self)
     }
 
     // MARK: Type-specific fields (orchestrationV2.ts:1373-1576)

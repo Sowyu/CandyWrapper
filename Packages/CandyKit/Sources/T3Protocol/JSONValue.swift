@@ -11,6 +11,8 @@ public enum JSONValue: Codable, Sendable, Hashable {
     case object([String: JSONValue])
 
     public init(from decoder: Decoder) throws {
+        // Through JSONValueDecoder the node is already here.
+        if let tree = decoder as? TreeDecoder { self = tree.value; return }
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { self = .null }
         else if let v = try? c.decode(Bool.self) { self = .bool(v) }

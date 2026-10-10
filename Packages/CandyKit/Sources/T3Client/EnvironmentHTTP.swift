@@ -144,7 +144,7 @@ public struct EnvironmentHTTP: Sendable {
             throw EnvironmentHTTPError.status(http.statusCode, try? JSONDecoder().decode(EnvironmentHTTPErrorBody.self, from: data))
         }
         do {
-            return try JSONDecoder().decode(T.self, from: data)
+            return try JSONValue(parsing: data).decode(as: T.self)
         } catch {
             throw EnvironmentHTTPError.invalidResponse("\(T.self): \(error)")
         }

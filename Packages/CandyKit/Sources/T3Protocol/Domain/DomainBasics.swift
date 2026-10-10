@@ -115,8 +115,53 @@ public struct T3Timestamp: Hashable, Sendable, Codable, ExpressibleByStringLiter
 
     /// Fractional seconds first, then whole seconds. Anything else is invalid.
     public static func parseEpochMs(_ raw: String) -> Int64? {
+        if let ms = canonicalEpochMs(raw) { return ms }
         guard let date = fractional.date(from: raw) ?? whole.date(from: raw) else { return nil }
         return Int64((date.timeIntervalSince1970 * 1000).rounded())
+    }
+
+    /// `toISOString` output, `YYYY-MM-DDTHH:MM:SS.sssZ` or without `.sss`, parsed by hand. The
+    /// formatter costs about 45 µs and 480 allocations per call; a thread snapshot has hundreds.
+    /// Anything else, including out-of-range fields, goes to the formatters.
+    static func canonicalEpochMs(_ raw: String) -> Int64? {
+        let n = raw.utf8.count
+        guard n == 24 || n == 20 else { return nil }
+        func daysInMonth(_ m: Int64, _ y: Int64) -> Int64 {
+            if m == 2 { return y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) ? 29 : 28 }
+            return m == 4 || m == 6 || m == 9 || m == 11 ? 30 : 31
+        }
+        func parse(_ b: UnsafeBufferPointer<UInt8>) -> Int64? {
+            func num(_ at: Int, _ len: Int) -> Int64? {
+                var v: Int64 = 0
+                for i in at..<at + len {
+                    let d = b[i] &- 0x30
+                    guard d < 10 else { return nil }
+                    v = v * 10 + Int64(d)
+                }
+                return v
+            }
+            guard b[4] == 0x2D, b[7] == 0x2D, b[10] == 0x54, b[13] == 0x3A, b[16] == 0x3A, b[n - 1] == 0x5A,
+                  let y = num(0, 4), let mo = num(5, 2), let d = num(8, 2),
+                  let h = num(11, 2), let mi = num(14, 2), let s = num(17, 2),
+                  y >= 1900, (1...12).contains(mo), d >= 1, d <= daysInMonth(mo, y), h < 24, mi < 60, s < 60
+            else { return nil }
+            var ms: Int64 = 0
+            if n == 24 {
+                guard b[19] == 0x2E, let f = num(20, 3) else { return nil }
+                ms = f
+            }
+            // Days since 1970-01-01, proleptic Gregorian (Howard Hinnant's days_from_civil). The
+            // formatter switches to Julian before 1583, hence the 1900 floor above.
+            let yy = mo <= 2 ? y - 1 : y
+            let era = yy / 400
+            let yoe = yy - era * 400
+            let doy = (153 * (mo > 2 ? mo - 3 : mo + 9) + 2) / 5 + d - 1
+            let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+            let days = era * 146_097 + doe - 719_468
+            return ((days * 24 + h) * 60 + mi) * 60_000 + s * 1000 + ms
+        }
+        var raw = raw
+        return raw.withUTF8(parse)
     }
 }
 

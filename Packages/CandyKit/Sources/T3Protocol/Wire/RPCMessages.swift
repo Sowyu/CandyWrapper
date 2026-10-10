@@ -127,11 +127,11 @@ public enum RPCFrame {
         try encoder.encode(message)
     }
 
+    /// Parses the frame once; chunk values keep their parsed nodes (see JSONValueDecoder.swift).
     private static func decodeMessages<T: Decodable>(_ data: Data) throws -> [T] {
-        let decoder = JSONDecoder()
-        let first = data.first { !($0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09) }
-        if first == UInt8(ascii: "[") { return try decoder.decode([T].self, from: data) }
-        return [try decoder.decode(T.self, from: data)]
+        let json = try JSONValue(parsing: data)
+        if case .array(let items) = json { return try items.map { try $0.decode(as: T.self) } }
+        return [try json.decode(as: T.self)]
     }
 
     private static let encoder: JSONEncoder = {
@@ -309,11 +309,11 @@ extension RPCTypedError: Codable {
 extension JSONValue {
     /// Encodes any Encodable to a JSONValue (for request payloads).
     public init<T: Encodable>(encoding value: T) throws {
-        self = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
+        self = try JSONValue(parsing: JSONEncoder().encode(value))
     }
 
-    // ponytail: decodes through an intermediate Data copy, decode chunk values straight from the frame if profiling shows this hot
-    public func decode<T: Decodable>(as type: T.Type, decoder: JSONDecoder = JSONDecoder()) throws -> T {
+    /// Decodes through JSON text with a configured JSONDecoder. `decode(as:)` skips the text.
+    public func decode<T: Decodable>(as type: T.Type, decoder: JSONDecoder) throws -> T {
         try decoder.decode(T.self, from: JSONEncoder().encode(self))
     }
 }
