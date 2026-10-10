@@ -17,7 +17,7 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
 
 /// Replays every recorded `subscribeThread` stream and derives its timeline.
 @Suite struct ThreadFixtureTests {
-    @Test(arguments: [("02-turn.jsonl", 1), ("03-turn2.jsonl", 2), ("04-threads.jsonl", 14), ("06-requests.jsonl", 2)])
+    @Test(arguments: [("02-turn.jsonl", 1), ("03-turn2.jsonl", 2), ("04-threads.jsonl", 14), ("06-requests.jsonl", 2), ("07-queue.jsonl", 1)])
     func everyRecordedThreadDerivesRows(_ name: String, _ count: Int) throws {
         let streams = try recordedThreadStreams(name)
         #expect(streams.count == count)
@@ -77,5 +77,47 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
 
     @Test func anUnansweredRunFoldsWithoutAnAnswer() throws {
         #expect(try threadRows("04-threads.jsonl", titled: "Create a file named approval-demo").map(describe) == ["user", "turn-fold"])
+    }
+
+    /// 07-queue: a queued message promoted to steer, then a `deliveryIntent:"steer"` dispatch, both
+    /// inside one running turn. T3 places a steer by its turn item ordinal (session-logic.ts:592-809),
+    /// so it sits inside its run after the work that came before it, and it never starts a new
+    /// response (MessagesTimeline.logic.ts:879-886). Checked after every Chunk, live and settled.
+    @Test func steeredMessagesShowInsideTheirTurn() throws {
+        let stream = try #require(try recordedThreadStreams("07-queue.jsonl").first)
+        var reducer = ThreadReducer(threadId: stream.threadId)
+        func userRows(_ rows: [TimelineRow]) -> [(index: Int, intent: InputIntent?)] {
+            rows.enumerated().compactMap { i, row in
+                if case .message(let m, _, _, _, _, _) = row.kind, m.role == .user { return (i, m.inputIntent) }
+                return nil
+            }
+        }
+        var sawLiveSteer = false
+        for chunk in stream.chunks {
+            reducer.apply(chunk)
+            let projection = try #require(reducer.projection)
+            let steers = projection.turnItems.filter {
+                $0.type == .userMessage && ($0.inputIntent == .steer || $0.inputIntent == .promotedQueuedToSteer)
+            }
+            let rows = TimelineRows.derive(TimelineRowsInput(projection: projection))
+            let users = userRows(rows)
+            // Every steer the server has sent has its own row, in server order after the prompt.
+            #expect(users.count == 1 + steers.count)
+            #expect(users.map(\.intent) == [.turnStart] + steers.map(\.inputIntent))
+            if TimelineRowsInput(projection: projection).isWorking, let last = users.last, steers.count == 2 {
+                sawLiveSteer = true
+                // Live: the working header stays under the first prompt, and the steer sits above
+                // the activity that follows it.
+                #expect(rows.firstIndex { $0.id == "working-indicator-row" } == 1)
+                #expect(last.index < rows.count - 1)
+            }
+        }
+        #expect(sawLiveSteer)
+        let rows = TimelineRows.derive(TimelineRowsInput(projection: try #require(reducer.projection)))
+        // Settled: the run folds behind the first prompt; both steers stay out of the fold, before the answer.
+        #expect(rows.map(describe) == ["user", "turn-fold", "user", "user", "assistant"])
+        #expect(userRows(rows).map(\.intent) == [.turnStart, .promotedQueuedToSteer, .steer])
+        guard case .message(let steer, _, _, _, _, _) = rows[3].kind else { Issue.record("expected the steer"); return }
+        #expect(steer.text == "Then also say: steered")
     }
 }
