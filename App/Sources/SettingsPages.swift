@@ -3,11 +3,13 @@ import DesignSystem
 import Features
 import T3Client
 import T3Protocol
+import T3Store
 
-/// Settings > General, Appearance and Keybindings: page routing, settings search jumps, the scope, and the
-/// writes. Client settings go to `ClientSettingsStore`; server settings go to every connected environment in
-/// the scope through `server.updateSettings {patch}`; keybindings through `server.upsertKeybinding` and
-/// `server.removeKeybinding` (useScopedSettings.ts, KeybindingsSettings.tsx:1390-1460).
+/// Settings pages: routing, settings search jumps, the scope, and the writes. Client settings go to
+/// `ClientSettingsStore`; server settings go to every connected environment in the scope through
+/// `server.updateSettings {patch}`, or into each selected project's override entry at a project scope;
+/// keybindings through `server.upsertKeybinding` and `server.removeKeybinding` (useScopedSettings.ts,
+/// scopedSettings.ts, KeybindingsSettings.tsx:1390-1460); projects through `projects.mutate`.
 extension SettingsController {
     func setUpPageContext() {
         let c = pageContext
@@ -33,6 +35,33 @@ extension SettingsController {
             return host
         }
         c.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        c.clearServer = { [weak self] keys in
+            guard let self else { return }
+            self.run(self.pageContext.scope.planClear(keys))
+        }
+        c.request = { [weak self] env, method, payload in
+            guard let self else { throw CancellationError() }
+            return try await self.environments.request(env, method, payload)
+        }
+        c.applySettings = { [weak self] env, raw in self?.composer?.applySettings(env, raw) }
+        c.confirm = { [weak self] message, _, action in
+            let copy = ConfirmCopy.resolve(message)
+            self?.confirm(copy.title, copy.description ?? "", then: action)
+        }
+        c.toggleFavorite = { [weak self] id, model in self?.composer?.pickers.store.toggleFavorite(id, model) }
+        c.openSection = { [weak self] section in self?.show(section) }
+        c.closeSettings = { [weak self] in self?.close() }
+        c.copy = { [weak self] text, title in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            self?.toast(title, nil, .success)
+        }
+        c.updateProject = { [weak self] members, fields, title in self?.updateProject(members, fields, failureTitle: title) }
+        c.deleteProjects = { [weak self] members, leave in self?.deleteProjects(members, leave: leave) }
+        c.threadCount = { [weak self] env, projectId in
+            self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0
+        }
+        c.saveActions = { [weak self] writes in await self?.saveActions(writes) }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
         composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
         NotificationCenter.default.addObserver(forName: AppearanceMode.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -49,15 +78,19 @@ extension SettingsController {
         nav.selected = section
         page.header.section = section
         page.header.restore.isHidden = section != .general
+        // `WorkspacePageContainer` widths: Connections and Providers are "wide", Diagnostics "expanded".
+        page.containerWidth = [.connections, .providers].contains(section) ? 1024 : section == .diagnostics ? 1152 : 896
         let view: (NSView & SettingsGroupRow)
         switch section {
         case .general: view = generalPage()
         case .appearance: view = appearancePage()
         case .keybindings: view = keybindingsView()
-        default: view = connectionsPage
+        case .connections, .scheduledTasks: view = connectionsPage
+        default: view = extraPage(section)
         }
         if page.page !== view { page.page = view; page.scrollToTop() }
         refreshPages()
+        extraPages[section]?.didShow()
     }
 
     /// A search result: open its page, then scroll its anchor into view and pulse it.
@@ -68,7 +101,7 @@ extension SettingsController {
         case .general: general?.anchor(item.anchor)
         case .appearance: appearance?.anchor(item.anchor)
         case .keybindings: keybindingsPage?.anchor(item.anchor)
-        default: nil
+        default: extraPages[item.to]?.anchor(item.anchor)
         }
         page.pageChanged()
         if let target { page.reveal(target) }
@@ -91,6 +124,25 @@ extension SettingsController {
         return v
     }
 
+    /// The WP7.7b pages, built on first open.
+    private func extraPage(_ section: SettingsSection) -> SettingsPageBase {
+        if let existing = extraPages[section] { return existing }
+        let c = pageContext
+        let v: SettingsPageBase = switch section {
+        case .projects: ProjectSettingsView(context: c)
+        case .providers: ProvidersSettingsView(context: c)
+        case .integrations: IntegrationsSettingsView(context: c)
+        case .sourceControl: SourceControlSettingsView(context: c)
+        case .storage: StorageSettingsView(context: c)
+        case .archive: ArchiveSettingsView(context: c)
+        case .diagnostics: DiagnosticsSettingsView(context: c)
+        default: SnapShotSettingsView(context: c)
+        }
+        v.onHeightChange = { [weak self] in self?.page.pageChanged() }
+        extraPages[section] = v
+        return v
+    }
+
     private func keybindingsView() -> KeybindingsSettingsView {
         if let keybindingsPage { return keybindingsPage }
         let v = KeybindingsSettingsView(context: pageContext)
@@ -108,8 +160,9 @@ extension SettingsController {
         case .general: general?.refresh()
         case .appearance: appearance?.refresh()
         case .keybindings: keybindingsPage?.refresh()
-        default: break
+        default: extraPages[section]?.refresh()
         }
+        nav.showsProject = pageContext.scope.selection.project != nil
         pageContext.didChange()
         page.header.restore.isEnabled = !changedSettingLabels().isEmpty
         page.pageChanged()
@@ -134,18 +187,37 @@ extension SettingsController {
         c.scope = SettingsScopeState(selection: scopeSelection, environments: scoped, primaryId: environments.primaryId,
                                      projects: projectGroups())
         c.providers = c.scope.representative.flatMap { composer?.config($0.id)?.providers } ?? []
+        c.configs = Dictionary(uniqueKeysWithValues: ids.compactMap { id in composer?.config(id).map { (id, $0) } })
+        c.favorites = composer?.pickers.store.favorites ?? []
         let primary = environments.primaryId.flatMap { composer?.config($0) }
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath
     }
 
-    /// The project picker lists the sidebar's project groups by name.
+    /// `useSettingsProjectGroups`: the sidebar's logical projects over every environment, by display name.
     private func projectGroups() -> [SettingsScopeProject] {
-        guard let snapshot = environments.primaryId.flatMap({ environments.snapshot($0) }) else { return [] }
-        var seen = Set<String>()
-        return snapshot.projects.compactMap { p in
-            seen.insert(p.title).inserted ? SettingsScopeProject(key: p.id.rawValue, displayName: p.title) : nil
+        var projects: [ProjectShell] = []
+        for id in environments.environmentIds {
+            projects += (environments.snapshot(id)?.projects ?? []).map { EnvironmentScope.scope($0, id) }
         }
+        let mode: SidebarModel.ProjectGroupingMode = ClientSettingsStore.shared.current.string("sidebarProjectGroupingMode") == "separate" ? .separate : .repository
+        return SidebarModel.buildProjectGroups(projects, mode: mode, preferredEnvironmentId: environments.primaryId).map { g in
+            SettingsScopeProject(key: g.key, displayName: g.label, members: g.members.map { p in
+                let env = p.id.environmentId ?? ""
+                return SettingsScopeProject.Member(
+                    environmentId: env, projectId: EnvironmentScope.localId(of: p.id.rawValue), title: p.title, workspaceRoot: p.workspaceRoot,
+                    environmentLabel: environments.label(env), faviconPath: p.faviconPath, projectIcon: p.projectIcon,
+                    scripts: p.scripts.compactMap(ProjectScript.init),
+                    legacy: ProjectSettings.Legacy(defaultModelSelection: p.defaultModelSelection.flatMap { try? JSONValue(encoding: $0) },
+                                                   defaultThreadEnvMode: p.defaultThreadEnvMode))
+            })
+        }.sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
+    }
+
+    /// A shell changed: projects, their scripts and thread counts follow.
+    func shellChanged() {
+        guard isOpen else { return }
+        refreshPages()
     }
 
     /// `useAvailableSettingsSearchItems` for this client.
@@ -159,9 +231,10 @@ extension SettingsController {
 
     // MARK: Writes
 
+    private func writeServer(_ patch: [String: JSONValue]) { run(pageContext.scope.plan(patch)) }
+
     /// `useRunScopedPlan`: one `server.updateSettings` per target; the reply's settings apply at once.
-    private func writeServer(_ patch: [String: JSONValue]) {
-        let plan = pageContext.scope.plan(patch)
+    private func run(_ plan: (writes: [SettingsScopeState.Write], unavailableReason: String?)) {
         if let reason = plan.unavailableReason {
             toast("Setting not saved", reason, .warning)
             return
@@ -181,6 +254,80 @@ extension SettingsController {
             toast(saved.isEmpty ? "Setting not saved" : "Setting saved on some environments",
                   (failures + (saved.isEmpty ? [] : ["Saved on \(saved.joined(separator: ", "))."])).joined(separator: "\n"), .error)
         }
+    }
+
+    // MARK: Projects (ProjectSettingsPanel.tsx)
+
+    /// `updateAllMembers`: `project.update` on every member in turn; a failure names its environment when
+    /// the group spans several and stops there.
+    private func updateProject(_ members: [SettingsScopeProject.Member], _ fields: [String: JSONValue], failureTitle: String) {
+        if let offline = members.first(where: { environments.state($0.environmentId)?.status != .connected }) {
+            toast(failureTitle, "Connect \(offline.environmentLabel ?? "the selected environment") and try again.", .error)
+            return
+        }
+        Task {
+            for m in members {
+                var o = fields
+                o["type"] = .string("project.update")
+                o["commandId"] = .string(ThreadCommands.newCommandId())
+                o["projectId"] = .string(m.projectId)
+                do {
+                    _ = try await environments.request(m.environmentId, "projects.mutate", .object(o))
+                } catch {
+                    toast(members.count > 1 ? "\(failureTitle) on \(m.environmentLabel ?? "the current environment")" : failureTitle,
+                          Self.rpcMessage(error, fallback: "An error occurred."), .error)
+                    return
+                }
+            }
+        }
+    }
+
+    /// `removeMembers` after the confirm: `project.delete {force: true}` per member; the whole project goes back
+    /// to the thread view.
+    private func deleteProjects(_ members: [SettingsScopeProject.Member], leave: Bool) {
+        Task {
+            for m in members {
+                do {
+                    _ = try await environments.request(m.environmentId, "projects.mutate", .object([
+                        "type": .string("project.delete"), "commandId": .string(ThreadCommands.newCommandId()),
+                        "projectId": .string(m.projectId), "force": .bool(true),
+                    ]))
+                } catch {
+                    toast("Failed to remove \"\(m.title)\"", Self.rpcMessage(error, fallback: "An error occurred."), .error)
+                    return
+                }
+            }
+            if leave {
+                scopeSelection = SettingsScopeSelection(machine: scopeSelection.machine, project: nil)
+                close()
+            } else {
+                refreshPages()
+            }
+        }
+    }
+
+    /// `persist`: each environment's settings write, then its shortcut changes. The first failure stops the rest.
+    private func saveActions(_ writes: [ProjectActionsLogic.Write]) async -> String? {
+        for w in writes {
+            do {
+                let result = try await environments.request(w.environmentId, "server.updateSettings", .object(["patch": .object(w.patch)]))
+                composer?.applySettings(w.environmentId, result)
+                for op in w.bindings {
+                    let reply: JSONValue
+                    switch op {
+                    case .upsert(let target, let replace):
+                        reply = try await environments.request(w.environmentId, "server.upsertKeybinding", KeybindingsLogic.upsertPayload(target, replace: replace))
+                    case .remove(let target):
+                        reply = try await environments.request(w.environmentId, "server.removeKeybinding", target.json)
+                    }
+                    composer?.applyKeybindings(w.environmentId, Keymap.decodeRules(reply["keybindings"]))
+                }
+            } catch {
+                return Self.rpcMessage(error, fallback: "An error occurred.")
+            }
+        }
+        refreshPages()
+        return nil
     }
 
     private static func rpcMessage(_ error: Error, fallback: String) -> String {

@@ -20,11 +20,38 @@ public struct SettingsScopeEnvironment: Equatable, Sendable {
     }
 }
 
-/// A project group for the project picker (`SidebarProjectSnapshot`).
+/// A logical project for the project picker (`SidebarProjectSnapshot`): the sidebar's group and its
+/// physical projects, one per environment and folder.
 public struct SettingsScopeProject: Equatable, Sendable {
+    /// One checkout (`SidebarProjectGroupMember`).
+    public struct Member: Equatable, Sendable {
+        public var environmentId: String
+        /// The id the server knows.
+        public var projectId: String
+        public var title: String
+        public var workspaceRoot: String
+        public var environmentLabel: String?
+        public var faviconPath: String?
+        public var projectIcon: JSONValue?
+        public var scripts: [ProjectScript]
+        public var legacy: ProjectSettings.Legacy
+
+        public init(environmentId: String, projectId: String, title: String, workspaceRoot: String, environmentLabel: String? = nil,
+                    faviconPath: String? = nil, projectIcon: JSONValue? = nil, scripts: [ProjectScript] = [],
+                    legacy: ProjectSettings.Legacy = .init()) {
+            self.environmentId = environmentId; self.projectId = projectId; self.title = title; self.workspaceRoot = workspaceRoot
+            self.environmentLabel = environmentLabel; self.faviconPath = faviconPath; self.projectIcon = projectIcon; self.scripts = scripts
+            self.legacy = legacy
+        }
+
+        /// `physicalProjectKey`.
+        public var physicalKey: String { environmentId + ":" + workspaceRoot }
+    }
+
     public var key: String
     public var displayName: String
-    public init(key: String, displayName: String) { self.key = key; self.displayName = displayName }
+    public var members: [Member]
+    public init(key: String, displayName: String, members: [Member] = []) { self.key = key; self.displayName = displayName; self.members = members }
 }
 
 /// The URL search the settings route keeps (`SettingsScopeSearch`): absent means all.
@@ -37,10 +64,20 @@ public struct SettingsScopeSelection: Equatable, Sendable {
 /// Where a row's value comes from (`SettingInheritanceState`).
 public enum SettingInheritanceState: Equatable, Sendable { case `default`, environment, inherited, overridden, mixed }
 
-/// The resolved scope (settingsScope.ts `resolveSettingsScope` on the environment axis, plus
-/// scopedSettings.ts target selection, mixed detection and write planning).
+/// The resolved scope (settingsScope.ts `resolveSettingsScope`, scopedSettings.ts target resolution, mixed
+/// detection and write planning) on both axes: environments and projects.
 public struct SettingsScopeState: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case all, environment(String), unavailable(String) }
+    public enum Kind: Equatable, Sendable { case all, environment(String), project(String), unavailable(String) }
+
+    /// One (environment, project) pair the scope writes to, with that project's effective settings
+    /// (`ScopedSettingsTarget`). Environment scopes have no project.
+    public struct Target: Equatable, Sendable {
+        public var environmentId: String
+        public var label: String
+        public var projectId: String?
+        public var settings: ServerSettingsValues
+        public var sources: [String: ProjectSettingSource]
+    }
 
     public var selection: SettingsScopeSelection
     public var environments: [SettingsScopeEnvironment]
@@ -52,46 +89,102 @@ public struct SettingsScopeState: Equatable, Sendable {
         self.selection = selection; self.environments = environments; self.primaryId = primaryId; self.projects = projects
     }
 
-    // ponytail: the project axis lists projects but only "All projects" applies; project overrides come with the Project page (WP7.7b)
     public var kind: Kind {
-        guard let machine = selection.machine else { return .all }
-        return environments.contains { $0.id == machine } ? .environment(machine) : .unavailable("This environment is no longer available.")
+        if let machine = selection.machine, !environments.contains(where: { $0.id == machine }) {
+            return .unavailable("This environment is no longer available.")
+        }
+        if let key = selection.project {
+            guard let group = projects.first(where: { $0.key == key }) else { return .unavailable("This project is no longer available.") }
+            if members(of: group).isEmpty { return .unavailable("This project has no checkout on this environment.") }
+            return .project(key)
+        }
+        if let machine = selection.machine { return .environment(machine) }
+        return .all
     }
+
+    public var isProjectScope: Bool { if case .project = kind { true } else { false } }
+
+    /// The selected project group, at a project scope.
+    public var group: SettingsScopeProject? {
+        guard case .project(let key) = kind else { return nil }
+        return projects.first { $0.key == key }
+    }
+
+    private func members(of group: SettingsScopeProject) -> [SettingsScopeProject.Member] {
+        group.members.filter { selection.machine == nil || $0.environmentId == selection.machine }
+    }
+
+    /// The selected checkouts (`scope.members`).
+    public var members: [SettingsScopeProject.Member] { group.map(members(of:)) ?? [] }
 
     public var label: String {
         switch kind {
-        case .all: "All environments"
-        case .environment(let id): environments.first { $0.id == id }.map(environmentLabel) ?? id
-        case .unavailable: "Unavailable selection"
+        case .all: return "All environments"
+        case .environment(let id): return environments.first { $0.id == id }.map(environmentLabel) ?? id
+        case .project:
+            let env = selection.machine.flatMap { id in environments.first { $0.id == id } }
+            return "\(group?.displayName ?? "") / \(env?.label ?? "All checkouts")"
+        case .unavailable: return "Unavailable selection"
         }
     }
 
     /// `scope.environmentIds`.
     public var environmentIds: [String] {
         switch kind {
-        case .all: environments.map(\.id)
-        case .environment(let id): [id]
-        case .unavailable: []
+        case .all: return environments.map(\.id)
+        case .environment(let id): return [id]
+        case .project:
+            var seen = Set<String>()
+            return members.compactMap { seen.insert($0.environmentId).inserted ? $0.environmentId : nil }
+        case .unavailable: return []
         }
     }
 
-    /// `selectScopedSettingsEnvironments`: the selected, connected targets with a config.
+    /// `selectScopedSettingsEnvironments`: the selected, connected environments with a config.
     public var connected: [SettingsScopeEnvironment] {
         let ids = Set(environmentIds)
         return environments.filter { ids.contains($0.id) && $0.connected && $0.settings != nil }
     }
 
-    /// The representative target that supplies display values: the primary, else the first connected.
+    /// The representative environment: the primary, else the first connected.
     public var representative: SettingsScopeEnvironment? { connected.first { $0.id == primaryId } ?? connected.first }
 
-    /// Display values: the representative's settings, or the defaults with nothing connected.
-    public var values: ServerSettingsValues { representative?.settings ?? ServerSettingsValues(nil) }
+    /// `resolveScopedSettingsTargets`: members at a project scope, environments otherwise.
+    public var targets: [Target] {
+        let byId = Dictionary(connected.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        if isProjectScope {
+            return members.compactMap { m in
+                guard let e = byId[m.environmentId], let s = e.settings else { return nil }
+                let r = ProjectSettings.resolve(s, projectId: m.projectId, legacy: m.legacy)
+                return Target(environmentId: e.id, label: e.label, projectId: m.projectId, settings: r.settings, sources: r.sources)
+            }
+        }
+        return connected.compactMap { e in e.settings.map { Target(environmentId: e.id, label: e.label, projectId: nil, settings: $0, sources: [:]) } }
+    }
+
+    /// The target that supplies display values, the one on the representative environment first.
+    public var target: Target? {
+        let all = targets
+        return all.first { $0.environmentId == representative?.id } ?? all.first
+    }
+
+    /// Display values: the representative target's settings, or the defaults with nothing connected.
+    public var values: ServerSettingsValues { target?.settings ?? ServerSettingsValues(nil) }
 
     /// `scopedSettingsAreMixed`.
     public func isMixed(_ keys: [String]) -> Bool {
-        let targets = connected.compactMap(\.settings)
-        guard let first = targets.first else { return false }
-        return targets.contains { t in keys.contains { first[$0] != t[$0] } }
+        let all = targets
+        guard let first = all.first else { return false }
+        return all.contains { t in keys.contains { first.settings[$0] != t.settings[$0] } }
+    }
+
+    /// `scopedSettingsSource`: overridden on every target, inherited on every target, or split (nil).
+    public func source(_ keys: [String]) -> ProjectSettingSource? {
+        let scoped = keys.filter(ProjectSettings.isScoped)
+        let all = targets
+        guard !scoped.isEmpty, !all.isEmpty else { return .environment }
+        let sources = Set(all.flatMap { t in scoped.map { t.sources[$0] ?? .environment } })
+        return sources.count > 1 ? nil : sources.first
     }
 
     /// Every selected target supports `capability` (`threadAutoSettlement`, `threadRestartContinuation`).
@@ -110,10 +203,21 @@ public struct SettingsScopeState: Equatable, Sendable {
         environments.contains { $0.id != e.id && $0.label == e.label } ? "\(e.label) · \(e.displayURL ?? e.id)" : e.label
     }
 
-    /// The row's inheritance indicator at an environment scope (settingsLayout.tsx `inheritance`).
+    /// The row's inheritance indicator (settingsLayout.tsx `inheritance`).
     public func inheritance(_ keys: [String]) -> (state: SettingInheritanceState, summary: String) {
         if isMixed(keys) { return (.mixed, "Mixed across selected environments") }
-        let customized = connected.contains { e in keys.contains { !(e.settings?.isDefault($0) ?? true) } }
+        let scoped = keys.filter(ProjectSettings.isScoped)
+        if isProjectScope {
+            switch source(scoped) {
+            case .project?: return (.overridden, "Overridden for this project")
+            case .environment? where !scoped.isEmpty:
+                let from = environmentIds.count == 1 ? environments.first { $0.id == environmentIds[0] }?.label ?? "environment" : "environment"
+                return (.inherited, "Inherited from \(from)")
+            default: break
+            }
+        }
+        let byId = Dictionary(connected.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let customized = targets.contains { t in keys.contains { !(byId[t.environmentId]?.settings?.isDefault($0) ?? true) } }
         return customized ? (.environment, "Set on the environment") : (.default, "Built-in default")
     }
 
@@ -124,12 +228,69 @@ public struct SettingsScopeState: Equatable, Sendable {
         public var patch: [String: JSONValue]
     }
 
-    /// `planScopedSettingsPatch` at an environment or all scope: the server patch goes to every connected
-    /// target. Returns the writes, or the reason nothing can be saved.
+    /// `projectOverrideWrites`: one patch per environment that names each member's new override entry
+    /// (null drops it). Environments without `projectSettingsOverrides` are skipped.
+    private func overrideWrites(_ update: (_ current: [String: JSONValue], _ settings: ServerSettingsValues, _ projectId: String) -> [String: JSONValue]?) -> [Write] {
+        let byId = Dictionary(environments.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var order: [String] = []
+        var entries: [String: [String: JSONValue]] = [:]
+        for m in members {
+            guard let e = byId[m.environmentId], e.connected, let s = e.settings, e.capabilities.contains("projectSettingsOverrides") else { continue }
+            let current = s["projectSettingsOverrides"][m.projectId]?.objectValue ?? [:]
+            if entries[e.id] == nil { order.append(e.id) }
+            entries[e.id, default: [:]][m.projectId] = update(current, s, m.projectId).map(JSONValue.object) ?? .null
+        }
+        return order.map { id in Write(environmentId: id, label: byId[id]!.label, patch: ["projectSettingsOverrides": .object(entries[id]!)]) }
+    }
+
+    /// `planScopedSettingsPatch` for server keys. Environment scopes send the patch to every connected
+    /// target; a project scope writes the scopable keys into each member's override entry. Returns the
+    /// writes, or the reason nothing can be saved.
     public func plan(_ patch: [String: JSONValue]) -> (writes: [Write], unavailableReason: String?) {
         guard !patch.isEmpty else { return ([], nil) }
         if case .unavailable(let message) = kind { return ([], message) }
-        let writes = connected.map { Write(environmentId: $0.id, label: $0.label, patch: patch) }
+        if isProjectScope {
+            if patch.keys.contains(where: { !ProjectSettings.isScoped($0) }) {
+                return ([], "This setting is environment-wide and cannot be overridden by a project.")
+            }
+            let writes = overrideWrites { current, settings, projectId in
+                // Object values arrive as partial patches; an override stores the whole value.
+                let effective = ProjectSettings.resolve(settings, projectId: projectId).settings
+                var next = current
+                for (key, value) in patch {
+                    if key == "worktreeCleanup", value["mode"]?.stringValue == "custom" {
+                        var rules = ProjectSettings.worktreeCleanup(settings, projectId: projectId)
+                        for (k, v) in value["rules"]?.objectValue ?? [:] { rules[k] = v }
+                        next[key] = .object(["mode": .string("custom"), "rules": .object(rules)])
+                        continue
+                    }
+                    // A picker's "Inherit" sends null; for keys whose override can't be null that removes it.
+                    if value == .null, !ProjectSettings.nullableKeys.contains(key) {
+                        next.removeValue(forKey: key)
+                        continue
+                    }
+                    if case .object(let o) = value, case .object(var base) = effective[key] {
+                        for (k, v) in o { base[k] = v }
+                        next[key] = .object(base)
+                    } else {
+                        next[key] = value
+                    }
+                }
+                return next
+            }
+            return writes.isEmpty ? ([], "Connect the selected checkouts, or update their environments, to save a project override.") : (writes, nil)
+        }
+        let writes = connected.map { e -> Write in
+            var p = patch
+            // A worktree rule edit where the environment already has its own `worktreeCleanup` goes there too.
+            if let s = e.settings, s["worktreeCleanup"] != .null, let storage = patch["storageCleanup"]?.objectValue,
+               storage.keys.contains(where: { $0.hasPrefix("worktree") }) {
+                var rules = ProjectSettings.worktreeCleanup(s, projectId: nil)
+                for (k, v) in storage where k.hasPrefix("worktree") { rules[k] = v }
+                p["worktreeCleanup"] = .object(["mode": .string("custom"), "rules": .object(rules)])
+            }
+            return Write(environmentId: e.id, label: e.label, patch: p)
+        }
         if writes.isEmpty {
             if case .environment = kind { return ([], "Connect \(label) to save this setting.") }
             return ([], "Connect an environment to save this setting.")
@@ -137,13 +298,26 @@ public struct SettingsScopeState: Equatable, Sendable {
         return (writes, nil)
     }
 
+    /// `planScopedSettingsClear`: drops the keys' overrides so the selected checkouts inherit again.
+    public func planClear(_ keys: [String]) -> (writes: [Write], unavailableReason: String?) {
+        guard isProjectScope else { return ([], nil) }
+        let writes = overrideWrites { _, settings, projectId in ProjectSettings.clear(settings, projectId: projectId, keys: keys) }
+        return writes.isEmpty ? ([], "Connect the selected checkouts, or update their environments, to reset this override.") : (writes, nil)
+    }
+
     /// The tooltip of an inert server control (settingsLayout.tsx `renderedControl`), or nil when it works.
-    public var inertReason: String? {
+    /// At a project scope a row with no overridable key is environment-wide.
+    public func inertReason(for keys: [String]) -> String? {
         if connected.isEmpty { return "Reconnect the selected environment to change this setting." }
         let denied = connected.filter { !$0.canWrite }.map(\.label)
         if !denied.isEmpty { return "This connection lacks permission to change settings on \(denied.joined(separator: ", "))." }
+        if isProjectScope, !keys.isEmpty, !keys.contains(where: ProjectSettings.isScoped) {
+            return "Environment-wide setting. Select an environment to change it."
+        }
         return nil
     }
+
+    public var inertReason: String? { inertReason(for: []) }
 
     /// The page body's notice instead of rows (settings.tsx `SettingsScopeBoundary`), or nil.
     public var boundaryMessage: String? {

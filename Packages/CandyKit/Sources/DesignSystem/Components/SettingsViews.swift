@@ -42,6 +42,8 @@ public final class SettingsRowView: DSView {
     public var inertReason: String? { didSet { applyInert() } }
     /// `bg-muted/15` (the new keybinding row).
     public var fill: NSColor? { didSet { needsDisplay = true } }
+    /// A 14pt glyph before the title (`inline-flex items-center gap-2`), such as the Archive page's spinner.
+    public var titleIcon: NSView? { didSet { oldValue?.removeFromSuperview(); titleIcon.map(addSubview); needsLayout = true } }
     private let inertCover = InertCoverView()
 
     private let titleLabel = LabelView()
@@ -156,9 +158,11 @@ public final class SettingsRowView: DSView {
             return s.width == NSView.noIntrinsicMetric ? NSSize(width: 20, height: 20) : s
         }
         let slots = accessories.reduce(0) { $0 + size($1).width + 6 }
-        let titleWidth = min(ceil(titleLabel.textWidth) + 1, max(0, f.title.width - slots))
-        titleLabel.frame = NSRect(x: f.title.minX, y: f.title.minY, width: titleWidth, height: 20)
-        var ax = f.title.minX + titleWidth + 6
+        let iconInset: CGFloat = titleIcon == nil ? 0 : 14 + 8
+        titleIcon?.frame = NSRect(x: f.title.minX, y: f.title.minY + 3, width: 14, height: 14)
+        let titleWidth = min(ceil(titleLabel.textWidth) + 1, max(0, f.title.width - slots - iconInset))
+        titleLabel.frame = NSRect(x: f.title.minX + iconInset, y: f.title.minY, width: titleWidth, height: 20)
+        var ax = f.title.minX + iconInset + titleWidth + 6
         for a in accessories {
             let s = size(a)
             if s.width > 20 { ax += 2 }

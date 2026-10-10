@@ -116,6 +116,10 @@ final class Environments {
 
     private func changed() { for o in observers.values { o() } }
 
+    /// After each merge, for views besides the thread view (Settings follows projects and their scripts).
+    private var shellObservers: [() -> Void] = []
+    func observeShell(_ change: @escaping () -> Void) { shellObservers.append(change) }
+
     // MARK: The local environment
 
     /// The local server's shell from the disk cache, before it answers.
@@ -503,6 +507,7 @@ final class Environments {
         let shown = shells.merged(order: order)
         sidebar?.setSnapshot(shown, animated: sidebar?.snapshot != nil)
         if let shown { onShell?(shown) }
+        for o in shellObservers { o() }
     }
 
     private func publishEnvironments() {

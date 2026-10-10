@@ -15,6 +15,9 @@ public class SettingsPageBase: SettingsStackView {
         super.init(frame: .zero)
     }
 
+    /// The page was opened (again): pages that query the server load fresh data.
+    public func didShow() {}
+
     /// Re-reads every control after the client settings, a server config or the scope changed.
     public func refresh() {
         binder.refresh()
@@ -86,9 +89,14 @@ public class SettingsPageBase: SettingsStackView {
         let slot = ResetSlot(label: reset ?? "")
         r.accessories = extra + [inheritance, slot]
         inheritance.onOpen = { [weak self] trigger in self?.showChain(keys: keys, from: trigger) }
+        let scoped = keys.filter(ProjectSettings.isScoped)
         slot.action = { [weak self] in
             guard let self else { return }
-            self.context.patchServer(resetPatch?() ?? Dictionary(uniqueKeysWithValues: keys.map { ($0, ServerSettingsValues.fields[$0]?.defaultValue ?? .null) }))
+            if self.context.scope.isProjectScope, !scoped.isEmpty {
+                self.context.clearServer?(scoped)
+            } else {
+                self.context.patchServer(resetPatch?() ?? Dictionary(uniqueKeysWithValues: keys.map { ($0, ServerSettingsValues.fields[$0]?.defaultValue ?? .null) }))
+            }
         }
         binder.add { [weak self, weak r] in
             guard let self else { return }
@@ -97,9 +105,17 @@ public class SettingsPageBase: SettingsStackView {
             inheritance.state = inh.state
             inheritance.summary = inh.summary
             inheritance.isHidden = scope.connected.isEmpty
-            let changed = !(isDefault?() ?? keys.allSatisfy { self.server.isDefault($0) })
-            slot.isShown = reset != nil && changed && scope.inertReason == nil
-            r?.inertReason = scope.inertReason
+            let inert = scope.inertReason(for: keys)
+            if scope.isProjectScope, !scoped.isEmpty {
+                // `SettingResetButton tooltip="Reset to inherited value"` while the project overrides it.
+                slot.isShown = scope.source(scoped) != .environment && inert == nil
+                slot.tooltip = "Reset to inherited value"
+            } else {
+                let changed = !(isDefault?() ?? keys.allSatisfy { self.server.isDefault($0) })
+                slot.isShown = reset != nil && changed && inert == nil
+                slot.tooltip = "Reset to default"
+            }
+            r?.inertReason = inert
         }
         return slot
     }
@@ -143,6 +159,15 @@ public class SettingsPageBase: SettingsStackView {
         return (r, select)
     }
 
+    /// Rows whose description names the project at a project scope (ProjectDefaultsSettings.tsx `isProjectScope`).
+    func projectScopeDetails(_ rows: [(SettingsRowView, String, String)]) {
+        binder.add { [weak self] in
+            guard let self else { return }
+            let project = self.context.scope.isProjectScope
+            for (row, inProject, otherwise) in rows { row.detail = project ? inProject : otherwise }
+        }
+    }
+
     // MARK: Inheritance chain
 
     /// `SettingInheritance`'s popover: per environment, the environment value and the built-in default,
@@ -150,13 +175,19 @@ public class SettingsPageBase: SettingsStackView {
     func showChain(keys: [String], from trigger: NSView) {
         guard let key = keys.first else { return }
         let stack = ChainView()
-        for e in context.scope.connected {
-            guard let s = e.settings else { continue }
+        let scope = context.scope
+        for t in scope.targets {
+            guard let e = scope.environments.first(where: { $0.id == t.environmentId }), let s = e.settings else { continue }
+            // `settingInheritanceLayers`: the project override, the environment's value, the built-in default.
+            let source = ProjectSettings.isScoped(key) ? t.sources[key] ?? .environment : .environment
             let set = !s.isDefault(key)
-            stack.add(header: context.scope.environmentLabel(e), machine: e.machine, layers: [
-                ("Environment", set ? Self.format(key, s[key]) : "Inherits", set, set),
-                ("Default", Self.format(key, ServerSettingsValues.fields[key]?.defaultValue ?? .null), !set, true),
-            ])
+            var layers: [(label: String, value: String, effective: Bool, set: Bool)] = []
+            if t.projectId != nil, ProjectSettings.isScoped(key) {
+                layers.append(("Project", source == .project ? Self.format(key, t.settings[key]) : "Inherits", source == .project, source == .project))
+            }
+            layers.append((t.label, set ? Self.format(key, s[key]) : "Inherits", source == .environment && set, set))
+            layers.append(("Default", Self.format(key, ServerSettingsValues.fields[key]?.defaultValue ?? .null), source == .environment && !set, true))
+            stack.add(header: scope.environmentLabel(e), machine: e.machine, layers: layers)
         }
         let pop = PopoverView(content: stack, padding: .none, width: .md)
         _ = pop.show(from: trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
@@ -167,6 +198,8 @@ public class SettingsPageBase: SettingsStackView {
         switch value {
         case .null:
             switch key {
+            case "pullRequestMergeMethod": return "Last selected"
+            case "sourceControlWriterModelSelection": return "Text generation model"
             case "sidebarAutoSettleAfterDays": return "Never"
             case "defaultModelSelection": return "Automatic"
             case "defaultThreadEnvMode", "worktreeSubmodules": return "Inherit"
@@ -179,11 +212,14 @@ public class SettingsPageBase: SettingsStackView {
         case .string(let s):
             if key == "defaultThreadEnvMode" { return s == "worktree" ? "New worktree" : "Current checkout" }
             if key == "worktreeSubmodules" { return ["recursive": "Recursive", "top-level": "Top level only", "none": "Skip"][s] ?? s }
+            if key == "pullRequestMergeMethod" { return ["merge": "Merge commit", "squash": "Squash and merge", "rebase": "Rebase and merge"][s] ?? s }
             return s.isEmpty ? "Empty" : s
         case .array(let a): return "\(a.count) \(a.count == 1 ? "item" : "items")"
         case .object(let o):
             if let model = o["model"]?.stringValue { return model }
-            if let mode = o["mode"]?.stringValue { return mode }
+            if let mode = o["mode"]?.stringValue {
+                return ["repo_conventions": "Repository conventions", "conventional_commits": "Conventional Commits", "custom": "Custom instructions"][mode] ?? mode
+            }
             return "Custom"
         }
     }

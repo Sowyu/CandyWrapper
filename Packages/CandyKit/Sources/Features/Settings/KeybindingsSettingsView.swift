@@ -213,6 +213,12 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
     var onRecord: ((String) -> Void)?
     var onCancel: (() -> Void)?
     var onEnd: (() -> Void)?
+    /// The text when nothing is recorded (the action editor says "Press shortcut").
+    var emptyText = "Unassigned" { didSet { sync() } }
+    /// Backspace and Delete clear the value (the action editor's `captureKeybinding`).
+    var deleteClears = false
+    /// The width when laid out by its intrinsic size.
+    var preferredWidth: CGFloat = 176
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -227,13 +233,13 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
     }
 
     override var acceptsFirstResponder: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: 176, height: 28) }
+    override var intrinsicContentSize: NSSize { NSSize(width: preferredWidth, height: 28) }
     override func becomeFirstResponder() -> Bool { isCapturing = true; return true }
     override func resignFirstResponder() -> Bool { isCapturing = false; onEnd?(); return true }
     override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
 
     private func sync() {
-        label.text = isCapturing ? "Press shortcut" : (value.isEmpty ? "Unassigned" : value)
+        label.text = isCapturing && value.isEmpty ? "Press shortcut" : isCapturing && !deleteClears ? "Press shortcut" : (value.isEmpty ? emptyText : value)
         label.color = isCapturing || value.isEmpty ? Themed.color(\.contrastPlaceholder) : Themed.color(\.contrastForeground)
     }
 
@@ -250,6 +256,11 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
         if event.keyCode == 53 {
             onCancel?()
             window?.makeFirstResponder(superview)
+            return
+        }
+        if deleteClears, event.keyCode == 51 || event.keyCode == 117 {
+            value = ""
+            onRecord?("")
             return
         }
         guard let stroke = KeyStroke(event), let binding = KeybindingsLogic.binding(from: stroke) else { return }

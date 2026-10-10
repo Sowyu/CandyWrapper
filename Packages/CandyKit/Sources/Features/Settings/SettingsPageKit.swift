@@ -30,6 +30,33 @@ public final class SettingsPageContext {
     public var toast: ((String, String?, ToastQueue.Kind) -> Void)?
     /// Opens a modal dialog (the background activity dialog).
     public var presentDialog: ((DialogView) -> ModalHost?)?
+    /// Drops the keys' project overrides at a project scope (`useClearScopedSettings`).
+    public var clearServer: (([String]) -> Void)?
+    /// One RPC on an environment's socket (environment id, method, payload).
+    public var request: ((String, String, JSONValue) async throws -> JSONValue)?
+    /// Applies the settings a `server.updateSettings` reply returned to that environment's config.
+    public var applySettings: ((String, JSONValue) -> Void)?
+    /// `requestConfirmDialog(message, {variant})`: the app's alert dialog; the closure runs on Confirm.
+    public var confirm: ((_ message: String, _ destructive: Bool, _ onConfirm: @escaping @MainActor () -> Void) -> Void)?
+    /// Each environment's server config (providers, keybindings), by id.
+    public var configs: [String: ServerProviderConfig] = [:]
+    /// The model picker's favorites (client setting `favorites`) and their toggle.
+    public var favorites: [ModelFavorite] = []
+    public var toggleFavorite: ((ProviderInstanceId, String) -> Void)?
+    /// Opens another settings page.
+    public var openSection: ((SettingsSection) -> Void)?
+    /// Leaves Settings for the thread view (after removing the open project).
+    public var closeSettings: (() -> Void)?
+    /// Copies text and shows a toast with the title.
+    public var copy: ((String, String) -> Void)?
+    /// `projects.mutate project.update` on every member, stopping at the first failure (`updateAllMembers`).
+    public var updateProject: ((_ members: [SettingsScopeProject.Member], _ fields: [String: JSONValue], _ failureTitle: String) -> Void)?
+    /// `projects.mutate project.delete {force: true}` for each member; `leave` returns to the thread view.
+    public var deleteProjects: ((_ members: [SettingsScopeProject.Member], _ leave: Bool) -> Void)?
+    /// Active threads of a project on an environment (environment id, project id), for the removal prompt.
+    public var threadCount: ((String, String) -> Int)?
+    /// Runs project action writes in order; returns the first error message, or nil.
+    public var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
 
     public init() {}
 
@@ -86,12 +113,17 @@ final class ResetSlot: DSView {
     let button = ButtonView(nil, icon: .undo2, variant: .ghostMuted, size: .iconMicro)
     var action: (@MainActor () -> Void)? { didSet { button.action = action } }
     var isShown = false { didSet { button.isHidden = !isShown } }
+    private var tip: TooltipController?
+    var tooltip: String {
+        get { tip?.text ?? "" }
+        set { if tip?.text != newValue { tip?.text = newValue } }
+    }
 
     init(label: String, tooltip: String = "Reset to default") {
         super.init(frame: .zero)
         button.iconSize = 12
         button.setAccessibilityLabel("Reset \(label) to default")
-        _ = TooltipController.attach(to: button, text: tooltip)
+        tip = TooltipController.attach(to: button, text: tooltip)
         button.isHidden = true
         addSubview(button)
     }
@@ -186,6 +218,10 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
     let project = InlinePickerButton()
     let environment = InlinePickerButton()
     weak var context: SettingsPageContext?
+    /// Providers and Diagnostics show one environment at a time (`singleEnvironment`): no "All environments".
+    var singleEnvironment = false
+    /// The environment such a page picked when none is chosen (`selectSingleEnvironmentScope`).
+    var impliedMachine: String?
 
     init(context: SettingsPageContext) {
         self.context = context
@@ -202,13 +238,14 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
 
     func refresh() {
         guard let scope = context?.scope else { return }
-        project.title = scope.selection.project.flatMap { key in scope.projects.first { $0.key == key }?.displayName } ?? "All projects"
-        connective.text = scope.selection.machine == nil ? "across" : "on"
-        if let id = scope.selection.machine, let e = scope.environments.first(where: { $0.id == id }) {
+        project.title = scope.selection.project.map { key in scope.projects.first { $0.key == key }?.displayName ?? "Unavailable project" } ?? "All projects"
+        let machine = scope.selection.machine ?? (singleEnvironment ? impliedMachine : nil)
+        connective.text = machine == nil ? "across" : "on"
+        if let id = machine, let e = scope.environments.first(where: { $0.id == id }) {
             environment.title = scope.environmentLabel(e)
             environment.glyph = EnvironmentMachineIcon.view(e.machine, size: 14, color: Themed.color(\.foreground))
         } else {
-            environment.title = scope.selection.machine == nil ? "All environments" : "Unavailable environment"
+            environment.title = scope.selection.machine != nil ? "Unavailable environment" : singleEnvironment ? "No environments" : "All environments"
             environment.glyph = nil
         }
         needsLayout = true
@@ -217,16 +254,22 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
     private func openEnvironments() {
         guard let context else { return }
         let scope = context.scope
-        var items: [MenuItem] = [MenuItem.radio("All environments", checked: scope.selection.machine == nil) { [weak context] _ in
-            context?.selectScope?(SettingsScopeSelection(machine: nil, project: scope.selection.project))
-        }]
-        items[0].icon = .layers
-        items[0].closesOnClick = true
-        items.append(MenuItem("", kind: .separator))
+        var items: [MenuItem] = []
+        if !singleEnvironment {
+            var all = MenuItem.radio("All environments", checked: scope.selection.machine == nil) { [weak context] _ in
+                context?.selectScope?(SettingsScopeSelection(machine: nil, project: scope.selection.project))
+            }
+            all.icon = .layers
+            all.closesOnClick = true
+            items = [all, MenuItem("", kind: .separator)]
+        }
         for e in scope.environments {
             var item = MenuItem.radio(scope.environmentLabel(e), checked: scope.selection.machine == e.id) { [weak context] _ in
                 context?.selectScope?(SettingsScopeSelection(machine: e.id, project: scope.selection.project))
             }
+            if singleEnvironment, scope.selection.machine == nil { item = MenuItem.radio(scope.environmentLabel(e), checked: impliedMachine == e.id) { [weak context] _ in
+                context?.selectScope?(SettingsScopeSelection(machine: e.id, project: scope.selection.project))
+            } }
             item.glyph = EnvironmentMachineIcon.definition(e.machine)
             item.shortcut = e.connected ? nil : "Offline"
             item.closesOnClick = true
@@ -238,13 +281,18 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
     private func openProjects() {
         guard let context else { return }
         let scope = context.scope
-        var items: [MenuItem] = [MenuItem.radio("All projects", checked: scope.selection.project == nil) { _ in }]
+        // `selectProjectAxis`: choosing a project keeps the environment axis.
+        var items: [MenuItem] = [MenuItem.radio("All projects", checked: scope.selection.project == nil) { [weak context] _ in
+            context?.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: nil))
+        }]
         items[0].closesOnClick = true
         items.append(MenuItem("", kind: .separator))
+        // ponytail: rows show names without the project favicon; add the icon if the menu learns custom glyph views
         for p in scope.projects {
-            var item = MenuItem.radio(p.displayName, checked: scope.selection.project == p.key) { _ in }
-            // ponytail: choosing a project waits for project overrides (WP7.7b); the list shows T3's projects
-            item.isDisabled = true
+            var item = MenuItem.radio(p.displayName, checked: scope.selection.project == p.key) { [weak context] _ in
+                context?.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: p.key))
+            }
+            item.closesOnClick = true
             items.append(item)
         }
         MenuPopupView.show(items, from: project, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none))

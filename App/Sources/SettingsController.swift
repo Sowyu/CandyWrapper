@@ -28,6 +28,8 @@ final class SettingsController {
     var general: GeneralSettingsView?
     var appearance: AppearanceSettingsView?
     var keybindingsPage: KeybindingsSettingsView?
+    /// Project, Providers, Integrations, Source Control, Storage, Archive, Diagnostics and SnapShots (WP7.7b), built on first open.
+    var extraPages: [SettingsSection: SettingsPageBase] = [:]
     weak var composer: ComposerController?
     var clientObserver: Int?
     private(set) var isOpen = false
@@ -64,6 +66,7 @@ final class SettingsController {
         self.environments = environments
         self.t3 = t3
         environments.observe { [weak self] in self?.refresh() }
+        environments.observeShell { [weak self] in self?.shellChanged() }
         t3.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
         t3.observe { [weak self] in self?.refresh() }
     }
@@ -283,7 +286,7 @@ final class SettingsController {
 
     /// `requestConfirmDialog` as `ConfirmDialogHost` draws it: the question line is the title, the rest
     /// the description, then Cancel and a destructive Confirm.
-    private func confirm(_ title: String, _ message: String, confirmTitle: String = "Confirm", then action: @escaping () -> Void) {
+    func confirm(_ title: String, _ message: String, confirmTitle: String = "Confirm", then action: @escaping () -> Void) {
         guard let window, modal == nil else { return }
         let dialog = DialogView(kind: .alertDialog, title: title, message: message)
         let cancel = ButtonView("Cancel", variant: .outline)

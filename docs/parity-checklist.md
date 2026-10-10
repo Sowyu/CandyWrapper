@@ -267,23 +267,23 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | 🟡 | WP7.7a: T3's catalog (generated), ranking, arrows/Return/Escape, `/` to focus, jump with pulse. WP7.7b pages stay disabled |
+| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | 🟡 | WP7.7a: T3's catalog (generated), ranking, arrows/Return/Escape, `/` to focus, jump with pulse. WP7.7b: every page but Scheduled Tasks opens; Project shows only with a project picked. Missing: the scope notice for a search hit outside its owning scope |
 | Settings breadcrumb, group and row layout, scope notice | comp/settings/SettingsBreadcrumb.tsx, comp/settings/SettingsGroup.tsx, comp/settings/SettingsScopeNotice.tsx | ➖ | WP7.7a: reset arrows, inheritance indicator with chain popover, inert rows, scope boundary text, Restore device defaults. Missing: SettingsScopeNotice |
-| Environment scope picker (All environments, per environment, mixed values) | comp/settings/SettingsScopeContext.tsx, comp/settings/settingsScope.ts | ➖ | WP7.7a: sentence, environment axis, mixed switches and selects, writes to every connected target. The project axis lists projects; choosing one waits for WP7.7b |
+| Environment scope picker (All environments, per environment, mixed values) | comp/settings/SettingsScopeContext.tsx, comp/settings/settingsScope.ts | 🟡 | WP7.7a: sentence, environment axis, mixed switches and selects. WP7.7b: project axis (sidebar groups by name), project targets with resolved overrides, writes into `projectSettingsOverrides`, reset to inherited, environment-wide rows inert, chain popover with the Project layer, single-environment pages (Providers, Diagnostics). Missing: checkout axis, t3.json tier, "Reset all" for overriding projects at an environment scope, project favicons in the picker |
 
 ### Settings > Project
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Project list and per-project settings page | web/routes/settings.projects.tsx, web/routes/projects.$projectKey.tsx, comp/settings/ProjectsSettings.tsx, comp/settings/ProjectSettingsPanel.tsx | ⏳ | |
-| Project overview (name, path, repo identity, icon, favicon) | comp/settings/ProjectSettingsPanel.tsx, comp/settings/ProjectFaviconPickerDialog.tsx | ⏳ | |
-| Default model, workspace mode, permissions overrides | comp/settings/ProjectDefaultsSettings.tsx | ⏳ | Inherit vs override per setting |
-| Automatically pull (keep default branch current) | comp/settings/ProjectDefaultsSettings.tsx, docs/project-settings.md | ⏳ | |
-| Agent browser access override | comp/settings/ProjectDefaultsSettings.tsx | ⏳ | needs webview: ask user |
-| Actions (scripts): add, edit, run on settle, keybinding | comp/settings/ProjectActionsSettings.tsx, comp/settings/ProjectActionsList.tsx, comp/projectScriptEditor.tsx | ⏳ | `t3.json` scripts too |
-| Worktree location and branch naming | comp/settings/BranchNamingSettings.tsx, docs/project-settings.md | ⏳ | Branch prefix, naming instructions |
-| Webhook automations | docs/project-settings.md | ⏳ | Links to Scheduled Tasks |
-| Project removal | comp/settings/ProjectSettingsPanel.tsx | ⏳ | |
+| Project list and per-project settings page | web/routes/settings.projects.tsx, web/routes/projects.$projectKey.tsx, comp/settings/ProjectsSettings.tsx, comp/settings/ProjectSettingsPanel.tsx | 🟡 | WP7.7b: `ProjectSettingsView`; picked through the scope sentence; no project shows T3's scope notice with one button per project. Fidelity `settings-pages2` |
+| Project overview (name, path, repo identity, icon, favicon) | comp/settings/ProjectSettingsPanel.tsx, comp/settings/ProjectFaviconPickerDialog.tsx | ➖ | WP7.7b: rename across members (`project.update`), icon description and reset to Automatic, permission note. Missing: icon and image file pickers (buttons disabled) |
+| Default model, workspace mode, permissions overrides | comp/settings/ProjectDefaultsSettings.tsx | 🟡 | WP7.7b: Model and Workspace on Project; every General row overrides at a project scope. No traits picker |
+| Automatically pull (keep default branch current) | comp/settings/ProjectDefaultsSettings.tsx, docs/project-settings.md | 🟡 | WP7.7b: Source Control > Repositories; the server pulls |
+| Agent browser access override | comp/settings/ProjectDefaultsSettings.tsx | 🟡 | WP7.7b: Integrations; server-side |
+| Actions (scripts): add, edit, run on settle, keybinding | comp/settings/ProjectActionsSettings.tsx, comp/settings/ProjectActionsList.tsx, comp/projectScriptEditor.tsx | ➖ | WP7.7b: list, Add/Edit Action dialog (icon, shortcut recorder, command, preview URL, roles), delete with confirm, reset to the environment list, shortcuts upserted and removed. Stored only: running them (`script.<id>.run`). Missing: t3.json import, invalid t3.json row. Keeps a shortcut on an edit that leaves it alone (T3 drops it) |
+| Worktree location and branch naming | comp/settings/BranchNamingSettings.tsx, docs/project-settings.md | 🟡 | WP7.7b: Storage > Worktree location, Source Control > Worktree branch naming (static prefix, semantic, custom instructions) |
+| Webhook automations | docs/project-settings.md | ⏳ | Scheduled Tasks, WP7.7c |
+| Project removal | comp/settings/ProjectSettingsPanel.tsx | 🟡 | WP7.7b: T3's confirm lines, `project.delete {force}` per member, back to the thread view; Checkouts section for groups |
 
 ### Settings > General
 
@@ -310,7 +310,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | Confirmations: Unpin, Archive, Delete, Quit shortcut (Hold, Direct, Double press) | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; prompts and the quit hold come with WP7.8 |
 | Text generation model | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: model picker writes the setting; no traits picker |
 | `t3` CLI command install row | comp/settings/CliCommandSettingsRow.tsx | ⏳ | Skipped: CandyWrapper installs no CLI |
-| About: version, privacy policy, telemetry note, Diagnostics link, Open source licenses | comp/settings/SettingsPanels.tsx, comp/settings/OpenSourceLicenses.tsx, docs/telemetry.md | ➖ | WP7.7a: version, privacy policy; Diagnostics and licenses wait for WP7.7b |
+| About: version, privacy policy, telemetry note, Diagnostics link, Open source licenses | comp/settings/SettingsPanels.tsx, comp/settings/OpenSourceLicenses.tsx, docs/telemetry.md | ➖ | WP7.7a: version, privacy policy. WP7.7b: View diagnostics opens Diagnostics. Missing: the licenses page |
 | Legacy toggles: Plan mode, Context window indicator, Sidebar | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: folded section; plan mode wired, the other two stored |
 | Panel for "Reset to defaults" / restore | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: Restore device defaults with T3's confirm list |
 
@@ -341,33 +341,33 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Enable toggle and setup dialog (screen recording, accessibility, shortcut) | comp/settings/SnapShotSettings.tsx, comp/settings/SnapShotSetupDialog.tsx, docs/snap-shot.md | ⏳ | macOS permissions |
-| Include app text; Capture shortcut recorder; sound; flash; animations | comp/settings/SnapShotSettings.tsx, comp/settings/CaptureShortcutConfig.tsx | ⏳ | |
+| Enable toggle and setup dialog (screen recording, accessibility, shortcut) | comp/settings/SnapShotSettings.tsx, comp/settings/SnapShotSetupDialog.tsx, docs/snap-shot.md | ➖ | WP7.7b: the page (no scope sentence) with the enable switch, stored. Missing: capture, permissions, setup dialog (WP7.8) |
+| Include app text; Capture shortcut recorder; sound; flash; animations | comp/settings/SnapShotSettings.tsx, comp/settings/CaptureShortcutConfig.tsx | ➖ | WP7.7b: rows store the client settings; the shortcut shows read-only |
 
 ### Settings > Providers
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Provider instance cards (Claude, Codex, Cursor, OpenCode, Pi, Muse, Antigravity, Grok, ACP agents) | comp/settings/ProviderSettingsPanel.tsx, comp/settings/ProviderInstanceCard.tsx, docs/providers-*.md | ⏳ | Many instances per driver allowed |
-| Add provider instance wizard (driver choice, ACP registry search, auth step) | comp/settings/AddProviderInstanceDialog.tsx, comp/settings/AcpRegistrySearchStep.tsx, comp/settings/ProviderWizardAuthenticationStep.tsx | ⏳ | |
-| Provider status (installed, version, auth, update available) and Update now | comp/settings/providerStatus.ts, comp/ProviderUpdatesAction.tsx | ⏳ | |
-| Provider config form (binary path, home dir, env vars with redaction, args) | comp/settings/ProviderSettingsForm.tsx, comp/settings/RedactedSensitiveText.tsx | ⏳ | |
+| Provider instance cards (Claude, Codex, Cursor, OpenCode, Pi, Muse, Antigravity, Grok, ACP agents) | comp/settings/ProviderSettingsPanel.tsx, comp/settings/ProviderInstanceCard.tsx, docs/providers-*.md | 🟡 | WP7.7b: one environment at a time; list (status, version, enable) beside the editor (display name, Runtime, Models), reset or delete instances through `providerInstanceMutation`. Fidelity `settings-pages2` |
+| Add provider instance wizard (driver choice, ACP registry search, auth step) | comp/settings/AddProviderInstanceDialog.tsx, comp/settings/AcpRegistrySearchStep.tsx, comp/settings/ProviderWizardAuthenticationStep.tsx | ⏳ | WP7.7b: both entry points drawn disabled |
+| Provider status (installed, version, auth, update available) and Update now | comp/settings/providerStatus.ts, comp/ProviderUpdatesAction.tsx | ➖ | WP7.7b: summaries, version labels, refresh with "Checked …". Missing: version advisory popover and Update now |
+| Provider config form (binary path, home dir, env vars with redaction, args) | comp/settings/ProviderSettingsForm.tsx, comp/settings/RedactedSensitiveText.tsx | ➖ | WP7.7b: text fields per driver (Codex, Claude, Grok, Muse, Pi, OpenCode). Missing: environment variables editor, Antigravity and ACP fields, accent color |
 | Provider sign-in terminal and auth callback | comp/settings/ProviderAuthTerminal.tsx, comp/settings/ProviderAuthenticationSection.tsx, comp/settings/ProviderAuthCallbackCoordinator.tsx | ⏳ | OAuth callback arrives as a deep link |
-| Models list, custom models, accent color | comp/settings/ProviderModelsSection.tsx, comp/settings/ProviderAccentColorPicker.tsx | ⏳ | |
+| Models list, custom models, accent color | comp/settings/ProviderModelsSection.tsx, comp/settings/ProviderAccentColorPicker.tsx | ➖ | WP7.7b: grouped list, favorites (wired to the model picker), filter, move, hide, Disable all, add and remove custom models with T3's validation. Stored only: hidden models and order (the picker doesn't read them). Missing: custom model editor, accent color |
 | Codex setup, add Codex account, ChatGPT account/sharing/usage | comp/settings/CodexSetupSection.tsx, comp/settings/AddCodexAccountDialog.tsx, comp/settings/ChatGptConnectionButton.tsx, comp/settings/ChatGptAccountPicker.tsx | ⏳ | |
 | ACP session management section | comp/settings/AcpSessionManagementSection.tsx | ⏳ | |
 | Usage providers (incl. Cursor account usage via Keychain) | comp/settings/UsageProviderSettings.tsx | ⏳ | |
-| Health check interval | comp/settings/SettingsPanels.tsx | ⏳ | |
+| Health check interval | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7b: Providers > Advanced, written to that environment |
 | Provider update notifications (launch and primary) | comp/ProviderUpdateLaunchNotification.tsx, comp/ProviderUpdatePrimaryNotification.tsx | ⏳ | |
 
 ### Settings > Integrations
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Devices: device hub toggle, agent device access, simulator support, device hosts (SSH) | comp/settings/IntegrationsSettings.tsx, comp/settings/DeviceHostsSettings.tsx, comp/settings/DeviceHostEditor.tsx | ⏳ | |
-| Browser: profiles, default profile, viewport, zoom, appearance | comp/settings/IntegrationsSettings.tsx | ⏳ | needs webview: ask user |
-| Browser: recording frame rate, show key presses, show mouse presses | comp/settings/IntegrationsSettings.tsx | ⏳ | needs webview: ask user |
-| Browser: Open links in, Auto-show floating preview | comp/settings/IntegrationsSettings.tsx | ⏳ | needs webview: ask user |
+| Devices: device hub toggle, agent device access, simulator support, device hosts (SSH) | comp/settings/IntegrationsSettings.tsx, comp/settings/DeviceHostsSettings.tsx, comp/settings/DeviceHostEditor.tsx | ➖ | WP7.7b: hub and agent access rows show the values; agent access overrides at a project scope. Missing: `device.configure`, simulator status, device hosts |
+| Browser: profiles, default profile, viewport, zoom, appearance | comp/settings/IntegrationsSettings.tsx | ➖ | WP7.7b: agent browser access (server); viewport (Fill or Responsive), zoom and appearance store. Missing: profiles, presets and sizes |
+| Browser: recording frame rate, show key presses, show mouse presses | comp/settings/IntegrationsSettings.tsx | ➖ | WP7.7b: stored; the browser reads them with WP7.6b |
+| Browser: Open links in, Auto-show floating preview | comp/settings/IntegrationsSettings.tsx | ➖ | WP7.7b: stored |
 | MCP / outside agents (listed under Connections) | docs/outside-agents.md | ⏳ | See Remote environments |
 
 ### Settings > Scheduled Tasks
@@ -378,22 +378,22 @@ See the "Scheduled tasks" section.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Server environment selector and Rescan | comp/settings/SourceControlSettings.tsx | ⏳ | |
-| Provider rows: GitHub, GitLab, Bitbucket, Azure DevOps, Forgejo/Gitea (auth state) | comp/settings/SourceControlSettings.tsx | ⏳ | |
-| GitHub accounts and token; per-host routing | comp/settings/GitHubAccountSettings.tsx, comp/settings/GitHubTokenSettings.tsx, comp/settings/GitHubRoutingSettings.tsx | ⏳ | |
+| Server environment selector and Rescan | comp/settings/SourceControlSettings.tsx | 🟡 | WP7.7b: `server.discoverSourceControl` on the representative environment, Rescan, empty state |
+| Provider rows: GitHub, GitLab, Bitbucket, Azure DevOps, Forgejo/Gitea (auth state) | comp/settings/SourceControlSettings.tsx | 🟡 | WP7.7b: marks, status dots, badges, T3's summaries. Bitbucket, Azure and Jujutsu glyphs missing (dot only). Fidelity `settings-pages2` |
+| GitHub accounts and token; per-host routing | comp/settings/GitHubAccountSettings.tsx, comp/settings/GitHubTokenSettings.tsx, comp/settings/GitHubRoutingSettings.tsx | ➖ | WP7.7b: token per host (write-only, Save and Remove). Missing: accounts and routing (need `gh`) |
 | Bitbucket credentials | comp/settings/BitbucketCredentialsSettings.tsx | ⏳ | |
-| Git fetch interval; Automatically pull | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Worktree branch naming | comp/settings/BranchNamingSettings.tsx | ⏳ | |
-| Writing style (Repository conventions, Conventional Commits, Custom), writer model, follow templates | comp/settings/SourceControlWritingSettings.tsx | ⏳ | |
-| Default merge method; Remove agent credits when merging | comp/settings/SourceControlSettings.tsx | ⏳ | |
+| Git fetch interval; Automatically pull | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7b: fetch interval in the Git row's details, automatic pull in Repositories |
+| Worktree branch naming | comp/settings/BranchNamingSettings.tsx | 🟡 | WP7.7b |
+| Writing style (Repository conventions, Conventional Commits, Custom), writer model, follow templates | comp/settings/SourceControlWritingSettings.tsx | ➖ | WP7.7b: style select with custom instructions, templates, writer model switch and picker. Missing: "Write custom instructions for all" when mixed, traits picker |
+| Default merge method; Remove agent credits when merging | comp/settings/SourceControlSettings.tsx | ➖ | WP7.7b: both rows. Stored only for this client: the pull request merge tab still starts from the last-picked method |
 
 ### Settings > Storage
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Automatic worktree cleanup (deleted threads, inactive, merged, unchanged) | comp/settings/StorageSettings.tsx | ⏳ | |
-| Worktree location | comp/settings/StorageSettings.tsx | ⏳ | |
-| Artifacts and logs (old browser artifacts, rotated logs) | comp/settings/StorageSettings.tsx | ⏳ | |
+| Automatic worktree cleanup (deleted threads, inactive, merged, unchanged) | comp/settings/StorageSettings.tsx | 🟡 | WP7.7b: rules per environment; Inherit, Off or Custom per project; capability notices. The days field commits on each step |
+| Worktree location | comp/settings/StorageSettings.tsx | 🟡 | WP7.7b |
+| Artifacts and logs (old browser artifacts, rotated logs) | comp/settings/StorageSettings.tsx | 🟡 | WP7.7b |
 
 ### Settings > Connections
 
@@ -414,15 +414,15 @@ See the "Scheduled tasks" section.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Archived threads list with Unarchive and Delete | web/routes/settings.archived.tsx, comp/settings/SettingsPanels.tsx (line ~3470) | ⏳ | |
+| Archived threads list with Unarchive and Delete | web/routes/settings.archived.tsx, comp/settings/SettingsPanels.tsx (line ~3470) | 🟡 | WP7.7b: `orchestration.getArchivedShellSnapshot` per environment, by project, Unarchive, context menu with Delete (confirm when "Confirm thread deletion" is on) |
 
 ### Settings > Diagnostics (from General > About)
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Live processes with signal actions | comp/settings/DiagnosticsSettings.tsx, comp/settings/ProcessSignalActions.tsx | ⏳ | |
-| Resource history charts (5m, 15m, 30m, 1h) | comp/settings/DiagnosticsSettings.tsx, comp/settings/ResourceTelemetryDiagnostics.tsx | ⏳ | |
-| Trace diagnostics (latest failures, common failures, slowest spans, span logs, top names) | comp/settings/DiagnosticsSettings.tsx | ⏳ | |
+| Live processes with signal actions | comp/settings/DiagnosticsSettings.tsx, comp/settings/ProcessSignalActions.tsx | 🟡 | WP7.7b: stats, process tree with collapse, INT and KILL (`server.signalProcess`, KILL asks first) |
+| Resource history charts (5m, 15m, 30m, 1h) | comp/settings/DiagnosticsSettings.tsx, comp/settings/ResourceTelemetryDiagnostics.tsx | ➖ | WP7.7b: window selector, stats, CPU bars, top processes. Missing: the resource telemetry block (its own stream), bar tooltips |
+| Trace diagnostics (latest failures, common failures, slowest spans, span logs, top names) | comp/settings/DiagnosticsSettings.tsx | ➖ | WP7.7b: stats and the five tables. Missing: open logs folder, copy trace id, expandable text |
 
 ## Command palette
 
@@ -446,7 +446,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | Change theme (sub-page with live preview) | comp/CommandPalette.tsx (line ~2126) | ⏳ | `theme.select` |
 | Change appearance (System, Light, Dark) | comp/CommandPalette.tsx (line ~2175) | 🟡 | Kept in UserDefaults `appearance.mode`; `--appearance` still wins for development |
 | Toggle theme editor | comp/CommandPalette.tsx (line ~2221) | ⏳ | |
-| Open pull requests; Open usage; Open settings; Project settings | comp/CommandPalette.tsx (lines ~2242-2299) | ➖ | Pull requests and usage open the placeholder pages; Project settings waits for WP7.7 |
+| Open pull requests; Open usage; Open settings; Project settings | comp/CommandPalette.tsx (lines ~2242-2299) | ➖ | Pull requests and usage open the placeholder pages; Project settings not wired yet (the page exists since WP7.7b) |
 | Environment picker inside multi-env flows | comp/CommandPalette.tsx (lines ~1803, 2906) | ⏳ | |
 | Command palette bus (open to a given page from elsewhere) | web/commandPaletteBus.ts | ➖ | `chat.new` opens "New thread in..." with several projects; the sidebar's new-thread button still creates directly |
 | Copy thread ID (`thread.copyReference`) | comp/CommandPalette.tsx (line ~1950) | ✅ | "Copy PR link" when the thread has one |

@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn | turn2 | threads | composer | requests | queue
+//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -642,6 +642,17 @@ case "git":
     try await request("vcs.listRefs", ["cwd": repo, "query": "feat", "limit": 100])
     try await request("server.discoverSourceControl")
     await pause(4)
+
+case "settings":
+    // The WP7.7b settings pages' reads: config (settings, providers, capabilities), source control discovery,
+    // archived threads, and the diagnostics queries. Read-only.
+    try await request("server.getConfig")
+    try await request("server.discoverSourceControl")
+    try await request("orchestration.getArchivedShellSnapshot")
+    try await request("server.getProcessDiagnostics")
+    try await request("server.getTraceDiagnostics")
+    try await request("server.getProcessResourceHistory", ["windowMs": 900_000, "bucketMs": 60_000])
+    await pause(6)
 
 default:
     print("unknown scenario"); exit(2)

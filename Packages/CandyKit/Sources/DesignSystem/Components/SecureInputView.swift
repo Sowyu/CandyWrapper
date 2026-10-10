@@ -50,6 +50,9 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
 
     public func controlTextDidBeginEditing(_ obj: Notification) { state.focused = true }
     public func controlTextDidEndEditing(_ obj: Notification) { state.focused = false }
+    /// Each edit (a Save button follows the draft).
+    public var onChange: (@MainActor (String) -> Void)?
+    public func controlTextDidChange(_ obj: Notification) { onChange?(field.stringValue) }
 
     public func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
