@@ -1,0 +1,96 @@
+import AppKit
+import DesignSystem
+
+/// `ComposerBanner.Root` with `placement="attached"` (chat/ComposerBanner.tsx:37-71, 148-178):
+/// the rounded-top glass card that docks above the composer and slides `overlap` (17) under it.
+/// Its fill and outline stop 16px above its bottom (`mask-t-from-4`), so the composer's own
+/// surface covers the seam. Spec: J-composer-visuals 6.1.
+///
+/// Integration: the composer lane places the banner `drawerInset` (22) in from each side of the
+/// composer, its bottom `overlap` below the composer's top, and BELOW the composer in z-order.
+public class ComposerBannerView: DSView {
+    public enum Variant { case neutral, warning }
+
+    /// `--chat-composer-attachment-overlap`: `calc(1rem + 1px)`.
+    public static let overlap: CGFloat = 17
+    /// `--chat-composer-drawer-inset`, per side.
+    public static let drawerInset: CGFloat = 22
+    static let radius: CGFloat = 18
+
+    let variant: Variant
+    /// Clips the surface 16px above the bottom (the mask).
+    private let clip = DSView()
+    private let surface = DSView()
+    private let tint = CALayer()
+    /// Dark only: `--background-image-composer-seam-above`, a 10px shade fading up from the seam.
+    private let seam = CAGradientLayer()
+
+    init(variant: Variant) {
+        self.variant = variant
+        super.init(frame: .zero)
+        clipsToBounds = true
+        clip.clipsToBounds = true
+        addSubview(clip)
+        // Glass: the composer surface at 80% over a backdrop blur (12px light, 16px dark; one value here).
+        surface.layerUsesCoreImageFilters = true
+        if let blur = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 12]),
+           let saturate = CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 1.14, "inputBrightness": 0, "inputContrast": 1]) {
+            surface.layer?.backgroundFilters = [saturate, blur]
+        }
+        surface.layer?.cornerRadius = Self.radius
+        surface.layer?.masksToBounds = true
+        surface.layer?.borderWidth = 1
+        surface.layer?.addSublayer(tint)
+        surface.layer?.addSublayer(seam)
+        clip.addSubview(surface)
+    }
+
+    public override func updateLayer() {
+        let dark = effectiveAppearance.isDark
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        switch variant {
+        case .neutral:
+            tint.backgroundColor = nil
+            surface.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+        case .warning:
+            tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
+            surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)
+        }
+        seam.isHidden = !dark
+        seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
+        CATransaction.commit()
+    }
+
+    public override func layout() {
+        super.layout()
+        let w = bounds.width, h = bounds.height
+        clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - 16))
+        // Taller than the clip so the bottom corners never show.
+        surface.frame = NSRect(x: 0, y: 0, width: w, height: h + Self.radius)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        tint.frame = surface.bounds
+        // The shade sits just above the overlap line, darkest at the seam.
+        seam.frame = CGRect(x: 0, y: h - Self.overlap - 10, width: w, height: 10)
+        seam.startPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 0 : 1)
+        seam.endPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 1 : 0)
+        CATransaction.commit()
+    }
+}
+
+/// Text on the banner's glass: Chromium skips font smoothing there (PROGRESS findings).
+@MainActor func glassLabel(_ text: String = "", font: NSFont, color: NSColor, lineHeight: CGFloat) -> LabelView {
+    let label = LabelView(text, font: font, color: color)
+    label.lineHeight = lineHeight
+    label.smoothsFont = false
+    return label
+}
+
+@MainActor func glassBlock(font: NSFont, color: NSColor, lineHeight: CGFloat) -> TextBlockView {
+    let block = TextBlockView()
+    block.font = font
+    block.color = color
+    block.lineHeight = lineHeight
+    block.smoothsFont = false
+    return block
+}

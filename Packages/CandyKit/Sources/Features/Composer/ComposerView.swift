@@ -27,6 +27,8 @@ public final class ComposerView: DSView {
     public var sendDisabledReason: String? { didSet { if sendDisabledReason != oldValue { refresh() } } }
     public var placeholderInput = ComposerLogic.PlaceholderInput() { didSet { if placeholderInput != oldValue { refresh() } } }
     public var sendShortcut = ComposerLogic.SendShortcut.enter
+    /// The composer edits a queued message: the button is the check and a send saves the edit.
+    public var editingQueued = false { didSet { if editingQueued != oldValue { refresh() } } }
     /// `followUpBehavior`: false queues follow-ups while a turn runs (T3's default), true steers.
     public var steerByDefault = false { didSet { refresh() } }
     /// Nightly and dev servers draw the stage art in the send button.
@@ -46,7 +48,8 @@ public final class ComposerView: DSView {
 
     // MARK: Outputs
 
-    /// Return or the button with content: the text (untrimmed) and how to deliver it.
+    /// Return or the button with content: the text (untrimmed) and how to deliver it. While
+    /// `editingQueued`, the send saves the edit; the mode doesn't matter.
     public var onSend: ((String, ComposerLogic.SendMode) -> Void)?
     public var onStop: (() -> Void)?
     public var onResume: (() -> Void)?
@@ -85,7 +88,9 @@ public final class ComposerView: DSView {
         // `shadow-composer`: 0 12px 28px -18px black/40%, light only, and only outside the box.
         shadowLayer.shadowColor = .black
         shadowLayer.shadowRadius = 14
-        shadowLayer.shadowOffset = CGSize(width: 0, height: -12) // y-up layer space: 12px down
+        // The view is flipped, so its layers are too: +12 is 12px down. (-12 drew the shadow above
+        // the box on screen; offscreen snapshots don't render shadows, so only the screen shows it.)
+        shadowLayer.shadowOffset = CGSize(width: 0, height: 12)
         shadowLayer.mask = shadowMask
         shadowMask.fillRule = .evenOdd
         layer?.addSublayer(shadowLayer)
@@ -173,7 +178,7 @@ public final class ComposerView: DSView {
         editor.isEditable = !editorDisabled
         // Project selection required dims the whole surface (`opacity-75`).
         alphaValue = placeholderInput.projectRequired ? 0.75 : 1
-        let face = ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode)
+        let face = ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(editor.string)
         switch face {
@@ -186,6 +191,9 @@ public final class ComposerView: DSView {
         case .busy:
             primary.isEnabled = false
             primary.tooltip = "Submitting message"
+        case .update:
+            primary.isEnabled = hasContent && sendDisabledReason == nil && validationMessage == nil
+            primary.tooltip = sendDisabledReason ?? "Update queued message"
         case .send, .queue, .steer:
             primary.isEnabled = hasContent && sendDisabledReason == nil && validationMessage == nil
             if let reason = sendDisabledReason {
@@ -237,6 +245,7 @@ public final class ComposerView: DSView {
         case .stop: onStop?()
         case .resume: onResume?()
         case .busy: break
+        case .update: send(.queue)
         case .send, .queue, .steer:
             let held = NSApp.currentEvent.map { !$0.modifierFlags.intersection([.command, .control]).isEmpty } ?? false
             send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: held, steerByDefault: steerByDefault))

@@ -1,5 +1,6 @@
 import Foundation
 import T3Protocol
+import T3Store
 
 /// The composer's pure rules, ported from T3's web client. Spec: docs/research/I-composer-flow.md.
 public enum ComposerLogic {
@@ -138,7 +139,8 @@ public enum ComposerLogic {
 
     /// The primary action button's look.
     public enum PrimaryAction: Sendable, Equatable {
-        case send, stop, queue, steer, resume, busy
+        /// `update`: saving an edited queued message (a check).
+        case send, stop, queue, steer, resume, busy, update
     }
 
     /// `ComposerDispatchMode` without `restart`, which the stock composer never produces.
@@ -151,9 +153,11 @@ public enum ComposerLogic {
         return steerByDefault != alternate ? .steer : .queue
     }
 
-    /// `ComposerPrimaryActions.tsx:267-289`.
-    public static func primaryAction(run: RunState, hasContent: Bool, busy: Bool, mode: SendMode) -> PrimaryAction {
+    /// `ComposerPrimaryActions.tsx:267-289`. While a queued message is being edited the button
+    /// is the check, even with a run active (`isQueuing` is false while editing).
+    public static func primaryAction(run: RunState, hasContent: Bool, busy: Bool, mode: SendMode, editingQueued: Bool = false) -> PrimaryAction {
         if busy { return .busy }
+        if editingQueued { return .update }
         if run.canInterrupt, !hasContent { return .stop }
         if !hasContent, run.canResume { return .resume }
         switch mode {
@@ -171,6 +175,103 @@ public enum ComposerLogic {
         case .queue: return (.object(["type": .string("queue_after_active")]), nil)
         case .auto: return (.object(["type": .string("start_immediately")]), "auto")
         case .steer: return (.object(["type": .string("start_immediately")]), "steer")
+        }
+    }
+
+    // MARK: Queue
+
+    /// `deriveThreadQueueWorkflowState` (client-runtime threadWorkflows.ts:127-163) plus the
+    /// optimistic queued messages the strip shows as "saving" (QueuedRunsControl.tsx:130-132).
+    public struct QueueState: Sendable, Equatable {
+        public struct Item: Sendable, Equatable {
+            /// Nil while the message is still optimistic: every action is disabled.
+            public var runId: RunId?
+            public var messageId: MessageId?
+            public var text: String
+            public init(runId: RunId?, messageId: MessageId?, text: String) {
+                self.runId = runId; self.messageId = messageId; self.text = text
+            }
+        }
+        public var items: [Item] = []
+        /// `resolveActiveThreadRun`: the last `preparing`, `starting`, `running` or `waiting` run.
+        public var activeRunId: RunId?
+        public var isHeld = false
+        public var canReorder = false
+        public var canPromoteToSteer = false
+        public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false, canReorder: Bool = false, canPromoteToSteer: Bool = false) {
+            self.items = items; self.activeRunId = activeRunId; self.isHeld = isHeld
+            self.canReorder = canReorder; self.canPromoteToSteer = canPromoteToSteer
+        }
+
+        /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
+        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = []) {
+            let saving = optimistic.filter { $0.inputIntent == .queuedTurn }
+            guard let p = projection else {
+                items = saving.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
+                return
+            }
+            let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
+            let activeRun = p.runs.last { active.contains($0.status) }
+            activeRunId = activeRun?.id
+            let automatic = Set(p.messages.filter { $0.delegatedCompletion != nil || $0.notification != nil }.map(\.id))
+            let queued = p.runs.filter { $0.status == .queued && !($0.userMessageId.map(automatic.contains) ?? false) }
+                .sorted { ($0.queuePosition ?? $0.ordinal, $0.ordinal) < ($1.queuePosition ?? $1.ordinal, $1.ordinal) }
+            let texts = Dictionary(p.messages.map { ($0.id, $0.text) }, uniquingKeysWith: { _, b in b })
+            items = queued.map { Item(runId: $0.id, messageId: $0.userMessageId, text: $0.userMessageId.flatMap { texts[$0] } ?? "Queued message") }
+            // Optimistic queued sends the projection doesn't list yet go last.
+            items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
+            isHeld = p.runs.contains { $0.status == .queued && $0.queueHeld == true }
+            let turns = Self.providerSession(p)?["capabilities"]?["turns"]
+            canReorder = turns?["supportsQueuedMessages"] == .bool(true)
+            let steerable = activeRun?.status == .running && activeRun?.activeAttemptId != nil && p.providerTurns.contains {
+                $0["runAttemptId"]?.stringValue == activeRun?.activeAttemptId?.rawValue && $0["status"]?.stringValue == "running"
+            }
+            canPromoteToSteer = steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
+        }
+
+        /// `resolveThreadProviderSession` (threadWorkflows.ts:64-88).
+        static func providerSession(_ p: ThreadProjection) -> JSONValue? {
+            let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
+            let providerThreadId = p.runs.last { active.contains($0.status) }?.providerThreadId ?? p.thread.activeProviderThreadId
+            let attached = providerThreadId.flatMap { id in p.providerThreads.first { $0["id"]?.stringValue == id } }
+                ?? p.providerThreads.first { $0["appThreadId"]?.stringValue == p.thread.id.rawValue && $0["providerSessionId"]?.stringValue != nil }
+            if let sessionId = attached?["providerSessionId"]?.stringValue {
+                return p.providerSessions.first { $0["id"]?.stringValue == sessionId }
+            }
+            return p.providerSessions.last { !["stopped", "error"].contains($0["status"]?.stringValue ?? "") }
+        }
+
+        /// `threadSupportsProviderHandoff` (threadWorkflows.ts:90-108).
+        public static func supportsProviderHandoff(_ p: ThreadProjection?) -> Bool {
+            guard let p else { return false }
+            if let session = providerSession(p) {
+                return session["capabilities"]?["sessions"]?["supportsProviderSwitchingViaHandoff"] == .bool(true)
+            }
+            let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
+            if p.runs.contains(where: { active.contains($0.status) }) { return false }
+            if p.thread.historyOrigin == "v1_import" || p.runs.isEmpty { return true }
+            return p.providerThreads.contains { t in
+                t["id"]?.stringValue == p.thread.activeProviderThreadId && t["appThreadId"]?.stringValue == p.thread.id.rawValue
+                    && t["providerInstanceId"]?.stringValue == p.thread.raw["modelSelection"]?["instanceId"]?.stringValue
+                    && t["nativeThreadRef"] != nil && t["nativeThreadRef"] != .null
+            }
+        }
+
+        /// `hasStartedSession` is `activeRuntime !== null` (ChatView.tsx:10687): `deriveThreadRuntime`
+        /// returns null only for a thread with no run and no active provider thread
+        /// (client-runtime threadExecution.ts:248-255).
+        // ponytail: ignores a pull request watch holding a run-less thread (backgroundWorkHoldsRun); add with PR watches
+        public static func hasStartedSession(_ p: ThreadProjection?) -> Bool {
+            guard let p else { return false }
+            return !p.runs.isEmpty || p.thread.activeProviderThreadId != nil
+        }
+
+        /// The drag and arrow-key rule (QueuedRunsControl.tsx:180-190, 350-359): moving `index` to
+        /// insert position `insert` (0...count) gives the run to go before, or nil for the end.
+        /// Nil result `.none` means no move (dropped on itself or right after itself).
+        public static func reorderTarget(_ items: [Item], moving index: Int, to insert: Int) -> RunId?? {
+            guard items.indices.contains(index), insert >= 0, insert <= items.count, insert != index, insert != index + 1 else { return .none }
+            return .some(insert < items.count ? items[insert].runId : nil)
         }
     }
 }

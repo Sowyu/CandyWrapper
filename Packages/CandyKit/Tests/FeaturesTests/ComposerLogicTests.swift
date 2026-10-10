@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import T3Protocol
+import T3Store
 @testable import Features
 
 /// T3's composer rules: composer-logic.test.ts:80-158, composerSubmission.test.ts, String.ts truncate.
@@ -51,5 +52,45 @@ struct ComposerLogicTests {
         #expect(L.lengthValidationMessage(String(repeating: "a", count: 121_500))?.hasPrefix("Prompt is 1,500 characters over") == true)
         #expect(L.placeholder(.init()) == "Ask anything, @tag files/folders, $use skills, or / for commands")
         #expect(L.placeholder(.init(approvalPending: true, disconnected: true)) == "Resolve this approval request to continue")
+    }
+
+    /// The queue strip over the recorded 07-queue.jsonl: three queued, edit, two reorders, two
+    /// cancels, then promote-to-steer, each step as the strip shows it.
+    @Test func queueStateFollowsTheRecordedQueue() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var streamId: String?, reducer: ThreadReducer?
+        var seen: [[String]] = []
+        var steerable = false, reorderable = false
+        for line in try String(contentsOf: root.appendingPathComponent("fixtures/transcripts/07-queue.jsonl"), encoding: .utf8).split(separator: "\n") {
+            guard let record = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let body = record["body"] as? [String: Any] else { continue }
+            if body["tag"] as? String == "orchestration.subscribeThread", let payload = body["payload"] as? [String: Any] {
+                streamId = body["id"] as? String
+                reducer = ThreadReducer(threadId: ThreadId(payload["threadId"] as! String))
+            } else if body["_tag"] as? String == "Chunk", body["requestId"] as? String == streamId, let values = body["values"] as? [Any] {
+                _ = reducer!.apply(try values.map { try JSONDecoder().decode(ThreadStreamItem.self, from: JSONSerialization.data(withJSONObject: $0)) })
+                let state = L.QueueState(projection: reducer!.projection)
+                let texts = state.items.map { $0.text.replacingOccurrences(of: "Reply with one word: ", with: "") }
+                if seen.last != texts { seen.append(texts) }
+                if !state.items.isEmpty { steerable = steerable || state.canPromoteToSteer; reorderable = reorderable || state.canReorder }
+            }
+        }
+        #expect(seen == [[], ["alpha"], ["alpha", "beta"], ["alpha", "beta", "gamma"], ["alpha2", "beta", "gamma"],
+                         ["gamma", "alpha2", "beta"], ["gamma", "beta", "alpha2"], ["gamma", "alpha2"], ["gamma"], []])
+        #expect(steerable && reorderable)
+        let started = try #require(reducer?.projection)
+        #expect(L.QueueState.hasStartedSession(started))
+        #expect(L.QueueState.supportsProviderHandoff(started))
+    }
+
+    @Test func reorderTargets() {
+        let items = ["a", "b", "c"].map { L.QueueState.Item(runId: RunId($0), messageId: nil, text: $0) }
+        // Dropping on itself or right after itself does nothing.
+        #expect(L.QueueState.reorderTarget(items, moving: 1, to: 1) == .none)
+        #expect(L.QueueState.reorderTarget(items, moving: 1, to: 2) == .none)
+        #expect(L.QueueState.reorderTarget(items, moving: 2, to: 0) == .some(RunId("a")))
+        #expect(L.QueueState.reorderTarget(items, moving: 0, to: 3) == .some(nil))
+        #expect(L.primaryAction(run: .init(activeRunId: RunId("r"), running: true), hasContent: true, busy: false, mode: .queue, editingQueued: true) == .update)
     }
 }

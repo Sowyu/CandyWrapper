@@ -17,7 +17,7 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
 
 /// Replays every recorded `subscribeThread` stream and derives its timeline.
 @Suite struct ThreadFixtureTests {
-    @Test(arguments: [("02-turn.jsonl", 1), ("03-turn2.jsonl", 2), ("04-threads.jsonl", 14)])
+    @Test(arguments: [("02-turn.jsonl", 1), ("03-turn2.jsonl", 2), ("04-threads.jsonl", 14), ("06-requests.jsonl", 2)])
     func everyRecordedThreadDerivesRows(_ name: String, _ count: Int) throws {
         let streams = try recordedThreadStreams(name)
         #expect(streams.count == count)

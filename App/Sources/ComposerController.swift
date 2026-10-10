@@ -6,9 +6,12 @@ import T3Protocol
 import T3Store
 
 /// What the composer sends and where: `message.dispatch` on an open thread, `orchestration.launchThread`
-/// for a new-thread draft's first send, `run.interrupt` for Stop, the continuation for Resume.
-/// Keeps the prompt per thread and one draft session per project, persisted like T3's
-/// composer draft store (I-composer-flow sections 1, 2, 4.8 and 6).
+/// for a new-thread draft's first send, `run.interrupt` for Stop, the continuation for Resume, and
+/// the queue strip's commands. Keeps the prompt per thread and one draft session per project,
+/// persisted like T3's composer draft store (I-composer-flow sections 1, 2, 4, 5 and 6).
+///
+/// The footer pickers' picks live in one place, `ComposerSelectionStore`, keyed by the same draft
+/// key as the prompt; every send reads `pickers.current` and drops the picks after it succeeds.
 @MainActor
 final class ComposerController {
     /// A new thread that exists only here until its first send (T3's `DraftSessionState`).
@@ -39,9 +42,19 @@ final class ComposerController {
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
 
-    /// The pickers (WP5.4) set these; nil sends the thread's, project's or newest thread's choice.
-    var modelSelectionOverride: ModelSelection?
-    var runtimeModeOverride: String?
+    /// Model, traits and access: the footer controls and the per-draft picks they own.
+    let pickers = ComposerPickers(store: ComposerSelectionStore(), draftKey: "", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
+    /// `server.getConfig` providers and settings, followed through `subscribeServerConfig`.
+    private var serverConfig = ServerProviderConfig(providers: [])
+    private var configSubscription: Task<Void, Never>?
+
+    /// A queued message open in the composer (`beginEditingQueuedRun`, ChatView.tsx:4673-4699).
+    /// Its text lives here, not in the thread's prompt, which comes back on save or cancel.
+    private struct QueuedEdit { let runId: RunId; let threadId: ThreadId }
+    private var queuedEdit: QueuedEdit?
+    /// A queue command is in flight: the strip's actions wait (`busyRunId`).
+    private var queueBusy = false
+    private var keyMonitor: Any?
 
     // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by project.
     private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v1"
@@ -61,13 +74,81 @@ final class ComposerController {
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
         composer.stageArt = sidebar.stage != .none
+        composer.footerControls = [pickers.controlsView]
+        pickers.onPromptChange = { [weak self] text in
+            guard let self else { return }
+            composer.text = text
+            remember(text)
+        }
+        pickers.onBlocked = { [weak self] reason in self?.fail(reason, restore: nil) }
+        pickers.onChange = { [weak self] _ in self?.composer.needsLayout = true }
+        let queue = panel.queue
+        queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)],
+                                                                   fallback: "Failed to remove the queued message.") }
+        queue.onReorder = { [weak self] runId, before in
+            self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null],
+                               fallback: "Failed to reorder the queued message.")
+        }
+        queue.onSteer = { [weak self] runId in self?.promoteToSteer(runId) }
+        queue.onEdit = { [weak self] item in self?.beginEdit(item) }
+        queue.onCancelEdit = { [weak self] in self?.endEdit() }
+        installShortcuts()
         refresh()
     }
 
     func follow(_ shell: ShellSession?, environment: String?) {
+        if shell !== self.shell {
+            configSubscription?.cancel()
+            configSubscription = shell.map(subscribeConfig)
+        }
         self.shell = shell
         self.environment = environment
         refresh()
+    }
+
+    /// `subscribeServerConfig`: a snapshot first, then provider and settings updates (protocol.md 1562).
+    private func subscribeConfig(_ shell: ShellSession) -> Task<Void, Never> {
+        let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: { .object([:]) }, handler: { [weak self] event in
+            guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
+            await MainActor.run { self?.configChanged(change) }
+        })
+        return stream
+    }
+
+    private func configChanged(_ event: ServerConfigEvent) {
+        switch event {
+        case .snapshot(let config): serverConfig = config
+        case .providerStatuses(let providers): serverConfig.providers = providers
+        case .settingsUpdated(let settings): serverConfig.settings = settings
+        case .other: return
+        }
+        refresh()
+    }
+
+    // MARK: Shortcuts
+
+    /// `modelPicker.toggle` (⇧⌘M), `composer.effort` (⇧⌘E), `composer.mode` (⇧⌘A) and
+    /// `thread.steerQueuedMessage` (⇧⌘↩, steers the first queued message) while the composer shows.
+    // ponytail: T3's default bindings only; read the user's keybindings from server config in M7
+    private func installShortcuts() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, MainActor.assumeIsolated({ self.handleKey(event) }) else { return event }
+            return nil
+        }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard event.window === panel.window, !composer.isHidden, target != nil else { return false }
+        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if mods == [.command, .shift], event.keyCode == 36 || event.keyCode == 76 {
+            // Swallowed even on repeat or with nothing to steer (QueuedRunsControl.tsx:208-214).
+            let queue = panel.queue.state
+            if !event.isARepeat, case .thread = target, queue.canPromoteToSteer, !queueBusy, let first = queue.items.first?.runId {
+                promoteToSteer(first)
+            }
+            return true
+        }
+        return pickers.handleShortcut(event)
     }
 
     // MARK: Targets
@@ -85,6 +166,7 @@ final class ComposerController {
         var carried: [ChatMessage] = []
         if case .draft(let s) = target, s.threadId == id.rawValue { carried = optimistic }
         flushPrompt()
+        queuedEdit = nil
         target = .thread(id)
         projection = nil
         optimistic = carried
@@ -115,6 +197,7 @@ final class ComposerController {
                                                     projectId: project.id.rawValue, createdAt: Date())
         sessions[key] = session
         flushPrompt()
+        queuedEdit = nil
         target = .draft(session)
         projection = nil
         optimistic = []
@@ -140,18 +223,22 @@ final class ComposerController {
 
     private func loadPrompt() {
         composer.text = draftKey.flatMap { prompts[$0] } ?? ""
+        pickers.prompt = composer.text
         refresh()
         DispatchQueue.main.async { [weak self] in self?.composer.focus() }
     }
 
     private func remember(_ text: String) {
-        guard let key = draftKey else { return }
+        pickers.prompt = text
+        // An open queued edit keeps its text out of the thread's prompt.
+        guard queuedEdit == nil, let key = draftKey else { return }
         prompts[key] = text.isEmpty ? nil : text
         scheduleSave()
         refresh()
     }
 
     private func flushPrompt() {
+        guard queuedEdit == nil else { return }
         if let key = draftKey { prompts[key] = composer.text.isEmpty ? nil : composer.text }
     }
 
@@ -180,6 +267,16 @@ final class ComposerController {
         if let id = pendingMessageId, confirmed.contains(id) { pendingMessageId = nil }
         // Resume is done once a run is active again.
         if resuming, let projection, ComposerLogic.RunState(runs: projection.runs).canInterrupt { resuming = false }
+        // The edited message left the queue (it started, or another client removed it): the
+        // unsaved text moves to an empty prompt, else it is dropped (queuedMessageEdit.ts:10-24).
+        if let edit = queuedEdit, projection?.runs.contains(where: { $0.id == edit.runId && $0.status == .queued }) != true {
+            let unsaved = composer.text
+            queuedEdit = nil
+            composer.editingQueued = false
+            let saved = draftKey.flatMap { prompts[$0] } ?? ""
+            composer.text = saved.isEmpty ? unsaved : saved
+            remember(composer.text)
+        }
         refresh()
     }
 
@@ -193,8 +290,34 @@ final class ComposerController {
         placeholder.approvalPending = pending.contains { $0.kind != .userInput }
         composer.placeholderInput = placeholder
         composer.sendDisabledReason = shell == nil ? "Environment disconnected" : nil
+        composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
+        panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
+            : ComposerLogic.QueueState(projection: projection, optimistic: optimistic)
+        panel.queue.editingRunId = queuedEdit?.runId
+        panel.queue.isBusy = queueBusy
+        updatePickers()
         panel.updateComposerShown()
+    }
+
+    /// The pickers follow the draft key, the server config and the open thread.
+    private func updatePickers() {
+        let snapshot = sidebar?.snapshot
+        let thread = shellThread
+        let projectId: ProjectId? = switch target {
+        case .draft(let s): ProjectId(s.projectId)
+        case .thread: thread?.projectId
+        case nil: nil
+        }
+        let project = snapshot?.projects.first { $0.id == projectId }
+        let context = ComposerSelectionContext(
+            catalog: ProviderCatalog(serverConfig.providers), thread: thread, projectDefaultModel: project?.defaultModelSelection,
+            serverDefaults: serverConfig.settings,
+            hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
+            supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection))
+        pickers.update(draftKey: draftKey ?? "", context: context)
+        // A new label (config arrived, thread switched) changes the controls' width.
+        composer.needsLayout = true
     }
 
     // MARK: Commands
@@ -204,30 +327,17 @@ final class ComposerController {
         return sidebar?.snapshot?.threads.first { $0.id == id }
     }
 
-    /// The model to send: the pickers' choice, the thread's, the project's default, else the newest thread's.
-    // ponytail: no server-config fallback (default provider instance); WP5.4 owns that
-    private func modelSelection(projectId: ProjectId?) -> ModelSelection? {
-        if let modelSelectionOverride { return modelSelectionOverride }
-        if let thread = shellThread { return thread.modelSelection }
-        let snapshot = sidebar?.snapshot
-        if let project = snapshot?.projects.first(where: { $0.id == projectId }), let selection = project.defaultModelSelection {
-            return selection
-        }
-        return snapshot?.threads.max { $0.updatedAt.raw < $1.updatedAt.raw }?.modelSelection
-    }
-
     private func send(_ text: String, mode: ComposerLogic.SendMode) {
         guard let shell, pendingMessageId == nil, let target else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        if let edit = queuedEdit { saveEdit(edit, text: trimmed); return }
         let messageId = MessageId(UUID().uuidString.lowercased())
         let commandId = UUID().uuidString.lowercased()
         let now = T3Timestamp(Date())
-        let projectId: ProjectId? = switch target {
-        case .draft(let s): ProjectId(s.projectId)
-        case .thread: shellThread?.projectId
-        }
-        guard let selection = modelSelection(projectId: projectId) else {
+        let picks = pickers.current
+        let picksKey = draftKey
+        guard let selection = picks.modelSelection else {
             fail("No model is available. Enable a provider in T3 Code's settings.", restore: text)
             return
         }
@@ -249,14 +359,15 @@ final class ComposerController {
             let payload: JSONValue = .object([
                 "commandId": .string(commandId), "creationSource": .string("web"), "threadId": .string(session.threadId),
                 "projectId": .string(session.projectId), "title": .string(title), "generateTitle": .bool(true),
-                "modelSelection": selectionJSON, "runtimeMode": .string(runtimeModeOverride ?? "full-access"),
-                "interactionMode": .string("default"), "workspaceStrategy": .object(["type": .string("root")]),
+                "modelSelection": selectionJSON, "runtimeMode": .string(picks.runtimeMode.rawValue),
+                "interactionMode": .string(picks.interactionMode.rawValue), "workspaceStrategy": .object(["type": .string("root")]),
                 "initialMessage": .object(["messageId": .string(messageId.rawValue), "text": .string(trimmed), "attachments": .array([])]),
             ])
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
                     guard let self else { return }
+                    pickers.store.didSend(session.draftId)
                     sessions = sessions.filter { $0.value.draftId != session.draftId }
                     prompts[session.draftId] = nil
                     scheduleSave()
@@ -274,16 +385,24 @@ final class ComposerController {
                 "modelSelection": selectionJSON, "dispatchMode": dispatchMode,
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
-            let runtimeChange = runtimeModeOverride.flatMap { $0 != shellThread?.runtimeMode ? $0 : nil }
+            let runtimeChange = picks.runtimeModeToPersist, interactionChange = picks.interactionModeToPersist
             Task { [weak self] in
                 do {
-                    // A changed access mode is persisted before the message (persistThreadSettingsForNextTurn).
+                    // Changed access and interaction modes are persisted before the message, each
+                    // aborting the send on failure (persistThreadSettingsForNextTurn, ChatView.tsx:6267-6340).
                     if let runtimeChange {
                         _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
                             "type": .string("thread.runtime-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
-                            "threadId": .string(threadId.rawValue), "runtimeMode": .string(runtimeChange)]))
+                            "threadId": .string(threadId.rawValue), "runtimeMode": .string(runtimeChange.rawValue)]))
+                    }
+                    if let interactionChange {
+                        _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
+                            "type": .string("thread.interaction-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
+                            "threadId": .string(threadId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
+                    if let picksKey { self?.pickers.store.didSend(picksKey) }
+                    self?.refresh()
                 } catch {
                     self?.sendFailed(error, messageId: messageId, text: text, draft: nil)
                 }
@@ -346,7 +465,7 @@ final class ComposerController {
     private func resume() {
         guard let shell, case .thread(let threadId) = target, let projection, !resuming else { return }
         let state = ComposerLogic.RunState(runs: projection.runs)
-        guard state.canResume, let selection = modelSelection(projectId: shellThread?.projectId) else { return }
+        guard state.canResume, let selection = pickers.current.modelSelection else { return }
         resuming = true
         refresh()
         let supervisor = shell.supervisor
@@ -374,6 +493,76 @@ final class ComposerController {
                 self?.refresh()
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
                 self?.fail(Self.message(error, fallback: "Failed to resume the thread."), restore: nil)
+            }
+        }
+    }
+
+    // MARK: Queue
+
+    /// One strip command (`queued-run.cancel`, `queued-run.reorder`): the strip is busy until it returns.
+    private func queueCommand(_ type: String, _ fields: [String: JSONValue], fallback: String) {
+        guard let shell, case .thread(let threadId) = target, !queueBusy else { return }
+        var command = fields
+        command["type"] = .string(type)
+        command["commandId"] = .string(UUID().uuidString.lowercased())
+        command["threadId"] = .string(threadId.rawValue)
+        queueBusy = true
+        refresh()
+        let supervisor = shell.supervisor
+        Task { [weak self] in
+            defer { self?.queueBusy = false; self?.refresh() }
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command)) } catch {
+                if let rpc = error as? RPCClientError, rpc.isTransport { return }
+                self?.fail(Self.message(error, fallback: fallback), restore: nil)
+            }
+        }
+    }
+
+    /// Steer now: the server cancels the queued run and steers the same message into the active run.
+    private func promoteToSteer(_ runId: RunId) {
+        guard let active = panel.queue.state.activeRunId, panel.queue.state.canPromoteToSteer else { return }
+        queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)],
+                     fallback: "Failed to steer the queued message.")
+    }
+
+    private func beginEdit(_ item: ComposerLogic.QueueState.Item) {
+        guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy else { return }
+        flushPrompt()
+        queuedEdit = QueuedEdit(runId: runId, threadId: threadId)
+        composer.text = item.text
+        pickers.prompt = item.text
+        refresh()
+        composer.focus()
+    }
+
+    /// Cancel: back to the thread's own prompt (`cancelEditingQueuedRun`).
+    private func endEdit() {
+        guard queuedEdit != nil else { return }
+        queuedEdit = nil
+        loadPrompt()
+    }
+
+    /// Enter while editing saves with `queued-run.edit` and keeps the edit open on failure.
+    private func saveEdit(_ edit: QueuedEdit, text: String) {
+        guard let shell, !queueBusy else { return }
+        let command: JSONValue = .object([
+            "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
+            "threadId": .string(edit.threadId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
+        ])
+        queueBusy = true
+        refresh()
+        let supervisor = shell.supervisor
+        Task { [weak self] in
+            do {
+                _ = try await supervisor.request("orchestration.dispatchCommand", payload: command)
+                guard let self else { return }
+                queueBusy = false
+                if queuedEdit?.runId == edit.runId { endEdit() } else { refresh() }
+            } catch {
+                self?.queueBusy = false
+                self?.refresh()
+                if let rpc = error as? RPCClientError, rpc.isTransport { return }
+                self?.fail("Could not save the edited queued message.", restore: nil)
             }
         }
     }

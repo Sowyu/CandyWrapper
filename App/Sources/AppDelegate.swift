@@ -13,6 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
+        // Development: `--appearance light|dark` sets the app's own appearance, leaving the system's alone.
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--appearance"), i + 1 < args.count {
+            NSApp.appearance = NSAppearance(named: args[i + 1] == "dark" ? .darkAqua : .aqua)
+        }
         quitOnSIGTERM()
         showMainWindow()
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
