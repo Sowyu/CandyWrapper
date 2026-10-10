@@ -4,9 +4,9 @@ Update this file at the end of every work session. Newest log entry first.
 
 ## Current milestone
 
-Milestone 4, read-only thread view: open a thread from the sidebar and show its real history (messages, markdown, tool cards, diffs) in a virtualized timeline. Milestone 3 was accepted by the user on 2026-10-10 ("the sidebar looks awesome") after the live demo.
+Milestone 5, interactive: compose and send messages, watch them stream, stop a run, answer approvals and questions, queue and steer follow-ups, pick the model. Milestone 4 was accepted by the user on 2026-10-10 ("everything looks perfect"); they asked for a stress-testing milestone soon, added as 5b.
 
-Next action: two agents are running. One wires the diff panel into the app (changed-files card under turns, right panel, getTurnDiff loader, `--open-diff`, fresh T3 captures of the card and an open diff). The other replaces the JSON decode path (frames parsed once with JSONSerialization, typed models read straight from the JSONValue tree, no try? cascade). When both land: verify, commit, re-measure memory on the user's live thread (peak was 105 MB), then ask the user to sign off M4.
+Next action: research for M5 (two sonnet-medium agents): `docs/research/I-composer-flow.md` (commands, payloads and client state for send, stop, approvals, questions, queue, steer, new thread drafts, model and runtime selection) and `docs/research/J-composer-visuals.md` (composer, footer controls, primary actions, approval and question panels, queued list, model, traits and access pickers, new-thread draft page, against references 01, 04, 05, 06, 13, 29, 41, 42). Then the work packages in the Milestone 5 checklist.
 
 ## Milestones
 
@@ -15,8 +15,9 @@ Next action: two agents are running. One wires the diff panel into the app (chan
 | 1 | Research: protocol, parity checklist, reference screenshots, baseline benchmarks | done, accepted 2026-10-09 |
 | 2 | Design system and component gallery, user sign-off | done, signed off 2026-10-09 |
 | 3 | Skeleton: connect to server, sidebar shows real data | done, accepted 2026-10-10 |
-| 4 | Read-only thread view | in progress |
-| 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | not started |
+| 4 | Read-only thread view | done, accepted 2026-10-10 |
+| 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | in progress |
+| 5b | Stress testing (asked for by the user on 2026-10-10) | not started |
 | 6 | T3 Connect | not started |
 | 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
 | 8 | Performance and battery pass | not started |
@@ -39,6 +40,21 @@ Next action: two agents are running. One wires the diff panel into the app (chan
 - [x] Official desktop app baseline in `docs/benchmarks.md`: cold launch about 3.4 s to sidebar data, idle 2.6% CPU, 88 interrupt wakeups/s, Energy Impact 4.29, 544 MB, bundle 366 MB. Streaming and large-thread memory deferred to milestone 8
 - [x] Demo milestone 1 to the user (accepted)
 
+## Milestone 5 checklist
+
+Scope: the core interactive loop. Later (M5 stretch or M7): slash commands, `@` file and thread mentions, `$` skills, `#` pull requests, attachments and images, rich text formatting, prompt stash, history recall, branch and worktree toolbar.
+
+- [ ] Research (sonnet-medium agents): I-composer-flow.md, J-composer-visuals.md
+- [ ] WP5.1 composer core: text editor (TextKit 2), T3's send shortcuts and placeholder rules, primary action (send, stop), optimistic user message, `message.dispatch`, stop (`thread.stop` or T3's interrupt command), new-thread draft page and `thread.create`; fidelity against 04 and the composer area of 01 and 03a
+- [ ] WP5.2 approvals and questions: the panels that replace the composer, Approve, Approve for session, Decline, Cancel, option answers with 1 to 9 keys, `runtime-request.respond`; fidelity against 05 and 06
+- [ ] WP5.3 queue and steer: queued list with edit, reorder, cancel, promote to steer, the follow-up behavior setting and its `mod+enter` flip; fidelity against 29
+- [ ] WP5.4 model, traits and access pickers from server config providers and models; fidelity against 13, 41, 42
+- [ ] Live test on the sandbox with tiny `claude-haiku-5-5` turns (the user's subscription pays), then the demo
+
+## Milestone 5b: stress testing (planned)
+
+Long threads (2,000+ messages), 50+ threads, hours-long sessions watched for leaks, reconnect storms, rapid thread switching, resize storms and fuzzed stream events, in an automated harness with budgets for CPU, memory and frame time, run against the sandbox and checked on screen with `scripts/ui/`.
+
 ## Milestone 4 checklist
 
 Scope: open a thread from the sidebar; header (breadcrumb, title); timeline rows for user and assistant messages (markdown, highlighted code), assistant meta, thinking, working, work log groups and tool cards, turn and attempt folds, dividers, errors, plan card; load older history; stick to bottom and anchoring on prepend; changed files per turn; diff panel (unified and split). Later milestones: composer, approvals and questions, queue, find, minimap, selection toolbar, citations. Images and media are a stretch goal. Mermaid, HTML renders and MCP apps need a webview, so ask the user first.
@@ -50,7 +66,7 @@ Scope: open a thread from the sidebar; header (breadcrumb, title); timeline rows
   - 2026-10-10 done (read-only part): `Features/Thread/` (ThreadPanelView, ThreadHeaderView, TimelineView, row views, ThreadViewModel, ThreadPreview). Whole-panel fidelity above the composer (`swift test --filter ThreadFidelityTests`, report /tmp/candywrapper-fidelity/report-thread-whole.html): 03a 3.28/3.20%, 03b 2.91/2.13%, 03c 1.65/1.68%, 03d 3.25/3.53% (light/dark). T3's composer takes 172pt off the scroll range (fitted on 03c). `--thread-preview [title]` shows a recorded thread in the app without connecting. Open: app wiring (sidebar opens the thread over a live connection), status line, connection status, minimap, changed-files card (WP4), fetch of omitted tool output (`orchestration.getTurnItem`), user bubble text at 100% foreground needs a MarkdownView color option
 - [x] WP4 diffs (`886d637`; app wiring in progress): `orchestration.getTurnDiff`, unified diff parser, changed files tree, diff panel unified and split; fidelity against 09 and 10. Built (2026-10-10, not committed yet): `Features/Diff/` parser (`UnifiedDiff`), virtualized `DiffListView`, `DiffPanelView` (`loader`, `setSummaries`, `open(runId:filePath:)` for the changed files card), gallery sections. Body fidelity 2.42% against pierre rendered by `scripts/gen-diff-spec.py`; panel 5.1-5.5% against 09/10. Open: wire the loader to `orchestration.getTurnDiff` in the app, the file tree aside, demo.
   - 2026-10-10 wired (not committed): changed files card (`Thread/ChangedFilesCardView.swift`, fold state in `ThreadViewModel`, pierre file icons generated by `scripts/gen-file-icons.py` from the installed client bundle), inline right panel with the Diff tab and the window panel controls (`Thread/RightPanelView.swift`, `ThreadPanelView`), loader over the shell socket (`ThreadSession.diffLoader`), Cmd+D, per-thread open state in UserDefaults, `--open-diff`. Fidelity (`swift test --filter ChangedFilesFidelityTests`, references 47 and 48): card 2.63/2.87%, chat column beside the panel 4.17/4.59%, right panel 0.31/0.32%. Verified end to end against an app-owned sandbox server. Open: right panel as a sheet under 980px and its resize handle, "+" surface menu, git scopes (Changes, Uncommitted) in the scope menu, sticky card header
-- [ ] Demo to the user. 2026-10-10: shown live on the user's real T3 (this chat streaming in CandyWrapper). Found and fixed 10.8% CPU while streaming (`8b86108`, now 0.8%). Sign-off pending after the diff wiring.
+- [x] Demo to the user, accepted 2026-10-10. 2026-10-10: shown live on the user's real T3 (this chat streaming in CandyWrapper). Found and fixed 10.8% CPU while streaming (`8b86108`, now 0.8%). Sign-off pending after the diff wiring.
 
 ## Milestone 3 checklist
 
