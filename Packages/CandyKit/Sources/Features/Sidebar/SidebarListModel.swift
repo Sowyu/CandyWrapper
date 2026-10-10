@@ -19,6 +19,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var projectLabel: String?
     /// The project's own title: the monogram and its color derive from it (ProjectFavicon.tsx).
     public var projectTitle: String?
+    /// The project's icon inputs (chosen icon, icon file).
+    public var projectIcon: ProjectIconSource? = nil
     public var branch: String?
     public var hasWorktree: Bool
     public var status: SidebarThreadStatus
@@ -79,6 +81,7 @@ public struct SidebarDraftRowModel: Equatable, Sendable {
     public var id: String
     public var projectLabel: String?
     public var projectTitle: String?
+    public var projectIcon: ProjectIconSource? = nil
     public var preview: String
     public var isActive: Bool
 }
@@ -89,6 +92,7 @@ public struct SidebarSearchResultModel: Equatable, Sendable {
     public var index: Int
     public var title: String
     public var projectTitle: String?
+    public var projectIcon: ProjectIconSource? = nil
     public var timeLabel: String
     /// The server's message match, shown as the "You:" or "Agent:" excerpt.
     public var match: ThreadSearchMatch?
@@ -250,7 +254,8 @@ public enum SidebarListBuilder {
                 guard !preview.isEmpty else { return nil }
                 let project = ctx.projectById[d.projectId]
                 return (SidebarDraftRowModel(id: d.id, projectLabel: ctx.groupByProject[d.projectId]?.label ?? project?.title,
-                                             projectTitle: project?.title, preview: preview, isActive: d.id == state.activeDraftId),
+                                             projectTitle: project?.title, projectIcon: project.map(ProjectIconSource.init),
+                                             preview: preview, isActive: d.id == state.activeDraftId),
                         d.createdAt)
             }
             .sorted { $0.1 > $1.1 }
@@ -281,6 +286,7 @@ public enum SidebarListBuilder {
         return found.enumerated().map { i, t in
             .searchResult(SidebarSearchResultModel(
                 id: t.id, index: i, title: t.shell.title, projectTitle: ctx.projectById[t.shell.projectId]?.title,
+                projectIcon: ctx.projectById[t.shell.projectId].map(ProjectIconSource.init),
                 timeLabel: SidebarModel.threadTimeLabel(t, section: .active, nowMs: nowMs), match: matchById[t.id],
                 query: query, isHighlighted: i == highlighted, isActive: t.id == state.activeThreadId))
         }
@@ -337,7 +343,7 @@ public enum SidebarListBuilder {
             ? SidebarModel.resolveWorkingStartedAt(latestRun: t.latestRun, runtime: t.runtime)?.epochMs : nil
         return SidebarRowModel(
             id: shell.id, variant: variant, action: action, section: section, title: shell.title,
-            projectLabel: group?.label ?? project?.title, projectTitle: project?.title,
+            projectLabel: group?.label ?? project?.title, projectTitle: project?.title, projectIcon: project.map(ProjectIconSource.init),
             branch: shell.branch, hasWorktree: !(shell.worktreePath ?? "").isEmpty,
             status: status,
             topStatus: SidebarModel.resolveSidebarV2TopStatus(status: status, isUnread: isUnread, isWoke: isWoke),

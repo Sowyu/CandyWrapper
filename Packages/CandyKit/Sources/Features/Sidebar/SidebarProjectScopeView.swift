@@ -13,6 +13,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         var key: String?
         var label: String
         var projectTitle: String?
+        var projectIcon: ProjectIconSource? = nil
     }
 
     static let maxWidth: CGFloat = 288, searchHeight: CGFloat = 43, maxHeight: CGFloat = 368
@@ -36,7 +37,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private var scrollOffset: CGFloat = 0
 
     init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat) {
-        items = [Item(key: nil, label: "All projects")] + groups.map { Item(key: $0.key, label: $0.label, projectTitle: $0.representative.title) }
+        items = [Item(key: nil, label: "All projects")] + groups.map { Item(key: $0.key, label: $0.label, projectTitle: $0.representative.title,
+                                                                         projectIcon: ProjectIconSource($0.representative)) }
         // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone.
         self.selectedKey = groups.contains { $0.key == selectedKey } ? selectedKey : nil
         self.minimumWidth = minimumWidth
@@ -200,7 +202,7 @@ final class ScopeRowView: ControlView {
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(fill)
-        if item.key == nil { addSubview(folder) } else { addSubview(monogram); monogram.projectTitle = item.projectTitle ?? item.label }
+        if item.key == nil { addSubview(folder) } else { addSubview(monogram); monogram.projectTitle = item.projectTitle ?? item.label; monogram.source = item.projectIcon }
         label.text = item.label
         label.font = DSFont.ui(14)
         label.lineHeight = 20

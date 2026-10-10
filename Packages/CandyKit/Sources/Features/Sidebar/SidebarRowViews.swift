@@ -61,15 +61,41 @@ enum SB {
     }
 }
 
-/// `ProjectMonogram` (ProjectMonogram.tsx) with the generated identity from projectIdentity.ts:
-/// a 16px tile, 25% radius, the color at 14% behind 8.25px bold monospace text squeezed to 6 or 12 units.
+/// `ProjectFavicon` (ProjectFavicon.tsx): the project's chosen icon, else the icon file the server finds
+/// in the project (`ProjectIconStore`), else `ProjectMonogram` (ProjectMonogram.tsx) with the generated
+/// identity from projectIdentity.ts: a 16px tile, 25% radius, the color at 14% behind 8.25px bold
+/// monospace text squeezed to 6 or 12 units. The monogram also shows while the icon loads.
 final class ProjectMonogramView: DSView {
-    var projectTitle = "" { didSet { if projectTitle != oldValue { identity = Self.identity(projectTitle); needsDisplay = true } } }
+    var projectTitle = "" { didSet { if projectTitle != oldValue { updateIdentity() } } }
+    /// The whole project, for its chosen icon and its icon file. Without it only the title's monogram shows.
+    var source: ProjectIconSource? {
+        didSet {
+            guard source != oldValue else { return }
+            if let source { projectTitle = source.title }
+            updateIdentity()
+        }
+    }
     var dimmed = false { didSet { if dimmed != oldValue { needsDisplay = true } } }
     private var identity = (monogram: "PR", color: "blue")
+    private var observing = false
 
     override var wantsUpdateLayer: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    private func updateIdentity() {
+        if case .monogram(let text, let color)? = source?.override {
+            identity = (text, color)
+        } else {
+            identity = Self.identity(projectTitle)
+        }
+        if source != nil, !observing {
+            observing = true
+            NotificationCenter.default.addObserver(self, selector: #selector(iconsChanged), name: ProjectIconStore.didChange, object: nil)
+        }
+        needsDisplay = true
+    }
+
+    @objc private func iconsChanged() { needsDisplay = true }
 
     static let colors = ["gray", "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal", "cyan",
                          "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose"]
@@ -93,6 +119,38 @@ final class ProjectMonogramView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let tileRect = CGRect(x: 0, y: 0, width: 16, height: 16)
+        switch source?.override {
+        case .emoji(let emoji)?:
+            // `text-[length:80cqh]` in the 14px box: the emoji at 80% of the box height, centered.
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: emoji, attributes: [.font: NSFont.systemFont(ofSize: 16 * 0.8)]))
+            let b = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
+            ctx.saveGState()
+            ctx.textMatrix = .identity
+            ctx.translateBy(x: 8 - b.midX, y: 8 + b.midY)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.textPosition = .zero
+            CTLineDraw(line, ctx)
+            ctx.restoreGState()
+            return
+        case .lucide(let name, let color)?:
+            let icon = IconName.allCases.first { $0.lucideName == name } ?? .folderCode
+            drawIcon(icon.definition, in: tileRect, color: SB.base("\(color)-600", "\(color)-400").cgColor(in: self), ctx: ctx)
+            return
+        default: break
+        }
+        if let source, let image = ProjectIconStore.shared.image(for: source, grayscale: dimmed) {
+            // `size-4 rounded-[25%] object-contain`; the store already centered the image in its square.
+            ctx.saveGState()
+            ctx.addPath(CGPath(roundedRect: tileRect, cornerWidth: 4, cornerHeight: 4, transform: nil))
+            ctx.clip()
+            ctx.interpolationQuality = .high
+            ctx.translateBy(x: 0, y: 16)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(image, in: tileRect)
+            ctx.restoreGState()
+            return
+        }
         var color = SB.base("\(identity.color)-600", "\(identity.color)-400").cgColor(in: self)
         if dimmed, let gray = color.converted(to: CGColorSpace(name: CGColorSpace.genericGrayGamma2_2)!, intent: .defaultIntent, options: nil) {
             color = gray // `grayscale` on settled favicons
@@ -113,6 +171,24 @@ final class ProjectMonogramView: DSView {
         ctx.scaleBy(x: width > 0 ? target / width : 1, y: -1)
         ctx.textPosition = .zero
         CTLineDraw(line, ctx)
+        ctx.restoreGState()
+    }
+
+    /// A lucide icon stroked into `rect` (`size-full` in the 14px box).
+    private func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
+        let scale = rect.width / definition.viewBox.width
+        ctx.saveGState()
+        ctx.translateBy(x: rect.minX - definition.viewBox.x * scale, y: rect.minY - definition.viewBox.y * scale)
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.setStrokeColor(color)
+        ctx.setLineWidth(2)
+        ctx.setLineCap(.round)
+        ctx.setLineJoin(.round)
+        for element in definition.elements {
+            guard let path = try? element.cgPath() else { continue }
+            ctx.addPath(path)
+            ctx.strokePath()
+        }
         ctx.restoreGState()
     }
 }
@@ -157,7 +233,7 @@ final class RowActionButton: ControlView {
 
 /// Base for recycled list rows: hover and press from ControlView, a reusable `configure`.
 class SidebarRowBase: ControlView {
-    var onOpen: (@MainActor () -> Void)?
+    final var onOpen: (@MainActor () -> Void)? // final: see PROGRESS.md gotchas (Swift 6.4 link bug)
     var isKeyboardFocused = false { didSet { if isKeyboardFocused != oldValue { needsDisplay = true; refresh() } } }
     var item: SidebarItem?
 
@@ -242,6 +318,7 @@ final class SidebarCardRowView: SidebarRowBase {
         CATransaction.commit()
 
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
+        monogram.source = r.projectIcon
         monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil
         project.text = r.projectLabel ?? ""
         project.font = SB.font(12, r.recedes ? .regular : .medium)
@@ -413,6 +490,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         // Dimmed favicon at rest, restored on hover.
         let dim = (!r.isActive || unsettle) && !hovered
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
+        monogram.source = r.projectIcon
         monogram.dimmed = dim
         monogram.alphaValue = dim ? 0.4 : 1
         title.text = r.title

@@ -124,6 +124,8 @@ final class UserMessageRowView: TimelineRowView {
         super.configure(item)
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         text = m.text
+        markdown.cwd = context.markdownCwd
+        markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id, m.text, lineBreaks: true)
         collapsible = shouldCollapseUserMessage(m.text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
@@ -231,6 +233,8 @@ final class AssistantMessageRowView: TimelineRowView {
         let isEmpty = m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !m.streaming
         empty.isHidden = !isEmpty
         markdown.isHidden = isEmpty
+        markdown.cwd = context.markdownCwd
+        markdown.onOpenFile = context.model?.openFile
         markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text))
         meta.isHidden = !showMeta
         meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now())
@@ -395,6 +399,8 @@ final class PlanRowView: TimelineRowView {
         let collapsed = collapsible && !item.ui.planExpanded
         // ponytail: the collapsed preview is the first 10 body lines; T3's buildCollapsedProposedPlanPreviewMarkdown also closes open fences
         let body = collapsed ? parts.body.components(separatedBy: "\n").prefix(10).joined(separator: "\n") : parts.body
+        markdown.cwd = context.markdownCwd
+        markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id + (collapsed ? ":preview" : ""), body, lineBreaks: false)
         toggle.title = item.ui.planExpanded ? "Collapse plan" : "Expand plan"
         toggle.isHidden = !collapsible

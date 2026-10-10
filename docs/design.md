@@ -88,7 +88,7 @@ Each row is diffed against T3's own markup in Chromium at 2x in light and dark, 
 | color-picker.tsx | ColorPickerView | 8 | 1.17% (hue slider) |
 | calendar.tsx | CalendarView | gallery only | |
 | Wrapped text | TextBlockView | 16 | 7.53% (line breaks identical; glyph antialiasing) |
-| ChatMarkdown.tsx, `.chat-markdown` (index.css) | MarkdownView (Features/Markdown) | 12 | 1.37%: text 1.72/2.07, lists 1.35/1.71, quotes 1.10/1.21, table 0.94/1.35, code 2.64/1.97, rule and image 0.16/0.25 (light/dark). Spec `scripts/gen-markdown-spec.py`, code colored by T3's own Shiki in the page |
+| ChatMarkdown.tsx, `.chat-markdown` (index.css) | MarkdownView (Features/Markdown) | 14 | 1.61%: text 1.72/2.07, lists 1.35/1.71, quotes 1.10/1.21, table 0.94/1.35, code 2.64/1.97, rule and image 0.16/0.25, file chips 2.75/3.35 (light/dark). Spec `scripts/gen-markdown-spec.py`, code colored by T3's own Shiki in the page |
 | DiffPanel.tsx, @pierre/diffs with StyledDiffCodeView.tsx CSS | DiffPanelView, DiffListView (Features/Diff) | 18 + 4 | body 2.42% against pierre itself rendering each patch in Chromium (spec `scripts/gen-diff-spec.py`; wrapped text cases 4-5%); panel against 09 and 10 5.1% light, 5.5% dark (glyph antialiasing over 23 rows of file names) |
 
 Behaviour tests cover popup positioning and keyboard navigation, toast timing and stacking, modal focus trapping, and sidebar resize limits.
@@ -124,5 +124,6 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 - Toasts lack the copy-error button and the loading spinner.
 - 11 brand logos with gradients or masks, file-type icons and morphicons are not extracted yet.
 - Code font: Menlo per Chromium's rendering on this machine. Verify on the real desktop app.
+- File chips in markdown: clicks call `ThreadViewModel.openFile`, which the app does not set yet, so a click shows the chip's menu (copy relative or full path), as T3 does when it has no open action. No "copied" toast, no hover transition, no Open in editor or Reveal items yet.
 - Markdown: the native highlighter approximates Shiki (82 to 100% of characters match per language on sample snippets; TS, JSON, YAML, TOML, HTML, diff, Markdown at 97% or more). Code block titles show the language label, not pierre's file-type icons. External links have no favicon. Tables never wrap or truncate cells and clip instead of scrolling; the expand toggle does nothing yet. Unwrapped code clips instead of scrolling. All lists render tight (Foundation does not report looseness). Images are the 16:9 loading slot.
 - Diff panel: no file tree aside (the toggle only shows state), no line selection or review comments, no expanding of hidden lines (patches carry no file contents), no 200ms fade on expand, no title hover transition. Unwrapped lines share one horizontal offset across the list. Wrapping counts every character as one column, so wide CJK or emoji lines wrap later than Chromium.

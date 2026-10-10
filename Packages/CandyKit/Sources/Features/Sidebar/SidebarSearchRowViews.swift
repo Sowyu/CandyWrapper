@@ -42,6 +42,7 @@ final class SidebarDraftRowView: SidebarRowBase {
         CATransaction.commit()
         pen.strokeColor = SB.c(\.warningForeground)
         monogram.projectTitle = d.projectTitle ?? d.projectLabel ?? ""
+        monogram.source = d.projectIcon
         monogram.isHidden = d.projectTitle == nil
         project.text = d.projectLabel ?? ""
         project.color = SB.c(\.secondaryLabel)
@@ -150,6 +151,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
             : state.hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
         CATransaction.commit()
         monogram.projectTitle = r.projectTitle ?? ""
+        monogram.source = r.projectIcon
         monogram.isHidden = r.projectTitle == nil
         title.text = r.title
         title.color = lit || state.hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground, 0.75)

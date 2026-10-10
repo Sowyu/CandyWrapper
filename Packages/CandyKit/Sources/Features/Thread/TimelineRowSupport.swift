@@ -44,6 +44,8 @@ enum TL {
 final class TimelineContext {
     weak var model: ThreadViewModel?
     var workspaceRoot: String? { model?.workspaceRoot }
+    /// T3's `markdownCwd` (ChatView.tsx `gitCwd`): the thread's worktree, else the project root. File chips resolve against it.
+    var markdownCwd: String? { model?.projection?.thread.worktreePath ?? model?.workspaceRoot }
     var now: () -> Date = Date.init
 
     private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]

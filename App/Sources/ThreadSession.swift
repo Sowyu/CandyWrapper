@@ -72,6 +72,7 @@ final class ThreadSession {
         guard let update = await store.takeUpdate(), active, let panel else { return }
         let (projectTitle, workspaceRoot) = place(update.projection)
         panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
+        panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
         onProjection?(update.projection)
     }
 
@@ -79,9 +80,15 @@ final class ThreadSession {
     private func place(_ projection: ThreadProjection?) -> (String, String?) {
         let snapshot = sidebar?.snapshot
         let shell = snapshot?.threads.first { $0.id == threadId } ?? snapshot?.archivedThreads.first { $0.id == threadId }
-        guard let projectId = projection?.thread.projectId ?? shell?.projectId,
-              let project = snapshot?.projects.first(where: { $0.id == projectId }) else { return ("", nil) }
+        guard let project = project(projection) else { return ("", nil) }
         return (project.title, projection?.thread.worktreePath ?? shell?.worktreePath ?? project.workspaceRoot)
+    }
+
+    private func project(_ projection: ThreadProjection?) -> ProjectShell? {
+        let snapshot = sidebar?.snapshot
+        let shell = snapshot?.threads.first { $0.id == threadId } ?? snapshot?.archivedThreads.first { $0.id == threadId }
+        guard let projectId = projection?.thread.projectId ?? shell?.projectId else { return nil }
+        return snapshot?.projects.first { $0.id == projectId }
     }
 
     private func loadEarlier() {
@@ -165,6 +172,9 @@ final class ThreadController {
 
     init(sidebar: SidebarContentView, window: NSWindow) {
         self.sidebar = sidebar
+        panel.projectIconForTitle = { [weak sidebar] title in
+            sidebar?.snapshot?.projects.first { $0.title == title }.map(ProjectIconSource.init)
+        }
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open-thread"), i + 1 < args.count { openPrefix = args[i + 1] }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }

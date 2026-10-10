@@ -16,6 +16,18 @@ public final class MarkdownView: DSView {
         didSet { if bodyColor != oldValue { invalidate() } }
     }
 
+    /// The directory relative file paths resolve against: T3's `markdownCwd`, the thread's worktree
+    /// or else the project's workspace root. Path-shaped inline code and file links render as chips.
+    public var cwd: String? {
+        didSet { if cwd != oldValue { invalidate() } }
+    }
+
+    /// A plain click on a file chip (`inEditor` false) or a Cmd-click (`inEditor` true). T3 opens the file
+    /// in its right files panel (`panelPath`; media in the media viewer, PDF and HTML in the browser
+    /// preview when one is available) and Cmd-click opens it in the preferred editor. Without a
+    /// handler a click shows the chip's menu, as T3 does when no open action is available.
+    public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
+
     /// Parses and shows `markdown`. User messages pass `preservesLineBreaks`.
     public func setMarkdown(_ markdown: String, preservesLineBreaks: Bool = false) {
         document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
@@ -24,6 +36,10 @@ public final class MarkdownView: DSView {
     private var unwrappedCode: Set<Int> = []
     private var cache: [CGFloat: MarkdownLayout] = [:]
     private var buttons: [ButtonView] = []
+    private var chipViews: [FileChipHitView] = []
+    private var hoveredChip: Int? {
+        didSet { if hoveredChip != oldValue { needsDisplay = true } }
+    }
     private var copiedResets: [Int: DispatchWorkItem] = [:]
 
     public override var wantsUpdateLayer: Bool { false }
@@ -43,7 +59,7 @@ public final class MarkdownView: DSView {
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
-        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor)
+        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd)
         cache[width] = made
         return made
     }
@@ -66,6 +82,7 @@ public final class MarkdownView: DSView {
 
     public override func layout() {
         super.layout()
+        layoutChips()
         let controls = bounds.width > 0 ? layout(forWidth: bounds.width).controls : []
         while buttons.count < controls.count {
             let button = ButtonView(icon: .copy, variant: .ghostMuted, size: .iconXs)
@@ -95,6 +112,51 @@ public final class MarkdownView: DSView {
         }
     }
 
+    /// One transparent view per file chip: pointer cursor, hover, tooltip, click and context menu.
+    private func layoutChips() {
+        let chips = bounds.width > 0 ? layout(forWidth: bounds.width).fileChips : []
+        while chipViews.count < chips.count {
+            let view = FileChipHitView(owner: self, index: chipViews.count)
+            addSubview(view)
+            chipViews.append(view)
+        }
+        for (i, view) in chipViews.enumerated() {
+            guard i < chips.count else { view.isHidden = true; continue }
+            view.isHidden = false
+            view.frame = chips[i].frame
+            view.chip = chips[i]
+        }
+        if let hovered = hoveredChip, hovered >= chips.count { hoveredChip = nil }
+    }
+
+    fileprivate func chipHover(_ index: Int, _ inside: Bool) {
+        if inside { hoveredChip = index } else if hoveredChip == index { hoveredChip = nil }
+    }
+
+    fileprivate func chipClicked(_ chip: FileChip, event: NSEvent, view: NSView) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if let onOpenFile {
+            onOpenFile(chip.meta, modifiers.contains(.command) && !modifiers.contains(.control))
+        } else {
+            chipMenu(chip, event: event, view: view)
+        }
+    }
+
+    /// T3's native file menu (ChatMarkdown.tsx `showFileContextMenu`). Open, browser and reveal items
+    /// appear only once the app supplies those actions.
+    // ponytail: copy items only, and no "copied" toast; add Open in editor and Reveal in Finder with the shell actions
+    fileprivate func chipMenu(_ chip: FileChip, event: NSEvent, view: NSView) {
+        let menu = NSMenu()
+        let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) } ?? chip.meta.targetPath
+        for (title, value) in [("Copy relative path", relative), ("Copy full path", chip.meta.targetPath)] {
+            let item = NSMenuItem(title: title, action: #selector(FileChipHitView.copyPath(_:)), keyEquivalent: "")
+            item.target = view
+            item.representedObject = value
+            menu.addItem(item)
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
+    }
+
     private func copy(_ text: String, button index: Int) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -122,6 +184,7 @@ public final class MarkdownView: DSView {
         ctx.setShouldSmoothFonts(true)
         ctx.setAllowsFontSmoothing(true)
         let dark = effectiveAppearance.isDark
+        var chipIndex = -1
         for item in layout(forWidth: bounds.width).items {
             switch item {
             case .text(let box, let origin):
@@ -150,7 +213,15 @@ public final class MarkdownView: DSView {
             case .checkbox(let rect, let checked):
                 drawCheckbox(rect, checked: checked, dark: dark, in: ctx)
             case .icon(let name, let rect, let color):
-                drawIcon(name, in: rect, color: color.cgColor(in: self), ctx: ctx)
+                drawIcon(name.definition, in: rect, color: color.cgColor(in: self), ctx: ctx)
+            case .fileChip(let chip):
+                chipIndex += 1
+                let hovered = hoveredChip == chipIndex
+                drawBox(chip.frame, fill: hovered ? FileChipStyle.hoverFill : FileChipStyle.fill,
+                        border: hovered ? FileChipStyle.hoverBorder : FileChipStyle.border, radius: chip.frame.height / 1.41 * 0.5,
+                        fillUnderBorder: true, in: ctx)
+                let (icon, color) = FileChipStyle.icon(for: chip.meta)
+                drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
             case .clip(let rect):
                 ctx.saveGState()
                 ctx.clip(to: rect)
@@ -163,7 +234,8 @@ public final class MarkdownView: DSView {
     /// CSS box: the border is drawn inside the rect, the fill inside the border.
     /// Blink snaps box edges to device pixels (`PixelSnappedIntRect`): each edge rounds on its own.
     // ponytail: 2x device pixels, like TextLine.baseline
-    private func drawBox(_ unsnapped: CGRect, fill: NSColor?, border: NSColor?, radius: CGFloat, in ctx: CGContext) {
+    /// `fillUnderBorder`: the CSS default `background-clip: border-box`, visible under a translucent border.
+    private func drawBox(_ unsnapped: CGRect, fill: NSColor?, border: NSColor?, radius: CGFloat, fillUnderBorder: Bool = false, in ctx: CGContext) {
         func snap(_ v: CGFloat) -> CGFloat { (v * 2).rounded() / 2 }
         let x0 = snap(unsnapped.minX), y0 = snap(unsnapped.minY)
         let rect = CGRect(x: x0, y: y0, width: max(0.5, snap(unsnapped.maxX) - x0), height: max(0.5, snap(unsnapped.maxY) - y0))
@@ -174,7 +246,7 @@ public final class MarkdownView: DSView {
         let inner = border == nil ? rect : rect.insetBy(dx: 1, dy: 1)
         if let fill {
             ctx.setFillColor(fill.cgColor(in: self))
-            ctx.addPath(path(inner, max(0, radius - (border == nil ? 0 : 1))))
+            if fillUnderBorder { ctx.addPath(path(rect, radius)) } else { ctx.addPath(path(inner, max(0, radius - (border == nil ? 0 : 1)))) }
             ctx.fillPath()
         }
         if let border {
@@ -211,22 +283,84 @@ public final class MarkdownView: DSView {
         }
     }
 
-    /// A lucide icon: stroked paths scaled from the 24-unit view box, stroke width 2 units.
-    private func drawIcon(_ name: IconName, in rect: CGRect, color: CGColor, ctx: CGContext) {
-        let definition = name.definition
+    /// An icon scaled from its view box: lucide strokes, pierre fills. `currentColor` is `color`.
+    private func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
         let scale = rect.width / definition.viewBox.width
         ctx.saveGState()
         ctx.translateBy(x: rect.minX - definition.viewBox.x * scale, y: rect.minY - definition.viewBox.y * scale)
         ctx.scaleBy(x: scale, y: scale)
-        ctx.setStrokeColor(color)
-        ctx.setLineWidth(2)
-        ctx.setLineCap(.round)
-        ctx.setLineJoin(.round)
+        func resolve(_ c: IconColor) -> CGColor? {
+            switch c {
+            case .none: nil
+            case .current: color
+            case .rgba(let v): CGColor(srgbRed: CGFloat(v >> 24 & 0xFF) / 255, green: CGFloat(v >> 16 & 0xFF) / 255,
+                                       blue: CGFloat(v >> 8 & 0xFF) / 255, alpha: CGFloat(v & 0xFF) / 255)
+            }
+        }
         for element in definition.elements {
             guard let path = try? element.cgPath() else { continue }
-            ctx.addPath(path)
-            ctx.strokePath()
+            let paint = element.paint
+            ctx.saveGState()
+            ctx.translateBy(x: paint.offsetX, y: paint.offsetY)
+            ctx.setAlpha(paint.opacity)
+            if let fill = resolve(paint.fill) {
+                ctx.setFillColor(fill)
+                ctx.addPath(path)
+                ctx.fillPath(using: paint.evenOdd ? .evenOdd : .winding)
+            }
+            if let stroke = resolve(paint.stroke) {
+                ctx.setStrokeColor(stroke)
+                ctx.setLineWidth(paint.strokeWidth)
+                let cap: CGLineCap = switch paint.lineCap { case .butt: .butt; case .round: .round; case .square: .square }
+                let join: CGLineJoin = switch paint.lineJoin { case .miter: .miter; case .round: .round; case .bevel: .bevel }
+                ctx.setLineCap(cap)
+                ctx.setLineJoin(join)
+                ctx.addPath(path)
+                ctx.strokePath()
+            }
+            ctx.restoreGState()
         }
         ctx.restoreGState()
+    }
+}
+
+/// The interactive part of a file chip; the chip itself is drawn by `MarkdownView`.
+private final class FileChipHitView: NSView {
+    weak var owner: MarkdownView?
+    let index: Int
+    var chip: FileChip? { didSet { tooltip.text = chip?.meta.targetPath ?? ""; window?.invalidateCursorRects(for: self) } }
+    private lazy var tooltip = TooltipController.attach(to: self, text: "", variant: .code)
+
+    init(owner: MarkdownView, index: Int) {
+        self.owner = owner
+        self.index = index
+        super.init(frame: .zero)
+        _ = tooltip
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        setAccessibilityRole(.link)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func mouseEntered(with event: NSEvent) { owner?.chipHover(index, true) }
+    override func mouseExited(with event: NSEvent) { owner?.chipHover(index, false) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        guard let chip, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        tooltip.hide()
+        owner?.chipClicked(chip, event: event, view: self)
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        guard let chip else { return }
+        tooltip.hide()
+        owner?.chipMenu(chip, event: event, view: self)
+    }
+    override func accessibilityLabel() -> String? { chip?.label }
+
+    @objc func copyPath(_ sender: NSMenuItem) {
+        guard let value = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 }

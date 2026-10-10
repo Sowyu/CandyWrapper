@@ -87,6 +87,17 @@ final class MarkdownTextBox {
         return rects
     }
 
+    /// Horizontal extent and baseline of `range` on each line it touches, relative to the box.
+    func spans(_ range: NSRange) -> [(x0: CGFloat, x1: CGFloat, baseline: CGFloat)] {
+        lines.compactMap { line in
+            let lo = max(range.location, line.start), hi = min(range.upperBound, line.start + line.length)
+            guard lo < hi else { return nil }
+            let local = line.start - line.fragment.characterRange.location
+            let x = Self.glyphOffsets(line.fragment)
+            return (line.x + x(lo - local), line.x + x(hi - local), line.baseline)
+        }
+    }
+
     /// Glyph origins by string index within a line fragment. `locationForCharacter(at:)` splits a kerned
     /// character's extra advance around the caret, so it misplaces the edges the kerning reserves.
     private static func glyphOffsets(_ line: NSTextLineFragment) -> (Int) -> CGFloat {

@@ -300,7 +300,7 @@ public final class SidebarContentView: DSView {
     private func updateScopeTrigger() {
         let group = scopedGroup
         filterMonogram.isHidden = group == nil
-        if let group { filterMonogram.projectTitle = group.representative.title }
+        if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
         if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .folder : nil }
         let label = group.map { "Filter threads by project: \($0.label)" } ?? "Filter threads by project"
         filterButton.setAccessibilityLabel(label)
