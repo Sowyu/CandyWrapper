@@ -155,14 +155,9 @@ final class T3ConnectController {
         let items: [MenuItem] = [
             .label(signedIn.identifier ?? "Signed in"),
             .separator,
-            // The menu closes after its action returns; a modal opened inside the action would keep it up.
             MenuItem("T3 Connect", action: { [weak self, weak window] in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        guard let window else { return }
-                        self?.presentAccountPage(in: window)
-                    }
-                }
+                guard let window else { return }
+                self?.presentAccountPage(in: window)
             }),
             .separator,
             MenuItem("Sign out", action: { [weak self] in self?.signOut() }),
