@@ -71,31 +71,50 @@ enum WorkIcons {
 
 /// What an expanded entry shows: blocks of mono text (the `V2ItemInspector` essentials).
 struct WorkDetail: Hashable {
-    enum Tone: Hashable { case command, output, error }
+    /// `note` is the muted italic of "Loading output…" and "No output.".
+    enum Tone: Hashable { case command, output, error, note }
     var blocks: [(String, Tone)] = []
-    var isEmpty: Bool { blocks.isEmpty }
+    /// The stream left this entry's output out; it loads when the row opens, so the row expands
+    /// even before anything is fetched (`turnItemHasDetail`, itemDetail.ts:227-248).
+    var fetches = false
+    var isEmpty: Bool { blocks.isEmpty && !fetches }
 
-    static func == (a: WorkDetail, b: WorkDetail) -> Bool { a.blocks.map(\.0) == b.blocks.map(\.0) }
+    static func == (a: WorkDetail, b: WorkDetail) -> Bool { a.blocks.map(\.0) == b.blocks.map(\.0) && a.fetches == b.fetches }
     func hash(into h: inout Hasher) { h.combine(blocks.map(\.0)) }
 
     /// `V2ItemInspector.tsx:222-424` reduced to text: the command, the output, a failing exit code,
-    /// read paths, changed files, or the entry's detail.
-    // ponytail: no search result links, JSON highlighting, Open diff button or fetch of omitted output (orchestration.getTurnItem); add with the diff panel
-    static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?) -> WorkDetail {
+    /// read paths, changed files, or the entry's detail. `output` is the fetch state of an output
+    /// the stream left out.
+    // ponytail: no search result links, JSON highlighting or Open diff button; add with the inspector's rich blocks
+    static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState? = nil) -> WorkDetail {
         var d = WorkDetail()
+        d.fetches = e.projectedItem.map { TurnItemDetail.needsFetch($0.item) } ?? false
         func add(_ text: String?, _ tone: Tone) {
             guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, t != label,
                   !d.blocks.contains(where: { $0.0 == t }) else { return }
             d.blocks.append((t, tone))
         }
+        /// `ToolOutput` (V2ItemInspector.tsx:149-175): the text, else loading, error or empty.
+        func addFetched() {
+            switch output {
+            case .loading: d.blocks.append(("Loading output…", .note))
+            case .failed(let message): d.blocks.append(("Couldn't load output: " + message, .error))
+            case .fetched(.gone): d.blocks.append(("Couldn't load output: Output is no longer available.", .error))
+            case .fetched(.output(let text?)) where !text.isEmpty: d.blocks.append((text, .output))
+            case .fetched(.output): d.blocks.append(("No output.", .note))
+            case .fetched(.mismatch), nil: break
+            }
+        }
         let item = e.structuredPayload
         if let read = WorkLog.readOutput(e, workspaceRoot: workspaceRoot), WorkLog.toolGroupAction(e) == .read {
+            // A read expands to its plain text, then the output fetched for it (MessagesTimeline.tsx:5549-5553, :5764-5770).
             add(read, .output)
+            if d.fetches { addFetched() }
             return d
         }
         if e.itemType == .commandExecution || e.command != nil {
             add((e.command ?? item?.input?.stringValue).map(commandDisplayText), .command)
-            add(item?.output?.stringValue ?? e.detail, .output)
+            if d.fetches { addFetched() } else { add(item?.output?.stringValue ?? e.detail, .output) }
             if let code = item?.exitCode, code != 0 { d.blocks.append(("exit \(code)", .error)) }
             return d
         }
@@ -104,7 +123,7 @@ struct WorkDetail: Hashable {
             return d
         }
         add(e.detail, .output)
-        if let out = item?.output?.stringValue { add(out, .output) }
+        if d.fetches { addFetched() } else if let out = item?.output?.stringValue { add(out, .output) }
         return d
     }
 }
@@ -112,6 +131,7 @@ struct WorkDetail: Hashable {
 /// Mono detail blocks, `space-y-1.5`, 13px at `leading-relaxed`, each clipped at 320px.
 final class WorkDetailView: DSView {
     static let font = DSFont.mono(13)
+    static let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
     static let lineHeight: CGFloat = 13 * 1.625
     static let maxBlock: CGFloat = 320
 
@@ -131,10 +151,11 @@ final class WorkDetailView: DSView {
         let made = detail.blocks.map { text, tone in
             let color: NSColor = switch tone {
             case .command: TL.c(\.foreground, 0.85)
-            case .output: TL.c(\.mutedForeground)
+            case .output, .note: TL.c(\.mutedForeground)
             case .error: TL.c(\.destructive)
             }
-            return TextBlockLayout(NSAttributedString(string: text, attributes: [.font: Self.font, .foregroundColor: color]),
+            let font = tone == .note ? Self.italic : Self.font
+            return TextBlockLayout(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]),
                                    width: width, lineHeight: Self.lineHeight)
         }
         cache = (width, made)
@@ -287,7 +308,7 @@ final class WorkRowView: WorkRowBase {
         let root = context.workspaceRoot
         entries = grouped.map { e in
             let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
-            return (e, WorkDetail.of(e, label: label, workspaceRoot: root), item.ui.expandedEntries.contains(e.id))
+            return (e, WorkDetail.of(e, label: label, workspaceRoot: root, output: item.ui.outputs[e.id]), item.ui.expandedEntries.contains(e.id))
         }
         for (i, (e, detail, open)) in entries.enumerated() {
             let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
@@ -309,7 +330,7 @@ final class WorkRowView: WorkRowBase {
                 details.append(d)
             }
             details[i].detail = detail
-            details[i].isHidden = !open || detail.isEmpty
+            details[i].isHidden = !open || detail.blocks.isEmpty
         }
         hideLines(from: entries.count)
         for d in details.dropFirst(entries.count) { d.isHidden = true }
@@ -328,7 +349,7 @@ final class WorkRowView: WorkRowBase {
 
     /// Detail box `mt-0.5 mb-1.5`, indented like `ms-7` for text (28px) and flush for panels.
     private func detailHeight(_ i: Int, _ width: CGFloat) -> CGFloat {
-        guard entries[i].open, !entries[i].detail.isEmpty else { return 0 }
+        guard entries[i].open, !entries[i].detail.blocks.isEmpty else { return 0 }
         return 2 + details[i].height(forWidth: max(0, width - 4)) + 6
     }
 

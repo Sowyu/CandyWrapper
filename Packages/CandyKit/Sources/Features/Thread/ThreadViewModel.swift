@@ -14,6 +14,17 @@ struct TimelineRowUI: Hashable {
     /// The changed files card's fold-all state and the folders toggled since.
     var filesExpanded = false
     var folderOverrides: [String: Bool] = [:]
+    /// Fetched output of this row's open entries whose output the stream left out.
+    var outputs: [String: ToolOutputState] = [:]
+}
+
+/// An omitted tool output while its row is open (V2ItemInspector.tsx:149-175).
+enum ToolOutputState: Hashable {
+    /// "Loading output…"
+    case loading
+    /// "Couldn't load output: <message>"
+    case failed(String)
+    case fetched(TurnItemDetail.Fetched)
 }
 
 /// One row as the timeline draws it.
@@ -48,6 +59,16 @@ public final class ThreadViewModel {
     /// The changed files card asks for a run's diff, at a file (`onOpenTurnDiff`).
     public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
 
+    /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,
+    /// tests) leaves omitted output unfetched.
+    public typealias TurnItemLoader = @Sendable (GetTurnItemInput, TurnItemType) async throws -> TurnItemDetail.Fetched
+    public var turnItemLoader: TurnItemLoader?
+    /// Per entry id: the revision fetched (`TurnItemDetail.revision`) and its state.
+    private var outputs: [String: (revision: String, state: ToolOutputState)] = [:]
+    private var outputTasks: [String: Task<Void, Never>] = [:]
+    /// T3 drops a result 60 s after the last open row lets go of it (`idleTtlMs`, state/orchestration.ts:47-53).
+    var outputIdleTTL: Duration = .seconds(60)
+
     public init() {}
 
     /// Replaces the projection (nil clears the view) and re-derives the rows.
@@ -63,6 +84,7 @@ public final class ThreadViewModel {
         } else {
             expandedEntries = []; expandedMessages = []; expandedPlans = []
             expandedChangedFiles = []; folderOverrides = [:]
+            dropOutputs()
         }
         input = fresh
         derive()
@@ -71,7 +93,11 @@ public final class ThreadViewModel {
     func toggleRun(_ id: RunId) { mutateInput { $0.expandedRunIds.formSymmetricDifference([id]) } }
     func toggleAttempt(_ id: RunAttemptId) { mutateInput { $0.expandedAttemptIds.formSymmetricDifference([id]) } }
     func toggleGroup(_ id: String) { mutateInput { $0.expandedWorkGroupIds.formSymmetricDifference([id]) } }
-    func toggleEntry(_ id: String) { expandedEntries.formSymmetricDifference([id]); derive() }
+    func toggleEntry(_ id: String) {
+        expandedEntries.formSymmetricDifference([id])
+        if !expandedEntries.contains(id), outputs[id] != nil { scheduleEviction(id) }
+        derive()
+    }
     func toggleMessage(_ id: String) { expandedMessages.formSymmetricDifference([id]); derive() }
     func togglePlan(_ id: String) { expandedPlans.formSymmetricDifference([id]); derive() }
     func toggleChangedFiles(_ run: RunId) {
@@ -109,7 +135,11 @@ public final class ThreadViewModel {
         items = rows.map { row in
             var ui = TimelineRowUI()
             switch row.kind {
-            case .work(let entries, _, _): ui.expandedEntries = expandedEntries.intersection(entries.map(\.id))
+            case .work(let entries, _, _):
+                ui.expandedEntries = expandedEntries.intersection(entries.map(\.id))
+                for e in entries where ui.expandedEntries.contains(e.id) {
+                    if let state = output(for: e) { ui.outputs[e.id] = state }
+                }
             case .workLive(_, _, _, _, _, let thought?): ui.expandedEntries = expandedEntries.intersection([thought.id])
             case .message(let m, _, _, _, _, let summary):
                 ui.messageExpanded = expandedMessages.contains(m.id.rawValue)
@@ -123,5 +153,54 @@ public final class ThreadViewModel {
             return TimelineItem(row: row, ui: ui)
         }
         onChange?()
+    }
+
+    // MARK: Omitted tool output
+
+    /// The output state of an open entry. Starts a fetch when the stream left its output out and
+    /// this revision isn't fetched yet: on expand, and again when a live item settles.
+    private func output(for e: WorkLogEntry) -> ToolOutputState? {
+        guard let row = e.projectedItem, TurnItemDetail.needsFetch(row.item) else { return nil }
+        let request = TurnItemDetail.request(row)
+        let revision = request.revision ?? ""
+        if let cached = outputs[e.id], cached.revision == revision { return cached.state }
+        guard let loader = turnItemLoader else { return nil }
+        outputs[e.id] = (revision, .loading)
+        outputTasks[e.id]?.cancel()
+        let id = e.id, wireType = row.item.type
+        outputTasks[id] = Task { [weak self] in
+            let state: ToolOutputState
+            do { state = .fetched(try await loader(request, wireType)) }
+            catch is CancellationError { return }
+            catch {
+                // `formatEnvironmentQueryError` (apps/web/src/state/query.ts:20-25).
+                let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                state = .failed(message.isEmpty ? "The environment request failed." : message)
+            }
+            guard let self, !Task.isCancelled, self.outputs[id]?.revision == revision else { return }
+            self.outputs[id] = (revision, state)
+            self.outputTasks[id] = nil
+            self.derive()
+        }
+        return .loading
+    }
+
+    /// Whether the model still holds an output for the entry, fetched or loading.
+    func holdsOutput(_ id: String) -> Bool { outputs[id] != nil }
+
+    private func scheduleEviction(_ id: String) {
+        let ttl = outputIdleTTL
+        Task { [weak self] in
+            try? await Task.sleep(for: ttl)
+            guard let self, !self.expandedEntries.contains(id) else { return }
+            self.outputs[id] = nil
+            self.outputTasks.removeValue(forKey: id)?.cancel()
+        }
+    }
+
+    private func dropOutputs() {
+        outputTasks.values.forEach { $0.cancel() }
+        outputTasks = [:]
+        outputs = [:]
     }
 }

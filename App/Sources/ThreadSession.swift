@@ -39,7 +39,10 @@ final class ThreadSession {
         historyLoad?.cancel()
         historyLoad = nil
         self.shell = shell
-        if active { panel?.diffPanel.loader = Self.diffLoader(shell.supervisor) }
+        if active {
+            panel?.diffPanel.loader = Self.diffLoader(shell.supervisor)
+            panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
+        }
         let store = self.store
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
             ThreadSession.encode(await store.subscribeInput())
@@ -121,6 +124,20 @@ final class ThreadSession {
     }
 
     struct DiffLoadError: LocalizedError { var errorDescription: String? }
+
+    /// `orchestration.getTurnItem` on the shell's socket for an open row whose output the stream
+    /// left out. Decoding and trimming run here, off the main thread; the row gets only the text.
+    nonisolated static func turnItemLoader(_ supervisor: ConnectionSupervisor) -> ThreadViewModel.TurnItemLoader {
+        { input, wireType in
+            do {
+                let json = try await supervisor.request("orchestration.getTurnItem", payload: encode(input))
+                let result = try json.decode(as: GetTurnItemResult.self)
+                return TurnItemDetail.resolve(result, wireType: wireType)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
 
     nonisolated static func encode(_ input: some Encodable) -> JSONValue {
         guard let data = try? JSONEncoder().encode(input),
