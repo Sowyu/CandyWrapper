@@ -28,6 +28,13 @@ public enum SidebarStage: Sendable {
 // ponytail: Dev blueprint art is not drawn; port DevBlueprintArt if dev builds need it
 final class StageBackdropView: DSView {
     override var wantsUpdateLayer: Bool { false }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        // The blur draws its shapes off to the side. Unclipped, AppKit sized the backing store to
+        // hold that drawing too, up to the whole window (27 MB at 2x).
+        clipsToBounds = true
+    }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     static let stars: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
@@ -46,7 +53,9 @@ final class StageBackdropView: DSView {
         let w = bounds.width, h = bounds.height
         let s = h / 96 // xMinYMin slice: height decides the scale for any sidebar width
         ctx.saveGState()
-        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        // Explicit bounds: under AppKit's recorded drawing an unbounded group got a window-sized
+        // scratch layer (27 MB at 2x).
+        ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
         ctx.saveGState()
         ctx.scaleBy(x: s, y: s)
         let unitsW = w / s
@@ -112,9 +121,7 @@ final class StageBackdropView: DSView {
             ctx.saveGState()
             ctx.setAlpha(alpha)
             // ponytail: the blur paints one flat color (the cloud gradient's middle stop); blur a bitmap if the gradient shows
-            drawBlurred(ctx, sigma: 4 * s, scale: s, color: col(\.stageNightSecondary, 0.62)) {
-                $0.addPath(path); $0.fillPath()
-            }
+            drawBlurred(ctx, path, sigma: 4 * s, scale: s, color: col(\.stageNightSecondary, 0.62))
             ctx.restoreGState()
         }
         ctx.restoreGState()
@@ -134,14 +141,20 @@ final class StageBackdropView: DSView {
     }
 
     /// Gaussian blur by drawing far off-canvas and letting the shadow land in place.
-    private func drawBlurred(_ ctx: CGContext, sigma: CGFloat, scale: CGFloat, color: CGColor, _ body: (CGContext) -> Void) {
-        let shift: CGFloat = 4000
+    private func drawBlurred(_ ctx: CGContext, _ path: CGPath, sigma: CGFloat, scale: CGFloat, color: CGColor) {
+        // Just past the clouds (x up to about 300 units) plus 3 sigma.
+        let shift: CGFloat = 320
         // Shadow offsets are in device space; this view is flipped, so +y in user space is -y in device space.
         // Shadow offsets and blur are in the base space (points), outside the CTM.
         ctx.setShadow(offset: CGSize(width: shift * scale, height: 0), blur: sigma * 2, color: color)
-        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        // The group only needs to hold the shifted shape; unbounded, its scratch layer spanned the
+        // whole shift and the view (tens of MB at 2x).
+        let margin = 3 * sigma / scale
+        ctx.beginTransparencyLayer(in: path.boundingBox.offsetBy(dx: -shift, dy: 0).insetBy(dx: -margin, dy: -margin),
+                                   auxiliaryInfo: nil)
         ctx.translateBy(x: -shift, y: 0)
-        body(ctx)
+        ctx.addPath(path)
+        ctx.fillPath()
         ctx.endTransparencyLayer()
     }
 
