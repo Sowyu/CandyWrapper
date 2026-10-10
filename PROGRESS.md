@@ -66,6 +66,18 @@ Scope: the core interactive loop. Later (M5 stretch or M7): slash commands, `@` 
 - [x] Demo milestone 5 to the user (accepted 2026-10-10: "M5 aprove")
   - 2026-10-10 demo run by the agent with the user's permission, side by side with the official web client (paired through `t3 auth pairing create`, driven by T3's preview browser) on the user's live T3: send and stream, queue strip, Cmd+Enter steer, command approval, question card, model and access pickers and both appearances behave the same. Found and fixed: the steer race ("No running provider turn found") now lands in T3's thread error banner, the idle placeholder follows derivePhase, a draft opens with the right panel closed, the menu bar had no Edit menu. Checked: our `launchThread` matches the official client's captured payload (no `branch` for a Current checkout draft; T3 records one only when the user picks it); the diff panel's failed state now matches T3. Delegated: file path chips in markdown, project icons instead of monograms. Later (M7): the fork button in the message action row, the thread details card, the branch toolbar under the draft composer, timestamp format per T3 desktop's system locale (`desktopBridge.getSystemLocale`)
 
+## Milestone 6 checklist
+
+Scope: remote environments the way the official app shows them (docs/research/K-connect-ui.md, L-multi-environment.md, C-auth-connect.md, protocol.md section 10). Later in M6 or M7: SSH environments, QR display, the This machine T3 Connect link switch, onboarding, load balancing.
+
+- [x] Research (sonnet-medium): K-connect-ui.md (screens, flows, exact strings, what needs web content), L-multi-environment.md (environment model, one socket per environment, scoped refs, merging, removal, timers)
+- [ ] WP6.1 multi-environment core: an environment catalog (non-secret JSON in Application Support, credentials in the Keychain), one ShellSession per enabled environment with T3's reconnect and backoff (1 s to 300 s, upper-half jitter, reset after 30 s up), scoped refs `env:id` through sidebar, thread, composer, drafts and per-thread stores, projects merged across environments by repository identity, the machine icon on remote rows and project badges, removal clears per-environment state
+- [ ] WP6.2 T3 Connect client library in T3Client: DPoP keys (P-256, Keychain), relay HTTP API (`GET /v1/environments`, connect, deregister), connect sequence, learned routes, renewal, relay errors; a token-provider seam so the sign-in route can change
+- [ ] WP6.3 Add Environment (Remote link: host plus pairing code, or a pasted URL), Settings > Connections (Environments list with T3's strings and menu, status text), connection status in the UI
+- [ ] WP6.4 T3 Connect sign-in (route decided by the user, see Waiting on the user) and the sidebar footer `Sign in to T3 Connect`, account environments, Run on picker in the composer
+- [ ] Live tests: the sandbox paired as a remote over its URL, then T3 Connect with the user's account (the user signs in)
+- [ ] Demo milestone 6 to the user
+
 ## Milestone 10: stress test, parity with T3 Code Nightly (planned, last)
 
 The user's definition (2026-10-10): prove CandyWrapper has all of T3 Code Nightly's features and the exact same functionality.
@@ -122,8 +134,9 @@ Gotchas found so far:
 
 ## Waiting on the user
 
+- M6 T3 Connect sign-in route (asked 2026-10-10): T3's Clerk only redirects to `t3code://app/`, so the official in-app sign-in can't come back to CandyWrapper. Options: the CLI's public OAuth client with PKCE in the system browser and a loopback callback (what `t3 connect` does, no webview, recommended); claiming `t3code://` (clashes with the official app if both are installed); loading the hosted web app in a WKWebView and reading its session (fragile).
+- Screen Recording permission: granted 2026-10-10.
 - The user hasn't confirmed the Allow Remote Access design yet (see Decisions). Built as proposed.
-- Screen Recording permission for screenshots over SSH: the user tried on 2026-10-10 and couldn't grant it yet. Not blocking; use the app's `--snapshot`.
 - GUI session is up (auto-login set by the user) and Xcode 27.0 is installed, selected, license accepted.
 
 ## Resolved environment issues
