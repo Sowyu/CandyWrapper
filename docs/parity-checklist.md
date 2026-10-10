@@ -1,7 +1,16 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Every row starts as `⏳`. Source of truth is the read-only tree at `/Users/mrm/CandyWrapper-research/t3code`.
+Status 2026-10-10: 78 🟡, 39 ➖, 364 ⏳.
+
+Status legend:
+
+- `⏳` not built.
+- `🟡` built but not yet verified side by side with the official app.
+- `✅` reserved for milestone 10's side-by-side verification. Nothing uses it yet.
+- `➖` partly built. Notes say what is missing.
+
+Source of truth is the read-only tree at `/Users/mrm/CandyWrapper-research/t3code`.
 
 Path shorthand in the "Official source" column:
 
@@ -17,25 +26,25 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Sidebar shell, resizable width, collapse toggle (`sidebar.toggle`) | comp/Sidebar.tsx, comp/AppSidebarLayout.tsx, comp/threadSidebarWidth.ts, comp/ui/sidebar.tsx | ⏳ | Width persisted per client; collapse animates per Panel animations setting |
-| Sidebar header: wordmark, back/forward, new thread, search | comp/sidebar/SidebarThreadHeader.tsx, comp/sidebar/SidebarChrome.tsx, comp/T3Wordmark.tsx | ⏳ | |
-| Project list grouped by project, collapsible project rows | comp/Sidebar.tsx, web/sidebarProjectGrouping.ts, web/logicalProject.ts | ⏳ | Same repo on several environments groups into one logical project |
-| Project grouping and order (settings: Project grouping, Project order) | comp/settings/SettingsPanels.tsx, web/sidebarProjectGrouping.ts | ⏳ | |
-| Project filter ("All projects" select) and project search | comp/Sidebar.tsx | ⏳ | |
-| Project favicon / monogram / custom icon with color | comp/ProjectFavicon.tsx, comp/ProjectMonogram.tsx, web/projectIconColors.ts, comp/settings/ProjectIconPickerDialog.tsx | ⏳ | Favicon fetched from server asset; monogram fallback |
-| Project environment badge (remote machine marker) | comp/ProjectEnvironmentBadge.tsx, comp/EnvironmentMachineIcon.tsx | ⏳ | |
+| Sidebar shell, resizable width, collapse toggle (`sidebar.toggle`) | comp/Sidebar.tsx, comp/AppSidebarLayout.tsx, comp/threadSidebarWidth.ts, comp/ui/sidebar.tsx | 🟡 | Width persisted per client; collapse animates per Panel animations setting |
+| Sidebar header: wordmark, back/forward, new thread, search | comp/sidebar/SidebarThreadHeader.tsx, comp/sidebar/SidebarChrome.tsx, comp/T3Wordmark.tsx | ➖ | Missing: back/forward buttons |
+| Project list grouped by project, collapsible project rows | comp/Sidebar.tsx, web/sidebarProjectGrouping.ts, web/logicalProject.ts | ➖ | Same repo on several environments groups into one logical project; Missing: collapsible project rows; groups feed the scope popup and row labels |
+| Project grouping and order (settings: Project grouping, Project order) | comp/settings/SettingsPanels.tsx, web/sidebarProjectGrouping.ts | ➖ | Missing: the two settings; fixed to updated-at order and repository grouping |
+| Project filter ("All projects" select) and project search | comp/Sidebar.tsx | 🟡 | |
+| Project favicon / monogram / custom icon with color | comp/ProjectFavicon.tsx, comp/ProjectMonogram.tsx, web/projectIconColors.ts, comp/settings/ProjectIconPickerDialog.tsx | ➖ | Favicon fetched from server asset; monogram fallback; Missing: icon picker dialog |
+| Project environment badge (remote machine marker) | comp/ProjectEnvironmentBadge.tsx, comp/EnvironmentMachineIcon.tsx | 🟡 | |
 | Project row menu (new thread, rename, project settings, remove, copy path, open in editor) | comp/Sidebar.tsx | ⏳ | |
 | Threads without a project ("No project" group, scratch folder) | docs/thread-sidebar.md, comp/Sidebar.tsx | ⏳ | `mod+alt+n`; folder under ~/.t3/scratch |
-| Section: Pinned | comp/Sidebar.tsx, docs/thread-sidebar.md | ⏳ | Boundary label shown while dragging |
-| Section: Active (ordered, new threads on top) | comp/Sidebar.tsx | ⏳ | |
+| Section: Pinned | comp/Sidebar.tsx, docs/thread-sidebar.md | 🟡 | Boundary label shown while dragging |
+| Section: Active (ordered, new threads on top) | comp/Sidebar.tsx | 🟡 | |
 | Section: Working (beta, folds running/monitoring threads) | comp/Sidebar.tsx, comp/settings/SettingsPanels.tsx | ⏳ | Setting "Working section (beta)"; disables manual ordering |
-| Section: Snoozed shelf | comp/Sidebar.tsx, comp/Sidebar.snooze.ts | ⏳ | Cannot drop into it; dragging out wakes |
-| Section: Settled shelf (collapsible) | comp/Sidebar.tsx | ⏳ | Ordered by settlement time |
-| Thread row: title, relative time, project/branch subtitle, status badge | comp/Sidebar.tsx, comp/ThreadStatusIndicators.tsx, comp/ThreadCommandSubtitle.tsx | ⏳ | |
-| Thread status labels: Working, Goal, Waiting, Approval, Input, Limited, Failed, Woke, Done | comp/Sidebar.tsx (around line 1297), comp/ThreadStatusIndicators.tsx | ⏳ | Colored dot or pill per state |
-| Unsent draft rows with discard button | comp/Sidebar.tsx | ⏳ | Undo restores text and attachments |
+| Section: Snoozed shelf | comp/Sidebar.tsx, comp/Sidebar.snooze.ts | 🟡 | Cannot drop into it; dragging out wakes |
+| Section: Settled shelf (collapsible) | comp/Sidebar.tsx | 🟡 | Ordered by settlement time |
+| Thread row: title, relative time, project/branch subtitle, status badge | comp/Sidebar.tsx, comp/ThreadStatusIndicators.tsx, comp/ThreadCommandSubtitle.tsx | 🟡 | |
+| Thread status labels: Working, Goal, Waiting, Approval, Input, Limited, Failed, Woke, Done | comp/Sidebar.tsx (around line 1297), comp/ThreadStatusIndicators.tsx | 🟡 | Colored dot or pill per state |
+| Unsent draft rows with discard button | comp/Sidebar.tsx | 🟡 | Undo restores text and attachments |
 | Thread hover card (summary, PR, branch) | comp/ThreadHoverCard.tsx | ⏳ | |
-| Thread row actions: settle, wake, unpin, discard, snooze | comp/Sidebar.tsx | ⏳ | Hover buttons; press-and-drag range select on Settle |
+| Thread row actions: settle, wake, unpin, discard, snooze | comp/Sidebar.tsx | ➖ | Hover buttons; press-and-drag range select on Settle; Missing: row buttons are drawn but not wired to server commands |
 | Thread context menu: Pin, Settle, Snooze (presets and Custom...), Archive, Delete, Rename, Regenerate title, Copy path, Copy branch, Copy thread ID, Auto-settle behavior, Move up/down, Mark unread | comp/Sidebar.tsx, comp/threadActionMenu.logic.ts | ⏳ | |
 | Custom snooze dialog (date/time or duration) | comp/CustomSnoozeDialog.tsx, comp/Sidebar.snooze.ts | ⏳ | |
 | Multi-select threads (cmd/shift click) with bulk actions | web/threadSelectionStore.ts, comp/Sidebar.tsx | ⏳ | Bulk settle, snooze, archive, delete, regenerate titles |
@@ -44,80 +53,80 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Drag thread onto composer to attach as context | comp/chat/threadContextDrag.ts, comp/chat/ThreadContextDragGhost.tsx | ⏳ | |
 | Drop files onto thread row to attach in its composer | web/sidebarPendingFileDropStore.ts, docs/thread-sidebar.md | ⏳ | |
 | Undo notice at bottom of sidebar (5 s, `thread.undo`) | comp/sidebar/SidebarThreadUndoNotice.tsx | ⏳ | |
-| Thread search results inside sidebar (message search, 2+ chars) | comp/Sidebar.tsx, comp/ThreadSearchMatch.tsx | ⏳ | Also in command palette |
+| Thread search results inside sidebar (message search, 2+ chars) | comp/Sidebar.tsx, comp/ThreadSearchMatch.tsx | 🟡 | Also in command palette |
 | Thread relationships (fork, subagent, handoff) icons and navigation | comp/chat/ThreadRelationshipIcon.tsx, comp/chat/ThreadRelationshipsControl.tsx | ⏳ | |
-| Sidebar footer: settings entry, usage entry, connection status | comp/Sidebar.tsx, comp/ConnectionStatusDot.tsx | ⏳ | |
+| Sidebar footer: settings entry, usage entry, connection status | comp/Sidebar.tsx, comp/ConnectionStatusDot.tsx | ➖ | Missing: Usage button does nothing, no connection status |
 | Desktop update pill and release notes in sidebar | comp/sidebar/SidebarUpdatePill.tsx, comp/sidebar/SidebarUpdateReleaseNotes.tsx, comp/sidebar/DesktopUpdateStatusIcon.tsx | ⏳ | |
 | Provider update pill in sidebar | comp/sidebar/SidebarProviderUpdatePill.tsx, comp/ProviderUpdatesAction.tsx | ⏳ | |
 | T3 Connect sign-in in sidebar | comp/clerk/T3ConnectSidebarSignIn.tsx | ⏳ | Clerk sign-in UI; needs webview: ask user |
-| Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ⏳ | See Git and pull requests |
+| Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ➖ | See Git and pull requests; Missing: button is drawn, no PR list page |
 | Settled/auto-settle rules (merged PR, 3 days inactive, closed PR) | docs/thread-sidebar.md | ⏳ | Server-owned; client only displays and configures |
 | Limited-thread recovery in sidebar (Resume at reset, Snooze until reset, Wake now) | comp/Sidebar.tsx, comp/chat/UsageLimitRecoveryBanner.tsx | ⏳ | |
 | Legacy sidebar (opt-in setting) | comp/LegacySidebar.tsx | ⏳ | Low priority; setting "Sidebar (legacy)" |
-| Empty states: no projects hero, no active thread | comp/NoProjectsHero.tsx, comp/NoActiveThreadState.tsx | ⏳ | |
+| Empty states: no projects hero, no active thread | comp/NoProjectsHero.tsx, comp/NoActiveThreadState.tsx | ➖ | Missing: no-projects hero; text-only empty state |
 | Legacy thread migration toast | comp/LegacyThreadMigrationToast.tsx, docs/thread-migration.md | ⏳ | |
 
 ## Thread view
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Chat canvas layout, chat width setting (comfortable, wide, full) | comp/chat/ChatCanvas.tsx, comp/chat/chatCanvasLayout.ts, comp/ChatView.tsx | ⏳ | |
-| Thread header: breadcrumb (project > thread), editable title, thread actions menu | comp/chat/ChatHeader.tsx, comp/WorkspaceBreadcrumb.tsx | ⏳ | |
-| Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ⏳ | |
+| Chat canvas layout, chat width setting (comfortable, wide, full) | comp/chat/ChatCanvas.tsx, comp/chat/chatCanvasLayout.ts, comp/ChatView.tsx | ➖ | Missing: chat width setting |
+| Thread header: breadcrumb (project > thread), editable title, thread actions menu | comp/chat/ChatHeader.tsx, comp/WorkspaceBreadcrumb.tsx | ➖ | Missing: editable title, thread actions menu |
+| Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ➖ | Missing: editor picker, git actions, project scripts; only the diff toggle works |
 | Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ⏳ | |
-| Thread status line (running, elapsed, agent activity) | comp/chat/ThreadStatusLine.tsx, comp/chat/AgentElapsed.tsx | ⏳ | |
-| Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ⏳ | |
-| Timeline: assistant message with markdown | comp/chat/MessagesTimeline.tsx, comp/ChatMarkdown.tsx | ⏳ | Incremental streaming render (web/markdown-incremental.ts) |
-| Timeline: assistant meta row (model, duration, copy, timestamps) | comp/chat/MessagesTimeline.logic.ts (`assistant-meta`) | ⏳ | |
-| Timeline: thinking / reasoning row | comp/chat/MessagesTimeline.logic.ts (`thinking`) | ⏳ | Collapsible |
-| Timeline: working indicator row | comp/chat/MessagesTimeline.logic.ts (`working`) | ⏳ | |
-| Timeline: work log group (live and folded, `work`, `work-live`, `work-toggle`) | comp/chat/WorkLog.tsx | ⏳ | Collapsed summary with "show N tool calls" toggle |
-| Timeline: turn fold and attempt fold | comp/chat/MessagesTimeline.logic.ts (`turn-fold`, `attempt-fold`) | ⏳ | |
-| Timeline: proposed plan card | comp/chat/ProposedPlanCard.tsx | ⏳ | Markdown body, copy, save, implement action |
-| Timeline: context compaction divider | comp/chat/MessagesTimeline.logic.ts (`context-compaction`), comp/chat/TimelineSystemDivider.tsx | ⏳ | |
-| Timeline: system events (`event`), lifecycle rows | comp/chat/V2LifecycleRow.tsx, comp/chat/TimelineSystemDivider.tsx | ⏳ | |
-| Timeline: V2 item inspector (raw item detail) | comp/chat/V2ItemInspector.tsx | ⏳ | |
+| Thread status line (running, elapsed, agent activity) | comp/chat/ThreadStatusLine.tsx, comp/chat/AgentElapsed.tsx | ➖ | Missing: agent activity text; only the "Working for Ns" row exists |
+| Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ➖ | Missing: chips, image shelf |
+| Timeline: assistant message with markdown | comp/chat/MessagesTimeline.tsx, comp/ChatMarkdown.tsx | 🟡 | Incremental streaming render (web/markdown-incremental.ts) |
+| Timeline: assistant meta row (model, duration, copy, timestamps) | comp/chat/MessagesTimeline.logic.ts (`assistant-meta`) | 🟡 | |
+| Timeline: thinking / reasoning row | comp/chat/MessagesTimeline.logic.ts (`thinking`) | 🟡 | Collapsible |
+| Timeline: working indicator row | comp/chat/MessagesTimeline.logic.ts (`working`) | 🟡 | |
+| Timeline: work log group (live and folded, `work`, `work-live`, `work-toggle`) | comp/chat/WorkLog.tsx | 🟡 | Collapsed summary with "show N tool calls" toggle |
+| Timeline: turn fold and attempt fold | comp/chat/MessagesTimeline.logic.ts (`turn-fold`, `attempt-fold`) | 🟡 | |
+| Timeline: proposed plan card | comp/chat/ProposedPlanCard.tsx | 🟡 | Markdown body, copy, save, implement action |
+| Timeline: context compaction divider | comp/chat/MessagesTimeline.logic.ts (`context-compaction`), comp/chat/TimelineSystemDivider.tsx | 🟡 | |
+| Timeline: system events (`event`), lifecycle rows | comp/chat/V2LifecycleRow.tsx, comp/chat/TimelineSystemDivider.tsx | 🟡 | |
+| Timeline: V2 item inspector (raw item detail) | comp/chat/V2ItemInspector.tsx | ➖ | Missing: rich blocks (search links, JSON highlighting, Open diff) |
 | Timeline: worktree setup card (progress of setup script) | comp/chat/WorktreeSetupCard.tsx | ⏳ | |
-| Timeline: secret request card | comp/chat/SecretRequestCard.tsx | ⏳ | Agent asks for a secret via MCP `request_secret` |
+| Timeline: secret request card | comp/chat/SecretRequestCard.tsx | ➖ | Agent asks for a secret via MCP `request_secret`; Missing: only the title row; the secret entry form is not built |
 | Timeline: HTML render frame (visual replies) | comp/chat/HtmlRenderFrame.tsx, docs/html-renders.md | ⏳ | needs webview: ask user |
 | Timeline: MCP app frame (MCP Apps standard) | comp/chat/McpAppFrame.tsx, docs/html-renders.md | ⏳ | needs webview: ask user |
-| Timeline: subagent items and bar | comp/chat/ProviderSubagentBar.tsx, comp/chat/SubagentTooltipContent.tsx, comp/chat/agentSpawnSummary.ts | ⏳ | "Agents" follow-along; Stop also stops subagents |
-| Timeline: fork / handoff / thread_created items | contracts/orchestrationV2.ts (item types) | ⏳ | |
-| Timeline: error rows and thread error banner | comp/chat/ThreadErrorBanner.tsx | ⏳ | |
+| Timeline: subagent items and bar | comp/chat/ProviderSubagentBar.tsx, comp/chat/SubagentTooltipContent.tsx, comp/chat/agentSpawnSummary.ts | ➖ | "Agents" follow-along; Stop also stops subagents; Missing: follow-along bar; subagents show as event cards |
+| Timeline: fork / handoff / thread_created items | contracts/orchestrationV2.ts (item types) | 🟡 | |
+| Timeline: error rows and thread error banner | comp/chat/ThreadErrorBanner.tsx | 🟡 | |
 | Provider status banner (not installed, not signed in, outdated) | comp/chat/ProviderStatusBanner.tsx | ⏳ | |
-| Markdown: headings, lists, tables, task lists, blockquote, hr, links, inline code | comp/ChatMarkdown.tsx (react-markdown + remark-gfm) | ⏳ | |
-| Markdown: GitHub alerts (NOTE, TIP, WARNING...) | web/markdownGithubAlerts.test.tsx, comp/ChatMarkdown.tsx | ⏳ | |
-| Markdown: fenced code with syntax highlighting, copy button, language label | comp/chat/HighlightedCodeLines.tsx, comp/chat/HighlightedTokens.tsx | ⏳ | Shiki in the web app; use a native highlighter |
+| Markdown: headings, lists, tables, task lists, blockquote, hr, links, inline code | comp/ChatMarkdown.tsx (react-markdown + remark-gfm) | 🟡 | |
+| Markdown: GitHub alerts (NOTE, TIP, WARNING...) | web/markdownGithubAlerts.test.tsx, comp/ChatMarkdown.tsx | 🟡 | |
+| Markdown: fenced code with syntax highlighting, copy button, language label | comp/chat/HighlightedCodeLines.tsx, comp/chat/HighlightedTokens.tsx | 🟡 | Shiki in the web app; use a native highlighter |
 | Markdown: Mermaid diagrams | comp/chat/MermaidDiagram.tsx | ⏳ | needs webview: ask user (mermaid is a JS library) |
-| Markdown: images and image gallery, zoomable image, expanded image dialog | comp/chat/markdownImageGallery.ts, comp/chat/ZoomableImage.tsx, comp/chat/ExpandedImageDialog.tsx | ⏳ | |
+| Markdown: images and image gallery, zoomable image, expanded image dialog | comp/chat/markdownImageGallery.ts, comp/chat/ZoomableImage.tsx, comp/chat/ExpandedImageDialog.tsx | ➖ | Missing: images are a loading slot, no gallery or zoom |
 | Markdown: video/audio attachments and media actions | comp/media/MediaVideoPlayer.tsx, comp/media/MediaActions.tsx, comp/files/AudioPreview.tsx | ⏳ | AVKit natively |
-| Markdown: file links (path:line) open in file panel; external links open in browser | web/markdown-links.ts, comp/chat/MarkdownThreadLink.tsx, comp/chat/externalLinkContextMenu.ts | ⏳ | |
+| Markdown: file links (path:line) open in file panel; external links open in browser | web/markdown-links.ts, comp/chat/MarkdownThreadLink.tsx, comp/chat/externalLinkContextMenu.ts | ➖ | Missing: click does not open a file panel; chip menu copies paths only |
 | Markdown: thread links, PR link previews | comp/chat/MarkdownThreadLink.tsx, comp/pullRequest/PullRequestLinkPreview.tsx | ⏳ | Right-click PR link: Link to thread / Unlink |
 | Markdown: assistant citation chips with comments | comp/chat/AssistantCitationChip.tsx, comp/chat/AssistantCitationCommentEditor.tsx | ⏳ | |
 | Markdown: skill inline text, shell command block | comp/chat/SkillInlineText.tsx, comp/chat/ShellCommandBlock.tsx, comp/CommandBlock.tsx | ⏳ | |
-| Markdown: copy as Markdown (chips become links) | web/markdown-clipboard.ts, comp/chat/MessageCopyButton.tsx | ⏳ | |
+| Markdown: copy as Markdown (chips become links) | web/markdown-clipboard.ts, comp/chat/MessageCopyButton.tsx | 🟡 | |
 | Quote an assistant response / selection toolbar | comp/chat/AssistantSelectionToolbar.tsx, docs/composer.md | ⏳ | Floating toolbar on text selection |
-| Tool card: command execution (command, status, exit code, expandable output) | comp/chat/WorkLog.tsx, comp/CommandBlock.tsx | ⏳ | Summaries shorten shell wrappers |
-| Tool card: file change (path list, +/- counts, inline diff) | comp/chat/WorkLog.tsx, comp/chat/DiffStatLabel.tsx, comp/chat/ChangedFilesTree.tsx | ⏳ | |
-| Tool card: file search / web search | comp/chat/WorkLog.tsx | ⏳ | |
+| Tool card: command execution (command, status, exit code, expandable output) | comp/chat/WorkLog.tsx, comp/CommandBlock.tsx | 🟡 | Summaries shorten shell wrappers |
+| Tool card: file change (path list, +/- counts, inline diff) | comp/chat/WorkLog.tsx, comp/chat/DiffStatLabel.tsx, comp/chat/ChangedFilesTree.tsx | ➖ | Missing: inline diff |
+| Tool card: file search / web search | comp/chat/WorkLog.tsx | 🟡 | |
 | Tool card: todo list | comp/chat/WorkLog.tsx, comp/chat/ComposerTasksBadge.tsx | ⏳ | Also a tasks badge above composer |
-| Tool card: dynamic / MCP tool call (name, args, result) | comp/chat/WorkLog.tsx | ⏳ | |
-| Tool card: checkpoint, system notice, notification items | contracts/orchestrationV2.ts, comp/chat/WorkLog.tsx | ⏳ | |
-| Changed files tree and per-turn diff summary | comp/chat/ChangedFilesTree.tsx | ⏳ | Click opens Diff panel at that turn/file |
-| Approval request UI (command/file/permission): Approve, Approve for session, Decline, Cancel | comp/chat/ComposerPendingApprovalPanel.tsx, comp/chat/ComposerPendingApprovalActions.tsx | ⏳ | Replaces composer while pending |
-| User input request (questions, options, free text, multi-question, file answers) | comp/chat/ComposerPendingUserInputPanel.tsx, web/pendingUserInput.ts, docs/question-attachments.md | ⏳ | Keyboard 1-9 selects options |
+| Tool card: dynamic / MCP tool call (name, args, result) | comp/chat/WorkLog.tsx | 🟡 | |
+| Tool card: checkpoint, system notice, notification items | contracts/orchestrationV2.ts, comp/chat/WorkLog.tsx | 🟡 | |
+| Changed files tree and per-turn diff summary | comp/chat/ChangedFilesTree.tsx | 🟡 | Click opens Diff panel at that turn/file |
+| Approval request UI (command/file/permission): Approve, Approve for session, Decline, Cancel | comp/chat/ComposerPendingApprovalPanel.tsx, comp/chat/ComposerPendingApprovalActions.tsx | 🟡 | Replaces composer while pending |
+| User input request (questions, options, free text, multi-question, file answers) | comp/chat/ComposerPendingUserInputPanel.tsx, web/pendingUserInput.ts, docs/question-attachments.md | 🟡 | Keyboard 1-9 selects options |
 | Plan mode: proposed plan with follow-up banner (Implement / refine) | comp/chat/ComposerPlanFollowUpBanner.tsx, comp/chat/ProposedPlanCard.tsx, web/proposedPlan.ts | ⏳ | |
-| Permission modes (Supervised, Auto-accept edits, Full access) and per-provider differences | docs/permission-modes.md, comp/chat/runtimeModeConfig.ts | ⏳ | |
+| Permission modes (Supervised, Auto-accept edits, Full access) and per-provider differences | docs/permission-modes.md, comp/chat/runtimeModeConfig.ts | 🟡 | |
 | Permission update notice | comp/PermissionUpdateNotice.tsx | ⏳ | |
-| Interrupt / Stop turn (button, `thread.stop`) | comp/chat/ComposerPrimaryActions.tsx | ⏳ | |
-| Steer (send while running) and Queue follow-up | comp/chat/ComposerPrimaryActions.tsx, docs/composer.md | ⏳ | Follow-up behavior setting; `mod+enter` flips |
-| Queued messages list: edit, reorder, cancel, promote to steer | comp/chat/QueuedRunsControl.tsx, comp/chat/queuedMessageEdit.ts, docs/composer.md | ⏳ | `alt+arrowup` edits, `mod+shift+enter` steers |
-| Resume button in empty composer (limited or interrupted turn) | docs/thread-sidebar.md, comp/chat/UsageLimitRecoveryBanner.tsx | ⏳ | |
+| Interrupt / Stop turn (button, `thread.stop`) | comp/chat/ComposerPrimaryActions.tsx | 🟡 | |
+| Steer (send while running) and Queue follow-up | comp/chat/ComposerPrimaryActions.tsx, docs/composer.md | 🟡 | Follow-up behavior setting; `mod+enter` flips |
+| Queued messages list: edit, reorder, cancel, promote to steer | comp/chat/QueuedRunsControl.tsx, comp/chat/queuedMessageEdit.ts, docs/composer.md | 🟡 | `alt+arrowup` edits, `mod+shift+enter` steers |
+| Resume button in empty composer (limited or interrupted turn) | docs/thread-sidebar.md, comp/chat/UsageLimitRecoveryBanner.tsx | ➖ | Missing: usage-limit failures do not offer Resume |
 | Usage limit recovery banner (auto-resume, snooze until reset) | comp/chat/UsageLimitRecoveryBanner.tsx | ⏳ | |
 | Goal row above composer (`/goal`) | docs/composer.md, comp/chat/ComposerBanner.tsx | ⏳ | |
-| Scroll: stick to bottom, scroll-to-bottom pill, anchoring on prepend | comp/chat/timelineScrollAnchoring.ts, comp/chat/pageScrollController.ts, comp/chat/timelineScrollTarget.ts | ⏳ | |
+| Scroll: stick to bottom, scroll-to-bottom pill, anchoring on prepend | comp/chat/timelineScrollAnchoring.ts, comp/chat/pageScrollController.ts, comp/chat/timelineScrollTarget.ts | 🟡 | |
 | Timeline minimap | comp/chat/timelineMinimapItems.ts | ⏳ | |
-| Snapshot pagination of long threads (load older) | D-server-features.md (`threadSnapshotPagination`) | ⏳ | |
+| Snapshot pagination of long threads (load older) | D-server-features.md (`threadSnapshotPagination`) | 🟡 | |
 | Find in thread bar (`chat.find`) with highlights and next/prev | comp/chat/ThreadFindBar.tsx, comp/chat/useThreadFind.ts, comp/chat/threadFindHighlights.ts | ⏳ | Server-side thread find, progressive |
 | Edit an earlier prompt and rerun / fork | docs/composer.md (Edit an earlier prompt) | ⏳ | |
 | Fork thread, merge back, handoff to worktree | contracts/rpc.ts, comp/chat/ThreadRelationshipsControl.tsx, docs/portable-handoffs.md | ⏳ | |
@@ -133,11 +142,11 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Composer surface: rich text editor (bold, italic, code, lists, blockquote, headings, hr, task list) | comp/chat/ChatComposer.tsx, comp/ComposerPromptEditorTiptap.tsx, web/composer-rich-text.ts | ⏳ | Setting "Rich text composer" toggles Markdown source mode |
+| Composer surface: rich text editor (bold, italic, code, lists, blockquote, headings, hr, task list) | comp/chat/ChatComposer.tsx, comp/ComposerPromptEditorTiptap.tsx, web/composer-rich-text.ts | ➖ | Setting "Rich text composer" toggles Markdown source mode; Missing: plain text only, no formatting |
 | Fenced code block node with language picker | comp/chat/ComposerCodeBlockNodeView.tsx, comp/chat/ComposerCodeBlockLanguagePicker.tsx, web/composer-code-languages.ts | ⏳ | |
 | List continuation and splitting, undo grouping | web/composer-list-continuation.ts, web/composer-undo-grouping.ts | ⏳ | |
-| Send shortcut modes (Enter / mod+Enter multiline / always mod+Enter) | docs/keybindings.md, comp/chat/composerSubmission.ts | ⏳ | |
-| Primary action button (send, stop, queue, steer) | comp/chat/ComposerPrimaryActions.tsx | ⏳ | |
+| Send shortcut modes (Enter / mod+Enter multiline / always mod+Enter) | docs/keybindings.md, comp/chat/composerSubmission.ts | 🟡 | Setting has no UI yet; default Enter |
+| Primary action button (send, stop, queue, steer) | comp/chat/ComposerPrimaryActions.tsx | 🟡 | |
 | Slash command menu (`/`) incl. provider commands, T3 commands (`/model`, `/plan`, `/goal`, `/compact`) | comp/chat/ComposerCommandMenu.tsx, comp/chat/composerSlashCommandSearch.ts, comp/chat/useComposerTriggerState.ts | ⏳ | |
 | Skill picker (`$`) and skills in slash menu | comp/chat/ComposerCommandMenu.tsx, web/providerSkillSearch.ts | ⏳ | |
 | File mention picker (`@`) with workspace file search and thread mentions | comp/chat/ComposerCommandMenu.tsx, web/composer-editor-mentions.ts | ⏳ | |
@@ -145,43 +154,43 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Inline context chips: terminal excerpt, review comment, preview annotation, file, PR, thread, image | comp/composerInlineChip.ts, comp/ContextChip.tsx, comp/ThreadContextChip.tsx, comp/chat/FileTagChip.tsx, comp/chat/TerminalContextInlineChip.tsx | ⏳ | Hover brief, click opens detail |
 | Chip copy/paste across drafts | web/composerHandleContext.ts, comp/composerInlineTokenPaste.ts | ⏳ | |
 | Image thumbnail shelf, expanded preview | comp/chat/ComposerImageThumbnail.tsx, comp/chat/ExpandedImagePreview.tsx | ⏳ | |
-| Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | ⏳ | |
+| Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | ⏳ | Only question-answer files are built |
 | Attached file preview panel | comp/files/AttachmentFilePreview.tsx | ⏳ | |
 | SnapShot attachment details | comp/chat/SnapShotAttachmentDetails.tsx | ⏳ | |
-| Model picker (providers sidebar, search, favorites, multi-select with shift-click) | comp/chat/ProviderModelPicker.tsx, comp/chat/ModelPickerContent.tsx, comp/chat/ModelPickerSidebar.tsx, comp/chat/ModelListRow.tsx | ⏳ | `mod+shift+m`; provider keys `mod+shift+up/down` |
-| Traits picker (effort, speed, thinking, context size) | comp/chat/TraitsPicker.tsx, comp/chat/TraitsSpeed.tsx | ⏳ | `mod+shift+e` |
+| Model picker (providers sidebar, search, favorites, multi-select with shift-click) | comp/chat/ProviderModelPicker.tsx, comp/chat/ModelPickerContent.tsx, comp/chat/ModelPickerSidebar.tsx, comp/chat/ModelListRow.tsx | ➖ | `mod+shift+m`; provider keys `mod+shift+up/down`; Missing: shift-click multi-select |
+| Traits picker (effort, speed, thinking, context size) | comp/chat/TraitsPicker.tsx, comp/chat/TraitsSpeed.tsx | 🟡 | `mod+shift+e` |
 | Custom models editor | comp/settings/CustomModelEditor.tsx | ⏳ | |
-| Access / permission mode picker | comp/chat/CompactComposerControlsMenu.tsx, comp/chat/runtimeModeConfig.ts | ⏳ | `mod+shift+a` |
-| Compact controls menu (narrow widths) | comp/chat/CompactComposerControlsMenu.tsx, comp/composerFooterLayout.ts | ⏳ | |
-| Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | ⏳ | `mod+shift+h`, cycle host unbound |
+| Access / permission mode picker | comp/chat/CompactComposerControlsMenu.tsx, comp/chat/runtimeModeConfig.ts | 🟡 | `mod+shift+a` |
+| Compact controls menu (narrow widths) | comp/chat/CompactComposerControlsMenu.tsx, comp/composerFooterLayout.ts | 🟡 | |
+| Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | 🟡 | `mod+shift+h`, cycle host unbound |
 | Workspace mode selector (current checkout / new worktree / previous worktree) | comp/BranchToolbarEnvModeSelector.tsx | ⏳ | `mod+shift+x`, `mod+shift+l` |
 | Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | ⏳ | `mod+shift+g` |
 | Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ⏳ | |
 | Previous worktree item | comp/PreviousWorktreeItemContent.tsx | ⏳ | |
-| Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | ⏳ | |
-| Composer banners stack (clone progress, server update, provider issues) | comp/chat/ComposerBannerStack.tsx, comp/chat/ComposerBanner.tsx, comp/chat/ComposerServerUpdateStatus.tsx | ⏳ | |
+| Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | 🟡 | |
+| Composer banners stack (clone progress, server update, provider issues) | comp/chat/ComposerBannerStack.tsx, comp/chat/ComposerBanner.tsx, comp/chat/ComposerServerUpdateStatus.tsx | ➖ | Missing: only the environment reconnecting banner exists |
 | Composer activity status | comp/chat/ComposerActivityStatus.tsx | ⏳ | |
 | Composer usage limits chip | comp/chat/ComposerUsageLimits.tsx | ⏳ | |
 | Prompt stash (save, restore, menu, badge) `composer.stash` | comp/chat/ComposerStashMenu.tsx, comp/chat/ComposerStashBadge.tsx, web/promptStashStore.ts | ⏳ | |
-| Prompt history recall (arrow up/down) | comp/chat/composerPromptHistory.ts | ⏳ | |
-| Prompt length validation | comp/chat/ComposerPromptLengthValidation.tsx | ⏳ | |
+| Prompt history recall (arrow up/down) | comp/chat/composerPromptHistory.ts | 🟡 | |
+| Prompt length validation | comp/chat/ComposerPromptLengthValidation.tsx | 🟡 | |
 | Collapse composer on scroll (setting) | comp/chat/composerScrollGesture.ts | ⏳ | |
 | Pending terminal contexts | comp/chat/ComposerPendingTerminalContexts.tsx | ⏳ | |
-| Composer feedback / transient errors | comp/chat/ComposerFeedback.tsx | ⏳ | |
+| Composer feedback / transient errors | comp/chat/ComposerFeedback.tsx | 🟡 | |
 | Voice input | docs/composer.md | ⏳ | iPhone only per docs; skip on macOS unless confirmed |
 | Start in background (`mod+enter` new thread, `mod+alt+enter`) and send-and-new-thread | docs/thread-sidebar.md, docs/keybindings.md | ⏳ | |
 | Multi-model fan-out (shift-click models, one thread and worktree each) | docs/thread-sidebar.md | ⏳ | Git project only |
-| Composer placeholder text rules | web/composerPlaceholder.ts | ⏳ | |
+| Composer placeholder text rules | web/composerPlaceholder.ts | 🟡 | |
 
 ## Right panels
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ⏳ | Tab kinds: preview(browser), device, terminal, diff, files, file, pull-request, pull-requests |
+| Right panel container, tab strip, new tab (+) menu, close (`mod+w`), reopen closed (`mod+shift+t`) | comp/RightPanelTabs.tsx, web/rightPanelStore.ts, web/closedViewStore.ts | ➖ | Tab kinds: preview(browser), device, terminal, diff, files, file, pull-request, pull-requests; Missing: Diff tab only; + menu inert, no reopen |
 | Right panel resize handle, sheet mode on narrow windows | comp/preview/RightPanelResizeHandle.tsx, comp/RightPanelSheet.tsx, web/rightPanelLayout.ts | ⏳ | |
-| Diff panel (`diff.toggle`): turn selector, file tree, unified/split, wrap, whitespace toggle | comp/DiffPanel.tsx, comp/DiffPanelShell.tsx, web/diffPanelStore.ts | ⏳ | Diffs rendered by @pierre/diffs (web worker pool); needs native renderer |
+| Diff panel (`diff.toggle`): turn selector, file tree, unified/split, wrap, whitespace toggle | comp/DiffPanel.tsx, comp/DiffPanelShell.tsx, web/diffPanelStore.ts | ➖ | Diffs rendered by @pierre/diffs (web worker pool); needs native renderer; Missing: file tree aside (toggle is inert) |
 | Diff file tree with status icons | comp/diffs/DiffFileTree.tsx, comp/diffs/DiffFileStatus.tsx | ⏳ | |
-| Diff code view: syntax highlight, collapsed unchanged ranges, folded files | comp/diffs/StyledDiffCodeView.tsx | ⏳ | |
+| Diff code view: syntax highlight, collapsed unchanged ranges, folded files | comp/diffs/StyledDiffCodeView.tsx | ➖ | Missing: expanding hidden lines |
 | Diff inline review comments (annotate, submit, add to chat as chip) | comp/diffs/AnnotatableCodeView.tsx, comp/diffs/DiffCommentAnnotation.tsx, web/reviewCommentContext.ts | ⏳ | |
 | Diff find (`mod+f`, not configurable) | comp/diffs/codeViewSearch.test.ts, docs/keybindings.md | ⏳ | |
 | Diff copy path, open in editor, revert file actions | comp/DiffFilePathCopyButton.tsx, web/diffFileActions.ts | ⏳ | |
@@ -258,8 +267,8 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | ⏳ | |
-| Settings breadcrumb, group and row layout, scope notice | comp/settings/SettingsBreadcrumb.tsx, comp/settings/SettingsGroup.tsx, comp/settings/SettingsScopeNotice.tsx | ⏳ | |
+| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | ➖ | Missing: search box is inert; only Connections has content |
+| Settings breadcrumb, group and row layout, scope notice | comp/settings/SettingsBreadcrumb.tsx, comp/settings/SettingsGroup.tsx, comp/settings/SettingsScopeNotice.tsx | ➖ | Missing: scope notice |
 | Environment scope picker (All environments, per environment, mixed values) | comp/settings/SettingsScopeContext.tsx, comp/settings/settingsScope.ts | ⏳ | |
 
 ### Settings > Project
@@ -289,7 +298,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | Proactive panels | comp/settings/SettingsPanels.tsx | ⏳ | Auto-open diff/preview panels |
 | Show skills in slash menu | comp/settings/SettingsPanels.tsx | ⏳ | |
 | Rich text composer; Collapse composer on scroll | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Send shortcut; Follow-up behavior (Queue/Steer) | comp/settings/SettingsPanels.tsx | ⏳ | |
+| Send shortcut; Follow-up behavior (Queue/Steer) | comp/settings/SettingsPanels.tsx | ➖ | Behaviors built with defaults; no settings controls |
 | Provider update checks | comp/settings/SettingsPanels.tsx | ⏳ | |
 | Continue threads after restarts | comp/settings/SettingsPanels.tsx | ⏳ | Apply to all environments |
 | Background activity profile and advanced intervals (Git fetch, provider health, host power) | comp/settings/SettingsPanels.tsx (lines ~930-1110) | ⏳ | |
@@ -390,16 +399,16 @@ See the "Scheduled tasks" section.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| This machine: environment name, icon, version, update | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentIconPicker.tsx, comp/settings/LocalEnvironmentSetting.tsx | ⏳ | |
-| Environments list (add backend, SSH, remote link, route, remove, reconnect status) | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentRow.tsx, comp/settings/EnvironmentRoutesList.tsx | ⏳ | |
+| This machine: environment name, icon, version, update | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentIconPicker.tsx, comp/settings/LocalEnvironmentSetting.tsx | ➖ | Missing: update actions, row menu |
+| Environments list (add backend, SSH, remote link, route, remove, reconnect status) | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentRow.tsx, comp/settings/EnvironmentRoutesList.tsx | ➖ | Missing: SSH, drag reorder of routes, permissions panel |
 | Network access toggle; Tailscale HTTPS; pairing link with QR | comp/settings/ConnectionsSettings.tsx, comp/ui/qr-code.tsx | ⏳ | |
 | Authorized clients list, revoke one/others | comp/settings/ConnectionsSettings.tsx, comp/settings/SessionPermissions.tsx | ⏳ | |
 | T3 Connect toggle, Publish agent activity, Hold webhooks while offline | comp/settings/ConnectionsSettings.tsx | ⏳ | |
-| Outside agents: MCP URL copy, approve sign-in | comp/settings/ConnectionsSettings.tsx, web/routes/connect-agent.tsx | ⏳ | |
+| Outside agents: MCP URL copy, approve sign-in | comp/settings/ConnectionsSettings.tsx, web/routes/connect-agent.tsx | ➖ | Missing: only Copy MCP URL in the environment row menu; no sign-in approval |
 | Load balancing (Prefer, Normal, Less often, Manual only) | comp/settings/LoadBalancingSettings.tsx | ⏳ | |
 | GitHub sharing (Read PRs / Read and act) | comp/settings/ConnectionsSettings.tsx | ⏳ | |
 | WSL backend | comp/settings/ConnectionsSettings.tsx | ⏳ | Windows only; skip |
-| Trace ID copy | comp/settings/ConnectionsSettings.tsx | ⏳ | |
+| Trace ID copy | comp/settings/ConnectionsSettings.tsx | 🟡 | |
 
 ### Settings > Archive
 
@@ -421,7 +430,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Palette dialog, input, virtualized grouped results, footer hints, back navigation (sub-pages) | comp/CommandPaletteContent.tsx, comp/CommandPaletteResults.tsx | ⏳ | |
+| Palette dialog, input, virtualized grouped results, footer hints, back navigation (sub-pages) | comp/CommandPaletteContent.tsx, comp/CommandPaletteResults.tsx | ⏳ | Dialog component exists in the gallery, no commands wired |
 | Group: Actions (default page), Recent Threads | comp/CommandPalette.logic.ts | ⏳ | |
 | Search groups: Projects, Threads (title and message search, 2+ chars), Settings | comp/CommandPalette.logic.ts | ⏳ | Settings results come from settingsSearch |
 | New thread in... (project chooser incl. No project) | comp/CommandPalette.tsx (line ~1917) | ⏳ | |
@@ -448,7 +457,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 
 | Command | Key | When | Status |
 |---|---|---|---|
-| sidebar.toggle | mod+b | (none) | ⏳ |
+| sidebar.toggle | mod+b | (none) | 🟡 |
 | navigation.back | mod+[ | !terminalFocus | ⏳ |
 | navigation.forward | mod+] | !terminalFocus | ⏳ |
 | terminal.toggle | mod+j | (none) | ⏳ |
@@ -460,7 +469,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | terminal.close | mod+w | terminalFocus | ⏳ |
 | rightPanel.close | mod+w | !terminalFocus | ⏳ |
 | view.reopenClosed | mod+shift+t | (none) | ⏳ |
-| diff.toggle | mod+d | !terminalFocus | ⏳ |
+| diff.toggle | mod+d | !terminalFocus | 🟡 |
 | preview.toggle | mod+shift+j | (none) | ⏳ |
 | preview.refresh | mod+r | previewFocus | ⏳ |
 | preview.focusUrl | mod+l | previewFocus | ⏳ |
@@ -475,9 +484,9 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | appearance.cycle | mod+alt+shift+a | !terminalFocus | ⏳ |
 | themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ |
 | composer.stash | mod+s | !terminalFocus | ⏳ |
-| thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | ⏳ |
-| thread.editQueuedMessage | alt+arrowup | composerFocus | ⏳ |
-| composer.sendAlternate | mod+enter | composerFocus && turnRunning | ⏳ |
+| thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | 🟡 |
+| thread.editQueuedMessage | alt+arrowup | composerFocus | 🟡 |
+| composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 |
 | composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | ⏳ |
 | composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | ⏳ |
 | composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | ⏳ |
@@ -486,10 +495,10 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | chat.newLocal | mod+shift+n | !terminalFocus | ⏳ |
 | chat.newWithoutProject | mod+alt+n | !terminalFocus | ⏳ |
 | chat.find | mod+f | !terminalFocus && !previewFocus | ⏳ |
-| modelPicker.toggle | mod+shift+m | !terminalFocus | ⏳ |
-| composer.host | mod+shift+h | !terminalFocus | ⏳ |
-| composer.effort | mod+shift+e | !terminalFocus | ⏳ |
-| composer.mode | mod+shift+a | !terminalFocus | ⏳ |
+| modelPicker.toggle | mod+shift+m | !terminalFocus | 🟡 |
+| composer.host | mod+shift+h | !terminalFocus | 🟡 |
+| composer.effort | mod+shift+e | !terminalFocus | 🟡 |
+| composer.mode | mod+shift+a | !terminalFocus | 🟡 |
 | composer.workspace | mod+shift+x | !terminalFocus | ⏳ |
 | composer.branch | mod+shift+g | !terminalFocus | ⏳ |
 | composer.previousWorktree | mod+shift+l | !terminalFocus | ⏳ |
@@ -528,7 +537,7 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 | System notification (click focuses the thread) | comp/ThreadNotificationCoordinator.tsx | ⏳ | UNUserNotificationCenter |
 | Notification sound, audio unlock | web/threadNotifications.ts | ⏳ | |
 | Dock badge count of threads with unread notifications; cleared on window focus | desk/ipc/methods/notificationBadge.ts | ⏳ | `app.setBadgeCount` on macOS |
-| In-app toasts (toast manager, anchored copy toast, undo toasts) | comp/ui/toast.tsx, comp/ui/toastHelpers.ts | ⏳ | |
+| In-app toasts (toast manager, anchored copy toast, undo toasts) | comp/ui/toast.tsx, comp/ui/toastHelpers.ts | ➖ | Missing: toast component and copy toasts only |
 | Slow RPC toast, keybinding update toast, provider update toast | comp/SlowRpcRequestToastCoordinator.tsx, comp/KeybindingsUpdateToast.logic.ts | ⏳ | |
 | Mobile push / Live Activities for agent activity | docs/mobile-notifications.md | ⏳ | Server publishes when "Publish agent activity" is on; no macOS client work |
 
@@ -551,20 +560,20 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Local environment spawned and managed by the app | desk/backend/DesktopBackendManager.ts | ⏳ | See Desktop-only |
-| Add remote environment by pairing link / token (LAN, Tailscale) | docs/remote-access.md, web/pairingUrl.ts, web/hostedPairing.ts | ⏳ | |
+| Local environment spawned and managed by the app | desk/backend/DesktopBackendManager.ts | 🟡 | See Desktop-only |
+| Add remote environment by pairing link / token (LAN, Tailscale) | docs/remote-access.md, web/pairingUrl.ts, web/hostedPairing.ts | 🟡 | |
 | Desktop-managed SSH environments (password prompt dialog) | desk/ssh, comp/desktop/SshPasswordPromptDialog.tsx | ⏳ | |
-| T3 Connect: sign in (Clerk), cloud environments list, connect/remove | comp/clerk/T3ConnectAccountPages.tsx, comp/cloud/CloudEnvironmentConnectList.tsx, comp/clerk/RemoveT3ConnectEnvironmentDialog.tsx | ⏳ | Clerk UI needs webview: ask user |
+| T3 Connect: sign in (Clerk), cloud environments list, connect/remove | comp/clerk/T3ConnectAccountPages.tsx, comp/cloud/CloudEnvironmentConnectList.tsx, comp/clerk/RemoveT3ConnectEnvironmentDialog.tsx | ➖ | Clerk UI needs webview: ask user; Missing: client library and Clerk sign-in code exist, no sign-in UI, not wired in the app |
 | T3 Connect relay client install dialog | comp/cloud/RelayClientInstallDialog.tsx | ⏳ | |
 | Account profile pages (user, mobile clients) | comp/clerk/T3ConnectUserProfilePage.tsx, comp/clerk/MobileClientsUserProfilePage.tsx | ⏳ | needs webview: ask user |
 | Electron-managed auth shell (browser handoff, passkeys) | comp/clerk/ElectronManagedAuthShell.tsx, desk/app/DesktopClerk.ts | ⏳ | Native: ASWebAuthenticationSession |
-| Environment connection status dots, reconnecting reasons | comp/ConnectionStatusDot.tsx, comp/settings/ConnectionsSettings.logic.ts | ⏳ | |
-| Multi-environment thread/project merge in sidebar | web/environmentGrouping.ts, web/environments/ | ⏳ | |
-| Version skew blocking (app newer than server and vice versa) | web/versionSkew.ts, docs/updating.md | ⏳ | |
+| Environment connection status dots, reconnecting reasons | comp/ConnectionStatusDot.tsx, comp/settings/ConnectionsSettings.logic.ts | ➖ | Missing: status text and reconnect banner only, no dots |
+| Multi-environment thread/project merge in sidebar | web/environmentGrouping.ts, web/environments/ | 🟡 | |
+| Version skew blocking (app newer than server and vice versa) | web/versionSkew.ts, docs/updating.md | ➖ | Missing: protocol mismatch shows "Client not supported"; no skew blocking flow |
 | Remote server update (self-update progress, desktop-managed update) | comp/ServerUpdateAction.tsx, desk/updates/DesktopRemoteUpdates.ts | ⏳ | |
 | Load balancing of new threads across machines | comp/settings/LoadBalancingSettings.tsx, docs/remote-access.md | ⏳ | |
 | Outside agents (Claude Code, Codex, ChatGPT connect via MCP URL + OAuth approval) | docs/outside-agents.md, web/routes/connect-agent.tsx | ⏳ | |
-| Hosted web app (app.t3.codes) pairing | docs/remote-access.md | ⏳ | Web only |
+| Hosted web app (app.t3.codes) pairing | docs/remote-access.md | 🟡 | Web only |
 | Background service (`t3 service`) | docs/background-service.md | ⏳ | CLI, not a UI feature |
 | Threads from older versions (migration) | docs/thread-migration.md | ⏳ | |
 
@@ -611,40 +620,40 @@ Source: `desk/window/DesktopApplicationMenu.ts`.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| App menu: About T3 Code | desk/window/DesktopApplicationMenu.ts (line 169) | ⏳ | |
+| App menu: About T3 Code | desk/window/DesktopApplicationMenu.ts (line 169) | 🟡 | |
 | App menu: Check for Updates... | same (line 171) | ⏳ | Also under Help |
-| App menu: Settings... (Cmd+,) | same (line 176) | ⏳ | |
-| App menu: Services | same (line 181) | ⏳ | |
-| App menu: Hide T3 Code, Hide Others, Show All | same (lines 183-185) | ⏳ | |
-| App menu: Quit T3 Code (Cmd+Q, hold-to-quit logic) | same (line 187), desk/window/QuitHold.ts, comp/QuitHoldOverlay.tsx | ⏳ | Overlay shown while holding |
+| App menu: Settings... (Cmd+,) | same (line 176) | 🟡 | |
+| App menu: Services | same (line 181) | 🟡 | |
+| App menu: Hide T3 Code, Hide Others, Show All | same (lines 183-185) | 🟡 | |
+| App menu: Quit T3 Code (Cmd+Q, hold-to-quit logic) | same (line 187), desk/window/QuitHold.ts, comp/QuitHoldOverlay.tsx | ➖ | Overlay shown while holding; Missing: hold-to-quit |
 | File menu: Close (Cmd+W) | same (lines 194-206) | ⏳ | Close role; app rebinds mod+w to panel/terminal close first |
-| Edit menu: Undo, Redo, Cut, Copy, Paste, Paste as Text (Cmd+Shift+V), Delete, Select All, Speech (Start/Stop Speaking) | same (lines 210-231) | ⏳ | |
+| Edit menu: Undo, Redo, Cut, Copy, Paste, Paste as Text (Cmd+Shift+V), Delete, Select All, Speech (Start/Stop Speaking) | same (lines 210-231) | 🟡 | |
 | View menu: Reload (Cmd+R), Force Reload (Shift+Cmd+R), Toggle Developer Tools (Alt+Cmd+I) | same (lines 238-255) | ⏳ | Dev tools and reload need a web inspector; native build can omit or map to debug tools |
 | View menu: Actual Size (Cmd+0), Zoom In (Cmd+=, Cmd+Plus), Zoom Out (Cmd+-), Toggle Full Screen | same (lines 258-268) | ⏳ | Zoom scales the whole UI |
-| Window menu (system Window role: Minimize, Zoom, Bring All to Front) | same (line 271) | ⏳ | |
+| Window menu (system Window role: Minimize, Zoom, Bring All to Front) | same (line 271) | 🟡 | |
 | Help menu: Check for Updates... | same (lines 272-279) | ⏳ | |
-| Context menus (native menu for items, fallback in web) | desk/electron/ElectronMenu.ts, web/contextMenuFallback.ts | ⏳ | Use NSMenu everywhere |
+| Context menus (native menu for items, fallback in web) | desk/electron/ElectronMenu.ts, web/contextMenuFallback.ts | ➖ | Use NSMenu everywhere; Missing: only file chip and menu popups use native menus |
 
 ### Window behaviour
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Hidden inset title bar with traffic lights at custom position; custom top bar height | desk/window/DesktopWindow.ts (lines 267-279), web/workspaceTitlebar.ts | ⏳ | Needed for identical look |
-| Minimum window size 840 wide | desk/window/DesktopWindow.ts (line 407) | ⏳ | |
-| Window bounds persisted and restored (display-aware) | desk/window/DesktopWindow.ts (lines 168-190) | ⏳ | |
+| Hidden inset title bar with traffic lights at custom position; custom top bar height | desk/window/DesktopWindow.ts (lines 267-279), web/workspaceTitlebar.ts | 🟡 | Needed for identical look |
+| Minimum window size 840 wide | desk/window/DesktopWindow.ts (line 407) | 🟡 | |
+| Window bounds persisted and restored (display-aware) | desk/window/DesktopWindow.ts (lines 168-190) | 🟡 | |
 | Window vibrancy / glass opacity | desk/window/DesktopWindow.ts, comp/settings/SettingsPanels.tsx | ⏳ | Verify vibrancy parameters in source |
-| Window drag region in sidebar and header | web/index.css (`-webkit-app-region`) | ⏳ | |
+| Window drag region in sidebar and header | web/index.css (`-webkit-app-region`) | 🟡 | |
 | Running-thread keep alive (prevent App Nap / sleep while agents run) | comp/desktop/RunningThreadKeepAlive.tsx, desk/electron/ElectronPowerMonitor.ts | ⏳ | |
 | Single instance; second launch focuses existing window | desk/app/DesktopClerk.ts (`second-instance`), desk/app/DesktopAppActivation.ts | ⏳ | |
 | App activation coordination (focus thread on notification click) | comp/desktop/DesktopAppActivationCoordinator.tsx, web/desktopAppActivation.ts | ⏳ | |
 | Native theme sync (window appearance follows chosen mode) | desk/electron/ElectronTheme.ts | ⏳ | |
-| Safe storage for secrets (Keychain) | desk/electron/ElectronSafeStorage.ts | ⏳ | |
-| Shell environment resolution (PATH from login shell) | desk/shell/DesktopShellEnvironment.ts | ⏳ | Needed to spawn the bundled server |
+| Safe storage for secrets (Keychain) | desk/electron/ElectronSafeStorage.ts | 🟡 | |
+| Shell environment resolution (PATH from login shell) | desk/shell/DesktopShellEnvironment.ts | 🟡 | Needed to spawn the bundled server |
 | Open in editor / file manager / reveal in Finder | comp/chat/OpenInPicker.tsx, web/editorPreferences.ts, desk/electron/ElectronShell.ts | ⏳ | `editor.openFavorite` |
-| Native dialogs (folder pick, confirm) | desk/electron/ElectronDialog.ts, web/confirmDialog.ts, comp/ConfirmDialogHost.tsx | ⏳ | |
+| Native dialogs (folder pick, confirm) | desk/electron/ElectronDialog.ts, web/confirmDialog.ts, comp/ConfirmDialogHost.tsx | 🟡 | |
 | Tray / menu bar icon | none found in desk/src | ⏳ | No tray implemented in the official app; do not build |
-| Desktop settings stores (client settings, saved environments, connection catalog) | desk/settings/, desk/app/DesktopConnectionCatalogStore.ts | ⏳ | Per-device preferences live here, not on server |
-| Spawned backend lifecycle (start, restart, pool, exposure on LAN) | desk/backend/DesktopBackendManager.ts, desk/backend/DesktopServerExposure.ts | ⏳ | See D-server-features.md |
+| Desktop settings stores (client settings, saved environments, connection catalog) | desk/settings/, desk/app/DesktopConnectionCatalogStore.ts | ➖ | Per-device preferences live here, not on server; Missing: saved environments only; no client settings store |
+| Spawned backend lifecycle (start, restart, pool, exposure on LAN) | desk/backend/DesktopBackendManager.ts, desk/backend/DesktopServerExposure.ts | 🟡 | See D-server-features.md |
 | CLI shim install (`t3` command) | desk/app/DesktopCliShim.ts, desk/app/DesktopCliCommand.ts | ⏳ | |
 | macOS permission helper and settings window | desk/permissions/MacPermissionHelper.ts, desk/permissions/MacSettingsWindow.ts | ⏳ | Screen Recording, Accessibility |
 
