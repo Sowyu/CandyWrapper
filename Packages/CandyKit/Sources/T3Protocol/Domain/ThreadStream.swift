@@ -347,3 +347,38 @@ public struct ThreadTurnDiff: Codable, Hashable, Sendable {
     public var toTurnCount: Int
     public var diff: String
 }
+
+// MARK: - Turn item detail
+
+/// `OrchestrationV2GetTurnItemInput` (orchestrationV2.ts:3458-3463). `revision` is the item's
+/// `updatedAt` as the client saw it (or `"live"` while it runs); it only keys the client cache.
+public struct GetTurnItemInput: Codable, Hashable, Sendable {
+    public var threadId: ThreadId
+    public var itemId: TurnItemId
+    public var revision: String?
+
+    public init(threadId: ThreadId, itemId: TurnItemId, revision: String? = nil) {
+        self.threadId = threadId
+        self.itemId = itemId
+        self.revision = revision
+    }
+}
+
+/// `OrchestrationV2GetTurnItemResult` (orchestrationV2.ts:3467-3469). The server bounds inputs and
+/// outputs to 256 KiB and ends a cut string with "\n… output truncated for transport"
+/// (`WireProjection.ts:16-35`, `:171-197`). `item` is null when the item is gone.
+public struct GetTurnItemResult: Codable, Hashable, Sendable {
+    public var item: TurnItem?
+
+    public init(item: TurnItem?) { self.item = item }
+
+    private enum CodingKeys: String, CodingKey { case item }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        item = try c.decodeIfPresent(TurnItem.self, forKey: .item)
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(item, forKey: .item)
+    }
+}

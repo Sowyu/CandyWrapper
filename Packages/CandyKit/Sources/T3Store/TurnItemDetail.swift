@@ -1,0 +1,138 @@
+import Foundation
+import T3Protocol
+
+/// Tool output the thread stream leaves out, fetched with `orchestration.getTurnItem`
+/// (client-runtime/src/work-log/itemDetail.ts:124-205). T3 fetches only while a row is open
+/// (V2ItemInspector.tsx:103-137) and keeps a result 60 s after the last row lets go of it
+/// (client-runtime/src/state/orchestration.ts:47-53).
+public enum TurnItemDetail {
+    /// `turnItemNeedsDetailFetch` (itemDetail.ts:140-149): the server set `outputOmitted`, or cut a
+    /// dynamic tool's input down to `{summary, truncated: true}`.
+    public static func needsFetch(_ item: TurnItem) -> Bool {
+        switch item.type {
+        case .commandExecution: item.outputOmitted
+        case .dynamicTool: item.outputOmitted || isSummarized(item.input)
+        default: false
+        }
+    }
+
+    /// `turnItemDetailRevision` (itemDetail.ts:124-137): one key while the item runs, so an open
+    /// row fetches once while it streams and again when it settles.
+    public static func revision(_ item: TurnItem) -> String {
+        [.idle, .pending, .running, .waiting].contains(item.status) ? "live" : item.updatedAt.raw
+    }
+
+    /// The request for a projected row: the source thread and item, which differ from the row's
+    /// own ids for inherited rows (V2ItemInspector.tsx:109-117).
+    public static func request(_ row: ProjectedTurnItem) -> GetTurnItemInput {
+        GetTurnItemInput(threadId: row.sourceThreadId, itemId: row.sourceItemId, revision: revision(row.item))
+    }
+
+    /// What a fetch resolves to, ready to draw.
+    public enum Fetched: Hashable, Sendable {
+        /// The fetched item's output text, nil when it has none ("No output.").
+        case output(String?)
+        /// `item: null`: "Output is no longer available." (V2ItemInspector.tsx:131-132).
+        case gone
+        /// The fetched item has another type; T3 keeps the wire item and shows nothing more (:120).
+        case mismatch
+    }
+
+    /// Lines kept of a fetched output. The detail box clips each block at 320 px (about 15 lines),
+    /// so the rest would only cost memory and layout time.
+    // ponytail: keeps the first 200 lines / 16 KiB; keep the whole text once the detail box scrolls
+    public static let keptLines = 200
+    public static let keptBytes = 16 * 1024
+
+    /// Turns a `getTurnItem` result into what the row shows. Runs off the main thread.
+    public static func resolve(_ result: GetTurnItemResult, wireType: TurnItemType) -> Fetched {
+        guard let item = result.item else { return .gone }
+        guard item.type == wireType else { return .mismatch }
+        return .output(outputText(item).map(prefix))
+    }
+
+    static func prefix(_ text: String) -> String {
+        var end = text.startIndex, lines = 0
+        let byteCap = text.utf8.index(text.startIndex, offsetBy: keptBytes, limitedBy: text.endIndex) ?? text.endIndex
+        while end < byteCap, lines < keptLines {
+            if text[end] == "\n" { lines += 1 }
+            end = text.index(after: end)
+        }
+        return end == text.endIndex ? text : String(text[..<end])
+    }
+
+    /// `turnItemOutputText` for the two fetched types (itemDetail.ts:168-174).
+    public static func outputText(_ item: TurnItem) -> String? {
+        switch item.type {
+        case .commandExecution:
+            guard let out = item.output?.stringValue,
+                  !out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let text = commandOutputText(out)
+            return text.isEmpty ? nil : text
+        case .dynamicTool:
+            return item.outputOmitted ? nil : formatToolValue(item.output)
+        default:
+            return nil
+        }
+    }
+
+    /// Older Claude bash rows stored the raw `{stdout, stderr, interrupted}` result (itemDetail.ts:151-166).
+    static func commandOutputText(_ output: String) -> String {
+        guard output.drop(while: \.isWhitespace).hasPrefix("{\"stdout\""),
+              let data = output.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let stdout = o["stdout"] as? String, let stderr = o["stderr"] as? String,
+              o["interrupted"] is Bool else { return output }
+        return [stdout, stderr].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.joined(separator: "\n")
+    }
+
+    static func isSummarized(_ value: JSONValue?) -> Bool {
+        value?["truncated"]?.boolValue == true && value?["summary"]?.stringValue != nil
+    }
+
+    /// `formatToolValue` (itemDetail.ts:68-80): text blocks as text, everything else as JSON.
+    // ponytail: JSON keys come out sorted (JSONValue drops key order) and minified JSON text is not re-indented; port prettyJsonText if MCP output reads badly
+    static func formatToolValue(_ value: JSONValue?) -> String? {
+        guard let value, value != .null else { return nil }
+        if let text = textFromBlocks(value, depth: 0) {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+        }
+        if value == .object([:]) || value == .array([]) { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    /// `textFromBlocks` (itemDetail.ts:16-45). Images show as "[image]"; T3 loads them as assets.
+    // ponytail: no tool output images; add with the image work (tool-output-image assets)
+    static func textFromBlocks(_ value: JSONValue, depth: Int) -> String? {
+        guard depth <= 4 else { return nil }
+        switch value {
+        case .string(let s): return s
+        case .array(let blocks):
+            var parts: [String] = []
+            for b in blocks {
+                guard let p = textFromBlocks(b, depth: depth + 1) else { return nil }
+                if !p.isEmpty { parts.append(p) }
+            }
+            return parts.joined(separator: "\n")
+        case .object(let o):
+            let type = o["type"]?.stringValue
+            if type == "text", let t = o["text"]?.stringValue { return t }
+            if type == "image" { return "[image]" }
+            if type == "resource_link", let uri = o["uri"]?.stringValue { return uri }
+            if type == "resource", case .object(let r)? = o["resource"] {
+                if let t = r["text"]?.stringValue { return t }
+                if let uri = r["uri"]?.stringValue { return uri }
+            }
+            let keys = Set(o.keys).subtracting(["isError", "is_error"])
+            if keys == ["content"], let c = o["content"] { return textFromBlocks(c, depth: depth + 1) }
+            if keys == ["content", "structuredContent"], let c = o["content"] {
+                let t = textFromBlocks(c, depth: depth + 1)
+                return t.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } == false ? t : nil
+            }
+            return nil
+        default: return nil
+        }
+    }
+}
