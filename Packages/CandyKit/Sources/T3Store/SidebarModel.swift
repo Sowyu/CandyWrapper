@@ -625,10 +625,17 @@ public enum SidebarModel {
         return result.isEmpty ? trimmed : String(result)
     }
 
-    /// Port of `deriveLogicalProjectKey` (packages/client-runtime/src/state/projectGrouping.ts:126-145)
-    /// for one environment. The physical key is the normalized workspace root.
+    /// Port of `derivePhysicalProjectKey` (projectGrouping.ts:69-77): `<environmentId>:<normalized root>`.
+    /// The environment comes from the scoped project id (`EnvironmentScope`); an unscoped id has none.
+    public static func physicalProjectKey(_ project: ProjectShell) -> String {
+        let root = normalizeProjectPath(project.workspaceRoot)
+        return project.id.environmentId.map { EnvironmentScope.key($0, root) } ?? root
+    }
+
+    /// Port of `deriveLogicalProjectKey` (packages/client-runtime/src/state/projectGrouping.ts:126-145).
+    /// The same repository in two environments gets one key, so it forms one sidebar group.
     public static func deriveLogicalProjectKey(_ project: ProjectShell, mode: ProjectGroupingMode) -> String {
-        let physical = normalizeProjectPath(project.workspaceRoot)
+        let physical = physicalProjectKey(project)
         if mode == .separate { return physical }
         return project.repositoryIdentity?.groupingKey ?? physical
     }
@@ -652,9 +659,11 @@ public enum SidebarModel {
         return representative.title
     }
 
-    /// Port of `buildProjectGroups` (projectGrouping.ts:255-326) for one environment. Projects with
-    /// the same workspace root collapse to the freshest; groups keep first-seen order.
-    public static func buildProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode = .repository) -> [ProjectGroup] {
+    /// Port of `buildProjectGroups` (projectGrouping.ts:255-326). Projects with the same environment and
+    /// workspace root collapse to the freshest; groups keep first-seen order. The representative is the
+    /// member in `preferredEnvironmentId` (the primary environment) when there is one, else the first.
+    public static func buildProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode = .repository,
+                                          preferredEnvironmentId: String? = nil) -> [ProjectGroup] {
         func freshness(_ p: ProjectShell) -> Int64 { p.updatedAt.epochMs ?? p.createdAt.epochMs ?? 0 }
         func replaces(_ existing: ProjectShell, _ candidate: ProjectShell) -> Bool {
             let delta = freshness(candidate) - freshness(existing)
@@ -663,7 +672,7 @@ public enum SidebarModel {
         var physicalOrder: [String] = []
         var byPhysical: [String: [ProjectShell]] = [:]
         for project in projects {
-            let key = normalizeProjectPath(project.workspaceRoot)
+            let key = physicalProjectKey(project)
             if byPhysical[key] == nil { physicalOrder.append(key) }
             byPhysical[key, default: []].append(project)
         }
@@ -686,11 +695,11 @@ public enum SidebarModel {
         var ids: [String: [ProjectId]] = [:]
         var seen = Set<ProjectId>()
         for project in projects where seen.insert(project.id).inserted {
-            ids[logicalByPhysical[normalizeProjectPath(project.workspaceRoot)]!, default: []].append(project.id)
+            ids[logicalByPhysical[physicalProjectKey(project)]!, default: []].append(project.id)
         }
         return groupOrder.map { key in
             let group = members[key]!
-            let representative = group[0]
+            let representative = preferredEnvironmentId.flatMap { env in group.first { $0.id.environmentId == env } } ?? group[0]
             return ProjectGroup(
                 key: key,
                 label: group.count > 1

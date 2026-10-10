@@ -4,13 +4,15 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// One open thread: the `orchestration.subscribeThread` stream on the shell's supervisor (the
-/// same socket, resumed from the store's cursor), the store (decodes and reduces off the main
-/// thread) and the panel (pulls one merged update per change window). Older history comes over
-/// HTTP when the timeline scrolls near its first row.
+/// One open thread: the `orchestration.subscribeThread` stream on its environment's supervisor (the
+/// same socket as that environment's shell, resumed from the store's cursor), the store (decodes and
+/// reduces off the main thread) and the panel (pulls one merged update per change window). Older
+/// history comes over HTTP when the timeline scrolls near its first row.
 @MainActor
 final class ThreadSession {
+    /// Scoped, `environmentId:threadId` (`EnvironmentScope`). The store and the wire use the local id.
     let threadId: ThreadId
+    let environmentId: String
     private let store: ThreadStore
     private weak var panel: ThreadPanelView?
     private weak var sidebar: SidebarContentView?
@@ -24,10 +26,11 @@ final class ThreadSession {
 
     init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?) {
         self.threadId = threadId
+        environmentId = threadId.environmentId ?? ""
         self.panel = panel
         self.sidebar = sidebar
         let relay = ShellSession.ChangeRelay()
-        store = ThreadStore(threadId: threadId, onChange: { relay.fire() })
+        store = ThreadStore(threadId: threadId.localId, onChange: { relay.fire() })
         relay.set { [weak self] in Task { @MainActor in await self?.pull() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
     }
@@ -35,6 +38,8 @@ final class ThreadSession {
     /// Subscribes on `shell`'s supervisor. Called again when the app replaces its shell session
     /// (server restart, idle stop then wake); the store keeps its cursor, so the new stream resumes.
     func attach(_ shell: ShellSession) {
+        // Already streaming on this session: the supervisor resubscribes across reconnects itself.
+        if shell === self.shell, subscription != nil { return }
         subscription?.cancel()
         historyLoad?.cancel()
         historyLoad = nil
@@ -87,7 +92,7 @@ final class ThreadSession {
     private func project(_ projection: ThreadProjection?) -> ProjectShell? {
         let snapshot = sidebar?.snapshot
         let shell = snapshot?.threads.first { $0.id == threadId } ?? snapshot?.archivedThreads.first { $0.id == threadId }
-        guard let projectId = projection?.thread.projectId ?? shell?.projectId else { return nil }
+        guard let projectId = projection?.thread.projectId?.scoped(to: environmentId) ?? shell?.projectId else { return nil }
         return snapshot?.projects.first { $0.id == projectId }
     }
 
@@ -153,16 +158,16 @@ final class ThreadSession {
     }
 }
 
-/// Which thread the main panel shows: opens threads from the sidebar, follows the app's shell
-/// session across server restarts, remembers the last thread per environment and reopens it.
+/// Which thread the main panel shows: opens threads from the sidebar on their own environment's
+/// session, follows that session across reconnects and server restarts, remembers the last thread
+/// (a scoped id) and reopens it.
 @MainActor
 final class ThreadController {
     let panel = ThreadPanelView()
     private(set) var composer: ComposerController!
     private weak var sidebar: SidebarContentView?
+    private let environments: Environments
     private var session: ThreadSession?
-    private var shell: ShellSession?
-    private var environment: String?
     /// Development: `--open-thread <title prefix>` opens the first matching thread once the shell arrives.
     private var openPrefix: String?
     /// Development: `--open-diff` opens the right panel on that thread's newest turn that changed files.
@@ -170,15 +175,16 @@ final class ThreadController {
     private var restored = false
     private var keyMonitor: Any?
 
-    init(sidebar: SidebarContentView, window: NSWindow) {
+    init(sidebar: SidebarContentView, window: NSWindow, environments: Environments) {
         self.sidebar = sidebar
+        self.environments = environments
         panel.projectIconForTitle = { [weak sidebar] title in
             sidebar?.snapshot?.projects.first { $0.title == title }.map(ProjectIconSource.init)
         }
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open-thread"), i + 1 < args.count { openPrefix = args[i + 1] }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
-        composer = ComposerController(panel: panel, sidebar: sidebar)
+        composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
         sidebar.actions.openDraft = { [weak self] id in
@@ -187,12 +193,10 @@ final class ThreadController {
             session = nil
         }
         sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
-        sidebar.actions.searchThreads = { [weak self] query in
-            guard let supervisor = self?.shell?.supervisor,
-                  let json = try? await supervisor.request("orchestration.searchThreads", payload: .object(["query": .string(query)]))
-            else { return nil }
-            return (try? json.decode(as: ThreadSearchResult.self))?.matches
-        }
+        sidebar.actions.searchThreads = { [weak environments] query in await environments?.searchThreads(query) }
+        environments.onSessionChange = { [weak self] env in self?.sessionChanged(env) }
+        environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
+        environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
         sidebar.scopeDefaults = .standard
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
@@ -227,27 +231,19 @@ final class ThreadController {
         UserDefaults.standard.stringArray(forKey: Self.rightPanelKey)?.contains(id.rawValue) == true
     }
 
-    private var lastThreadKey: String? { environment.map { "thread.lastOpen." + $0 } }
+    /// The open thread across launches, scoped. T3 routes by `_chat.$environmentId.$threadId`.
+    private static let lastThreadKey = "thread.lastOpenScoped"
 
-    /// The app's current shell session, or nil while there is none. `environment` keys the remembered thread.
-    func follow(_ shell: ShellSession?, environment: String?) {
-        composer.follow(shell, environment: shell == nil ? self.environment : environment)
-        guard let shell else { session?.detach(); self.shell = nil; return }
-        if environment != self.environment { restored = false }
-        self.shell = shell
-        self.environment = environment
-        // ServerController owns `onSnapshot`; chain after it.
-        let previous = shell.onSnapshot
-        shell.onSnapshot = { [weak self] snapshot in
-            previous?(snapshot)
-            self?.shellChanged(snapshot)
-        }
-        session?.attach(shell)
+    /// An environment's session started, was replaced or ended: the open thread follows its own one.
+    private func sessionChanged(_ environmentId: String) {
+        composer.sessionChanged(environmentId)
+        guard let session, session.environmentId == environmentId else { return }
+        if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
 
     func open(_ id: ThreadId) {
         sidebar?.state.activeThreadId = id
-        if let lastThreadKey { UserDefaults.standard.set(id.rawValue, forKey: lastThreadKey) }
+        UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard id != session?.threadId || panel.isDraft else { return }
         session?.end()
         panel.setDraft(projectTitle: nil)
@@ -256,7 +252,7 @@ final class ThreadController {
         panel.setRightPanelOpen(rightPanelWasOpen(id))
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
-        if let shell { session.attach(shell) }
+        if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
         if openDiff {
             openDiff = false
@@ -278,6 +274,35 @@ final class ThreadController {
         session = nil
     }
 
+    /// A removed environment: its open thread closes and the per-thread state the app keeps for it
+    /// goes (right panel, remembered thread, visits, scope). Composer state goes in the composer.
+    private func environmentRemoved(_ environmentId: String) {
+        let prefix = environmentId + ":"
+        composer.environmentRemoved(environmentId)
+        let defaults = UserDefaults.standard
+        if let ids = defaults.stringArray(forKey: Self.rightPanelKey) {
+            defaults.set(ids.filter { !$0.hasPrefix(prefix) }, forKey: Self.rightPanelKey)
+        }
+        if defaults.string(forKey: Self.lastThreadKey)?.hasPrefix(prefix) == true { defaults.removeObject(forKey: Self.lastThreadKey) }
+        if let sidebar {
+            var state = sidebar.state
+            state.localVisits = state.localVisits.filter { !$0.key.rawValue.hasPrefix(prefix) }
+            if state.activeThreadId?.rawValue.hasPrefix(prefix) == true { state.activeThreadId = nil }
+            sidebar.state = state
+            // A `separate` mode group key is a physical key, `environmentId:path`.
+            if state.projectScopeKey?.hasPrefix(prefix) == true { sidebar.setProjectScope(nil) }
+        }
+        guard session?.environmentId == environmentId else { return }
+        session?.end()
+        session = nil
+        // Like T3's index route: a draft for the most recently active project left, else nothing.
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        if let snapshot = sidebar?.snapshot,
+           let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
+            _ = composer.newThread(in: project)
+        }
+    }
+
     /// With the first shell: opens the `--open-thread` match or the remembered thread, else lands
     /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
     private func shellChanged(_ snapshot: ShellSnapshot) {
@@ -288,11 +313,13 @@ final class ThreadController {
             return
         }
         guard !restored, openPrefix == nil else { return }
+        let remembered = UserDefaults.standard.string(forKey: Self.lastThreadKey).map { ThreadId($0) }
+        // The remembered thread's environment is connecting but its shell hasn't arrived: wait for it.
+        if let env = remembered?.environmentId, environments.isRegistered(env), !environments.hasShell(env) { return }
         restored = true
         guard session == nil, !panel.isDraft else { return }
-        if let lastThreadKey, let raw = UserDefaults.standard.string(forKey: lastThreadKey),
-           snapshot.threads.contains(where: { $0.id.rawValue == raw }) {
-            open(ThreadId(raw))
+        if let remembered, snapshot.threads.contains(where: { $0.id == remembered }) {
+            open(remembered)
         } else if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
             _ = composer.newThread(in: project)
         }

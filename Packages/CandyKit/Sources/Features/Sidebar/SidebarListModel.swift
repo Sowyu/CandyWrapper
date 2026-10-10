@@ -40,6 +40,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     /// Start of the work a Working row counts from.
     public var workingStartedMs: Int64?
     public var providerIcon: String
+    /// `EnvironmentMachineKind` of a thread on another environment, nil on the primary one (Sidebar.tsx:1370-1375, 2196-2205).
+    public var environmentMachine: String? = nil
     /// Timestamps behind the labels, for the refresh timer.
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
@@ -61,6 +63,48 @@ public struct SidebarRowModel: Equatable, Sendable {
 }
 
 public enum SidebarShelf: String, Sendable { case snoozed, settled }
+
+/// The environments the merged shell spans: the primary (this machine), labels and machine kinds
+/// (Sidebar.tsx `primaryEnvironmentId`, `environmentLabelById`, `useEnvironmentMachines`). Thread and
+/// project ids are scoped (`EnvironmentScope`), so a row's environment is its id's prefix.
+public struct SidebarEnvironments: Equatable, Sendable {
+    /// Nil when no environment is this machine, which marks every thread as remote, as in T3's hosted app.
+    public var primaryId: String?
+    public var labels: [String: String]
+    /// `resolveEnvironmentMachineKind`: the server's `platform.machine`, else `server`.
+    public var machines: [String: String]
+
+    public init(primaryId: String? = nil, labels: [String: String] = [:], machines: [String: String] = [:]) {
+        self.primaryId = primaryId
+        self.labels = labels
+        self.machines = machines
+    }
+
+    public func machine(_ environmentId: String) -> String { machines[environmentId] ?? "server" }
+
+    /// The machine glyph for a thread row, nil for the primary environment and unscoped ids.
+    public func rowMachine(_ id: ThreadId) -> String? {
+        guard let env = id.environmentId, env != primaryId else { return nil }
+        return machine(env)
+    }
+
+    /// `projectGroupsSpanEnvironments` (sidebarProjectGrouping.ts:29-41): badges show only then.
+    public static func span(_ groups: [SidebarModel.ProjectGroup]) -> Bool {
+        Set(groups.flatMap { $0.members.compactMap(\.id.environmentId) }).count > 1
+    }
+
+    /// `ProjectEnvironmentBadge` (ProjectEnvironmentBadge.tsx:15-35): the first remote member's machine and
+    /// "On <labels>" or "Also on <labels>". Nil when every member is on the primary environment.
+    public func badge(_ group: SidebarModel.ProjectGroup) -> (machine: String, description: String)? {
+        let remote = group.members.compactMap(\.id.environmentId).filter { $0 != primaryId }
+            .map { (env: $0, label: labels[$0] ?? "Remote") }
+            .sorted { $0.label.localizedCompare($1.label) == .orderedAscending }
+        guard let first = remote.first else { return nil }
+        var seen = Set<String>()
+        let names = remote.map(\.label).filter { seen.insert($0).inserted }.joined(separator: ", ")
+        return (machine(first.env), "\(remote.count < group.members.count ? "Also on" : "On") \(names)")
+    }
+}
 
 /// A new-thread draft the composer keeps until its first send (T3's `DraftSessionState` plus its prompt).
 public struct SidebarDraft: Equatable, Sendable {
@@ -179,6 +223,7 @@ public struct SidebarListState: Equatable, Sendable {
     public var capabilities = SidebarModel.Capabilities(threadSettlement: true, threadSnooze: true)
     /// Visits recorded on this device, for servers without `lastVisitedAt`.
     public var localVisits: [ThreadId: T3Timestamp] = [:]
+    public var environments = SidebarEnvironments()
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -188,7 +233,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.scopedProjectIds == b.scopedProjectIds && a.localVisits == b.localVisits
             && a.projectScopeKey == b.projectScopeKey && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
-            && a.capabilities.threadSnooze == b.capabilities.threadSnooze
+            && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
     }
 }
 
@@ -207,7 +252,7 @@ public enum SidebarListBuilder {
         var shelves: SidebarModel.Shelves
 
         init(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) {
-            let groups = SidebarModel.buildProjectGroups(snapshot.projects)
+            let groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId)
             self.groups = groups
             for group in groups { for id in group.memberProjectIds { groupByProject[id] = group } }
             for p in snapshot.projects { projectById[p.id] = p }
@@ -222,9 +267,10 @@ public enum SidebarListBuilder {
 
     /// The scope popup's projects (`projectGroups`, Sidebar.tsx:2541-2544), most recently active first.
     // ponytail: T3's default `updated_at` project order; read `sidebarProjectSortOrder` from client settings when settings land
-    public static func projectScopeGroups(snapshot: ShellSnapshot?) -> [SidebarModel.ProjectGroup] {
+    public static func projectScopeGroups(snapshot: ShellSnapshot?, primaryEnvironmentId: String? = nil) -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
-        return SidebarModel.sortSidebarV2ProjectGroups(SidebarModel.buildProjectGroups(snapshot.projects),
+        return SidebarModel.sortSidebarV2ProjectGroups(
+            SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: primaryEnvironmentId),
                                                        threads: snapshot.threads, order: .updatedAt)
     }
 
@@ -356,6 +402,8 @@ public enum SidebarListBuilder {
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
             providerIcon: providerDriver(shell.runtimeInstanceId),
+            // ponytail: no scratch-project machine label on line 3 (Sidebar.tsx:1375); add with scratch projects
+            environmentMachine: state.environments.rowMachine(shell.id),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
     }
 

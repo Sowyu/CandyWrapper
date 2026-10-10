@@ -43,7 +43,7 @@ struct ProjectIconTests {
         let store = ProjectIconStore.shared
         let calls = Counter()
         let png = Self.png(width: 64, height: 64)
-        store.loader = { cwd, _ in await calls.bump(cwd); return cwd == "/has-icon" ? png : nil }
+        store.loader = { _, cwd, _ in await calls.bump(cwd); return cwd == "/has-icon" ? png : nil }
         defer { store.loader = nil }
         let withIcon = ProjectIconSource(title: "A", workspaceRoot: "/has-icon")
         let without = ProjectIconSource(title: "B", workspaceRoot: "/none")

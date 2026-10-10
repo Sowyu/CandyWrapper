@@ -257,6 +257,13 @@ public final class ComposerSelectionStore {
         save()
     }
 
+    /// Drops the picks of every key that matches, for a removed environment.
+    public func removeDrafts(where matches: (String) -> Bool) {
+        let before = drafts.count
+        drafts = drafts.filter { !matches($0.key) }
+        if drafts.count != before { save() }
+    }
+
     /// A new-thread draft that became a server thread keeps its picks under the thread's key.
     public func moveDraft(from old: String, to new: String) {
         guard let d = drafts.removeValue(forKey: old) else { return }
