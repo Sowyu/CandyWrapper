@@ -783,7 +783,11 @@ final class ComposerController {
 extension ComposerController {
     /// Drafts with a prompt, for `SidebarDraftBlock` (Sidebar.tsx:962-1066), and the open draft.
     func syncSidebarDrafts() {
-        let drafts = sessions.values.compactMap { s -> SidebarDraft? in
+        // `sessions` holds every environment's drafts; T3 scopes draft rows to the environment and its projects.
+        let prefix = "\(environment ?? ""):"
+        let projects = Set(sidebar?.snapshot?.projects.map(\.id) ?? [])
+        let drafts = sessions.compactMap { key, s -> SidebarDraft? in
+            guard key.hasPrefix(prefix), projects.contains(ProjectId(s.projectId)) else { return nil }
             // The open draft's prompt lives in the editor until the next save.
             let prompt = target == .draft(s) ? composer.text : prompts[s.draftId] ?? ""
             return prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil
