@@ -13,9 +13,13 @@ import T3Store
 ///
 /// The footer pickers' picks live in one place, `ComposerSelectionStore`, keyed by the same draft
 /// key as the prompt; every send reads `pickers.current` and drops the picks after it succeeds.
+///
+/// Thread and project ids here are scoped (`EnvironmentScope`). Commands go to the target's own
+/// environment session with the local ids.
 @MainActor
 final class ComposerController {
-    /// A new thread that exists only here until its first send (T3's `DraftSessionState`).
+    /// A new thread that exists only here until its first send (T3's `DraftSessionState`). Both ids
+    /// are scoped: the project's environment is where the thread will be created.
     struct DraftSession: Codable, Equatable {
         var draftId: String
         var threadId: String
@@ -31,8 +35,7 @@ final class ComposerController {
     private let panel: ThreadPanelView
     private weak var sidebar: SidebarContentView?
     private var composer: ComposerView { panel.composer }
-    private var shell: ShellSession?
-    private var environment: String?
+    private let environments: Environments
     private(set) var target: Target?
     private var projection: ThreadProjection?
     /// Sent messages the stream hasn't confirmed, for the open thread.
@@ -45,9 +48,13 @@ final class ComposerController {
 
     /// Model, traits and access: the footer controls and the per-draft picks they own.
     let pickers = ComposerPickers(store: ComposerSelectionStore(), draftKey: "", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
-    /// `server.getConfig` providers and settings, followed through `subscribeServerConfig`.
-    private var serverConfig = ServerProviderConfig(providers: [])
-    private var configSubscription: Task<Void, Never>?
+    /// `server.getConfig` providers and settings per environment, followed through `subscribeServerConfig`
+    /// on each environment's session (T3 follows every environment's config, CR/state/server.ts:437).
+    private var serverConfigs: [String: ServerProviderConfig] = [:]
+    private var configSubscriptions: [String: (shell: ShellSession, task: Task<Void, Never>)] = [:]
+    private var serverConfig: ServerProviderConfig {
+        targetEnvironmentId.flatMap { serverConfigs[$0] } ?? ServerProviderConfig(providers: [])
+    }
 
     /// A queued message open in the composer (`beginEditingQueuedRun`, ChatView.tsx:4673-4699).
     /// Its text lives here, not in the thread's prompt, which comes back on save or cancel.
@@ -69,24 +76,31 @@ final class ComposerController {
 
     /// Files attached to question answers, by `questionKey` (T3's `questionAttachmentDraftId`).
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
-    /// The environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
-    /// read from `/.well-known/t3/environment` when the shell changes.
-    fileprivate var supportsQuestionAttachments = false
-    fileprivate var fileUploadLimit: Int?
-    private var capabilitiesTask: Task<Void, Never>?
+    /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
+    /// read from `/.well-known/t3/environment` when its session changes.
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?)] = [:]
+    fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
+    fileprivate var fileUploadLimit: Int? { targetEnvironmentId.flatMap { capabilities[$0]?.uploadLimit } }
+    private var capabilityTasks: [String: Task<Void, Never>] = [:]
 
-    // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by project.
-    private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v1"
+    // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by scoped project id.
+    // v2 sessions hold scoped ids; v1 (one environment) is read once and scoped by its key's prefix.
+    private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v2"
+    private static let sessionsKeyV1 = "composer.draftSessions.v1"
     private var prompts: [String: String]
     private var sessions: [String: DraftSession]
     private var saveWork: DispatchWorkItem?
 
-    init(panel: ThreadPanelView, sidebar: SidebarContentView) {
+    init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments) {
         self.panel = panel
         self.sidebar = sidebar
+        self.environments = environments
         let defaults = UserDefaults.standard
         prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
-        sessions = (defaults.data(forKey: Self.sessionsKey)).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) } ?? [:]
+        func decode(_ key: String) -> [String: DraftSession]? {
+            defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
+        }
+        sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
         composer.onSend = { [weak self] text, mode in self?.send(text, mode: mode) }
         composer.onStop = { [weak self] in self?.stop() }
         composer.onResume = { [weak self] in self?.resume() }
@@ -128,33 +142,78 @@ final class ComposerController {
         refresh()
     }
 
-    func follow(_ shell: ShellSession?, environment: String?) {
-        if shell !== self.shell {
-            configSubscription?.cancel()
-            configSubscription = shell.map(subscribeConfig)
-            readCapabilities(shell)
+    /// v1 sessions were keyed `environmentId:projectId` with unscoped ids inside.
+    static func scopeV1(_ v1: [String: DraftSession]) -> [String: DraftSession] {
+        var out: [String: DraftSession] = [:]
+        for (key, var s) in v1 {
+            guard let env = EnvironmentScope.environmentId(of: key), !env.isEmpty else { continue }
+            s.projectId = EnvironmentScope.key(env, s.projectId)
+            s.threadId = EnvironmentScope.key(env, s.threadId)
+            out[key] = s
         }
-        self.shell = shell
-        self.environment = environment
+        return out
+    }
+
+    /// The session (shell) of the target's environment. Nil while that environment is disconnected.
+    private var shell: ShellSession? { environments.session(targetEnvironmentId) }
+
+    private var targetEnvironmentId: String? {
+        switch target {
+        case .thread(let id): id.environmentId
+        case .draft(let s): ProjectId(s.projectId).environmentId
+        case nil: nil
+        }
+    }
+
+    /// An environment's session started, was replaced or ended: its config stream and capabilities follow.
+    func sessionChanged(_ environmentId: String) {
+        let shell = environments.session(environmentId)
+        if shell !== configSubscriptions[environmentId]?.shell {
+            configSubscriptions[environmentId]?.task.cancel()
+            configSubscriptions[environmentId] = shell.map { ($0, subscribeConfig($0)) }
+            readCapabilities(shell, environmentId: environmentId)
+        }
         refresh()
     }
 
     /// `subscribeServerConfig`: a snapshot first, then provider and settings updates (protocol.md 1562).
     private func subscribeConfig(_ shell: ShellSession) -> Task<Void, Never> {
+        let env = shell.environmentId
         let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: { .object([:]) }, handler: { [weak self] event in
             guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
-            await MainActor.run { self?.configChanged(change) }
+            await MainActor.run { self?.configChanged(change, environmentId: env) }
         })
         return stream
     }
 
-    private func configChanged(_ event: ServerConfigEvent) {
+    private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
+        var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
         switch event {
-        case .snapshot(let config): serverConfig = config
-        case .providerStatuses(let providers): serverConfig.providers = providers
-        case .settingsUpdated(let settings): serverConfig.settings = settings
+        case .snapshot(let snapshot): config = snapshot
+        case .providerStatuses(let providers): config.providers = providers
+        case .settingsUpdated(let settings): config.settings = settings
         case .other: return
         }
+        serverConfigs[environmentId] = config
+        if environmentId == targetEnvironmentId { refresh() }
+    }
+
+    /// A removed environment: its drafts, prompts, picks, question files, config and capabilities go
+    /// (T3's `clearComposerDraftsEnvironment`, composerDraftStore.ts:4419-4450, plus the rest).
+    func environmentRemoved(_ environmentId: String) {
+        let prefix = environmentId + ":"
+        configSubscriptions.removeValue(forKey: environmentId)?.task.cancel()
+        capabilityTasks.removeValue(forKey: environmentId)?.cancel()
+        serverConfigs[environmentId] = nil
+        capabilities[environmentId] = nil
+        let removed = sessions.filter { $0.key.hasPrefix(prefix) }
+        let draftIds = Set(removed.values.map(\.draftId))
+        for key in removed.keys { sessions[key] = nil }
+        prompts = prompts.filter { !$0.key.hasPrefix(prefix) && !draftIds.contains($0.key) }
+        pickers.store.removeDrafts { $0.hasPrefix(prefix) || draftIds.contains($0) }
+        for key in questionFiles.keys where key.hasPrefix(prefix) { releaseQuestionFiles(key) }
+        if targetEnvironmentId == environmentId { target = nil; projection = nil; requests = PendingRequests() }
+        save()
         refresh()
     }
 
@@ -205,7 +264,7 @@ final class ComposerController {
 
     private var draftKey: String? {
         switch target {
-        case .thread(let id): environment.map { "\($0):\(id.rawValue)" }
+        case .thread(let id): id.rawValue
         case .draft(let session): session.draftId
         case nil: nil
         }
@@ -245,8 +304,10 @@ final class ComposerController {
     }
 
     private func showDraft(_ project: ProjectShell) {
-        let key = "\(environment ?? ""):\(project.id.rawValue)"
-        let session = sessions[key] ?? DraftSession(draftId: UUID().uuidString.lowercased(), threadId: UUID().uuidString.lowercased(),
+        // The scoped project id: one draft per project per environment, like T3's `env:projectId` keys.
+        let key = project.id.rawValue
+        let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
+        let session = sessions[key] ?? DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
                                                     projectId: project.id.rawValue, createdAt: Date())
         sessions[key] = session
         flushPrompt()
@@ -269,6 +330,8 @@ final class ComposerController {
 
     private func pickProject(from anchor: NSView) {
         guard let snapshot = sidebar?.snapshot, case .draft(let current) = target else { return }
+        // ponytail: lists every physical project, so a repository on two environments shows twice; T3 lists
+        // groups with the environment badge and asks which member gets the thread (DraftHeroHeadline.tsx)
         let items = snapshot.projects.map { project in
             var item = MenuItem.radio(project.title, checked: project.id.rawValue == current.projectId)
             item.closesOnClick = true
@@ -392,13 +455,13 @@ final class ComposerController {
         }
         if let approval = requests.activeApproval {
             leaveQuestion()
-            panel.approvalPanel.configure(approval, pendingCount: requests.approvals.count, threadId: threadId)
+            panel.approvalPanel.configure(approval, pendingCount: requests.approvals.count, threadId: threadId.localId)
             panel.approvalPanel.isResponding = responding.contains(approval.requestId)
             panel.drawer = .approval
             composer.pending = .approval
         } else if let input = requests.activeUserInput {
             let question = panel.questionPanel
-            question.configure(input, threadId: threadId)
+            question.configure(input, threadId: threadId.localId)
             question.isResponding = responding.contains(input.requestId)
             if questionRequestId == nil {
                 // The editor becomes the answer field; an open queued edit closes first.
@@ -538,7 +601,8 @@ final class ComposerController {
             panel.setDraft(projectTitle: nil)
             refresh()
             let payload = ComposerLogic.launchThreadPayload(
-                commandId: commandId, threadId: session.threadId, projectId: session.projectId, title: title,
+                commandId: commandId, threadId: EnvironmentScope.localId(of: session.threadId),
+                projectId: EnvironmentScope.localId(of: session.projectId), title: title,
                 modelSelection: selectionJSON, runtimeMode: picks.runtimeMode.rawValue,
                 interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: trimmed)
             Task { [weak self] in
@@ -558,7 +622,7 @@ final class ComposerController {
             let (dispatchMode, deliveryIntent) = ComposerLogic.dispatch(mode)
             var command: [String: JSONValue] = [
                 "type": .string("message.dispatch"), "commandId": .string(commandId), "createdBy": .string("user"),
-                "creationSource": .string("web"), "threadId": .string(threadId.rawValue), "messageId": .string(messageId.rawValue),
+                "creationSource": .string("web"), "threadId": .string(threadId.localId.rawValue), "messageId": .string(messageId.rawValue),
                 "text": .string(trimmed), "attachments": .array([]), "titleSeed": .string(title),
                 "modelSelection": selectionJSON, "dispatchMode": dispatchMode,
             ]
@@ -571,12 +635,12 @@ final class ComposerController {
                     if let runtimeChange {
                         _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
                             "type": .string("thread.runtime-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
-                            "threadId": .string(threadId.rawValue), "runtimeMode": .string(runtimeChange.rawValue)]))
+                            "threadId": .string(threadId.localId.rawValue), "runtimeMode": .string(runtimeChange.rawValue)]))
                     }
                     if let interactionChange {
                         _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
                             "type": .string("thread.interaction-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
-                            "threadId": .string(threadId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
+                            "threadId": .string(threadId.localId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
@@ -655,7 +719,7 @@ final class ComposerController {
         guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id else { return }
         let payload: JSONValue = .object([
             "type": .string("run.interrupt"), "commandId": .string(UUID().uuidString.lowercased()),
-            "threadId": .string(threadId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
+            "threadId": .string(threadId.localId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
         ])
         let supervisor = shell.supervisor
         let key = draftKey
@@ -681,14 +745,14 @@ final class ComposerController {
         if let runId = state.resumableRunId {
             continuation = .object([
                 "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
-                "createdBy": .string("user"), "creationSource": .string("web"), "threadId": .string(threadId.rawValue),
+                "createdBy": .string("user"), "creationSource": .string("web"), "threadId": .string(threadId.localId.rawValue),
                 "messageId": .string(UUID().uuidString.lowercased()), "text": .string("Continue where you left off."),
                 "attachments": .array([]), "modelSelection": ThreadSession.encode(selection),
                 "dispatchMode": .object(["type": .string("start_immediately")]), "manualContinuationOfRunId": .string(runId.rawValue),
             ])
         }
         let release: JSONValue? = state.hasHeldQueuedRuns ? .object([
-            "type": .string("queue.resume"), "commandId": .string(UUID().uuidString.lowercased()), "threadId": .string(threadId.rawValue),
+            "type": .string("queue.resume"), "commandId": .string(UUID().uuidString.lowercased()), "threadId": .string(threadId.localId.rawValue),
         ]) : nil
         Task { [weak self] in
             do {
@@ -713,7 +777,7 @@ final class ComposerController {
         var command = fields
         command["type"] = .string(type)
         command["commandId"] = .string(UUID().uuidString.lowercased())
-        command["threadId"] = .string(threadId.rawValue)
+        command["threadId"] = .string(threadId.localId.rawValue)
         queueBusy = true
         refresh()
         let supervisor = shell.supervisor
@@ -755,7 +819,7 @@ final class ComposerController {
         guard let shell, !queueBusy else { return }
         let command: JSONValue = .object([
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
-            "threadId": .string(edit.threadId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
+            "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
         ])
         queueBusy = true
         refresh()
@@ -783,11 +847,10 @@ final class ComposerController {
 extension ComposerController {
     /// Drafts with a prompt, for `SidebarDraftBlock` (Sidebar.tsx:962-1066), and the open draft.
     func syncSidebarDrafts() {
-        // `sessions` holds every environment's drafts; T3 scopes draft rows to the environment and its projects.
-        let prefix = "\(environment ?? ""):"
+        // Draft rows show for every environment in the merged shell, each under its own (scoped) project.
         let projects = Set(sidebar?.snapshot?.projects.map(\.id) ?? [])
-        let drafts = sessions.compactMap { key, s -> SidebarDraft? in
-            guard key.hasPrefix(prefix), projects.contains(ProjectId(s.projectId)) else { return nil }
+        let drafts = sessions.values.compactMap { s -> SidebarDraft? in
+            guard projects.contains(ProjectId(s.projectId)) else { return nil }
             // The open draft's prompt lives in the editor until the next save.
             let prompt = target == .draft(s) ? composer.text : prompts[s.draftId] ?? ""
             return prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil
@@ -868,17 +931,17 @@ extension ComposerController {
     }
     fileprivate static func requestPrefix(_ threadId: ThreadId, _ requestId: String) -> String { threadId.rawValue + "\u{0}" + requestId + "\u{0}" }
 
-    fileprivate func readCapabilities(_ shell: ShellSession?) {
-        capabilitiesTask?.cancel()
-        supportsQuestionAttachments = false
-        fileUploadLimit = nil
+    fileprivate func readCapabilities(_ shell: ShellSession?, environmentId: String) {
+        capabilityTasks[environmentId]?.cancel()
+        capabilities[environmentId] = nil
         guard let http = shell?.http else { return }
-        capabilitiesTask = Task { [weak self] in
+        capabilityTasks[environmentId] = Task { [weak self] in
             guard let descriptor = try? await http.descriptor(), !Task.isCancelled, let self else { return }
-            supportsQuestionAttachments = descriptor.capability("questionAttachments")
+            var limit: Int?
             if descriptor.capability("attachmentUploads"), case .number(let max)? = descriptor.capabilities["fileAttachments"]?["maxUploadBytes"] {
-                fileUploadLimit = Int(max)
+                limit = Int(max)
             }
+            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit)
             refresh()
         }
     }

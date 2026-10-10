@@ -274,6 +274,8 @@ final class SidebarCardRowView: SidebarRowBase {
     private let branchIcon = IconView(name: .folderGit2, size: 12)
     private let branch = LabelView()
     private let provider = ProviderGlyphView()
+    /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
+    private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread")
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     var actions = SidebarRowActions()
@@ -285,7 +287,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider] as [NSView] { addSubview(v) }
+        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine] as [NSView] { addSubview(v) }
         project.font = SB.font(12, .medium); project.lineHeight = 16
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
@@ -359,6 +361,9 @@ final class SidebarCardRowView: SidebarRowBase {
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
         branchIcon.strokeColor = SB.c(\.mutedForeground, 0.4)
         provider.driver = r.providerIcon
+        machine.kind = r.environmentMachine
+        machine.isHidden = r.environmentMachine == nil
+        machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         setAccessibilityLabel([r.title, r.statusLabel, r.projectLabel].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
@@ -413,9 +418,12 @@ final class SidebarCardRowView: SidebarRowBase {
         // Line 3: branch and provider, `mt-0.5`, text-xs.
         let y3 = top + 46
         provider.frame = NSRect(x: right - 14, y: y3 + 1, width: 14, height: 14)
+        // `ml-auto gap-1`: the machine sits 4pt left of the provider.
+        var trailing = right - 14
+        if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
         var bx = left
         if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
-        branch.frame = NSRect(x: bx, y: y3, width: max(0, right - 14 - 6 - bx), height: 16)
+        branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
     }
 }
 

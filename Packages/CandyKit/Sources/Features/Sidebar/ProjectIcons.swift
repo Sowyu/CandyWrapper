@@ -15,6 +15,8 @@ public struct ProjectIconSource: Hashable, Sendable {
     public var workspaceRoot: String
     public var faviconPath: String?
     public var override: Override?
+    /// The environment whose server serves the icon file, from the scoped project id. Empty when unscoped.
+    public var environmentId = ""
 
     public init(title: String, workspaceRoot: String, faviconPath: String? = nil, override: Override? = nil) {
         self.title = title; self.workspaceRoot = workspaceRoot; self.faviconPath = faviconPath; self.override = override
@@ -23,6 +25,7 @@ public struct ProjectIconSource: Hashable, Sendable {
     public init(_ project: ProjectShell) {
         self.init(title: project.title, workspaceRoot: project.workspaceRoot, faviconPath: project.faviconPath,
                   override: Self.override(project.projectIcon))
+        environmentId = project.id.environmentId ?? ""
     }
 
     /// `ReceivedProjectIcon`: unknown kinds mean no override; a lucide icon carrying `monogramText` or
@@ -57,14 +60,19 @@ public final class ProjectIconStore {
 
     /// Fetches the icon's bytes for a workspace root and optional `faviconPath`. Returns nil when the
     /// server reports no icon (the `project-favicon-missing` marker). Throws on any failure.
-    public typealias Loader = @Sendable (_ cwd: String, _ faviconPath: String?) async throws -> Data?
+    public typealias Loader = @Sendable (_ environmentId: String, _ cwd: String, _ faviconPath: String?) async throws -> Data?
 
     /// Set by the app when a shell connects; changing it drops every cached icon.
     public var loader: Loader? {
         didSet { entries.removeAll(); generation += 1; NotificationCenter.default.post(name: Self.didChange, object: self) }
     }
 
-    struct Key: Hashable { var cwd: String; var path: String? }
+    struct Key: Hashable { var environmentId: String; var cwd: String; var path: String? }
+
+    /// Drops a removed environment's icons.
+    public func forget(environmentId: String) {
+        entries = entries.filter { $0.key.environmentId != environmentId }
+    }
     enum State { case loading, missing(Date), image(CGImage, gray: CGImage?) }
 
     /// Pixel size icons decode to.
@@ -78,7 +86,7 @@ public final class ProjectIconStore {
     /// The decoded icon, or nil while loading or when the project has none. Starts a load on first ask.
     public func image(for source: ProjectIconSource, grayscale: Bool = false) -> CGImage? {
         guard source.override == nil else { return nil }
-        let key = Key(cwd: source.workspaceRoot, path: source.faviconPath)
+        let key = Key(environmentId: source.environmentId, cwd: source.workspaceRoot, path: source.faviconPath)
         switch entries[key] {
         case .image(let image, let gray):
             guard grayscale else { return image }
@@ -99,7 +107,7 @@ public final class ProjectIconStore {
         let generation = generation
         Task.detached(priority: .utility) {
             let image: CGImage?
-            do { image = try await loader(key.cwd, key.path).flatMap(Self.decode) } catch { image = nil }
+            do { image = try await loader(key.environmentId, key.cwd, key.path).flatMap(Self.decode) } catch { image = nil }
             await MainActor.run {
                 let store = ProjectIconStore.shared
                 guard store.generation == generation else { return }

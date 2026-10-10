@@ -14,7 +14,11 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         var label: String
         var projectTitle: String?
         var projectIcon: ProjectIconSource? = nil
+        /// `ProjectEnvironmentBadge`: a remote member's machine and its "On" or "Also on" text.
+        var badge: Badge? = nil
     }
+
+    struct Badge: Equatable { var machine: String; var description: String }
 
     static let maxWidth: CGFloat = 288, searchHeight: CGFloat = 43, maxHeight: CGFloat = 368
 
@@ -36,9 +40,15 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private var rows: [ScopeRowView] = []
     private var scrollOffset: CGFloat = 0
 
-    init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat) {
-        items = [Item(key: nil, label: "All projects")] + groups.map { Item(key: $0.key, label: $0.label, projectTitle: $0.representative.title,
-                                                                         projectIcon: ProjectIconSource($0.representative)) }
+    init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat,
+         environments: SidebarEnvironments = SidebarEnvironments()) {
+        // Badges only while the projects span environments (Sidebar.tsx:2608-2611).
+        let badges = SidebarEnvironments.span(groups)
+        items = [Item(key: nil, label: "All projects")] + groups.map { group in
+            Item(key: group.key, label: group.label, projectTitle: group.representative.title,
+                 projectIcon: ProjectIconSource(group.representative),
+                 badge: badges ? environments.badge(group).map { Badge(machine: $0.machine, description: $0.description) } : nil)
+        }
         // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone.
         self.selectedKey = groups.contains { $0.key == selectedKey } ? selectedKey : nil
         self.minimumWidth = minimumWidth
@@ -188,6 +198,7 @@ final class ScopeRowView: ControlView {
     private let folder = IconView(name: .folder, size: 16)
     private let monogram = ProjectMonogramView()
     private let label = LabelView()
+    private let badge: EnvironmentMachineGlyphView?
     private let settings: ButtonView?
     var isHighlighted: () -> Bool = { false }
     var onHover: (@MainActor () -> Void)?
@@ -197,6 +208,7 @@ final class ScopeRowView: ControlView {
         self.item = item
         self.selected = selected
         settings = item.key == nil ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
+        badge = item.badge.map { _ in EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14)) }
         super.init(frame: .zero)
         scalesWhenPressed = false
         fill.cornerRadius = 6
@@ -207,6 +219,14 @@ final class ScopeRowView: ControlView {
         label.font = DSFont.ui(14)
         label.lineHeight = 20
         addSubview(label)
+        if let badge, let info = item.badge {
+            badge.kind = info.machine
+            badge.toolTip = info.description
+            badge.setAccessibilityElement(true)
+            badge.setAccessibilityRole(.image)
+            badge.setAccessibilityLabel(info.description)
+            addSubview(badge)
+        }
         if let settings, let key = item.key {
             settings.iconSize = 14
             settings.toolTip = "Project settings for \(item.label)"
@@ -219,7 +239,7 @@ final class ScopeRowView: ControlView {
         restyle()
     }
 
-    var naturalWidth: CGFloat { 16 + 16 + 8 + ceil(label.textWidth) + (settings == nil ? 0 : 8 + 24) }
+    var naturalWidth: CGFloat { 16 + 16 + 8 + ceil(label.textWidth) + (badge == nil ? 0 : 8 + 14) + (settings == nil ? 0 : 8 + 24) }
 
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
@@ -247,6 +267,7 @@ final class ScopeRowView: ControlView {
         CATransaction.commit()
         label.color = lit ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
         folder.strokeColor = Themed.color(\.contrastMutedForeground)
+        badge?.color = Themed.color(\.contrastMutedForeground)
         setAccessibilitySelected(selected)
     }
 
@@ -258,6 +279,7 @@ final class ScopeRowView: ControlView {
         monogram.frame = folder.frame
         var right = bounds.width - 8
         if let settings { settings.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24); right -= 24 + 8 }
+        if let badge { badge.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 8 }
         label.frame = NSRect(x: 32, y: (h - 20) / 2, width: max(0, right - 32), height: 20)
     }
 }

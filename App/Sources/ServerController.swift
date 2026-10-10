@@ -5,16 +5,17 @@ import T3Protocol
 import T3Store
 
 /// Runs the local T3 server for the window (PROGRESS.md, "Server lifecycle"): shows the cached
-/// sidebar first, reuses a running server or starts one, and stops ours when idle or on quit.
+/// sidebar first, reuses a running server or starts one, and stops ours when idle or on quit. Its
+/// session is the primary environment in `Environments`, platform-managed like T3's.
 @MainActor
 final class ServerController {
     private let home: URL
     private let identity: ClientIdentity
     private let credentials = CredentialStore()
-    private let cache = ShellCache()
+    private var cache: ShellCache { environments.cache }
     private let remoteAccess = RemoteAccessSetting()
     private lazy var lifecycle = makeLifecycle()
-    private weak var sidebar: SidebarContentView?
+    private let environments: Environments
     private weak var window: NSWindow?
     private var session: ShellSession?
     private var sessionKey: String?
@@ -28,11 +29,9 @@ final class ServerController {
     private var ownsServer = false
     private var pairingDeclined = false
     private var observers: [NSObjectProtocol] = []
-    /// Each new shell session with its environment id, and nil when the session ends.
-    var onShell: ((ShellSession?, String?) -> Void)?
 
-    init(sidebar: SidebarContentView, window: NSWindow) {
-        self.sidebar = sidebar
+    init(environments: Environments, window: NSWindow) {
+        self.environments = environments
         self.window = window
         // Development: CANDY_T3_HOME points at a sandbox home instead of ~/.t3.
         home = ProcessInfo.processInfo.environment["CANDY_T3_HOME"].map { URL(filePath: $0, directoryHint: .isDirectory) }
@@ -51,10 +50,8 @@ final class ServerController {
     private func showCached(_ id: String) {
         environmentId = id
         latest = cache.load(environmentId: id)?.snapshot
-        if let latest {
-            sidebar?.setSnapshot(latest, animated: false)
-            LaunchTiming.mark("cached sidebar")
-        }
+        environments.showCachedPrimary(id, latest)
+        if latest != nil { LaunchTiming.mark("cached sidebar") }
     }
 
     // MARK: Connecting
@@ -124,14 +121,13 @@ final class ServerController {
     }
 
     private func startSession(origin: URL, token: String, key: String) {
-        guard let sidebar else { return }
+        guard let environmentId else { return }
         session?.stop()
-        let session = ShellSession(baseURL: origin, token: token, sidebar: sidebar, cached: latest)
+        let session = ShellSession(environmentId: environmentId, baseURL: origin, token: token, cached: latest)
         session.onSnapshot = { [weak self] in self?.shellChanged($0) }
-        session.start()
         self.session = session
         sessionKey = key
-        onShell?(session, environmentId)
+        environments.setPrimary(session, environmentId: environmentId)
     }
 
     private func shellChanged(_ snapshot: ShellSnapshot) {
@@ -150,7 +146,7 @@ final class ServerController {
         session?.stop()
         session = nil
         sessionKey = nil
-        onShell?(nil, nil)
+        environments.setPrimary(nil, environmentId: nil)
     }
 
     // MARK: Activity
@@ -221,7 +217,7 @@ final class ServerController {
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
         }
-        session?.stop()
+        environments.stopAll()
         let cache = self.cache, lifecycle = self.lifecycle
         Task.detached {
             await cache.flush()

@@ -294,7 +294,7 @@ public final class SidebarContentView: DSView {
 
     private var scopedGroup: SidebarModel.ProjectGroup? {
         guard let key = state.projectScopeKey, let snapshot else { return nil }
-        return SidebarModel.buildProjectGroups(snapshot.projects).first { $0.key == key }
+        return SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId).first { $0.key == key }
     }
 
     private func updateScopeTrigger() {
@@ -313,8 +313,9 @@ public final class SidebarContentView: DSView {
     func toggleScopePopup() {
         guard let host = filterButton.popupHost else { return }
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
-        let view = SidebarProjectScopeView(groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot),
-                                           selectedKey: state.projectScopeKey, minimumWidth: search.frame.width)
+        let view = SidebarProjectScopeView(
+            groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId),
+            selectedKey: state.projectScopeKey, minimumWidth: search.frame.width, environments: state.environments)
         view.onSelect = { [weak self] key in
             self?.setProjectScope(key)
             self?.closeScopePopup()

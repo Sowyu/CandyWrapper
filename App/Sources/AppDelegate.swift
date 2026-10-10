@@ -6,7 +6,7 @@ import Features
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private var galleryWindow: NSWindow?
-    private var session: ShellSession?
+    private var environments: Environments?
     private var server: ServerController?
     private var threads: ThreadController?
     private var terminationSignal: DispatchSourceSignal?
@@ -37,7 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        server?.shouldTerminate() ?? .terminateNow
+        guard let server else { environments?.stopAll(); return .terminateNow }
+        return server.shouldTerminate()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -48,7 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         let window = MainWindow()
         let sidebar = SidebarContentView()
-        let threads = ThreadController(sidebar: sidebar, window: window)
+        let environments = Environments(sidebar: sidebar)
+        self.environments = environments
+        let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
         let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
@@ -60,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.layoutTrafficLights()
         mainWindow = window
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
-        startSession(sidebar: sidebar, window: window)
+        startSession(environments, window: window)
         scheduleSelfSnapshot(window)
     }
 
@@ -102,26 +105,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The local server through `ServerController`. Development: `--server <url> --token-file
-    /// <path>` connects straight to a running server instead, such as the sandbox on 47391.
-    private func startSession(sidebar: SidebarContentView, window: NSWindow) {
+    /// The local server through `ServerController`, plus every saved environment. Development:
+    /// `--server <url> --token-file <path>` connects straight to a running server instead, such as the
+    /// sandbox on 47391. Give the pair more than once for more environments: the first is the primary
+    /// (this machine), the rest are remote. They aren't saved.
+    private func startSession(_ environments: Environments, window: NSWindow) {
         let args = CommandLine.arguments
         // A preview never connects, so it never starts or joins a server.
         if args.contains("--thread-preview") { return }
-        guard let s = args.firstIndex(of: "--server"), s + 1 < args.count, let url = URL(string: args[s + 1]),
-              let t = args.firstIndex(of: "--token-file"), t + 1 < args.count,
-              let token = try? String(contentsOfFile: args[t + 1], encoding: .utf8)
-                  .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
-            let server = ServerController(sidebar: sidebar, window: window)
-            server.onShell = { [weak self] in self?.threads?.follow($0, environment: $1) }
-            server.start()
-            self.server = server
+        let servers = Self.developmentServers(args)
+        guard servers.isEmpty else {
+            for (i, server) in servers.enumerated() { environments.addDevelopment(baseURL: server.url, token: server.token, primary: i == 0) }
             return
         }
-        let session = ShellSession(baseURL: url, token: token, sidebar: sidebar)
-        session.start()
-        self.session = session
-        threads?.follow(session, environment: url.absoluteString)
+        let server = ServerController(environments: environments, window: window)
+        server.start()
+        self.server = server
+        environments.restoreSaved()
+    }
+
+    /// The `--server` and `--token-file` values, paired in order. A pair whose token file can't be read is skipped.
+    static func developmentServers(_ args: [String]) -> [(url: URL, token: String)] {
+        func values(_ flag: String) -> [String] {
+            args.indices.filter { args[$0] == flag && $0 + 1 < args.count }.map { args[$0 + 1] }
+        }
+        return zip(values("--server"), values("--token-file")).compactMap { server, file in
+            guard let url = URL(string: server),
+                  let token = try? String(contentsOfFile: file, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+                  !token.isEmpty else { return nil }
+            return (url, token)
+        }
     }
 
     /// Prints traffic light frames and what a click at header points would hit, then quits.
@@ -198,6 +211,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timeline.isHidden = true
         timeline.allowsKeyEquivalentWhenHidden = true
         appMenu.addItem(timeline)
+        // Hidden, development: removes the newest remote environment, until Settings > Connections has a Remove item (WP6.3).
+        let remove = NSMenuItem(title: "Remove Last Environment", action: #selector(removeLastEnvironment(_:)), keyEquivalent: "r")
+        remove.keyEquivalentModifierMask = [.command, .option, .shift]
+        remove.isHidden = true
+        remove.allowsKeyEquivalentWhenHidden = true
+        appMenu.addItem(remove)
         appItem.submenu = appMenu
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = makeEditMenu()
         let window = NSMenu(title: "Window")
@@ -239,6 +258,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? report.write(toFile: path, atomically: true, encoding: .utf8)
         print(report)
         NSLog("timeline report written to %@", path)
+    }
+
+    @objc func removeLastEnvironment(_ sender: Any?) {
+        guard let environments, let last = environments.environmentIds.last(where: { $0 != environments.primaryId }) else { return }
+        NSLog("removing environment %@", last)
+        environments.remove(last)
     }
 
     /// On: T3 Code's server keeps running while CandyWrapper is idle, so other devices can reach
