@@ -3,7 +3,7 @@ import DesignSystem
 
 /// The round primary action (ComposerPrimaryActions.tsx:134-159, 310-355): 32px, send in
 /// `message-action` blue or the Nightly stage art, Stop in `destructive/90`, and the queue,
-/// steer, resume and busy faces. Hover scales to 1.05 over 150ms; there is no press scale.
+/// steer, resume, update (edited queued message) and busy faces. Hover scales to 1.05 over 150ms; there is no press scale.
 /// J-composer-visuals section 4.
 final class ComposerPrimaryButton: ControlView {
     static let size: CGFloat = 32
@@ -78,6 +78,7 @@ final class ComposerPrimaryButton: ControlView {
         case .queue: IconView(name: .listPlus, size: 16, strokeColor: white)
         case .steer: IconView(name: .cornerUpRight, size: 16, strokeColor: white)
         case .resume: IconView(name: .play, size: 16, strokeColor: white, fillColor: white)
+        case .update: IconView(name: .check, size: 16, strokeColor: white)
         case .busy: nil
         }
         if let view { addSubview(view); icon = view }

@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn | turn2 | threads | composer
+//   scenario    basic | turn | turn2 | threads | composer | requests | queue
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -468,6 +468,160 @@ case "composer":
     // The continuation, then the released queued run.
     let continuation = await waitFor("continuation end", after: m, timeout: 120, isEnd).map { payload($0)["id"] as? String }
     _ = await waitFor("queued run end", after: m, timeout: 120, { e in isEnd(e) && payload(e)["id"] as? String != continuation })
+    await pause(3)
+    print("threadId \(threadId)")
+
+case "requests":
+    // Every runtime-request.respond the composer panels send (I-composer-flow.md 3.2 to 3.4):
+    // decline, cancel and acceptForSession on file approvals, then a two-question prompt answered
+    // with a multi-select array and a free-text answer. Four tiny haiku turns.
+    let projectId = ProcessInfo.processInfo.environment["PROJECT_ID"]!
+    let haiku: [String: Any] = ["instanceId": "claudeAgent", "model": "claude-haiku-5-5"]
+    func isEnd(_ e: [String: Any]) -> Bool {
+        (e["type"] as? String) == "run.updated" && ["completed", "failed", "interrupted", "cancelled"].contains(payload(e)["status"] as? String ?? "")
+    }
+    func isPending(_ e: [String: Any]) -> Bool {
+        (e["type"] as? String) == "runtime-request.updated" && (payload(e)["status"] as? String) == "pending"
+    }
+    func launch(_ text: String, mode: String) async throws -> String {
+        let threadId = uuid()
+        let rid = try await request("orchestration.launchThread", [
+            "commandId": uuid(), "creationSource": "web", "threadId": threadId, "projectId": projectId,
+            "title": text, "generateTitle": false, "modelSelection": haiku,
+            "runtimeMode": mode, "interactionMode": "default", "workspaceStrategy": ["type": "root"],
+            "initialMessage": ["messageId": uuid(), "text": text, "attachments": [] as [Any]],
+        ])
+        for _ in 0..<150 where await state.exit(rid) == nil { await pause(0.1) }
+        try await request("orchestration.subscribeThread", ["threadId": threadId, "requestCompletionMarker": true,
+                                                            "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+        return threadId
+    }
+    func follow(_ threadId: String, _ text: String) async throws {
+        try await request("orchestration.dispatchCommand", [
+            "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+            "threadId": threadId, "messageId": uuid(), "text": text, "attachments": [] as [Any],
+            "modelSelection": haiku, "dispatchMode": ["type": "start_immediately"], "deliveryIntent": "auto",
+        ])
+    }
+    /// Answers the run's first approval with `first`, any later one with `rest`, until the run ends.
+    func answerApprovals(_ threadId: String, after: Int, first: String, rest: String) async throws {
+        var m = after, decision = first
+        for _ in 0..<4 {
+            guard let e = await waitFor("approval or end", after: m, timeout: 120, { isPending($0) || isEnd($0) }), !isEnd(e) else { return }
+            m = await mark()
+            await pause(1)
+            try await request("orchestration.dispatchCommand", [
+                "type": "runtime-request.respond", "commandId": uuid(), "threadId": threadId,
+                "requestId": payload(e)["id"]!, "decision": decision,
+            ])
+            decision = rest
+        }
+        _ = await waitFor("run end", after: m, timeout: 120, isEnd)
+    }
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    await pause(1)
+
+    var m = await mark()
+    let approvals = try await launch("Create a file named a.txt containing hi.", mode: "approval-required")
+    try await answerApprovals(approvals, after: m, first: "decline", rest: "cancel")
+    await pause(2)
+    m = await mark()
+    try await follow(approvals, "Try again: create a.txt containing hi.")
+    try await answerApprovals(approvals, after: m, first: "cancel", rest: "cancel")
+    await pause(2)
+    m = await mark()
+    try await follow(approvals, "Create a file named b.txt containing hi.")
+    try await answerApprovals(approvals, after: m, first: "acceptForSession", rest: "accept")
+    await pause(2)
+
+    m = await mark()
+    let questions = try await launch("Use AskUserQuestion once with two questions: a multi-select one with three options, then a single-select one with two options. Then reply ok.", mode: "full-access")
+    if let req = await waitFor("question", after: m, timeout: 120, { isPending($0) || isEnd($0) }), !isEnd(req) {
+        await pause(1)
+        let requestId = payload(req)["id"] as! String
+        let item = await state.snapshot().compactMap { $0["event"] as? [String: Any] }.last {
+            ($0["type"] as? String) == "turn-item.updated" && (payload($0)["requestId"] as? String) == requestId
+        }
+        var answers: [String: Any] = [:]
+        for (i, q) in ((item.map(payload)?["questions"] as? [[String: Any]]) ?? []).enumerated() {
+            let options = ((q["options"] as? [[String: Any]]) ?? []).map { ($0["value"] as? String) ?? ($0["label"] as? String ?? "") }
+            let id = q["id"] as? String ?? ""
+            if (q["multiSelect"] as? Bool) == true { answers[id] = Array(options.prefix(2)) }
+            else { answers[id] = i == 0 ? (options.first ?? "a") : "My own answer" }
+        }
+        m = await mark()
+        try await request("orchestration.dispatchCommand", [
+            "type": "runtime-request.respond", "commandId": uuid(), "threadId": questions,
+            "requestId": requestId, "answers": answers,
+        ])
+        _ = await waitFor("question run end", after: m, timeout: 120, isEnd)
+    }
+    await pause(3)
+    print("threads \(approvals) \(questions)")
+
+case "queue":
+    // The queue strip's commands and steer (I-composer-flow.md 4.3 to 4.6, 9.10 items 2 and 4):
+    // three messages queued behind a slow turn, queued-run.edit, queued-run.reorder,
+    // queued-run.cancel, queued-message.promote-to-steer, then a direct steer. Everything lands
+    // in the one running turn, so it costs one haiku turn.
+    let projectId = ProcessInfo.processInfo.environment["PROJECT_ID"]!
+    let haiku: [String: Any] = ["instanceId": "claudeAgent", "model": "claude-haiku-5-5"]
+    func isEnd(_ e: [String: Any]) -> Bool {
+        (e["type"] as? String) == "run.updated" && ["completed", "failed", "interrupted", "cancelled"].contains(payload(e)["status"] as? String ?? "")
+    }
+    func command(_ type: String, _ fields: [String: Any]) async throws {
+        try await request("orchestration.dispatchCommand", fields.merging(["type": type, "commandId": uuid()]) { a, _ in a })
+    }
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    await pause(1)
+    let threadId = uuid()
+    // A long tool-free reply keeps the run busy (a `sleep` gets moved to the background by Claude).
+    let text = "Without tools, write the numbers 1 to 1000 as words, one per line."
+    let launch = try await request("orchestration.launchThread", [
+        "commandId": uuid(), "creationSource": "web", "threadId": threadId, "projectId": projectId,
+        "title": "Numbers 1 to 1000 as words", "generateTitle": false, "modelSelection": haiku,
+        "runtimeMode": "full-access", "interactionMode": "default", "workspaceStrategy": ["type": "root"],
+        "initialMessage": ["messageId": uuid(), "text": text, "attachments": [] as [Any]],
+    ])
+    for _ in 0..<150 where await state.exit(launch) == nil { await pause(0.1) }
+    try await request("orchestration.subscribeThread", ["threadId": threadId, "requestCompletionMarker": true,
+                                                        "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+    // The run is already running in the launch reply's projection, so no event announces it.
+    let activeRunId = "run:thread:\(threadId):ordinal:1"
+    await pause(1)
+    var runIds: [String] = []
+    for word in ["alpha", "beta", "gamma"] {
+        let m = await mark()
+        let messageId = uuid()
+        try await command("message.dispatch", [
+            "createdBy": "user", "creationSource": "web", "threadId": threadId, "messageId": messageId,
+            "text": "Reply with one word: \(word)", "attachments": [] as [Any], "modelSelection": haiku,
+            "dispatchMode": ["type": "queue_after_active"],
+        ])
+        if let created = await waitFor("queued \(word)", after: m, timeout: 20, { e in
+            (e["type"] as? String) == "run.created" && (payload(e)["userMessageId"] as? String) == messageId
+        }) { runIds.append(payload(created)["id"] as! String) }
+    }
+    guard runIds.count == 3 else { break }
+    try await command("queued-run.edit", ["threadId": threadId, "runId": runIds[0], "text": "Reply with one word: alpha2"])
+    await pause(0.5)
+    // gamma before alpha: positions become gamma, alpha, beta.
+    try await command("queued-run.reorder", ["threadId": threadId, "runId": runIds[2], "beforeRunId": runIds[0]])
+    await pause(0.5)
+    try await command("queued-run.reorder", ["threadId": threadId, "runId": runIds[0], "beforeRunId": NSNull()])
+    await pause(0.5)
+    try await command("queued-run.cancel", ["threadId": threadId, "runId": runIds[1]])
+    await pause(0.5)
+    try await command("queued-run.cancel", ["threadId": threadId, "runId": runIds[0]])
+    await pause(0.5)
+    try await command("queued-message.promote-to-steer", ["threadId": threadId, "queuedRunId": runIds[2], "targetRunId": activeRunId])
+    await pause(1)
+    try await command("message.dispatch", [
+        "createdBy": "user", "creationSource": "web", "threadId": threadId, "messageId": uuid(),
+        "text": "Then also say: steered", "attachments": [] as [Any], "modelSelection": haiku,
+        "dispatchMode": ["type": "start_immediately"], "deliveryIntent": "steer",
+    ])
+    _ = await waitFor("turn end", timeout: 120, { e in isEnd(e) && (payload(e)["id"] as? String) == activeRunId })
     await pause(3)
     print("threadId \(threadId)")
 

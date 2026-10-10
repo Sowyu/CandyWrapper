@@ -81,6 +81,8 @@ public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
     public let timeline = TimelineView()
     public let composer = ComposerView()
+    /// The queued messages docked above the composer; it hides itself when empty.
+    public let queue = QueuedRunsView()
     public let hero = DraftHeroView()
     /// Showing the new-thread draft page instead of a thread.
     public private(set) var isDraft = false
@@ -119,8 +121,11 @@ public final class ThreadPanelView: DSView {
         hero.isHidden = true
         addSubview(hero)
         composer.isHidden = true
+        queue.isHidden = true
+        addSubview(queue)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
+        queue.onHeightChange = { [weak self] in self?.needsLayout = true }
         // `topbar-scroll-fade` (index.css:439-475): the first 25px of the scroller fade out; drawn as
         // a background-colored overlay instead of a mask, so scrolling doesn't render offscreen.
         fade.locations = [0, 0.1, 0.24, 0.42, 0.62, 0.82, 1]
@@ -260,7 +265,13 @@ public final class ThreadPanelView: DSView {
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
-        let inset = composer.isHidden || isDraft ? 0 : 8 + height + 20
+        // The queue slides 17pt under the composer, 22pt in from each side (ComposerBanner.Attachment).
+        let queueHeight = composer.isHidden || isDraft ? 0 : queue.preferredHeight
+        queue.isHidden = queueHeight == 0
+        queue.frame = NSRect(x: x + QueuedRunsView.inset, y: y - queueHeight + QueuedRunsView.overlap,
+                             width: max(0, width - 2 * QueuedRunsView.inset), height: queueHeight)
+        let above = queueHeight == 0 ? 0 : queueHeight - QueuedRunsView.overlap
+        let inset = composer.isHidden || isDraft ? 0 : 8 + above + height + 20
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }
     }

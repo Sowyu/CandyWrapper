@@ -68,6 +68,8 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var activeAttemptId: RunAttemptId?
     public var checkpointId: CheckpointId?
     public var userMessageId: MessageId?
+    /// The provider thread the run executes on; picks the provider session (queue capabilities).
+    public var providerThreadId: String?
     public var status: ThreadStatus
     public var queuePosition: Int?
     public var queueHeld: Bool?
@@ -135,6 +137,9 @@ public struct ConversationMessage: Codable, Hashable, Sendable, Identifiable {
     public var streaming: Bool
     public var createdAt: T3Timestamp
     public var updatedAt: T3Timestamp
+    /// Set on automatic deliveries, which the queue strip leaves out (`getUserQueuedThreadRuns`).
+    public var delegatedCompletion: JSONValue?
+    public var notification: JSONValue?
 }
 
 /// `OrchestrationV2PlanArtifact` (orchestrationV2.ts:1170-1191), flat over its `kind`.
@@ -191,6 +196,19 @@ public struct RuntimeRequest: Codable, Hashable, Sendable, Identifiable {
     public var resolvedAt: T3Timestamp?
     public var decision: String?
     public var answers: JSONValue?
+    public var responseCapability: ResponseCapability?
+}
+
+/// `OrchestrationV2RuntimeRequest.responseCapability` (orchestrationV2.ts:1035-1039): `live`
+/// answers go to the provider session, `message` answers become a user message, and
+/// `not_resumable` (with a reason) can't be answered.
+public struct ResponseCapability: Codable, Hashable, Sendable {
+    public var type: String
+    public var reason: String?
+    public init(type: String, reason: String? = nil) {
+        self.type = type
+        self.reason = reason
+    }
 }
 
 /// `OrchestrationV2ThreadProjection`. Arrays the timeline doesn't read stay `[JSONValue]`

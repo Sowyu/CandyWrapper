@@ -45,6 +45,11 @@ public final class ButtonView: ControlView {
     public var iconSize: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Replaces the variant's icon color, for icons with their own `text-*` class.
     public var iconColor: NSColor? { didSet { restyle() } }
+    /// See `LabelView.smoothsFont`: off for buttons on glass (backdrop-filter) surfaces.
+    public var smoothsFont: Bool {
+        get { label.smoothsFont }
+        set { label.smoothsFont = newValue }
+    }
     /// Set by GroupView: a joined side loses its radius and its border (`rounded-s-none border-s-0`).
     public var joinedSides: (leading: Bool, trailing: Bool) = (false, false) {
         didSet { restyle(); invalidateIntrinsicContentSize() }
