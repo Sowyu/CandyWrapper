@@ -84,6 +84,24 @@ final class ComposerController {
     fileprivate var fileUploadLimit: Int? { targetEnvironmentId.flatMap { capabilities[$0]?.uploadLimit } }
     private var capabilityTasks: [String: Task<Void, Never>] = [:]
 
+    /// Draft attachments by draft key, kept in memory (extension "Attachments" below).
+    // ponytail: draft attachments are not persisted; a relaunch keeps the prompt but drops them (its chips show unavailable). Persist the uploaded ids with the drafts if that bites
+    private var draftAttachments: [String: [ComposerAttachment]] = [:]
+    private var attachmentTasks: [String: Task<Void, Never>] = [:]
+    /// Images still being prepared per draft key: they hold their attachment slots.
+    private var preparingImages: [String: Int] = [:]
+    /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
+    private var sentFiles: [String: URL] = [:]
+    /// The prompt stash (`usePromptStashStore`), shared by every thread and environment like T3's.
+    private lazy var stash = PromptStashStore(directory: Self.supportDirectory.appendingPathComponent("PromptStash", isDirectory: true))
+    private var stashInFlight: Set<String> = []
+    private var stashPulseWork: DispatchWorkItem?
+    private var stashKeyMonitor: Any?
+    /// `useDelayedStatus` for the thread's sync row: the phase, when it was asked for and shown.
+    private var syncStatus = DelayedStatus()
+    /// The attachments the chips were last drawn for; chips rebuild only when these change.
+    private var chipAttachments: [ComposerAttachment] = []
+
     // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by scoped project id.
     // v2 sessions hold scoped ids; v1 (one environment) is read once and scoped by its key's prefix.
     private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v2"
@@ -132,7 +150,7 @@ final class ComposerController {
         }
         let question = panel.questionPanel
         question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
-        composer.onAttach = { [weak self] in self?.attachToQuestion() }
+        composer.onAttach = { [weak self] in self?.attachPressed() }
         composer.fileList.onRemove = { [weak self] id in self?.removeQuestionFile(id) }
         composer.fileList.onRetry = { [weak self] id in self?.retryQuestionFile(id) }
         question.onDismiss = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.dismissQuestion) }
@@ -141,6 +159,7 @@ final class ComposerController {
         composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
         setUpMenus()
+        setUpAttachments()
         refresh()
     }
 
@@ -281,6 +300,14 @@ final class ComposerController {
                 self.panel.queue.expand()
                 self.beginEdit(latest)
             }
+            return true
+        }
+        // The stash menu's keys while it is open (`ComposerStashMenu`, a capture-phase listener).
+        shortcuts.onKey { [weak self] event in self?.handleStashMenuKey(event) ?? false }
+        // `composer.stash` is always claimed, so the key never reaches anything else.
+        shortcuts.on("composer.stash") { [weak self] call in
+            guard let self, self.isActive else { return false }
+            if !call.isRepeat { self.stashShortcut() }
             return true
         }
         // `thread.stop` (no default key): interrupts a running turn, else leaves the key alone.
@@ -520,6 +547,7 @@ final class ComposerController {
     // MARK: Prompts
 
     private func loadPrompt() {
+        attachmentsTargetChanged()
         composer.resetPromptHistory()
         composer.text = draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
@@ -536,6 +564,8 @@ final class ComposerController {
         pickers.prompt = text
         // An open queued edit keeps its text out of the thread's prompt.
         guard queuedEdit == nil, let key = draftKey else { return }
+        pruneUnreferencedFiles(text, key: key)
+        if panel.stashMenuOpen { setStashMenu(false) }
         prompts[key] = text.isEmpty ? nil : text
         scheduleSave()
         refresh()
@@ -607,7 +637,9 @@ final class ComposerController {
         placeholder.approvalPending = requests.activeApproval != nil
         composer.placeholderInput = placeholder
         updateRequests()
-        composer.sendDisabledReason = shell == nil ? "Environment disconnected" : nil
+        composer.sendDisabledReason = shell == nil ? "Environment disconnected"
+            : questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments.map(\.status)) : nil
+        syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
@@ -751,8 +783,19 @@ final class ComposerController {
     private func send(_ text: String, mode: ComposerLogic.SendMode) {
         guard let shell, pendingMessageId == nil, let target else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if let edit = queuedEdit { saveEdit(edit, text: trimmed); return }
+        if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
+        let attachments = currentAttachments
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+        // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
+        guard ComposerAttachmentRules.uploadBlockReason(attachments.map(\.status)) == nil else { return }
+        if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
+            if let key = draftKey { threadErrors.set(key, limit) }
+            refresh()
+            return
+        }
+        let uploaded = attachments.compactMap(\.chatAttachment)
+        // A message with only attachments carries T3's bootstrap text (ChatView.tsx:9282).
+        let messageText = trimmed.isEmpty ? ComposerAttachmentRules.attachmentOnlyPrompt : trimmed
         let messageId = MessageId(UUID().uuidString.lowercased())
         let commandId = UUID().uuidString.lowercased()
         let now = T3Timestamp(Date())
@@ -766,13 +809,24 @@ final class ComposerController {
         if let picksKey { threadErrors.set(picksKey, nil) }
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).
         let intent: InputIntent? = mode == .queue ? .queuedTurn : mode == .steer ? .steer : nil
-        optimistic.append(ChatMessage(id: messageId, role: .user, text: trimmed, createdAt: now, inputIntent: intent))
+        // Every attachment rides as a record bound to its upload (`buildMessageContext`).
+        let referenced = contextRecords(for: trimmed)
+        let records = ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] } + attachments.compactMap(\.contextRecord)
+        let context: JSONValue? = records.isEmpty ? nil : .object(["version": .number(1), "records": .array(records)])
+        optimistic.append(ChatMessage(id: messageId, role: .user, text: messageText, createdAt: now, inputIntent: intent,
+                                      context: context, attachments: uploaded))
         pendingMessageId = messageId
+        for a in attachments { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
+        // The draft's attachments leave with the message; the server claims their uploads.
+        if let key = draftKey { draftAttachments[key] = nil }
         composer.text = ""
         remember("")
-        // The title seed leaves context links out (ChatView.tsx:9481-9485); their records ride as `context`.
-        let title = ComposerLogic.titleSeed(ComposerContext.stripReferences(trimmed))
-        let context = ComposerContext.messageContext(prompt: trimmed, records: contextRecords(for: trimmed))
+        // The title seed leaves context links out (ChatView.tsx:9481-9485), else names the first
+        // attachment (:9807-9821); records ride as `context`.
+        var titleText = ComposerContext.stripReferences(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        if titleText.isEmpty, let first = attachments.first(where: { $0.kind == .image }) { titleText = "Image: \(first.name)" }
+        if titleText.isEmpty, let first = attachments.first(where: { $0.kind == .file }) { titleText = "File: \(first.name)" }
+        let title = ComposerLogic.titleSeed(titleText)
         let selectionJSON = ThreadSession.encode(selection)
         let supervisor = shell.supervisor
 
@@ -785,7 +839,8 @@ final class ComposerController {
                 commandId: commandId, threadId: EnvironmentScope.localId(of: session.threadId),
                 projectId: EnvironmentScope.localId(of: session.projectId), title: title,
                 modelSelection: selectionJSON, runtimeMode: picks.runtimeMode.rawValue,
-                interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: trimmed, context: context)
+                interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: messageText, context: context,
+                attachments: uploaded)
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
@@ -796,6 +851,7 @@ final class ComposerController {
                     scheduleSave()
                     openThread?(ThreadId(session.threadId))
                 } catch {
+                    self?.restoreAttachments(attachments, key: picksKey)
                     self?.sendFailed(error, messageId: messageId, text: text, draft: session, key: picksKey)
                 }
             }
@@ -804,7 +860,7 @@ final class ComposerController {
             var command: [String: JSONValue] = [
                 "type": .string("message.dispatch"), "commandId": .string(commandId), "createdBy": .string("user"),
                 "creationSource": .string("web"), "threadId": .string(threadId.localId.rawValue), "messageId": .string(messageId.rawValue),
-                "text": .string(trimmed), "attachments": .array([]), "titleSeed": .string(title),
+                "text": .string(messageText), "attachments": .array(uploaded), "titleSeed": .string(title),
                 "modelSelection": selectionJSON, "dispatchMode": dispatchMode,
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
@@ -828,6 +884,7 @@ final class ComposerController {
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
                 } catch {
+                    self?.restoreAttachments(attachments, key: picksKey)
                     self?.sendFailed(error, messageId: messageId, text: text, draft: nil, key: picksKey)
                 }
             }
@@ -1232,54 +1289,30 @@ extension ComposerController {
         syncQuestion()
     }
 
-    /// `runUpload`: mint a signed upload URL, POST the bytes with their content type, report progress
-    /// in 5% steps, and fail with T3's reasons.
+    /// `runUpload` for a question's file (`uploadAttachment` below).
     private func upload(_ id: String, key: String) {
         guard let file = questionFiles[key]?.first(where: { $0.id == id }) else { return }
         guard let shell else { updateFile(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }; return }
-        let supervisor = shell.supervisor, base = shell.http.baseURL
         let task = Task { [weak self] in
-            let reason: String
-            do {
-                let minted = try await supervisor.request("attachments.createUploadUrl", payload: .object([
-                    "type": .string("file"), "name": .string(file.name), "mimeType": .string(file.mimeType), "sizeBytes": .number(Double(file.sizeBytes))]))
-                guard case .string(let attachmentId)? = minted["attachmentId"], case .string(let relative)? = minted["relativeUrl"],
-                      let url = URL(string: relative, relativeTo: base)?.absoluteURL else { throw URLError(.badServerResponse) }
-                if Task.isCancelled {
-                    _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(attachmentId)]))
-                    return
-                }
-                self?.updateFile(id, key: key) { $0.attachmentId = attachmentId }
-                var request = URLRequest(url: url, timeoutInterval: 600)
-                request.httpMethod = "POST"
-                request.setValue(file.mimeType, forHTTPHeaderField: "Content-Type")
-                let progress = UploadProgress { p in
-                    Task { @MainActor in
-                        self?.updateFile(id, key: key) { f in
-                            if case .uploading(let old) = f.status, Int(old * 20) == Int(p * 20) { return }
-                            f.status = .uploading(p)
-                        }
+            let result = await Self.uploadAttachment(
+                supervisor: shell.supervisor, base: shell.http.baseURL, type: "file", name: file.name,
+                mimeType: file.mimeType, sizeBytes: file.sizeBytes, file: file.url,
+                onMinted: { minted in self?.updateFile(id, key: key) { $0.attachmentId = minted } },
+                onProgress: { p in
+                    self?.updateFile(id, key: key) { f in
+                        if case .uploading(let old) = f.status, Int(old * 20) == Int(p * 20) { return }
+                        f.status = .uploading(p)
                     }
-                }
-                let (_, response) = try await URLSession.shared.upload(for: request, fromFile: file.url, delegate: progress)
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                guard (200..<300).contains(status) else { throw UploadRejected(status: status) }
-                self?.updateFile(id, key: key) { $0.status = .ready }
-                return
-            } catch let rejected as UploadRejected {
-                reason = "Upload rejected (\(rejected.status))"
-            } catch let error as URLError where error.code == .timedOut {
-                reason = "Upload timed out"
-            } catch {
-                if Task.isCancelled { return }
-                reason = "Upload failed"
+                })
+            switch result {
+            case .uploaded: self?.updateFile(id, key: key) { $0.status = .ready }
+            case .failed(let reason): self?.updateFile(id, key: key) { $0.status = .failed(reason) }
+            case .cancelled: break
             }
-            self?.updateFile(id, key: key) { $0.status = .failed(reason) }
         }
         updateFile(id, key: key) { $0.task = task }
     }
 
-    private struct UploadRejected: Error { let status: Int }
 
     private func fileKey(_ id: String) -> String? { questionFiles.first { $0.value.contains { $0.id == id } }?.key }
 
@@ -1613,6 +1646,8 @@ extension ComposerController {
     }
 
     private func chipLook(_ token: ComposerInlineToken) -> ComposerChipLook {
+        if case .context(let kind, let contextId, let label) = token.kind,
+           let look = attachmentChipLook(kind: kind, contextId: contextId, label: label) { return look }
         let skills = menuProvider?.skills(cwd: menuCwd) ?? []
         let env = targetEnvironmentId ?? ""
         let threads = sidebar?.snapshot?.threads ?? []
@@ -1623,5 +1658,716 @@ extension ComposerController {
             guard let local = record["threadId"]?.stringValue else { return nil }
             return threads.first { $0.id.rawValue == EnvironmentScope.key(env, local) }?.title
         })
+    }
+}
+
+// MARK: - Attachments
+
+/// `createDelayedStatus` (packages/client-runtime/src/delayedStatus.ts): a status shows once it has
+/// lasted 400 ms and then stays at least 400 ms, so a short sync never flashes.
+struct DelayedStatus {
+    static let showDelay: TimeInterval = 0.4, minVisible: TimeInterval = 0.4
+    var key = ""
+    var value: ComposerActivityRowView.Phase?
+    var shown: ComposerActivityRowView.Phase?
+    var shownAt = Date.distantPast
+    var timer: DispatchWorkItem?
+}
+
+/// The composer's own files and images (ChatComposer.tsx `addComposerAttachments`, :5762-5960):
+/// the picker, drops and pastes, T3's checks, image preparation, the upload through
+/// `attachments.createUploadUrl` and the signed route, chips, the image shelf and preview, and the
+/// sent message's images. Then the prompt stash (promptStashStore.ts, ChatComposer.tsx:4536-5040)
+/// and the thread's sync row (ComposerActivityStatus.tsx).
+extension ComposerController {
+    enum UploadResult { case uploaded(String), failed(String), cancelled }
+
+    static var supportDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CandyWrapper", isDirectory: true)
+    }
+    static var attachmentWorkDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperAttachments", isDirectory: true)
+    }
+    static var attachmentCacheDirectory: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("CandyWrapper/attachments", isDirectory: true)
+    }
+
+    /// `runAttachmentUploadCycle` plus the byte transfer: mint a signed upload URL, POST the file
+    /// with its content type and report progress, failing with T3's reasons. A cancel after the
+    /// mint deletes the pending upload.
+    static func uploadAttachment(supervisor: ConnectionSupervisor, base: URL, type: String, name: String, mimeType: String,
+                                 sizeBytes: Int, file: URL, onMinted: @escaping @MainActor (String) -> Void,
+                                 onProgress: @escaping @MainActor (Double) -> Void) async -> UploadResult {
+        do {
+            let minted = try await supervisor.request("attachments.createUploadUrl", payload: .object([
+                "type": .string(type), "name": .string(name), "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))]))
+            guard case .string(let attachmentId)? = minted["attachmentId"], case .string(let relative)? = minted["relativeUrl"],
+                  let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return .failed("Upload failed") }
+            if Task.isCancelled {
+                _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(attachmentId)]))
+                return .cancelled
+            }
+            await onMinted(attachmentId)
+            var request = URLRequest(url: url, timeoutInterval: 600)
+            request.httpMethod = "POST"
+            request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+            let progress = UploadProgress { p in Task { @MainActor in onProgress(p) } }
+            let (_, response) = try await URLSession.shared.upload(for: request, fromFile: file, delegate: progress)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else { return .failed("Upload rejected (\(status))") }
+            return .uploaded(attachmentId)
+        } catch let error as URLError where error.code == .timedOut {
+            return .failed("Upload timed out")
+        } catch {
+            return Task.isCancelled ? .cancelled : .failed("Upload failed")
+        }
+    }
+
+    fileprivate func setUpAttachments() {
+        composer.onFiles = { [weak self] files in self?.addFiles(files) }
+        composer.onPasteText = { [weak self] text, bypass in self?.foldPastedText(text, bypass: bypass) ?? false }
+        composer.pasteDirectory = Self.attachmentWorkDirectory
+        composer.imageShelf.onRemove = { [weak self] id in self?.removeImage(id) }
+        composer.imageShelf.onRetry = { [weak self] id in self?.retryAttachment(id) }
+        composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
+        panel.model.attachmentImage = { [weak self] id, side, cover in
+            guard let source = await self?.attachmentSource(id) else { return nil }
+            return await ComposerImageIO.thumbnail(source, side: side, cover: cover)
+        }
+        panel.model.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
+        panel.stashBadge.onToggleMenu = { [weak self] in self?.toggleStashMenu() }
+        panel.stashMenu.imageURL = { [weak self] image in self?.stash.imageURL(image) ?? URL(fileURLWithPath: "/") }
+        panel.stashMenu.onRestore = { [weak self] entry in self?.restoreStash(entry) }
+        panel.stashMenu.onDelete = { [weak self] entry in self?.deleteStash(entry) }
+        panel.stashMenu.onClose = { [weak self] in self?.setStashMenu(false) }
+        stash.onChange = { [weak self] in self?.syncStashViews() }
+        syncStashViews()
+    }
+
+    var currentAttachments: [ComposerAttachment] { draftKey.flatMap { draftAttachments[$0] } ?? [] }
+
+    /// The composer shows another thread or draft.
+    fileprivate func attachmentsTargetChanged() {
+        if panel.stashMenuOpen { setStashMenu(false) }
+        let key = draftKey ?? ""
+        var phase: ComposerActivityRowView.Phase?
+        if case .thread = target { phase = .loading }
+        updateSyncPhase(phase, key: key)
+        syncAttachmentViews()
+    }
+
+    /// The shelf, the send state and the chips for the current draft. T3 hides the shelf while an
+    /// approval or a question is open (ChatComposer.tsx:7062-7066).
+    fileprivate func syncAttachmentViews() {
+        let attachments = currentAttachments
+        let hidden = questionRequestId != nil || requests.activeApproval != nil
+        composer.imageTiles = hidden ? [] : attachments.filter { $0.kind == .image }.map {
+            ComposerImageShelfView.Tile(id: $0.id, name: $0.name, status: $0.status, fileURL: $0.fileURL)
+        }
+        composer.attachmentCount = questionRequestId == nil ? attachments.count : 0
+        if attachments != chipAttachments {
+            chipAttachments = attachments
+            composer.refreshChips()
+        }
+        syncStashViews()
+    }
+
+    private func updateAttachment(_ id: String, key: String, _ change: (inout ComposerAttachment) -> Void) {
+        guard let i = draftAttachments[key]?.firstIndex(where: { $0.id == id }) else { return }
+        change(&draftAttachments[key]![i])
+        if key == draftKey { refresh() }
+    }
+
+    /// The paperclip: a question's answer takes the files while one is open, else the draft does.
+    fileprivate func attachPressed() {
+        if questionRequestId != nil { attachToQuestion(); return }
+        guard let window = composer.window, target != nil else { return }
+        let picker = NSOpenPanel()
+        picker.allowsMultipleSelection = true
+        picker.canChooseDirectories = false
+        picker.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            let urls = picker.urls
+            MainActor.assumeIsolated { self?.addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
+        }
+    }
+
+    /// `addComposerAttachments`: count, type and size checks in order, so concurrent adds see each
+    /// other's slots; files get a chip at the caret and upload at once; images are prepared off the
+    /// main thread first and get a chip only when the prompt already has prose.
+    fileprivate func addFiles(_ files: [ComposerIncomingFile], pastedText: Bool = false) {
+        guard !files.isEmpty, let key = draftKey, let env = targetEnvironmentId else { return }
+        if questionRequestId != nil {
+            guard let requestId = questionRequestId, let questionKey = activeQuestionKey, supportsQuestionAttachments,
+                  panel.questionPanel.session?.progress.activeQuestion?.allowsCustomAnswer == true, !responding.contains(requestId) else {
+                _ = panel.toasts.show(ToastView(title: "This question cannot accept attachments.", kind: .error))
+                return
+            }
+            addQuestionFiles(files.map(\.url), key: questionKey, requestId: requestId)
+            return
+        }
+        let imagesGetChips = !ComposerContext.stripReferences(composer.text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || requests.activeApproval != nil
+        var reserved = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0)
+        let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
+        var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
+        var error: String?
+        for file in files {
+            if reserved >= ComposerAttachmentRules.maxAttachments { error = ComposerAttachmentRules.countMessage; continue }
+            switch ComposerAttachmentRules.classify(name: file.name, mimeType: file.mimeType) {
+            case .unsupportedImage:
+                error = ComposerAttachmentRules.unsupportedImageMessage(file.name)
+                continue
+            case .image:
+                var image = file
+                if let inferred = ComposerAttachmentRules.inferImageMimeType(name: file.name),
+                   file.mimeType.isEmpty || file.mimeType == "application/octet-stream" { image.mimeType = inferred }
+                images.append(image)
+            case .file:
+                guard let limit else { error = "This server does not support file attachments."; continue }
+                let size = (try? file.url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])).flatMap { $0.isDirectory == true ? 0 : $0.fileSize } ?? 0
+                if size <= 0 { error = "'\(file.name)' is empty or could not be read."; continue }
+                if size > limit { error = ComposerAttachmentRules.tooLargeMessage(file.name, limit); continue }
+                var attachment = ComposerAttachment(kind: .file, name: file.name, mimeType: file.mimeType, sizeBytes: size,
+                                                    fileURL: file.url, environmentId: env)
+                attachment.pastedText = pastedText
+                accepted.append(attachment)
+            }
+            reserved += 1
+        }
+        threadErrors.set(key, error)
+        if !accepted.isEmpty {
+            draftAttachments[key, default: []] += accepted
+            composer.insertAtCaret(accepted.map(\.reference).joined(separator: " ") + " ")
+            for a in accepted { startUpload(a.id, key: key) }
+            if pastedText, let first = accepted.first {
+                toast(.info, "Large paste attached as \(first.name)",
+                      "\(ComposerFileRow.formatSize(first.sizeBytes)) · Use ⌘⇧V to keep a large paste inline.")
+            }
+        }
+        refresh()
+        guard !images.isEmpty else { return }
+        preparingImages[key, default: 0] += images.count
+        let work = Self.attachmentWorkDirectory
+        Task { [weak self] in
+            try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            var prepared: [ComposerAttachment] = []
+            var failure: String?
+            for image in images {
+                do {
+                    let p = try await ComposerImageIO.prepare(image.url, name: image.name, mimeType: image.mimeType,
+                                                              maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
+                    prepared.append(ComposerAttachment(kind: .image, name: p.name, mimeType: p.mimeType, sizeBytes: p.sizeBytes,
+                                                       fileURL: p.url, environmentId: env))
+                } catch ComposerImageIO.PrepareFailure.unreadable {
+                    failure = "'\(image.name)' could not be read as an image."
+                } catch {
+                    failure = "'\(image.name)' is too large to attach, even after compression."
+                }
+            }
+            guard let self else { return }
+            preparingImages[key, default: images.count] -= images.count
+            draftAttachments[key, default: []] += prepared
+            if imagesGetChips, key == draftKey, !prepared.isEmpty {
+                composer.insertAtCaret(prepared.map(\.reference).joined(separator: " ") + " ")
+            }
+            for a in prepared { startUpload(a.id, key: key) }
+            // Only failures are reported here, so a later error is never cleared by this one.
+            if let failure { threadErrors.set(key, failure) }
+            refresh()
+        }
+    }
+
+    /// `foldPastedText` (ChatComposer.tsx:6033-6110): a large paste becomes `pasted-text.txt`, uploaded
+    /// like any file, with a chip where the text would have gone. Question answers keep their text.
+    fileprivate func foldPastedText(_ text: String, bypass: Bool) -> Bool {
+        guard questionRequestId == nil, let key = draftKey, let env = targetEnvironmentId else { return false }
+        let wouldExceed = ComposerAttachmentRules.pasteWouldExceedLimit(promptLength: composer.text.utf16.count,
+                                                                        selectedLength: composer.selectedPromptLength, textLength: text.utf16.count)
+        guard ComposerAttachmentRules.foldsPastedText(text, bypass: bypass, wouldExceedLimit: wouldExceed) else { return false }
+        let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
+        let hasSlot = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments
+        guard hasSlot, let limit else {
+            if !wouldExceed { return false }
+            toast(.error, "Pasted text is too large for this message", "Remove some text or an attachment, then paste again.")
+            return true
+        }
+        let name = ComposerAttachmentRules.nextPastedTextFileName((draftAttachments[key] ?? []).map(\.name))
+        let data = Data(text.utf8)
+        if data.count > limit {
+            if !wouldExceed { return false }
+            toast(.error, "Pasted text is too large to attach", "Reduce the clipboard contents or save a smaller excerpt as a file.")
+            return true
+        }
+        let dir = Self.attachmentWorkDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = dir.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try data.write(to: url)
+        } catch {
+            return false
+        }
+        addFiles([ComposerIncomingFile(url: url, name: name, mimeType: "text/plain;charset=utf-8")], pastedText: true)
+        return true
+    }
+
+    private func startUpload(_ id: String, key: String) {
+        guard let a = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+        guard let shell = environments.session(a.environmentId) else {
+            updateAttachment(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }
+            return
+        }
+        attachmentTasks[id]?.cancel()
+        attachmentTasks[id] = Task { [weak self] in
+            let result = await Self.uploadAttachment(
+                supervisor: shell.supervisor, base: shell.http.baseURL, type: a.kind.rawValue, name: a.name, mimeType: a.mimeType,
+                sizeBytes: a.sizeBytes, file: a.fileURL,
+                onMinted: { minted in self?.updateAttachment(id, key: key) { $0.attachmentId = minted } },
+                onProgress: { p in
+                    self?.updateAttachment(id, key: key) { f in
+                        if case .uploading(let old) = f.status, Int(old * 20) == Int(p * 20) { return }
+                        f.status = .uploading(p)
+                    }
+                })
+            guard let self else { return }
+            attachmentTasks[id] = nil
+            switch result {
+            case .uploaded: updateAttachment(id, key: key) { $0.status = .ready }
+            case .failed(let reason): updateAttachment(id, key: key) { $0.status = .failed(reason) }
+            case .cancelled: break
+            }
+        }
+    }
+
+    /// Cancels an upload and deletes its pending server copy (`releaseDraftAttachment`).
+    private func release(_ a: ComposerAttachment) {
+        attachmentTasks.removeValue(forKey: a.id)?.cancel()
+        guard let id = a.attachmentId, let shell = environments.session(a.environmentId) else { return }
+        let supervisor = shell.supervisor
+        Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(id)])) }
+    }
+
+    /// `retryAttachmentUpload`.
+    private func retryAttachment(_ id: String) {
+        guard let key = draftKey, let a = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+        release(a)
+        updateAttachment(id, key: key) { $0.attachmentId = nil; $0.status = .uploading(0) }
+        startUpload(id, key: key)
+    }
+
+    /// Files exist only as chips: deleting a file's last chip removes the file (docs/user/composer.md).
+    fileprivate func pruneUnreferencedFiles(_ text: String, key: String) {
+        guard let attachments = draftAttachments[key], attachments.contains(where: { $0.kind == .file }) else { return }
+        let referenced = Set(ComposerContext.referencedIds(text))
+        let gone = attachments.filter { $0.kind == .file && !referenced.contains($0.contextId) }
+        guard !gone.isEmpty else { return }
+        gone.forEach(release)
+        draftAttachments[key] = attachments.filter { a in !gone.contains { $0.id == a.id } }
+    }
+
+    /// `removeComposerImage`: asks first when the text still mentions the image, then removes it
+    /// with every chip that points at it.
+    private func removeImage(_ id: String) {
+        guard let key = draftKey, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+        let remove = { [weak self] in
+            guard let self, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+            release(image)
+            draftAttachments[key]?.removeAll { $0.id == id }
+            if key == draftKey, ComposerContext.referencedIds(composer.text).contains(image.contextId) {
+                composer.text = Self.removingReferences(to: image.contextId, in: composer.text)
+                remember(composer.text)
+            }
+            refresh()
+        }
+        guard ComposerContext.referencedIds(composer.text).contains(image.contextId), let window = composer.window else { return remove() }
+        let alert = NSAlert()
+        alert.messageText = "Remove \(image.name) from the message?"
+        alert.informativeText = "It is referenced in your text; removing it also removes every reference."
+        alert.addButton(withTitle: "Remove").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn { MainActor.assumeIsolated { remove() } }
+        }
+    }
+
+    /// The prompt without the links to `contextId` (`removeInlineContextReference`).
+    static func removingReferences(to contextId: String, in prompt: String) -> String {
+        let ns = NSMutableString(string: prompt)
+        for t in ComposerInlineTokens.collect(prompt).reversed() {
+            if case .context(_, let id, _) = t.kind, id == contextId { ns.replaceCharacters(in: t.range, with: "") }
+        }
+        return ns as String
+    }
+
+    /// A failed send puts its attachments back when the draft took no new ones meanwhile.
+    fileprivate func restoreAttachments(_ attachments: [ComposerAttachment], key: String?) {
+        guard let key, !attachments.isEmpty, draftAttachments[key]?.isEmpty ?? true else { return }
+        draftAttachments[key] = attachments
+        refresh()
+    }
+
+    /// The chip for an attachment link: its icon, middle-truncated name and size, and the upload state.
+    fileprivate func attachmentChipLook(kind: String, contextId: String, label: String) -> ComposerChipLook? {
+        guard kind == "image" || kind == "file", let a = currentAttachments.first(where: { $0.contextId == contextId }) else { return nil }
+        var detail = ComposerFileRow.formatSize(a.sizeBytes)
+        if case .uploading(let p) = a.status { detail += " " + ComposerFileRow.formatProgress(p) }
+        if case .failed = a.status { detail += " upload failed" }
+        return ComposerChipLook(kind: a.kind == .image ? .image : .file(name: a.name),
+                                label: ComposerAttachmentRules.middleTruncate(a.name), detail: detail)
+    }
+
+    // MARK: Previews
+
+    private func expandDraftImage(_ id: String) {
+        let images = currentAttachments.filter { $0.kind == .image }
+        guard let index = images.firstIndex(where: { $0.id == id }) else { return }
+        let items = images.map { image in
+            let url = image.fileURL
+            return ExpandedImagePreviewView.Item(key: url.path, name: image.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }
+        }
+        presentPreview(items, index: index)
+    }
+
+    private func presentPreview(_ items: [ExpandedImagePreviewView.Item], index: Int) {
+        guard let window = panel.window, !items.isEmpty else { return }
+        ExpandedImagePreviewView(items: items, index: index).present(in: window)
+    }
+
+    /// A sent image's bytes on disk: the file it was sent from, else the server copy, fetched once
+    /// through `assets.createUrl` (resource `attachment`) into the cache directory.
+    fileprivate func attachmentSource(_ attachmentId: String) async -> URL? {
+        if let local = sentFiles[attachmentId], FileManager.default.fileExists(atPath: local.path) { return local }
+        let safe = attachmentId.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
+        let cached = Self.attachmentCacheDirectory.appendingPathComponent(safe)
+        if FileManager.default.fileExists(atPath: cached.path) { return cached }
+        guard case .thread(let threadId) = target, let shell = environments.session(threadId.environmentId) else { return nil }
+        let supervisor = shell.supervisor, base = shell.http.baseURL
+        do {
+            let result = try await supervisor.request("assets.createUrl", payload: .object([
+                "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+            guard case .string(let relative)? = result["relativeUrl"], let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return nil }
+            let (temp, response) = try await URLSession.shared.download(from: url)
+            guard ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
+            try? FileManager.default.createDirectory(at: Self.attachmentCacheDirectory, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: cached)
+            try FileManager.default.moveItem(at: temp, to: cached)
+            return cached
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: Thread sync row
+
+    /// The thread store's status (`resolveThreadSyncPhase`): empty or synchronizing is "loading"
+    /// without a projection and "syncing" with one.
+    func threadStatusChanged(_ status: ThreadSyncStatus, threadId: ThreadId) {
+        guard target == .thread(threadId) else { return }
+        let phase: ComposerActivityRowView.Phase? = switch status {
+        case .empty, .synchronizing: projection == nil ? .loading : .syncing
+        case .live, .deleted: nil
+        }
+        updateSyncPhase(phase, key: threadId.rawValue)
+    }
+
+    private func updateSyncPhase(_ phase: ComposerActivityRowView.Phase?, key: String) {
+        if key != syncStatus.key {
+            syncStatus.timer?.cancel()
+            syncStatus = DelayedStatus(key: key)
+        }
+        syncStatus.value = phase
+        func schedule(_ delay: TimeInterval, _ body: @escaping @MainActor (ComposerController) -> Void) {
+            syncStatus.timer?.cancel()
+            let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if let self { body(self) } } }
+            syncStatus.timer = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        }
+        if let phase {
+            if syncStatus.shown != nil {
+                syncStatus.timer?.cancel()
+                syncStatus.shown = phase
+            } else if syncStatus.timer == nil {
+                schedule(DelayedStatus.showDelay) { c in
+                    c.syncStatus.timer = nil
+                    guard let value = c.syncStatus.value else { return }
+                    c.syncStatus.shown = value
+                    c.syncStatus.shownAt = Date()
+                    c.applySyncPhase()
+                }
+            }
+        } else if syncStatus.shown != nil {
+            let remaining = DelayedStatus.minVisible - Date().timeIntervalSince(syncStatus.shownAt)
+            if remaining <= 0 {
+                syncStatus.shown = nil
+            } else {
+                schedule(remaining) { c in
+                    c.syncStatus.timer = nil
+                    if c.syncStatus.value == nil { c.syncStatus.shown = nil; c.applySyncPhase() }
+                }
+            }
+        } else {
+            syncStatus.timer?.cancel()
+            syncStatus.timer = nil
+        }
+        applySyncPhase()
+    }
+
+    private func applySyncPhase() {
+        if let shown = syncStatus.shown { panel.activityRow.phase = shown }
+        panel.showsActivity = syncStatus.shown != nil
+    }
+
+    // MARK: Prompt stash
+
+    fileprivate func syncStashViews() {
+        panel.stashBadge.count = stash.entries.count
+        panel.showsStashBadge = !stash.entries.isEmpty && target != nil
+        panel.stashBadge.menuOpen = panel.stashMenuOpen
+        let label = ActiveKeymap.label(for: "composer.stash")
+        if panel.stashMenu.shortcutLabel != label { panel.stashMenu.shortcutLabel = label }
+        panel.stashMenu.entries = stash.entries
+        if panel.stashMenuOpen, panel.menus.isOpen { setStashMenu(false) }
+    }
+
+    private func toggleStashMenu() { setStashMenu(!panel.stashMenuOpen) }
+
+    /// Opens or closes the menu; while open, a click outside it or the badge closes it.
+    fileprivate func setStashMenu(_ open: Bool) {
+        guard open != panel.stashMenuOpen else { return }
+        panel.stashMenuOpen = open
+        panel.stashBadge.menuOpen = open
+        if let monitor = stashKeyMonitor { NSEvent.removeMonitor(monitor); stashKeyMonitor = nil }
+        guard open else { return }
+        panel.stashMenu.entries = stash.entries
+        panel.stashMenu.reload()
+        stashKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            nonisolated(unsafe) let event = event
+            MainActor.assumeIsolated {
+                guard let self, event.window === self.panel.window else { return }
+                for view in [self.panel.stashMenu, self.panel.stashBadge] as [NSView] where !view.isHidden {
+                    if view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return }
+                }
+                self.setStashMenu(false)
+            }
+            return event
+        }
+    }
+
+    /// The menu's keys while it is open, before the composer's (a capture-phase listener in T3).
+    func handleStashMenuKey(_ event: NSEvent) -> Bool {
+        guard panel.stashMenuOpen, !panel.stashMenu.isHidden else { return false }
+        return panel.stashMenu.handleKey(event)
+    }
+
+    /// `composer.stash` (ChatComposer.tsx:5696-5720): always claimed; with a question open it toggles
+    /// the menu, during an approval or without a project it does nothing, else it stashes.
+    func stashShortcut() {
+        if questionRequestId != nil, requests.activeApproval == nil { toggleStashMenu(); return }
+        if requests.activeApproval != nil || target == nil { return }
+        stashCurrentPrompt()
+    }
+
+    private func toast(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) {
+        _ = panel.toasts.show(ToastView(title: title, message: message, kind: kind))
+    }
+
+    private static func isoNow() -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: Date())
+    }
+
+    /// `stashCurrentPrompt`: an empty composer restores the only entry or opens the menu. Files must
+    /// be uploaded and keep their reference; the entry is written before the composer clears, and
+    /// images are encoded into it afterwards.
+    private func stashCurrentPrompt() {
+        guard let key = draftKey, let env = targetEnvironmentId else { return }
+        if (preparingImages[key] ?? 0) > 0 {
+            toast(.info, "Still bringing a pasted attachment into this message.", "Stash again once its chip resolves.")
+            return
+        }
+        let prompt = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = currentAttachments
+        let images = attachments.filter { $0.kind == .image }, files = attachments.filter { $0.kind == .file }
+        if prompt.isEmpty, attachments.isEmpty {
+            if stash.entries.count == 1, let only = stash.entries.first, (only.pendingImageCount ?? 0) == 0 {
+                restoreStash(only)
+            } else {
+                toggleStashMenu()
+            }
+            return
+        }
+        var stashedFiles: [PromptStashEntry.File] = []
+        for file in files {
+            guard file.status == .ready, let attachmentId = file.attachmentId, file.environmentId == env else {
+                toast(.error, "Wait for file uploads before stashing this prompt")
+                return
+            }
+            stashedFiles.append(.init(id: file.id, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes,
+                                      attachmentId: attachmentId, environmentId: env))
+        }
+        let snapshot = [key, prompt, attachments.map { "\($0.kind.rawValue):\($0.id)" }.joined(separator: ",")].joined(separator: "\n")
+        guard stashInFlight.insert(snapshot).inserted else { return }
+        let referenced = contextRecords(for: prompt)
+        let records = ComposerContext.referencedIds(prompt).compactMap { referenced[$0] }
+        let entryId = UUID().uuidString.lowercased()
+        let entry = PromptStashEntry(id: entryId, createdAt: Self.isoNow(), prompt: prompt, files: stashedFiles.isEmpty ? nil : stashedFiles,
+                                     unreadableImageNames: [], pendingImageCount: images.count, records: records.isEmpty ? nil : records)
+        let (evicted, written) = stash.stash(entry)
+        guard written else {
+            stashInFlight.remove(snapshot)
+            toast(.error, "Could not stash this prompt", "The stash could not be written to disk, so the composer was left as-is.")
+            return
+        }
+        // Everything the entry carries leaves the draft with it; images are uploaded again on restore.
+        draftAttachments[key] = nil
+        for image in images { release(image) }
+        composer.text = ""
+        remember("")
+        pulseStashBadge()
+        if let evicted {
+            for file in evicted.files ?? [] { deleteUpload(file.attachmentId, environmentId: file.environmentId) }
+            toast(.warning, "Oldest stashed prompt discarded",
+                  "The stash holds \(PromptStashStore.maxEntries) prompts; the oldest was removed to make room.")
+        }
+        guard !images.isEmpty else { stashInFlight.remove(snapshot); return }
+        let directory = stash.directory
+        Task { [weak self] in
+            var candidates: [(image: PromptStashEntry.Image, chars: Int)] = [], unreadable: [String] = [], oversized: [String] = []
+            for image in images {
+                let file = "\(entryId)-\(image.id).img"
+                switch await ComposerImageIO.stashCopy(image.fileURL, mimeType: image.mimeType, to: directory.appendingPathComponent(file)) {
+                case .success(let copy):
+                    candidates.append((.init(id: image.id, name: image.name, mimeType: copy.mimeType, sizeBytes: copy.bytes, file: file),
+                                       ComposerImageIO.dataURLChars(bytes: copy.bytes, mimeType: copy.mimeType)))
+                case .failure(.tooLarge): oversized.append(image.name)
+                case .failure(.unreadable): unreadable.append(image.name)
+                }
+            }
+            guard let self else { return }
+            stashInFlight.remove(snapshot)
+            let (kept, dropped) = PromptStashStore.partition(candidates)
+            for c in candidates where !kept.contains(c.image) { try? FileManager.default.removeItem(at: directory.appendingPathComponent(c.image.file)) }
+            if !stash.finalizeImages(entryId, images: kept, dropped: oversized + dropped, unreadable: unreadable) {
+                for image in kept { try? FileManager.default.removeItem(at: directory.appendingPathComponent(image.file)) }
+                toast(.warning, "Stashed images were not saved", "The prompt was restored or deleted before its images finished saving.")
+            }
+        }
+    }
+
+    /// The badge lifts to full opacity and the count turns primary for 1.2 s (`pulseStashBadge`).
+    private func pulseStashBadge() {
+        stashPulseWork?.cancel()
+        panel.stashBadge.pulsing = true
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.panel.stashBadge.pulsing = false } }
+        stashPulseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
+    private func deleteUpload(_ attachmentId: String, environmentId: String) {
+        guard let supervisor = environments.session(environmentId)?.supervisor else { return }
+        Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(attachmentId)])) }
+    }
+
+    /// `restoreStashEntry`: files only in the environment that holds them, checked against the
+    /// server first (uploads expire after 24 hours); the text joins the current prompt after a
+    /// blank line; images upload again; anything that did not come back is listed in one warning.
+    private func restoreStash(_ menuEntry: PromptStashEntry) {
+        guard let key = draftKey, let env = targetEnvironmentId else { return }
+        let files = menuEntry.files ?? []
+        if files.contains(where: { $0.environmentId != env }) {
+            toast(.error, "Stashed files belong to another environment", "Restore this prompt in the environment that received its files.")
+            return
+        }
+        setStashMenu(false)
+        let supervisor = shell?.supervisor
+        Task { [weak self] in
+            var expired = Set<String>()
+            for file in files {
+                guard let supervisor else { break }
+                do {
+                    _ = try await supervisor.request("assets.createUrl", payload: .object([
+                        "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(file.attachmentId)])]))
+                } catch let error as RPCClientError where error.typedError?.tag == "AssetAttachmentNotFoundError" {
+                    expired.insert(file.attachmentId)
+                } catch {}
+            }
+            // A target switch during the check leaves the entry for where the user is now.
+            guard let self, draftKey == key else { return }
+            finishRestore(menuEntry.id, key: key, env: env, expired: expired)
+        }
+    }
+
+    private func finishRestore(_ id: String, key: String, env: String, expired: Set<String>) {
+        let (taken, durable) = stash.take(id)
+        guard let entry = taken else { return }
+        if !durable {
+            toast(.warning, "Restored prompt may reappear in the stash", "The stash could not be updated on disk, so this entry could still be there after a relaunch.")
+        }
+        for record in entry.records ?? [] {
+            if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
+        }
+        var existing = draftAttachments[key] ?? []
+        var reasons: [String] = []
+        var expiredNames: [String] = [], unrestored: [String] = []
+        var capacity = max(0, ComposerAttachmentRules.maxAttachments - existing.count)
+        var restoredFiles: [ComposerAttachment] = []
+        for file in entry.files ?? [] where !existing.contains(where: { $0.id == file.id }) {
+            if expired.contains(file.attachmentId) { expiredNames.append(file.name); continue }
+            guard capacity > 0 else { unrestored.append(file.name); deleteUpload(file.attachmentId, environmentId: env); continue }
+            capacity -= 1
+            restoredFiles.append(ComposerAttachment(id: file.id, kind: .file, name: file.name, mimeType: file.mimeType, sizeBytes: file.sizeBytes,
+                                                    fileURL: Self.attachmentWorkDirectory, status: .ready, attachmentId: file.attachmentId,
+                                                    environmentId: env))
+        }
+        var restoredImages: [ComposerAttachment] = []
+        var unrestoredImages: [String] = []
+        let work = Self.attachmentWorkDirectory
+        try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        for image in entry.attachments where !existing.contains(where: { $0.id == image.id }) {
+            guard capacity > 0 else { unrestoredImages.append(image.name); continue }
+            let copy = work.appendingPathComponent(UUID().uuidString + "-" + image.name)
+            guard (try? FileManager.default.copyItem(at: stash.imageURL(image), to: copy)) != nil else { unrestoredImages.append(image.name); continue }
+            capacity -= 1
+            restoredImages.append(ComposerAttachment(id: image.id, kind: .image, name: image.name, mimeType: image.mimeType,
+                                                     sizeBytes: image.sizeBytes, fileURL: copy, environmentId: env))
+        }
+        stash.removeImages(of: entry)
+        existing += restoredFiles + restoredImages
+        draftAttachments[key] = existing
+        // An image-only stash adds no blank lines to what is already in the composer.
+        let current = composer.text
+        var next = entry.prompt.isEmpty ? current
+            : current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? entry.prompt
+            : current.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression) + "\n\n" + entry.prompt
+        // Restored files keep a chip (`appendReference`).
+        let ids = Set(ComposerContext.referencedIds(next))
+        let missing = restoredFiles.filter { !ids.contains($0.contextId) }.map(\.reference)
+        if !missing.isEmpty { next += (next.isEmpty || next.hasSuffix(" ") || next.hasSuffix("\n") ? "" : " ") + missing.joined(separator: " ") + " " }
+        if next != current {
+            composer.text = next
+            remember(next)
+        }
+        for image in restoredImages { startUpload(image.id, key: key) }
+        if !entry.droppedImageNames.isEmpty { reasons.append("\(entry.droppedImageNames.joined(separator: ", ")) exceeded the stash size limit when this prompt was saved.") }
+        if let unreadable = entry.unreadableImageNames, !unreadable.isEmpty { reasons.append("\(unreadable.joined(separator: ", ")) could not be read when this prompt was saved.") }
+        let limited = unrestoredImages + unrestored
+        if !limited.isEmpty { reasons.append("\(limited.joined(separator: ", ")) could not be restored: the composer is at its \(ComposerAttachmentRules.maxAttachments)-attachment limit.") }
+        // ponytail: an expired file is dropped with this note; T3 keeps it as an "Attach again" row
+        if !expiredNames.isEmpty { reasons.append("\(expiredNames.joined(separator: ", ")): stashed files are kept for 24 hours and this upload expired. Attach the file again.") }
+        if !reasons.isEmpty { toast(.warning, "Some attachments were not restored", reasons.joined(separator: " ")) }
+        refresh()
+        composer.focus()
+    }
+
+    /// `deleteStashEntry`: the entry's file uploads go too.
+    private func deleteStash(_ entry: PromptStashEntry) {
+        let (removed, durable) = stash.take(entry.id)
+        if stash.entries.isEmpty { setStashMenu(false) }
+        if let removed {
+            stash.removeImages(of: removed)
+            if durable { for file in removed.files ?? [] { deleteUpload(file.attachmentId, environmentId: file.environmentId) } }
+        }
+        if !durable { toast(.warning, "Stash entry may come back", "The stash could not be updated on disk, so this prompt could reappear after a relaunch.") }
     }
 }

@@ -94,6 +94,8 @@ final class UserMessageRowView: TimelineRowView {
     private let marker = UserIntentMarkerView(frame: .zero)
     private var text = ""
     private var collapsible = false
+    /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
+    private let attachments = UserMessageAttachmentsView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -104,6 +106,8 @@ final class UserMessageRowView: TimelineRowView {
         // `text-foreground` on the bubble, where assistant markdown sits at 80%.
         markdown.bodyColor = TL.c(\.foreground)
         bubble.addSubview(markdown)
+        // Over the bubble, not in it: the bubble takes no clicks (`FillView`), the images do.
+        addSubview(attachments)
         bubble.addSubview(toggle)
         time.lineHeight = 16
         addSubview(time)
@@ -127,6 +131,7 @@ final class UserMessageRowView: TimelineRowView {
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id, m.text, lineBreaks: true)
+        attachments.configure(m, model: context.model)
         collapsible = shouldCollapseUserMessage(m.text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
         toggle.isHidden = !collapsible
@@ -145,10 +150,10 @@ final class UserMessageRowView: TimelineRowView {
         let maxBubble = width * 0.8
         let inner = maxBubble - Self.padding * 2
         // `fit-content`: the max-content width (unwrapped) if it fits, else the full 80%.
-        let natural = markdown.layout(forWidth: 100_000).contentWidth
+        let natural = max(markdown.layout(forWidth: 100_000).contentWidth, attachments.naturalWidth)
         var bubbleWidth = natural > inner ? maxBubble : min(maxBubble, ceil(natural * 64) / 64 + Self.padding * 2)
         if collapsible { bubbleWidth = max(bubbleWidth, min(maxBubble, toggle.intrinsicContentSize.width - 4 + Self.padding * 2)) }
-        let full = markdown.height(forWidth: bubbleWidth - Self.padding * 2)
+        let full = markdown.height(forWidth: bubbleWidth - Self.padding * 2) + attachments.height(forWidth: bubbleWidth - Self.padding * 2)
         let expanded = item?.ui.messageExpanded ?? false
         let body = collapsible && !expanded ? min(full, Self.collapsedHeight) : full
         return (bubbleWidth, body, full)
@@ -170,7 +175,9 @@ final class UserMessageRowView: TimelineRowView {
         let markerWidth = marker.fittingWidth
         marker.frame = NSRect(x: width - 4 - markerWidth, y: 0, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
-        markdown.frame = NSRect(x: Self.padding, y: Self.padding, width: m.bubble - Self.padding * 2, height: m.full)
+        let attachmentsHeight = attachments.height(forWidth: m.bubble - Self.padding * 2)
+        attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + Self.padding, width: m.bubble - Self.padding * 2, height: attachmentsHeight)
+        markdown.frame = NSRect(x: Self.padding, y: Self.padding + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full - attachmentsHeight)
         let clipped = collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if clipped {
@@ -455,5 +462,127 @@ final class PlanRowView: TimelineRowView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsLayout = true
+    }
+}
+
+/// A user message's attachments (MessagesTimeline.tsx:2402-2490): images in a `grid max-w-[210px]
+/// grid-cols-2 gap-2` of `aspect-[4/3] rounded-lg border border-border/80 bg-background/70` cells,
+/// then files without a chip in the text as `py-1 text-sm` rows with the pierre icon, the name and
+/// an eye, each block `mb-2`. Images decode at cell size through the model's loader.
+final class UserMessageAttachmentsView: DSView {
+    private struct Image { let attachmentId: String; let name: String }
+    private var images: [Image] = []
+    private var files: [String] = []
+    private var cells: [AsyncImageView] = []
+    private var rows: [(icon: IconView, label: LabelView, eye: IconView?)] = []
+    private weak var model: ThreadViewModel?
+    static let gridWidth: CGFloat = 210, gap: CGFloat = 8, rowHeight: CGFloat = 28
+
+    func configure(_ m: ChatMessage, model: ThreadViewModel?) {
+        self.model = model
+        var images: [Image] = [], files: [String] = []
+        // Files with a chip in the text need no row (`chippedAttachmentIds`).
+        var chipped = Set<String>()
+        if case .array(let records)? = m.context?["records"] {
+            let referenced = Set(ComposerContext.referencedIds(m.text))
+            for r in records where ["file", "image"].contains(r["kind"]?.stringValue ?? "") && referenced.contains(r["contextId"]?.stringValue ?? "") {
+                if let id = r["attachmentId"]?.stringValue { chipped.insert(id) }
+            }
+        }
+        for a in m.attachments {
+            let type = a["type"]?.stringValue ?? "", id = a["id"]?.stringValue ?? "", name = a["name"]?.stringValue ?? ""
+            if type == "image" {
+                if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name)) }
+            } else if !(type == "file" && chipped.contains(id)) {
+                files.append(name)
+            }
+        }
+        guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files else { return }
+        self.images = images
+        self.files = files
+        rebuild()
+    }
+
+    private func rebuild() {
+        cells.forEach { $0.removeFromSuperview() }
+        rows.forEach { $0.icon.removeFromSuperview(); $0.label.removeFromSuperview(); $0.eye?.removeFromSuperview() }
+        let loader = model?.attachmentImage
+        cells = images.enumerated().map { i, image in
+            let cell = AsyncImageView()
+            cell.layer?.cornerRadius = 10
+            cell.layer?.borderWidth = 1
+            cell.fallback.font = DSFont.ui(11)
+            let id = image.attachmentId
+            cell.set(key: id, fallbackText: image.name, loader: loader.map { load in { side in await load(id, side, true) } })
+            let click = NSClickGestureRecognizer(target: self, action: #selector(expand(_:)))
+            cell.addGestureRecognizer(click)
+            cell.setAccessibilityLabel("Preview \(image.name)")
+            addSubview(cell)
+            return cell
+        }
+        rows = files.map { name in
+            let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
+            let (definition, color) = FileChipStyle.icon(for: meta)
+            let icon = IconView(definition: definition, size: 16, color: color)
+            let label = LabelView(name, font: DSFont.ui(14), color: TL.c(\.foreground))
+            label.lineHeight = 20
+            [icon, label].forEach(addSubview)
+            return (icon, label, nil)
+        }
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    @objc private func expand(_ gesture: NSClickGestureRecognizer) {
+        guard let view = gesture.view, let index = cells.firstIndex(where: { $0 === view }), let loader = model?.attachmentImage else { return }
+        let items = images.map { image in
+            ExpandedImagePreviewView.Item(key: image.attachmentId, name: image.name) { side in await loader(image.attachmentId, side, false) }
+        }
+        model?.onExpandImage?(items, index)
+    }
+
+    private var cellSize: CGSize {
+        let w = (Self.gridWidth - Self.gap) / 2
+        return CGSize(width: w, height: w * 3 / 4)
+    }
+
+    /// The widest block: the 210pt grid, or the longest file row.
+    var naturalWidth: CGFloat {
+        let fileWidth = rows.map { 16 + 8 + ceil($0.label.textWidth) }.max() ?? 0
+        return max(images.isEmpty ? 0 : Self.gridWidth, fileWidth)
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        var h: CGFloat = 0
+        if !images.isEmpty {
+            let gridRows = CGFloat((images.count + 1) / 2)
+            h += gridRows * cellSize.height + (gridRows - 1) * Self.gap + 8
+        }
+        if !files.isEmpty { h += CGFloat(files.count) * Self.rowHeight + CGFloat(files.count - 1) * 4 + 8 }
+        return h
+    }
+
+    override func updateLayer() {
+        for cell in cells {
+            cell.layer?.backgroundColor = TL.c(\.background).withAlphaComponent(0.7).cgColor(in: self)
+            cell.layer?.borderColor = TL.c(\.border).withAlphaComponent(0.8).cgColor(in: self)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        let size = cellSize
+        let gridWidth = min(Self.gridWidth, bounds.width)
+        let cw = gridWidth == Self.gridWidth ? size.width : (gridWidth - Self.gap) / 2
+        let ch = cw * 3 / 4
+        for (i, cell) in cells.enumerated() {
+            cell.frame = NSRect(x: CGFloat(i % 2) * (cw + Self.gap), y: CGFloat(i / 2) * (ch + Self.gap), width: cw, height: ch)
+        }
+        var y: CGFloat = images.isEmpty ? 0 : CGFloat((images.count + 1) / 2) * (ch + Self.gap) - Self.gap + 8
+        for row in rows {
+            row.icon.frame = NSRect(x: 0, y: y + 6, width: 16, height: 16)
+            row.label.frame = NSRect(x: 24, y: y + 4, width: max(0, bounds.width - 24), height: 20)
+            y += Self.rowHeight + 4
+        }
     }
 }

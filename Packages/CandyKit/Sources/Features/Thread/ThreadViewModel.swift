@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import T3Protocol
 import T3Store
@@ -46,6 +47,10 @@ public final class ThreadViewModel {
     /// File chip clicks in messages (`MarkdownView.onOpenFile`); nil shows the chip's copy menu.
     // ponytail: unwired; the app sets it once the files panel and open-in-editor exist
     public var openFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
+    /// A sent image at a pixel side (`assets.createUrl` for the attachment, decoded at that size).
+    public var attachmentImage: (@Sendable (_ attachmentId: String, _ side: Int, _ cover: Bool) async -> CGImage?)?
+    /// A click on a sent image: the message's images and the one clicked.
+    public var onExpandImage: (([ExpandedImagePreviewView.Item], Int) -> Void)?
 
     /// Turn folds, superseded attempts and tool groups the user opened (row pass inputs).
     private var expandedRunIds: Set<RunId> = []

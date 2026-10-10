@@ -24,6 +24,8 @@ final class ThreadSession {
     private var active = true
     /// After each projection the panel shows (the composer reads runs and requests from it).
     var onProjection: ((ThreadProjection?) -> Void)?
+    /// The store's sync status after each render (the composer's "Loading messages..." row).
+    var onStatus: ((ThreadSyncStatus) -> Void)?
 
     private let relay: ShellSession.ChangeRelay
 
@@ -120,6 +122,7 @@ final class ThreadSession {
         }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
         onProjection?(update.projection)
+        onStatus?(update.status)
     }
 
     /// Project title and workspace root from the shell (the worktree when the thread has one).
@@ -362,6 +365,7 @@ final class ThreadController {
         let kept = retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
+        session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
         updateEnvironmentBanner()

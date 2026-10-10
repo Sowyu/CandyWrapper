@@ -226,12 +226,62 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     /// fragment in the HTML flavor brings the records behind its links.
     override func paste(_ sender: Any?) {
         let pboard = NSPasteboard.general
-        guard let text = pboard.string(forType: .string) else { return pasteAsPlainText(sender) }
+        let bypass = pasteAsTextPending
+        pasteAsTextPending = false
+        // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`).
+        if onPasteAttachments?(pboard) == true { return }
+        // Large text becomes a text file unless Cmd+Shift+V asked for it inline (`foldPastedText`).
+        if let text = pboard.string(forType: .string), onPasteText?(text, bypass) == true { return }
+        guard let text = pboard.string(forType: .string) else { return super.pasteAsPlainText(sender) }
         if let html = pboard.string(forType: .html) {
             let records = ComposerContext.pastedRecords(html: html, pastedText: text)
             if !records.isEmpty { onPasteRecords?(records) }
         }
         insertText(text, replacementRange: selectedRange())
+    }
+
+    // MARK: File drops
+
+    /// A paste the composer takes as attachments; true when it did.
+    var onPasteAttachments: ((NSPasteboard) -> Bool)?
+    /// Pasted text and whether Cmd+Shift+V asked to keep it inline; true when the composer took it.
+    var onPasteText: ((String, Bool) -> Bool)?
+    /// Cmd+Shift+V (`isPasteAsTextShortcut`): the next paste stays text.
+    private var pasteAsTextPending = false
+    /// Files dragged over the editor go to the composer, never into the text as paths.
+    var fileDrop: ComposerFileDrop?
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
+        return super.draggingEntered(sender)
+    }
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
+        return super.draggingUpdated(sender)
+    }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        fileDrop?.exited()
+        super.draggingExited(sender)
+    }
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.perform(sender) }
+        return super.performDragOperation(sender)
+    }
+
+    /// A plain-text view disables Paste when the pasteboard holds only an image or files; the
+    /// composer takes those as attachments.
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)) || item.action == #selector(pasteAsPlainText(_:)), onPasteAttachments != nil, isEditable {
+            let pboard = NSPasteboard.general
+            if pboard.availableType(from: [.png, .tiff, .fileURL]) != nil { return true }
+        }
+        return super.validateUserInterfaceItem(item)
+    }
+
+    /// Cmd+Shift+V (`isPasteAsTextShortcut`, the Edit menu's Paste as Text): a large paste stays text.
+    override func pasteAsPlainText(_ sender: Any?) {
+        pasteAsTextPending = true
+        paste(sender)
     }
 
     override func keyDown(with event: NSEvent) {
