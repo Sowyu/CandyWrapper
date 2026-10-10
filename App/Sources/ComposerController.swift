@@ -56,6 +56,14 @@ final class ComposerController {
     private var queueBusy = false
     private var keyMonitor: Any?
 
+    /// The open thread's pending approvals and questions (`derivePendingThreadRequests`).
+    private var requests = PendingRequests()
+    /// Requests with a respond or dismiss in flight (`respondingRequestIds`): their actions are disabled.
+    private var responding: Set<String> = []
+    /// The question whose custom answer the editor holds. The thread's prompt waits in `prompts`
+    /// until it closes (ChatComposer.tsx shows `activePendingProgress.customAnswer` in place of the prompt).
+    private var questionRequestId: String?
+
     // Persisted like T3's `t3code:composer-drafts:v1`: prompts by draft key, sessions by project.
     private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v1"
     private var prompts: [String: String]
@@ -92,6 +100,16 @@ final class ComposerController {
         queue.onSteer = { [weak self] runId in self?.promoteToSteer(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
+        panel.approvalPanel.onRespond = { [weak self] _, payload in
+            self?.respond(payload, fallback: "Failed to submit approval decision.")
+        }
+        let question = panel.questionPanel
+        question.onSubmit = { [weak self] payload in self?.respond(payload, fallback: "Failed to submit user input.") }
+        question.onDismiss = { [weak self] payload in self?.respond(payload, fallback: "Failed to dismiss the question.") }
+        question.onDisplacedAnswer = { [weak self] text in self?.carryDisplaced(text) }
+        question.onChange = { [weak self] in self?.syncQuestion() }
+        composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
+        composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
         installShortcuts()
         refresh()
     }
@@ -139,6 +157,12 @@ final class ComposerController {
 
     private func handleKey(_ event: NSEvent) -> Bool {
         guard event.window === panel.window, !composer.isHidden, target != nil else { return false }
+        // Digits 1 to 9 pick a question's option unless focus is in an editable field
+        // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener).
+        if panel.drawer == .question, !panel.questionPanel.isHidden, !Self.editableTextFocused(in: event.window),
+           panel.questionPanel.handleKey(event) {
+            return true
+        }
         let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if mods == [.command, .shift], event.keyCode == 36 || event.keyCode == 76 {
             // Swallowed even on repeat or with nothing to steer (QueuedRunsControl.tsx:208-214).
@@ -167,8 +191,10 @@ final class ComposerController {
         if case .draft(let s) = target, s.threadId == id.rawValue { carried = optimistic }
         flushPrompt()
         queuedEdit = nil
+        questionRequestId = nil
         target = .thread(id)
         projection = nil
+        requests = PendingRequests()
         optimistic = carried
         if carried.isEmpty { pendingMessageId = nil }
         resuming = false
@@ -198,8 +224,10 @@ final class ComposerController {
         sessions[key] = session
         flushPrompt()
         queuedEdit = nil
+        questionRequestId = nil
         target = .draft(session)
         projection = nil
+        requests = PendingRequests()
         optimistic = []
         pendingMessageId = nil
         sidebar?.state.activeThreadId = nil
@@ -229,6 +257,11 @@ final class ComposerController {
     }
 
     private func remember(_ text: String) {
+        // An open question: the editor is its custom answer, not the prompt.
+        if questionRequestId != nil {
+            if text != panel.questionPanel.customAnswer { panel.questionPanel.setCustomAnswer(text) }
+            return
+        }
         pickers.prompt = text
         // An open queued edit keeps its text out of the thread's prompt.
         guard queuedEdit == nil, let key = draftKey else { return }
@@ -238,7 +271,7 @@ final class ComposerController {
     }
 
     private func flushPrompt() {
-        guard queuedEdit == nil else { return }
+        guard queuedEdit == nil, questionRequestId == nil else { return }
         if let key = draftKey { prompts[key] = composer.text.isEmpty ? nil : composer.text }
     }
 
@@ -262,6 +295,9 @@ final class ComposerController {
     func projectionChanged(_ projection: ThreadProjection?, threadId: ThreadId) {
         guard target == .thread(threadId) else { return }
         self.projection = projection
+        requests = projection.map(PendingRequests.derive) ?? PendingRequests()
+        // A pending approval or question settles the local send (ChatView.logic.ts:1236-1238).
+        if !requests.isEmpty { pendingMessageId = nil }
         let confirmed = Set(projection?.messages.map(\.id) ?? [])
         optimistic.removeAll { confirmed.contains($0.id) }
         if let id = pendingMessageId, confirmed.contains(id) { pendingMessageId = nil }
@@ -286,9 +322,9 @@ final class ComposerController {
         composer.isBusy = pendingMessageId != nil || resuming
         var placeholder = ComposerLogic.PlaceholderInput()
         placeholder.disconnected = shell == nil
-        let pending = projection?.runtimeRequests.filter { $0.status == "pending" } ?? []
-        placeholder.approvalPending = pending.contains { $0.kind != .userInput }
+        placeholder.approvalPending = requests.activeApproval != nil
         composer.placeholderInput = placeholder
+        updateRequests()
         composer.sendDisabledReason = shell == nil ? "Environment disconnected" : nil
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
@@ -298,6 +334,99 @@ final class ComposerController {
         panel.queue.isBusy = queueBusy
         updatePickers()
         panel.updateComposerShown()
+    }
+
+    // MARK: Requests
+
+    /// The top drawer (ChatComposer.tsx:6727-6781): the oldest approval, else the oldest question.
+    private func updateRequests() {
+        guard case .thread(let threadId) = target else {
+            leaveQuestion()
+            panel.drawer = .none
+            composer.pending = .none
+            return
+        }
+        if let approval = requests.activeApproval {
+            leaveQuestion()
+            panel.approvalPanel.configure(approval, pendingCount: requests.approvals.count, threadId: threadId)
+            panel.approvalPanel.isResponding = responding.contains(approval.requestId)
+            panel.drawer = .approval
+            composer.pending = .approval
+        } else if let input = requests.activeUserInput {
+            let question = panel.questionPanel
+            question.configure(input, threadId: threadId)
+            question.isResponding = responding.contains(input.requestId)
+            if questionRequestId == nil {
+                // The editor becomes the answer field; an open queued edit closes first.
+                if queuedEdit != nil { endEdit() }
+                flushPrompt()
+            }
+            questionRequestId = input.requestId
+            panel.drawer = .question
+            syncQuestion()
+        } else {
+            leaveQuestion()
+            panel.drawer = .none
+            composer.pending = .none
+        }
+    }
+
+    /// The question closed: the thread's prompt comes back to the editor.
+    private func leaveQuestion() {
+        guard questionRequestId != nil else { return }
+        questionRequestId = nil
+        composer.text = draftKey.flatMap { prompts[$0] } ?? ""
+        pickers.prompt = composer.text
+    }
+
+    /// The question card changed (pick, typing, next, previous): the editor, placeholder and
+    /// footer follow its active question.
+    private func syncQuestion() {
+        guard questionRequestId != nil, let session = panel.questionPanel.session else { return }
+        let question = panel.questionPanel
+        if composer.text != question.customAnswer { composer.text = question.customAnswer }
+        var placeholder = composer.placeholderInput
+        placeholder.questionChoiceOnly = !question.editorEnabled
+        composer.placeholderInput = placeholder
+        let responding = question.isResponding
+        composer.pending = .question(ComposerView.QuestionFooter(
+            label: session.primaryLabel(compact: false, responding: responding),
+            compactLabel: session.primaryLabel(compact: true, responding: responding),
+            enabled: session.canPressPrimary && !responding && shell != nil,
+            showsPrevious: session.showsPrevious, responding: responding,
+            showsAttach: question.editorEnabled))
+        panel.needsLayout = true
+    }
+
+    /// An option pick replaced typed text: it goes to the end of the thread's prompt (ChatView.tsx:10253-10270).
+    private func carryDisplaced(_ text: String) {
+        guard let key = draftKey else { return }
+        let next = UserInputAnswers.carryDisplaced(prompts[key] ?? "", text)
+        prompts[key] = next.isEmpty ? nil : next
+        scheduleSave()
+    }
+
+    /// `runtime-request.respond` or `thread.user-input.dismiss` (ChatView.tsx:10114-10230). The
+    /// actions stay disabled until the call returns; the request leaves the composer when the
+    /// stream marks it resolved, not on the reply.
+    private func respond(_ payload: JSONValue, fallback: String) {
+        guard let shell, case .string(let requestId)? = payload["requestId"], !responding.contains(requestId) else { return }
+        responding.insert(requestId)
+        refresh()
+        let supervisor = shell.supervisor
+        Task { [weak self] in
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) } catch {
+                if let rpc = error as? RPCClientError, rpc.isTransport {} else {
+                    self?.fail(Self.message(error, fallback: fallback), restore: nil)
+                }
+            }
+            self?.responding.remove(requestId)
+            self?.refresh()
+        }
+    }
+
+    private static func editableTextFocused(in window: NSWindow?) -> Bool {
+        (window?.firstResponder as? NSTextView)?.isEditable == true
     }
 
     /// The pickers follow the draft key, the server config and the open thread.

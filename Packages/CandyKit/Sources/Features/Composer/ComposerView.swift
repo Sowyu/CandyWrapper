@@ -34,6 +34,33 @@ public final class ComposerView: DSView {
     /// Nightly and dev servers draw the stage art in the send button.
     public var stageArt = true { didSet { primary.stageArt = stageArt } }
 
+    /// A runtime request docked above (ChatComposer.tsx:6980, 7468, 7547-7553).
+    public enum PendingState: Equatable, Sendable {
+        case none
+        /// The editor shrinks to 32 (`min-h-10`), the body gets `pb-4`, and there is no footer: 66 tall empty.
+        case approval
+        /// The footer gets `pt-2` and shows Stop (while a run can stop), Previous and the pill.
+        case question(QuestionFooter)
+    }
+
+    /// The question footer (ComposerPrimaryActions.tsx:181-230).
+    public struct QuestionFooter: Equatable, Sendable {
+        public var label: String
+        public var compactLabel: String
+        public var enabled: Bool
+        public var showsPrevious: Bool
+        /// Submitting: Previous and the pill are disabled and the editor is read-only.
+        public var responding: Bool
+        /// Choice-only questions hide attach (`showComposerAttachAction`).
+        public var showsAttach: Bool
+        public init(label: String, compactLabel: String, enabled: Bool, showsPrevious: Bool, responding: Bool, showsAttach: Bool) {
+            self.label = label; self.compactLabel = compactLabel; self.enabled = enabled
+            self.showsPrevious = showsPrevious; self.responding = responding; self.showsAttach = showsAttach
+        }
+    }
+
+    public var pending = PendingState.none { didSet { if pending != oldValue { refresh(); relayoutHeight(); needsLayout = true } } }
+
     /// The footer's left cluster (model, traits, access). Separators go between them.
     public var footerControls: [NSView] = [] {
         didSet {
@@ -56,14 +83,31 @@ public final class ComposerView: DSView {
     /// Every edit, for the per-thread draft.
     public var onTextChange: ((String) -> Void)?
     public var onHeightChange: (() -> Void)?
+    /// A question is open: Return or the pill moves to the next question or submits.
+    public var onQuestionAdvance: (() -> Void)?
+    public var onQuestionPrevious: (() -> Void)?
 
     public var text: String {
         get { editor.string }
         set { editor.setText(newValue) }
     }
 
-    /// Composer box height for the current text: 144 to 274.
-    public var preferredHeight: CGFloat { Self.inset * 2 + Self.pad + editorHeight + 8 + Self.footerHeight + Self.pad }
+    /// Composer box height for the current text: 144 to 274, 66 up with an approval, +8 with a question.
+    public var preferredHeight: CGFloat {
+        switch pending {
+        case .approval: Self.inset * 2 + Self.pad + editorHeight + Self.pad
+        // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
+        case .question: Self.inset * 2 + Self.pad + editorHeight + 8 + 8 + 28 + Self.pad
+        case .none: Self.inset * 2 + Self.pad + editorHeight + 8 + Self.footerHeight + Self.pad
+        }
+    }
+
+    /// `ComposerPrimaryActions` compact labels below a 780 form width when the footer holds wide actions.
+    private var compactActions: Bool { bounds.width < 780 }
+    private var questionFooter: QuestionFooter? {
+        if case .question(let footer) = pending { return footer }
+        return nil
+    }
 
     // MARK: Views
 
@@ -78,6 +122,12 @@ public final class ComposerView: DSView {
     private let validation = LabelView()
     let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
+    let questionPill = MessageActionPill()
+    /// "Previous" (`Button outline sm`), or the chevron (`outline icon-sm`) when compact.
+    let previousFull = ButtonView("Previous", variant: .outline, size: .sm)
+    let previousCompact = ButtonView(nil, icon: .chevronLeft, variant: .outline, size: .iconSm)
+    /// The backdrop blur under the glass fill.
+    private let blur = BackdropBlurView()
     private var separators: [SeparatorView] = []
     private var alternateHeld = false
     private var editorHeight = ComposerView.editorMin
@@ -96,13 +146,10 @@ public final class ComposerView: DSView {
         layer?.addSublayer(shadowLayer)
 
         // Glass: `card` / `surface-raised` at 80% over a 12px backdrop blur, saturate 1.14.
-        glass.layerUsesCoreImageFilters = true
+        blur.cornerRadius = Self.radius
+        addSubview(blur)
         glass.layer?.cornerRadius = Self.radius
         glass.layer?.masksToBounds = true
-        if let blur = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 12]),
-           let saturate = CIFilter(name: "CIColorControls", parameters: ["inputSaturation": 1.14, "inputBrightness": 0, "inputContrast": 1]) {
-            glass.layer?.backgroundFilters = [saturate, blur]
-        }
         addSubview(glass)
 
         scroll.drawsBackground = false
@@ -132,6 +179,14 @@ public final class ComposerView: DSView {
         addSubview(attach)
         primary.action = { [weak self] in self?.primaryPressed() }
         addSubview(primary)
+        questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
+        previousCompact.iconSize = 14
+        previousCompact.setAccessibilityLabel("Previous question")
+        for button in [previousFull, previousCompact] {
+            button.smoothsFont = false
+            button.action = { [weak self] in self?.onQuestionPrevious?() }
+        }
+        [questionPill, previousFull, previousCompact].forEach { $0.isHidden = true; addSubview($0) }
 
         // The outline sits over everything (Host::after).
         outline.layer?.cornerRadius = Self.radius
@@ -171,14 +226,24 @@ public final class ComposerView: DSView {
     /// Editor disabled for approvals, choice-only questions and a missing project (ChatComposer.tsx:7500-7506).
     private var editorDisabled: Bool {
         placeholderInput.approvalPending || placeholderInput.questionChoiceOnly == true || placeholderInput.projectRequired
+            || questionFooter?.responding == true
     }
 
     func refresh() {
         placeholder.text = ComposerLogic.placeholder(placeholderInput)
         editor.isEditable = !editorDisabled
+        if let footer = questionFooter {
+            questionPill.title = compactActions ? footer.compactLabel : footer.label
+            questionPill.compact = compactActions
+            questionPill.isEnabled = footer.enabled
+            previousFull.isEnabled = !footer.responding
+            previousCompact.isEnabled = !footer.responding
+        }
         // Project selection required dims the whole surface (`opacity-75`).
         alphaValue = placeholderInput.projectRequired ? 0.75 : 1
-        let face = ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
+        // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
+        let face = questionFooter != nil ? .stop
+            : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(editor.string)
         switch face {
@@ -221,7 +286,8 @@ public final class ComposerView: DSView {
     }
 
     private func relayoutHeight() {
-        let height = min(Self.editorMax, max(Self.editorMin, editor.contentHeight))
+        let minimum = pending == .approval ? 32 : Self.editorMin
+        let height = min(Self.editorMax, max(minimum, editor.contentHeight))
         needsLayout = true
         guard height != editorHeight else { return }
         editorHeight = height
@@ -234,6 +300,13 @@ public final class ComposerView: DSView {
         guard let intent = ComposerLogic.submitIntent(key, prompt: editor.string, mode: sendShortcut, turnRunning: runState.canInterrupt) else {
             return false
         }
+        // An open question: the send key answers it (`submissionTarget: "pending-user-input"`, no length check).
+        if questionFooter != nil {
+            // T3 moves past an unanswered middle question on Return; only the pill stays disabled.
+            onQuestionAdvance?()
+            return true
+        }
+        if pending == .approval { return true }
         let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault)
         send(mode)
         // A send key never inserts a newline, even when nothing was sent.
@@ -284,6 +357,7 @@ public final class ComposerView: DSView {
         shadowMask.frame = box
         shadowMask.path = maskPath
         CATransaction.commit()
+        blur.frame = box
         glass.frame = box
         outline.frame = box
 
@@ -301,14 +375,51 @@ public final class ComposerView: DSView {
         validation.frame = NSRect(x: Self.inset + Self.pad, y: textTop + editorHeight - 16, width: textWidth, height: 16)
 
         // Footer row: 32 tall, 16 from the bottom.
-        let rowY = h - Self.inset - Self.pad - Self.footerHeight
-        let midY = rowY + Self.footerHeight / 2
-        primary.frame = NSRect(x: w - Self.inset - Self.pad - 32, y: rowY, width: 32, height: 32)
-        attach.frame = NSRect(x: primary.frame.minX - 8 - 28, y: midY - 14, width: 28, height: 28)
+        let rowHeight: CGFloat = questionFooter == nil ? Self.footerHeight : 28
+        let rowY = h - Self.inset - Self.pad - rowHeight
+        let midY = rowY + rowHeight / 2
+        let right = w - Self.inset - Self.pad
+        // No footer with an approval open.
+        let footerShown = pending != .approval
+        footerControls.forEach { $0.isHidden = !footerShown }
+        separators.forEach { $0.isHidden = !footerShown }
+        var actionsLeft: CGFloat
+        if let footer = questionFooter {
+            // Right to left: the pill, Previous, Stop (28, only while a run can stop); `gap-1.5` compact, else `gap-2`.
+            let gap: CGFloat = compactActions ? 6 : 8
+            questionPill.compact = compactActions
+            questionPill.title = compactActions ? footer.compactLabel : footer.label
+            let pillWidth = questionPill.intrinsicContentSize.width
+            questionPill.frame = NSRect(x: right - pillWidth, y: midY - 14, width: pillWidth, height: 28)
+            questionPill.isHidden = false
+            actionsLeft = questionPill.frame.minX
+            let previous = compactActions ? previousCompact : previousFull
+            previousFull.isHidden = true
+            previousCompact.isHidden = true
+            if footer.showsPrevious {
+                let pw = previous.intrinsicContentSize.width
+                previous.frame = NSRect(x: actionsLeft - gap - pw, y: midY - 14, width: pw, height: 28)
+                previous.isHidden = false
+                actionsLeft = previous.frame.minX
+            }
+            primary.isHidden = !runState.canInterrupt
+            if runState.canInterrupt {
+                primary.frame = NSRect(x: actionsLeft - gap - 28, y: midY - 14, width: 28, height: 28)
+                actionsLeft = primary.frame.minX
+            }
+            attach.isHidden = !footer.showsAttach
+        } else {
+            [questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
+            primary.isHidden = !footerShown
+            attach.isHidden = !footerShown
+            primary.frame = NSRect(x: right - 32, y: rowY, width: 32, height: 32)
+            actionsLeft = primary.frame.minX
+        }
+        attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,
         // separators 1x16 with 2px margins.
         var x = Self.inset + Self.pad - 10
-        let limit = attach.frame.minX - 8
+        let limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - 8
         for (i, control) in footerControls.enumerated() {
             if i > 0 {
                 let sep = separators[i - 1]
