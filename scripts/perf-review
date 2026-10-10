@@ -89,6 +89,8 @@ THRESHOLDS = {
     "stream.peak_footprint_mb": (0.10, 5, "MB"),
     "size.bundle_mb": (0.10, 0.5, "MB"),
     "size.binary_mb": (0.10, 0.5, "MB"),
+    "size.stripped_binary_mb": (0.10, 0.5, "MB"),
+    "size.shipped_bundle_mb": (0.10, 0.5, "MB"),
 }
 BENCH_THRESHOLD = (0.20, 0.05, "ms")
 # Reported but never a verdict: one sample each. The footprint 1 s after a turn lands is about 36-56 MB
@@ -157,7 +159,17 @@ def sizes(app):
             path = os.path.join(root, name)
             if not os.path.islink(path):
                 total += os.path.getsize(path)
-    return {"size.bundle_mb": [total / 1048576], "size.binary_mb": [os.path.getsize(app + "/Contents/MacOS/CandyWrapper") / 1048576]}
+    binary = app + "/Contents/MacOS/CandyWrapper"
+    # What ships: `xcodebuild build` keeps the symbol tables that an archive strips. The spec's 25 MB budget is
+    # for the shipped bundle, so measure a stripped copy too.
+    stripped = WORK + "/stripped-binary"
+    shutil.copy(binary, stripped)
+    subprocess.call(["codesign", "--remove-signature", stripped], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.call(["strip", "-x", "-S", stripped], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    built, small = os.path.getsize(binary), os.path.getsize(stripped)
+    os.remove(stripped)
+    return {"size.bundle_mb": [total / 1048576], "size.binary_mb": [built / 1048576],
+            "size.stripped_binary_mb": [small / 1048576], "size.shipped_bundle_mb": [(total - built + small) / 1048576]}
 
 
 # MARK: micro-benchmarks
