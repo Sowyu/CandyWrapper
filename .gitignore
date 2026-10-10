@@ -5,3 +5,4 @@ scripts/procstat
 .DS_Store
 Packages/CandyKit/.build/
 Packages/CandyKit/.swiftpm/
+.claude/worktrees/
