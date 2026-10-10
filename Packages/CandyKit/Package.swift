@@ -11,6 +11,10 @@ let package = Package(
         .library(name: "T3Store", targets: ["T3Store"]),
         .library(name: "Features", targets: ["Features"]),
     ],
+    dependencies: [
+        // SwiftTerm v1.19.0, vendored (Packages/SwiftTerm/README.md says why).
+        .package(path: "../SwiftTerm"),
+    ],
     targets: [
         .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"], resources: [.copy("Resources/surface-grain.rgba")]),
         // Wire and domain types from docs/protocol.md. No I/O.
@@ -20,7 +24,7 @@ let package = Package(
         // Normalized state and reducers fed by T3Client streams.
         .target(name: "T3Store", dependencies: ["T3Protocol"]),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
-        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol"], resources: [.copy("Resources/candy-town.gray")]),
+        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray")]),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client"]),

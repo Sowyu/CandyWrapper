@@ -329,6 +329,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let provider = ProviderGlyphView()
     /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+    let terminal = TerminalStatusGlyph()
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread")
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     var actions = SidebarRowActions()
@@ -340,7 +341,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine] as [NSView] { addSubview(v) }
+        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine, terminal] as [NSView] { addSubview(v) }
         project.font = SB.font(12, .medium); project.lineHeight = 16
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
@@ -418,6 +419,7 @@ final class SidebarCardRowView: SidebarRowBase {
         machine.kind = r.environmentMachine
         machine.isHidden = r.environmentMachine == nil
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
+        terminal.count = r.terminalProcessCount
         setAccessibilityLabel([r.title, r.statusLabel, r.projectLabel].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
@@ -472,6 +474,8 @@ final class SidebarCardRowView: SidebarRowBase {
         // `ml-auto gap-1`: the machine sits 4pt left of the provider.
         var trailing = right - 14
         if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
+        // The terminal glyph follows the branch, `gap-1.5` before the provider group.
+        if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
         if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
@@ -518,6 +522,7 @@ final class SidebarSlimRowView: SidebarRowBase {
     private let monogram = ProjectMonogramView()
     private let title = LabelView()
     let pin = PinButton()
+    let terminal = TerminalStatusGlyph()
     private let time = LabelView()
     private var actionButton: RowActionButton?
     private var actionKind: SidebarRowModel.Action?
@@ -528,7 +533,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, title, pin, time] as [NSView] { addSubview(v) }
+        for v in [monogram, title, pin, terminal, time] as [NSView] { addSubview(v) }
         title.lineHeight = 20
         time.font = SB.tabular(12); time.lineHeight = 16
         pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }
@@ -566,6 +571,7 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
         pin.isHidden = !r.isPinned
+        terminal.count = r.terminalProcessCount
         if let snooze = r.snoozeLabel {
             time.text = snooze
             time.color = SB.c(\.infoForeground)
@@ -618,6 +624,8 @@ final class SidebarSlimRowView: SidebarRowBase {
             b.frame = NSRect(x: w - 10 + 4 - bw, y: (h - 24) / 2, width: bw, height: 24) // `-mr-1`
         }
         var right = slotX - 10
+        // `{title}{pin}{terminal}` in a `gap-2.5` row.
+        if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
         if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
         title.frame = NSRect(x: x, y: (h - 20) / 2, width: max(0, right - x), height: 20)
     }
@@ -689,5 +697,73 @@ final class SidebarShowMoreRowView: SidebarRowBase {
         surface.frame = bounds
         icon.frame = NSRect(x: 10, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.frame = NSRect(x: 36, y: (bounds.height - 20) / 2, width: bounds.width - 46, height: 20)
+    }
+}
+
+/// The thread's terminal indicator (Sidebar.tsx:1722-1734, `terminalStatusFromRunningIds`): a 14pt
+/// terminal glyph, `text-teal-600 dark:text-teal-300/90`, pulsing with `status-pulse` (2s: full for
+/// 40%, six steps down to half, half until 90%, six steps back). The pulse is a Core Animation
+/// keyframe animation, so it runs in the render server without waking the app.
+final class TerminalStatusGlyph: DSView {
+    private let icon = IconView(name: .terminal, size: 14)
+
+    var count = 0 {
+        didSet {
+            guard count != oldValue else { return }
+            isHidden = count == 0
+            setAccessibilityLabel("\(count) terminal \(count == 1 ? "process" : "processes") running")
+            updatePulse()
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isHidden = true
+        setAccessibilityRole(.image)
+        addSubview(icon)
+    }
+
+    override func layout() {
+        super.layout()
+        icon.frame = bounds
+    }
+
+    override func updateLayer() {
+        icon.strokeColor = Themed.base("teal-600", dark: "teal-300", 0.9)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updatePulse()
+    }
+
+    static func pulse() -> CAKeyframeAnimation {
+        var times: [NSNumber] = [0], values: [Double] = [1]
+        // `steps(6)` from 40% to 50% and from 90% to 100%.
+        for (start, from, to) in [(0.4, 1.0, 0.5), (0.9, 0.5, 1.0)] {
+            for step in 0..<6 {
+                times.append(NSNumber(value: start + 0.1 * Double(step) / 6))
+                values.append(from + (to - from) * Double(step) / 6)
+            }
+            times.append(NSNumber(value: start + 0.1))
+            values.append(to)
+        }
+        let animation = CAKeyframeAnimation(keyPath: "opacity")
+        animation.keyTimes = times
+        animation.values = values
+        animation.calculationMode = .discrete
+        animation.duration = 2
+        animation.repeatCount = .infinity
+        animation.isRemovedOnCompletion = false
+        return animation
+    }
+
+    private func updatePulse() {
+        let animate = count > 0 && window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if animate, icon.layer?.animation(forKey: "pulse") == nil {
+            icon.layer?.add(Self.pulse(), forKey: "pulse")
+        } else if !animate {
+            icon.layer?.removeAnimation(forKey: "pulse")
+        }
     }
 }

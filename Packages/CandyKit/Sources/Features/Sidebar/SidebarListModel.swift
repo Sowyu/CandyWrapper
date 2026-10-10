@@ -44,6 +44,9 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var environmentMachine: String? = nil
     /// `canSnooze`: the snooze button shows only where the server would accept it (Sidebar.tsx:1540-1545).
     public var canSnooze = true
+    /// Terminals of this thread running a subprocess (`useThreadRunningTerminalIds`); above 0 shows
+    /// the pulsing terminal glyph.
+    public var terminalProcessCount = 0
     /// Timestamps behind the labels, for the refresh timer.
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
@@ -226,6 +229,8 @@ public struct SidebarListState: Equatable, Sendable {
     /// Visits recorded on this device, for servers without `lastVisitedAt`.
     public var localVisits: [ThreadId: T3Timestamp] = [:]
     public var environments = SidebarEnvironments()
+    /// Scoped thread id to its terminals running a subprocess, from `subscribeTerminalMetadata`.
+    public var terminalProcesses: [ThreadId: Int] = [:]
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -236,6 +241,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.projectScopeKey == b.projectScopeKey && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
+            && a.terminalProcesses == b.terminalProcesses
     }
 }
 
@@ -407,6 +413,7 @@ public enum SidebarListBuilder {
             // ponytail: no scratch-project machine label on line 3 (Sidebar.tsx:1375); add with scratch projects
             environmentMachine: state.environments.rowMachine(shell.id),
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
+            terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
     }
 
