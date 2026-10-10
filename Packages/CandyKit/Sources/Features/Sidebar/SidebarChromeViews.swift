@@ -33,13 +33,11 @@ final class StageBackdropView: DSView {
     /// The send button (T3's `StageBackdropButtonArt` slot): the teddy circle, no fade or mask.
     var compact = false { didSet { needsDisplay = true } }
 
-    /// Title and toggle color over the art: plum on the light dark-mode art, white on the deeper light-mode art.
-    static func ink(_ alpha: CGFloat = 1) -> NSColor {
-        NSColor(name: nil) { $0.isDark ? srgb(0x3a1a52, alpha) : .white.withAlphaComponent(alpha) }
-    }
+    /// Title and toggle color over the art: white in both appearances.
+    static func ink(_ alpha: CGFloat = 1) -> NSColor { .white.withAlphaComponent(alpha) }
     /// The duotone ends: luma 0 paints `shadow`, luma 255 paints `light`.
-    static let candyShadow = NSColor(name: nil) { $0.isDark ? srgb(0x2a1240) : srgb(0x22103a) }
-    static let candyLight = NSColor(name: nil) { $0.isDark ? srgb(0xffc4df) : srgb(0xdc8fbd) }
+    static let candyShadow = NSColor(name: nil) { $0.isDark ? srgb(0x170a26) : srgb(0x22103a) }
+    static let candyLight = NSColor(name: nil) { $0.isDark ? srgb(0xa45e8c) : srgb(0xdc8fbd) }
     static func srgb(_ hex: Int, _ alpha: CGFloat = 1) -> NSColor {
         NSColor(srgbRed: CGFloat(hex >> 16) / 255, green: CGFloat(hex >> 8 & 0xff) / 255, blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
     }
@@ -161,7 +159,7 @@ final class SidebarBrandView: DSView {
         let baseline = TextLine(NSAttributedString(string: "Code", attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
         let fg = onBackdrop ? StageBackdropView.ink() : SB.c(\.foreground)
         let muted = onBackdrop ? StageBackdropView.ink(0.7) : SB.c(\.mutedForeground)
-        if onBackdrop, !effectiveAppearance.isDark {
+        if onBackdrop {
             // The white title lifts off the candy art: `text-shadow: 0 1px 2px rgb(20 6 30 / 35%)`.
             ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(srgbRed: 20 / 255, green: 6 / 255, blue: 30 / 255, alpha: 0.35))
         }
