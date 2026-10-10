@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startSession(environments, window: window)
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
+        PerfScroll.schedule(window)
     }
 
     /// Development: `--thread-preview [title prefix]` shows a recorded thread from
@@ -296,5 +297,54 @@ extension AppDelegate: NSMenuItemValidation {
         guard item.action == #selector(toggleRemoteAccess(_:)) else { return true }
         item.state = server?.allowsRemoteAccess == true ? .on : .off
         return server != nil
+    }
+}
+
+/// Development: `--perf-scroll <delay seconds>` scrolls the window's tallest scroll view (the
+/// timeline) to the top and back to the bottom, 300 pt per frame, then prints `perf-scroll done` to
+/// stderr. scripts/perf-review uses it to measure scrolling without sending events through the
+/// user's screen.
+@MainActor
+enum PerfScroll {
+    static func schedule(_ window: NSWindow) {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--perf-scroll"), i + 1 < args.count, let delay = Double(args[i + 1]) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                guard let content = window.contentView, let scroll = tallest(in: content) else {
+                    FileHandle.standardError.write(Data("perf-scroll no scroll view\n".utf8))
+                    return
+                }
+                step(scroll, up: true, left: 140)
+            }
+        }
+    }
+
+    private static func tallest(in view: NSView) -> NSScrollView? {
+        var best: NSScrollView?
+        var queue = [view]
+        while let v = queue.popLast() {
+            if let s = v as? NSScrollView, (s.documentView?.frame.height ?? 0) > (best?.documentView?.frame.height ?? 0) { best = s }
+            queue += v.subviews
+        }
+        return best
+    }
+
+    /// One frame's worth of scrolling, then the next on the following frame (16 ms).
+    private static func step(_ scroll: NSScrollView, up: Bool, left: Int) {
+        guard left > 0 else {
+            if up { step(scroll, up: false, left: 140) } else { FileHandle.standardError.write(Data("perf-scroll done\n".utf8)) }
+            return
+        }
+        let clip = scroll.contentView
+        let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - clip.bounds.height)
+        // Toward the start of the document: y shrinks in a flipped document, grows in an unflipped one.
+        let towardTop: CGFloat = (scroll.documentView?.isFlipped ?? true) ? -300 : 300
+        let y = min(maxY, max(0, clip.bounds.origin.y + (up ? towardTop : -towardTop)))
+        clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
+        scroll.reflectScrolledClipView(clip)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
+            MainActor.assumeIsolated { step(scroll, up: up, left: left - 1) }
+        }
     }
 }
