@@ -9,7 +9,7 @@ final class ComposerPrimaryButton: ControlView {
     static let size: CGFloat = 32
 
     var face: ComposerLogic.PrimaryAction = .send { didSet { if face != oldValue { restyleFace() } } }
-    /// Nightly and dev servers fill the send button with the sidebar's stage art.
+    /// Nightly and dev servers fill the send button with stage art; ours is the teddy from the sidebar's candy art.
     var stageArt = true { didSet { art.isHidden = !stageArt; restyle() } }
     var tooltip: String = "" {
         didSet {
@@ -120,6 +120,13 @@ final class ComposerPrimaryButton: ControlView {
         highlight.fillColor = state.active ? Themed.black(0.08).cgColor : Themed.white(0.16).cgColor
         if enabled { if highlight.superlayer == nil { layer?.addSublayer(highlight) } } else { highlight.removeFromSuperlayer() }
         highlight.zPosition = 1
+        // The white glyph gets a soft plum halo over the teddy art, whose light end is pale pink.
+        if let iconLayer = icon?.layer {
+            iconLayer.shadowColor = CGColor(srgbRed: 34 / 255, green: 16 / 255, blue: 58 / 255, alpha: 1)
+            iconLayer.shadowOpacity = art.isHidden ? 0 : 0.6
+            iconLayer.shadowRadius = 1
+            iconLayer.shadowOffset = .zero
+        }
         CATransaction.commit()
     }
 

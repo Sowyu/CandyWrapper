@@ -30,7 +30,7 @@ public enum SidebarStage: Sendable {
 // ponytail: Dev blueprint art is not drawn; port DevBlueprintArt if dev builds need it
 final class StageBackdropView: DSView {
     override var wantsUpdateLayer: Bool { false }
-    /// `StageBackdropButtonArt` (the send button): `NightlySkyArt` from viewBox x 96, no fade or mask.
+    /// The send button (T3's `StageBackdropButtonArt` slot): the teddy circle, no fade or mask.
     var compact = false { didSet { needsDisplay = true } }
 
     /// Title and toggle color over the art: plum on the light dark-mode art, white on the deeper light-mode art.
@@ -48,6 +48,8 @@ final class StageBackdropView: DSView {
     /// x 17.5% to 99.5% at any width and y 53% to 97% at the narrowest sidebar (208pt).
     static let candySource = CGSize(width: 1280, height: 905)
     static let candyCrop = CGRect(x: 223, y: 440, width: 1057, height: 465)
+    /// The send button's circle in source pixels: the teddy with both ears in, its face above the arrow.
+    static let teddy = CGRect(x: 940, y: 606, width: 196, height: 196)
     /// 8-bit luma (Rec. 709 on sRGB), mapped from the bundle: its pages stay clean, so they don't
     /// count against the app's memory, and there is nothing to decode.
     static let candyLuma: CGImage? = {
@@ -63,18 +65,11 @@ final class StageBackdropView: DSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        // The blur draws its shapes off to the side. Unclipped, AppKit sized the backing store to
-        // hold that drawing too, up to the whole window (27 MB at 2x).
+        // The art's placement runs past the view. Unclipped, AppKit sized the backing store to hold
+        // that drawing too, up to the whole window (27 MB at 2x).
         clipsToBounds = true
     }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    static let stars: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
-        (14, 10, 0.6, 0.85), (38, 22, 0.4, 0.55), (58, 8, 0.5, 0.7), (84, 16, 0.4, 0.5), (104, 7, 0.6, 0.8),
-        (126, 20, 0.4, 0.55), (148, 11, 0.5, 0.7), (170, 24, 0.4, 0.5), (192, 9, 0.6, 0.8), (214, 18, 0.4, 0.55),
-        (236, 8, 0.5, 0.7), (258, 20, 0.45, 0.6), (278, 11, 0.55, 0.75), (26, 34, 0.4, 0.45), (118, 34, 0.4, 0.45),
-        (202, 32, 0.4, 0.5), (268, 34, 0.4, 0.45)]
-    static let sparkles: [(CGFloat, CGFloat)] = [(70, 28), (160, 36), (246, 26)]
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -82,12 +77,8 @@ final class StageBackdropView: DSView {
         // Explicit bounds: under AppKit's recorded drawing an unbounded group got a window-sized
         // scratch layer (27 MB at 2x).
         ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
-        if compact {
-            drawSky(ctx)
-        } else {
-            drawCandyTown(ctx)
-            drawFadeAndMask(ctx)
-        }
+        drawCandyTown(ctx)
+        if !compact { drawFadeAndMask(ctx) }
         ctx.endTransparencyLayer()
         ctx.restoreGState()
     }
@@ -98,9 +89,16 @@ final class StageBackdropView: DSView {
         ctx.setFillColor(Self.candyShadow.cgColor(in: self))
         ctx.fill(bounds)
         guard let luma = Self.candyLuma else { return }
-        let scale = 1.22 * w / Self.candySource.width
-        let full = CGSize(width: Self.candySource.width * scale, height: Self.candySource.height * scale)
-        let origin = CGPoint(x: (w - full.width) * 0.97, y: (h - full.height) * 0.95)
+        // Where the whole source lands: the teddy circle fills the button; the band is CSS
+        // `background-size: 122%; background-position: 97% 95%`.
+        let scale: CGFloat, origin: CGPoint
+        if compact {
+            scale = w / Self.teddy.width
+            origin = CGPoint(x: -Self.teddy.minX * scale, y: -Self.teddy.minY * scale)
+        } else {
+            scale = 1.22 * w / Self.candySource.width
+            origin = CGPoint(x: (w - Self.candySource.width * scale) * 0.97, y: (h - Self.candySource.height * scale) * 0.95)
+        }
         let crop = Self.candyCrop
         let rect = CGRect(x: origin.x + crop.minX * scale, y: origin.y + crop.minY * scale,
                           width: crop.width * scale, height: crop.height * scale)
@@ -112,85 +110,6 @@ final class StageBackdropView: DSView {
         ctx.clip(to: rect, mask: luma)
         ctx.setFillColor(Self.candyLight.cgColor(in: self))
         ctx.fill(rect)
-        ctx.restoreGState()
-    }
-
-    private func drawSky(_ ctx: CGContext) {
-        func col(_ k: KeyPath<Palette, TokenColor>, _ a: CGFloat = 1) -> CGColor {
-            let c = SB.c(k).cgColor(in: self)
-            return c.copy(alpha: c.alpha * a) ?? c
-        }
-        let w = bounds.width, h = bounds.height
-        let s = h / 96 // xMinYMin slice: height decides the scale for any sidebar width
-        ctx.saveGState()
-        ctx.scaleBy(x: s, y: s)
-        if compact { ctx.translateBy(x: -96, y: 0) }
-        let unitsW = w / s + (compact ? 96 : 0)
-        // The star tiles below are whole 288-unit tiles; without this the last one spills past
-        // the sidebar wherever the context isn't clipped to the view (layer.render(in:)).
-        ctx.clip(to: CGRect(x: 0, y: 0, width: unitsW, height: 96))
-        let space = CGColorSpaceCreateDeviceRGB()
-        // Sky: linear (24,0) to (264,96), spread reflect.
-        // spreadMethod reflect: one long gradient whose segments alternate direction, no seams.
-        let dx: CGFloat = 240, dy: CGFloat = 96
-        let len2 = dx * dx + dy * dy
-        let segments = Int((unitsW * dx + 96 * dy) / len2) + 3
-        var colors: [CGColor] = [], locations: [CGFloat] = []
-        let base = [col(\.stageNightBottom), col(\.stageNightMid), col(\.stageNightTop)]
-        for k in 0..<(segments + 1) {
-            let seg = k % 2 == 1 ? base : base.reversed() // segment 0 is the mirror before (24,0)
-            for (j, c) in seg.enumerated() {
-                colors.append(c)
-                locations.append((CGFloat(k) + CGFloat(j) / 2) / CGFloat(segments + 1))
-            }
-        }
-        let sky = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: locations)!
-        ctx.saveGState()
-        ctx.clip(to: CGRect(x: 0, y: 0, width: unitsW, height: 96))
-        let start = CGPoint(x: 24 - dx, y: -dy)
-        ctx.drawLinearGradient(sky, start: start,
-                               end: CGPoint(x: start.x + dx * CGFloat(segments + 1), y: start.y + dy * CGFloat(segments + 1)),
-                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        ctx.restoreGState()
-        // Glow: radial at (216,18) rotated 137deg, scale (120,84), tiled every 640 units.
-        let glow = CGGradient(colorsSpace: space, colors: [col(\.stageNightGlowHighlight, 0.4), col(\.stageNightGlowSecondary, 0.16),
-                                                            col(\.stageNightBottom, 0)] as CFArray, locations: [0, 0.5, 1])!
-        var tileX: CGFloat = 0
-        while tileX < unitsW {
-            ctx.saveGState()
-            ctx.clip(to: CGRect(x: tileX, y: 0, width: 640, height: 96))
-            ctx.translateBy(x: tileX + 216, y: 18)
-            ctx.rotate(by: 137 * .pi / 180)
-            ctx.scaleBy(x: 120, y: 84)
-            ctx.drawRadialGradient(glow, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
-            ctx.restoreGState()
-            tileX += 640
-        }
-        // Stars and sparkles, tiled every 288 units.
-        tileX = 0
-        while tileX < unitsW {
-            for (cx, cy, r, o) in Self.stars {
-                ctx.setFillColor(col(\.stageNightLine, o))
-                ctx.fillEllipse(in: CGRect(x: tileX + cx - r, y: cy - r, width: r * 2, height: r * 2))
-            }
-            ctx.setStrokeColor(col(\.stageNightSparkle, 0.7))
-            ctx.setLineWidth(0.6)
-            ctx.setLineCap(.round)
-            for (x, y) in Self.sparkles {
-                ctx.move(to: CGPoint(x: tileX + x - 1.5, y: y)); ctx.addLine(to: CGPoint(x: tileX + x + 1.5, y: y))
-                ctx.move(to: CGPoint(x: tileX + x, y: y - 1.5)); ctx.addLine(to: CGPoint(x: tileX + x, y: y + 1.5))
-            }
-            ctx.strokePath()
-            tileX += 288
-        }
-        // Clouds: blurred (stdDeviation 4) shapes filled with a horizontal gradient.
-        for (path, alpha) in [(Self.cloudA, CGFloat(1)), (Self.cloudB, 0.8)] {
-            ctx.saveGState()
-            ctx.setAlpha(alpha)
-            // ponytail: the blur paints one flat color (the cloud gradient's middle stop); blur a bitmap if the gradient shows
-            drawBlurred(ctx, path, sigma: 4 * s, scale: s, color: col(\.stageNightSecondary, 0.62))
-            ctx.restoreGState()
-        }
         ctx.restoreGState()
     }
 
@@ -208,50 +127,6 @@ final class StageBackdropView: DSView {
                               locations: [0, 0.55, 0.92])!
         ctx.drawLinearGradient(mask, start: .zero, end: CGPoint(x: 0, y: h), options: [.drawsAfterEndLocation])
     }
-
-    /// Gaussian blur by drawing far off-canvas and letting the shadow land in place.
-    private func drawBlurred(_ ctx: CGContext, _ path: CGPath, sigma: CGFloat, scale: CGFloat, color: CGColor) {
-        // Just past the clouds (x up to about 300 units) plus 3 sigma.
-        let shift: CGFloat = 320
-        // Shadow offsets are in device space; this view is flipped, so +y in user space is -y in device space.
-        // Shadow offsets and blur are in the base space (points), outside the CTM.
-        ctx.setShadow(offset: CGSize(width: shift * scale, height: 0), blur: sigma * 2, color: color)
-        // The group only needs to hold the shifted shape; unbounded, its scratch layer spanned the
-        // whole shift and the view (tens of MB at 2x).
-        let margin = 3 * sigma / scale
-        ctx.beginTransparencyLayer(in: path.boundingBox.offsetBy(dx: -shift, dy: 0).insetBy(dx: -margin, dy: -margin),
-                                   auxiliaryInfo: nil)
-        ctx.translateBy(x: -shift, y: 0)
-        ctx.addPath(path)
-        ctx.fillPath()
-        ctx.endTransparencyLayer()
-    }
-
-    static let cloudA: CGPath = {
-        let p = CGMutablePath()
-        p.move(to: CGPoint(x: -12, y: 88))
-        p.addCurve(to: CGPoint(x: 14, y: 63), control1: CGPoint(x: -12, y: 74), control2: CGPoint(x: 0, y: 63))
-        p.addCurve(to: CGPoint(x: 44, y: 41), control1: CGPoint(x: 18, y: 50), control2: CGPoint(x: 30, y: 41))
-        p.addCurve(to: CGPoint(x: 74, y: 62), control1: CGPoint(x: 58, y: 41), control2: CGPoint(x: 70, y: 49))
-        p.addCurve(to: CGPoint(x: 94, y: 54), control1: CGPoint(x: 79, y: 57), control2: CGPoint(x: 86, y: 54))
-        p.addCurve(to: CGPoint(x: 124, y: 82), control1: CGPoint(x: 110, y: 54), control2: CGPoint(x: 123, y: 66))
-        p.addCurve(to: CGPoint(x: 141, y: 96), control1: CGPoint(x: 132, y: 83), control2: CGPoint(x: 138, y: 88))
-        p.addLine(to: CGPoint(x: -12, y: 96))
-        p.closeSubpath()
-        return p
-    }()
-
-    static let cloudB: CGPath = {
-        let p = CGMutablePath()
-        p.move(to: CGPoint(x: 150, y: 96))
-        p.addCurve(to: CGPoint(x: 173, y: 75), control1: CGPoint(x: 151, y: 84), control2: CGPoint(x: 161, y: 75))
-        p.addCurve(to: CGPoint(x: 198, y: 57), control1: CGPoint(x: 176, y: 64), control2: CGPoint(x: 186, y: 57))
-        p.addCurve(to: CGPoint(x: 223, y: 75), control1: CGPoint(x: 210, y: 57), control2: CGPoint(x: 220, y: 64))
-        p.addCurve(to: CGPoint(x: 241, y: 87), control1: CGPoint(x: 231, y: 75), control2: CGPoint(x: 238, y: 80))
-        p.addCurve(to: CGPoint(x: 260, y: 96), control1: CGPoint(x: 250, y: 87), control2: CGPoint(x: 257, y: 91))
-        p.closeSubpath()
-        return p
-    }()
 }
 
 /// `SidebarBrandMark` (SidebarChrome.tsx:126-142): the T3 wordmark at cap height, `gap-1`, then "Code"
