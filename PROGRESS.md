@@ -21,7 +21,7 @@ Next action: research for M6 with sonnet-medium agents: how the official app fin
 | 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
 | 8 | Performance and battery pass | not started |
 | 9 | Polish and packaging | not started |
-| 10 | Stress test: full parity with T3 Code Nightly, every feature and behavior verified (the user's call, 2026-10-10) | not started |
+| 10 | Stress test: glitches and performance under load, failure and long sessions, behavior parity with T3 Code Nightly | not started |
 
 ## Milestone 1 checklist
 
@@ -90,14 +90,17 @@ Scope: remote environments the way the official app shows them (docs/research/K-
   - 2026-10-10 live: the sandbox paired as a remote through Add Environment (WP6.3 agent, on screen). The user signed in to T3 Connect in the demo app through the native Clerk sheet on their live T3; the relay listed their two machines ("aniko" and "Aniko's MacBook Pro") and both connected through T3 Connect (relay plus DPoP), shown as "T3 Connect · Connected · Routes". The user said "it looks great" and asked for their profile picture (T3 shows Clerk's image, we showed the initial) and the full Connections page (T3's is "way more complicated"); an agent is on both.
 - [ ] Demo milestone 6 to the user
 
-## Milestone 10: stress test, parity with T3 Code Nightly (planned, last)
+## Milestone 10: stress test for glitches and performance (planned, last)
 
-The user's definition (2026-10-10): prove CandyWrapper has all of T3 Code Nightly's features and the exact same functionality.
+The user's definition, sharpened 2026-10-10: the stress test is less about the UI and mostly about glitches and performance. Hammer the app until it breaks, fix what breaks, and prove it stays fast and light under abuse. Feature parity still counts, checked by behavior rather than by pixels.
 
-- Re-pin to the then-current Nightly: update `T3_VERSION`, fetch its source, and diff its features against `docs/parity-checklist.md` so new Nightly features get rows first.
-- Every row of the parity checklist exercised side by side on the same sandbox data: T3's client driven by the capture tool (headless Chromium) and CandyWrapper driven by `scripts/ui/`, comparing screens and outcomes for each action, keyboard shortcut, state and error case. A row is done only when both behave the same.
-- Heavy real use while doing it: long threads (2,000+ messages), 50+ threads, hours-long sessions watched for leaks, reconnects, rapid thread switching and resizing.
-- The result is a parity report with every row checked and any difference fixed or listed for the user.
+- Load: threads with 2,000+ messages and huge tool outputs and diffs, 1,000+ threads in the sidebar, 5+ environments at once (local, paired, T3 Connect), long streaming turns, many runs in parallel.
+- Abuse: rapid thread switching, resizing and scrolling during streams, fast repeated clicks and shortcuts, queue and steer spam, approvals and questions arriving while switching threads, the same thread driven from the official app at the same time.
+- Failure: network drops, server restarts, sleep and wake, relay reconnects, expired tokens and sessions, a full disk, malformed or out-of-order events; the app must recover without losing or duplicating anything.
+- Endurance: hours-long sessions watched for memory growth, CPU and wakeup creep and Energy Impact, with `scripts/perf-review` numbers before and after.
+- Glitches: flicker, stale or wrong state, layout jumps, focus loss, hangs over 100 ms (spin dumps), crashes (zero tolerated).
+- Re-pin to the then-current Nightly first (`T3_VERSION`, source fetch) so new Nightly behavior gets checked too.
+- The result is a stress report: every scenario run, every glitch found and fixed or listed for the user, and the performance numbers under load.
 
 ## Milestone 4 checklist
 
