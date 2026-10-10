@@ -29,6 +29,8 @@ final class Environments {
     private weak var sidebar: SidebarContentView?
     let catalog: EnvironmentCatalog
     let cache: ShellCache
+    /// Settled thread snapshots on disk (nil with `CANDY_THREAD_CACHE=off`).
+    let threadCache = ThreadCache.forApp()
     private(set) var primaryId: String?
     private var entries: [String: Entry] = [:]
     private var shells = MergedShell()
@@ -349,6 +351,7 @@ final class Environments {
             }
             saved.removeAll { $0.environmentId == id }
             await cache.remove(environmentId: id)
+            await threadCache?.removeEnvironment(id)
         }
         for registration in updated {
             let usedRelay = routeInUse(registration.environmentId).map { inUse in
@@ -387,10 +390,11 @@ final class Environments {
             ProjectIconStore.shared.forget(environmentId: environmentId)
             onRemove?(environmentId)
         }
-        let catalog = self.catalog, cache = self.cache
+        let catalog = self.catalog, cache = self.cache, threadCache = self.threadCache
         try await Task.detached {
             try catalog.remove(environmentId: environmentId)
             await cache.remove(environmentId: environmentId)
+            await threadCache?.removeEnvironment(environmentId)
         }.value
         saved.removeAll { $0.environmentId == environmentId }
     }

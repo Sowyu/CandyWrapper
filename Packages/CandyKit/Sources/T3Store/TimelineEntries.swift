@@ -131,6 +131,8 @@ public enum TimelineEntries {
     /// older answers were saved on the runtime request without updating the timeline item, so a
     /// resolved request with answers fills in the item's `questionAnswer`.
     public static func projectingQuestionHistory(_ rows: [ProjectedTurnItem], requests: [RuntimeRequest]) -> [ProjectedTurnItem] {
+        // Nothing to fill in: hand back the same array, so later comparisons stay cheap.
+        guard requests.contains(where: { $0.status == "resolved" && $0.answers != nil }) else { return rows }
         let byId = Dictionary(requests.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         return rows.map { row in
             let item = row.item
@@ -153,81 +155,178 @@ public enum TimelineEntries {
         }
     }
 
-    /// Port of `deriveTimelineEntriesFromVisibleTurnItems` (session-logic.ts:592-809), without
-    /// optimistic and anchored messages (composer state). Order follows `visibleTurnItems`.
-    public static func derive(
-        visibleTurnItems: [ProjectedTurnItem], attempts: [RunAttempt] = [], nodes: [ExecutionNode] = [],
-        plans: [PlanArtifact] = []
-    ) -> [TimelineEntry] {
-        let attemptByRootNodeId = Dictionary(attempts.map { ($0.rootNodeId, $0) }, uniquingKeysWith: { _, last in last })
-        let nodeById = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        let planById = Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+    /// Walks up the execution nodes to the attempt rooted there (session-logic.ts:603-617).
+    struct AttemptLookup: Sendable {
+        var byRootNodeId: [NodeId: RunAttempt]
+        var nodeById: [NodeId: ExecutionNode]
 
-        func timelineAttempt(_ a: RunAttempt) -> TimelineAttempt {
-            TimelineAttempt(id: a.id, runId: a.runId, attemptOrdinal: a.attemptOrdinal, rootNodeId: a.rootNodeId, status: a.status)
+        init(attempts: [RunAttempt], nodes: [ExecutionNode]) {
+            byRootNodeId = Dictionary(attempts.map { ($0.rootNodeId, $0) }, uniquingKeysWith: { _, last in last })
+            nodeById = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         }
-        // Walk up the execution nodes to the attempt rooted there (session-logic.ts:603-617).
-        func resolveAttempt(_ item: TurnItem) -> TimelineAttempt? {
+
+        func attempt(_ item: TurnItem) -> TimelineAttempt? {
             guard var nodeId = item.nodeId, let runId = item.runId else { return nil }
             var visited = Set<NodeId>()
             while visited.insert(nodeId).inserted {
-                if let direct = attemptByRootNodeId[nodeId], direct.runId == runId { return timelineAttempt(direct) }
+                if let direct = byRootNodeId[nodeId], direct.runId == runId { return Self.timelineAttempt(direct) }
                 guard let node = nodeById[nodeId] else { return nil }
-                if let root = attemptByRootNodeId[node.rootNodeId], root.runId == runId { return timelineAttempt(root) }
+                if let root = byRootNodeId[node.rootNodeId], root.runId == runId { return Self.timelineAttempt(root) }
                 guard let parent = node.parentNodeId else { return nil }
                 nodeId = parent
             }
             return nil
         }
 
-        let foldedAnswerMessageIds = Set(visibleTurnItems.compactMap { row -> String? in
+        static func timelineAttempt(_ a: RunAttempt) -> TimelineAttempt {
+            TimelineAttempt(id: a.id, runId: a.runId, attemptOrdinal: a.attemptOrdinal, rootNodeId: a.rootNodeId, status: a.status)
+        }
+    }
+
+    /// Answers folded into their question card hide the user message that carried them.
+    static func foldedAnswerMessageIds(_ rows: [ProjectedTurnItem]) -> Set<String> {
+        Set(rows.compactMap { row -> String? in
             guard row.item.type == .userInputRequest, let answer = row.item.questionAnswer,
                 let requestId = answer["requestId"]?.stringValue
             else { return nil }
             return "async-answer:\(requestId)"
         })
+    }
 
+    /// The entry of one row, or nil for a row the timeline leaves out.
+    static func entry(_ row: ProjectedTurnItem, attempt: TimelineAttempt?, planById: [PlanId: PlanArtifact], folded: Set<String>) -> TimelineEntry? {
+        let item = row.item
+        if isWorkspacePreparation(item) { return nil }
+        // Task progress belongs in the composer; checkpoints become diff summaries.
+        if item.type == .todoList || item.type == .checkpoint { return nil }
+        if item.type == .userMessage, let messageId = item.messageId, folded.contains(messageId.rawValue) { return nil }
+        let createdAt = item.startedAt ?? item.updatedAt
+        switch item.type {
+        case .notification:
+            let entry = WorkLogEntry(
+                id: item.id.rawValue, createdAt: createdAt, runId: item.runId, label: item.string("summary") ?? "",
+                tone: .info, itemType: item.type, structuredPayload: item, projectedItem: row)
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(entry), attempt: attempt)
+        case .userMessage, .assistantMessage:
+            let isUser = item.type == .userMessage
+            let message = ChatMessage(
+                id: item.messageId ?? MessageId(item.id.rawValue), role: isUser ? .user : .assistant, text: item.text,
+                runId: item.runId, streaming: !isUser && item.streaming, createdAt: createdAt, updatedAt: item.updatedAt,
+                inputIntent: isUser ? item.inputIntent : nil,
+                createdBy: isUser ? item.string("createdBy") : nil,
+                creationSource: isUser ? item.string("creationSource") : nil,
+                senderThreadId: isUser ? item.string("senderThreadId") : nil,
+                scheduledTaskId: isUser ? item.string("scheduledTaskId") : nil,
+                context: isUser ? item["context"] : nil,
+                attachments: item["attachments"]?.arrayValue ?? [])
+            return TimelineEntry(id: message.id.rawValue, createdAt: createdAt, kind: .message(message, projectedItem: row), attempt: attempt)
+        case .proposedPlan:
+            let planId = PlanId(item.string("planId") ?? item.id.rawValue)
+            let plan = planById[planId]
+            let proposed = ProposedPlan(
+                id: planId, runId: item.runId, planMarkdown: item.string("markdown") ?? "",
+                status: plan?.kind == "proposed_plan" ? plan!.status : "active", createdAt: createdAt, updatedAt: item.updatedAt)
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .proposedPlan(proposed), attempt: attempt)
+        case _ where standaloneEventTypes.contains(item.type):
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .event(row), attempt: attempt)
+        default:
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(WorkLog.entry(for: row)), attempt: attempt)
+        }
+    }
+
+    /// Port of `deriveTimelineEntriesFromVisibleTurnItems` (session-logic.ts:592-809), without
+    /// optimistic and anchored messages (composer state). Order follows `visibleTurnItems`.
+    public static func derive(
+        visibleTurnItems: [ProjectedTurnItem], attempts: [RunAttempt] = [], nodes: [ExecutionNode] = [],
+        plans: [PlanArtifact] = []
+    ) -> [TimelineEntry] {
+        var memo = Memo()
+        return derive(visibleTurnItems: visibleTurnItems, attempts: attempts, nodes: nodes, plans: plans, memo: &memo).entries
+    }
+
+    /// `derive` remembered per row, so an update rebuilds only the rows that changed. T3 reuses
+    /// entries across streaming updates the same way (`deriveTimelineEntriesFromVisibleTurnItemsWithState`,
+    /// session-logic.ts:930-1030); this also covers tool and status updates, which T3 rebuilds whole.
+    public struct Memo: Sendable {
+        var rows: [ProjectedTurnItem] = []
+        var attempts: [TimelineAttempt?] = []
+        /// Per row, its index in `entries`, or -1 for a row left out.
+        var entryIndex: [Int] = []
         var entries: [TimelineEntry] = []
-        for row in visibleTurnItems {
-            let item = row.item
-            if isWorkspacePreparation(item) { continue }
-            // Task progress belongs in the composer; checkpoints become diff summaries.
-            if item.type == .todoList || item.type == .checkpoint { continue }
-            if item.type == .userMessage, let messageId = item.messageId, foldedAnswerMessageIds.contains(messageId.rawValue) { continue }
-            let createdAt = item.startedAt ?? item.updatedAt
-            let attempt = resolveAttempt(item)
-            switch item.type {
-            case .notification:
-                let entry = WorkLogEntry(
-                    id: item.id.rawValue, createdAt: createdAt, runId: item.runId, label: item.string("summary") ?? "",
-                    tone: .info, itemType: item.type, structuredPayload: item, projectedItem: row)
-                entries.append(TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(entry), attempt: attempt))
-            case .userMessage, .assistantMessage:
-                let isUser = item.type == .userMessage
-                let message = ChatMessage(
-                    id: item.messageId ?? MessageId(item.id.rawValue), role: isUser ? .user : .assistant, text: item.text,
-                    runId: item.runId, streaming: !isUser && item.streaming, createdAt: createdAt, updatedAt: item.updatedAt,
-                    inputIntent: isUser ? item.inputIntent : nil,
-                    createdBy: isUser ? item.string("createdBy") : nil,
-                    creationSource: isUser ? item.string("creationSource") : nil,
-                    senderThreadId: isUser ? item.string("senderThreadId") : nil,
-                    scheduledTaskId: isUser ? item.string("scheduledTaskId") : nil,
-                    context: isUser ? item["context"] : nil,
-                    attachments: item["attachments"]?.arrayValue ?? [])
-                entries.append(TimelineEntry(id: message.id.rawValue, createdAt: createdAt, kind: .message(message, projectedItem: row), attempt: attempt))
-            case .proposedPlan:
-                let planId = PlanId(item.string("planId") ?? item.id.rawValue)
-                let plan = planById[planId]
-                let proposed = ProposedPlan(
-                    id: planId, runId: item.runId, planMarkdown: item.string("markdown") ?? "",
-                    status: plan?.kind == "proposed_plan" ? plan!.status : "active", createdAt: createdAt, updatedAt: item.updatedAt)
-                entries.append(TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .proposedPlan(proposed), attempt: attempt))
-            case _ where standaloneEventTypes.contains(item.type):
-                entries.append(TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .event(row), attempt: attempt))
-            default:
-                entries.append(TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(WorkLog.entry(for: row)), attempt: attempt))
+        var folded: Set<String> = []
+        var attemptsSource: [RunAttempt] = []
+        var nodesSource: [ExecutionNode] = []
+        var plansSource: [PlanArtifact] = []
+        var lookup: AttemptLookup?
+
+        public init() {}
+    }
+
+    /// `derive` against the previous result in `memo`. Returns the entries and, when entries only
+    /// changed in place (same count, same ids), the indices that changed; nil means the list
+    /// changed shape.
+    public static func derive(
+        visibleTurnItems rows: [ProjectedTurnItem], attempts: [RunAttempt], nodes: [ExecutionNode], plans: [PlanArtifact],
+        memo: inout Memo
+    ) -> (entries: [TimelineEntry], changed: [Int]?) {
+        let folded = foldedAnswerMessageIds(rows)
+        let old = memo
+        memo = Memo()
+        // Plans and folded answers reach across rows; a change there rebuilds every row.
+        let fresh = old.lookup == nil || folded != old.folded || plans != old.plansSource
+        let lookupChanged = fresh || attempts != old.attemptsSource || nodes != old.nodesSource
+        let lookup = lookupChanged ? AttemptLookup(attempts: attempts, nodes: nodes) : old.lookup!
+        let planById = plans.isEmpty ? [:] : Dictionary(plans.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        var next = Memo()
+        next.rows = rows
+        next.folded = folded
+        next.attemptsSource = attempts
+        next.nodesSource = nodes
+        next.plansSource = plans
+        next.lookup = lookup
+        next.attempts.reserveCapacity(rows.count)
+        next.entryIndex.reserveCapacity(rows.count)
+        next.entries.reserveCapacity(old.entries.count + 1)
+        // Rows line up by index while the window only grows at its end; a shifted row (a history
+        // page, an insert) is found by its id.
+        var oldIndexById: [TurnItemId: Int]?
+        var sameShape = !fresh && rows.count == old.rows.count
+        var changed: [Int] = []
+        for (i, row) in rows.enumerated() {
+            var previous: Int?
+            if !fresh {
+                if i < old.rows.count, old.rows[i].sourceItemId == row.sourceItemId {
+                    previous = i
+                } else {
+                    sameShape = false
+                    if oldIndexById == nil {
+                        oldIndexById = Dictionary(old.rows.enumerated().map { ($1.sourceItemId, $0) }, uniquingKeysWith: { a, _ in a })
+                    }
+                    previous = oldIndexById![row.sourceItemId]
+                }
+            }
+            let unchangedRow = previous.map { old.rows[$0] == row } ?? false
+            let attempt = unchangedRow && !lookupChanged ? old.attempts[previous!] : lookup.attempt(row.item)
+            next.attempts.append(attempt)
+            let entry: TimelineEntry?
+            if let p = previous, unchangedRow, attempt == old.attempts[p] {
+                let index = old.entryIndex[p]
+                entry = index < 0 ? nil : old.entries[index]
+            } else {
+                entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded)
+                if sameShape, let p = previous {
+                    let index = old.entryIndex[p]
+                    if (index < 0) != (entry == nil) { sameShape = false } else if index >= 0 { changed.append(index) }
+                }
+            }
+            if let entry {
+                next.entryIndex.append(next.entries.count)
+                next.entries.append(entry)
+            } else {
+                next.entryIndex.append(-1)
             }
         }
-        return entries
+        memo = next
+        return (next.entries, sameShape ? changed : nil)
     }
 }

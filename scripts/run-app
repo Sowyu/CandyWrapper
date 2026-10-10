@@ -5,7 +5,8 @@
 # only joins its server, and pairing asks first.
 # Other arguments go to the app: `--snapshot /tmp/x.png --snapshot-delay 12` renders the window
 # to a PNG and quits. The app's pid goes to /tmp/candywrapper-app.pid.
-# CANDY_LAUNCH_TIMING=1 and CANDY_THREAD_TIMING=1 in the caller's environment reach the app (scripts/perf-review).
+# CANDY_LAUNCH_TIMING=1, CANDY_THREAD_TIMING=1 and CANDY_THREAD_CACHE (a directory, or `off`) in the
+# caller's environment reach the app (scripts/perf-review).
 # Build first: xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd build
 # Usage: scripts/run-app [--live] [app arguments]
 set -eu
@@ -30,4 +31,5 @@ user="$(id -un)"
 exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; exec "$@"' sh \
   env -i HOME="$HOME" USER="$user" LOGNAME="$user" LANG=en_US.UTF-8 T3CODE_TELEMETRY_ENABLED=false \
   "$home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" ${CANDY_LAUNCH_TIMING:+CANDY_LAUNCH_TIMING=1} ${CANDY_THREAD_TIMING:+CANDY_THREAD_TIMING=1} \
+  ${CANDY_THREAD_CACHE:+CANDY_THREAD_CACHE="$CANDY_THREAD_CACHE"} \
   "$app/Contents/MacOS/CandyWrapper" "$@"

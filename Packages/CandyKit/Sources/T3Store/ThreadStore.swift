@@ -17,15 +17,44 @@ public struct ThreadUpdate: Sendable {
 /// The app keeps a closed thread's store for a while and reopens from it (T3's retention,
 /// RT/threadRetention.ts): the view shows the retained projection at once and the new
 /// subscription resumes after `lastSequence`.
-/// // ponytail: no disk cache (T3 persists settled snapshots); add it when cold opens of huge threads still feel slow
+/// With a `ThreadCache`, an empty store first fills itself from disk (T3's `cache.loadThread`,
+/// threads.ts:186-232), so the view paints before the network and the subscription resumes
+/// after the cached sequence; settled states go back to the cache.
 public actor ThreadStore {
     private var reducer: ThreadReducer
     private var pending: ThreadChangeSet?
     private let onChange: @Sendable () -> Void
+    private let cache: ThreadCache?
+    private let cacheKey: ThreadCache.Key
+    private var cacheRead = false
+    /// The sequence and paging state last loaded from or offered to the cache.
+    private var cached: (sequence: Int, history: ThreadHistoryMeta)?
 
-    public init(threadId: ThreadId, onChange: @escaping @Sendable () -> Void) {
+    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onChange: @escaping @Sendable () -> Void) {
         reducer = ThreadReducer(threadId: threadId)
         self.onChange = onChange
+        self.cache = cache
+        cacheKey = ThreadCache.Key(environmentId: environmentId, threadId: threadId)
+    }
+
+    /// Fills an empty store from the disk cache, once. True when it did.
+    @discardableResult
+    public func restoreFromCache() -> Bool {
+        guard !cacheRead else { return false }
+        cacheRead = true
+        guard reducer.projection == nil, let cache,
+              let snapshot = OpenTiming.measure("disk cache", "", { cache.load(cacheKey) })
+        else { return false }
+        let changes = reducer.applySnapshot(snapshot)
+        cached = (snapshot.snapshotSequence, reducer.history)
+        OpenTiming.mark("disk cache restored", "\(reducer.projection?.visibleTurnItems.count ?? 0) rows, sequence \(snapshot.snapshotSequence)")
+        publish(changes)
+        return true
+    }
+
+    /// Writes the queued snapshot now; the thread's view closed.
+    public func flushCache() async {
+        await cache?.flush(cacheKey)
     }
 
     public var projection: ThreadProjection? { reducer.projection }
@@ -35,7 +64,8 @@ public actor ThreadStore {
 
     /// The input for the next `orchestration.subscribeThread` call.
     public func subscribeInput(requestCompletionMarker: Bool = true) -> SubscribeThreadInput {
-        reducer.subscribeInput(requestCompletionMarker: requestCompletionMarker)
+        restoreFromCache()
+        return reducer.subscribeInput(requestCompletionMarker: requestCompletionMarker)
     }
 
     /// Applies items that arrived together, for example one RPC Chunk.
@@ -104,5 +134,26 @@ public actor ThreadStore {
         } else {
             pending?.merge(changes)
         }
+        updateCache(changes)
+    }
+
+    /// Settled states go to the cache, a deletion clears it (threads.ts:386-430).
+    private func updateCache(_ changes: ThreadChangeSet) {
+        guard let cache else { return }
+        let key = cacheKey
+        if changes.deleted {
+            cached = nil
+            Task { await cache.remove(key) }
+            return
+        }
+        guard let projection = reducer.projection, let sequence = reducer.lastSequence,
+              ThreadCache.shouldPersist(projection, history: reducer.history)
+        else { return }
+        var history = reducer.history
+        history.loading = false
+        history.error = nil
+        if let cached, cached.sequence == sequence, cached.history == history { return }
+        cached = (sequence, history)
+        Task { await cache.offer(key, sequence: sequence, projection: projection, history: history) }
     }
 }

@@ -3,6 +3,16 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
+/// Which rows of the timeline an update touched.
+enum TimelineChange: Equatable, Sendable {
+    /// Anything may have changed.
+    case all
+    /// Only these rows changed; the count and the ids stayed.
+    case rows([Int])
+    /// Rows before this index stayed; the ones from it on are new.
+    case tail(Int)
+}
+
 /// The messages timeline (MessagesTimeline.tsx): a virtualized list in T3's centered chat lane.
 ///
 /// Only rows inside the visible rect plus `overscan` have views, recycled per kind. Each row's
@@ -82,15 +92,41 @@ public final class TimelineView: DSView {
 
     // MARK: Data
 
-    /// Replaces the rows. Unchanged rows keep their views and heights.
-    func setItems(_ new: [TimelineItem]) {
+    /// Replaces the rows. Unchanged rows keep their views and heights. `change` says which rows
+    /// differ from the current ones, so an update on a long thread touches only those.
+    func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
         let anchor = captureAnchor()
+        let old = items
         items = new
-        indexById = Dictionary(new.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
-        // Drop measurements of rows that left.
-        if measured.count > new.count * 2 { measured = measured.filter { indexById[$0.key] != nil } }
-        heights = new.map { height(of: $0) }
-        recomputeTops()
+        let consistent = heights.count == old.count && tops.count == old.count
+        if case .rows(let changed) = change, consistent, new.count == old.count {
+            var first = new.count
+            for i in changed {
+                let h = height(of: new[i])
+                if h != heights[i] { heights[i] = h; first = min(first, i) }
+            }
+            if first < new.count { recomputeTops(from: first) }
+        } else if case .tail(let first) = change, consistent, first <= old.count, first <= new.count {
+            for item in old[first...] where indexById[item.id] ?? -1 >= first { indexById[item.id] = nil }
+            for (i, item) in new[first...].enumerated() where indexById[item.id] == nil { indexById[item.id] = first + i }
+            if measured.count > new.count * 2 { measured = measured.filter { indexById[$0.key] != nil } }
+            heights.removeSubrange(first...)
+            heights += new[first...].map { height(of: $0) }
+            recomputeTops(from: first)
+        } else {
+            // Rows that kept their place and content keep their height; the rest are looked up or estimated.
+            let sameIds = old.count == new.count && zip(old, new).allSatisfy { $0.id == $1.id }
+            if !sameIds {
+                indexById = Dictionary(new.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+                // Drop measurements of rows that left.
+                if measured.count > new.count * 2 { measured = measured.filter { indexById[$0.key] != nil } }
+            }
+            let oldHeights = heights
+            heights = new.enumerated().map { i, item in
+                i < old.count && i < oldHeights.count && old[i].id == item.id && old[i] == item ? oldHeights[i] : height(of: item)
+            }
+            recomputeTops()
+        }
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
@@ -166,11 +202,13 @@ public final class TimelineView: DSView {
         }
     }
 
-    private func recomputeTops() {
-        tops = []
+    /// Row tops from `first` on; the ones above it stay.
+    private func recomputeTops(from first: Int = 0) {
+        let start = tops.count == items.count ? min(first, items.count) : 0
+        tops.removeSubrange(start...)
         tops.reserveCapacity(items.count)
-        var y = topInset
-        for h in heights {
+        var y = start == 0 ? topInset : tops[start - 1] + heights[start - 1]
+        for h in heights[start...] {
             tops.append(y)
             y += h
         }

@@ -64,6 +64,7 @@ THRESHOLDS = {
     # Click to the first display refresh after the rows are placed; the refresh adds up to two frames of noise.
     "open.big_first_frame_ms": (0.25, 25, "ms"),
     "open.big_reopen_first_frame_ms": (0.25, 25, "ms"),
+    "open.big_cache_first_frame_ms": (0.25, 25, "ms"),
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),
@@ -316,12 +317,13 @@ def scenario_big_thread(app_path, metrics, i, noise):
         app.stop()
 
 
-def scenario_open(app_path, metrics, i, noise):
+def open_frames(app_path, tag, cache_dir, noise):
     # --perf-open: 4 s after the shell the app opens the big thread as a click would, 2 s later the
     # small one again, 2 s later the big one again (the second open comes from the retained store).
     # CANDY_THREAD_TIMING prints `thread-timing <ms> open <id>` and `... first frame ...` per open.
-    app = App(app_path, ["--open-thread", IDLE_THREAD, "--perf-open", "4", BIG_THREAD], "open-%d" % i,
-              env_extra={"CANDY_THREAD_TIMING": "1"})
+    # CANDY_THREAD_CACHE points the disk thread cache at our own directory (older builds ignore it).
+    app = App(app_path, ["--open-thread", IDLE_THREAD, "--perf-open", "4", BIG_THREAD], tag,
+              env_extra={"CANDY_THREAD_TIMING": "1", "CANDY_THREAD_CACHE": cache_dir})
     try:
         probe("window", app.pid, 30)
         app.timing("live sidebar", wait=20)
@@ -332,16 +334,33 @@ def scenario_open(app_path, metrics, i, noise):
             if len(frames) >= 4:
                 break
             time.sleep(0.2)
-        # Opens in order: the small thread at launch, big, small, big again.
-        if len(frames) >= 4:
-            add(metrics, "open.big_first_frame_ms", float(frames[1]))
-            add(metrics, "open.big_reopen_first_frame_ms", float(frames[3]))
-        else:
-            noise.append("open run %d: %d of 4 opens printed a first frame (no --perf-open in this build?)" % (i, len(frames)))
+        if len(frames) < 4:
+            noise.append("%s: %d of 4 opens printed a first frame (no --perf-open in this build?)" % (tag, len(frames)))
         if foreign_apps(app.pid):
-            noise.append("open run %d overlapped another CandyWrapper app" % i)
+            noise.append("%s overlapped another CandyWrapper app" % tag)
+        time.sleep(1)  # the cache writes the big thread 0.5 s after it settles and when its view closes
+        return frames, app.log_path
     finally:
         app.stop()
+
+
+def scenario_open(app_path, metrics, i, noise):
+    # First launch with an empty thread cache: the big thread's first open comes from the network.
+    # Second launch with what the first one cached: the same open paints from the disk cache.
+    cache_dir = "%s/thread-cache-%d" % (WORK, i)
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    # Opens in order: the small thread at launch, big, small, big again.
+    frames, _ = open_frames(app_path, "open-%d" % i, cache_dir, noise)
+    if len(frames) >= 4:
+        add(metrics, "open.big_first_frame_ms", float(frames[1]))
+        add(metrics, "open.big_reopen_first_frame_ms", float(frames[3]))
+    frames, log_path = open_frames(app_path, "open-cached-%d" % i, cache_dir, noise)
+    log_text = open(log_path).read()
+    if "disk cache restored" not in log_text:
+        noise.append("open-cached-%d: no open painted from the disk cache (a build without it?)" % i)
+    elif len(frames) >= 2:
+        add(metrics, "open.big_cache_first_frame_ms", float(frames[1]))
+    shutil.rmtree(cache_dir, ignore_errors=True)
 
 
 def scenario_stream(app_path, metrics, sha, noise):

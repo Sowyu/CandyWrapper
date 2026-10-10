@@ -34,18 +34,22 @@ final class ThreadSession {
         let relay: ShellSession.ChangeRelay
     }
 
-    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil) {
+    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil, cache: ThreadCache? = nil) {
         self.threadId = threadId
         environmentId = threadId.environmentId ?? ""
         self.panel = panel
         self.sidebar = sidebar
         let relay = retained?.relay ?? ShellSession.ChangeRelay()
         self.relay = relay
-        store = retained?.store ?? ThreadStore(threadId: threadId.localId, onChange: { relay.fire() })
+        let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onChange: { relay.fire() })
+        self.store = store
         relay.set { [weak self] in Task { @MainActor in await self?.pull() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
         if retained != nil {
             Task { [weak self] in await self?.showRetained() }
+        } else {
+            // A cold open paints from the disk cache before the network; the store publishes it.
+            Task { await store.restoreFromCache() }
         }
     }
 
@@ -96,6 +100,8 @@ final class ThreadSession {
         detach()
         active = false
         relay.set {}
+        let store = self.store
+        Task { await store.flushCache() }
         return Retained(store: store, relay: relay)
     }
 
@@ -354,7 +360,7 @@ final class ThreadController {
         composer.showThread(id)
         panel.setRightPanelOpen(rightPanelWasOpen(id))
         let kept = retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
-        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept)
+        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
