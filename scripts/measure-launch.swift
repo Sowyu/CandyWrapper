@@ -18,10 +18,11 @@ let homeDir = NSHomeDirectory()
 let env = [
     "HOME=\(homeDir)", "USER=\(user)", "LOGNAME=\(user)", "SHELL=/bin/zsh", "LANG=en_US.UTF-8",
     "TMPDIR=\(ProcessInfo.processInfo.environment["TMPDIR"] ?? "/tmp")",
-    "PATH=\(homeDir)/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    // /tmp/candywrapper-bin/t3 is the T3_VERSION runtime (scripts/run-app); ~/.local/bin/t3 is stale.
+    "PATH=/tmp/candywrapper-bin:\(homeDir)/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
     // Isolation: the official app must never open the live ~/.t3.
-    "T3CODE_HOME=\(home)", "T3CODE_TELEMETRY_ENABLED=false",
-]
+    "T3CODE_HOME=\(home)", "CANDY_T3_HOME=\(home)", "CANDY_LAUNCH_TIMING=1", "T3CODE_TELEMETRY_ENABLED=false",
+] + (ProcessInfo.processInfo.environment["MallocStackLogging"].map { ["MallocStackLogging=\($0)"] } ?? [])
 
 var attr = posix_spawnattr_t(bitPattern: 0)
 posix_spawnattr_init(&attr)
