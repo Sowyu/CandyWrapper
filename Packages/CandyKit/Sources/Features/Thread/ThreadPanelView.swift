@@ -5,7 +5,8 @@ import T3Store
 
 /// The chat header (ChatView.tsx:11285-11293, ChatHeader.tsx, WorkspaceBreadcrumb.tsx): 52px,
 /// 20px gutters, "favicon project / title", and the three panel toggles fixed at the right.
-public final class ThreadHeaderView: DSView {
+/// The bar drags the window.
+public final class ThreadHeaderView: TopbarDragView {
     static let height: CGFloat = 52
 
     private let favicon = ProjectMonogramView()
@@ -107,6 +108,8 @@ public final class ThreadPanelView: DSView {
         model.workspaceRoot = workspaceRoot
         header.projectTitle = projectTitle
         header.threadTitle = projection?.thread.title ?? ""
+        // With no thread the bar stays, empty, so it still drags the window.
+        for view in header.subviews { view.isHidden = projection == nil }
         if projection?.thread.id != model.projection?.thread.id { timeline.context.forgetDocuments() }
         model.setProjection(projection)
     }

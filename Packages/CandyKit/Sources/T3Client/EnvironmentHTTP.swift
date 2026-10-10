@@ -112,7 +112,14 @@ public struct EnvironmentHTTP: Sendable {
 
     private func send<T: Decodable>(_ method: String, _ path: String, token: String?, body: Data? = nil,
                                     contentType: String? = nil, as: T.Type) async throws -> T {
-        var request = URLRequest(url: baseURL.appending(path: path), timeoutInterval: timeout)
+        // `appending(path:)` would escape a query's `?`, so a path like `ThreadHistoryRequest.path` keeps its query apart.
+        let parts = path.split(separator: "?", maxSplits: 1)
+        var url = baseURL.appending(path: String(parts.first ?? ""))
+        if parts.count == 2, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.percentEncodedQuery = String(parts[1])
+            url = c.url ?? url
+        }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.httpShouldHandleCookies = false
         // Required on /api/orchestration/*, ignored elsewhere (protocol.md 1.2).

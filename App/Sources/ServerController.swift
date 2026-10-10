@@ -28,6 +28,8 @@ final class ServerController {
     private var ownsServer = false
     private var pairingDeclined = false
     private var observers: [NSObjectProtocol] = []
+    /// Each new shell session with its environment id, and nil when the session ends.
+    var onShell: ((ShellSession?, String?) -> Void)?
 
     init(sidebar: SidebarContentView, window: NSWindow) {
         self.sidebar = sidebar
@@ -129,6 +131,7 @@ final class ServerController {
         session.start()
         self.session = session
         sessionKey = key
+        onShell?(session, environmentId)
     }
 
     private func shellChanged(_ snapshot: ShellSnapshot) {
@@ -147,6 +150,7 @@ final class ServerController {
         session?.stop()
         session = nil
         sessionKey = nil
+        onShell?(nil, nil)
     }
 
     // MARK: Activity

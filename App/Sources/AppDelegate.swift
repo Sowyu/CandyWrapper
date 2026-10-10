@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var galleryWindow: NSWindow?
     private var session: ShellSession?
     private var server: ServerController?
+    private var threads: ThreadController?
     private var terminationSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -42,7 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         let window = MainWindow()
         let sidebar = SidebarContentView()
-        let main: NSView = Self.threadPreview() ?? TopbarDragView()
+        let threads = ThreadController(sidebar: sidebar, window: window)
+        self.threads = threads
+        let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
@@ -105,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let token = try? String(contentsOfFile: args[t + 1], encoding: .utf8)
                   .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
             let server = ServerController(sidebar: sidebar, window: window)
+            server.onShell = { [weak self] in self?.threads?.follow($0, environment: $1) }
             server.start()
             self.server = server
             return
@@ -112,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let session = ShellSession(baseURL: url, token: token, sidebar: sidebar)
         session.start()
         self.session = session
+        threads?.follow(session, environment: url.absoluteString)
     }
 
     /// Prints traffic light frames and what a click at header points would hit, then quits.

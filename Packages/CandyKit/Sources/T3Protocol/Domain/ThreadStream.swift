@@ -117,6 +117,9 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
         components.queryItems = [URLQueryItem(name: "cursor", value: cursor)]
             + (throughEntryId.map { [URLQueryItem(name: "throughEntryId", value: $0)] } ?? [])
             + (view.map { [URLQueryItem(name: "view", value: $0.rawValue)] } ?? [])
+        // URLComponents leaves `+` alone, and the server's query parser reads it as a space; the
+        // cursor is opaque, so encode it.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return components.string ?? components.path
     }
 
