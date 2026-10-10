@@ -39,6 +39,9 @@ public struct EnvironmentHTTP: Sendable {
     private let session: URLSession
     /// T3's auth request timeout (authorization/remote.ts:25).
     public var timeout: TimeInterval = 10
+    /// Headers for an authenticated request, used instead of `Bearer <token>` when set. T3 Connect
+    /// sets it to `Authorization: DPoP <token>` plus a proof for that method and URL.
+    public var authorize: (@Sendable (_ method: String, _ url: URL) async throws -> [String: String])?
 
     /// Cookie-free ephemeral session. A cookie would beat the Authorization header (protocol.md 4.2).
     public static let defaultSession: URLSession = {
@@ -99,7 +102,7 @@ public struct EnvironmentHTTP: Sendable {
         }
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpShouldHandleCookies = false
-        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token { try await setAuthorization(&request, token: token) }
         let data: Data, response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
@@ -133,6 +136,14 @@ public struct EnvironmentHTTP: Sendable {
         return c.url!
     }
 
+    private func setAuthorization(_ request: inout URLRequest, token: String) async throws {
+        guard let authorize, let url = request.url else {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            return
+        }
+        for (name, value) in try await authorize(request.httpMethod ?? "GET", url) { request.setValue(value, forHTTPHeaderField: name) }
+    }
+
     private func send<T: Decodable>(_ method: String, _ path: String, token: String?, body: Data? = nil,
                                     contentType: String? = nil, as: T.Type) async throws -> T {
         // `appending(path:)` would escape a query's `?`, so a path like `ThreadHistoryRequest.path` keeps its query apart.
@@ -148,7 +159,7 @@ public struct EnvironmentHTTP: Sendable {
         // Required on /api/orchestration/*, ignored elsewhere (protocol.md 1.2).
         request.setValue(String(T3Protocol.orchestrationProtocolVersion), forHTTPHeaderField: "x-t3-orchestration-protocol")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token { try await setAuthorization(&request, token: token) }
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         request.httpBody = body
 

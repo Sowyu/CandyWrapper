@@ -48,10 +48,46 @@ public struct ConnectionsPageModel: Equatable {
         }
     }
 
+    /// One machine from the T3 Connect account that is not saved here (`CloudEnvironmentConnectRows`).
+    public struct CloudMachine: Equatable {
+        public enum Dot: Equatable { case success, warning, destructive, idle }
+        public enum Action: Equatable {
+            /// `Add`, or `Add route` for a machine saved over another route.
+            case add(String)
+            case adding
+            /// Disabled `Add` with the reason as tooltip (client not supported).
+            case unsupported(String)
+        }
+        public var id: String
+        public var label: String
+        public var machine: String
+        /// `T3 Connect · Not added · Relay online`, or the offline reason.
+        public var status: String
+        public var statusIsError: Bool
+        public var dot: Dot
+        public var dotTooltip: String
+        public var action: Action
+        public init(id: String, label: String, machine: String, status: String, statusIsError: Bool, dot: Dot, dotTooltip: String, action: Action) {
+            self.id = id; self.label = label; self.machine = machine; self.status = status; self.statusIsError = statusIsError
+            self.dot = dot; self.dotTooltip = dotTooltip; self.action = action
+        }
+    }
+
+    /// T3 Connect discovery for the signed-in account.
+    public enum Cloud: Equatable {
+        /// Signed out, or no cloud config: no rows.
+        case idle
+        case loading
+        case machines([CloudMachine])
+        /// `Could not load T3 Connect environments` with the reason.
+        case failed(String)
+    }
+
     public var thisMachine: Machine?
     public var environments: [Environment]
     /// T3 Connect configured: the empty state mentions connecting from it.
     public var cloudEnabled: Bool
+    public var cloud: Cloud = .idle
 
     public init(thisMachine: Machine? = nil, environments: [Environment] = [], cloudEnabled: Bool = true) {
         self.thisMachine = thisMachine; self.environments = environments; self.cloudEnabled = cloudEnabled
@@ -68,6 +104,10 @@ public struct ConnectionsActions {
     public var removeRoute: (String, ConnectionsPageModel.Route) -> Void = { _, _ in }
     /// Copies text and shows T3's toast: (text, toast title, toast description).
     public var copy: (String, String, String) -> Void = { _, _, _ in }
+    /// A T3 Connect row's `Add` or `Add route`.
+    public var addCloud: (String) -> Void = { _ in }
+    /// `Try again` after a failed discovery.
+    public var retryCloud: () -> Void = {}
     public init() {}
 }
 
@@ -82,6 +122,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private var rows: [String: EnvironmentRowView] = [:]
     private var openRoutes: Set<String> = []
     private var empty: (message: String, view: EmptyView)?
+    private var cloudRows: [String: CloudMachineRowView] = [:]
+    private lazy var cloudSkeleton = CloudSkeletonRowView()
+    private lazy var cloudFailure = CloudFailureRowView()
     /// After a change of height, for the page to lay out again.
     public var onHeightChange: (() -> Void)?
 
@@ -137,8 +180,28 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         rows = next
         openRoutes = openRoutes.filter { next[$0] != nil }
-        // The T3 Connect discovery rows (`CloudRemoteEnvironmentRows`) go after the saved ones (WP6.4).
-        if model.environments.isEmpty {
+        // The T3 Connect rows (`CloudRemoteEnvironmentRows`) follow the saved ones. With nothing saved
+        // they stand alone: a skeleton while loading, the failure, or the empty state.
+        var nextCloud: [String: CloudMachineRowView] = [:]
+        let standalone = model.environments.isEmpty
+        var machines: [ConnectionsPageModel.CloudMachine] = []
+        if case .machines(let list) = model.cloud { machines = list }
+        for machine in machines {
+            let row = cloudRows[machine.id] ?? CloudMachineRowView()
+            row.configure(machine)
+            let id = machine.id
+            row.onAdd = { [weak self] in self?.actions.addCloud(id) }
+            nextCloud[id] = row
+            groupRows.append(row)
+        }
+        cloudRows = nextCloud
+        if standalone, machines.isEmpty, model.cloud == .loading {
+            groupRows.append(cloudSkeleton)
+        } else if standalone, machines.isEmpty, case .failed(let reason) = model.cloud {
+            cloudFailure.reason = reason
+            cloudFailure.onRetry = { [weak self] in self?.actions.retryCloud() }
+            groupRows.append(cloudFailure)
+        } else if standalone, machines.isEmpty {
             let message = model.cloudEnabled
                 ? "Click “Add environment” to pair another environment, or connect one from T3 Connect."
                 : "Click “Add environment” to pair another environment."
@@ -207,6 +270,143 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
 }
 
 extension EmptyView: SettingsGroupRow {}
+
+/// A T3 Connect machine that is not saved (CloudEnvironmentConnectList.tsx:420-470): status dot, glyph and
+/// name, the status line, and `Add` on the right. `px-4 py-3`.
+// ponytail: the dot doesn't ping while checking; add the `animate-status-ping` ring if users miss it
+final class CloudMachineRowView: DSView, SettingsGroupRow {
+    private let dot = CALayer()
+    private let dotHit = DSView()
+    private let glyph = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+    private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    private let status = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private let add = ButtonView("Add", variant: .default, size: .sm)
+    private var dotTip: TooltipController?
+    private var addTip: TooltipController?
+    private var dotKind: ConnectionsPageModel.CloudMachine.Dot = .idle
+    var onAdd: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        dot.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
+        dot.cornerRadius = 4
+        layer?.addSublayer(dot)
+        glyph.color = Themed.color(\.mutedForeground)
+        title.lineHeight = 20
+        title.truncates = true
+        status.lineHeight = 16
+        status.truncates = true
+        for v in [dotHit, glyph, title, status, add] as [NSView] { addSubview(v) }
+        add.action = { [weak self] in self?.onAdd?() }
+        dotTip = TooltipController.attach(to: dotHit, text: "")
+    }
+
+    func configure(_ m: ConnectionsPageModel.CloudMachine) {
+        glyph.kind = m.machine
+        title.text = m.label
+        status.text = m.status
+        status.color = m.statusIsError ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
+        dotTip?.text = m.dotTooltip
+        dotHit.setAccessibilityLabel(m.dotTooltip)
+        dotKind = m.dot
+        switch m.action {
+        case .add(let title):
+            add.title = title
+            add.isEnabled = true
+        case .adding:
+            add.title = "Adding…"
+            add.isEnabled = false
+        case .unsupported(let reason):
+            add.title = "Add"
+            add.isEnabled = false
+            if addTip == nil { addTip = TooltipController.attach(to: add, text: reason) } else { addTip?.text = reason }
+        }
+        needsDisplay = true
+        needsLayout = true
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat { 12 + 20 + 4 + 16 + 12 }
+
+    override func updateLayer() {
+        let color: NSColor = switch dotKind {
+        case .success: Themed.color(\.success)
+        case .warning: Themed.color(\.warning)
+        case .destructive: Themed.color(\.destructive)
+        case .idle: Themed.color(\.mutedForeground, 0.35)
+        }
+        dot.backgroundColor = color.cgColor(in: self)
+    }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        let s = add.intrinsicContentSize
+        add.frame = NSRect(x: w - 16 - s.width, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
+        let right = add.frame.minX - 12
+        // `flex items-center gap-2`: the `size-3` dot box, the glyph, the name.
+        dotHit.frame = NSRect(x: 16, y: 12 + 4, width: 12, height: 12)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        dot.frame = CGRect(x: 18, y: 12 + 6, width: 8, height: 8)
+        CATransaction.commit()
+        glyph.frame = NSRect(x: 36, y: 12 + 2, width: 16, height: 16)
+        title.frame = NSRect(x: 60, y: 12, width: max(0, right - 60), height: 20)
+        status.frame = NSRect(x: 16, y: 36, width: max(0, right - 16), height: 16)
+    }
+}
+
+/// `RemoteEnvironmentRowsSkeleton`: two pills and a button-sized block while discovery runs.
+final class CloudSkeletonRowView: DSView, SettingsGroupRow {
+    private let name = SkeletonView(shape: .pill)
+    private let line = SkeletonView(shape: .pill)
+    private let button = SkeletonView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        for v in [name, line, button] { addSubview(v) }
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat { 12 + 16 + 8 + 12 + 12 }
+
+    override func layout() {
+        super.layout()
+        name.frame = NSRect(x: 16, y: 12, width: 128, height: 16)
+        line.frame = NSRect(x: 16, y: 36, width: 80, height: 12)
+        button.frame = NSRect(x: bounds.width - 16 - 64, y: (bounds.height - 28) / 2, width: 64, height: 28)
+    }
+}
+
+/// A failed discovery (CloudEnvironmentConnectList.tsx:293-312), never shown as "no environments".
+final class CloudFailureRowView: DSView, SettingsGroupRow {
+    private let title = LabelView("Could not load T3 Connect environments", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.destructive))
+    private let detail = TextBlockView()
+    private let retry = ButtonView("Try again", variant: .outline, size: .sm)
+    var onRetry: (() -> Void)?
+    var reason = "" { didSet { detail.text = reason; needsLayout = true } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        title.lineHeight = 20
+        detail.font = DSFont.ui(12)
+        detail.lineHeight = 16
+        detail.color = Themed.color(\.mutedForeground)
+        for v in [title, detail, retry] as [NSView] { addSubview(v) }
+        retry.action = { [weak self] in self?.onRetry?() }
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        12 + 20 + 4 + detail.height(forWidth: max(0, width - 32)) + 12 + retry.intrinsicContentSize.height + 12
+    }
+
+    override func layout() {
+        super.layout()
+        let tw = max(0, bounds.width - 32)
+        title.frame = NSRect(x: 16, y: 12, width: tw, height: 20)
+        let dh = detail.height(forWidth: tw)
+        detail.frame = NSRect(x: 16, y: 36, width: tw, height: dh)
+        let s = retry.intrinsicContentSize
+        retry.frame = NSRect(x: 16, y: 36 + dh + 12, width: s.width, height: s.height)
+    }
+}
 
 /// One saved machine (`EnvironmentRow` in `SavedBackendListRow`): machine glyph, name, one subtitle line
 /// (`<transport> · <status> · Routes`), the on/off switch and the row menu; the route list opens below.

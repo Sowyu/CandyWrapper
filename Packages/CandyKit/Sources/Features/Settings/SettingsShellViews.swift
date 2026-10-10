@@ -60,6 +60,22 @@ public final class SettingsSidebarView: DSView {
     private let searchKbd = KbdView("/")
     public private(set) var items: [SettingsSection: SidebarMenuButtonView] = [:]
     let back = SidebarMenuButtonView("Back", icon: .arrowLeft)
+    /// `T3ConnectSidebarSignIn`: shown while signed out of T3 Connect.
+    public let signIn = SidebarMenuButtonView("Sign in to T3 Connect", icon: .logIn)
+    /// `T3ConnectSidebarAvatar`: Clerk's `UserButton`, shown while signed in. Opens the account menu.
+    public let avatar = T3ConnectAvatarButton()
+
+    /// The footer's T3 Connect slot. `.unavailable` hides both, as T3 does without cloud config.
+    public enum T3ConnectSlot: Equatable { case unavailable, signedOut, signedIn(String) }
+    public var t3Connect: T3ConnectSlot = .unavailable {
+        didSet {
+            signIn.isHidden = t3Connect != .signedOut
+            if case .signedIn(let identifier) = t3Connect { avatar.email = identifier; avatar.isHidden = false } else { avatar.isHidden = true }
+            needsLayout = true
+        }
+    }
+    public var onSignIn: (() -> Void)?
+    public var onAccount: ((NSView) -> Void)?
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
 
@@ -93,6 +109,12 @@ public final class SettingsSidebarView: DSView {
         // T3 Connect's sidebar sign-in sits above the utility row (SettingsSidebarNav.tsx:352-362), WP6.4.
         back.action = { [weak self] in self?.onBack?() }
         addSubview(back)
+        signIn.action = { [weak self] in self?.onSignIn?() }
+        signIn.isHidden = true
+        addSubview(signIn)
+        avatar.action = { [weak self] in guard let self else { return }; self.onAccount?(self.avatar) }
+        avatar.isHidden = true
+        addSubview(avatar)
         trigger.action = { [weak self] in self?.onToggleSidebar?() }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Settings")
@@ -129,8 +151,55 @@ public final class SettingsSidebarView: DSView {
             items[section]?.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
             y += 36
         }
-        // `SidebarFooter` (`px-2 py-1`) with the full-width Back row.
-        back.frame = NSRect(x: 8, y: h - 4 - 32, width: w - 16, height: 32)
+        // `SidebarFooter` (`px-2 py-1 gap-2`): the sign-in row above `flex items-center gap-1` of Back and the avatar.
+        let row: CGFloat = avatar.isHidden ? 32 : 36
+        let rowY = h - 4 - row
+        back.frame = NSRect(x: 8, y: rowY + (row - 32) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: 32)
+        avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
+        signIn.frame = NSRect(x: 8, y: rowY - 8 - 32, width: w - 16, height: 32)
+    }
+}
+
+/// Clerk's `UserButton` trigger (`rounded-lg p-1 hover:bg-sidebar-row-hover`, avatar `size-7`).
+// ponytail: draws the email's initial on a muted circle; Clerk shows the account image, load it if users set one
+public final class T3ConnectAvatarButton: ControlView {
+    private let circle = CALayer()
+    private let initial = LabelView("", font: DSFont.ui(12, weight: .semibold), color: Themed.color(\.foreground))
+    public var email = "" {
+        didSet {
+            initial.text = email.first.map { String($0).uppercased() } ?? ""
+            setAccessibilityLabel("Open user button")
+            toolTip = email
+            needsLayout = true
+        }
+    }
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        layer?.cornerRadius = 10
+        circle.actions = ["position": NSNull(), "bounds": NSNull()]
+        layer?.addSublayer(circle)
+        initial.lineHeight = 16
+        initial.alignment = .center
+        addSubview(initial)
+        setAccessibilityRole(.button)
+    }
+
+    public override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+
+    public override func updateLayer() {
+        layer?.backgroundColor = state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: true).cgColor(in: self) : nil
+        circle.backgroundColor = Themed.color(\.primary, 0.18).cgColor(in: self)
+    }
+
+    public override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        circle.frame = CGRect(x: 4, y: 4, width: 28, height: 28)
+        circle.cornerRadius = 14
+        CATransaction.commit()
+        initial.frame = NSRect(x: 4, y: 10, width: 28, height: 16)
     }
 }
 
