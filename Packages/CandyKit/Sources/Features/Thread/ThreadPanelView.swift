@@ -105,6 +105,11 @@ public final class ThreadPanelView: DSView {
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
+    /// The draft's context strip under the composer, with the "Run on" control.
+    public let contextStrip = ComposerContextStripView()
+    /// `shouldShowComposerContextStrip` on the draft page: the project has a machine to show
+    /// (BranchToolbar.logic.ts:59-81). The checkout and branch controls are not drawn yet.
+    public var showsContextStrip = false { didSet { if showsContextStrip != oldValue { needsLayout = true } } }
     /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
     public let errorBanner = ThreadErrorBannerView()
     /// T3's top-right toast stack (`ToastProvider`), placed against the window, above everything.
@@ -155,6 +160,8 @@ public final class ThreadPanelView: DSView {
         addSubview(environmentBanner)
         addSubview(approvalPanel)
         addSubview(questionPanel)
+        contextStrip.isHidden = true
+        addSubview(contextStrip)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         queue.onHeightChange = { [weak self] in self?.needsLayout = true }
@@ -295,7 +302,7 @@ public final class ThreadPanelView: DSView {
         let x = ((chat - width) / 2).rounded()
         let y: CGFloat
         if isDraft {
-            // ponytail: the context strip (checkout and branch pickers) is not drawn; it comes with the branch toolbar
+            // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
             let block = height + 32 + 20
             let top = ThreadHeaderView.height + (bounds.height - ThreadHeaderView.height - block) / 2
             y = top.rounded()
@@ -305,6 +312,12 @@ public final class ThreadPanelView: DSView {
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
+        let strip = isDraft && showsContextStrip && !composer.isHidden
+        contextStrip.isHidden = !strip
+        composer.joinsContextStrip = strip
+        let stripInset = ComposerContextStripView.inset
+        contextStrip.frame = NSRect(x: x + stripInset, y: y + height - ComposerContextStripView.overlap,
+                                    width: max(0, width - 2 * stripInset), height: ComposerContextStripView.height)
         // Attachments, 22pt in from each side, each sliding 17pt under the one below it: the
         // request panel under the composer, the queue under the panel (ComposerBanner.Column).
         let docked = !composer.isHidden && !isDraft

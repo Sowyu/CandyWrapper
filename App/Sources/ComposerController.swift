@@ -106,6 +106,7 @@ final class ComposerController {
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
+        panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none
         composer.footerControls = [pickers.controlsView]
         pickers.onPromptChange = { [weak self] text in
@@ -206,7 +207,8 @@ final class ComposerController {
         capabilityTasks.removeValue(forKey: environmentId)?.cancel()
         serverConfigs[environmentId] = nil
         capabilities[environmentId] = nil
-        let removed = sessions.filter { $0.key.hasPrefix(prefix) }
+        // Sessions are keyed by project group; the environment is in the session's project id.
+        let removed = sessions.filter { ProjectId($0.value.projectId).environmentId == environmentId }
         let draftIds = Set(removed.values.map(\.draftId))
         for key in removed.keys { sessions[key] = nil }
         prompts = prompts.filter { !$0.key.hasPrefix(prefix) && !draftIds.contains($0.key) }
@@ -257,6 +259,11 @@ final class ComposerController {
             }
             return true
         }
+        // `composer.host` (mod+shift+h, keybindings.ts:176): opens "Run on" when it can choose (ChatView.tsx:8183-8192).
+        if mods == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "h" {
+            if !event.isARepeat, !panel.contextStrip.isHidden { panel.contextStrip.runOn.open() }
+            return true
+        }
         return pickers.handleShortcut(event)
     }
 
@@ -303,13 +310,30 @@ final class ComposerController {
         return true
     }
 
-    private func showDraft(_ project: ProjectShell) {
-        // The scoped project id: one draft per project per environment, like T3's `env:projectId` keys.
-        let key = project.id.rawValue
-        let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
-        let session = sessions[key] ?? DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
-                                                    projectId: project.id.rawValue, createdAt: Date())
-        sessions[key] = session
+    /// Opens the draft for `project`'s group, or `stored` as it is (a sidebar draft row). One draft per
+    /// project group, like T3's `logicalProjectDraftThreadKeyByLogicalProjectKey`; the session's project is
+    /// the member (and so the environment) the thread will be created in. An empty stored draft moves to
+    /// the requested member (`setLogicalProjectDraftThreadId` in useHandleNewThread.ts:280-305).
+    // ponytail: a draft with text is reused as is; T3 mints a fresh draft then (useHandleNewThread.ts:185-195)
+    private func showDraft(_ project: ProjectShell, stored: DraftSession? = nil) {
+        let group = group(of: project.id)
+        let key = group?.key ?? project.id.rawValue
+        var session: DraftSession
+        if let stored {
+            session = stored
+        } else if var existing = storedSession(key, members: Set(group?.memberProjectIds ?? [project.id])) {
+            if existing.projectId != project.id.rawValue, target != .draft(existing),
+               (prompts[existing.draftId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Self.retarget(&existing, to: project)
+                sessions[key] = existing
+            }
+            session = existing
+        } else {
+            let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
+            session = DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
+                                   projectId: project.id.rawValue, createdAt: Date())
+            sessions[key] = session
+        }
         flushPrompt()
         queuedEdit = nil
         questionRequestId = nil
@@ -319,7 +343,8 @@ final class ComposerController {
         optimistic = []
         pendingMessageId = nil
         sidebar?.state.activeThreadId = nil
-        panel.setDraft(projectTitle: project.title)
+        // The hero names the group (`activeProjectDisplayName`, DraftHeroHeadline.tsx:143-144).
+        panel.setDraft(projectTitle: group?.label ?? project.title)
         // T3 keeps the right panel per thread (rightPanelStore.ts); a draft opens with it closed.
         // ponytail: drafts don't remember an opened panel; key the state by draft id if that shows
         panel.setRightPanelOpen(false)
@@ -328,14 +353,111 @@ final class ComposerController {
         syncSidebarDrafts()
     }
 
+    /// The group's session. Sessions saved under a project id (before groups) move to the group key.
+    private func storedSession(_ key: String, members: Set<ProjectId>) -> DraftSession? {
+        if let session = sessions[key] { return session }
+        guard let (old, session) = sessions.first(where: { members.contains(ProjectId($0.value.projectId)) }) else { return nil }
+        sessions[old] = nil
+        sessions[key] = session
+        return session
+    }
+
+    /// The merged shell changed: a group may have gained or lost a machine.
+    func projectsChanged() {
+        if case .draft = target { updateRunOn() }
+    }
+
+    /// Points a draft at another member: same draft and local thread id, the member's environment.
+    static func retarget(_ session: inout DraftSession, to project: ProjectShell) {
+        session.projectId = project.id.rawValue
+        session.threadId = ThreadId(EnvironmentScope.localId(of: session.threadId)).scoped(to: project.id.environmentId ?? "").rawValue
+    }
+
+    private var sidebarEnvironments: SidebarEnvironments { sidebar?.state.environments ?? SidebarEnvironments() }
+
+    /// The project group holding `projectId` (`buildProjectGroups`, the sidebar's grouping).
+    private func group(of projectId: ProjectId) -> SidebarModel.ProjectGroup? {
+        guard let projects = sidebar?.snapshot?.projects else { return nil }
+        return SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: sidebarEnvironments.primaryId)
+            .first { $0.memberProjectIds.contains(projectId) }
+    }
+
+    /// `logicalProjectEnvironments` (ChatView.tsx:2758-2818): the first member per environment in project
+    /// order, labelled by its environment (else the id), the primary first, then by label.
+    private func runOnTargets(_ group: SidebarModel.ProjectGroup) -> [(option: RunOnOption, project: ProjectShell)] {
+        let envs = sidebarEnvironments
+        let members = Set(group.memberProjectIds)
+        var seen = Set<String>()
+        var out: [(option: RunOnOption, project: ProjectShell)] = []
+        for project in sidebar?.snapshot?.projects ?? [] where members.contains(project.id) {
+            guard let env = project.id.environmentId, seen.insert(env).inserted else { continue }
+            out.append((RunOnOption(environmentId: env, label: envs.labels[env] ?? env, machine: envs.machine(env)), project))
+        }
+        return out.sorted { a, b in
+            let ap = a.option.environmentId == envs.primaryId, bp = b.option.environmentId == envs.primaryId
+            if ap != bp { return ap }
+            return a.option.label.localizedCompare(b.option.label) == .orderedAscending
+        }
+    }
+
+    /// The draft's "Run on" control: shown with a choice of machines or on a machine other than this one
+    /// (`shouldShowEnvironmentIndicator`, BranchToolbar.logic.ts:59-65), a static label without a choice.
+    private func updateRunOn() {
+        guard case .draft(let session) = target, let group = group(of: ProjectId(session.projectId)) else {
+            panel.showsContextStrip = false
+            return
+        }
+        let targets = runOnTargets(group)
+        let env = ProjectId(session.projectId).environmentId
+        let runOn = panel.contextStrip.runOn
+        runOn.options = targets.map(\.option)
+        runOn.selectedId = env
+        runOn.locked = targets.count < 2 || pendingMessageId != nil
+        panel.showsContextStrip = targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
+    }
+
+    /// `onEnvironmentChange` (ChatView.tsx:4450-4517): the open draft moves to the group's member on that
+    /// machine, keeping its prompt, picks, draft id and thread id. The pick is stored with the draft.
+    private func changeEnvironment(_ environmentId: String) {
+        guard case .draft(var session) = target, pendingMessageId == nil,
+              let group = group(of: ProjectId(session.projectId)),
+              let project = runOnTargets(group).first(where: { $0.option.environmentId == environmentId })?.project,
+              project.id.rawValue != session.projectId else { return }
+        flushPrompt()
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        Self.retarget(&session, to: project)
+        sessions[key] = session
+        target = .draft(session)
+        scheduleSave()
+        refresh()
+        syncSidebarDrafts()
+    }
+
+    /// The hero's project menu (DraftHeroHeadline.tsx:236-310): one radio row per project group, the open
+    /// one first and checked, each with the machine badge while projects span environments. Picking a group
+    /// opens its draft on the member in the current draft's environment, else its representative
+    /// (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:136-176).
+    // ponytail: no favicons, "No project" or "Add project" rows; add them with scratch threads and Add Project
     private func pickProject(from anchor: NSView) {
         guard let snapshot = sidebar?.snapshot, case .draft(let current) = target else { return }
-        // ponytail: lists every physical project, so a repository on two environments shows twice; T3 lists
-        // groups with the environment badge and asks which member gets the thread (DraftHeroHeadline.tsx)
-        let items = snapshot.projects.map { project in
-            var item = MenuItem.radio(project.title, checked: project.id.rawValue == current.projectId)
+        let envs = sidebarEnvironments
+        let currentId = ProjectId(current.projectId)
+        var groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
+        if let i = groups.firstIndex(where: { $0.memberProjectIds.contains(currentId) }), i > 0 {
+            groups.insert(groups.remove(at: i), at: 0)
+        }
+        let badges = SidebarEnvironments.span(groups)
+        let items = groups.map { group in
+            let active = group.memberProjectIds.contains(currentId)
+            var item = MenuItem.radio(group.label, checked: active)
             item.closesOnClick = true
-            item.action = { [weak self] in self?.showDraft(project) }
+            if badges, let badge = envs.badge(group) {
+                item.badge = EnvironmentMachineIcon.definition(badge.machine)
+                item.badgeTooltip = badge.description
+            }
+            let project = group.members.first { $0.id == currentId }
+                ?? group.members.first { $0.id.environmentId == currentId.environmentId } ?? group.representative
+            item.action = { [weak self] in if !active { self?.showDraft(project) } }
             return item
         }
         MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4))
@@ -435,6 +557,7 @@ final class ComposerController {
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.isBusy = queueBusy
         updatePickers()
+        updateRunOn()
         let banner = draftKey.flatMap { threadErrors.visible($0, shell: shellThread) }
         if banner != panel.errorBanner.banner {
             panel.errorBanner.banner = banner
@@ -868,7 +991,7 @@ extension ComposerController {
         guard let session = sessions.values.first(where: { $0.draftId == draftId }),
               let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) else { return false }
         if target == .draft(session) { return true }
-        showDraft(project)
+        showDraft(project, stored: session)
         return true
     }
 
