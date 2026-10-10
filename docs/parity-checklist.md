@@ -248,13 +248,13 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Terminal drawer (`terminal.toggle`, `mod+j`), resize, height persistence | comp/ThreadTerminalDrawer.tsx, web/terminalUiStateStore.ts | ⏳ | Also available as right-panel tab |
-| Terminal tabs and split groups (max 4 per group), horizontal/vertical splits | comp/ThreadTerminalDrawer.tsx, web/types.ts | ⏳ | `terminal.split`, `terminal.splitVertical`, `terminal.new`, `terminal.close` |
-| Terminal renderer (Ghostty-based) with theme colors, fonts, selection | web/terminal/ghostty/ | ⏳ | Renderer is JS/WASM in the web app; native needs its own emulator (SwiftTerm or libghostty). needs webview: ask user only if reusing the JS renderer |
-| Terminal links (URLs, file paths) open in preview/editor | web/terminal-links.ts, comp/preview/openTerminalLinkInPreview.ts | ⏳ | Opening URL in preview needs webview: ask user |
+| Terminal drawer (`terminal.toggle`, `mod+j`), resize, height persistence | comp/ThreadTerminalDrawer.tsx, web/terminalUiStateStore.ts | 🟡 | WP7.4: drawer under the chat column, header toggle and `mod+j`, 6pt drag handle (180 to 75% of the window), per-thread open/height/terminals in UserDefaults, action cluster with tooltips, empty state, close confirm. Missing: open/close animation, right-panel terminal tab (WP7.6), drawer on draft threads |
+| Terminal tabs and split groups (max 4 per group), horizontal/vertical splits | comp/ThreadTerminalDrawer.tsx, web/types.ts | ➖ | One terminal shows at a time. New (`terminal.new`, `+`) opens the next `term-N` and shows it; the split buttons do the same; the terminal list aside and split grids are not drawn | `terminal.split`, `terminal.splitVertical`, `terminal.new`, `terminal.close` |
+| Terminal renderer (Ghostty-based) with theme colors, fonts, selection | web/terminal/ghostty/ | 🟡 | SwiftTerm 1.19.0 (vendored, Packages/SwiftTerm), CoreText drawing: SF Mono 12, 16pt cells, 4pt padding, libghostty's default palette, T3's cursor and selection colors per appearance, 10,000 rows scrollback, blinking block cursor, no bell. Missing: font settings, bundled Symbols Nerd Font, bottom-anchored grid |
+| Terminal links (URLs, file paths) open in preview/editor | web/terminal-links.ts, comp/preview/openTerminalLinkInPreview.ts | 🟡 | Plain click on a detected URL or OSC 8 link; URLs open in the browser, paths with the default app. Missing: preview panel and preferred editor routing | Opening URL in preview needs webview: ask user |
 | Add terminal selection to chat as context chip | comp/ThreadTerminalDrawer.tsx, comp/chat/TerminalContextInlineChip.tsx | ⏳ | |
-| Terminal context menu (copy, paste, clear, add to chat) | comp/ThreadTerminalDrawer.tsx | ⏳ | |
-| Terminal history retained server-side, replay on reconnect | docs/terminal.md, D-server-features.md section 1 | ⏳ | |
+| Terminal context menu (copy, paste, clear, add to chat) | comp/ThreadTerminalDrawer.tsx | 🟡 | Copy, Paste, Select all, Jump to latest; Cmd+C/V/A; T3's Cmd/Option arrows, Cmd+Backspace, Cmd+K and Ctrl+L. Missing: Add to chat and the post-selection popup | |
+| Terminal history retained server-side, replay on reconnect | docs/terminal.md, D-server-features.md section 1 | ✅ | `terminal.attach` snapshot replays history on open, reopen and reconnect (replies muted during replay) | |
 | Project scripts / actions run in terminal (script. commands, `runOnSettle`) | comp/ProjectScriptsControl.tsx, comp/projectScriptEditor.tsx, web/projectScripts.ts | ⏳ | `script.<id>.run` keybindings |
 | Provider auth terminal (sign-in helper) | comp/settings/ProviderAuthTerminal.tsx | ⏳ | |
 | Idle terminals close on settle | docs/thread-sidebar.md | ⏳ | Server side |
@@ -462,13 +462,13 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | sidebar.toggle | mod+b | (none) | 🟡 |
 | navigation.back | mod+[ | !terminalFocus | ⏳ no route history yet |
 | navigation.forward | mod+] | !terminalFocus | ⏳ no route history yet |
-| terminal.toggle | mod+j | (none) | ⏳ WP7.4 |
+| terminal.toggle | mod+j | (none) | 🟡 |
 | rightPanel.toggle | mod+alt+b | (none) | ➖ the diff is the only surface |
 | rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | ⏳ WP7.6 |
-| terminal.split | mod+d | terminalFocus | ⏳ WP7.4 |
-| terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ WP7.4 |
-| terminal.new | mod+n | terminalFocus | ⏳ WP7.4 |
-| terminal.close | mod+w | terminalFocus | ⏳ WP7.4 |
+| terminal.split | mod+d | terminalFocus | ⏳ splits not drawn |
+| terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ splits not drawn |
+| terminal.new | mod+n | terminalFocus | 🟡 one terminal shows |
+| terminal.close | mod+w | terminalFocus | 🟡 |
 | rightPanel.close | mod+w | !terminalFocus | 🟡 |
 | view.reopenClosed | mod+shift+t | (none) | ⏳ WP7.6 |
 | diff.toggle | mod+d | !terminalFocus | 🟡 |

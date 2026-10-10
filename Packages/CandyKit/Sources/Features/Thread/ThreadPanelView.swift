@@ -43,7 +43,7 @@ public final class ThreadHeaderView: TopbarDragView {
         super.init(frame: frameRect)
         for label in [project, slash, title] { label.lineHeight = 20; addSubview(label) }
         addSubview(favicon)
-        // ponytail: the thread details and terminal toggles only reserve their place and look; their panels come with M5 and M7
+        // ponytail: the thread details toggle only reserves its place and look; its panel comes later in M7
         toggles[0].setAccessibilityLabel("Thread panel")
         toggles[1].setAccessibilityLabel("Toggle terminal")
         toggles[2].setAccessibilityLabel("Toggle right panel")
@@ -136,6 +136,13 @@ public final class ThreadPanelView: DSView {
     /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
     let maximize = ToggleView(nil, icon: .maximize2, variant: .ghost, size: .sm)
     public var diffPanel: DiffPanelView { rightPanel.diff }
+    /// The terminal drawer under the chat column; `TerminalController` fills it.
+    public let terminalDrawer = TerminalDrawerView()
+    public private(set) var terminalOpen = false
+    /// The drawer's height while open (already clamped by the controller).
+    public private(set) var terminalHeight: CGFloat = 0
+    /// The header's terminal toggle was clicked (`terminal.toggle`).
+    public var onTerminalToggle: (@MainActor () -> Void)?
     public private(set) var rightPanelOpen = false
     public private(set) var rightPanelMaximized = false
     /// The user opened or closed the right panel.
@@ -197,6 +204,8 @@ public final class ThreadPanelView: DSView {
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
+        terminalDrawer.isHidden = true
+        addSubview(terminalDrawer)
         rightPanel.isHidden = true
         addSubview(rightPanel)
         maximize.setAccessibilityLabel("Maximize panel")
@@ -205,6 +214,11 @@ public final class ThreadPanelView: DSView {
         addSubview(maximize)
         addSubview(toasts)
         header.toggles[2].onPressedChange = { [weak self] _ in self?.userSetRightPanel(!(self?.rightPanelOpen ?? true)) }
+        header.toggles[1].onPressedChange = { [weak self] _ in
+            guard let self else { return }
+            header.toggles[1].isPressed = terminalOpen // the controller decides
+            onTerminalToggle?()
+        }
         rightPanel.tab.close.action = { [weak self] in self?.userSetRightPanel(false) }
         model.onOpenTurnDiff = { [weak self] run, path in
             guard let self else { return }
@@ -229,6 +243,16 @@ public final class ThreadPanelView: DSView {
         if open { diffPanel.setSummaries(summaries) }
         needsLayout = true
         header.needsLayout = true
+    }
+
+    /// Shows or hides the terminal drawer at `height`.
+    public func setTerminal(open: Bool, height: CGFloat) {
+        guard open != terminalOpen || height != terminalHeight else { return }
+        terminalOpen = open
+        terminalHeight = height
+        terminalDrawer.isHidden = !open
+        header.toggles[1].isPressed = open
+        needsLayout = true
     }
 
     /// Cmd+D (`diff.toggle`): the panel on the diff, or closed.
@@ -322,7 +346,7 @@ public final class ThreadPanelView: DSView {
     /// viewport), at most 736 wide, 20px above the bottom; the timeline keeps the overlay's height
     /// (`pt-2` + composer + spacer) clear. On the draft page the composer, a 32px context strip and
     /// the spacer are centered in the column below the header, with the hero 16px above.
-    private func layoutComposer(chat: CGFloat) {
+    private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
         let width = max(0, min(Tokens.LengthRem.chatContentMaxWidth * 16, chat - 2 * lane))
         let height = composer.preferredHeight
@@ -331,11 +355,11 @@ public final class ThreadPanelView: DSView {
         if isDraft {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
             let block = height + 32 + 20
-            let top = ThreadHeaderView.height + (bounds.height - ThreadHeaderView.height - block) / 2
+            let top = ThreadHeaderView.height + (chatHeight - ThreadHeaderView.height - block) / 2
             y = top.rounded()
             hero.frame = NSRect(x: x, y: y - 16 - DraftHeroView.height, width: width, height: DraftHeroView.height)
         } else {
-            y = bounds.height - 20 - height
+            y = chatHeight - 20 - height
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
@@ -435,7 +459,13 @@ public final class ThreadPanelView: DSView {
         header.isHidden = chat == 0
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
-        timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, bounds.height - ThreadHeaderView.height))
+        // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
+        // the column above it keeps at least the header.
+        let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - ThreadHeaderView.height)) : 0
+        let chatHeight = bounds.height - drawer
+        terminalDrawer.isHidden = drawer == 0
+        terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
+        timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
         rightPanel.frame = NSRect(x: chat, y: 0, width: panelWidth, height: bounds.height)
         if rightPanelOpen {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
@@ -447,7 +477,7 @@ public final class ThreadPanelView: DSView {
                 x -= 4
             }
         }
-        layoutComposer(chat: chat)
+        layoutComposer(chat: chat, height: chatHeight)
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         if !errorBanner.isHidden {
             let w = errorBanner.fittingWidth(max: max(0, min(768, chat - 32)))

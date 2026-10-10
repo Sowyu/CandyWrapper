@@ -1,0 +1,10 @@
+{
+  "drawer" : {
+    "height" : 200,
+    "width" : 640
+  },
+  "empty" : {
+    "height" : 200,
+    "width" : 640
+  }
+}

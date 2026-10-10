@@ -101,6 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             values["editableFocus"] = Shortcuts.editableFocused(in: window)
             values["draftThreadRoute"] = threads?.panel.isDraft ?? false
             values["rightPanelOpen"] = threads?.panel.rightPanelOpen ?? false
+            values["terminalFocus"] = threads?.terminal.isFocused ?? false
+            values["terminalOpen"] = threads?.panel.terminalOpen ?? false
             values["usagePageOpen"] = commands?.isUsagePageOpen ?? false
             return KeybindingContext(values)
         }

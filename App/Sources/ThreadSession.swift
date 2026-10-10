@@ -223,6 +223,7 @@ final class ThreadSession {
 @MainActor
 final class ThreadController {
     let panel = ThreadPanelView()
+    private(set) var terminal: TerminalController!
     private(set) var composer: ComposerController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
@@ -255,12 +256,14 @@ final class ThreadController {
         if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
+        terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
         sidebar.actions.openDraft = { [weak self] id in
             guard let self, composer.openDraft(id) else { return }
             session?.end()
             session = nil
+            terminal.show(nil)
         }
         sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
         sidebar.actions.searchThreads = { [weak environments] query in await environments?.searchThreads(query) }
@@ -288,6 +291,7 @@ final class ThreadController {
     /// The thread view's keybindings (ChatView.tsx:8030-8180, Sidebar.tsx:4872-4910).
     func registerShortcuts(_ shortcuts: Shortcuts) {
         composer.registerShortcuts(shortcuts)
+        terminal.registerShortcuts(shortcuts)
         // `diff.toggle` and `rightPanel.toggle`: the diff is the only right panel surface so far.
         shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] _ in
             guard let self, self.panel.window != nil else { return false }
@@ -348,6 +352,7 @@ final class ThreadController {
     /// An environment's session started, was replaced or ended: the open thread follows its own one.
     private func sessionChanged(_ environmentId: String) {
         composer.sessionChanged(environmentId)
+        terminal.sessionChanged(environmentId)
         guard let session, session.environmentId == environmentId else { return }
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
@@ -368,6 +373,7 @@ final class ThreadController {
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
+        terminal.show(id)
         updateEnvironmentBanner()
         if openDiff {
             openDiff = false
@@ -397,6 +403,7 @@ final class ThreadController {
         guard composer.newThread(in: project) else { return }
         previous?.end()
         session = nil
+        terminal.show(nil)
     }
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
@@ -405,6 +412,7 @@ final class ThreadController {
     func close() {
         session?.end()
         session = nil
+        terminal.show(nil)
     }
 
     /// "<label> is reconnecting|offline" over the composer while the open thread's environment is not
@@ -463,6 +471,7 @@ final class ThreadController {
     private func landOnIndex() {
         session?.end()
         session = nil
+        terminal.show(nil)
         updateEnvironmentBanner()
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         if let snapshot = sidebar?.snapshot,
@@ -477,6 +486,7 @@ final class ThreadController {
         let prefix = environmentId + ":"
         retained.removeAll { $0.id.environmentId == environmentId }
         composer.environmentRemoved(environmentId)
+        terminal.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
         if let ids = defaults.stringArray(forKey: Self.rightPanelKey) {
             defaults.set(ids.filter { !$0.hasPrefix(prefix) }, forKey: Self.rightPanelKey)
