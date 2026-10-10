@@ -204,7 +204,7 @@ final class ComposerController {
     /// Sidebar new-thread button (`handleNewThread`, useHandleNewThread.ts:64-390): the open
     /// thread's project, else the first project. Reuses the project's draft session, else mints one.
     @discardableResult
-    func newThread() -> Bool {
+    func newThread(in chosen: ProjectShell? = nil) -> Bool {
         guard let snapshot = sidebar?.snapshot, !snapshot.projects.isEmpty else { return false }
         var projectId: ProjectId?
         switch target {
@@ -212,7 +212,7 @@ final class ComposerController {
         case .draft(let s): projectId = ProjectId(s.projectId)
         case nil: break
         }
-        let project = snapshot.projects.first { $0.id == projectId } ?? snapshot.projects[0]
+        let project = chosen ?? snapshot.projects.first { $0.id == projectId } ?? snapshot.projects[0]
         showDraft(project)
         return true
     }
