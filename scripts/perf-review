@@ -69,6 +69,11 @@ THRESHOLDS = {
     "size.binary_mb": (0.10, 0.5, "MB"),
 }
 BENCH_THRESHOLD = (0.20, 0.05, "ms")
+# Reported but never a verdict: one sample each, and a 2026-10-10 A/B (3 rounds per build) showed the
+# footprint 1 s after a turn lands on either about 36-56 MB or about 86 MB in the same build, depending
+# on whether the allocator has returned freed pages yet; package idle wakeups follow the whole machine.
+# stream.peak_footprint_mb and stream.cpu_pct still gate.
+INFORMATIONAL = {"stream.footprint_mb", "stream.package_idle_wakeups_per_s"}
 
 
 def log(msg):
@@ -342,6 +347,8 @@ def verdict(name, new, old):
     rel, absolute, _ = THRESHOLDS.get(name, BENCH_THRESHOLD)
     if old is None:
         return "new"
+    if name in INFORMATIONAL:
+        return "info"
     delta = new["median"] - old["median"]
     big = abs(delta) > absolute and (old["median"] == 0 or abs(delta) / abs(old["median"]) > rel)
     if not big:
