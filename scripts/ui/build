@@ -6,5 +6,10 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p /tmp/cw-ui
-for t in click scroll key axpress front grid colmean type; do swiftc -O -o "/tmp/cw-ui/$t" "$here/$t.swift"; done
+# The input tools get input-guard.swift in front: no input while the user's demo app is frontmost.
+for t in click scroll key type; do
+  cat "$here/input-guard.swift" "$here/$t.swift" > "/tmp/cw-ui/$t-main.swift"
+  swiftc -O -o "/tmp/cw-ui/$t" "/tmp/cw-ui/$t-main.swift"
+done
+for t in axpress front grid colmean; do swiftc -O -o "/tmp/cw-ui/$t" "$here/$t.swift"; done
 echo "built into /tmp/cw-ui"

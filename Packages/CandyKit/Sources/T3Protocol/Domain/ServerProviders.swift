@@ -162,8 +162,46 @@ public struct ServerProviderStatus: OpenStringEnum {
     public static let disabled: Self = "disabled"
 }
 
-/// `ServerProvider` (server.ts:213-300), one configured provider instance. Fields the pickers don't
-/// read (auth, skills, slash commands, usage limits, advisories) are skipped.
+/// `ServerProviderSlashCommand` (server.ts:102-112).
+public struct ServerProviderSlashCommand: Codable, Hashable, Sendable {
+    public struct Input: Codable, Hashable, Sendable { public var hint: String }
+    public var name: String
+    public var description: String?
+    public var input: Input?
+    public init(name: String, description: String? = nil, hint: String? = nil) {
+        self.name = name; self.description = description; self.input = hint.map { Input(hint: $0) }
+    }
+}
+
+/// `ServerProviderSkill` (server.ts:114-135).
+public struct ServerProviderSkill: Codable, Hashable, Sendable {
+    public var name: String
+    public var description: String?
+    public var path: String
+    public var scope: String?
+    public var enabled: Bool
+    public var displayName: String?
+    public var shortDescription: String?
+    public var userInvocationOnly: Bool?
+    public var userInvocable: Bool?
+    public init(name: String, description: String? = nil, path: String, scope: String? = nil, enabled: Bool = true,
+                displayName: String? = nil, shortDescription: String? = nil, userInvocable: Bool? = nil) {
+        self.name = name; self.description = description; self.path = path; self.scope = scope; self.enabled = enabled
+        self.displayName = displayName; self.shortDescription = shortDescription; self.userInvocable = userInvocable
+    }
+}
+
+/// `ServerProviderWorkspaceSnapshot` (server.ts:137-145): skills and commands found under one cwd.
+public struct ServerProviderWorkspaceSnapshot: Codable, Hashable, Sendable {
+    public var cwd: String
+    public var checkedAt: String
+    public var slashCommands: [ServerProviderSlashCommand]
+    public var slashCommandsPending: Bool?
+    public var skills: [ServerProviderSkill]
+}
+
+/// `ServerProvider` (server.ts:213-300), one configured provider instance. Fields nothing here
+/// reads (auth, usage limits, advisories) are skipped.
 public struct ServerProvider: Decodable, Hashable, Sendable {
     public var instanceId: ProviderInstanceId
     /// Driver kind slug (`claudeAgent`, `codex`, ...). Picks the icon; never a routing key.
@@ -184,6 +222,9 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// `available` or `unavailable`; absent means available.
     public var availability: String?
     public var models: [ServerProviderModel]
+    public var slashCommands: [ServerProviderSlashCommand] = []
+    public var skills: [ServerProviderSkill] = []
+    public var workspaceSnapshots: [ServerProviderWorkspaceSnapshot]?
 
     public init(instanceId: ProviderInstanceId, driver: String, displayName: String? = nil, enabled: Bool = true,
                 installed: Bool = true, status: ServerProviderStatus = .ready, models: [ServerProviderModel] = []) {
@@ -194,7 +235,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, models
+        case status, message, availability, models, slashCommands, skills, workspaceSnapshots
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -220,6 +261,19 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         message = try c.decodeIfPresent(String.self, forKey: .message)
         availability = try c.decodeIfPresent(String.self, forKey: .availability)
         models = try c.decodeIfPresent([ServerProviderModel].self, forKey: .models) ?? []
+        // Lenient: a malformed entry drops the list, never the provider.
+        slashCommands = (try? c.decodeIfPresent([ServerProviderSlashCommand].self, forKey: .slashCommands)) ?? []
+        skills = (try? c.decodeIfPresent([ServerProviderSkill].self, forKey: .skills)) ?? []
+        workspaceSnapshots = try? c.decodeIfPresent([ServerProviderWorkspaceSnapshot].self, forKey: .workspaceSnapshots)
+    }
+
+    /// `resolveProviderSkillsForCwd`: the workspace snapshot's skills, else the provider's.
+    public func skills(cwd: String?) -> [ServerProviderSkill] { workspaceSnapshot(cwd)?.skills ?? skills }
+    /// `resolveProviderSlashCommandsForCwd`.
+    public func slashCommands(cwd: String?) -> [ServerProviderSlashCommand] { workspaceSnapshot(cwd)?.slashCommands ?? slashCommands }
+    public func workspaceSnapshot(_ cwd: String?) -> ServerProviderWorkspaceSnapshot? {
+        guard let cwd else { return nil }
+        return workspaceSnapshots?.first { $0.cwd == cwd }
     }
 }
 

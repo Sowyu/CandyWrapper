@@ -124,13 +124,16 @@ public enum ComposerLogic {
     /// Checked 2026-10-10 against the official web client on the sandbox: same keys, same values.
     public static func launchThreadPayload(commandId: String, threadId: String, projectId: String, title: String,
                                            modelSelection: JSONValue, runtimeMode: String, interactionMode: String,
-                                           messageId: String, text: String) -> JSONValue {
-        .object([
+                                           messageId: String, text: String, context: JSONValue? = nil) -> JSONValue {
+        var message: [String: JSONValue] = ["messageId": .string(messageId), "text": .string(text), "attachments": .array([])]
+        // Inline chips' records ride only when there are any (commands.ts:680-684).
+        if let context { message["context"] = context }
+        return .object([
             "commandId": .string(commandId), "creationSource": .string("web"), "threadId": .string(threadId),
             "projectId": .string(projectId), "title": .string(title), "generateTitle": .bool(true),
             "modelSelection": modelSelection, "runtimeMode": .string(runtimeMode),
             "interactionMode": .string(interactionMode), "workspaceStrategy": .object(["type": .string("root")]),
-            "initialMessage": .object(["messageId": .string(messageId), "text": .string(text), "attachments": .array([])]),
+            "initialMessage": .object(message),
         ])
     }
 

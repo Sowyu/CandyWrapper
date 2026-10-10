@@ -98,6 +98,10 @@ public final class ThreadPanelView: DSView {
     /// drawer). Show one through `drawer`; the composer controller configures them.
     public let approvalPanel = ApprovalPanelView()
     public let questionPanel = QuestionPanelView()
+    /// The `/`, `@`, `$` and `#` menu, docked on the composer's top edge over the other attachments.
+    public let commandMenu = ComposerCommandMenuView()
+    /// Drives `commandMenu` from the composer's caret; the app supplies rows and acts on picks.
+    public private(set) lazy var menus = ComposerMenuController(composer: composer, menu: commandMenu)
     /// "<label> is reconnecting|offline" (ChatView.tsx:3091-3142): the banner stack's front item, docked
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
@@ -162,8 +166,10 @@ public final class ThreadPanelView: DSView {
         addSubview(questionPanel)
         contextStrip.isHidden = true
         addSubview(contextStrip)
+        addSubview(commandMenu)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
+        menus.onLayoutChange = { [weak self] in self?.needsLayout = true }
         queue.onHeightChange = { [weak self] in self?.needsLayout = true }
         // `topbar-scroll-fade` (index.css:439-475): the first 25px of the scroller fade out; drawn as
         // a background-colored overlay instead of a mask, so scrolling doesn't render offscreen.
@@ -326,6 +332,15 @@ public final class ThreadPanelView: DSView {
                                     width: max(0, width - 2 * stripInset), height: ComposerContextStripView.height)
         // Attachments, 22pt in from each side, each sliding 17pt under the one below it: the
         // request panel under the composer, the queue under the panel (ComposerBanner.Column).
+        // The menu (`ComposerCommandMenuLayer`): its bottom 17 under the composer's top, 22 in from
+        // each side, at most as tall as the room above (`rect.top - 24 + overlap`, at least 96).
+        let menuShown = menus.isOpen && !composer.isHidden
+        commandMenu.isHidden = !menuShown
+        if menuShown {
+            let h = min(commandMenu.preferredHeight, max(96, y - 24 + ComposerBannerView.overlap))
+            commandMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
+                                       width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
+        }
         let docked = !composer.isHidden && !isDraft
         let bannerX = x + ComposerBannerView.drawerInset
         let bannerWidth = max(0, width - 2 * ComposerBannerView.drawerInset)
