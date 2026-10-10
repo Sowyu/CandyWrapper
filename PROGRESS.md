@@ -114,6 +114,8 @@ Gotchas found so far:
 
 ## Findings worth knowing before you code
 
+- On-screen only bugs that offscreen snapshots miss: AppKit records `draw(_:)` and replays it at 2x, so a clip rect with an unbounded height became an empty clip (diff code never showed). `NSView.prepareForReuse()` unhides the view, so hide after calling it. Views drawn with the onSetNeedsDisplay policy keep their old image on resize unless marked for display (DSView now does that). Grain at 3.5% opacity sits under the 8/255 fidelity threshold, so grain bugs need their own check. Verify on screen with `screencapture` and `scripts/ui/`.
+- DS menus: radio items only call `onToggle`; set `closesOnClick` to run `action` and close (base-ui `closeOnClick`).
 - `NSView.prepareForReuse()` unhides the view and sets alpha to 1. Call it before hiding a recycled view. The timeline did it the other way round, and every recycled row stayed on screen at its old frame (the doubled and misplaced rows on the user's live thread, 2026-10-10). `TimelineView.layoutProblems()` checks the tiling contract; the hidden Cmd+Opt+Shift+L menu item writes it for the live app to `/tmp/cw-timeline-<pid>.txt`.
 
 - Memory: a view that draws (`wantsUpdateLayer` false) gets a backing store of its full size, 8 bytes per pixel at 2x on this screen, so a window-sized one costs 27 MB plus the same again in CG scratch. Use layer properties for fills (`GrainSurfaceView` is a background color plus replicated tiles). Since macOS 14 views don't clip their drawing, and drawing outside the bounds grows the backing store, up to the whole window: set `clipsToBounds = true` (the setter, not an override) on views that draw off-canvas tricks, and give transparency layers explicit rects. To find the cause: `footprint -p`, `vmmap -summary`, `MallocStackLogging=1` with `malloc_history -allEvents`, and a dump of the window's layer tree looking for big layers with contents.
@@ -134,6 +136,8 @@ Gotchas found so far:
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
 ## Log
+
+- 2026-10-10: Live demo bugs found by the user and on screen, all fixed: overlapping and stale timeline rows (`5fcc3a1`, recycle order, with TimelineTilingTests), the grain seam (`83f616b`, `5fcc3a1`), a stale truncated title after the diff panel closed (`058953d`), the turn picker doing nothing (`bb72d16`), diff code invisible on screen (`ac7460e`). JSON decode rewrite (`83f616b`): largest stream 76 ms to 7.7 ms. Diff panel wired with the changed-files card (`5fcc3a1`). Live thread of 227 rows: 0.56% CPU while streaming, 56 to 72 MB, peaks 110 to 174 MB while history loads (M8). UI tools saved in `scripts/ui/`.
 
 - 2026-10-10: WP3, app wiring and WP4 landed. Live demo on the user's T3 with accessibility granted (screenshots and clicks now work from the agent shell: `screencapture`, CGEvent, AX). The demo exposed Swift Regex in per-update failure checks (10.8% CPU while streaming, fixed with per-revision caching) and a 105 MB load peak from JSONValue's try? cascade (agent on it). Squeeze: grain tile mapped from the bundle and truncating labels clipped, sidebar app 27 to 25 MB. Debug and Release builds are ad-hoc signed, so each rebuild re-pairs with the live T3 (three CandyWrapper devices in T3 now); delete the old Keychain item first (`security delete-generic-password -s dev.candywrapper.t3.environment-token -a <envId>`) to avoid Keychain prompts.
 
