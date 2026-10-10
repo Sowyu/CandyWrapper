@@ -9,6 +9,9 @@ for scalar in a[1].utf16 {
     for down in [true, false] {
         let e = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: down)!
         e.keyboardSetUnicodeString(stringLength: 1, unicodeString: &unit)
+        // The HID source carries the session's modifier state; after a shortcut it can still say
+        // cmd/opt/shift are down, which turns every letter into a shortcut. Plain text has none.
+        e.flags = []
         e.post(tap: .cghidEventTap)
     }
     usleep(8000)
@@ -20,6 +23,7 @@ if a.contains("--return") {
     for down in [true, false] {
         let e = CGEvent(keyboardEventSource: src, virtualKey: 36, keyDown: down)!
         e.keyboardSetUnicodeString(stringLength: 1, unicodeString: &cr)
+        e.flags = []
         e.post(tap: .cghidEventTap)
         usleep(20000)
     }
