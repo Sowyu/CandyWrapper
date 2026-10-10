@@ -37,6 +37,7 @@ final class ThreadSession {
         historyLoad?.cancel()
         historyLoad = nil
         self.shell = shell
+        if active { panel?.diffPanel.loader = Self.diffLoader(shell.supervisor) }
         let store = self.store
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
             ThreadSession.encode(await store.subscribeInput())
@@ -95,13 +96,30 @@ final class ThreadSession {
         }
     }
 
-    // ponytail: JSON round trips like ShellSession.decode; decode from the frame bytes if profiling shows it
     nonisolated static func decode(_ json: JSONValue) -> ThreadStreamItem? {
-        guard let data = try? JSONEncoder().encode(json) else { return nil }
-        return try? JSONDecoder().decode(ThreadStreamItem.self, from: data)
+        try? json.decode(as: ThreadStreamItem.self)
     }
 
-    nonisolated static func encode(_ input: SubscribeThreadInput) -> JSONValue {
+    /// `getTurnDiff` and `getFullThreadDiff` as unary calls on the shell's socket (DiffPanel's
+    /// request rule is `TurnDiffs.request`). Failures carry the server's message, which T3 shows.
+    nonisolated static func diffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.Loader {
+        { request in
+            let (tag, payload) = switch request {
+            case .turn(let input): ("orchestration.getTurnDiff", encode(input))
+            case .fullThread(let input): ("orchestration.getFullThreadDiff", encode(input))
+            }
+            do {
+                let json = try await supervisor.request(tag, payload: payload)
+                return try JSONDecoder().decode(ThreadTurnDiff.self, from: JSONEncoder().encode(json))
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    struct DiffLoadError: LocalizedError { var errorDescription: String? }
+
+    nonisolated static func encode(_ input: some Encodable) -> JSONValue {
         guard let data = try? JSONEncoder().encode(input),
               let json = try? JSONDecoder().decode(JSONValue.self, from: data) else { return .object([:]) }
         return json
@@ -119,7 +137,10 @@ final class ThreadController {
     private var environment: String?
     /// Development: `--open-thread <title prefix>` opens the first matching thread once the shell arrives.
     private var openPrefix: String?
+    /// Development: `--open-diff` opens the right panel on that thread's newest turn that changed files.
+    private var openDiff = CommandLine.arguments.contains("--open-diff")
     private var restored = false
+    private var keyMonitor: Any?
 
     init(sidebar: SidebarContentView, window: NSWindow) {
         self.sidebar = sidebar
@@ -129,6 +150,32 @@ final class ThreadController {
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }
+        panel.onRightPanelChange = { [weak self] open in self?.rememberRightPanel(open) }
+        // Cmd+D is T3's `diff.toggle` (a web keydown handler, not a menu item in the desktop app).
+        // ponytail: the default binding only; read the user's keybindings from server config in M7
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
+            guard event.window === window, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers == "d", let self else { return event }
+            MainActor.assumeIsolated { self.panel.toggleDiff() }
+            return nil
+        }
+    }
+
+    /// T3 keeps the right panel's state per thread and persists it (rightPanelStore.ts,
+    /// `t3code:right-panel-state:v2`). Only open threads are stored.
+    private static let rightPanelKey = "thread.rightPanelOpen"
+
+    private func rememberRightPanel(_ open: Bool) {
+        guard let id = session?.threadId else { return }
+        var ids = UserDefaults.standard.stringArray(forKey: Self.rightPanelKey) ?? []
+        ids.removeAll { $0 == id.rawValue }
+        // ponytail: newest 200 threads; T3 keeps every thread's entry
+        if open { ids = Array(([id.rawValue] + ids).prefix(200)) }
+        UserDefaults.standard.set(ids, forKey: Self.rightPanelKey)
+    }
+
+    private func rightPanelWasOpen(_ id: ThreadId) -> Bool {
+        UserDefaults.standard.stringArray(forKey: Self.rightPanelKey)?.contains(id.rawValue) == true
     }
 
     private var lastThreadKey: String? { environment.map { "thread.lastOpen." + $0 } }
@@ -154,9 +201,14 @@ final class ThreadController {
         guard id != session?.threadId else { return }
         session?.end()
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        panel.setRightPanelOpen(rightPanelWasOpen(id))
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar)
         if let shell { session.attach(shell) }
         self.session = session
+        if openDiff {
+            openDiff = false
+            panel.opensChangedTurnOnLoad = true
+        }
     }
 
     func close() {

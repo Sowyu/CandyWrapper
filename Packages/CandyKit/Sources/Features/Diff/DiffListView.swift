@@ -68,9 +68,11 @@ public final class DiffListView: DSView {
 
     /// Expands `path` and scrolls its header to the top (T3's reveal of the file picked in the
     /// changed files card).
-    public func reveal(path: String) {
+    /// Scrolls `path`'s header to the top; `expand` also opens it (T3's lazy git sources do, turn
+    /// diffs only scroll, DiffPanel.tsx:595-650).
+    public func reveal(path: String, expand: Bool = true) {
         guard let file = diff.files.firstIndex(where: { $0.path == path }) else { return }
-        if collapsed.contains(file) { collapsed.remove(file); relayout(); onCollapsedChange?() }
+        if expand, collapsed.contains(file) { collapsed.remove(file); relayout(); onCollapsedChange?() }
         layoutSubtreeIfNeeded()
         let y = rowLayout.rows[rowLayout.headerRow[file]].top
         scrollTo(NSPoint(x: 0, y: min(y, max(0, frame.height - viewportHeight))))

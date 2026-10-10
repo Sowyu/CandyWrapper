@@ -32,7 +32,7 @@ public final class ThreadHeaderView: TopbarDragView {
         super.init(frame: frameRect)
         for label in [project, slash, title] { label.lineHeight = 20; addSubview(label) }
         addSubview(favicon)
-        // ponytail: the toggles only reserve their place and look; the panels they open come with M5 and M7
+        // ponytail: the thread details and terminal toggles only reserve their place and look; their panels come with M5 and M7
         toggles[0].setAccessibilityLabel("Thread panel")
         toggles[1].setAccessibilityLabel("Toggle terminal")
         toggles[2].setAccessibilityLabel("Toggle right panel")
@@ -50,10 +50,14 @@ public final class ThreadHeaderView: TopbarDragView {
         let slashX = 40 + projectWidth + 12
         slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
         let titleX = slashX + slash.textWidth + 12
-        // `pr-24` keeps the title clear of the toggles.
-        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 20 - 96 - titleX)), height: 20)
+        // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
+        // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
+        // (ChatHeader.tsx:256-345).
+        let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
+        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 20 - reserve - titleX)), height: 20)
         var x = bounds.width - 12 - 1
-        for toggle in toggles.reversed() {
+        // While the right panel is open, the terminal and panel toggles live on its tab bar.
+        for toggle in toggles.reversed() where toggle.superview === self {
             let size = toggle.intrinsicContentSize
             x -= size.width
             toggle.frame = NSRect(x: x, y: midY - size.height / 2, width: size.width, height: size.height)
@@ -62,18 +66,33 @@ public final class ThreadHeaderView: TopbarDragView {
     }
 }
 
-/// The read-only thread: header over the timeline, on the panel background. Feed it a projection
-/// with `setProjection(_:)`; the expand and collapse state lives in `model`.
+/// The read-only thread: header over the timeline, on the panel background, and the right panel
+/// with the diff beside them (ChatView.tsx:11240-11970). Feed it a projection with
+/// `setProjection(_:)`; the expand and collapse state lives in `model`.
 ///
 /// The app uses:
 /// - `setProjection(_:projectTitle:workspaceRoot:)` on every `ThreadStore` update,
 /// - `onLoadEarlier` to page in older history (call `ThreadStore.beginLoadEarlier`),
+/// - `diffPanel.loader` for `getTurnDiff`, `setRightPanelOpen` and `onRightPanelChange` to keep
+///   the panel's open state per thread, `toggleDiff()` for Cmd+D,
 /// - `bottomInset` once a composer floats over the timeline.
 public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
     public let timeline = TimelineView()
     public let model = ThreadViewModel()
     private let fade = CAGradientLayer()
+    let rightPanel = RightPanelView()
+    /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
+    let maximize = ToggleView(nil, icon: .maximize2, variant: .ghost, size: .sm)
+    public var diffPanel: DiffPanelView { rightPanel.diff }
+    public private(set) var rightPanelOpen = false
+    public private(set) var rightPanelMaximized = false
+    /// The user opened or closed the right panel.
+    public var onRightPanelChange: (@MainActor (Bool) -> Void)?
+    private var summaries: [TurnDiffSummary] = []
+    /// Development (`--open-diff`): open the panel on the newest run that changed files once the
+    /// thread's checkpoints arrive.
+    public var opensChangedTurnOnLoad = false
 
     /// The user scrolled near the first loaded row.
     public var onLoadEarlier: (@MainActor () -> Void)? {
@@ -100,6 +119,67 @@ public final class ThreadPanelView: DSView {
             guard let self else { return }
             self.timeline.setItems(self.model.items)
         }
+        rightPanel.isHidden = true
+        addSubview(rightPanel)
+        maximize.setAccessibilityLabel("Maximize panel")
+        maximize.isHidden = true
+        maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
+        addSubview(maximize)
+        header.toggles[2].onPressedChange = { [weak self] _ in self?.userSetRightPanel(!(self?.rightPanelOpen ?? true)) }
+        rightPanel.tab.close.action = { [weak self] in self?.userSetRightPanel(false) }
+        model.onOpenTurnDiff = { [weak self] run, path in
+            guard let self else { return }
+            if !rightPanelOpen { userSetRightPanel(true) }
+            diffPanel.open(runId: run, filePath: path)
+        }
+    }
+
+    // MARK: Right panel
+
+    /// Opens or closes the right panel without telling `onRightPanelChange` (restoring a thread's state).
+    public func setRightPanelOpen(_ open: Bool) {
+        guard open != rightPanelOpen else { return }
+        rightPanelOpen = open
+        if !open { rightPanelMaximized = false; maximize.isPressed = false }
+        rightPanel.isHidden = !open
+        maximize.isHidden = !open
+        header.toggles[2].isPressed = open
+        // The terminal and panel toggles move to the panel's tab bar and back, at the same place.
+        for toggle in header.toggles.dropFirst() { (open ? self : header).addSubview(toggle) }
+        // The panel asks for a diff only while it shows.
+        if open { diffPanel.setSummaries(summaries) }
+        needsLayout = true
+        header.needsLayout = true
+    }
+
+    /// Cmd+D (`diff.toggle`): the panel on the diff, or closed.
+    public func toggleDiff() {
+        guard model.projection != nil else { return }
+        userSetRightPanel(!rightPanelOpen)
+    }
+
+    private func userSetRightPanel(_ open: Bool) {
+        header.toggles[2].isPressed = rightPanelOpen // a toggle flips itself; the state decides
+        setRightPanelOpen(open)
+        onRightPanelChange?(open)
+    }
+
+    private func toggleMaximized() {
+        rightPanelMaximized.toggle()
+        maximize.isPressed = rightPanelMaximized
+        maximize.icon = rightPanelMaximized ? .minimize2 : .maximize2
+        let label = rightPanelMaximized ? "Restore panel size" : "Maximize panel"
+        maximize.setAccessibilityLabel(label)
+        maximize.toolTip = label
+        needsLayout = true
+    }
+
+    /// The window's width, or the outermost view's without a window (tests).
+    private var viewportWidth: CGFloat {
+        if let window { return window.frame.width }
+        var view: NSView = self
+        while let parent = view.superview { view = parent }
+        return view.bounds.width
     }
 
     /// Shows a thread. Pass nil to clear.
@@ -110,23 +190,53 @@ public final class ThreadPanelView: DSView {
         header.threadTitle = projection?.thread.title ?? ""
         // With no thread the bar stays, empty, so it still drags the window.
         for view in header.subviews { view.isHidden = projection == nil }
-        if projection?.thread.id != model.projection?.thread.id { timeline.context.forgetDocuments() }
+        if projection?.thread.id != model.projection?.thread.id {
+            timeline.context.forgetDocuments()
+            if rightPanelMaximized { toggleMaximized() }
+        }
+        diffPanel.threadId = projection?.thread.id
+        summaries = projection.map(TurnDiffs.summaries) ?? []
+        if opensChangedTurnOnLoad, let changed = TurnDiffs.sortedForPanel(summaries).first(where: { !$0.files.isEmpty }) {
+            opensChangedTurnOnLoad = false
+            setRightPanelOpen(true)
+            diffPanel.open(runId: changed.runId, filePath: nil)
+        }
+        if rightPanelOpen { diffPanel.setSummaries(summaries) }
         model.setProjection(projection)
     }
 
+    /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
+    /// through. Only the top fade uses the background color.
     public override func updateLayer() {
-        layer?.backgroundColor = TL.c(\.background).cgColor(in: self)
         let bg = TL.c(\.background).cgColor(in: self)
         fade.colors = [1, 0.9, 0.7, 0.42, 0.18, 0.04, 0].map { bg.copy(alpha: $0)! }
     }
 
     public override func layout() {
         super.layout()
-        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: ThreadHeaderView.height)
-        timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: bounds.width, height: max(0, bounds.height - ThreadHeaderView.height))
+        // ponytail: always inline; T3 shows the panel as a sheet over the chat below a 980px
+        // viewport and animates the width. Add both when windows that narrow matter
+        let panelWidth = !rightPanelOpen ? 0 : rightPanelMaximized ? bounds.width
+            : RightPanelView.width(viewport: viewportWidth, container: bounds.width)
+        let chat = max(0, bounds.width - panelWidth)
+        header.isHidden = chat == 0
+        timeline.isHidden = chat == 0
+        header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
+        timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, bounds.height - ThreadHeaderView.height))
+        rightPanel.frame = NSRect(x: chat, y: 0, width: panelWidth, height: bounds.height)
+        if rightPanelOpen {
+            // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
+            var x = bounds.width - 12 - 1
+            for control in [header.toggles[2], header.toggles[1], maximize] {
+                let size = control.intrinsicContentSize
+                x -= size.width
+                control.frame = NSRect(x: x, y: ThreadHeaderView.height / 2 - size.height / 2, width: size.width, height: size.height)
+                x -= 4
+            }
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The last 6px column (the scrollbar) stays unmasked.
-        fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, bounds.width - 6), height: 25)
+        fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
         CATransaction.commit()
     }

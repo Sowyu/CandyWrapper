@@ -212,6 +212,30 @@ final class DiffStatView: DSView {
         needsDisplay = true
     }
 
+    /// The changed files card's per-row counts (`font-mono text-3xs` around an aligned
+    /// `DiffStatLabel`): two right-aligned 4ch columns of the mono font, 8px apart.
+    func setAligned(additions: Int, deletions: Int, size: CGFloat) {
+        font = DSFont.mono(size)
+        // The grid sits `align-middle` on the row's 16px text line, 1px under the box's center (47).
+        baselineShift = 1
+        let ch = width("0")
+        parts = [("+\(Self.compact(additions))", Themed.color(\.diffAddition), 4 * ch, 0),
+                 ("-\(Self.compact(deletions))", Themed.color(\.diffDeletion), 8 * ch + 8, 4 * ch + 8)]
+        preferredWidth = 8 * ch + 8
+        needsDisplay = true
+    }
+
+    /// `+A -D` at an explicit size and gap (the card header's `text-xs` inline label).
+    func setInline(additions: Int, deletions: Int, size: CGFloat) {
+        setInline(additions: additions, deletions: deletions)
+        guard size != font.pointSize else { return }
+        font = DSFont.mono(size)
+        let plus = "+\(Self.compact(additions))", minus = "-\(Self.compact(deletions))"
+        let a = width(plus)
+        parts = [(plus, Themed.color(\.diffAddition), a, 0), (minus, Themed.color(\.diffDeletion), a + 4 + width(minus), 0)]
+        preferredWidth = a + 4 + width(minus)
+    }
+
     private func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
 
     /// `formatCompactDiffCount` (DiffStatLabel.tsx): 999, 1.2k, 21k, 1.5m.

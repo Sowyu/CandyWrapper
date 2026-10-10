@@ -170,7 +170,8 @@ struct DiffTests {
     }
 
     /// The changed files card's call: the panel asks for exactly that run's delta (the first run
-    /// through getFullThreadDiff), shows it collapsed, then expands and reveals the file.
+    /// through getFullThreadDiff), shows it collapsed and scrolls to the file without opening it
+    /// (T3 only scrolls for turn diffs; reference 48).
     @Test func panelLoadsRunAndRevealsFile() async throws {
         actor Requests { var all: [TurnDiffs.Request] = []; func add(_ r: TurnDiffs.Request) { all.append(r) } }
         let requests = Requests()
@@ -191,7 +192,7 @@ struct DiffTests {
         for _ in 0..<100 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await requests.all.last == .fullThread(GetFullThreadDiffInput(threadId: "t1", toTurnCount: 1, ignoreWhitespace: true)))
         #expect(panel.list.diff.files.map(\.path) == ["hello.py", "notes.md"])
-        #expect(panel.list.collapsed == [0]) // notes.md was revealed
+        #expect(panel.list.collapsed == [0, 1]) // scrolled to, still collapsed
         panel.open(runId: "run2", filePath: nil)
         for _ in 0..<100 where await requests.all.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await requests.all.last == .turn(GetTurnDiffInput(threadId: "t1", fromTurnCount: 1, toTurnCount: 2, ignoreWhitespace: true)))

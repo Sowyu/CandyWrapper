@@ -11,6 +11,9 @@ struct TimelineRowUI: Hashable {
     var messageExpanded = false
     /// A long plan shows in full.
     var planExpanded = false
+    /// The changed files card's fold-all state and the folders toggled since.
+    var filesExpanded = false
+    var folderOverrides: [String: Bool] = [:]
 }
 
 /// One row as the timeline draws it.
@@ -34,10 +37,16 @@ public final class ThreadViewModel {
     private var expandedEntries: Set<String> = []
     private var expandedMessages: Set<String> = []
     private var expandedPlans: Set<String> = []
+    /// Per run, like T3's `threadChangedFilesExpandedById` (kept for the thread, not persisted).
+    private var expandedChangedFiles: Set<RunId> = []
+    /// Per run, folder path to open; cleared when the run's fold-all changes (ChangedFilesTree.tsx).
+    private var folderOverrides: [RunId: [String: Bool]] = [:]
     private(set) var items: [TimelineItem] = []
 
     /// Rows changed; the panel re-applies them.
     var onChange: (@MainActor () -> Void)?
+    /// The changed files card asks for a run's diff, at a file (`onOpenTurnDiff`).
+    public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
 
     public init() {}
 
@@ -53,6 +62,7 @@ public final class ThreadViewModel {
             fresh?.expandedWorkGroupIds = old.expandedWorkGroupIds
         } else {
             expandedEntries = []; expandedMessages = []; expandedPlans = []
+            expandedChangedFiles = []; folderOverrides = [:]
         }
         input = fresh
         derive()
@@ -64,6 +74,15 @@ public final class ThreadViewModel {
     func toggleEntry(_ id: String) { expandedEntries.formSymmetricDifference([id]); derive() }
     func toggleMessage(_ id: String) { expandedMessages.formSymmetricDifference([id]); derive() }
     func togglePlan(_ id: String) { expandedPlans.formSymmetricDifference([id]); derive() }
+    func toggleChangedFiles(_ run: RunId) {
+        expandedChangedFiles.formSymmetricDifference([run])
+        folderOverrides[run] = nil
+        derive()
+    }
+    func toggleChangedFolder(_ run: RunId, _ path: String) {
+        folderOverrides[run, default: [:]][path] = !(folderOverrides[run]?[path] ?? expandedChangedFiles.contains(run))
+        derive()
+    }
 
     private func mutateInput(_ body: (inout TimelineRowsInput) -> Void) {
         guard input != nil else { return }
@@ -78,7 +97,12 @@ public final class ThreadViewModel {
             switch row.kind {
             case .work(let entries, _, _): ui.expandedEntries = expandedEntries.intersection(entries.map(\.id))
             case .workLive(_, _, _, _, _, let thought?): ui.expandedEntries = expandedEntries.intersection([thought.id])
-            case .message(let m, _, _, _, _, _): ui.messageExpanded = expandedMessages.contains(m.id.rawValue)
+            case .message(let m, _, _, _, _, let summary):
+                ui.messageExpanded = expandedMessages.contains(m.id.rawValue)
+                if let run = summary?.runId {
+                    ui.filesExpanded = expandedChangedFiles.contains(run)
+                    ui.folderOverrides = folderOverrides[run] ?? [:]
+                }
             case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
             default: break
             }
