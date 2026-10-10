@@ -34,14 +34,18 @@ struct ShellCacheTests {
     @Test func debouncesBurstsIntoOneWriteAfterQuiet() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let cache = ShellCache(directory: dir, quietPeriod: .milliseconds(150))
+        // The quiet period is long next to the gaps, so a loaded test machine can't stretch a gap past it.
+        let cache = ShellCache(directory: dir, quietPeriod: .seconds(2))
         for seq in 1...5 {
             await cache.noteChanged(ShellSnapshot(schemaVersion: 1, snapshotSequence: seq), environmentId: "env")
             try await Task.sleep(for: .milliseconds(30))
         }
         // Still inside the quiet period after the last change: nothing written yet.
         #expect(cache.load(environmentId: "env") == nil)
-        try await Task.sleep(for: .milliseconds(400))
+        let deadline = ContinuousClock.now + .seconds(10)
+        while cache.load(environmentId: "env") == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
         #expect(cache.load(environmentId: "env")?.afterSequence == 5)
     }
 
