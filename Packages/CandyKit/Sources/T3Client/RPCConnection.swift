@@ -65,7 +65,13 @@ public actor RPCConnection {
                 let messages: [RPCServerMessage]
                 do {
                     let frame = try await socket.receive()
-                    messages = try RPCFrame.decodeServer(frame)
+                    if OpenTiming.active {
+                        // The socket hands over whole messages: first and last byte arrive before this line.
+                        OpenTiming.mark("frame received", "\(frame.count) bytes")
+                        messages = try OpenTiming.measure("frame parsed", "\(frame.count) bytes") { try RPCFrame.decodeServer(frame) }
+                    } else {
+                        messages = try RPCFrame.decodeServer(frame)
+                    }
                 } catch let e as RPCTransportError {
                     await self?.shutDown(.transport(e))
                     return
@@ -102,6 +108,7 @@ public actor RPCConnection {
                 if Task.isCancelled { return c.resume(throwing: CancellationError()) }
                 unary[id] = c
                 write(.request(RPCRequest(id: id, tag: tag, payload: payload)))
+                OpenTiming.mark("request sent", tag)
             }
         } onCancel: {
             Task { await self.cancelUnary(id) }
@@ -121,6 +128,7 @@ public actor RPCConnection {
         } else {
             streams[id] = StreamState()
             write(.request(RPCRequest(id: id, tag: tag, payload: payload)))
+            OpenTiming.mark("request sent", tag)
         }
         return RPCStream(handle: StreamHandle(id: id, connection: self))
     }

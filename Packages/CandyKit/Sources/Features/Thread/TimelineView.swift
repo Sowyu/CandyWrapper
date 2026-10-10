@@ -92,7 +92,25 @@ public final class TimelineView: DSView {
         heights = new.map { height(of: $0) }
         recomputeTops()
         restore(anchor)
-        tile()
+        OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
+        if OpenTiming.active, !new.isEmpty { markFirstFrame() }
+    }
+
+    /// Development (CANDY_THREAD_TIMING): the next display refresh after the rows were placed, so
+    /// after the Core Animation commit that carries them.
+    private func markFirstFrame() {
+        guard frameLink == nil, let window else { return }
+        let link = window.displayLink(target: self, selector: #selector(frameLinkFired))
+        link.add(to: .main, forMode: .common)
+        frameLink = link
+    }
+
+    private var frameLink: CADisplayLink?
+
+    @objc private func frameLinkFired(_ link: CADisplayLink) {
+        link.invalidate()
+        frameLink = nil
+        OpenTiming.end("first frame", "\(items.count) rows, \(visible.count) row views, \(createdRowViews) created")
     }
 
     // MARK: Geometry
@@ -218,6 +236,10 @@ public final class TimelineView: DSView {
     // MARK: Layout and tiling
 
     public override func layout() {
+        OpenTiming.measure("timeline layout", "\(items.count) rows") { layoutNow() }
+    }
+
+    private func layoutNow() {
         super.layout()
         scrollView.frame = bounds
         let width = scrollView.contentSize.width
