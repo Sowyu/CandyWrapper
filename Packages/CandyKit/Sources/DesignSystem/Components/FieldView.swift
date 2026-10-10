@@ -39,7 +39,7 @@ public class FieldView: DSView {
     /// Called on every edit.
     public final var onChange: (@MainActor (String) -> Void)?
     /// Called after every state change (InputGroup mirrors its input this way).
-    final var onStateChange: (@MainActor (State) -> Void)?
+    public final var onStateChange: (@MainActor (State) -> Void)?
     /// False when a parent (InputGroup) applies `opacity-64` instead.
     var dimsWhenDisabled = true
 
@@ -304,4 +304,10 @@ final class FieldEditor: NSTextView, NSTextViewDelegate {
     }
 
     @MainActor private static var shiftCache: [String: (lineSpacing: CGFloat, top: CGFloat)] = [:]
+}
+
+/// CSS line boxes for a TextKit 2 view outside the fields (the composer's editor): the line spacing
+/// that makes each line `lineHeight` tall and how far the first baseline moves down.
+@MainActor public func textKitLineMetrics(font: NSFont, lineHeight: CGFloat) -> (lineSpacing: CGFloat, top: CGFloat) {
+    FieldEditor.lineMetrics(font: font, lineHeight: lineHeight)
 }

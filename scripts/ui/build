@@ -1,10 +1,10 @@
 #!/bin/sh
-# Builds the UI driving tools into /tmp/cw-ui: click, scroll, key, axpress, front, grid, colmean.
+# Builds the UI driving tools into /tmp/cw-ui: click, scroll, key, axpress, front, grid, colmean, type.
 # They post CGEvents and use the Accessibility API, so the shell's responsible app (T3's `t3`
 # here) needs Screen Recording and Accessibility ("Device Control and Data Access" on macOS 27).
 # Coordinates are global screen points, top-left origin; screencapture -R uses the same space.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p /tmp/cw-ui
-for t in click scroll key axpress front grid colmean; do swiftc -O -o "/tmp/cw-ui/$t" "$here/$t.swift"; done
+for t in click scroll key axpress front grid colmean type; do swiftc -O -o "/tmp/cw-ui/$t" "$here/$t.swift"; done
 echo "built into /tmp/cw-ui"

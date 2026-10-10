@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn
+//   scenario    basic | turn | turn2 | threads | composer
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -44,6 +44,10 @@ func flush() {
     // Scrub e-mail addresses (provider account info appears in server config).
     let emailRegex = try! NSRegularExpression(pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
     text = emailRegex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "user@example.com")
+    // Paths as in the older fixtures: the sandbox folder becomes /Users/user/sandbox.
+    let home = NSHomeDirectory()
+    text = text.replacingOccurrences(of: home + "/CandyWrapper-research/sandbox", with: "/Users/user/sandbox")
+    text = text.replacingOccurrences(of: home, with: "/Users/user")
     try! text.write(toFile: outPath, atomically: true, encoding: .utf8)
 }
 
@@ -397,6 +401,75 @@ case "threads":
     }
     await pause(2)
     print("threads \(threads.count)")
+
+case "composer":
+    // The composer flows I-composer-flow.md 9.10 lists as unrecorded: launchThread for a draft's
+    // first send, a follow-up with deliveryIntent auto, a queued message, run.interrupt with
+    // holdQueue, then resume (continuation plus queue.resume). Four tiny haiku turns.
+    let projectId = ProcessInfo.processInfo.environment["PROJECT_ID"]!
+    let haiku: [String: Any] = ["instanceId": "claudeAgent", "model": "claude-haiku-5-5"]
+    func isEnd(_ e: [String: Any]) -> Bool {
+        (e["type"] as? String) == "run.updated" && ["completed", "failed", "interrupted", "cancelled"].contains(payload(e)["status"] as? String ?? "")
+    }
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    await pause(1)
+    let threadId = uuid()
+    let launch = try await request("orchestration.launchThread", [
+        "commandId": uuid(), "creationSource": "web", "threadId": threadId, "projectId": projectId,
+        "title": "Reply with one word: hi", "generateTitle": true, "modelSelection": haiku,
+        "runtimeMode": "full-access", "interactionMode": "default", "workspaceStrategy": ["type": "root"],
+        "initialMessage": ["messageId": uuid(), "text": "Reply with one word: hi", "attachments": [] as [Any]],
+    ])
+    // The thread exists only once the launch returns; subscribing earlier fails with
+    // OrchestrationV2GetThreadProjectionError (recorded on the first attempt).
+    for _ in 0..<150 where await state.exit(launch) == nil { await pause(0.1) }
+    try await request("orchestration.subscribeThread", ["threadId": threadId, "requestCompletionMarker": true,
+                                                        "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+    _ = await waitFor("turn 1 end", timeout: 120, isEnd)
+    await pause(2)
+
+    // Follow-up the way the composer sends it on an idle thread: start_immediately plus deliveryIntent auto.
+    var m = await mark()
+    try await request("orchestration.dispatchCommand", [
+        "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+        "threadId": threadId, "messageId": uuid(), "text": "Without tools, write the numbers 1 to 400 as words, one per line.",
+        "attachments": [] as [Any], "titleSeed": "Without tools, write the numbers 1 to 400 as words...",
+        "modelSelection": haiku, "dispatchMode": ["type": "start_immediately"], "deliveryIntent": "auto",
+    ])
+    if let running = await waitFor("turn 2 running", after: m, timeout: 60, { e in
+        (e["type"] as? String) == "run.updated" && (payload(e)["status"] as? String) == "running"
+    }) {
+        // UI mode queue: queue_after_active, no deliveryIntent.
+        try await request("orchestration.dispatchCommand", [
+            "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+            "threadId": threadId, "messageId": uuid(), "text": "Reply with one word: ok",
+            "attachments": [] as [Any], "modelSelection": haiku, "dispatchMode": ["type": "queue_after_active"],
+        ])
+        _ = await waitFor("queued run", after: m, timeout: 20, { e in
+            (e["type"] as? String) == "run.created" && (payload(e)["status"] as? String) == "queued"
+        })
+        try await request("orchestration.dispatchCommand", [
+            "type": "run.interrupt", "commandId": uuid(), "threadId": threadId, "runId": payload(running)["id"]!, "holdQueue": true,
+        ])
+    }
+    guard let interrupted = await waitFor("turn 2 end", after: m, timeout: 60, isEnd) else { break }
+    await pause(3)
+
+    // Resume: the continuation message, then queue.resume for the held run.
+    m = await mark()
+    try await request("orchestration.dispatchCommand", [
+        "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+        "threadId": threadId, "messageId": uuid(), "text": "Continue where you left off.",
+        "attachments": [] as [Any], "modelSelection": haiku, "dispatchMode": ["type": "start_immediately"],
+        "manualContinuationOfRunId": payload(interrupted)["id"]!,
+    ])
+    await pause(1)
+    try await request("orchestration.dispatchCommand", ["type": "queue.resume", "commandId": uuid(), "threadId": threadId])
+    // The continuation, then the released queued run.
+    let continuation = await waitFor("continuation end", after: m, timeout: 120, isEnd).map { payload($0)["id"] as? String }
+    _ = await waitFor("queued run end", after: m, timeout: 120, { e in isEnd(e) && payload(e)["id"] as? String != continuation })
+    await pause(3)
+    print("threadId \(threadId)")
 
 default:
     print("unknown scenario"); exit(2)

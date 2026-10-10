@@ -78,6 +78,9 @@ public final class LabelView: DSView {
     public var isUnderlined = false { didSet { if isUnderlined != oldValue { needsDisplay = true } } }
     /// CSS `letter-spacing` in points, added after every character like Chromium.
     public var tracking: CGFloat = 0 { didSet { if tracking != oldValue { invalidate() } } }
+    /// Core Text font smoothing (stem darkening). Chromium draws text on transparent composited
+    /// layers (backdrop-filter surfaces such as the composer) without it, so those labels turn it off.
+    public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -123,8 +126,8 @@ public final class LabelView: DSView {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty else { return }
         // Core Text's smoothing (stem darkening) matches Chromium's glyph weight better than
         // plain antialiasing: Button fidelity 2.91% differing pixels with it, 3.27% without.
-        ctx.setShouldSmoothFonts(true)
-        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(smoothsFont)
+        ctx.setAllowsFontSmoothing(smoothsFont)
         var line = TextLine(attributed())
         if truncates, line.width > bounds.width, bounds.width > 0 {
             let ellipsis = CTLineCreateWithAttributedString(

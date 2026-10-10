@@ -90,6 +90,8 @@ public final class TextBlockView: DSView {
     public var maxLines = 0 { didSet { invalidate() } }
     /// `text-wrap: balance`.
     public var balanced = false { didSet { invalidate() } }
+    /// See `LabelView.smoothsFont`.
+    public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -148,8 +150,8 @@ public final class TextBlockView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty, bounds.width > 0 else { return }
         // Same smoothing as LabelView (closer to Chromium's glyph weight).
-        ctx.setShouldSmoothFonts(true)
-        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(smoothsFont)
+        ctx.setAllowsFontSmoothing(smoothsFont)
         ctx.setFillColor(color.cgColor(in: self))
         layout(forWidth: bounds.width).draw(in: ctx, origin: .zero, width: bounds.width, alignment: alignment)
     }

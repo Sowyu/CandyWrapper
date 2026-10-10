@@ -75,10 +75,16 @@ public final class ThreadHeaderView: TopbarDragView {
 /// - `onLoadEarlier` to page in older history (call `ThreadStore.beginLoadEarlier`),
 /// - `diffPanel.loader` for `getTurnDiff`, `setRightPanelOpen` and `onRightPanelChange` to keep
 ///   the panel's open state per thread, `toggleDiff()` for Cmd+D,
-/// - `bottomInset` once a composer floats over the timeline.
+/// - `composer`, which floats over the bottom of the timeline and sets `bottomInset`, and
+///   `setDraft(projectTitle:)` for the new-thread page (hero headline, centered composer).
 public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
     public let timeline = TimelineView()
+    public let composer = ComposerView()
+    public let hero = DraftHeroView()
+    /// Showing the new-thread draft page instead of a thread.
+    public private(set) var isDraft = false
+    private var composerShown = false
     public let model = ThreadViewModel()
     private let fade = CAGradientLayer()
     let rightPanel = RightPanelView()
@@ -110,6 +116,11 @@ public final class ThreadPanelView: DSView {
         super.init(frame: frameRect)
         addSubview(timeline)
         addSubview(header)
+        hero.isHidden = true
+        addSubview(hero)
+        composer.isHidden = true
+        addSubview(composer)
+        composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         // `topbar-scroll-fade` (index.css:439-475): the first 25px of the scroller fade out; drawn as
         // a background-colored overlay instead of a mask, so scrolling doesn't render offscreen.
         fade.locations = [0, 0.1, 0.24, 0.42, 0.62, 0.82, 1]
@@ -182,6 +193,20 @@ public final class ThreadPanelView: DSView {
         return view.bounds.width
     }
 
+    /// The new-thread page: header "{project} / New thread", the hero and the centered composer.
+    /// Pass nil to leave it.
+    public func setDraft(projectTitle: String?) {
+        isDraft = projectTitle != nil
+        hero.isHidden = !isDraft
+        hero.projectTitle = projectTitle ?? ""
+        if let projectTitle {
+            setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil)
+            header.threadTitle = "New thread"
+            for view in header.subviews { view.isHidden = false }
+        }
+        updateComposerShown()
+    }
+
     /// Shows a thread. Pass nil to clear.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?) {
         model.projectTitle = projectTitle
@@ -203,6 +228,41 @@ public final class ThreadPanelView: DSView {
         }
         if rightPanelOpen { diffPanel.setSummaries(summaries) }
         model.setProjection(projection)
+        if projection != nil, isDraft { setDraft(projectTitle: nil) }
+        updateComposerShown()
+    }
+
+    /// The composer shows with a thread, a draft, or a just-sent first message. Call after
+    /// changing `model.optimisticMessages`.
+    public func updateComposerShown() {
+        composerShown = isDraft || model.projection != nil || !model.optimisticMessages.isEmpty
+        needsLayout = true
+    }
+
+    /// The composer lane (J-composer-visuals 1.1 to 1.4): 48px side padding (12 below a 640
+    /// viewport), at most 736 wide, 20px above the bottom; the timeline keeps the overlay's height
+    /// (`pt-2` + composer + spacer) clear. On the draft page the composer, a 32px context strip and
+    /// the spacer are centered in the column below the header, with the hero 16px above.
+    private func layoutComposer(chat: CGFloat) {
+        let lane: CGFloat = viewportWidth < 640 ? 12 : 48
+        let width = max(0, min(Tokens.LengthRem.chatContentMaxWidth * 16, chat - 2 * lane))
+        let height = composer.preferredHeight
+        let x = ((chat - width) / 2).rounded()
+        let y: CGFloat
+        if isDraft {
+            // ponytail: the context strip (checkout and branch pickers) is not drawn; it comes with the branch toolbar
+            let block = height + 32 + 20
+            let top = ThreadHeaderView.height + (bounds.height - ThreadHeaderView.height - block) / 2
+            y = top.rounded()
+            hero.frame = NSRect(x: x, y: y - 16 - DraftHeroView.height, width: width, height: DraftHeroView.height)
+        } else {
+            y = bounds.height - 20 - height
+        }
+        composer.frame = NSRect(x: x, y: y, width: width, height: height)
+        composer.isHidden = !composerShown || chat == 0
+        let inset = composer.isHidden || isDraft ? 0 : 8 + height + 20
+        if timeline.bottomInset != inset { timeline.bottomInset = inset }
+        if isDraft { timeline.isHidden = true }
     }
 
     /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
@@ -234,6 +294,7 @@ public final class ThreadPanelView: DSView {
                 x -= 4
             }
         }
+        layoutComposer(chat: chat)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The last 6px column (the scrollbar) stays unmasked.
         fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)

@@ -1,0 +1,302 @@
+import AppKit
+import DesignSystem
+import T3Protocol
+import T3Store
+
+/// The composer footer's model, traits and access controls and their popups. The composer drops
+/// `controlsView` (or the three buttons) into its footer, sets `draftKey` and `context` whenever the
+/// thread or the server config changes, and reads `current` when it sends:
+/// `current.modelSelection` goes into `message.dispatch` / `launchThread`, `current.runtimeModeToPersist`
+/// becomes `thread.runtime-mode.set` before the send (or `launchThread.runtimeMode` for a new thread),
+/// `current.interactionMode` goes into the dispatch. After a successful send call `store.didSend(key)`.
+@MainActor
+public final class ComposerPickers {
+    public let store: ComposerSelectionStore
+    public let modelButton = ComposerControlView()
+    public let traitsButton = ComposerControlView(icon: IconView(name: .brain, size: 16))
+    public let accessButton = ComposerControlView()
+    /// Model, separator, traits, separator, access with T3's gaps. 28 tall; put its left edge 6pt
+    /// from the composer's left edge (footer `px-4` plus the model trigger's `-ms-2.5`).
+    public let controlsView: PickerControlsView
+
+    /// The draft key: the thread id, or a new-thread draft id.
+    public private(set) var draftKey: String
+    public private(set) var context: ComposerSelectionContext
+    /// The composer's text, read for the Ultrathink rules. Set it on every edit.
+    public var prompt = "" { didSet { if ModelTraits.isUltrathinkPrompt(prompt) != ModelTraits.isUltrathinkPrompt(oldValue) { refresh(notify: false) } } }
+    public private(set) var current: ResolvedComposerSelection
+
+    /// Called after any pick with the new values.
+    public final var onChange: (@MainActor (ResolvedComposerSelection) -> Void)?
+    /// Choosing or leaving Ultrathink rewrites the prompt (`Ultrathink:\n` prefix); apply the text.
+    public final var onPromptChange: (@MainActor (String) -> Void)?
+    /// A started thread refused the model change; show the text as a toast.
+    public final var onBlocked: (@MainActor (String) -> Void)?
+
+    private weak var modelPicker: ModelPickerView?
+    private var openPopup: OpenPopup?
+
+    public init(store: ComposerSelectionStore, draftKey: String, context: ComposerSelectionContext) {
+        self.store = store
+        self.draftKey = draftKey
+        self.context = context
+        current = store.resolve(draftKey, context)
+        controlsView = PickerControlsView(model: modelButton, traits: traitsButton, access: accessButton)
+        modelButton.tintsIcon = false
+        modelButton.minimumWidth = 52
+        modelButton.action = { [weak self] in self?.toggleModelPicker() }
+        traitsButton.action = { [weak self] in self?.openTraits() }
+        accessButton.action = { [weak self] in self?.openAccessMode() }
+        refresh(notify: false)
+    }
+
+    /// Switches to another thread or draft, or follows a new server config or thread snapshot.
+    public func update(draftKey: String? = nil, context: ComposerSelectionContext? = nil) {
+        if let draftKey { self.draftKey = draftKey }
+        if let context { self.context = context }
+        refresh(notify: false)
+        if let picker = modelPicker {
+            picker.catalog = self.context.catalog
+        }
+    }
+
+    private func refresh(notify: Bool) {
+        current = store.resolve(draftKey, context)
+        modelButton.title = current.triggerLabel
+        let glyph = current.entry.map { ProviderIcon.make(driver: $0.driver, displayName: $0.displayName, size: 16, color: Themed.color(\.contrastMutedForeground)) }
+        modelButton.icon = glyph
+        modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
+        let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled)
+        traitsButton.title = label
+        traitsButton.toolTip = label
+        traitsButton.isHidden = current.descriptors.isEmpty
+        let mode = Self.modes[current.runtimeMode] ?? Self.modes[.fullAccess]!
+        accessButton.title = mode.label
+        accessButton.icon = IconView(name: mode.icon, size: 16)
+        accessButton.toolTip = mode.description
+        controlsView.needsLayout = true
+        controlsView.invalidateIntrinsicContentSize()
+        if notify { onChange?(current) }
+    }
+
+    // MARK: Shortcuts (packages/shared/src/keybindings.ts:175-178)
+
+    /// `mod+shift+m`, `mod+shift+e`, `mod+shift+a` (when the terminal doesn't have focus). Returns
+    /// true when the event was one of them.
+    public func handleShortcut(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown, !event.isARepeat,
+              event.modifierFlags.intersection([.command, .shift, .option, .control]) == [.command, .shift] else { return false }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "m": toggleModelPicker()
+        case "e": openTraits()
+        case "a": openAccessMode()
+        default: return false
+        }
+        return true
+    }
+
+    // MARK: Model picker
+
+    /// `modelPicker.toggle`.
+    public func toggleModelPicker() {
+        if closeIfOpen(modelButton) { return }
+        guard let host = modelButton.popupHost, let instance = current.instanceId else { return }
+        let view = ModelPickerView(catalog: context.catalog, favorites: store.favorites, active: instance,
+                                   activeModel: current.model?.slug ?? current.modelSlug ?? "")
+        view.onSelect = { [weak self] id, slug in self?.pickModel(id, slug) }
+        view.onToggleFavorite = { [weak self, weak view] id, slug in
+            guard let self else { return }
+            self.store.toggleFavorite(id, slug)
+            view?.favorites = self.store.favorites
+        }
+        let popup = host.open(PickerPopupView(view), trigger: modelButton,
+                              placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end),
+                              motion: .popover)
+        track(popup)
+        modelPicker = view
+        modelButton.window?.makeFirstResponder(view.search)
+    }
+
+    /// The model picker's provider rail (`modelPicker.previousProvider` / `nextProvider`) while it is open.
+    public func selectAdjacentProvider(_ direction: Int) {
+        guard let picker = modelPicker else { return }
+        picker.selectRail(ModelPickerSections.adjacentRail(picker.rail, direction: direction, catalog: context.catalog))
+    }
+
+    private func pickModel(_ id: ProviderInstanceId, _ slug: String) {
+        closeOpenPopup()
+        if let reason = store.pickModel(draftKey, instance: id, model: slug, context) {
+            onBlocked?(reason)
+            return
+        }
+        refresh(notify: true)
+    }
+
+    // MARK: Traits
+
+    private var ultrathinkControlled: Bool {
+        let primary = current.descriptors.first { $0.type == .select }
+        return (primary?.promptInjectedValues?.isEmpty == false) && ModelTraits.isUltrathinkPrompt(prompt)
+    }
+
+    /// `composer.effort`: opens the traits menu (no-op when the model has no traits).
+    public func openTraits() {
+        if closeIfOpen(traitsButton) { return }
+        guard !traitsButton.isHidden, let host = traitsButton.popupHost else { return }
+        let menu = PickerMenuView(entries: traitsEntries(), style: .menu, minimumWidth: 160 - 2)
+        let popup = host.open(PickerPopupView(menu), trigger: traitsButton,
+                              placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+                              swallowsOutsideClick: true)
+        menu.onClose = { [weak self] in self?.closeOpenPopup() }
+        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
+        track(popup)
+    }
+
+    /// The menu content (TraitsPicker.tsx:390-486): one radio group per select descriptor, then
+    /// On and Off groups for boolean descriptors.
+    func traitsEntries() -> [PickerMenuEntry] {
+        let descriptors = current.descriptors
+        let selects = descriptors.filter { $0.type == .select }, booleans = descriptors.filter { $0.type == .boolean }
+        let primary = selects.first?.id
+        let controlled = ultrathinkControlled
+        let locked = controlled && ModelTraits.ultrathinkInBody(prompt)
+        var out: [PickerMenuEntry] = []
+        for (i, d) in selects.enumerated() {
+            if i > 0 { out.append(.separator) }
+            out.append(.label(d.label))
+            if locked && d.id == primary {
+                out.append(PickerMenuEntry(kind: .label, title: "Your prompt contains \"ultrathink\" in the text. Remove it to change this option."))
+            }
+            let selected = controlled && d.id == primary ? "ultrathink" : ModelTraits.currentValue(d)?.string
+            for o in d.options {
+                out.append(.option(o.label, badge: o.isDefault == true ? "Default" : nil, description: o.description,
+                                   checked: o.id == selected, disabled: locked && d.id == primary) { [weak self] in
+                    self?.pickSelect(d, o.id)
+                })
+            }
+        }
+        for (i, d) in booleans.enumerated() {
+            if i > 0 || !selects.isEmpty { out.append(.separator) }
+            out.append(.label(d.label, even: true))
+            let on = d.currentValue?.bool == true
+            for value in [true, false] {
+                out.append(.option(value ? "On" : "Off", checked: value == on) { [weak self] in
+                    guard let self else { return }
+                    self.store.setOptions(self.draftKey, ModelTraits.pick(self.current.descriptors, id: d.id, value: .bool(value)), self.context)
+                    self.refresh(notify: true)
+                })
+            }
+        }
+        return out
+    }
+
+    /// `handleSelectChange` (TraitsPicker.tsx:342-360).
+    private func pickSelect(_ d: ProviderOptionDescriptor, _ value: String) {
+        if d.promptInjectedValues?.contains(value) == true {
+            onPromptChange?(ModelTraits.applyUltrathinkPrefix(prompt))
+            return
+        }
+        let primary = current.descriptors.first { $0.type == .select }?.id
+        if ultrathinkControlled && d.id == primary {
+            if ModelTraits.ultrathinkInBody(prompt) { return }
+            onPromptChange?(ModelTraits.stripUltrathinkPrefix(prompt))
+        }
+        store.setOptions(draftKey, ModelTraits.pick(current.descriptors, id: d.id, value: .string(value)), context)
+        refresh(notify: true)
+    }
+
+    // MARK: Access
+
+    struct ModeInfo { let label: String; let description: String; let icon: IconName }
+
+    /// `runtimeModeConfig` (chat/runtimeModeConfig.ts:4-28).
+    static let modes: [RuntimeMode: ModeInfo] = [
+        .approvalRequired: ModeInfo(label: "Supervised", description: "Ask before commands and file changes.", icon: .lock),
+        .autoAcceptEdits: ModeInfo(label: "Auto-accept edits", description: "Auto-approve edits, ask before other actions.", icon: .penLine),
+        .auto: ModeInfo(label: "Auto", description: "Supported providers approve routine actions; others still ask.", icon: .sparkles),
+        .fullAccess: ModeInfo(label: "Full access", description: "Allow commands and edits without prompts.", icon: .lockOpen),
+    ]
+
+    /// `composer.mode`: opens the access select.
+    public func openAccessMode() {
+        if closeIfOpen(accessButton) { return }
+        guard let host = accessButton.popupHost else { return }
+        let list = PickerMenuView(entries: accessEntries(), style: .select, minimumWidth: 256 + 8)
+        let popup = host.open(PickerPopupView(list), trigger: accessButton, placement: .dropdown, swallowsOutsideClick: true)
+        list.onClose = { [weak self] in self?.closeOpenPopup() }
+        if NSApp.currentEvent?.type == .keyDown { list.highlightedIndex = list.selectable.first { list.entry($0).checked } }
+        track(popup)
+    }
+
+    func accessEntries() -> [PickerMenuEntry] {
+        current.runtimeModeOptions.map { mode in
+            let info = Self.modes[mode] ?? ModeInfo(label: mode.rawValue, description: "", icon: .lock)
+            return .option(info.label, icon: info.icon, description: info.description, checked: mode == current.runtimeMode) { [weak self] in
+                guard let self else { return }
+                self.store.setRuntimeMode(self.draftKey, mode)
+                self.refresh(notify: true)
+            }
+        }
+    }
+
+    // MARK: Popup bookkeeping
+
+    private func track(_ popup: OpenPopup) {
+        openPopup = popup
+        popup.onClose = { [weak self, weak popup] in
+            if self?.openPopup === popup { self?.openPopup = nil }
+        }
+    }
+
+    /// Closes this control's popup when it is open; a second shortcut press toggles it closed.
+    private func closeIfOpen(_ trigger: NSView) -> Bool {
+        guard let popup = openPopup, popup.trigger === trigger, let host = trigger.popupHost, host.popups.contains(where: { $0 === popup }) else { return false }
+        host.close(popup)
+        return true
+    }
+
+    private func closeOpenPopup() {
+        guard let popup = openPopup, let host = (popup.trigger ?? modelButton).popupHost else { return }
+        host.close(popup)
+    }
+}
+
+/// The footer's left cluster (`data-chat-composer-controls="left"`): model, separator, traits,
+/// separator, access, 4pt apart. The model label shrinks first, down to 52pt.
+// ponytail: no narrow-width overflow menu (J 3.7: hide labels, then the "..." menu); add it with the composer's narrow layout
+public final class PickerControlsView: DSView {
+    public let model: ComposerControlView, traits: ComposerControlView, access: ComposerControlView
+    private let separators = [ComposerControlSeparatorView(), ComposerControlSeparatorView()]
+
+    init(model: ComposerControlView, traits: ComposerControlView, access: ComposerControlView) {
+        self.model = model; self.traits = traits; self.access = access
+        super.init(frame: .zero)
+        for v in [model, separators[0], traits, separators[1], access] as [NSView] { addSubview(v) }
+    }
+
+    private var items: [NSView] {
+        traits.isHidden ? [model, separators[1], access] : [model, separators[0], traits, separators[1], access]
+    }
+
+    private func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
+
+    public override var intrinsicContentSize: NSSize {
+        NSSize(width: items.map(natural).reduce(0, +) + CGFloat(items.count - 1) * 4, height: 28)
+    }
+
+    public override func layout() {
+        super.layout()
+        separators[0].isHidden = traits.isHidden
+        let fixed = items.dropFirst().map(natural).reduce(0, +) + CGFloat(items.count - 1) * 4
+        // Fractional widths like CSS; boxes snap to device pixels the way Chromium paints them.
+        func snap(_ v: CGFloat) -> CGFloat { (v * 2).rounded() / 2 }
+        var x: CGFloat = 0
+        for v in items {
+            var w = natural(v)
+            if v === model { w = max(model.minimumWidth, min(w, bounds.width - fixed)) }
+            let h: CGFloat = v is ComposerControlView ? 28 : 16
+            v.frame = NSRect(x: snap(x), y: (bounds.height - h) / 2, width: snap(x + w) - snap(x), height: h)
+            x += w + 4
+        }
+    }
+}
