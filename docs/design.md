@@ -105,6 +105,14 @@ Expensive web effects drawn with a cheap native equivalent. Each image shows T3 
 | StandalonePage glows plus `backdrop-blur-md` card | Standalone pages | The 145deg overlay only. The glows sit under an opaque layer in T3 and never show | [standalone-page](design/substitutions/standalone-page.png) |
 | Sidebar grain (SVG `feTurbulence` filter) | Sidebar background | Port of the filter, rendered once into a static tile | (statistics in the table above) |
 
+## Deliberate differences
+
+The user's own choices where CandyWrapper looks different from T3 on purpose.
+
+| T3 | CandyWrapper | Where |
+|---|---|---|
+| `NightlySkyArt` behind the sidebar header on Nightly servers | The teddy-and-milk corner of "Candy Town" by Aya_Lu ([Pixabay](https://pixabay.com/illustrations/candy-town-city-buildings-8579300/), Pixabay Content License) as a duotone: #2a1240 to #ffc4df under a plum #3a1a52 title and toggle in dark mode, #22103a to #dc8fbd under a white title and toggle in light mode. Chosen 2026-10-10. `scripts/gen-candy-art.swift` bakes the 8-bit luma from the 1280px public download; the app maps it and paints the duotone | `StageBackdropView`, `SidebarBrandView`, `SidebarTriggerView.mediaTint` |
+
 ## Known gaps
 
 - Pixel snapping assumes a 2x backing store, as on every Retina Mac. On a 1x screen (this Mac mini's virtual display) edges can be half a point off. Use the window's backing scale where the code says `ponytail: 2x`.
