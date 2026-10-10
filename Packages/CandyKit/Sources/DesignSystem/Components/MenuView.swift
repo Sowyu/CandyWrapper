@@ -28,6 +28,15 @@ public struct MenuItem {
     /// base-ui `closeOnClick` on checkbox and radio items: picking one runs `action` and closes
     /// the menu. Off by default, as in base-ui.
     public var closesOnClick = false
+    /// A 12px leading glyph with a 6px gap, in `muted-foreground` (`size-3` plus `gap-1.5` in the
+    /// composer's select items, BranchToolbarEnvironmentSelector.tsx:117-124).
+    public var glyph: IconDefinition?
+    /// A 14px trailing glyph pushed to the end (`ml-auto`, ProjectEnvironmentBadge.tsx:36-50), with its tooltip.
+    public var badge: IconDefinition?
+    public var badgeTooltip: String?
+    /// Extra height under the content: an `inline-flex` span in a 20px line box sits on the baseline and
+    /// grows the row by the 1px below it (BranchToolbarEnvironmentSelector.tsx:126-131 in a SelectItem).
+    public var extraBottom: CGFloat = 0
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -93,7 +102,7 @@ public final class MenuPopupView: DSView, PopupContent {
     private var submenuWork: DispatchWorkItem?
     private var lastPointer: CGPoint?
     private var openSubmenu: (popup: OpenPopup, index: Int)?
-    weak var hostPopup: OpenPopup?
+    public weak var hostPopup: OpenPopup?
 
     public init(items: [MenuItem], style: Style = .menu) {
         self.style = style
@@ -444,6 +453,8 @@ final class MenuRowView: DSView {
     private let label = LabelView()
     private var iconView: IconView?
     private var trailing: IconView?
+    private var glyphView: IconView?
+    private var badgeView: IconView?
     private var check: CAShapeLayer?
     private var shortcut: TrackedLabelView?
 
@@ -462,7 +473,7 @@ final class MenuRowView: DSView {
     var isCheckbox: Bool { if case .checkbox = item.kind { true } else { false } }
 
     /// Row height: 28 for items and labels, 9 for separators (1px + 4px margins).
-    var height: CGFloat { isSeparator ? 9 : 28 }
+    var height: CGFloat { isSeparator ? 9 : 28 + item.extraBottom }
 
     var paddingLeading: CGFloat {
         if isLabel { return item.inset ? 32 : 8 }
@@ -476,6 +487,8 @@ final class MenuRowView: DSView {
         var w = paddingLeading + paddingTrailing + label.textWidth
         if isCheckbox { w += 16 + 8 }
         if iconView != nil { w += 12 + 8 }
+        if glyphView != nil { w += 12 + 6 }
+        if badgeView != nil { w += 8 + 14 }
         if let shortcut { w += 8 + shortcut.intrinsicContentSize.width }
         if trailing != nil { w += 8 + 14 }
         return w
@@ -484,6 +497,8 @@ final class MenuRowView: DSView {
     private func configure() {
         iconView?.removeFromSuperview(); iconView = nil
         trailing?.removeFromSuperview(); trailing = nil
+        glyphView?.removeFromSuperview(); glyphView = nil
+        badgeView?.removeFromSuperview(); badgeView = nil
         shortcut?.removeFromSuperview(); shortcut = nil
         check?.removeFromSuperlayer(); check = nil
         label.text = item.title
@@ -498,6 +513,22 @@ final class MenuRowView: DSView {
             let v = IconView(name: icon)
             addSubview(v)
             iconView = v
+        }
+        if let glyph = item.glyph, !isLabel, !isSeparator {
+            let v = IconView(definition: glyph, size: 12)
+            addSubview(v)
+            glyphView = v
+        }
+        if let badge = item.badge, !isLabel, !isSeparator {
+            let v = IconView(definition: badge, size: 14)
+            if let tip = item.badgeTooltip {
+                TooltipController.attach(to: v, text: tip)
+                v.setAccessibilityElement(true)
+                v.setAccessibilityRole(.image)
+                v.setAccessibilityLabel(tip)
+            }
+            addSubview(v)
+            badgeView = v
         }
         if case .submenu = item.kind {
             let v = IconView(name: .chevronRight)
@@ -561,6 +592,8 @@ final class MenuRowView: DSView {
         iconView?.alphaValue = 0.8
         trailing?.strokeColor = Themed.color(\.contrastMutedForeground)
         trailing?.alphaValue = 0.8
+        glyphView?.strokeColor = Themed.color(\.contrastMutedForeground)
+        badgeView?.strokeColor = Themed.color(\.contrastMutedForeground)
         if let check { check.strokeColor = text.cgColor(in: self) }
         needsDisplay = true
     }
@@ -595,6 +628,14 @@ final class MenuRowView: DSView {
             iconView.frame = NSRect(x: x - 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 12 + 8
         }
+        if let glyphView {
+            glyphView.frame = NSRect(x: x, y: (bounds.height - item.extraBottom - 12) / 2, width: 12, height: 12)
+            x += 12 + 6
+        }
+        if let badgeView {
+            badgeView.frame = NSRect(x: trailingX - 14, y: (bounds.height - 14) / 2, width: 14, height: 14)
+            trailingX -= 14 + 8
+        }
         if let trailing {
             trailing.frame = NSRect(x: trailingX + 2 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
             trailingX -= 14 + 8
@@ -605,6 +646,6 @@ final class MenuRowView: DSView {
             trailingX -= w + 8
         }
         let lh = label.lineHeight ?? 20
-        label.frame = NSRect(x: x, y: (bounds.height - lh) / 2, width: max(0, min(label.textWidth, trailingX - x)), height: lh)
+        label.frame = NSRect(x: x, y: (bounds.height - item.extraBottom - lh) / 2, width: max(0, min(label.textWidth, trailingX - x)), height: lh)
     }
 }

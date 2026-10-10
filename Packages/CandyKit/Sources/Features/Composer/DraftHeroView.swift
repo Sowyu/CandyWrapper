@@ -35,11 +35,21 @@ public final class DraftHeroView: DSView {
         let fg = Themed.color(\.foreground)
         let s = NSMutableAttributedString(string: "What should we build in ", attributes: [.font: Self.sentence, .foregroundColor: fg, .kern: kern])
         let start = s.length
-        // ponytail: `max-w-64` truncation of long project names is not applied
-        s.append(NSAttributedString(string: projectTitle, attributes: [.font: Self.projectFont, .foregroundColor: fg, .kern: kern]))
+        s.append(NSAttributedString(string: Self.truncated(projectTitle, kern: kern), attributes: [.font: Self.projectFont, .foregroundColor: fg, .kern: kern]))
         let range = NSRange(location: start, length: s.length - start)
         s.append(NSAttributedString(string: "?", attributes: [.font: Self.sentence, .foregroundColor: fg, .kern: kern]))
         return (s, range)
+    }
+
+    /// The picker is `max-w-64` with `truncate`: a name wider than 256 ends in an ellipsis.
+    static func truncated(_ title: String, kern: Double) -> String {
+        func width(_ s: String) -> CGFloat {
+            TextLine(NSAttributedString(string: s, attributes: [.font: projectFont, .kern: kern])).width
+        }
+        guard width(title) > 256 else { return title }
+        var chars = Array(title)
+        while !chars.isEmpty, width(String(chars) + "…") > 256 { chars.removeLast() }
+        return String(chars) + "…"
     }
 
     public override func draw(_ dirtyRect: NSRect) {

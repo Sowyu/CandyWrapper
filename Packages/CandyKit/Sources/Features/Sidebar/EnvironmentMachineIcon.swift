@@ -3,8 +3,8 @@ import DesignSystem
 
 /// `EnvironmentMachineIcon` (apps/web/src/components/EnvironmentMachineIcon.tsx): lucide glyphs plus the
 /// two Apple desktops T3 draws to lucide's grammar.
-enum EnvironmentMachineIcon {
-    static func definition(_ kind: String) -> IconDefinition {
+public enum EnvironmentMachineIcon {
+    public static func definition(_ kind: String) -> IconDefinition {
         let box = IconViewBox(x: 0, y: 0, width: 24, height: 24)
         switch kind {
         case "mac-mini":

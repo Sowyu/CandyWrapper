@@ -1,0 +1,22 @@
+{
+  "locked.remote" : {
+    "height" : 24,
+    "width" : 112.53125
+  },
+  "popup.remote" : {
+    "height" : 96,
+    "width" : 136.1484375
+  },
+  "strip.remote" : {
+    "height" : 96,
+    "width" : 600
+  },
+  "trigger.local" : {
+    "height" : 24,
+    "width" : 91.1171875
+  },
+  "trigger.remote" : {
+    "height" : 24,
+    "width" : 120.53125
+  }
+}

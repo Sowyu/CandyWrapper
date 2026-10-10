@@ -377,6 +377,7 @@ final class ThreadController {
     /// With the first shell: opens the `--open-thread` match or the remembered thread, else lands
     /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
     private func shellChanged(_ snapshot: ShellSnapshot) {
+        composer.projectsChanged()
         if let prefix = openPrefix, let match = snapshot.threads.first(where: { $0.title.hasPrefix(prefix) }) {
             openPrefix = nil
             restored = true

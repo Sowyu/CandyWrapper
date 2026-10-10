@@ -33,6 +33,9 @@ public final class ComposerView: DSView {
     public var steerByDefault = false { didSet { refresh() } }
     /// Nightly and dev servers draw the stage art in the send button.
     public var stageArt = true { didSet { primary.stageArt = stageArt } }
+    /// A context strip hangs under the composer: the outline leaves the seam between the strip's
+    /// sides open, its bottom 2px from 22 to width - 22 (`contextSeamClasses`, ComposerSurface.tsx:51-53).
+    public var joinsContextStrip = false { didSet { if joinsContextStrip != oldValue { needsLayout = true } } }
 
     /// A runtime request docked above (ChatComposer.tsx:6980, 7468, 7547-7553).
     public enum PendingState: Equatable, Sendable {
@@ -405,6 +408,19 @@ public final class ComposerView: DSView {
         blur.frame = box
         glass.frame = box
         outline.frame = box
+        if joinsContextStrip {
+            let mask = outline.layer?.mask as? CAShapeLayer ?? CAShapeLayer()
+            let path = CGMutablePath()
+            path.addRect(box)
+            path.addRect(CGRect(x: ComposerContextStripView.inset, y: h - 2, width: max(0, w - 2 * ComposerContextStripView.inset), height: 2))
+            mask.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull()]
+            mask.fillRule = .evenOdd
+            mask.path = path
+            mask.frame = box
+            outline.layer?.mask = mask
+        } else {
+            outline.layer?.mask = nil
+        }
 
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
