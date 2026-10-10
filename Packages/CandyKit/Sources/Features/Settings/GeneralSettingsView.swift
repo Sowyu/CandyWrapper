@@ -55,8 +55,10 @@ public final class GeneralSettingsView: SettingsPageBase {
         binder.add { [weak self, weak modelRow, weak model] in
             guard let self else { return }
             model?.refresh()
-            let mixed = self.context.scope.isMixed(["defaultModelSelection"])
-            modelRow?.status = self.context.scope.connected.isEmpty || mixed || self.server["defaultModelSelection"] != .null ? nil : "Automatic"
+            let scope = self.context.scope
+            let mixed = scope.isMixed(["defaultModelSelection"])
+            let overridden = scope.isProjectScope && scope.source(["defaultModelSelection"]) == .project
+            modelRow?.status = scope.connected.isEmpty || mixed || overridden || self.server["defaultModelSelection"] != .null ? nil : "Automatic"
         }
 
         let modes = RuntimeMode.all.map { (value: $0.rawValue, label: ComposerPickers.modes[$0]!.label) }
@@ -84,16 +86,25 @@ public final class GeneralSettingsView: SettingsPageBase {
                                            width: nil, reset: nil, label: "Worktree submodules",
                                            current: { $0["worktreeSubmodules"].stringValue ?? "recursive" })
         resetToNull(submodules, key: "worktreeSubmodules", label: "worktree submodules")
+        // ProjectDefaultsSettings.tsx: the same rows describe the project's own value at a project scope.
+        projectScopeDetails([(modelRow, "Model for new threads in this project.", "Default model for new threads. Projects can override it."),
+                             (permissions, "Permissions for new threads in this project.", "Default permissions for new threads. Projects can override them."),
+                             (workspace, "Where new threads in this project start.", "Where new threads start. Projects and their t3.json can override it."),
+                             (submodules, "How new worktrees in this project populate git submodules.",
+                              "How new worktrees populate git submodules. Projects and their t3.json can override it.")])
         return section("project-defaults", "New threads", [modelRow, permissions, workspace, submodules])
     }
 
-    /// File-backed keys reset to null (inherit), not to a value.
-    private func resetToNull(_ r: SettingsRowView, key: String, label: String) {
+    /// File-backed keys reset to null (inherit), not to a value. At a project scope the row's own reset clears the override.
+    func resetToNull(_ r: SettingsRowView, key: String, label: String) {
         guard let slot = r.accessories.last as? ResetSlot else { return }
         slot.button.setAccessibilityLabel("Reset \(label) to default")
-        slot.action = { [weak self] in self?.context.patchServer([key: .null]) }
-        binder.add { [weak self] in
+        slot.action = { [weak self] in
             guard let self else { return }
+            if self.context.scope.isProjectScope { self.context.clearServer?([key]) } else { self.context.patchServer([key: .null]) }
+        }
+        binder.add { [weak self] in
+            guard let self, !self.context.scope.isProjectScope else { return }
             slot.isShown = self.server[key] != .null && self.context.scope.inertReason == nil
         }
     }
@@ -370,9 +381,9 @@ public final class GeneralSettingsView: SettingsPageBase {
     }
 
     private func diagnosticsSection() -> SettingsSectionView {
-        // ponytail: Diagnostics and Open source licenses are WP7.7b pages; their buttons wait for them
+        // ponytail: the Open source licenses page is not built; its button stays disabled. Build it with the About work (M9)
         let diag = ButtonView("View diagnostics", variant: .outline, size: .sm)
-        diag.isEnabled = false
+        diag.action = { [weak self] in self?.context.openSection?(.diagnostics) }
         let diagnostics = row("diagnostics", detail: "", control: diag)
         binder.add { [weak self, weak diagnostics] in
             guard let self else { return }

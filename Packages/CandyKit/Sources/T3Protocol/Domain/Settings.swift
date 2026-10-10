@@ -87,6 +87,25 @@ public struct ClientSettings: Equatable, Sendable {
         "sidebarThreadPreviewCount": SettingSpec(.int(1...15), .number(6)),
         "timestampFormat": SettingSpec(.literals(["locale", "12-hour", "24-hour"]), .string("locale")),
         "wordWrap": SettingSpec(.bool, .bool(true)),
+        // Settings > SnapShots (settings.ts:493-505).
+        "snapShotEnabled": SettingSpec(.bool, .bool(false)),
+        "snapShotIncludeAccessibility": SettingSpec(.bool, .bool(true)),
+        "snapShotShortcut": SettingSpec(.any, .object(["kind": .string("both-shift-keys")])),
+        "snapShotPlaySound": SettingSpec(.bool, .bool(true)),
+        "snapShotSound": SettingSpec(.literals(["soft-pop", "camera-shutter"]), .string("soft-pop")),
+        "snapShotFlash": SettingSpec(.bool, .bool(true)),
+        "snapShotAnimations": SettingSpec(.bool, .bool(true)),
+        // Settings > Integrations > Browser (settings.ts:319-364).
+        "browserDefaultViewport": SettingSpec(.any, .object(["_tag": .string("fill")])),
+        "browserDefaultZoomFactor": SettingSpec(.any, .number(1)),
+        "browserDefaultAppearance": SettingSpec(.literals(["system", "light", "dark"]), .string("system")),
+        "browserRecordingFrameRate": SettingSpec(.any, .number(30)),
+        "browserRecordingShowKeyPresses": SettingSpec(.bool, .bool(false)),
+        "browserRecordingShowMousePresses": SettingSpec(.bool, .bool(false)),
+        "browserLinkTarget": SettingSpec(.literals(["system", "app"]), .string("system")),
+        "browserAutoShowFloatingPreview": SettingSpec(.bool, .bool(true)),
+        // Settings > Providers: favorites, visibility and order per instance (client settings).
+        "providerModelPreferences": SettingSpec(.any, .object([:])),
     ]
 
     public static let defaults = ClientSettings(values: fields.mapValues(\.defaultValue))
@@ -154,6 +173,30 @@ public struct ServerSettingsValues: Equatable, Sendable {
             "instanceId": .string("codex"), "model": .string("gpt-6-luna"),
             "options": .array([.object(["id": .string("reasoningEffort"), "value": .string("low")])]),
         ])),
+        // Settings > Project, Source Control, Integrations, Storage and Providers (WP7.7b).
+        "defaultAutoPull": SettingSpec(.bool, .bool(false)),
+        "removeAgentCreditsOnMerge": SettingSpec(.bool, .bool(false)),
+        "pullRequestMergeMethod": SettingSpec(.any, .null),
+        "branchNamingMode": SettingSpec(.literals(["static", "semantic", "custom"]), .string("static")),
+        "branchNamePrefix": SettingSpec(.string(maxLength: 4096), .string("t3")),
+        "branchNameInstructions": SettingSpec(.string(maxLength: 65_536), .string("")),
+        "sourceControlWritingStyle": SettingSpec(.any, .object([
+            "mode": .string("repo_conventions"), "customInstructions": .string(""), "followChangeRequestTemplates": .bool(true),
+        ])),
+        "sourceControlWriterModelSelection": SettingSpec(.any, .null),
+        "enableAgentBrowserAccess": SettingSpec(.bool, .bool(true)),
+        "enableAgentDeviceAccess": SettingSpec(.bool, .bool(false)),
+        "enableDeviceSupport": SettingSpec(.bool, .bool(false)),
+        "worktreesDirectory": SettingSpec(.string(maxLength: 4096), .string("")),
+        "storageCleanup": SettingSpec(.any, .object([
+            "worktreeAfterDays": .null, "worktreeOnMerge": .bool(false), "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false),
+            "browserArtifactsAfterDays": .null, "logsAfterDays": .null,
+        ])),
+        "worktreeCleanup": SettingSpec(.any, .null),
+        "defaultProjectScripts": SettingSpec(.any, .array([])),
+        "projectSettingsOverrides": SettingSpec(.any, .object([:])),
+        "projectSettingsFolded": SettingSpec(.bool, .bool(false)),
+        "providerInstances": SettingSpec(.any, .object([:])),
     ]
 
     public init(_ json: JSONValue?) { raw = json?.objectValue ?? [:] }

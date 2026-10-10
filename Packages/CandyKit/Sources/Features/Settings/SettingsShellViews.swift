@@ -5,6 +5,8 @@ import DesignSystem
 /// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
     case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
+    /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
+    case diagnostics
 
     public var label: String {
         switch self {
@@ -20,6 +22,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .storage: "Storage"
         case .connections: "Connections"
         case .archive: "Archive"
+        case .diagnostics: "Diagnostics"
         }
     }
 
@@ -37,15 +40,16 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .storage: .hardDrive
         case .connections: .link2
         case .archive: .archive
+        case .diagnostics: .activity
         }
     }
 
-    /// Pages that work. The rest list like T3's and stay disabled.
-    // ponytail: the other pages come with WP7.7b; enable each as it lands
-    public var isAvailable: Bool { [.general, .appearance, .keybindings, .connections].contains(self) }
+    /// Pages that work. Scheduled Tasks lists like T3's and stays disabled.
+    // ponytail: Scheduled Tasks comes with WP7.7c; enable it when it lands
+    public var isAvailable: Bool { self != .scheduledTasks }
 
-    /// The nav lists Project only for a project scope; CandyWrapper has none yet (WP7.7b).
-    static let navSections = allCases.filter { $0 != .projects }
+    /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
+    static let navSections = allCases.filter { $0 != .diagnostics }
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -87,6 +91,10 @@ public final class SettingsSidebarView: DSView {
     public var selected: SettingsSection = .connections {
         didSet { for (section, item) in items { item.isActive = section == selected } }
     }
+    /// A project is picked in the scope: the nav lists Project first.
+    public var showsProject = false {
+        didSet { guard showsProject != oldValue else { return }; items[.projects]?.isHidden = !showsProject || isSearching; needsLayout = true }
+    }
     public var onSelect: ((SettingsSection) -> Void)?
     public var onBack: (() -> Void)?
     public var onToggleSidebar: (() -> Void)?
@@ -121,6 +129,7 @@ public final class SettingsSidebarView: DSView {
             if section == .snapShots { item.iconDefinition = SettingsSection.snapShotIcon }
             item.isEnabled = section.isAvailable
             item.isActive = section == selected
+            item.isHidden = section == .projects && !showsProject
             item.action = { [weak self] in self?.select(section) }
             items[section] = item
             addSubview(item)
@@ -174,7 +183,7 @@ public final class SettingsSidebarView: DSView {
         }
         noResults.isHidden = !(isSearching && results.isEmpty)
         searchKbd.isHidden = isSearching
-        for item in items.values { item.isHidden = isSearching }
+        for (section, item) in items { item.isHidden = isSearching || (section == .projects && !showsProject) }
         needsLayout = true
     }
 
@@ -246,7 +255,7 @@ public final class SettingsSidebarView: DSView {
                 y += SettingsSearchResultRow.height + 4
             }
         } else {
-            for section in SettingsSection.navSections {
+            for section in SettingsSection.navSections where section != .projects || showsProject {
                 items[section]?.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
                 y += 36
             }
@@ -408,6 +417,8 @@ public final class SettingsPageView: DSView {
     private let scroll: ScrollAreaView
     /// Escape goes back (`useEscapeToGoBack`).
     public var onEscape: (() -> Void)?
+    /// `WorkspacePageContainer` width: `max-w-4xl` (readable), `max-w-5xl` (wide), `max-w-6xl` (expanded).
+    public var containerWidth: CGFloat = 896 { didSet { needsLayout = true } }
 
     public var page: (NSView & SettingsGroupRow)? {
         didSet {
@@ -453,7 +464,7 @@ public final class SettingsPageView: DSView {
         scroll.frame = NSRect(x: 0, y: SettingsHeaderView.height, width: bounds.width, height: max(0, bounds.height - SettingsHeaderView.height))
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
-        let container = min(1024, inner)
+        let container = min(containerWidth, inner)
         let contentWidth = max(0, container - 48)
         let x = gutter + (inner - container) / 2 + 24
         let pageHeight = page?.height(forWidth: contentWidth) ?? 0

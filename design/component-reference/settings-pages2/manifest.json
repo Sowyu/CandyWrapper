@@ -1,0 +1,22 @@
+{
+  "project.actions" : {
+    "height" : 165,
+    "width" : 796
+  },
+  "project.overview" : {
+    "height" : 135,
+    "width" : 796
+  },
+  "providers.list" : {
+    "height" : 211,
+    "width" : 272
+  },
+  "source-control.repositories" : {
+    "height" : 294,
+    "width" : 796
+  },
+  "source-control.vcs" : {
+    "height" : 173,
+    "width" : 796
+  }
+}
