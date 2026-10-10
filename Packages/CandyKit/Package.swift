@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "Features", targets: ["Features"]),
     ],
     targets: [
-        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"]),
+        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"], resources: [.copy("Resources/surface-grain.rgba")]),
         // Wire and domain types from docs/protocol.md. No I/O.
         .target(name: "T3Protocol"),
         // Transport: HTTP auth, WebSocket RPC, reconnect supervisor, Keychain.

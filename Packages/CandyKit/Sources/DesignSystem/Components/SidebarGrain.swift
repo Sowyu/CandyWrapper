@@ -10,8 +10,22 @@ public enum SurfaceGrain {
     public static let opacity: Double = 0.035
 
     /// Unpremultiplied noise RGBA as sRGB bytes, 512x512 for a 256pt tile at 2x.
-    // ponytail: computed at 2x only; 1x screens downsample it, render a 256px tile if 1x displays matter
-    public static let tile: CGImage = makeTile(pixels: 512, scale: 2)
+    // ponytail: 2x only; 1x screens downsample it, ship a 256px tile if 1x displays matter
+    public static let tile: CGImage = shippedTile() ?? makeTile(pixels: 512, scale: 2)
+
+    /// The precomputed tile (GrainTileTests keeps it equal to `makeTile`), mapped from the bundle:
+    /// its pages stay clean, so they don't count against the app's memory, and launch skips the noise.
+    static func shippedTile() -> CGImage? {
+        let pixels = 512
+        guard let url = Bundle.module.url(forResource: "surface-grain", withExtension: "rgba"),
+              let data = try? NSData(contentsOf: url, options: .alwaysMapped), data.length == pixels * pixels * 4,
+              let provider = CGDataProvider(data: data)
+        else { return nil }
+        return CGImage(width: pixels, height: pixels, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: pixels * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
 
     /// The pattern color for `draw(_:)`: the tile at 256pt with its 2x pixels.
     public static let pattern: NSColor = {
