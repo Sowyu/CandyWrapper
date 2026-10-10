@@ -75,9 +75,7 @@ final class ShellSession {
         func fire() { lock.withLock { action }?() }
     }
 
-    // ponytail: re-encodes the JSONValue to decode the typed item; decode from the frame bytes if profiling shows it
     nonisolated static func decode(_ json: JSONValue) -> ShellStreamItem? {
-        guard let data = try? JSONEncoder().encode(json) else { return nil }
-        return try? JSONDecoder().decode(ShellStreamItem.self, from: data)
+        try? json.decode(as: ShellStreamItem.self)
     }
 }

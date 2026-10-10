@@ -180,6 +180,8 @@ public final class GrainSurfaceView: DSView {
         rows.addSublayer(tile)
         columns.addSublayer(rows)
         layer?.addSublayer(columns)
+        // Whole tiles overhang the surface's edge; drawn grain was clipped by its backing store.
+        layer?.masksToBounds = true
     }
 
     public override func updateLayer() {

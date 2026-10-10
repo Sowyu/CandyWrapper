@@ -167,7 +167,7 @@ func readT3ToolResult(_ value: JSONValue?, depth: Int = 0) -> T3ToolResult {
     guard depth <= 4, let value else { return T3ToolResult() }
     switch value {
     case .string(let text):
-        guard let parsed = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) else { return T3ToolResult() }
+        guard let parsed = try? JSONValue(parsing: Data(text.utf8)) else { return T3ToolResult() }
         return readT3ToolResult(parsed, depth: depth + 1)
     case .array(let blocks):
         var result = T3ToolResult()
