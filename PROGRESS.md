@@ -4,7 +4,7 @@ Update this file at the end of every work session. Newest log entry first.
 
 ## Current milestone
 
-Milestone 5, interactive: compose and send messages, watch them stream, stop a run, answer approvals and questions, queue and steer follow-ups, pick the model. Milestone 4 was accepted by the user on 2026-10-10 ("everything looks perfect"); they asked for a stress-testing milestone soon, added as 5b.
+Milestone 5, interactive: compose and send messages, watch them stream, stop a run, answer approvals and questions, queue and steer follow-ups, pick the model. Milestone 4 was accepted by the user on 2026-10-10 ("everything looks perfect"); they asked for a stress-testing milestone once everything else is done, added as 10.
 
 Next action: research for M5 (two sonnet-medium agents): `docs/research/I-composer-flow.md` (commands, payloads and client state for send, stop, approvals, questions, queue, steer, new thread drafts, model and runtime selection) and `docs/research/J-composer-visuals.md` (composer, footer controls, primary actions, approval and question panels, queued list, model, traits and access pickers, new-thread draft page, against references 01, 04, 05, 06, 13, 29, 41, 42). Then the work packages in the Milestone 5 checklist.
 
@@ -17,11 +17,11 @@ Next action: research for M5 (two sonnet-medium agents): `docs/research/I-compos
 | 3 | Skeleton: connect to server, sidebar shows real data | done, accepted 2026-10-10 |
 | 4 | Read-only thread view | done, accepted 2026-10-10 |
 | 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | in progress |
-| 5b | Stress testing (asked for by the user on 2026-10-10) | not started |
 | 6 | T3 Connect | not started |
 | 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
 | 8 | Performance and battery pass | not started |
 | 9 | Polish and packaging | not started |
+| 10 | Stress testing, after everything else is done (the user's call, 2026-10-10) | not started |
 
 ## Milestone 1 checklist
 
@@ -51,7 +51,7 @@ Scope: the core interactive loop. Later (M5 stretch or M7): slash commands, `@` 
 - [ ] WP5.4 model, traits and access pickers from server config providers and models; fidelity against 13, 41, 42
 - [ ] Live test on the sandbox with tiny `claude-haiku-5-5` turns (the user's subscription pays), then the demo
 
-## Milestone 5b: stress testing (planned)
+## Milestone 10: stress testing (planned, last)
 
 Long threads (2,000+ messages), 50+ threads, hours-long sessions watched for leaks, reconnect storms, rapid thread switching, resize storms and fuzzed stream events, in an automated harness with budgets for CPU, memory and frame time, run against the sandbox and checked on screen with `scripts/ui/`.
 
