@@ -22,7 +22,7 @@ About 12 minutes per build: 3 to 5 for the Release build, 2 for the micro-benchm
 4. Runs three scenarios, each `--repeat` times (default 3), and reports the median and the range:
    - Launch and idle: opens the small finished thread "Reply with one word: candy". Window time comes from `probe window` (first on-screen window taller than 200 pt, measured from the process start time in the kernel). Sidebar times come from the app's `CANDY_LAUNCH_TIMING` lines. After 5 s of settling, 30 s of kernel counters (`proc_pid_rusage`): CPU, interrupt and package idle wakeups per second, footprint and lifetime peak footprint.
    - Large thread: opens "Numbers 1 to 1000 as words", footprint and peak 8 s after launch; then `--perf-scroll 12` makes the app scroll its timeline to the top and back, 300 pt per frame, 140 frames each way; CPU time of the whole window, then footprint and peak 3 s later. The app scrolls itself because scroll events posted to its PID never reach AppKit, and events through the HID tap would move the user's pointer.
-   - Thread open: launches on the small thread with `--perf-open 4 "Numbers 1 to 1000"` and `CANDY_THREAD_TIMING=1`. Four seconds after the shell the app opens the big thread as a click would, 2 s later the small one, 2 s later the big one again. `open.big_first_frame_ms` and `open.big_reopen_first_frame_ms` run from `open(id)` to the first display refresh after the rows are placed (a `CADisplayLink` on the window), so they carry up to two frames of display latency. The reopen paints from the retained store.
+   - Thread open: launches on the small thread with `--perf-open 4 "Numbers 1 to 1000"` and `CANDY_THREAD_TIMING=1`. Four seconds after the shell the app opens the big thread as a click would, 2 s later the small one, 2 s later the big one again. `open.big_first_frame_ms` and `open.big_reopen_first_frame_ms` run from `open(id)` to the first display refresh after the rows are placed (a `CADisplayLink` on the window), so they carry up to two frames of display latency. The reopen paints from the retained store. Each run points the disk thread cache at its own empty directory (`CANDY_THREAD_CACHE`, passed through `scripts/run-app`), so the first launch opens from the network; a second launch with the directory the first one filled gives `open.big_cache_first_frame_ms`, the same open painted from the disk cache.
    - Streaming (`--stream`): a fresh haiku thread made through the RPC by `scripts/perf/turn.swift`, opened in the app, then one turn ("the numbers from 1 to 60 as English words") driven by the helper while the app only watches; CPU and wakeups across the turn, footprint and peak after.
 5. Bundle and binary size.
 6. Micro-benchmarks: `CW_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter PerfBenchmarks` in `Packages/CandyKit` (`Tests/FeaturesTests/PerfBenchmarks.swift`). Deterministic inputs, a warm-up pass, then the median, min and max of 9 runs:
@@ -32,6 +32,8 @@ About 12 minutes per build: 3 to 5 for the Release build, 2 for the micro-benchm
    - `sidebar_items_1000`: `SidebarListBuilder.items` for 1,000 threads in 20 projects.
    - `markdown_parse_lines`: a reply of 2,400 short lines, one paragraph of soft breaks.
    - `huge_open_*`: a synthetic huge thread, 300 copies of the largest recorded snapshot's turns (900 runs, 3,600 nodes), shaped like the server's bounded snapshot: the last 3 copies of rows and messages (57 rows) plus every run, attempt, node, checkpoint, request and provider turn of the thread, 8.3 MB as one Chunk frame. Stages: `parse` (frame to `JSONValue`), `decode` (typed `ThreadStreamItem`), `reduce`, `entries` (`TimelineRowsInput`), `derive` (`TimelineRows.derive`) and `panel` (a fresh `ThreadPanelView` at 1200x800: `setProjection` and layout). `huge_full_*` is the same thread with all 5,700 rows loaded (20 MB). `huge_open_long_*` gives every reply in the window 6 KB of markdown.
+   - `huge_update_*`: main-thread time of one update to the `huge_full` thread already on screen, its newest run running: `stream` (the streaming answer grows by a word), `tool` (a tool row flips between running and completed), `append` (a new tool row). The time covers `setProjection`, applying rows a pass derived off the main thread (the pass itself is awaited, not counted) and layout. `huge_update_{stream,tool}_entries` is the incremental entry pass alone, `_rows_patch` the streaming patch, `_rows_offmain` the full row pass that runs off the main thread.
+   - `huge_cache_write` and `huge_cache_load`: the `huge_open` window through the disk thread cache (encode, compress and write; read, decompress and decode), with the file size in `bytes`.
 
    An older checkout without the benchmark file gets today's copy.
 
@@ -121,3 +123,16 @@ The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_
 ## Baseline: median of the last three runs (2026-10-10)
 
 The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.
+
+## Updating a long thread and the disk cache (2026-10-10)
+
+Synthetic thread with all 5,700 rows loaded (`huge_full`), main-thread time per update, before (a4a5a06) and after:
+
+| Update | Before | After |
+|---|---|---|
+| Streaming answer grows | 77 ms | 3.6 ms (entries and patch off the main thread; about 2 ms re-measures the answer) |
+| Tool row changes state | 75 ms | 1.2 ms (full row pass, 36 ms, runs off the main thread) |
+| New tool row | not measured | 3.6 ms |
+| Fresh panel (`huge_full_panel`) | 91 ms | 3.3 ms |
+
+Cold open of "Numbers 1 to 1000" on the local sandbox: 33.0 ms from the network, 32.6 ms from the disk cache. The cached open resumes after the cached sequence, so the server sends a 67-byte `synchronized` frame instead of the snapshot; the gain grows with the snapshot size and the link (the huge window is 8.3 MB on the wire, 160 KB on disk, 44 ms to load).

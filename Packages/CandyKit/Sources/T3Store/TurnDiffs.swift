@@ -34,9 +34,15 @@ public enum TurnDiffs {
     /// Port of `deriveThreadCheckpointSummaries` (threadCheckpoints.ts:29-52). Bounded snapshots
     /// can carry only some checkpoints, so a missing summary just means no card.
     public static func summaries(_ projection: ThreadProjection) -> [TurnDiffSummary] {
-        projection.checkpoints.compactMap { checkpoint in
+        guard !projection.checkpoints.isEmpty else { return [] }
+        // The last assistant message per run, in one pass (was a scan per checkpoint).
+        var lastAssistant: [RunId: MessageId] = [:]
+        for message in projection.messages where message.role == "assistant" {
+            if let runId = message.runId { lastAssistant[runId] = message.id }
+        }
+        return projection.checkpoints.compactMap { checkpoint in
             guard let ordinal = checkpoint.appRunOrdinal, let runId = checkpoint.runId else { return nil }
-            let assistantMessageId = projection.messages.last { $0.runId == runId && $0.role == "assistant" }?.id
+            let assistantMessageId = lastAssistant[runId]
             return TurnDiffSummary(
                 checkpointId: checkpoint.id, scopeId: checkpoint.scopeId, runId: runId, checkpointTurnCount: ordinal,
                 checkpointRef: checkpoint.ref, status: checkpoint.status, files: checkpoint.files,

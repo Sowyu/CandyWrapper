@@ -226,6 +226,123 @@ private func measureThreadOpen(_ name: String, copies: Int, window: Int, reply: 
     #expect(rows > 0)
 }
 
+/// The item with some wire fields replaced.
+private func replacing(_ item: TurnItem, _ fields: [String: JSONValue]) throws -> TurnItem {
+    guard case .object(var o) = item.raw else { return item }
+    o.merge(fields) { $1 }
+    return try TurnItem(json: .object(o))
+}
+
+/// A thread that is streaming: the newest run runs and its last answer streams.
+private func streamingProjection(copies: Int, window: Int) throws -> (ThreadProjection, answer: Int, tool: Int) {
+    let (frame, threadId) = try syntheticThreadFrame(copies: copies, window: window)
+    guard case .chunk(_, let values)? = try RPCFrame.decodeServer(frame).first else { throw CancellationError() }
+    var reducer = ThreadReducer(threadId: ThreadId(threadId))
+    reducer.apply([try values[0].decode(as: ThreadStreamItem.self)])
+    var p = try #require(reducer.projection)
+    let run = try #require(p.runs.indices.max { p.runs[$0].ordinal < p.runs[$1].ordinal })
+    p.runs[run].status = .running
+    p.runs[run].completedAt = nil
+    let answer = try #require(p.visibleTurnItems.lastIndex { $0.item.type == .assistantMessage })
+    p.visibleTurnItems[answer].item = try replacing(p.visibleTurnItems[answer].item, ["streaming": .bool(true), "status": .string("running")])
+    let tool = try #require(p.visibleTurnItems.lastIndex {
+        $0.item.type != .assistantMessage && $0.item.type != .userMessage && $0.item.type != .checkpoint && $0.item.type != .todoList
+    })
+    return (p, answer, tool)
+}
+
+/// Main-thread cost of one update to a thread already on screen: a streamed answer growing by a
+/// word (`_stream`), and a tool row flipping between running and completed (`_tool`). The time
+/// runs from `setProjection` until the timeline holds the new rows and is laid out, counting
+/// only main-thread work (rows derived off the main thread are awaited, not counted).
+@MainActor
+private func measureThreadUpdate(_ name: String, copies: Int, window: Int) async throws {
+    let (base, answer, tool) = try streamingProjection(copies: copies, window: window)
+    let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+    panel.setProjection(base, projectTitle: "demo-repo", workspaceRoot: nil)
+    await panel.model.rowsSettled()
+    panel.layoutSubtreeIfNeeded()
+    let text = base.visibleTurnItems[answer].item.text
+    var k = 0
+    func update(_ change: (inout ThreadProjection) throws -> Void) async throws -> Double {
+        var p = base
+        try change(&p)
+        let start = ContinuousClock.now
+        panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+        var main = milliseconds(ContinuousClock.now - start)
+        main += await panel.model.rowsSettled()
+        let layout = ContinuousClock.now
+        panel.layoutSubtreeIfNeeded()
+        return main + milliseconds(ContinuousClock.now - layout)
+    }
+    func report(_ suffix: String, _ times: [Double], rows: Int) {
+        let sorted = times.sorted()
+        let line: [String: Any] = ["name": "\(name)_\(suffix)", "median_ms": sorted[sorted.count / 2], "min_ms": sorted[0],
+                                   "max_ms": sorted[sorted.count - 1], "runs": sorted.count, "timeline_rows": rows]
+        let data = try! JSONSerialization.data(withJSONObject: line, options: [.sortedKeys])
+        print("PERF " + String(decoding: data, as: UTF8.self))
+    }
+    var stream: [Double] = []
+    for _ in 0..<12 {
+        k += 1
+        let words = String(repeating: " word", count: k)
+        stream.append(try await update { p in
+            p.visibleTurnItems[answer].item = try replacing(p.visibleTurnItems[answer].item, ["text": .string(text + words)])
+        })
+    }
+    report("stream", Array(stream.dropFirst(2)), rows: panel.model.items.count)
+    var tools: [Double] = []
+    for i in 0..<12 {
+        tools.append(try await update { p in
+            p.visibleTurnItems[tool].item = try replacing(p.visibleTurnItems[tool].item, ["status": .string(i % 2 == 0 ? "running" : "completed")])
+        })
+    }
+    report("tool", Array(tools.dropFirst(2)), rows: panel.model.items.count)
+    // A new tool call at the end of the running turn.
+    var appends: [Double] = []
+    for i in 0..<12 {
+        appends.append(try await update { p in
+            var row = p.visibleTurnItems[tool]
+            row.item = try replacing(row.item, ["id": .string("appended-\(i)"), "status": .string("running"),
+                                                "ordinal": .number(Double(row.item.ordinal + 1_000_000 + i))])
+            row.sourceItemId = row.item.id
+            row.position = p.visibleTurnItems.count
+            p.visibleTurnItems.append(row)
+        })
+    }
+    report("append", Array(appends.dropFirst(2)), rows: panel.model.items.count)
+
+    // The stages on their own, each a one-row change against the previous update.
+    func variants(_ change: (inout ThreadProjection, Int) throws -> Void) throws -> [ThreadProjection] {
+        try (0..<2).map { i in var p = base; try change(&p, i); return p }
+    }
+    let streamed = try variants { p, i in
+        p.visibleTurnItems[answer].item = try replacing(p.visibleTurnItems[answer].item, ["text": .string(text + String(repeating: " word", count: i + 1))])
+    }
+    let tooled = try variants { p, i in
+        p.visibleTurnItems[tool].item = try replacing(p.visibleTurnItems[tool].item, ["status": .string(i == 0 ? "running" : "completed")])
+    }
+    for (suffix, pair) in [("stream", streamed), ("tool", tooled)] {
+        var memo = TimelineRowsInput.Memo()
+        var flip = 0
+        var last = TimelineRowsInput.derive(projection: pair[0], memo: &memo)
+        measure("\(name)_\(suffix)_entries", runs: 9) {
+            flip ^= 1
+            last = TimelineRowsInput.derive(projection: pair[flip], memo: &memo)
+        }
+        var memo2 = TimelineRowsInput.Memo()
+        let a = TimelineRowsInput.derive(projection: pair[0], memo: &memo2).input
+        let (b, changed) = TimelineRowsInput.derive(projection: pair[1], memo: &memo2)
+        let derivedA = TimelineRows.Derived(a)
+        if let changed, TimelineRows.patchingStreamingText(derivedA, input: b, changedEntries: changed) != nil {
+            measure("\(name)_\(suffix)_rows_patch", runs: 9) { _ = TimelineRows.patchingStreamingText(derivedA, input: b, changedEntries: changed) }
+        } else {
+            measure("\(name)_\(suffix)_rows_offmain", runs: 5) { _ = TimelineRows.Derived(b) }
+        }
+        _ = last
+    }
+}
+
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["CW_BENCH"] != nil), .serialized)
 @MainActor
 struct PerfBenchmarks {
@@ -279,6 +396,43 @@ struct PerfBenchmarks {
         try measureThreadOpen("huge_full", copies: 300, window: 300)
         // The bounded window again, every reply 6 KB of markdown with code and tables.
         try measureThreadOpen("huge_open_long", copies: 300, window: 3, reply: longReply(sections: 12))
+    }
+
+    /// The huge thread's bounded window through the disk cache: `write` encodes, compresses and
+    /// writes it (off the main thread in the app), `load` reads, decompresses and decodes it, the
+    /// step a cold open takes before its first frame instead of the network.
+    @Test func hugeThreadCache() async throws {
+        let (frame, threadId) = try syntheticThreadFrame(copies: 300, window: 3)
+        guard case .chunk(_, let values)? = try RPCFrame.decodeServer(frame).first else { throw CancellationError() }
+        var reducer = ThreadReducer(threadId: ThreadId(threadId))
+        reducer.apply([try values[0].decode(as: ThreadStreamItem.self)])
+        let p = try #require(reducer.projection)
+        let dir = FileManager.default.temporaryDirectory.appending(path: "cw-bench-cache-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = ThreadCache(directory: dir)
+        let key = ThreadCache.Key(environmentId: "bench", threadId: p.thread.id)
+        var times: [Double] = []
+        for _ in 0..<5 {
+            let start = ContinuousClock.now
+            await cache.offer(key, sequence: 1, projection: p, history: reducer.history)
+            await cache.flush(key)
+            times.append(milliseconds(ContinuousClock.now - start))
+        }
+        times.sort()
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: cache.fileURL(key).path)[.size] as? Int) ?? 0
+        let line: [String: Any] = ["name": "huge_cache_write", "median_ms": times[2], "min_ms": times[0], "max_ms": times[4], "runs": 5,
+                                   "bytes": bytes, "json_bytes": frame.count]
+        print("PERF " + String(decoding: try JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]), as: UTF8.self))
+        var rows = 0
+        measure("huge_cache_load", runs: 5, extra: ["bytes": bytes]) {
+            rows = cache.load(key)?.projection.visibleTurnItems.count ?? 0
+        }
+        #expect(rows > 0)
+    }
+
+    /// One update to the huge thread on screen with all 5,700 rows loaded, as streaming sends them.
+    @Test func hugeThreadUpdate() async throws {
+        try await measureThreadUpdate("huge_update", copies: 300, window: 300)
     }
 
     @Test func markdownLayout() {

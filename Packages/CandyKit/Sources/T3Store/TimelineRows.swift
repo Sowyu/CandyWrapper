@@ -132,13 +132,47 @@ public struct TimelineRowsInput: Sendable {
     /// // ponytail: no usage-limit stand-in run, background-work hold or local dispatch timing
     /// (RT/threadExecution.ts); add them with the composer.
     public init(projection: ThreadProjection) {
+        var memo = Memo()
+        self = Self.derive(projection: projection, memo: &memo).input
+    }
+
+    /// What `derive(projection:memo:)` keeps between updates of one thread.
+    public struct Memo: Sendable {
+        var entries = TimelineEntries.Memo()
+        var checkpoints: [Checkpoint] = []
+        var messages: [ConversationMessage] = []
+        var summaries: [TurnDiffSummary] = []
+
+        public init() {}
+    }
+
+    /// `init(projection:)` against the previous update: only changed rows are rebuilt. `changed`
+    /// lists the entries replaced in place; nil when the entry list changed shape.
+    public static func derive(projection: ThreadProjection, memo: inout Memo) -> (input: TimelineRowsInput, changed: [Int]?) {
         let rows = TimelineEntries.projectingQuestionHistory(projection.visibleTurnItems, requests: projection.runtimeRequests)
-        let entries = TimelineEntries.derive(visibleTurnItems: rows, attempts: projection.attempts, nodes: projection.nodes, plans: projection.plans)
+        let (entries, changed) = TimelineEntries.derive(
+            visibleTurnItems: rows, attempts: projection.attempts, nodes: projection.nodes, plans: projection.plans, memo: &memo.entries)
         let state = TimelineRunState(projection: projection)
-        self.init(
+        // Equal summaries keep the old array, so the row pass sees the same value cheaply.
+        if projection.checkpoints != memo.checkpoints || projection.messages != memo.messages {
+            let summaries = TurnDiffs.summaries(projection)
+            if summaries != memo.summaries { memo.summaries = summaries }
+            memo.checkpoints = projection.checkpoints
+            memo.messages = projection.messages
+        }
+        let input = TimelineRowsInput(
             entries: entries, latestRun: state.latestRun, runningRunId: state.runningRunId, isWorking: state.isWorking,
             runlessWorkActive: state.runlessWorkStartedAt != nil,
-            activeTurnStartedAt: state.activeTurnStartedAt, turnDiffSummaries: TurnDiffs.summaries(projection))
+            activeTurnStartedAt: state.activeTurnStartedAt, turnDiffSummaries: memo.summaries)
+        return (input, changed)
+    }
+
+    /// Everything but the entries matches `other`: the row pass would fold and group the same way.
+    func sameContext(_ other: TimelineRowsInput) -> Bool {
+        latestRun == other.latestRun && runningRunId == other.runningRunId && isWorking == other.isWorking
+            && runlessWorkActive == other.runlessWorkActive && activeTurnStartedAt == other.activeTurnStartedAt
+            && expandedRunIds == other.expandedRunIds && expandedAttemptIds == other.expandedAttemptIds
+            && expandedWorkGroupIds == other.expandedWorkGroupIds && turnDiffSummaries == other.turnDiffSummaries
     }
 }
 
@@ -680,6 +714,88 @@ public enum TimelineRows {
             result[i].continuesWorkLog = true
         }
         return result
+    }
+
+    // MARK: Updates (L:2010-2165)
+
+    /// The rows of one input and where each message's rows sit, so a streaming update can patch
+    /// them in place (`MessagesTimelineRowsProjection`).
+    public struct Derived: Sendable {
+        public var input: TimelineRowsInput
+        public var rows: [TimelineRow]
+        /// Message id to the indices of its `message` and `assistantMeta` rows.
+        var messageRows: [String: [Int]]
+
+        public init(_ input: TimelineRowsInput) {
+            self.input = input
+            rows = TimelineRows.derive(input)
+            messageRows = [:]
+            for (index, row) in rows.enumerated() {
+                if let m = row.message { messageRows[m.id.rawValue, default: []].append(index) }
+            }
+        }
+    }
+
+    /// Port of `replaceStreamingMessageRows`: when the only change since `previous` is the text of
+    /// streaming answers (the entries at `changedEntries`), their rows get the new text and every
+    /// other row stays as it was. Returns the new state and the row indices that changed, or nil
+    /// when the update needs a full pass.
+    public static func patchingStreamingText(_ previous: Derived, input: TimelineRowsInput, changedEntries: [Int]) -> (Derived, [Int])? {
+        guard input.entries.count == previous.input.entries.count, input.sameContext(previous.input) else { return nil }
+        var next = previous
+        next.input = input
+        var changedRows: [Int] = []
+        for index in changedEntries {
+            let entry = input.entries[index], old = previous.input.entries[index]
+            guard case .message(let message, let projected) = entry.kind, case .message(let oldMessage, let oldProjected) = old.kind,
+                entry.id == old.id, entry.createdAt == old.createdAt, entry.attempt == old.attempt
+            else { return nil }
+            if projected != oldProjected {
+                guard let projected, let oldProjected, isStreamingTextUpdate(oldProjected, projected) else { return nil }
+            }
+            if message == oldMessage, projected == oldProjected { continue }
+            guard isStreamingTextUpdate(oldMessage, message) else { return nil }
+            for rowIndex in previous.messageRows[message.id.rawValue] ?? [] {
+                switch next.rows[rowIndex].kind {
+                case .message(_, _, let meta, let copy, let copyStreaming, let summary):
+                    next.rows[rowIndex].kind = .message(
+                        message, projectedItem: projected, showAssistantMeta: meta, showAssistantCopyButton: copy,
+                        assistantCopyStreaming: copyStreaming, turnDiffSummary: summary)
+                case .assistantMeta(_, _, let copy, let copyStreaming):
+                    next.rows[rowIndex].kind = .assistantMeta(message, projectedItem: projected, showAssistantCopyButton: copy, assistantCopyStreaming: copyStreaming)
+                default:
+                    return nil
+                }
+                changedRows.append(rowIndex)
+            }
+        }
+        return (next, changedRows)
+    }
+
+    /// `isStreamingMessageTextUpdate` (session-logic.ts:893-906): text and update time don't
+    /// change a streaming answer's rows.
+    static func isStreamingTextUpdate(_ previous: ChatMessage, _ next: ChatMessage) -> Bool {
+        guard previous.role == .assistant, next.role == .assistant, previous.streaming, next.streaming else { return false }
+        var same = previous
+        same.text = next.text
+        same.updatedAt = next.updatedAt
+        return same == next
+    }
+
+    /// `isStreamingTurnItemTextUpdate` (session-logic.ts:908-929).
+    static func isStreamingTextUpdate(_ previous: ProjectedTurnItem, _ next: ProjectedTurnItem) -> Bool {
+        let a = previous.item, b = next.item
+        guard a.type == .assistantMessage, b.type == .assistantMessage, a.streaming, b.streaming,
+            previous.position == next.position, previous.visibility == next.visibility,
+            previous.sourceThreadId == next.sourceThreadId, previous.sourceItemId == next.sourceItemId,
+            (a.startedAt ?? a.updatedAt) == (b.startedAt ?? b.updatedAt),
+            case .object(var x) = a.raw, case .object(var y) = b.raw
+        else { return false }
+        for key in ["text", "updatedAt"] {
+            x[key] = nil
+            y[key] = nil
+        }
+        return x == y
     }
 
     // MARK: Post passes (L:1151-1244, 1958-2004)

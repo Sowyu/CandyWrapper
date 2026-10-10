@@ -570,9 +570,12 @@ final class ComposerController {
         requests = projection.map(PendingRequests.derive) ?? PendingRequests()
         // A pending approval or question settles the local send (ChatView.logic.ts:1236-1238).
         if !requests.isEmpty { pendingMessageId = nil }
-        let confirmed = Set(projection?.messages.map(\.id) ?? [])
-        optimistic.removeAll { confirmed.contains($0.id) }
-        if let id = pendingMessageId, confirmed.contains(id) { pendingMessageId = nil }
+        // Only while something waits for confirmation: a long thread has thousands of messages.
+        if !optimistic.isEmpty || pendingMessageId != nil {
+            let confirmed = Set(projection?.messages.map(\.id) ?? [])
+            optimistic.removeAll { confirmed.contains($0.id) }
+            if let id = pendingMessageId, confirmed.contains(id) { pendingMessageId = nil }
+        }
         // Resume is done once a run is active again.
         if resuming, let projection, ComposerLogic.RunState(runs: projection.runs).canInterrupt { resuming = false }
         // The edited message left the queue (it started, or another client removed it): the

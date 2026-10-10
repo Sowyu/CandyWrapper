@@ -176,9 +176,9 @@ public final class ThreadPanelView: DSView {
         fade.locations = [0, 0.1, 0.24, 0.42, 0.62, 0.82, 1]
         layer?.addSublayer(fade)
         timeline.context.model = model
-        model.onChange = { [weak self] in
+        model.onChange = { [weak self] change in
             guard let self else { return }
-            self.timeline.setItems(self.model.items)
+            self.timeline.setItems(self.model.items, change: change)
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
