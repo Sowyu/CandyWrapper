@@ -98,6 +98,10 @@ public final class ThreadPanelView: DSView {
     /// drawer). Show one through `drawer`; the composer controller configures them.
     public let approvalPanel = ApprovalPanelView()
     public let questionPanel = QuestionPanelView()
+    /// "<label> is reconnecting|offline" (ChatView.tsx:3091-3142): the banner stack's front item, docked
+    /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
+    public let environmentBanner = EnvironmentBannerView()
+    public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
@@ -147,6 +151,8 @@ public final class ThreadPanelView: DSView {
         questionPanel.isHidden = true
         // Back to front: queue, request panel, composer (each slides under the next).
         addSubview(queue)
+        environmentBanner.isHidden = true
+        addSubview(environmentBanner)
         addSubview(approvalPanel)
         addSubview(questionPanel)
         addSubview(composer)
@@ -316,12 +322,20 @@ public final class ThreadPanelView: DSView {
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
         }
+        let bannerShown = docked && showsEnvironmentBanner
+        environmentBanner.isHidden = !bannerShown
+        if bannerShown {
+            let h = EnvironmentBannerView.height
+            environmentBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = environmentBanner.frame.minY
+        }
         let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
-        approvalPanel.joinsAbove = queueHeight > 0
-        questionPanel.joinsAbove = queueHeight > 0
+        environmentBanner.joinsAbove = queueHeight > 0
+        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown
+        questionPanel.joinsAbove = queueHeight > 0 || bannerShown
         let above = y - top
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }

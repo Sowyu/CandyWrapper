@@ -180,11 +180,12 @@ public actor ConnectionSupervisor {
         -> @Sendable () async throws -> RPCConnection {
         return {
             let descriptor = try await http.descriptor()
-            guard descriptor.isCompatible else {
-                throw ConnectionFailure.blocked(.unsupported, "The environment speaks orchestration protocol \(descriptor.protocolVersion).")
+            if let message = Pairing.compatibilityError(descriptor) {
+                throw ConnectionFailure.blocked(.unsupported, message)
             }
             if let environmentId, descriptor.environmentId != environmentId {
-                throw ConnectionFailure.blocked(.configuration, "A different environment answers at this address.")
+                // errors.ts `environmentMismatchError`.
+                throw ConnectionFailure.blocked(.configuration, "Connected environment \(descriptor.environmentId) does not match \(environmentId).")
             }
             let ticket = try await http.webSocketTicket(token: try await token())
             let socket = try await URLSessionRPCSocket.open(url: http.webSocketURL(ticket: ticket.ticket, identity: identity))

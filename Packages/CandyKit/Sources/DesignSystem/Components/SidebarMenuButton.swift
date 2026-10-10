@@ -25,6 +25,8 @@ public final class SidebarMenuButtonView: ControlView {
 
     public var title: String { didSet { label.text = title; needsLayout = true } }
     public var icon: IconName? { didSet { updateIcon() } }
+    /// An icon outside the generated set (T3's `createLucideIcon` glyphs). Wins over `icon`.
+    public var iconDefinition: IconDefinition? { didSet { updateIcon() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var variant: Variant = .default { didSet { restyle() } }
     public let kind: Kind
@@ -137,7 +139,7 @@ public final class SidebarMenuButtonView: ControlView {
 
     private func updateIcon() {
         iconView?.removeFromSuperview()
-        iconView = icon.map { IconView(name: $0) }
+        iconView = iconDefinition.map { IconView(definition: $0) } ?? icon.map { IconView(name: $0) }
         if let iconView { addSubview(iconView) }
         restyle()
     }

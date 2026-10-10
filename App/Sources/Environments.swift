@@ -19,6 +19,9 @@ final class Environments {
         var session: ShellSession?
         /// The newest shell, unscoped.
         var snapshot: ShellSnapshot?
+        /// The session's supervisor state, nil while no session runs.
+        var state: ConnectionState?
+        var watch: Task<Void, Never>?
     }
 
     private weak var sidebar: SidebarContentView?
@@ -38,6 +41,12 @@ final class Environments {
     var onShell: ((ShellSnapshot) -> Void)?
     /// An environment was removed: drop everything kept for it.
     var onRemove: ((String) -> Void)?
+    /// A connection state, the saved list or a label changed (Settings > Connections, the composer banner).
+    private var observers: [UUID: () -> Void] = [:]
+    /// Every saved environment, enabled or not, in catalog order. Loaded by `restoreSaved`.
+    private(set) var saved: [EnvironmentRegistration] = []
+    /// Ids being removed (the row menu reads "Removing…").
+    private(set) var removing: Set<String> = []
 
     init(sidebar: SidebarContentView, catalog: EnvironmentCatalog = EnvironmentCatalog(), cache: ShellCache = ShellCache()) {
         self.sidebar = sidebar
@@ -57,6 +66,21 @@ final class Environments {
     /// Whether the environment's shell has arrived (from the disk cache or the server).
     func hasShell(_ environmentId: String) -> Bool { entries[environmentId]?.snapshot != nil }
     func isRegistered(_ environmentId: String) -> Bool { entries[environmentId] != nil }
+    func label(_ environmentId: String) -> String? { entries[environmentId]?.label ?? saved.first { $0.environmentId == environmentId }?.label }
+    func machine(_ environmentId: String) -> String? { entries[environmentId]?.machine }
+    /// The session's connection state; nil when no session runs.
+    func state(_ environmentId: String) -> ConnectionState? { entries[environmentId]?.state }
+    /// The route the session uses.
+    func routeInUse(_ environmentId: String) -> URL? { entries[environmentId]?.session?.http.baseURL }
+
+    @discardableResult
+    func observe(_ change: @escaping () -> Void) -> UUID {
+        let id = UUID()
+        observers[id] = change
+        return id
+    }
+
+    private func changed() { for o in observers.values { o() } }
 
     // MARK: The local environment
 
@@ -89,30 +113,106 @@ final class Environments {
     /// Connects every enabled saved environment, each from its cached shell. Keychain reads run off
     /// the main thread, since one can wait on an access prompt.
     func restoreSaved() {
-        let catalog = self.catalog, cache = self.cache
+        let catalog = self.catalog
         Task {
-            let saved = await Task.detached { () -> [(EnvironmentRegistration, String?, ShellSnapshot?)] in
-                catalog.load().filter(\.enabled).map { ($0, try? catalog.token(environmentId: $0.environmentId),
-                                                        cache.load(environmentId: $0.environmentId)?.snapshot) }
-            }.value
-            for (registration, token, cached) in saved where registration.environmentId != primaryId {
-                guard let token else {
-                    // ponytail: a saved environment without its token stays hidden; WP6.3's Connections list shows it as "Not connected"
-                    NSLog("environment %@ has no token in the Keychain", registration.environmentId)
-                    continue
-                }
-                addRemote(environmentId: registration.environmentId, label: registration.label, machine: registration.machine,
-                          baseURL: registration.httpBaseURL, token: token, cached: cached)
-            }
+            saved = await Task.detached { catalog.load() }.value
+            changed()
+            for registration in saved where registration.enabled { connectSaved(registration) }
         }
     }
 
-    /// Saves a paired environment and connects it (the Add Environment flow, WP6.3, calls this).
-    func save(_ registration: EnvironmentRegistration, token: String) async throws {
+    /// Connects a saved environment over its first route that answers as that environment (routes.ts:
+    /// "the first route in preference order that answers as the expected environment"), else its first.
+    /// A saved environment without a token in the Keychain stays listed and "Not connected".
+    private func connectSaved(_ registration: EnvironmentRegistration) {
+        let id = registration.environmentId
+        guard id != primaryId else { return }
+        let catalog = self.catalog, cache = self.cache
+        Task {
+            let (route, token, cached) = await Task.detached { () -> (URL, String?, ShellSnapshot?) in
+                let route = await Self.pickRoute(registration)
+                return (route, try? catalog.token(environmentId: id, route: route), cache.load(environmentId: id)?.snapshot)
+            }.value
+            guard let token else {
+                NSLog("environment %@ has no token in the Keychain for its route", id)
+                return
+            }
+            // Switched off or removed while the Keychain read ran.
+            guard saved.first(where: { $0.environmentId == id })?.enabled == true else { return }
+            addRemote(environmentId: id, label: registration.label, machine: registration.machine, baseURL: route, token: token, cached: cached)
+        }
+    }
+
+    /// The first route whose descriptor answers within T3's 2.5 s route check with the saved id.
+    // ponytail: picked once per connect; T3 also rechecks every 60 s for a better route while on a fallback
+    nonisolated static func pickRoute(_ registration: EnvironmentRegistration) async -> URL {
+        guard registration.routes.count > 1 else { return registration.httpBaseURL }
+        for route in registration.routes {
+            var http = EnvironmentHTTP(baseURL: route)
+            http.timeout = 2.5
+            if let d = try? await http.descriptor(), d.environmentId == registration.environmentId { return route }
+        }
+        return registration.httpBaseURL
+    }
+
+    /// Add Environment: pairs over host and code, saves the route and its token, and connects
+    /// (onboarding.ts `registerPairingConnection`). Pairing the local environment saves nothing, as
+    /// T3's registry ignores platform environments. Returns the environment's label.
+    func pair(host: String, code: String, routeTarget: String?) async throws -> String {
+        let result = try await Pairing.pair(host: host, code: code, expectedEnvironmentId: routeTarget, identity: identity)
+        let d = result.descriptor
+        guard d.environmentId != primaryId else { return d.label }
+        let registration = EnvironmentRegistration(environmentId: d.environmentId, label: d.label, httpBaseURL: result.baseURL,
+                                                   machine: d.platform?.machine)
+        let catalog = self.catalog, token = result.token
+        let stored = try await Task.detached { try catalog.add(registration, token: token) }.value
+        upsertSaved(stored)
+        // A new route to a machine that is already connected leaves its session on the route it uses.
+        if stored.enabled, entries[stored.environmentId]?.session == nil {
+            addRemote(environmentId: stored.environmentId, label: stored.label, machine: stored.machine,
+                      baseURL: result.baseURL, token: token, cached: cache.load(environmentId: stored.environmentId)?.snapshot)
+        }
+        changed()
+        return d.label
+    }
+
+    private func upsertSaved(_ registration: EnvironmentRegistration) {
+        if let i = saved.firstIndex(where: { $0.environmentId == registration.environmentId }) { saved[i] = registration } else { saved.append(registration) }
+    }
+
+    /// The row switch (`setEnabled`): off keeps the registration, token and cache and closes the socket;
+    /// its projects and threads leave the sidebar. On connects again.
+    func setEnabled(_ environmentId: String, _ enabled: Bool) async throws {
         let catalog = self.catalog
-        try await Task.detached { try catalog.add(registration, token: token) }.value
-        addRemote(environmentId: registration.environmentId, label: registration.label, machine: registration.machine,
-                  baseURL: registration.httpBaseURL, token: token, cached: nil)
+        try await Task.detached { try catalog.setEnabled(enabled, environmentId: environmentId) }.value
+        guard let i = saved.firstIndex(where: { $0.environmentId == environmentId }) else { return }
+        saved[i].enabled = enabled
+        if enabled {
+            connectSaved(saved[i])
+        } else if entries[environmentId] != nil {
+            drop(environmentId)
+        }
+        changed()
+    }
+
+    /// The route list's remove button. Reconnects when the session used that route.
+    func removeRoute(_ route: URL, environmentId: String) async throws {
+        let catalog = self.catalog
+        let updated = try await Task.detached { try catalog.removeRoute(route, environmentId: environmentId) }.value
+        guard let updated else { return }
+        let wasInUse = routeInUse(environmentId).map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(route) } ?? false
+        upsertSaved(updated)
+        if wasInUse, updated.enabled {
+            drop(environmentId)
+            connectSaved(updated)
+        }
+        changed()
+    }
+
+    /// The thread banner's "Reconnect" (`retryEnvironment`).
+    func reconnect(_ environmentId: String) {
+        guard let supervisor = entries[environmentId]?.session?.supervisor else { return }
+        Task { await supervisor.retryNow() }
     }
 
     /// Development: a server and token from the command line. Not saved. The descriptor gives the
@@ -155,6 +255,7 @@ final class Environments {
         entry.machine = machine
         entries[id] = entry
         publishEnvironments()
+        changed()
         if let cached, entry.snapshot == nil { shellChanged(id, cached) }
         attach(ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: entries[id]?.snapshot), to: id)
     }
@@ -164,20 +265,32 @@ final class Environments {
     /// T3 clears only composer drafts here (L 3.5); this clears the rest too. The local environment
     /// is platform-managed and can't be removed.
     func remove(_ environmentId: String) {
-        guard environmentId != primaryId, entries[environmentId] != nil else { return }
-        drop(environmentId)
-        ProjectIconStore.shared.forget(environmentId: environmentId)
-        onRemove?(environmentId)
-        let catalog = self.catalog, cache = self.cache
-        Task.detached {
-            try? catalog.remove(environmentId: environmentId)
-            await cache.remove(environmentId: environmentId)
+        Task { try? await removeSaved(environmentId) }
+    }
+
+    /// "Remove from this device": forgets the registration, every route token and the cache.
+    func removeSaved(_ environmentId: String) async throws {
+        guard environmentId != primaryId else { return }
+        removing.insert(environmentId)
+        changed()
+        defer { removing.remove(environmentId); changed() }
+        if entries[environmentId] != nil {
+            drop(environmentId)
+            ProjectIconStore.shared.forget(environmentId: environmentId)
+            onRemove?(environmentId)
         }
+        let catalog = self.catalog, cache = self.cache
+        try await Task.detached {
+            try catalog.remove(environmentId: environmentId)
+            await cache.remove(environmentId: environmentId)
+        }.value
+        saved.removeAll { $0.environmentId == environmentId }
     }
 
     /// Stops the session and takes the environment out of the merged shell.
     private func drop(_ id: String) {
         entries[id]?.session?.stop()
+        entries[id]?.watch?.cancel()
         entries[id] = nil
         shells.remove(id)
         iconRoutes.set(id, nil)
@@ -185,6 +298,7 @@ final class Environments {
         publishEnvironments()
         merge()
         onSessionChange?(id)
+        changed()
     }
 
     // MARK: Sessions and shells
@@ -193,6 +307,19 @@ final class Environments {
         guard entries[id] != nil else { return }
         if let old = entries[id]?.session, old !== session { old.stop() }
         entries[id]?.session = session
+        entries[id]?.watch?.cancel()
+        entries[id]?.state = nil
+        entries[id]?.watch = session.map { session in
+            Task { [weak self, weak session] in
+                guard let stream = await session?.supervisor.states() else { return }
+                for await state in stream {
+                    guard let self, let session, self.entries[id]?.session === session else { return }
+                    self.entries[id]?.state = state
+                    self.changed()
+                }
+            }
+        }
+        changed()
         if let session {
             // ServerController may have set `onSnapshot` (cache, activity); chain after it.
             let previous = session.onSnapshot

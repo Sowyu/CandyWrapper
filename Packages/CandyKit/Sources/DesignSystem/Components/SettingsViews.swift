@@ -101,19 +101,29 @@ public final class SettingsRowView: DSView {
     }
 }
 
+/// A view that sizes itself to a width, so a settings card can stack it.
+@MainActor public protocol SettingsGroupRow: NSView {
+    func height(forWidth width: CGFloat) -> CGFloat
+}
+
+extension SettingsRowView: SettingsGroupRow {}
+
 /// `SettingsGroup`: the canonical card. 14px radius, border/60, card/40, `shadow-xs/5`, rows divided by border/50.
+/// Rows are `SettingsRowView`s or any other `SettingsGroupRow` (T3 puts environment rows and empty states
+/// straight in the group); `[&>*+*]:border-t` gives every row after the first a 1px top border.
 public final class SettingsGroupView: BoxView {
     public enum Variant: Sendable { case grouped, plain }
-    public var rows: [SettingsRowView] {
-        didSet { oldValue.forEach { $0.removeFromSuperview() }; rows.forEach(addSubview); restyle(); needsLayout = true }
+    public var rows: [any SettingsGroupRow] {
+        didSet { oldValue.forEach { $0.removeFromSuperview() }; rows.forEach { addSubview($0) }; restyle(); needsLayout = true }
     }
     public var variant: Variant { didSet { restyle(); needsLayout = true } }
+    private var dividers: [CALayer] = []
 
-    public init(rows: [SettingsRowView], variant: Variant = .grouped) {
+    public init(rows: [any SettingsGroupRow], variant: Variant = .grouped) {
         self.rows = rows
         self.variant = variant
         super.init(frame: .zero)
-        rows.forEach(addSubview)
+        rows.forEach { addSubview($0) }
         restyle()
     }
 
@@ -126,11 +136,20 @@ public final class SettingsGroupView: BoxView {
             box.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]
         }
         boxStyle = box
-        for (i, row) in rows.enumerated() { row.topBorder = variant == .grouped && i > 0 }
+        for row in rows { (row as? SettingsRowView)?.topBorder = false }
+        let count = variant == .grouped ? max(0, rows.count - 1) : 0
+        while dividers.count < count {
+            let l = CALayer()
+            l.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
+            layer?.addSublayer(l)
+            dividers.append(l)
+        }
+        while dividers.count > count { dividers.removeLast().removeFromSuperlayer() }
+        needsDisplay = true
     }
 
     private var inset: CGFloat { variant == .grouped ? 1 : 0 }
-    private var gap: CGFloat { variant == .plain ? 4 : 0 }  // `space-y-1`
+    private var gap: CGFloat { variant == .plain ? 4 : 1 }  // `space-y-1`, or the 1px top border
 
     public func height(forWidth width: CGFloat) -> CGFloat {
         rows.reduce(0) { $0 + $1.height(forWidth: width - 2 * inset) } + gap * CGFloat(max(0, rows.count - 1)) + 2 * inset
@@ -143,11 +162,24 @@ public final class SettingsGroupView: BoxView {
     public override func layout() {
         super.layout()
         var y = inset
-        for row in rows {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (i, row) in rows.enumerated() {
+            if i > 0 {
+                if variant == .grouped { dividers[i - 1].frame = CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1) }
+                y += gap
+            }
             let h = row.height(forWidth: bounds.width - 2 * inset)
             row.frame = NSRect(x: inset, y: y, width: bounds.width - 2 * inset, height: h)
-            y += h + gap
+            y += h
         }
+        CATransaction.commit()
+    }
+
+    public override func updateLayer() {
+        super.updateLayer()
+        let color = Themed.color(\.contrastBorder, 0.5).cgColor(in: self)
+        for d in dividers { d.backgroundColor = color }
     }
 }
 
@@ -157,9 +189,11 @@ public final class SettingsSectionView: DSView {
     public var title: String { didSet { titleLabel.text = title } }
     /// The header's trailing action slot (`min-h-7 min-w-7`).
     public var headerAction: NSView? { didSet { oldValue?.removeFromSuperview(); headerAction.map(addSubview); needsLayout = true } }
+    /// The `icon` before the title (`gap-2`), such as the machine glyph of "This machine".
+    public var icon: NSView? { didSet { oldValue?.removeFromSuperview(); icon.map(addSubview); needsLayout = true } }
     private let titleLabel = LabelView()
 
-    public init(title: String, rows: [SettingsRowView], variant: SettingsGroupView.Variant = .grouped) {
+    public init(title: String, rows: [any SettingsGroupRow], variant: SettingsGroupView.Variant = .grouped) {
         self.title = title
         group = SettingsGroupView(rows: rows, variant: variant)
         super.init(frame: .zero)
@@ -179,7 +213,9 @@ public final class SettingsSectionView: DSView {
 
     public override func layout() {
         super.layout()
-        titleLabel.frame = NSRect(x: 16, y: 4, width: bounds.width - 32 - 28 - 16, height: 20)
+        let titleX: CGFloat = icon == nil ? 16 : 16 + 16 + 8
+        icon?.frame = NSRect(x: 16, y: 6, width: 16, height: 16)
+        titleLabel.frame = NSRect(x: titleX, y: 4, width: max(0, bounds.width - titleX - 16 - 28 - 16), height: 20)
         if let action = headerAction {
             let s = action.intrinsicContentSize
             action.frame = NSRect(x: bounds.width - 16 - s.width, y: (28 - s.height) / 2, width: s.width, height: s.height)

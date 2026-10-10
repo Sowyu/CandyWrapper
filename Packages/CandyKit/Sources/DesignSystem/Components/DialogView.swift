@@ -25,6 +25,8 @@ public final class DialogView: DSView {
     }
     public var footerVariant: FooterVariant = .default { didSet { changed() } }
     public var showsCloseButton: Bool { didSet { closeButton.isHidden = !showsCloseButton } }
+    /// The popup's `max-w-*` for dialogs (`max-w-lg` by default; Add Environment uses `sm:max-w-3xl`).
+    public var maxWidth: CGFloat = 512
     /// Sheet `variant="inset"`: rounded and bordered all round, 16px from the viewport edges.
     public var isInset = false { didSet { restyle(); changed() } }
     /// Called by the close button. `ModalHost` sets it.
@@ -91,7 +93,7 @@ public final class DialogView: DSView {
     /// `calc(100% - 48px)` up to `max-w-md`; top and bottom sheets the full width.
     public func preferredWidth(in viewport: CGSize) -> CGFloat {
         switch kind {
-        case .dialog, .alertDialog: return min(512, viewport.width - 32)
+        case .dialog, .alertDialog: return min(maxWidth, viewport.width - 32)
         case .sheet(let side):
             let inset: CGFloat = isInset ? 32 : 0
             return side == .left || side == .right ? min(448, viewport.width - inset - 48) : viewport.width - inset

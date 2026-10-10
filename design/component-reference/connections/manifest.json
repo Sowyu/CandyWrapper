@@ -1,0 +1,42 @@
+{
+  "add-dialog" : {
+    "height" : 357,
+    "width" : 768
+  },
+  "add-dialog.error" : {
+    "height" : 389,
+    "width" : 768
+  },
+  "add-dialog.route" : {
+    "height" : 377,
+    "width" : 768
+  },
+  "environments.empty" : {
+    "height" : 248,
+    "width" : 796
+  },
+  "environments.routes" : {
+    "height" : 245,
+    "width" : 796
+  },
+  "environments.rows" : {
+    "height" : 210,
+    "width" : 796
+  },
+  "header" : {
+    "height" : 52,
+    "width" : 600
+  },
+  "nav" : {
+    "height" : 448,
+    "width" : 255
+  },
+  "nav.back" : {
+    "height" : 40,
+    "width" : 255
+  },
+  "this-machine" : {
+    "height" : 106,
+    "width" : 796
+  }
+}
