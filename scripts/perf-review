@@ -423,7 +423,21 @@ def latest_saved(out_dir, exclude):
             runs.append((data.get("created", ""), path, data))
         except ValueError:
             continue
-    return max(runs)[1:] if runs else (None, None)
+    if not runs:
+        return (None, None)
+    # Compare with the median of the last three runs, not the newest alone: on 2026-10-10 one
+    # unusually low big-thread run (38 MB after scrolling, every other run 44) became the baseline
+    # and made the next run look 16% worse. An A/B of both builds showed no change.
+    recent = sorted(runs)[-3:]
+    if len(recent) == 1:
+        return recent[0][1:]
+    metrics = {}
+    for name in set().union(*(set(r[2].get("metrics", {})) for r in recent)):
+        meds = [r[2]["metrics"][name]["median"] for r in recent
+                if isinstance(r[2].get("metrics", {}).get(name), dict) and "median" in r[2]["metrics"][name]]
+        if meds:
+            metrics[name] = {"median": statistics.median(meds), "min": min(meds), "max": max(meds), "values": meds}
+    return ("median of " + ", ".join(os.path.basename(r[1]) for r in recent), {"metrics": metrics})
 
 
 def main():

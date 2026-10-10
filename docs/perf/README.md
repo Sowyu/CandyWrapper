@@ -117,3 +117,7 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 ## Noise found 2026-10-10
 
 The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_idle_wakeups_per_s` (+67%). An A/B of the streaming scenario, three rounds alternating ef84b1d and 903e0a2, showed both builds landing on either about 36-56 MB or about 86 MB one second after the turn (ef84b1d: 87.4, 86.9, 36.2; 903e0a2: 85.9, 51.4, 86.3), with the same peak (86.5 to 88.2 MB), and package idle wakeups overlapping (0.97 to 1.27 against 1.07 to 1.46). Both metrics are now informational; the stream peak and CPU still gate. Open question for milestone 8: why the stream scenario peaks near 87 MB when the idle scenario peaks at 31 MB.
+
+## Baseline: median of the last three runs (2026-10-10)
+
+The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.
