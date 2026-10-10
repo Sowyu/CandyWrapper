@@ -4,9 +4,9 @@ Update this file at the end of every work session. Newest log entry first.
 
 ## Current milestone
 
-Milestone 6, T3 Connect: reach a T3 server on another machine the way the official app does (cloud sign-in, relay or direct connection, pairing), with the same protocol. Milestone 5 was accepted by the user on 2026-10-10 ("M5 aprove") after the agent ran the demo side by side with the official web client on the user's live T3. The user asks for commits as work lands.
+Milestone 7, the rest of the features: keybindings and the command palette, the composer's remaining parts (slash commands, mentions, skills, attachments, prompt stash), the terminal drawer, git and pull requests, the right panels (files, preview, search), every Settings page, notifications and the desktop-only parts. Milestone 6 was accepted by the user on 2026-10-10 ("m6 approve") after a full review. The user's standing rules: commit and push as work lands; run a full review (scripts/perf-review, the whole test suite, fidelity, and a code review at the milestone end) after every big step and show it.
 
-Next action: research for M6 with sonnet-medium agents: how the official app finds, authenticates to and talks to a remote T3 environment (T3 Connect cloud, Clerk sign-in, relay or tunnel, pairing links and QR, multiple environments in one sidebar), cited into `docs/research/K-connect.md`, then plan the M6 work packages here. Sign-in renders web content, so the WKWebView rule applies (create while visible, destroy when hidden).
+Next action: M7 work packages in this order, two agents at a time in worktrees, a full review after each merge: WP7.1 keybindings and command palette, WP7.2 composer menus (slash, @, $, #) and chips, WP7.3 attachments, images and prompt stash, WP7.4 terminal drawer, WP7.5 git and pull requests, WP7.6 right panels (files, file preview, go to file, project search, built-in browser in a WKWebView created only while visible), WP7.7 Settings pages, WP7.8 notifications, desktop-only parts and thread view leftovers. Track rows in docs/parity-checklist.md.
 
 ## Milestones
 
@@ -17,8 +17,8 @@ Next action: research for M6 with sonnet-medium agents: how the official app fin
 | 3 | Skeleton: connect to server, sidebar shows real data | done, accepted 2026-10-10 |
 | 4 | Read-only thread view | done, accepted 2026-10-10 |
 | 5 | Interactive: composer, streaming, interrupt, approvals, queue, model picker | done, accepted 2026-10-10 |
-| 6 | T3 Connect | not started |
-| 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | not started |
+| 6 | T3 Connect | done, accepted 2026-10-10 |
+| 7 | Terminal, git/PR, command palette, keybindings, settings, notifications | in progress |
 | 8 | Performance and battery pass | not started |
 | 9 | Polish and packaging | not started |
 | 10 | Stress test (glitches and performance under load, failure and long sessions) plus the side-by-side UI and behavior check against T3 Code Nightly | not started |
@@ -92,7 +92,21 @@ Scope: remote environments the way the official app shows them (docs/research/K-
   - 2026-10-10 live: the sandbox paired as a remote through Add Environment (WP6.3 agent, on screen). The user signed in to T3 Connect in the demo app through the native Clerk sheet on their live T3; the relay listed their two machines ("aniko" and "Aniko's MacBook Pro") and both connected through T3 Connect (relay plus DPoP), shown as "T3 Connect · Connected · Routes". The user said "it looks great" and asked for their profile picture (T3 shows Clerk's image, we showed the initial) and the full Connections page (T3's is "way more complicated"); an agent is on both.
 - [x] Review fixes (worktree agent, not committed)
   - 2026-10-10: fixed the M6 review's 14 items plus two perf items. Races: `ShellSession.stop` sets a final `stopped` flag and `start` connects through `ConnectionSupervisor.connect(unlessStopped:)`, which checks it on both sides of `connect`; `Environments.connectSaved` runs once per environment at a time (`connecting`), skips ids being removed, rechecks after the Keychain read and starts over when the routes changed meanwhile. `EnvironmentCatalog` serializes every read-modify-write under one lock and never overwrites (or moves aside) a document with a newer `version`. Re-pairing the route in use, or a session in error, replaces the session with one on the new token. `didSignIn` drops other accounts' relay routes. `drop` clears the environment's optimistic updates. `EnvironmentHTTP.send` retries a 401 once with a fresh DPoP token (`authorize` gets the rejected token). `ensureAccount` is single flight. A failed sign-out closes relay sessions anyway. Environment tokens are `AfterFirstUnlockThisDeviceOnly` (ponytail: needs the data protection keychain, M9). Pairing link and code copies carry the concealed and transient pasteboard types. Settings: the 1 s ticker has 0.2 s tolerance and rebuilds only the access section when a label changed; its views are built on first open. Perf: `MergedShell` rescopes only changed projects and threads (1,000 threads, one change: one rescope), the composer regroups "Run on" only when projects or environments change, and `buildProjectGroups` remembers its last result. Tests: SupervisorTests (two stop orderings), EnvironmentCatalogTests (concurrent writes, newer document), EnvironmentHTTPRetryTests, CredentialStoreTests, ThreadActionsTests, EnvironmentScopeTests (rescope count, group cache), CopySecretTests. The app-level guards (`connecting`, `removing`, re-pair, sign-in cleanup) have no test target; not checked on screen.
-- [ ] Demo milestone 6 to the user
+- [x] Demo milestone 6 to the user (accepted 2026-10-10: "m6 approve", after the full review: perf-review M5 vs M6, 534 tests, fidelity unchanged, 16 code review findings fixed)
+
+## Milestone 7 checklist
+
+Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside milestone 10's stress work (status 2026-10-10: 78 built, 39 partial, 364 to go; biggest areas Settings 85 rows, keyboard shortcuts 59, right panels 29, thread view 27, composer 25, desktop-only 23, sidebar 20, git and PRs 20, command palette 20). Each work package researches its own T3 source first, cites it, and updates the checklist rows it builds.
+
+- [ ] WP7.1 keybindings (T3's keybinding system: defaults, the server's keybindings config, user overrides, when-clauses, every action) and the command palette
+- [ ] WP7.2 composer menus: slash commands (provider and T3 commands), `@` file and thread mentions with workspace search, `$` skills, `#` pull requests, inline context chips
+- [ ] WP7.3 attachments and images (picker, drag, paste, HTTP upload, thumbnails, previews), prompt stash, the remaining composer rows
+- [ ] WP7.4 terminal drawer: a native terminal view over T3's terminal RPC (decision: SwiftTerm, MIT, pure Swift and AppKit, unless the research finds a reason not to)
+- [ ] WP7.5 git and pull requests: branch toolbar, git actions (commit, push, create PR), the Pull Requests page, PR badges
+- [ ] WP7.6 right panels: files panel, file preview and editor, go to file, project search, the built-in browser (WKWebView only while visible)
+- [ ] WP7.7 Settings pages: General, Appearance, Keybindings, SnapShots, Providers, Integrations, Scheduled Tasks, Source Control, Storage, Archive, plus settings search
+- [ ] WP7.8 notifications, desktop-only parts (menus, dock, single instance), thread view leftovers (status line, minimap, fork, rename)
+- [ ] Full review at the end (perf-review vs the M6 run, tests, fidelity, a code review of the milestone diff), then the M7 demo
 
 ## Milestone 10: stress test for glitches and performance (planned, last)
 
