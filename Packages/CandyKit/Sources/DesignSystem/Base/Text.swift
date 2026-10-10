@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import os
 
 /// UI fonts. T3 uses the system stack (`-apple-system`, so SF Pro) and `ui-monospace` (SF Mono),
 /// at rem-based sizes from `Tokens.Text`. Weights in use: 400, 500, 600, rarely 700.
@@ -11,10 +12,26 @@ public enum DSFont {
     /// `ui-monospace`: Chromium resolves it to the user fixed-pitch font (Menlo), because SF Mono
     /// is not an installed font. Measured against Chromium in the Input fidelity test.
     public static func mono(_ px: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        let base = CTFontCreateUIFontForLanguage(.userFixedPitch, px, nil).map { $0 as NSFont }
-            ?? .monospacedSystemFont(ofSize: px, weight: weight)
-        return weight >= .semibold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
+        cached("mono", px, weight) {
+            let base = CTFontCreateUIFontForLanguage(.userFixedPitch, px, nil).map { $0 as NSFont }
+                ?? .monospacedSystemFont(ofSize: px, weight: weight)
+            return weight >= .semibold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
+        }
     }
+
+    /// Fonts made from descriptors are new objects with their own tables and caches (about 150 KB
+    /// each), unlike `systemFont`, which AppKit shares. Make each style once.
+    public static func cached(_ kind: String, _ px: CGFloat, _ weight: NSFont.Weight, _ make: () -> NSFont) -> NSFont {
+        let key = "\(kind) \(px) \(weight.rawValue)"
+        return cache.withLockUnchecked { fonts in
+            if let font = fonts[key] { return font }
+            let font = make()
+            fonts[key] = font
+            return font
+        }
+    }
+
+    private static let cache = OSAllocatedUnfairLock(uncheckedState: [String: NSFont]())
 }
 
 /// Places text the way CSS does: the glyph box (ascent + descent) is centered in the
