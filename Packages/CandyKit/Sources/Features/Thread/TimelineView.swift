@@ -129,7 +129,10 @@ public final class TimelineView: DSView {
         }
         switch item.row.kind {
         case .message(let m, _, let meta, _, _, let summary):
-            if m.role == .user { return min(176, lines(m.text, 7.5 / 0.8) * 22.75) + 24 + 44 }
+            if m.role == .user {
+                let marker: CGFloat = UserIntentMarkerView.presentation(m.inputIntent) == nil ? 0 : 16
+                return marker + min(176, lines(m.text, 7.5 / 0.8) * 22.75) + 24 + 44
+            }
             let card = summary.map { $0.files.isEmpty ? 0 : 16 + 56 + CGFloat($0.files.count) * 28 } ?? 0
             return lines(m.text, 7.5) * 22.75 + 4 + card + (meta ? 46 : 8)
         case .assistantMeta: return 42

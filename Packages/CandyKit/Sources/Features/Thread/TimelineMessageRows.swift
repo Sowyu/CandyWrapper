@@ -34,8 +34,52 @@ extension MarkdownLayout {
     }
 }
 
+/// `UserMessageIntentMarker` (MessagesTimeline.tsx:2562-2603): the line above a bubble that did
+/// not start its own turn. Steers show a redo arrow and "Steer"; queued turns show "Queued".
+/// `me-1 flex items-center justify-end gap-1 text-xs leading-none text-muted-foreground`, icon `size-3`.
+final class UserIntentMarkerView: DSView {
+    static let height: CGFloat = 12
+    private let icon = IconView(name: .redo2, size: 12, strokeColor: TL.c(\.mutedForeground))
+    private let label = LabelView("", font: TL.font(12), color: TL.c(\.mutedForeground))
+
+    /// Label, icon and tooltip for an intent, or nil when the row shows no marker (`turn_start`, none).
+    static func presentation(_ intent: InputIntent?) -> (label: String, icon: Bool, tooltip: String)? {
+        guard let intent, intent != .turnStart else { return nil }
+        if intent == .queuedTurn { return ("Queued", false, "Queued behind the active turn") }
+        if intent == .promotedQueuedToSteer { return ("Steer", true, "Originally queued, then promoted to steer the active turn") }
+        // T3 falls back to the steer look for any other intent.
+        return ("Steer", true, "Steered the active turn")
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        label.lineHeight = Self.height
+        addSubview(icon)
+        addSubview(label)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(_ p: (label: String, icon: Bool, tooltip: String)) {
+        label.text = p.label
+        icon.isHidden = !p.icon
+        toolTip = p.tooltip
+        needsLayout = true
+    }
+
+    var fittingWidth: CGFloat { ceil(label.textWidth) + (icon.isHidden ? 0 : 12 + 4) }
+
+    override func layout() {
+        super.layout()
+        let w = ceil(label.textWidth)
+        label.frame = NSRect(x: bounds.width - w, y: 0, width: w, height: Self.height)
+        icon.frame = NSRect(x: label.frame.minX - 4 - 12, y: 0, width: 12, height: 12)
+    }
+}
+
 /// `UserTimelineRow` (MessagesTimeline.tsx:2198-2560): a right-aligned bubble at most 80% of the
-/// lane, then a hover row with the time and a copy button that always keeps its 24px.
+/// lane, then a hover row with the time and a copy button that always keeps its 24px. A steered or
+/// queued message gets its intent marker above the bubble (`flex-col gap-1`).
 final class UserMessageRowView: TimelineRowView {
     static let padding: CGFloat = 12
     static let collapsedHeight: CGFloat = 176
@@ -47,6 +91,7 @@ final class UserMessageRowView: TimelineRowView {
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private let copyButton = Features.copyButton()
     private let fadeMask = CAGradientLayer()
+    private let marker = UserIntentMarkerView(frame: .zero)
     private var text = ""
     private var collapsible = false
 
@@ -54,6 +99,7 @@ final class UserMessageRowView: TimelineRowView {
         super.init(frame: frameRect)
         bubble.fill = TL.c(\.messageSurface)
         bubble.radius = 18
+        addSubview(marker)
         addSubview(bubble)
         // `text-foreground` on the bubble, where assistant markdown sits at 80%.
         markdown.bodyColor = TL.c(\.foreground)
@@ -84,8 +130,14 @@ final class UserMessageRowView: TimelineRowView {
         toggle.isHidden = !collapsible
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
         time.toolTip = nil
+        let intent = UserIntentMarkerView.presentation(m.inputIntent)
+        marker.isHidden = intent == nil
+        if let intent { marker.configure(intent) }
         needsLayout = true
     }
+
+    /// The marker line and the 4px gap under it.
+    private var markerSpace: CGFloat { marker.isHidden ? 0 : UserIntentMarkerView.height + 4 }
 
     private func metrics(_ width: CGFloat) -> (bubble: CGFloat, body: CGFloat, full: CGFloat) {
         let maxBubble = width * 0.8
@@ -103,7 +155,7 @@ final class UserMessageRowView: TimelineRowView {
     override func height(forWidth width: CGFloat) -> CGFloat {
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        return m.body + footer + Self.padding * 2 + 4 + 24 + 16
+        return markerSpace + m.body + footer + Self.padding * 2 + 4 + 24 + 16
     }
 
     override func layout() {
@@ -112,7 +164,10 @@ final class UserMessageRowView: TimelineRowView {
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
         let bubbleHeight = m.body + footer + Self.padding * 2
-        bubble.frame = NSRect(x: width - m.bubble, y: 0, width: m.bubble, height: bubbleHeight)
+        let top = markerSpace
+        let markerWidth = marker.fittingWidth
+        marker.frame = NSRect(x: width - 4 - markerWidth, y: 0, width: markerWidth, height: UserIntentMarkerView.height)
+        bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
         markdown.frame = NSRect(x: Self.padding, y: Self.padding, width: m.bubble - Self.padding * 2, height: m.full)
         let clipped = collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -129,7 +184,7 @@ final class UserMessageRowView: TimelineRowView {
         let size = toggle.intrinsicContentSize
         toggle.frame = NSRect(x: Self.padding - 4, y: Self.padding + m.body + 6, width: size.width, height: size.height)
         // Hover row: `max-w-[80%] justify-end pe-1 gap-2`, 24px tall under a 4px gap.
-        let rowTop = bubbleHeight + 4
+        let rowTop = top + bubbleHeight + 4
         let copySize = copyButton.intrinsicContentSize
         copyButton.frame = NSRect(x: width - 4 - copySize.width, y: rowTop, width: copySize.width, height: 24)
         let timeWidth = ceil(time.textWidth)
