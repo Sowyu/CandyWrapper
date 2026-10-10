@@ -364,4 +364,6 @@ public final class SidebarListView: DSView {
     func view(forKey key: String) -> SidebarRowBase? { visible[key] }
     var poolSizes: [SidebarItem.Kind: Int] { pools.mapValues(\.count) }
     var liveViewCount: Int { visible.count }
+    /// The live view for an item key, for tests.
+    func rowView(_ key: String) -> SidebarRowBase? { visible[key] }
 }

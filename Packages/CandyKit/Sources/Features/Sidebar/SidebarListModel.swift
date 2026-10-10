@@ -42,6 +42,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var providerIcon: String
     /// `EnvironmentMachineKind` of a thread on another environment, nil on the primary one (Sidebar.tsx:1370-1375, 2196-2205).
     public var environmentMachine: String? = nil
+    /// `canSnooze`: the snooze button shows only where the server would accept it (Sidebar.tsx:1540-1545).
+    public var canSnooze = true
     /// Timestamps behind the labels, for the refresh timer.
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
@@ -404,6 +406,7 @@ public enum SidebarListBuilder {
             providerIcon: providerDriver(shell.runtimeInstanceId),
             // ponytail: no scratch-project machine label on line 3 (Sidebar.tsx:1375); add with scratch projects
             environmentMachine: state.environments.rowMachine(shell.id),
+            canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
     }
 

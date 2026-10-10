@@ -221,7 +221,12 @@ final class RowActionButton: ControlView {
         label?.frame = NSRect(x: padding + iconSize + 4, y: (bounds.height - 16) / 2, width: ceil(label!.textWidth) + 1, height: 16)
     }
 
-    override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        restyle()
+        // The snooze menu pins the row's hover actions while it is open (Sidebar.tsx:1536-1539).
+        if state.popupOpen != old.popupOpen { (superview as? SidebarRowBase)?.refresh() }
+    }
     override func updateLayer() { restyle() }
 
     private func restyle() {
@@ -248,6 +253,53 @@ class SidebarRowBase: ControlView {
     override func performAction() { onOpen?(); super.performAction() }
     // The list owns keyboard focus; rows never take it from a click.
     override var acceptsFirstResponder: Bool { false }
+
+    /// Thread rows open the thread menu (Sidebar.tsx:1410-1415); other rows have none.
+    final var onContextMenu: (@MainActor (ThreadId, NSEvent) -> Void)?
+    override func rightMouseDown(with event: NSEvent) {
+        guard case .row(let r)? = item, let onContextMenu else { return super.rightMouseDown(with: event) }
+        onContextMenu(r.id, event)
+    }
+}
+
+/// The pin glyph. Where pinning works it is the unpin button and shows pin-off on hover
+/// (Sidebar.tsx:1756-1789); `size-3`, `text-muted-foreground/65`.
+final class PinButton: ControlView {
+    private let pin = IconView(name: .pin, size: 12)
+    private let pinOff = IconView(name: .pinOff, size: 12)
+    var isButton = true { didSet { restyle() } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        addSubview(pin)
+        addSubview(pinOff)
+        setAccessibilityLabel("Unpin thread")
+        toolTip = "Unpin thread"
+        restyle()
+    }
+
+    override func layout() {
+        super.layout()
+        pin.frame = bounds
+        pinOff.frame = bounds
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { isButton ? super.hitTest(point) : nil }
+    override var acceptsFirstResponder: Bool { false }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    override func updateLayer() { restyle() }
+
+    private func restyle() {
+        let hot = isButton && state.hovered
+        let color = hot ? SB.c(\.foreground) : SB.c(\.mutedForeground, 0.65)
+        pin.strokeColor = color
+        pinOff.strokeColor = color
+        pin.isHidden = hot
+        pinOff.isHidden = !hot
+        toolTip = isButton ? "Unpin thread" : nil
+        setAccessibilityLabel(isButton ? "Unpin thread" : "Pinned")
+    }
 }
 
 /// Callbacks a row can fire. The app wires them to server commands.
@@ -258,6 +310,7 @@ struct SidebarRowActions {
     var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     var unsnooze: (ThreadId) -> Void = { _ in }
     var unpin: (ThreadId) -> Void = { _ in }
+    var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
 }
 
 /// The card row (Sidebar.tsx:1955-2217): `li py-0.5`, a `rounded-md` surface 78px tall,
@@ -266,7 +319,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let surface = CALayer()
     private let monogram = ProjectMonogramView()
     private let project = LabelView()
-    private let pin = IconView(name: .pin, size: 12)
+    let pin = PinButton()
     private let statusIcon = StatusIconSlot()
     private let statusLabel = LabelView()
     private let duration = LabelView()
@@ -301,13 +354,15 @@ final class SidebarCardRowView: SidebarRowBase {
             guard let self, case .row(let r)? = self.item else { return }
             self.actions.snooze(r.id, self.snoozeButton)
         }
+        pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }
+        onContextMenu = { [weak self] id, event in if let self { self.actions.contextMenu(id, event, self) } }
     }
 
     var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
 
     override func refresh() {
         guard let r = row else { return }
-        let hovered = state.hovered || isKeyboardFocused
+        let hovered = state.hovered || isKeyboardFocused || snoozeButton.state.popupOpen
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
@@ -326,7 +381,6 @@ final class SidebarCardRowView: SidebarRowBase {
         project.font = SB.font(12, r.recedes ? .regular : .medium)
         project.color = SB.c(\.secondaryLabel)
         pin.isHidden = !r.isPinned
-        pin.strokeColor = SB.c(\.mutedForeground, 0.65)
 
         let showActions = hovered
         if let top = r.topStatus {
@@ -347,7 +401,7 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         let woke = r.topStatus == .woke
         for v in [statusIcon, statusLabel, duration] as [NSView] { v.alphaValue = showActions && !woke ? 0 : 1 }
-        snoozeButton.isHidden = !showActions || r.action != .settle || !Self.canSnooze(r)
+        snoozeButton.isHidden = !showActions || r.action != .settle || !r.canSnooze
         settleButton.isHidden = !showActions
         // Title (Sidebar.tsx:1658-1690), card variant.
         title.text = r.title
@@ -367,9 +421,6 @@ final class SidebarCardRowView: SidebarRowBase {
         setAccessibilityLabel([r.title, r.statusLabel, r.projectLabel].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
-
-    /// `canSnooze` (threadSettled.ts:137-153), without the queued-turn grace check.
-    static func canSnooze(_ r: SidebarRowModel) -> Bool { r.status != .approval && r.status != .input }
 
     override func layout() {
         super.layout()
@@ -466,7 +517,7 @@ final class SidebarSlimRowView: SidebarRowBase {
     private let surface = CALayer()
     private let monogram = ProjectMonogramView()
     private let title = LabelView()
-    private let pin = IconView(name: .pin, size: 12)
+    let pin = PinButton()
     private let time = LabelView()
     private var actionButton: RowActionButton?
     private var actionKind: SidebarRowModel.Action?
@@ -480,6 +531,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         for v in [monogram, title, pin, time] as [NSView] { addSubview(v) }
         title.lineHeight = 20
         time.font = SB.tabular(12); time.lineHeight = 16
+        pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }
+        onContextMenu = { [weak self] id, event in if let self { self.actions.contextMenu(id, event, self) } }
     }
 
     var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
@@ -513,7 +566,6 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
         pin.isHidden = !r.isPinned
-        pin.strokeColor = SB.c(\.mutedForeground, 0.65)
         if let snooze = r.snoozeLabel {
             time.text = snooze
             time.color = SB.c(\.infoForeground)
