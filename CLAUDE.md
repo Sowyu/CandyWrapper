@@ -29,6 +29,7 @@ Update `PROGRESS.md` before you stop: tick what you finished, add what you learn
 - Remote Mac mini M4, macOS 27, 16 GB RAM, on AC power. No battery.
 - Hosted by MyRemoteMac. No display is attached; the GUI session (user mrm, automatic login) draws to a virtual 1920x1080 screen at 1x and 60 Hz. Screen Sharing is reachable at `vnc://<mac-public-ip>:59010` (the public IPv4 is the local address in `netstat -an | grep '\.22 '`; keep it out of committed files). The provider's pf anchor `com.myremotemac.vnc` drops TCP to port 5900, so SSH tunnels to 5900 hang. Don't edit the provider's pf, fail2ban or LaunchDaemons.
 - Run GUI work inside the desktop session with `sudo launchctl asuser 502 sudo -u mrm <cmd>`.
+- Since 2026-10-10 the user granted Screen Recording and Accessibility to `t3`, the app this shell runs under, so `screencapture` works directly and `scripts/ui/` (build with `scripts/ui/build`) can click, scroll, type, press buttons by title and bring an app forward. Check the real window this way: offscreen snapshots draw synchronously and miss on-screen-only bugs. The user may be watching that screen.
 - Passwordless sudo works. Use it only for things the user asked for.
 - Xcode 27.0 is installed and selected (license accepted). xcodebuild, XCTest and xctrace work. XcodeGen 2.46 lives at `../CandyWrapper-research/tools/xcodegen/bin/xcodegen` (Homebrew can't install it: `/opt/homebrew/var/log` belongs to root for the provider's fail2ban).
 - No node, npm or bun. Python 3.9 at /usr/bin/python3, Homebrew python3.14 at /opt/homebrew/bin.
