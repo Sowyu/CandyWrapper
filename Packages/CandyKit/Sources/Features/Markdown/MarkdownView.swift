@@ -213,7 +213,7 @@ public final class MarkdownView: DSView {
             case .checkbox(let rect, let checked):
                 drawCheckbox(rect, checked: checked, dark: dark, in: ctx)
             case .icon(let name, let rect, let color):
-                drawIcon(name.definition, in: rect, color: color.cgColor(in: self), ctx: ctx)
+                Self.drawIcon(name.definition, in: rect, color: color.cgColor(in: self), ctx: ctx)
             case .fileChip(let chip):
                 chipIndex += 1
                 let hovered = hoveredChip == chipIndex
@@ -221,7 +221,7 @@ public final class MarkdownView: DSView {
                         border: hovered ? FileChipStyle.hoverBorder : FileChipStyle.border, radius: chip.frame.height / 1.41 * 0.5,
                         fillUnderBorder: true, in: ctx)
                 let (icon, color) = FileChipStyle.icon(for: chip.meta)
-                drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
+                Self.drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
             case .clip(let rect):
                 ctx.saveGState()
                 ctx.clip(to: rect)
@@ -284,7 +284,7 @@ public final class MarkdownView: DSView {
     }
 
     /// An icon scaled from its view box: lucide strokes, pierre fills. `currentColor` is `color`.
-    private func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
+    static func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
         let scale = rect.width / definition.viewBox.width
         ctx.saveGState()
         ctx.translateBy(x: rect.minX - definition.viewBox.x * scale, y: rect.minY - definition.viewBox.y * scale)

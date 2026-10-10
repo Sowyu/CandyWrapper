@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-10: 78 🟡, 39 ➖, 364 ⏳.
+Status 2026-10-10: 101 🟡, 47 ➖, 292 ⏳.
 
 Status legend:
 
@@ -147,12 +147,12 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | List continuation and splitting, undo grouping | web/composer-list-continuation.ts, web/composer-undo-grouping.ts | ⏳ | |
 | Send shortcut modes (Enter / mod+Enter multiline / always mod+Enter) | docs/keybindings.md, comp/chat/composerSubmission.ts | 🟡 | Setting has no UI yet; default Enter |
 | Primary action button (send, stop, queue, steer) | comp/chat/ComposerPrimaryActions.tsx | 🟡 | |
-| Slash command menu (`/`) incl. provider commands, T3 commands (`/model`, `/plan`, `/goal`, `/compact`) | comp/chat/ComposerCommandMenu.tsx, comp/chat/composerSlashCommandSearch.ts, comp/chat/useComposerTriggerState.ts | ⏳ | |
-| Skill picker (`$`) and skills in slash menu | comp/chat/ComposerCommandMenu.tsx, web/providerSkillSearch.ts | ⏳ | |
-| File mention picker (`@`) with workspace file search and thread mentions | comp/chat/ComposerCommandMenu.tsx, web/composer-editor-mentions.ts | ⏳ | |
-| Pull request picker (`#`) | docs/composer.md, comp/chat/ComposerCommandMenu.tsx | ⏳ | |
-| Inline context chips: terminal excerpt, review comment, preview annotation, file, PR, thread, image | comp/composerInlineChip.ts, comp/ContextChip.tsx, comp/ThreadContextChip.tsx, comp/chat/FileTagChip.tsx, comp/chat/TerminalContextInlineChip.tsx | ⏳ | Hover brief, click opens detail |
-| Chip copy/paste across drafts | web/composerHandleContext.ts, comp/composerInlineTokenPaste.ts | ⏳ | |
+| Slash command menu (`/`) incl. provider commands, T3 commands (`/model`, `/plan`, `/goal`, `/compact`) | comp/chat/ComposerCommandMenu.tsx, comp/chat/composerSlashCommandSearch.ts, comp/chat/useComposerTriggerState.ts | 🟡 | `/model` opens the picker; `/plan` and `/default` only with plan mode (no setting UI yet); `/goal`, `/compact` (idle thread with a conversation, prompt is the command alone), `/feedback` and skills come from the provider's commands (`server.refreshProviders` per cwd); provider commands only at the prompt start; `/usage-limits` opens the usage page. Fidelity `composer-menu` |
+| Skill picker (`$`) and skills in slash menu | comp/chat/ComposerCommandMenu.tsx, web/providerSkillSearch.ts | 🟡 | Source badges; "Show skills in / menu" setting assumed on |
+| File mention picker (`@`) with workspace file search and thread mentions | comp/chat/ComposerCommandMenu.tsx, web/composer-editor-mentions.ts | 🟡 | `projects.searchEntries` (120 ms debounce, 80 rows), up to 5 thread matches first; picks insert `[name](path)` or a thread context link with its record in `context` |
+| Pull request picker (`#`) | docs/composer.md, comp/chat/ComposerCommandMenu.tsx | ➖ | `pullRequests.list` for the project's repository; picks a review-comment record. Missing: `pullRequests.detail` lookup for a number outside the 99 listed; not tried on screen (sandbox repo has no remote) |
+| Inline context chips: terminal excerpt, review comment, preview annotation, file, PR, thread, image | comp/composerInlineChip.ts, comp/ContextChip.tsx, comp/ThreadContextChip.tsx, comp/chat/FileTagChip.tsx, comp/chat/TerminalContextInlineChip.tsx | ➖ | File/folder mention, skill, thread, PR and unresolved chips in the editor, one character each (deletes as a unit); a token becomes a chip once whitespace follows. Missing: terminal, review comment, annotation and image chips (their producers come later), hover brief, click to open, chips in sent message bubbles |
+| Chip copy/paste across drafts | web/composerHandleContext.ts, comp/composerInlineTokenPaste.ts | 🟡 | Copy writes the expanded text plus T3's `data-t3-context-fragment` HTML flavor; paste imports the records the pasted links reference |
 | Image thumbnail shelf, expanded preview | comp/chat/ComposerImageThumbnail.tsx, comp/chat/ExpandedImagePreview.tsx | ⏳ | |
 | Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | ⏳ | Only question-answer files are built |
 | Attached file preview panel | comp/files/AttachmentFilePreview.tsx | ⏳ | |

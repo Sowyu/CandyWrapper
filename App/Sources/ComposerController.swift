@@ -72,6 +72,8 @@ final class ComposerController {
     private var questionRequestId: String?
     /// Thread errors by draft key and their session dismissals (the banner over the timeline).
     private var threadErrors = ThreadErrorState()
+    /// The `/`, `@`, `$` and `#` menus' searches and the chips' context records (extension below).
+    private var menuState = MenuState()
 
     /// Files attached to question answers, by `questionKey` (T3's `questionAttachmentDraftId`).
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
@@ -138,6 +140,7 @@ final class ComposerController {
         question.onChange = { [weak self] in self?.syncQuestion() }
         composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
+        setUpMenus()
         refresh()
     }
 
@@ -610,6 +613,8 @@ final class ComposerController {
         panel.queue.isBusy = queueBusy
         updatePickers()
         updateRunOn()
+        refreshWorkspaceSnapshot()
+        if panel.menus.isOpen { panel.menus.reload() }
         let banner = draftKey.flatMap { threadErrors.visible($0, shell: shellThread) }
         if banner != panel.errorBanner.banner {
             panel.errorBanner.banner = banner
@@ -762,7 +767,9 @@ final class ComposerController {
         pendingMessageId = messageId
         composer.text = ""
         remember("")
-        let title = ComposerLogic.titleSeed(trimmed)
+        // The title seed leaves context links out (ChatView.tsx:9481-9485); their records ride as `context`.
+        let title = ComposerLogic.titleSeed(ComposerContext.stripReferences(trimmed))
+        let context = ComposerContext.messageContext(prompt: trimmed, records: contextRecords(for: trimmed))
         let selectionJSON = ThreadSession.encode(selection)
         let supervisor = shell.supervisor
 
@@ -775,7 +782,7 @@ final class ComposerController {
                 commandId: commandId, threadId: EnvironmentScope.localId(of: session.threadId),
                 projectId: EnvironmentScope.localId(of: session.projectId), title: title,
                 modelSelection: selectionJSON, runtimeMode: picks.runtimeMode.rawValue,
-                interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: trimmed)
+                interactionMode: picks.interactionMode.rawValue, messageId: messageId.rawValue, text: trimmed, context: context)
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
@@ -798,6 +805,7 @@ final class ComposerController {
                 "modelSelection": selectionJSON, "dispatchMode": dispatchMode,
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
+            if let context { command["context"] = context }
             let runtimeChange = picks.runtimeModeToPersist, interactionChange = picks.interactionModeToPersist
             Task { [weak self] in
                 do {
@@ -1113,6 +1121,7 @@ extension ComposerController {
                 limit = Int(max)
             }
             capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit)
+            menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
         }
     }
@@ -1303,5 +1312,313 @@ extension ComposerController {
         }
         if !byQuestion.isEmpty { fields["attachmentsByQuestionId"] = .object(byQuestion) }
         respond(.object(fields), failure: ComposerFeedback.Failure.userInput)
+    }
+}
+
+// MARK: - Menus and chips
+
+/// The composer's `/`, `@`, `$` and `#` menus (ChatComposer.tsx:2550-2930) and the records behind
+/// its context chips (composerContextRecords.ts). Rows are built in `ComposerMenus`; this side runs
+/// the server calls: `projects.searchEntries` for `@`, `pullRequests.list` for `#`, and
+/// `server.refreshProviders` for the workspace's skills and commands.
+extension ComposerController {
+    struct MenuState {
+        /// Context records by id, from picks and pastes. Thread records are also rebuilt from the
+        /// shell, so a restored draft keeps its thread chips.
+        // ponytail: kept in memory only; a restart turns a pull request chip unavailable. Persist them with the drafts if that bites
+        var records: [String: JSONValue] = [:]
+        var paths: (key: String, entries: [(path: String, isDirectory: Bool)])?
+        var pathTask: Task<Void, Never>?
+        var pullRequests: (key: String, entries: [ComposerMenus.PullRequestEntry], failed: Bool)?
+        var pullRequestTask: Task<Void, Never>?
+        /// `server.refreshProviders` requests by `env|instance|cwd`, at most one per TTL (5 minutes).
+        var workspaceRefresh: [String: Date] = [:]
+        var pullRequestsSupported: [String: Bool] = [:]
+    }
+
+    fileprivate func setUpMenus() {
+        let menus = panel.menus
+        menus.itemsProvider = { [weak self] trigger in
+            self?.menuContent(trigger) ?? ComposerMenuController.Content(items: [], emptyText: "")
+        }
+        menus.onTriggerChange = { [weak self] trigger in self?.startSearches(trigger) }
+        menus.onPick = { [weak self] item in self?.picked(item) }
+        composer.chipLook = { [weak self] token in self?.chipLook(token) ?? ComposerChipLook.basic(token) }
+        composer.recordsForCopy = { [weak self] ids in
+            guard let self, let env = targetEnvironmentId else { return nil }
+            let records = contextRecords(for: ids)
+            return (ids.compactMap { records[$0] }, env)
+        }
+        composer.onPasteRecords = { [weak self] records in
+            self?.menuState.records.merge(records) { $1 }
+        }
+    }
+
+    // MARK: Inputs
+
+    private var menuProject: ProjectShell? {
+        let projectId: ProjectId? = switch target {
+        case .draft(let s): ProjectId(s.projectId)
+        case .thread: shellThread?.projectId
+        case nil: nil
+        }
+        return sidebar?.snapshot?.projects.first { $0.id == projectId }
+    }
+
+    /// `gitCwd`: the thread's worktree, else the project root.
+    private var menuCwd: String? { shellThread?.worktreePath ?? menuProject?.workspaceRoot }
+
+    private var menuProvider: ServerProvider? {
+        guard let instance = pickers.current.instanceId else { return nil }
+        return serverConfig.providers.first { $0.instanceId == instance }
+    }
+
+    /// `sourceControlRepositorySelector` (shared/sourceControl.ts:287-300).
+    private var menuRepository: String? {
+        guard let identity = menuProject?.repositoryIdentity else { return nil }
+        if identity.provider == "azure-devops" {
+            let segments = (identity.displayName ?? "").split(separator: "/").filter { $0 != "_git" }
+            return identity.name.flatMap { $0.isEmpty ? nil : $0 } ?? segments.last.map(String.init)
+        }
+        if let name = identity.displayName, !name.isEmpty { return name }
+        if let owner = identity.owner, let name = identity.name, !owner.isEmpty, !name.isEmpty { return "\(owner)/\(name)" }
+        return nil
+    }
+
+    /// The environment's threads for `@` (the agent can only read threads on its own server).
+    private var menuThreads: [ComposerMenus.ThreadCandidate] {
+        guard let env = targetEnvironmentId else { return [] }
+        return (sidebar?.snapshot?.threads ?? []).compactMap { t in
+            guard EnvironmentScope.environmentId(of: t.id.rawValue) == env else { return nil }
+            return ComposerMenus.ThreadCandidate(id: EnvironmentScope.localId(of: t.id.rawValue), title: t.title,
+                                                 updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil)
+        }
+    }
+
+    private var currentThreadLocalId: String? {
+        guard case .thread(let id) = target else { return nil }
+        return EnvironmentScope.localId(of: id.rawValue)
+    }
+
+    private func pathKey(_ query: String) -> String? {
+        guard let env = targetEnvironmentId, let cwd = menuCwd else { return nil }
+        return "\(env)|\(cwd)|\(query.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
+
+    /// Numbers and an empty query list the project's pull requests; text asks the host.
+    private func pullRequestKey(_ query: String) -> String? {
+        guard let env = targetEnvironmentId, let project = menuProject else { return nil }
+        let text = query.allSatisfy(\.isNumber) ? "" : query
+        return "\(env)|\(project.id.rawValue)|\(text)"
+    }
+
+    // MARK: Rows
+
+    private func menuContent(_ trigger: ComposerTrigger) -> ComposerMenuController.Content {
+        let provider = menuProvider
+        let providerKey = provider?.instanceId.rawValue ?? ""
+        let cwd = menuCwd
+        switch trigger.kind {
+        case .slashCommand:
+            // `/compact` only when the prompt is the command alone on an idle thread that has a
+            // conversation (`compactSlashCommandAvailable`, ChatView.tsx:7661-7680).
+            let text = composer.displayText as NSString
+            let before = text.substring(to: trigger.rangeStart), after = text.substring(from: trigger.rangeEnd)
+            let compact = before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && shellThread?.latestUserMessageAt != nil && !composer.runState.canInterrupt && requests.activeApproval == nil
+            let planMode = provider != nil && pickers.context.planModeEnabled && provider?.showInteractionModeToggle != false
+            // ponytail: "Show skills in / menu" is T3's default (on); read the client setting when Settings lands
+            let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
+                                                 skills: provider?.skills(cwd: cwd) ?? [], showSkills: true, planMode: planMode,
+                                                 compactAvailable: compact)
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
+        case .skill:
+            let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: false))
+        case .path:
+            let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads, excluding: currentThreadLocalId)
+            let key = pathKey(trigger.query)
+            let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
+            let loading = !trigger.query.isEmpty && key != nil && menuState.paths?.key != key
+            return .init(items: threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
+        case .pullRequest:
+            let env = targetEnvironmentId ?? ""
+            let available = menuState.pullRequestsSupported[env] == true && menuProject != nil && menuRepository != nil
+            guard available else {
+                return .init(items: [], emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: false, pullRequestsAvailable: false))
+            }
+            let key = pullRequestKey(trigger.query)
+            guard let listed = menuState.pullRequests, listed.key == key else {
+                return .init(items: [], emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: true))
+            }
+            let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: listed.entries, hostSearched: true)
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: false, pullRequestsFailed: listed.failed,
+                                                                           query: trigger.query))
+        }
+    }
+
+    // MARK: Searches
+
+    private func startSearches(_ trigger: ComposerTrigger?) {
+        guard let trigger, let shell else {
+            menuState.pathTask?.cancel()
+            menuState.pullRequestTask?.cancel()
+            return
+        }
+        let supervisor = shell.supervisor
+        switch trigger.kind {
+        case .path:
+            menuState.pathTask?.cancel()
+            let query = trigger.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty, let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
+            menuState.pathTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce))
+                guard !Task.isCancelled else { return }
+                let payload: JSONValue = .object(["cwd": .string(cwd), "query": .string(query), "limit": .number(Double(ComposerMenus.pathSearchLimit))])
+                let reply = try? await supervisor.request("projects.searchEntries", payload: payload)
+                guard !Task.isCancelled, let self else { return }
+                var entries: [(path: String, isDirectory: Bool)] = []
+                if case .array(let list)? = reply?["entries"] {
+                    entries = list.compactMap { e in e["path"]?.stringValue.map { ($0, e["kind"]?.stringValue == "directory") } }
+                }
+                menuState.paths = (key, entries)
+                panel.menus.reload()
+            }
+        case .pullRequest:
+            menuState.pullRequestTask?.cancel()
+            guard menuState.pullRequestsSupported[targetEnvironmentId ?? ""] == true, let project = menuProject,
+                  let repository = menuRepository, let key = pullRequestKey(trigger.query), menuState.pullRequests?.key != key else { return }
+            let text = trigger.query.allSatisfy(\.isNumber) ? "" : trigger.query
+            let projectId = EnvironmentScope.localId(of: project.id.rawValue)
+            menuState.pullRequestTask = Task { [weak self] in
+                if !text.isEmpty { try? await Task.sleep(for: .seconds(ComposerMenus.pullRequestDebounce)) }
+                guard !Task.isCancelled else { return }
+                var input: [String: JSONValue] = ["state": .string("all"), "projectId": .string(projectId),
+                                                  "limit": .number(Double(ComposerMenus.pullRequestListLimit))]
+                if !text.isEmpty { input["query"] = .string(text) }
+                let reply = try? await supervisor.request("pullRequests.list", payload: .object(input))
+                guard !Task.isCancelled, let self else { return }
+                menuState.pullRequests = (key, Self.pullRequestEntries(reply, projectId: projectId, repository: repository, query: text),
+                                          reply == nil || Self.listFailed(reply, projectId: projectId))
+                panel.menus.reload()
+            }
+        case .slashCommand, .skill:
+            break
+        }
+    }
+
+    /// `pullRequests.list` rows for this project and repository. With a text query a row stays when
+    /// its host searched (`searchesOnHost`) or its own fields match (`matchesPullRequestQuery`).
+    // ponytail: no `pullRequests.detail` lookup for an exact number outside the 99 listed; add it when long-lived repos need it
+    private static func pullRequestEntries(_ reply: JSONValue?, projectId: String, repository: String, query: String) -> [ComposerMenus.PullRequestEntry] {
+        guard case .array(let list)? = reply?["entries"] else { return [] }
+        var searchesOnHost: Set<String> = []
+        if case .array(let providers)? = reply?["providers"] {
+            for p in providers { if case .bool(true)? = p["searchesOnHost"], let host = p["host"]?.stringValue { searchesOnHost.insert(host) } }
+        }
+        let repo = repository.trimmingCharacters(in: .whitespaces).lowercased()
+        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return list.compactMap { e in
+            guard e["projectId"]?.stringValue == projectId,
+                  e["repository"]?.stringValue?.trimmingCharacters(in: .whitespaces).lowercased() == repo,
+                  case .number(let n)? = e["number"] else { return nil }
+            let isDraft: Bool = if case .bool(let b)? = e["isDraft"] { b } else { false }
+            let pr = PullRequestReference(number: Int(n), title: e["title"]?.stringValue ?? "", url: e["url"]?.stringValue ?? "",
+                                          headBranch: e["headBranch"]?.stringValue ?? "", baseBranch: e["baseBranch"]?.stringValue ?? "",
+                                          state: e["state"]?.stringValue ?? "open", isDraft: isDraft)
+            let entry = ComposerMenus.PullRequestEntry(reference: pr, repository: e["repository"]?.stringValue ?? "",
+                                                       authorLogin: e["author"]?["login"]?.stringValue, updatedAt: e["updatedAt"]?.stringValue ?? "")
+            if !needle.isEmpty, !searchesOnHost.contains(e["host"]?.stringValue ?? "") {
+                let fields = "#\(pr.number) \(pr.title) \(entry.repository) \(pr.headBranch) \(entry.authorLogin ?? "")".lowercased()
+                if !fields.contains(needle) { return nil }
+            }
+            return entry
+        }
+    }
+
+    private static func listFailed(_ reply: JSONValue?, projectId: String) -> Bool {
+        guard case .array(let errors)? = reply?["errors"] else { return false }
+        return errors.contains { $0["projectId"]?.stringValue == projectId }
+    }
+
+    /// `server.refreshProviders` for the composer's provider and cwd when the workspace snapshot is
+    /// missing or older than its TTL (ChatComposer.tsx:2214-2300). The reply carries the providers.
+    fileprivate func refreshWorkspaceSnapshot() {
+        guard let shell, let env = targetEnvironmentId, let cwd = menuCwd, let provider = menuProvider else { return }
+        let key = "\(env)|\(provider.instanceId.rawValue)|\(cwd)"
+        let ttl: TimeInterval = 5 * 60
+        if let last = menuState.workspaceRefresh[key], Date().timeIntervalSince(last) < ttl { return }
+        if let snapshot = provider.workspaceSnapshot(cwd), snapshot.slashCommandsPending != true,
+           let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
+        menuState.workspaceRefresh[key] = Date()
+        let supervisor = shell.supervisor
+        let payload: JSONValue = .object(["instanceId": .string(provider.instanceId.rawValue), "cwd": .string(cwd)])
+        Task { [weak self] in
+            guard let reply = try? await supervisor.request("server.refreshProviders", payload: payload),
+                  let providers = try? reply["providers"]?.decode(as: [ServerProvider].self), let self else { return }
+            var config = serverConfigs[env] ?? ServerProviderConfig(providers: [])
+            config.providers = providers
+            serverConfigs[env] = config
+            if panel.menus.isOpen { panel.menus.reload() }
+            composer.refreshChips()
+        }
+    }
+
+    // MARK: Picks and chips
+
+    private func picked(_ item: ComposerMenuItem) {
+        switch item.kind {
+        case .builtIn("model"):
+            // The token goes and the model picker opens (ChatComposer.tsx:4003-4014).
+            DispatchQueue.main.async { [weak self] in self?.pickers.toggleModelPicker() }
+        case .providerCommand("usage-limits"):
+            DispatchQueue.main.async { [weak self] in self?.sidebar?.actions.openUsage() }
+        case .builtIn(let mode):
+            if let key = draftKey { pickers.store.setInteractionMode(key, mode == "plan" ? .plan : .default) }
+            updatePickers()
+        case .thread(let id, let title):
+            guard let env = targetEnvironmentId else { return }
+            let record = ComposerContext.threadRecord(threadId: id, title: title, environmentId: env)
+            if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
+        case .pullRequest(let pr):
+            menuState.records[ComposerContext.pullRequestReference(pr).contextId] = ComposerContext.pullRequestRecord(pr)
+        default:
+            break
+        }
+    }
+
+    /// The records the prompt's links point at: picked or pasted ones, and threads rebuilt from the
+    /// shell (`thread_<id>`).
+    fileprivate func contextRecords(for prompt: String) -> [String: JSONValue] {
+        contextRecords(for: ComposerContext.referencedIds(prompt))
+    }
+
+    fileprivate func contextRecords(for ids: [String]) -> [String: JSONValue] {
+        var out: [String: JSONValue] = [:]
+        for id in ids {
+            if let record = menuState.records[id] { out[id] = record; continue }
+            if let record = rebuiltThreadRecord(id) { out[id] = record }
+        }
+        return out
+    }
+
+    private func rebuiltThreadRecord(_ contextId: String) -> JSONValue? {
+        guard contextId.hasPrefix("thread_"), let env = targetEnvironmentId else { return nil }
+        let local = String(contextId.dropFirst("thread_".count))
+        guard let thread = sidebar?.snapshot?.threads.first(where: { $0.id.rawValue == EnvironmentScope.key(env, local) }) else { return nil }
+        return ComposerContext.threadRecord(threadId: local, title: thread.title, environmentId: env)
+    }
+
+    private func chipLook(_ token: ComposerInlineToken) -> ComposerChipLook {
+        let skills = menuProvider?.skills(cwd: menuCwd) ?? []
+        let env = targetEnvironmentId ?? ""
+        let threads = sidebar?.snapshot?.threads ?? []
+        return ComposerChipLook.look(for: token, skillLabel: { name in
+            skills.first { $0.name == name }.map(ProviderSkills.displayName) ?? ProviderSkills.displayName(name: name, displayName: nil)
+        }, record: { id in menuState.records[id] ?? rebuiltThreadRecord(id) }, threadTitle: { record in
+            // `ThreadContextChip` prefers the live title.
+            guard let local = record["threadId"]?.stringValue else { return nil }
+            return threads.first { $0.id.rawValue == EnvironmentScope.key(env, local) }?.title
+        })
     }
 }

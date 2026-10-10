@@ -111,7 +111,7 @@ public final class ComposerView: DSView {
     private var historyPosition: PromptHistory.Position?
 
     public var text: String {
-        get { editor.string }
+        get { editor.expandedText }
         set { editor.setText(newValue) }
     }
 
@@ -223,6 +223,8 @@ public final class ComposerView: DSView {
         addSubview(outline)
 
         editor.onTextChange = { [weak self] in self?.textChanged() }
+        editor.onSelectionChange = { [weak self] in self?.onCaretChange?() }
+        editor.chipLook = chipLook
         editor.onSubmitKey = { [weak self] key in self?.submitKey(key) ?? false }
         editor.onHistoryKey = { [weak self] backward in self?.navigateHistory(backward: backward) ?? false }
         editor.onModifierChange = { [weak self] held in
@@ -249,7 +251,36 @@ public final class ComposerView: DSView {
 
     // MARK: State
 
-    private var hasContent: Bool { !editor.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// The prompt with chips as their source text.
+    private var prompt: String { editor.expandedText }
+    /// The editor's text with each chip as one U+FFFC: what menu triggers and their ranges read.
+    public var displayText: String { editor.string }
+
+    /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
+    private var hasContent: Bool {
+        let text = prompt
+        return !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !ComposerContext.referencedIds(text).isEmpty
+    }
+
+    /// The look of each chip; the default knows mentions and skills, and shows context links as
+    /// unavailable. The app passes one that reads its skills and context records.
+    public var chipLook: (ComposerInlineToken) -> ComposerChipLook = ComposerChipLook.basic {
+        didSet { editor.chipLook = chipLook; editor.refreshChips() }
+    }
+    /// Rebuilds the chips after their data changed (skills, records, thread titles).
+    public func refreshChips() { editor.refreshChips() }
+    /// Copy: the records behind context ids and their environment; paste: records from the clipboard.
+    public var recordsForCopy: (([String]) -> (records: [JSONValue], environmentId: String)?)? {
+        get { editor.recordsForCopy }
+        set { editor.recordsForCopy = newValue }
+    }
+    public var onPasteRecords: (([String: JSONValue]) -> Void)? {
+        get { editor.onPasteRecords }
+        set { editor.onPasteRecords = newValue }
+    }
+    /// An edit or a caret move (the menu controller follows the trigger).
+    var onCaretChange: (() -> Void)?
 
     private var sendMode: ComposerLogic.SendMode {
         ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault)
@@ -277,7 +308,7 @@ public final class ComposerView: DSView {
         let face = questionFooter != nil ? .stop
             : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
         primary.face = face
-        let validationMessage = ComposerLogic.lengthValidationMessage(editor.string)
+        let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
         switch face {
         case .stop:
             primary.isEnabled = true
@@ -319,7 +350,7 @@ public final class ComposerView: DSView {
         if historyPosition == nil, !editor.string.isEmpty { return false }
         guard editor.isCaretOnVisualEdge(start: backward), let messages = historyMessages?() else { return false }
         guard let step = PromptHistory.step(backward ? .backward : .forward, entries: PromptHistory.entries(messages),
-                                            position: historyPosition, currentPrompt: editor.string) else { return false }
+                                            position: historyPosition, currentPrompt: prompt) else { return false }
         historyPosition = step.position
         editor.setText(step.prompt)
         editor.scrollRangeToVisible(editor.selectedRange())
@@ -328,11 +359,12 @@ public final class ComposerView: DSView {
 
     private func textChanged() {
         // Any edit ends browsing, even one later undone by hand.
-        if historyPosition?.recalled != editor.string { historyPosition = nil }
+        if historyPosition?.recalled != prompt { historyPosition = nil }
         placeholder.isHidden = !editor.string.isEmpty
         refresh()
         relayoutHeight()
-        onTextChange?(editor.string)
+        onTextChange?(prompt)
+        onCaretChange?()
     }
 
     private func relayoutHeight() {
@@ -347,7 +379,7 @@ public final class ComposerView: DSView {
     // MARK: Actions
 
     private func submitKey(_ key: ComposerLogic.Key) -> Bool {
-        guard let intent = ComposerLogic.submitIntent(key, prompt: editor.string, mode: sendShortcut, turnRunning: runState.canInterrupt,
+        guard let intent = ComposerLogic.submitIntent(key, prompt: prompt, mode: sendShortcut, turnRunning: runState.canInterrupt,
                                                       isDraft: isDraftRoute, keymap: ActiveKeymap.keymap) else {
             return false
         }
@@ -379,8 +411,8 @@ public final class ComposerView: DSView {
 
     private func send(_ mode: ComposerLogic.SendMode) {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent,
-              ComposerLogic.lengthValidationMessage(editor.string) == nil else { return }
-        onSend?(editor.string, mode)
+              ComposerLogic.lengthValidationMessage(prompt) == nil else { return }
+        onSend?(prompt, mode)
     }
 
     // MARK: Drawing and layout
