@@ -47,6 +47,13 @@ final class Environments {
     private(set) var saved: [EnvironmentRegistration] = []
     /// Ids being removed (the row menu reads "Removing…").
     private(set) var removing: Set<String> = []
+    /// Connects T3 Connect routes. Nil until the account loads; relay machines wait for it.
+    var t3Connect: T3ConnectAuthorizer? {
+        didSet {
+            guard t3Connect != nil, oldValue == nil else { return }
+            for r in saved where r.enabled && r.relay != nil && entries[r.environmentId]?.session == nil { connectSaved(r) }
+        }
+    }
 
     init(sidebar: SidebarContentView, catalog: EnvironmentCatalog = EnvironmentCatalog(), cache: ShellCache = ShellCache()) {
         self.sidebar = sidebar
@@ -131,8 +138,17 @@ final class Environments {
         Task {
             let (route, token, cached) = await Task.detached { () -> (URL, String?, ShellSnapshot?) in
                 let route = await Self.pickRoute(registration)
-                return (route, try? catalog.token(environmentId: id, route: route), cache.load(environmentId: id)?.snapshot)
+                let token = registration.isRelayRoute(route) ? nil : try? catalog.token(environmentId: id, route: route)
+                return (route, token, cache.load(environmentId: id)?.snapshot)
             }.value
+            if registration.isRelayRoute(route) {
+                guard let authorizer = t3Connect else { return }
+                guard saved.first(where: { $0.environmentId == id })?.enabled == true else { return }
+                addRemote(environmentId: id, label: registration.label, machine: registration.machine, cached: cached) {
+                    ShellSession(environmentId: id, relayBaseURL: route, authorizer: authorizer, cached: $0)
+                }
+                return
+            }
             guard let token else {
                 NSLog("environment %@ has no token in the Keychain for its route", id)
                 return
@@ -248,6 +264,13 @@ final class Environments {
     }
 
     private func addRemote(environmentId id: String, label: String, machine: String?, baseURL: URL, token: String, cached: ShellSnapshot?) {
+        addRemote(environmentId: id, label: label, machine: machine, cached: cached) {
+            ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: $0)
+        }
+    }
+
+    private func addRemote(environmentId id: String, label: String, machine: String?, cached: ShellSnapshot?,
+                           session: (ShellSnapshot?) -> ShellSession) {
         guard id != primaryId else { return }
         if entries[id] == nil { order.append(id) }
         var entry = entries[id] ?? Entry(label: label)
@@ -257,7 +280,40 @@ final class Environments {
         publishEnvironments()
         changed()
         if let cached, entry.snapshot == nil { shellChanged(id, cached) }
-        attach(ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: entries[id]?.snapshot), to: id)
+        attach(session(entries[id]?.snapshot), to: id)
+    }
+
+    // MARK: T3 Connect
+
+    /// A machine just saved from the T3 Connect account: list it and connect it through the relay.
+    func addedRelay(_ registration: EnvironmentRegistration) {
+        upsertSaved(registration)
+        if registration.enabled, entries[registration.environmentId]?.session == nil { connectSaved(registration) }
+        changed()
+    }
+
+    /// After sign-out: the catalog already forgot `removed` and dropped the relay route of `updated`.
+    /// Their sessions close; cached threads and per-environment state of removed machines go too.
+    func appliedRelayRemoval(removed: [String], updated: [EnvironmentRegistration]) async {
+        for id in removed {
+            if entries[id] != nil {
+                drop(id)
+                ProjectIconStore.shared.forget(environmentId: id)
+                onRemove?(id)
+            }
+            saved.removeAll { $0.environmentId == id }
+            await cache.remove(environmentId: id)
+        }
+        for registration in updated {
+            let usedRelay = routeInUse(registration.environmentId).map { inUse in
+                !registration.routes.contains { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(inUse) } } ?? false
+            upsertSaved(registration)
+            if usedRelay {
+                drop(registration.environmentId)
+                if registration.enabled { connectSaved(registration) }
+            }
+        }
+        changed()
     }
 
     /// Removes a saved or development environment: closes its socket, forgets its registration, token,

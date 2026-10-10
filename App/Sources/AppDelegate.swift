@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: ServerController?
     private var threads: ThreadController?
     private var settings: SettingsController?
+    private var t3Connect: T3ConnectController?
     private var terminationSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -50,15 +51,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         let window = MainWindow()
         let sidebar = SidebarContentView()
-        let environments = Environments(sidebar: sidebar)
+        // Development: `--fake-t3-connect` swaps T3 Connect's Clerk and relay for in-process fakes and keeps
+        // saved environments in a temporary catalog (FakeT3Connect).
+        let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect")
+        let environments = fakeConnect ? Environments(sidebar: sidebar, catalog: FakeT3Connect.catalog()) : Environments(sidebar: sidebar)
         self.environments = environments
+        let t3Connect = T3ConnectController(environments: environments, fake: fakeConnect)
+        self.t3Connect = t3Connect
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
         let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
-        let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments)
+        let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
+                                          t3: t3Connect)
         self.settings = settings
         sidebar.actions.openSettings = { [weak settings] in settings?.open() }
         window.center()
@@ -68,11 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindow = window
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
         startSession(environments, window: window)
+        if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
     }
 
     /// Development: `--thread-preview [title prefix]` shows a recorded thread from
     /// fixtures/transcripts/04-threads.jsonl in the main panel (default: the markdown thread).
+    private static var isPreview: Bool { CommandLine.arguments.contains("--thread-preview") }
+
     private static func threadPreview() -> NSView? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--thread-preview") else { return nil }

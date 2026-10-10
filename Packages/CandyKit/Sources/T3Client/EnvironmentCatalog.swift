@@ -17,8 +17,25 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
     /// False keeps the registration and its token but never connects (T3's `disabledEnvironmentIds`).
     public var enabled: Bool
     public var createdAt: Date
+    /// The T3 Connect route, when the machine was added from the signed-in account (T3's
+    /// `RelayConnectionRegistration`, or a relay route on a paired machine).
+    public var relay: RelayLink?
 
     public var id: String { environmentId }
+
+    /// The relay route's place in `routes`: the tunnel origin, last. It has no Keychain token;
+    /// `T3ConnectAuthorizer` mints a DPoP token for each connect.
+    public var relayRoute: URL? { relay.flatMap { URL(string: $0.endpoint.httpBaseUrl) } }
+
+    public func isRelayRoute(_ url: URL) -> Bool {
+        relayRoute.map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } ?? false
+    }
+
+    /// Reached only through T3 Connect. Sign-out removes these (routes.ts:364-370).
+    public var isRelayOnly: Bool { relay != nil && routes.allSatisfy(isRelayRoute) }
+
+    /// `connectionRouteLabel`: "T3 Connect" for the relay route, else the direct route's label.
+    public func routeLabel(_ url: URL) -> String { isRelayRoute(url) ? "T3 Connect" : EnvironmentRoute.label(url) }
 
     /// Every route, preferred first (`connectionRoutes`).
     public var routes: [URL] {
@@ -41,7 +58,7 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
         self.createdAt = createdAt
     }
 
-    enum CodingKeys: String, CodingKey { case environmentId, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt }
+    enum CodingKeys: String, CodingKey { case environmentId, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt, relay }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -52,6 +69,20 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
         machine = try c.decodeIfPresent(String.self, forKey: .machine)
         enabled = try c.decode(Bool.self, forKey: .enabled)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
+        relay = try c.decodeIfPresent(RelayLink.self, forKey: .relay)
+    }
+}
+
+/// A machine's T3 Connect link: the account that listed it and the tunnel endpoint the relay reported.
+/// Ids and URLs only; no token.
+public struct RelayLink: Codable, Sendable, Equatable {
+    /// The Clerk user id (the relay JWT `sub`). A different account signing in drops the route.
+    public var accountId: String
+    public var endpoint: RelayEndpoint
+
+    public init(accountId: String, endpoint: RelayEndpoint) {
+        self.accountId = accountId
+        self.endpoint = endpoint
     }
 }
 
@@ -115,6 +146,56 @@ public struct EnvironmentCatalog: Sendable {
         return saved
     }
 
+    /// Saves a machine from the T3 Connect account (`RelayConnectionRegistration`). A machine already
+    /// saved over direct routes keeps them and gains the relay route last, as T3 ranks relay last
+    /// (routes.ts:110-117). New machines start switched on.
+    @discardableResult
+    public func addRelay(_ record: RelayEnvironmentRecord, accountId: String, machine: String? = nil) throws -> EnvironmentRegistration {
+        guard let tunnel = URL(string: record.endpoint.httpBaseUrl), tunnel.host != nil else {
+            throw RelayError(.invalidResponse("Relay returned an environment without an endpoint."), action: .connect)
+        }
+        var all = load()
+        let link = RelayLink(accountId: accountId, endpoint: record.endpoint)
+        var saved: EnvironmentRegistration
+        if let i = all.firstIndex(where: { $0.environmentId == record.environmentId }) {
+            saved = all[i]
+            let direct = saved.routes.filter { !saved.isRelayRoute($0) && EnvironmentRoute.origin($0) != EnvironmentRoute.origin(tunnel) }
+            saved.relay = link
+            saved.routes = direct + [tunnel]
+            saved.machine = machine ?? saved.machine
+            all[i] = saved
+        } else {
+            saved = EnvironmentRegistration(environmentId: record.environmentId, label: record.label, httpBaseURL: tunnel, machine: machine)
+            saved.relay = link
+            all.append(saved)
+        }
+        try write(all)
+        return saved
+    }
+
+    /// Sign-out or an account switch (managedAuth.tsx:46-57): machines reached only through T3 Connect
+    /// are forgotten, the rest lose their relay route. `keepingAccount` keeps the links of that account.
+    /// Returns the removed ids and the registrations that changed.
+    @discardableResult
+    public func removeRelay(keepingAccount: String? = nil) throws -> (removed: [String], updated: [EnvironmentRegistration]) {
+        var removed: [String] = [], updated: [EnvironmentRegistration] = []
+        var kept: [EnvironmentRegistration] = []
+        for var r in load() {
+            guard let link = r.relay, link.accountId != keepingAccount else { kept.append(r); continue }
+            if r.isRelayOnly {
+                removed.append(r.environmentId)
+                continue
+            }
+            r.routes = r.routes.filter { !r.isRelayRoute($0) }
+            r.relay = nil
+            updated.append(r)
+            kept.append(r)
+        }
+        guard !removed.isEmpty || !updated.isEmpty else { return ([], []) }
+        try write(kept)
+        return (removed, updated)
+    }
+
     /// Forgets the registration and every route's token. There is no server-side logout (protocol.md 4.7).
     public func remove(environmentId: String) throws {
         let routes = load().first { $0.environmentId == environmentId }?.routes ?? []
@@ -131,6 +212,7 @@ public struct EnvironmentCatalog: Sendable {
         var all = load()
         guard let i = all.firstIndex(where: { $0.environmentId == environmentId }), all[i].routes.count > 1 else { return nil }
         let origin = EnvironmentRoute.origin(route)
+        if all[i].isRelayRoute(route) { all[i].relay = nil }
         all[i].routes = all[i].routes.filter { EnvironmentRoute.origin($0) != origin }
         try write(all)
         try credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: environmentId, route))

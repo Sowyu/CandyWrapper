@@ -40,6 +40,8 @@ public class FieldView: DSView {
     public final var onChange: (@MainActor (String) -> Void)?
     /// Called after every state change (InputGroup mirrors its input this way).
     public final var onStateChange: (@MainActor (State) -> Void)?
+    /// Return in a single-line field, which then keeps focus. Without it Return ends editing.
+    public final var onSubmit: (@MainActor () -> Void)?
     /// False when a parent (InputGroup) applies `opacity-64` instead.
     var dimsWhenDisabled = true
 
@@ -253,7 +255,7 @@ final class FieldEditor: NSTextView, NSTextViewDelegate {
 
     /// Single-line fields end editing on Return, like `<input>` (DraftInput commits on Enter).
     override func insertNewline(_ sender: Any?) {
-        if isMultiline { super.insertNewline(sender) } else { window?.makeFirstResponder(nil) }
+        if isMultiline { super.insertNewline(sender) } else if let submit = field?.onSubmit { submit() } else { window?.makeFirstResponder(nil) }
     }
 
     override func insertTab(_ sender: Any?) { window?.selectNextKeyView(sender) }

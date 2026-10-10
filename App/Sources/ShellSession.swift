@@ -24,15 +24,31 @@ final class ShellSession {
 
     /// `environmentId` is the descriptor's id. The connector refuses a server that answers with another
     /// id (T3 does the same before it spends a pairing code, onboarding.ts:112-123).
-    init(environmentId: String, baseURL: URL, token: String, cached: ShellSnapshot? = nil) {
-        self.environmentId = environmentId
+    convenience init(environmentId: String, baseURL: URL, token: String, cached: ShellSnapshot? = nil) {
         let http = EnvironmentHTTP(baseURL: baseURL)
+        let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
+        self.init(environmentId: environmentId, http: http, token: token, cached: cached,
+                  supervisor: ConnectionSupervisor(dependencies: .init(
+                    connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity,
+                                                                  token: { token }))))
+    }
+
+    /// A T3 Connect session: the socket comes from `authorizer` over the tunnel at `baseURL`, and every
+    /// HTTP call carries `Authorization: DPoP` with a fresh proof. Tunnels drop idle sockets, so it pings
+    /// every 80 s (T3ConnectAuthorizer.connector).
+    convenience init(environmentId: String, relayBaseURL baseURL: URL, authorizer: T3ConnectAuthorizer, cached: ShellSnapshot? = nil) {
+        var http = EnvironmentHTTP(baseURL: baseURL)
+        http.authorize = { method, url in try await authorizer.authorizationHeaders(environmentId: environmentId, method: method, url: url) }
+        self.init(environmentId: environmentId, http: http, token: "", cached: cached,
+                  supervisor: ConnectionSupervisor(dependencies: .init(connect: authorizer.connector(environmentId: environmentId)),
+                                                   keepalive: .ping(interval: .seconds(80))))
+    }
+
+    private init(environmentId: String, http: EnvironmentHTTP, token: String, cached: ShellSnapshot?, supervisor: ConnectionSupervisor) {
+        self.environmentId = environmentId
         self.http = http
         self.token = token
-        let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
-        supervisor = ConnectionSupervisor(dependencies: .init(
-            connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity,
-                                                          token: { token })))
+        self.supervisor = supervisor
         let relay = ChangeRelay()
         store = ShellStore(cached: cached, onChange: { relay.fire() })
         relay.set { [weak self] in Task { @MainActor in self?.pull() } }
