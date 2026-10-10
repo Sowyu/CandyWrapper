@@ -87,6 +87,7 @@ Each row is diffed against T3's own markup in Chromium at 2x in light and dark, 
 | color-picker.tsx | ColorPickerView | 8 | 1.17% (hue slider) |
 | calendar.tsx | CalendarView | gallery only | |
 | Wrapped text | TextBlockView | 16 | 7.53% (line breaks identical; glyph antialiasing) |
+| ChatMarkdown.tsx, `.chat-markdown` (index.css) | MarkdownView (Features/Markdown) | 12 | 1.37%: text 1.72/2.07, lists 1.35/1.71, quotes 1.10/1.21, table 0.94/1.35, code 2.64/1.97, rule and image 0.16/0.25 (light/dark). Spec `scripts/gen-markdown-spec.py`, code colored by T3's own Shiki in the page |
 
 Behaviour tests cover popup positioning and keyboard navigation, toast timing and stacking, modal focus trapping, and sidebar resize limits.
 
@@ -112,3 +113,4 @@ Expensive web effects drawn with a cheap native equivalent. Each image shows T3 
 - Toasts lack the copy-error button and the loading spinner.
 - 11 brand logos with gradients or masks, file-type icons and morphicons are not extracted yet.
 - Code font: Menlo per Chromium's rendering on this machine. Verify on the real desktop app.
+- Markdown: the native highlighter approximates Shiki (82 to 100% of characters match per language on sample snippets; TS, JSON, YAML, TOML, HTML, diff, Markdown at 97% or more). Code block titles show the language label, not pierre's file-type icons. External links have no favicon. Tables never wrap or truncate cells and clip instead of scrolling; the expand toggle does nothing yet. Unwrapped code clips instead of scrolling. All lists render tight (Foundation does not report looseness). Images are the 16:9 loading slot.

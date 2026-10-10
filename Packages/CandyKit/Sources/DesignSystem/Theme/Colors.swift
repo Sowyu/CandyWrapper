@@ -20,6 +20,11 @@ public enum Themed {
         return NSColor(name: nil) { $0.isDark ? d : l }
     }
 
+    /// Tailwind palette colors by name (`text-blue-600 dark:text-blue-400` is `base("blue-600", dark: "blue-400")`).
+    public static func base(_ light: String, _ lightAlpha: Double = 1, dark: String? = nil, _ darkAlpha: Double? = nil) -> NSColor {
+        color(light: Tokens.baseColors[light]!, lightAlpha, dark: Tokens.baseColors[dark ?? light]!, darkAlpha ?? lightAlpha)
+    }
+
     /// Fixed colors such as `--color-white/16%` in arbitrary shadows.
     public static func white(_ alpha: Double) -> NSColor { NSColor(srgbRed: 1, green: 1, blue: 1, alpha: alpha) }
     public static func black(_ alpha: Double) -> NSColor { NSColor(srgbRed: 0, green: 0, blue: 0, alpha: alpha) }

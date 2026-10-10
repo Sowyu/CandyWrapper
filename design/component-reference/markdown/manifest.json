@@ -1,0 +1,26 @@
+{
+  "code" : {
+    "height" : 559.3359375,
+    "width" : 640
+  },
+  "lists" : {
+    "height" : 361.7890625,
+    "width" : 640
+  },
+  "quotes" : {
+    "height" : 354.234375,
+    "width" : 640
+  },
+  "rule-image" : {
+    "height" : 353.9453125,
+    "width" : 640
+  },
+  "table" : {
+    "height" : 168.765625,
+    "width" : 640
+  },
+  "text" : {
+    "height" : 313.828125,
+    "width" : 640
+  }
+}
