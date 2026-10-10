@@ -27,6 +27,12 @@ public final class EmptyView: DSView {
         didSet { oldValue?.removeFromSuperview(); content.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
 
+    /// A drawing in place of the icon media, as a plain child of the stack (`gap` below it), such as
+    /// the Pull Requests page's branch mark. Sized by its intrinsic content size.
+    public var illustration: NSView? {
+        didSet { oldValue?.removeFromSuperview(); illustration.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+    }
+
     private let titleLabel = TextBlockView()
     private let descriptionLabel = TextBlockView()
     private let media: MediaView?
@@ -56,7 +62,8 @@ public final class EmptyView: DSView {
 
     private func headerHeight(_ width: CGFloat) -> CGFloat {
         let m = size.metrics, w = textWidth(width)
-        return (media == nil ? 0 : 36 + m.mediaGap) + titleLabel.height(forWidth: w)
+        return (media == nil ? 0 : 36 + m.mediaGap) + (illustration.map { $0.intrinsicContentSize.height + m.gap } ?? 0)
+            + titleLabel.height(forWidth: w)
             + (hasMessage ? 4 + descriptionLabel.height(forWidth: w) : 0)
     }
 
@@ -86,6 +93,11 @@ public final class EmptyView: DSView {
         if let media {
             media.frame = NSRect(x: ((width - 36) / 2).rounded(), y: y, width: 36, height: 36)
             y += 36 + m.mediaGap
+        }
+        if let illustration {
+            let s = illustration.intrinsicContentSize
+            illustration.frame = NSRect(x: ((width - s.width) / 2).rounded(), y: y, width: s.width, height: s.height)
+            y += s.height + m.gap
         }
         let textWidth = self.textWidth(width)
         let textX = (width - textWidth) / 2

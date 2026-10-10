@@ -237,7 +237,10 @@ public final class ThreadPanelView: DSView {
         rightPanel.onCloseOthers = { [weak self] id in self?.mutatePanel { $0.closeOthers(id) } }
         rightPanel.onCloseToRight = { [weak self] id in self?.mutatePanel { $0.closeToRight(id) } }
         rightPanel.onCloseAll = { [weak self] in self?.mutatePanel { $0.closeAll() } }
-        rightPanel.onAdd = { [weak self] kind in self?.mutatePanel { $0.open(kind); return [] } }
+        rightPanel.onAdd = { [weak self] kind in
+            if kind == .pullRequest { self?.onAddPullRequest?(); return }
+            self?.mutatePanel { $0.open(kind); return [] }
+        }
         rightPanel.onCopyPath = { path in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(path, forType: .string)
@@ -278,6 +281,26 @@ public final class ThreadPanelView: DSView {
     }
     /// Opens the + menu (`rightPanel.new`).
     public func showAddSurfaceMenu() { rightPanel.showAddMenu() }
+    /// The pull request surfaces, for the app to fill.
+    public var pullRequestView: PullRequestDetailView { rightPanel.pullRequest }
+    public var linkedPullRequestsView: ThreadPullRequestsListView { rightPanel.linkedPullRequests }
+    /// Whether the + menu and launcher offer "Pull request" and "Linked pull requests"
+    /// (`pullRequestSurfaceAvailable`, `pullRequestsSurfaceAvailable`, ChatView.tsx:5453, 7124).
+    public var pullRequestAvailable: Bool {
+        get { rightPanel.pullRequestAvailable }
+        set { rightPanel.pullRequestAvailable = newValue }
+    }
+    public var pullRequestsAvailable: Bool {
+        get { rightPanel.pullRequestsAvailable }
+        set { rightPanel.pullRequestsAvailable = newValue }
+    }
+    /// The state each pull request tab's glyph wears.
+    public var pullRequestStatus: [String: PullRequestStateTone] {
+        get { rightPanel.pullRequestStatus }
+        set { rightPanel.pullRequestStatus = newValue }
+    }
+    /// "Pull request" from the + menu or launcher: the app opens the thread's current one.
+    public var onAddPullRequest: (@MainActor () -> Void)?
 
     /// Shows `state` without telling `onPanelChange` (restoring a thread's state).
     public func setPanelState(_ state: RightPanelState) {

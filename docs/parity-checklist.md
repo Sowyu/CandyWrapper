@@ -40,10 +40,10 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Section: Working (beta, folds running/monitoring threads) | comp/Sidebar.tsx, comp/settings/SettingsPanels.tsx | ⏳ | Setting "Working section (beta)"; disables manual ordering |
 | Section: Snoozed shelf | comp/Sidebar.tsx, comp/Sidebar.snooze.ts | 🟡 | Cannot drop into it; dragging out wakes |
 | Section: Settled shelf (collapsible) | comp/Sidebar.tsx | 🟡 | Ordered by settlement time |
-| Thread row: title, relative time, project/branch subtitle, status badge | comp/Sidebar.tsx, comp/ThreadStatusIndicators.tsx, comp/ThreadCommandSubtitle.tsx | 🟡 | |
+| Thread row: title, relative time, project/branch subtitle, status badge | comp/Sidebar.tsx, comp/ThreadStatusIndicators.tsx, comp/ThreadCommandSubtitle.tsx | 🟡 | PR badge (WP7.5b): stack count, `+n`, or the number in the state tone; one link opens it, several open the thread's Pull requests tab. Missing: the badge's hover mini list, the branch PR from git status |
 | Thread status labels: Working, Goal, Waiting, Approval, Input, Limited, Failed, Woke, Done | comp/Sidebar.tsx (around line 1297), comp/ThreadStatusIndicators.tsx | 🟡 | Colored dot or pill per state |
 | Unsent draft rows with discard button | comp/Sidebar.tsx | 🟡 | Undo restores text and attachments |
-| Thread hover card (summary, PR, branch) | comp/ThreadHoverCard.tsx | ⏳ | |
+| Thread hover card (summary, PR, branch) | comp/ThreadHoverCard.tsx | ⏳ | PR rows not built (WP7.5b left them with the hover card) |
 | Thread row actions: settle, wake, unpin, discard, snooze | comp/Sidebar.tsx | ➖ | Hover buttons; press-and-drag range select on Settle; Missing: row buttons are drawn but not wired to server commands |
 | Thread context menu: Pin, Settle, Snooze (presets and Custom...), Archive, Delete, Rename, Regenerate title, Copy path, Copy branch, Copy thread ID, Auto-settle behavior, Move up/down, Mark unread | comp/Sidebar.tsx, comp/threadActionMenu.logic.ts | ⏳ | |
 | Custom snooze dialog (date/time or duration) | comp/CustomSnoozeDialog.tsx, comp/Sidebar.snooze.ts | ⏳ | |
@@ -59,7 +59,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Desktop update pill and release notes in sidebar | comp/sidebar/SidebarUpdatePill.tsx, comp/sidebar/SidebarUpdateReleaseNotes.tsx, comp/sidebar/DesktopUpdateStatusIcon.tsx | ⏳ | |
 | Provider update pill in sidebar | comp/sidebar/SidebarProviderUpdatePill.tsx, comp/ProviderUpdatesAction.tsx | ⏳ | |
 | T3 Connect sign-in in sidebar | comp/clerk/T3ConnectSidebarSignIn.tsx | ⏳ | Clerk sign-in UI; needs webview: ask user |
-| Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ➖ | See Git and pull requests; Missing: button is drawn, no PR list page |
+| Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ✅ | Opens the Pull Requests page (WP7.5b) |
 | Settled/auto-settle rules (merged PR, 3 days inactive, closed PR) | docs/thread-sidebar.md | ⏳ | Server-owned; client only displays and configures |
 | Limited-thread recovery in sidebar (Resume at reset, Snooze until reset, Wake now) | comp/Sidebar.tsx, comp/chat/UsageLimitRecoveryBanner.tsx | ⏳ | |
 | Legacy sidebar (opt-in setting) | comp/LegacySidebar.tsx | ⏳ | Low priority; setting "Sidebar (legacy)" |
@@ -73,7 +73,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Chat canvas layout, chat width setting (comfortable, wide, full) | comp/chat/ChatCanvas.tsx, comp/chat/chatCanvasLayout.ts, comp/ChatView.tsx | ➖ | Missing: chat width setting |
 | Thread header: breadcrumb (project > thread), editable title, thread actions menu | comp/chat/ChatHeader.tsx, comp/WorkspaceBreadcrumb.tsx | ➖ | Missing: editable title, thread actions menu |
 | Header controls: Open in editor picker, git actions, project scripts, panel layout toggles | comp/chat/OpenInPicker.tsx, comp/GitActionsControl.tsx, comp/ProjectScriptsControl.tsx, comp/chat/PanelLayoutControls.tsx | ➖ | The details toggle opens the thread details card with the git actions (WP7.5a). Missing: editor picker, project scripts |
-| Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ➖ | Workspace (run context) and Version Control (branch, git actions, Changes or Initialize Git). Always the popover placement under the header; T3 pins it inline and shifts the chat lane from a 1012pt column. Missing: Open in, project scripts, PR rows, automations, lineage, compact densities |
+| Thread details panel/card (PR rows, branch, worktree, runtime, automations) | comp/chat/ThreadDetailsPanel.tsx, comp/chat/ThreadDetailsCard.tsx, comp/chat/ThreadDetailsPrRows.tsx | ➖ | Workspace (run context) and Version Control (branch, git actions, Changes or Initialize Git). Always the popover placement under the header; T3 pins it inline and shifts the chat lane from a 1012pt column. PR rows (WP7.5b): the current link as "#n: title" in its state tone, the rest behind "Show N more", each opening its PR tab. Missing: Open in, project scripts, the PR row's second line (checks, watch, action), automations, lineage, compact densities |
 | Thread status line (running, elapsed, agent activity) | comp/chat/ThreadStatusLine.tsx, comp/chat/AgentElapsed.tsx | ➖ | Missing: agent activity text; only the "Working for Ns" row exists |
 | Timeline: user message bubble (text, chips, image shelf, file chips) | comp/chat/MessagesTimeline.tsx, comp/composerInlineChip.ts | ➖ | Image grid (`max-w-[210px]` 2 columns, 4:3, `assets.createUrl` then decoded at cell size; a click opens the preview) and rows for files without a chip. Missing: chips in the text (links still), file row preview and download, videos |
 | Timeline: assistant message with markdown | comp/chat/MessagesTimeline.tsx, comp/ChatMarkdown.tsx | 🟡 | Incremental streaming render (web/markdown-incremental.ts) |
@@ -101,7 +101,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Markdown: images and image gallery, zoomable image, expanded image dialog | comp/chat/markdownImageGallery.ts, comp/chat/ZoomableImage.tsx, comp/chat/ExpandedImageDialog.tsx | ➖ | Missing: images are a loading slot, no gallery or zoom |
 | Markdown: video/audio attachments and media actions | comp/media/MediaVideoPlayer.tsx, comp/media/MediaActions.tsx, comp/files/AudioPreview.tsx | ⏳ | AVKit natively |
 | Markdown: file links (path:line) open in file panel; external links open in browser | web/markdown-links.ts, comp/chat/MarkdownThreadLink.tsx, comp/chat/externalLinkContextMenu.ts | ➖ | WP7.6a: a click opens the file tab at its line (`panelPath`), user bubbles included. Missing: Cmd-click to the preferred editor (opens the panel too), the chip menu's Open and Reveal items |
-| Markdown: thread links, PR link previews | comp/chat/MarkdownThreadLink.tsx, comp/pullRequest/PullRequestLinkPreview.tsx | ⏳ | Right-click PR link: Link to thread / Unlink |
+| Markdown: thread links, PR link previews | comp/chat/MarkdownThreadLink.tsx, comp/pullRequest/PullRequestLinkPreview.tsx | ⏳ | Right-click PR link: Link to thread / Unlink. `pullRequests.preview` decodes (PullRequestPreview); the hover card and the Markdown link handling are not built |
 | Markdown: assistant citation chips with comments | comp/chat/AssistantCitationChip.tsx, comp/chat/AssistantCitationCommentEditor.tsx | ⏳ | |
 | Markdown: skill inline text, shell command block | comp/chat/SkillInlineText.tsx, comp/chat/ShellCommandBlock.tsx, comp/CommandBlock.tsx | ⏳ | |
 | Markdown: copy as Markdown (chips become links) | web/markdown-clipboard.ts, comp/chat/MessageCopyButton.tsx | 🟡 | |
@@ -134,7 +134,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Activity log | docs/activity-log.md | ⏳ | Check what UI it describes before building |
 | Context window meter | comp/chat/ContextWindowMeter.tsx | ⏳ | Click offers compact |
 | Thread automations panel (scheduled tasks, PR watch) | comp/chat/ThreadAutomationsPanel.tsx | ⏳ | |
-| Thread-linked pull requests panel | comp/pullRequest/ThreadPullRequestsPanel.tsx | ⏳ | |
+| Thread-linked pull requests panel | comp/pullRequest/ThreadPullRequestsPanel.tsx | 🟡 | WP7.5b: the `pull-requests` tab, rows stepped by stack depth newest chain first, unsynced rows muted, footer counts and Link, row menu (Copy link, Open, Watch, Unlink or Dismiss), empty state. Missing: Shift quick actions on rows, hover menu button |
 | Agent browser cursor overlay (agent clicking in a preview) | comp/preview/AgentBrowserCursor.tsx | ⏳ | needs webview: ask user |
 | Drag files onto thread to attach | comp/chat/workspaceFileDrop.ts, comp/chat/folderDrop.ts | ⏳ | |
 
@@ -164,7 +164,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Compact controls menu (narrow widths) | comp/chat/CompactComposerControlsMenu.tsx, comp/composerFooterLayout.ts | 🟡 | |
 | Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | 🟡 | `mod+shift+h`, cycle host unbound. In a Git project the "Run on" group sits in the run context menu |
 | Workspace mode selector (current checkout / new worktree / previous worktree) | comp/BranchToolbarEnvModeSelector.tsx, comp/BranchToolbar.tsx (RunContextSelector) | 🟡 | `mod+shift+x`, `mod+shift+l`. The composer is never wider than `@3xl`, so T3 shows RunContextSelector there; the draft sends `worktree`, `existing_worktree` or `root` strategies (sent a real worktree turn on the sandbox). Start from origin does not read the project setting yet (WP7.7) |
-| Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | 🟡 | `mod+shift+g`. Search with the sanitized query, paging, create and switch refs, worktree reuse, start from origin. Fidelity: scripts/gen-git-spec.py. Missing: checkout PR row (WP7.5b), PR badge, the context menu "Copy branch name", label collapse at narrow widths |
+| Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | 🟡 | `mod+shift+g`. Search with the sanitized query, paging, create and switch refs, worktree reuse, start from origin. Fidelity: scripts/gen-git-spec.py. Missing: checkout PR row and the composer PR badge (needs `projects.preparePullRequestThread`), the context menu "Copy branch name", label collapse at narrow widths |
 | Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ➖ | T3 uses it only in Scheduled Tasks settings (WP7.7); `BranchPickerView` with the origin switch is ready for it |
 | Previous worktree item | comp/PreviousWorktreeItemContent.tsx | 🟡 | History glyph, title and the branch as a muted second line |
 | Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | 🟡 | |
@@ -216,7 +216,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Device controls rail (home, back, recents, rotate, power, fold, 3D view) | comp/device/DeviceControlsRail.tsx, comp/device/DeviceAndroidFoldControls.tsx, comp/device/DeviceDuoControls.tsx | ⏳ | 3D view uses WebGL (likely needs webview or SceneKit): ask user |
 | Device tools drawer (appearance, text size, location, permissions, push) | comp/device/DeviceToolsPanel.tsx, comp/device/DeviceToolVersions.tsx | ⏳ | |
 | Device touch input and floating device window | comp/device/useDeviceControls.ts, comp/device/phoneTrackpad.ts | ⏳ | |
-| Pull request tab in right panel | comp/pullRequest/PullRequestDetailPanel.tsx | ⏳ | See Git and pull requests |
+| Pull request tab in right panel | comp/pullRequest/PullRequestDetailPanel.tsx | 🟡 | WP7.5b: `pull-request:` surfaces with T3's ids, state-toned tab glyph, + menu and launcher "Pull request" and "Linked pull requests". See Git and pull requests |
 | Terminal tab in right panel | comp/ThreadTerminalDrawer.tsx | ⏳ | See Terminal |
 
 ## Git and pull requests
@@ -227,19 +227,19 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Commit dialog with generated message and file selection | comp/GitActionsControl.tsx | 🟡 | AI text generation via configured writer model (server side when the message is blank). Fidelity in gen-git-spec.py |
 | Publish repository (public/private, provider choice) | comp/GitActionsControl.tsx | ➖ | Providers: GitHub, GitLab, Bitbucket, Azure DevOps, Forgejo/Gitea. Three-step wizard built; never published. Missing: wizard header layout and tint, Bitbucket and Azure glyphs, opening Source Control settings, no fidelity spec |
 | Create pull request / change request | comp/GitActionsControl.tsx, comp/pullRequest/PullRequestComposer.tsx | ➖ | The menu and quick action run `create_pr` and the stacked forms through `git.runStackedAction` (payload unit tested, never run against a real host). PullRequestComposer is the PR page's form (WP7.5b) |
-| PR stack actions (GitHub stacks) | comp/pullRequest/PullRequestStackMenu.tsx, comp/pullRequest/PullRequestStackLayers.tsx, comp/pullRequest/PullRequestStackHeader.tsx | ⏳ | |
-| Pull requests page: list, filters, grouping, speed actions (Shift) | web/routes/_chat.pull-requests.tsx, comp/pullRequest/PullRequestListRow.tsx, comp/pullRequest/PullRequestListFilters.tsx, comp/pullRequest/PullRequestSpeedActions.tsx | ⏳ | Drag-select Close |
-| PR list empty/unavailable states | comp/pullRequest/PullRequestListEmptyState.tsx, comp/pullRequest/PullRequestsUnavailableState.tsx, comp/pullRequest/PullRequestActivityUnavailableState.tsx | ⏳ | |
-| PR detail: Summary tab | comp/pullRequest/PullRequestSummaryTab.tsx, comp/pullRequest/PullRequestDetailLayout.tsx | ⏳ | |
-| PR detail: Timeline tab (comments, reviews, events) | comp/pullRequest/PullRequestTimelineTab.tsx, comp/pullRequest/PullRequestCommentBody.tsx | ⏳ | GitHub-flavored markdown body |
-| PR detail: Code tab (diff, per-commit scope, viewed marks, review comments) | comp/pullRequest/PullRequestCodeTab.tsx, comp/pullRequest/pullRequestFilesViewed.logic.ts, comp/pullRequest/PullRequestReviewAnnotation.tsx | ⏳ | |
-| PR checks popover | comp/pullRequest/PullRequestChecksPopover.tsx | ⏳ | |
-| PR edit title/body, labels, reviewers, reactions | comp/pullRequest/PullRequestEditButton.tsx, comp/pullRequest/PullRequestLabelPicker.tsx, comp/pullRequest/PullRequestReviewerPicker.tsx, comp/pullRequest/PullRequestReactions.tsx | ⏳ | |
-| PR comment form, review form (approve, request changes, comment) | comp/pullRequest/PullRequestCommentForm.tsx, comp/pullRequest/PullRequestReviewForm.tsx | ⏳ | |
-| PR merge (merge, squash, rebase, auto-merge), checkout, revert, close/reopen | comp/pullRequest/PullRequestDetailPanel.tsx, docs/source-control.md | ⏳ | Default merge method and "Remove agent credits" settings |
-| Link pull request to thread dialog, unlink, candidate picker | comp/pullRequest/LinkPullRequestDialog.tsx, comp/pullRequest/PullRequestCandidatePicker.tsx, comp/pullRequest/PullRequestThreadLinks.tsx | ⏳ | Command palette: "Link pull request to thread" |
-| Create PR thread (open PR in new thread/worktree) | comp/PullRequestThreadDialog.tsx | ⏳ | |
-| Copy PR URL and number (`mod+shift+c`, `mod+shift+k`) | web/pullRequestReference.ts | ⏳ | |
+| PR stack actions (GitHub stacks) | comp/pullRequest/PullRequestStackMenu.tsx, comp/pullRequest/PullRequestStackLayers.tsx, comp/pullRequest/PullRequestStackHeader.tsx | ➖ | Stack chains, badges and list rows' `n/m` built and tested; `pullRequests.stack` decodes. Missing: the stack menu, merge-stack and rebase actions |
+| Pull requests page: list, filters, grouping, speed actions (Shift) | web/routes/_chat.pull-requests.tsx, comp/pullRequest/PullRequestListRow.tsx, comp/pullRequest/PullRequestListFilters.tsx, comp/pullRequest/PullRequestSpeedActions.tsx | 🟡 | WP7.5b: search with qualifiers (250 ms), Sort (7), Filters menu (state, involvement, author, labels, draft, review, checks, host, project), provider menu, refresh with invalidate, Authored and Review requested partitions, overrides, `listStats`, Load more, Shift actions, Mod+F, 60 s live refresh, the page's own right panel. Fidelity `pull-requests` rows. Missing: condensed scrolled header, cursored paging, the reload snapshot, server filter, drag-select Close, checks and stack popovers |
+| PR list empty/unavailable states | comp/pullRequest/PullRequestListEmptyState.tsx, comp/pullRequest/PullRequestsUnavailableState.tsx, comp/pullRequest/PullRequestActivityUnavailableState.tsx | ✅ | Ghost rows, branch mark, no projects, search empty, filtered empty, unavailable with Retry; checked on screen against the sandbox (empty list, provider-unsupported detail) |
+| PR detail: Summary tab | comp/pullRequest/PullRequestSummaryTab.tsx, comp/pullRequest/PullRequestDetailLayout.tsx | 🟡 | Header (repository, toned `#n`, merge slot, ⋯ menu, title, author, checkout command, `base ← head`, files, counts), tab bar with checks line; Reviewers with verdict rings, Labels, Description (Markdown), Checks, Comments. Fidelity `pull-requests` detail-header. Missing: edit title and body, reviewer and label pickers, comment paging and bot groups, condensed header |
+| PR detail: Timeline tab (comments, reviews, events) | comp/pullRequest/PullRequestTimelineTab.tsx, comp/pullRequest/PullRequestCommentBody.tsx | 🟡 | Rail, lifecycle, commits (open the commit in Code), verdict rows, folded conversations, order toggle. Missing: reactions, comment editing |
+| PR detail: Code tab (diff, per-commit scope, viewed marks, review comments) | comp/pullRequest/PullRequestCodeTab.tsx, comp/pullRequest/pullRequestFilesViewed.logic.ts, comp/pullRequest/PullRequestReviewAnnotation.tsx | 🟡 | `POST /api/pull-requests/diff` into the shared diff list, commit scope menu, "Viewed" ticks on file headers with the overlay logic and `setFilesViewed`. Missing: cursored slices, review annotations and inline comments, file tree |
+| PR checks popover | comp/pullRequest/PullRequestChecksPopover.tsx | ➖ | Glyphs, labels and the summaries ported; the popover itself is not built (rows show the glyph, Summary lists the checks) |
+| PR edit title/body, labels, reviewers, reactions | comp/pullRequest/PullRequestEditButton.tsx, comp/pullRequest/PullRequestLabelPicker.tsx, comp/pullRequest/PullRequestReviewerPicker.tsx, comp/pullRequest/PullRequestReactions.tsx | ⏳ | Payloads (`update`) and candidate lists decode; no UI yet |
+| PR comment form, review form (approve, request changes, comment) | comp/pullRequest/PullRequestCommentForm.tsx, comp/pullRequest/PullRequestReviewForm.tsx | 🟡 | The glass composer button and popover: Comment or Review with a verdict. Never sent against a real repository. Missing: close or reopen with comment, pending line comments |
+| PR merge (merge, squash, rebase, auto-merge), checkout, revert, close/reopen | comp/pullRequest/PullRequestDetailPanel.tsx, docs/source-control.md | 🟡 | Primary control (merge, auto-merge, ready, resolve, merged/closed badge), confirmations, ⋯ menu with draft toggle, merge now, auto-merge, method radios, close, reopen, revert, copy link and number. Never run against a real repository. Missing: checkout into a worktree or this repository (menu shown, not wired), base freshness update, project default merge method |
+| Link pull request to thread dialog, unlink, candidate picker | comp/pullRequest/LinkPullRequestDialog.tsx, comp/pullRequest/PullRequestCandidatePicker.tsx, comp/pullRequest/PullRequestThreadLinks.tsx | 🟡 | Dialog with `resolveLinkPullRequestInput`, `thread.pull-request.link`/`unlink` or the legacy `thread.meta.update`; detail ⋯ "Link to this thread"/"Unlink from this thread". Linked on screen in the sandbox. Fidelity `pull-requests` link-dialog. Missing: candidate picker, thread picker from the page, linked-threads count |
+| Create PR thread (open PR in new thread/worktree) | comp/PullRequestThreadDialog.tsx | ⏳ | Not built (needs `projects.preparePullRequestThread`) |
+| Copy PR URL and number (`mod+shift+c`, `mod+shift+k`) | web/pullRequestReference.ts | ✅ | `resolveThreadReferenceCopyTarget`: the panel's PR, the current link, else the thread ID; `pullRequest.copyNumber` with a PR tab active |
 | Worktrees: create, reuse, list, cleanup, handoff | comp/BranchToolbar.tsx, web/worktreeCleanup.ts, contracts/rpc.ts (`git.*`) | ⏳ | |
 | Clone project with progress toast and retry | comp/ProjectCloneToastCoordinator.tsx, comp/CommandPalette.tsx | ⏳ | |
 | Source control provider cards (auth status, rescan) | comp/settings/SourceControlSettings.tsx | ⏳ | See Settings |
@@ -436,7 +436,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | New thread in... (project chooser incl. No project) | comp/CommandPalette.tsx (line ~1917) | ➖ | Project groups with `thread.jump.N` shortcuts; no "No project" (scratch threads) |
 | New thread without a project | comp/CommandPalette.tsx (line ~1929) | ⏳ | |
 | Find in current thread | comp/CommandPalette.tsx (line ~1940) | ⏳ | |
-| Link pull request to thread; Show linked pull requests | comp/CommandPalette.tsx (lines ~1973-1990) | ⏳ | |
+| Link pull request to thread; Show linked pull requests | comp/CommandPalette.tsx (lines ~1973-1990) | ✅ | Capability-gated like T3 |
 | Restart agent session | comp/CommandPalette.tsx (line ~2000) | ⏳ | |
 | Go to file | comp/CommandPalette.tsx (line ~2041) | 🟡 | WP7.6a, keeps the palette open in files mode |
 | Search project contents | comp/CommandPalette.tsx (line ~2054) | ⏳ | |
@@ -449,7 +449,7 @@ Opened with `mod+k` (`commandPalette.toggle`). Source: `comp/CommandPalette.tsx`
 | Open pull requests; Open usage; Open settings; Project settings | comp/CommandPalette.tsx (lines ~2242-2299) | ➖ | Pull requests and usage open the placeholder pages; Project settings waits for WP7.7 |
 | Environment picker inside multi-env flows | comp/CommandPalette.tsx (lines ~1803, 2906) | ⏳ | |
 | Command palette bus (open to a given page from elsewhere) | web/commandPaletteBus.ts | ➖ | `chat.new` opens "New thread in..." with several projects; the sidebar's new-thread button still creates directly |
-| Copy thread ID (`thread.copyReference`) | comp/CommandPalette.tsx (line ~1950) | 🟡 | Never the PR link yet (WP7.5) |
+| Copy thread ID (`thread.copyReference`) | comp/CommandPalette.tsx (line ~1950) | ✅ | "Copy PR link" when the thread has one |
 | Thread find/search within palette using server `thread.find` | comp/ThreadSearchMatch.tsx | ➖ | Message search through `orchestration.searchThreads`; the match line is plain text |
 
 ## Keyboard shortcuts
@@ -504,7 +504,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | composer.workspace | mod+shift+x | !terminalFocus | 🟡 |
 | composer.branch | mod+shift+g | !terminalFocus | 🟡 |
 | composer.previousWorktree | mod+shift+l | !terminalFocus | 🟡 |
-| pullRequest.copyNumber | mod+shift+k | !terminalFocus | ⏳ WP7.5 |
+| pullRequest.copyNumber | mod+shift+k | !terminalFocus | ✅ WP7.5b, with a pull request tab active |
 | modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | 🟡 |
 | modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | 🟡 |
 | editor.openFavorite | mod+o | (none) | ⏳ WP7.8 |
@@ -524,7 +524,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | composer.cycleHost | (no default) | (none) | ⏳ |
 | script.<id>.run | (no default, user-assigned) | (none) | ⏳ project scripts, WP7.4 |
 | Fixed, not configurable: diff find | mod+f inside a diff | diff focused | ⏳ |
-| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | ⏳ WP7.5 |
+| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | 🟡 beside a thread; the Pull Requests page has no copy shortcut yet |
 | Fixed: quit | mod+q (hold 1.2 s, or double press within 500 ms) | desktop | ⏳ WP7.8 |
 | When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | ➖ composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop, isWeb set; terminal and preview keys read false until WP7.4 and WP7.6 |
 

@@ -310,6 +310,8 @@ struct SidebarRowActions {
     var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     var unsnooze: (ThreadId) -> Void = { _ in }
     var unpin: (ThreadId) -> Void = { _ in }
+    /// The pull request badge: one link opens it, a stack or several open the thread's list.
+    var pullRequest: (ThreadId) -> Void = { _ in }
     var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
 }
 
@@ -330,6 +332,7 @@ final class SidebarCardRowView: SidebarRowBase {
     /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let terminal = TerminalStatusGlyph()
+    let prBadge = PullRequestBadgeView()
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread")
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     var actions = SidebarRowActions()
@@ -341,7 +344,8 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine, terminal] as [NSView] { addSubview(v) }
+        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
+        prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         project.font = SB.font(12, .medium); project.lineHeight = 16
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
@@ -420,6 +424,7 @@ final class SidebarCardRowView: SidebarRowBase {
         machine.isHidden = r.environmentMachine == nil
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
+        prBadge.badge = r.pullRequestBadge
         setAccessibilityLabel([r.title, r.statusLabel, r.projectLabel].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
@@ -475,6 +480,10 @@ final class SidebarCardRowView: SidebarRowBase {
         var trailing = right - 14
         if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
         // The terminal glyph follows the branch, `gap-1.5` before the provider group.
+        if !prBadge.isHidden {
+            let pw = prBadge.preferredWidth
+            prBadge.frame = NSRect(x: trailing - 6 - pw, y: y3, width: pw, height: 16); trailing -= pw + 6
+        }
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
         if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
@@ -523,6 +532,7 @@ final class SidebarSlimRowView: SidebarRowBase {
     private let title = LabelView()
     let pin = PinButton()
     let terminal = TerminalStatusGlyph()
+    let prBadge = PullRequestBadgeView()
     private let time = LabelView()
     private var actionButton: RowActionButton?
     private var actionKind: SidebarRowModel.Action?
@@ -533,7 +543,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, title, pin, terminal, time] as [NSView] { addSubview(v) }
+        for v in [monogram, title, pin, terminal, prBadge, time] as [NSView] { addSubview(v) }
+        prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         title.lineHeight = 20
         time.font = SB.tabular(12); time.lineHeight = 16
         pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }
@@ -572,6 +583,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         pin.isHidden = !r.isPinned
         terminal.count = r.terminalProcessCount
+        prBadge.badge = r.pullRequestBadge
         if let snooze = r.snoozeLabel {
             time.text = snooze
             time.color = SB.c(\.infoForeground)
@@ -624,7 +636,11 @@ final class SidebarSlimRowView: SidebarRowBase {
             b.frame = NSRect(x: w - 10 + 4 - bw, y: (h - 24) / 2, width: bw, height: 24) // `-mr-1`
         }
         var right = slotX - 10
-        // `{title}{pin}{terminal}` in a `gap-2.5` row.
+        // `{title}{pin}{terminal}{prBadge}` in a `gap-2.5` row.
+        if !prBadge.isHidden {
+            let pw = prBadge.preferredWidth
+            prBadge.frame = NSRect(x: right - pw, y: (h - 16) / 2, width: pw, height: 16); right -= pw + 10
+        }
         if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
         if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
         title.frame = NSRect(x: x, y: (h - 20) / 2, width: max(0, right - x), height: 20)

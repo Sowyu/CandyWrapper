@@ -227,6 +227,7 @@ final class ThreadController {
     private(set) var composer: ComposerController!
     private(set) var git: GitController!
     private(set) var files: FilesController!
+    private(set) var pullRequests: ThreadPullRequestsController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -263,6 +264,22 @@ final class ThreadController {
         composer.onTargetChange = { [weak self] in self?.git.refresh() }
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
+        let prCapabilities = PullRequestCapabilities(environments: environments)
+        pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
+        pullRequests.openThreadId = { [weak self] in self?.openThreadId }
+        prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
+        files.onSync = { [weak self] in self?.pullRequests.sync() }
+        // A row's pull request badge: one link opens it beside the thread, a stack or several open
+        // the thread's pull requests tab (`ThreadPullRequestBadgeControl`).
+        sidebar.actions.openPullRequest = { [weak self, weak sidebar] id in
+            guard let self, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { return }
+            self.open(id)
+            if SidebarPullRequestBadge(thread)?.opensList == true {
+                self.panel.mutatePanel { $0.open(.pullRequests); return [] }
+            } else {
+                self.pullRequests.openCurrentPullRequest()
+            }
+        }
         // A chat file chip opens the file tab at its line (ChatMarkdown.tsx `fileLinkChip`).
         // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
         panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
@@ -303,6 +320,7 @@ final class ThreadController {
         terminal.registerShortcuts(shortcuts)
         git.registerShortcuts(shortcuts)
         files.registerShortcuts(shortcuts)
+        pullRequests.registerShortcuts(shortcuts)
         // `diff.toggle` (`toggle(ref, "diff")`) and `rightPanel.toggle` (`toggleRightPanel`).
         shortcuts.on(["diff.toggle", "rightPanel.toggle"]) { [weak self] call in
             guard let self, self.panel.window != nil else { return false }
@@ -500,6 +518,7 @@ final class ThreadController {
         composer.projectsChanged()
         git.refresh()
         files.shellChanged()
+        pullRequests.sync()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

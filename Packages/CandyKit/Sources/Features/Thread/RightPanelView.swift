@@ -26,6 +26,11 @@ final class RightPanelView: DSView {
     let files = FilesPanelView()
     let file = FileSurfaceView()
     let launcher = SurfaceLauncherView()
+    /// A `pull-request` tab's surface and the thread's linked pull requests.
+    public let pullRequest = PullRequestDetailView()
+    public let linkedPullRequests = ThreadPullRequestsListView()
+    /// The state a pull request tab's glyph wears, by surface id (`PullRequestSurfaceIcon`).
+    var pullRequestStatus: [String: PullRequestStateTone] = [:] { didSet { if pullRequestStatus != oldValue { apply(state) } } }
     let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs)
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
@@ -49,6 +54,8 @@ final class RightPanelView: DSView {
     /// What the + menu and the launcher may open (`filesAvailable`, `diffAvailable`).
     var filesAvailable = true { didSet { launcher.filesAvailable = filesAvailable } }
     var diffAvailable = true { didSet { launcher.diffAvailable = diffAvailable } }
+    var pullRequestAvailable = false { didSet { launcher.pullRequestAvailable = pullRequestAvailable } }
+    var pullRequestsAvailable = false { didSet { launcher.pullRequestsAvailable = pullRequestsAvailable } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -71,7 +78,7 @@ final class RightPanelView: DSView {
         self.state = state
         tabs.forEach { $0.removeFromSuperview() }
         tabs = state.surfaces.map { surface in
-            let tab = PanelTabView(title: surface.title, identity: Self.icon(for: surface), tinted: surface.kind != .file)
+            let tab = PanelTabView(title: surface.title, identity: icon(for: surface), tinted: surface.kind != .file && surface.kind != .pullRequest)
             tab.isActive = surface.id == state.activeSurfaceId
             tab.onSelect = { [weak self] in self?.onActivate?(surface.id) }
             tab.close.action = { [weak self] in self?.onClose?(surface.id) }
@@ -90,8 +97,19 @@ final class RightPanelView: DSView {
         } else if files.superview === self {
             files.removeFromSuperview()
         }
+        if active?.kind == .pullRequest { if pullRequest.superview !== self { addSubview(pullRequest) } } else { pullRequest.removeFromSuperview() }
+        if active?.kind == .pullRequests { if linkedPullRequests.superview !== self { addSubview(linkedPullRequests) } } else { linkedPullRequests.removeFromSuperview() }
         launcher.isHidden = active != nil
         needsLayout = true
+    }
+
+    func icon(for surface: RightPanelSurface) -> NSView {
+        if case .pullRequest = surface {
+            let tone = pullRequestStatus[surface.id]
+            return IconView(name: tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow, size: 12,
+                            strokeColor: tone.map(PullRequestStyle.color) ?? Themed.color(\.mutedForeground))
+        }
+        return Self.icon(for: surface)
     }
 
     static func icon(for surface: RightPanelSurface) -> IconView {
@@ -99,13 +117,16 @@ final class RightPanelView: DSView {
         case .diff: IconView(name: .fileDiff, size: 12, strokeColor: Themed.color(\.foreground))
         case .files: IconView(name: .files, size: 12, strokeColor: Themed.color(\.foreground))
         case .file(let path, _, _): FileTypeIcon.view(for: path, size: 12)
+        case .pullRequest: IconView(name: .gitPullRequestArrow, size: 12, strokeColor: Themed.color(\.mutedForeground))
+        case .pullRequests: IconView(name: .link2, size: 12, strokeColor: Themed.color(\.foreground))
         }
     }
 
     /// The + menu (RightPanelTabs.tsx:1248-1335): every kind with its letter; only the ones this
     /// app draws are enabled. Letters pick while the menu is open.
     func showAddMenu() {
-        let actions = SurfaceLauncherView.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable)
+        let actions = SurfaceLauncherView.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable,
+                                                  pullRequestAvailable: pullRequestAvailable, pullRequestsAvailable: pullRequestsAvailable)
         let items = actions.map { action -> MenuItem in
             var item = MenuItem(action.label, icon: action.icon, shortcut: action.shortcut, disabled: action.kind == nil)
             item.action = { [weak self] in if let kind = action.kind { self?.onAdd?(kind) } }
@@ -160,6 +181,8 @@ final class RightPanelView: DSView {
         diff.frame = content
         files.superview === self ? (files.frame = content) : ()
         file.frame = content
+        pullRequest.frame = content
+        linkedPullRequests.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
         launcher.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
@@ -253,20 +276,22 @@ final class SurfaceLauncherView: DSView {
         var kind: RightPanelSurface.Kind?
     }
 
-    // ponytail: Browser, Terminal, Pull request, Linked pull requests and Device stay disabled;
-    // enable each as WP7.6b, the terminal tab and WP7.5b build their surfaces
-    static func actions(filesAvailable: Bool, diffAvailable: Bool) -> [Action] {
+    // ponytail: Browser, Terminal and Device stay disabled; enable each as WP7.6b and the terminal
+    // tab build their surfaces
+    static func actions(filesAvailable: Bool, diffAvailable: Bool, pullRequestAvailable: Bool = false, pullRequestsAvailable: Bool = false) -> [Action] {
         [Action(label: "Browser", icon: .globe2, shortcut: "B", kind: nil),
          Action(label: "Terminal", icon: .terminalSquare, shortcut: "T", kind: nil),
          Action(label: "Files", icon: .files, shortcut: "F", kind: filesAvailable ? .files : nil),
          Action(label: "Diff", icon: .fileDiff, shortcut: "D", kind: diffAvailable ? .diff : nil),
-         Action(label: "Pull request", icon: .gitPullRequestArrow, shortcut: "P", kind: nil),
-         Action(label: "Linked pull requests", icon: .link, shortcut: "L", kind: nil),
+         Action(label: "Pull request", icon: .gitPullRequestArrow, shortcut: "P", kind: pullRequestAvailable ? .pullRequest : nil),
+         Action(label: "Linked pull requests", icon: .link, shortcut: "L", kind: pullRequestsAvailable ? .pullRequests : nil),
          Action(label: "Device", icon: .smartphone, shortcut: "M", kind: nil)]
     }
 
     var filesAvailable = true { didSet { rebuild() } }
     var diffAvailable = true { didSet { rebuild() } }
+    var pullRequestAvailable = false { didSet { if pullRequestAvailable != oldValue { rebuild() } } }
+    var pullRequestsAvailable = false { didSet { if pullRequestsAvailable != oldValue { rebuild() } } }
     var onPick: ((RightPanelSurface.Kind) -> Void)?
     private let heading = LabelView("Open a surface", font: DSFont.ui(14, weight: .medium))
     private var rows: [LauncherRow] = []
@@ -282,7 +307,8 @@ final class SurfaceLauncherView: DSView {
 
     private func rebuild() {
         rows.forEach { $0.removeFromSuperview() }
-        rows = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable).map { action in
+        rows = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable, pullRequestAvailable: pullRequestAvailable,
+                            pullRequestsAvailable: pullRequestsAvailable).map { action in
             let row = LauncherRow(action)
             row.onClick = { [weak self] in if let kind = action.kind { self?.onPick?(kind) } }
             return row
@@ -294,7 +320,8 @@ final class SurfaceLauncherView: DSView {
     /// The letter keys (`surfaceShortcutActionForKey`), outside typing contexts.
     func handleKey(_ characters: String) -> Bool {
         guard !isHiddenOrHasHiddenAncestor, window != nil,
-              let action = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable)
+              let action = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable, pullRequestAvailable: pullRequestAvailable,
+                                        pullRequestsAvailable: pullRequestsAvailable)
                 .first(where: { $0.shortcut.lowercased() == characters.lowercased() }), let kind = action.kind else { return false }
         onPick?(kind)
         return true

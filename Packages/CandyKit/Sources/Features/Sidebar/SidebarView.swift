@@ -12,6 +12,8 @@ public struct SidebarActions {
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     public var unsnooze: (ThreadId) -> Void = { _ in }
     public var unpin: (ThreadId) -> Void = { _ in }
+    /// A row's pull request badge was clicked.
+    public var openPullRequest: (ThreadId) -> Void = { _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// The undo notice's button (`undoLatestThreadAction`).
@@ -163,7 +165,8 @@ public final class SidebarContentView: DSView {
         list.rowActions = SidebarRowActions(
             settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },
             snooze: { [weak self] in self?.actions.snooze($0, $1) }, unsnooze: { [weak self] in self?.actions.unsnooze($0) },
-            unpin: { [weak self] in self?.actions.unpin($0) }, contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
+            unpin: { [weak self] in self?.actions.unpin($0) }, pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
+            contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
         list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }

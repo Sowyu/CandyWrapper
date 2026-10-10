@@ -209,10 +209,29 @@ final class PaletteCommands {
         }
         // ponytail: no "New thread without a project", "Find in current thread", PR, restart session,
         // project search, New project, theme and project settings entries; each lands with its work package
-        if let reference = commands.threadReference {
+        if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread id", "reference"],
-                                        title: "Copy thread ID", description: reference, icon: .link, shortcutCommand: "thread.copyReference",
+                                        title: target.title.hasPrefix("PR") ? "Copy PR link" : "Copy thread ID", description: target.value,
+                                        icon: .link, shortcutCommand: "thread.copyReference",
                                         action: .run({ [weak self] in self?.commands.copyThreadReference() }, keepOpen: false)))
+        }
+        // "Link pull request to thread" and "Show linked pull requests" (CommandPalette.tsx:1963-1990).
+        if let id = threads.openThreadId, let env = id.environmentId {
+            let prs = threads.pullRequests!
+            let multiple = prs.capabilities.has(env, "threadPullRequests")
+            if multiple || prs.capabilities.has(env, "threadPullRequestLinking") {
+                actions.append(PaletteEntry(value: "action:link-pull-request", searchTerms: ["link", "pull request", "pr", "attach", "stack"],
+                                            title: "Link pull request to thread", icon: .link2,
+                                            action: .run({ [weak prs] in DispatchQueue.main.async { prs?.openLinkDialog() } }, keepOpen: false)))
+                if multiple {
+                    let links = sidebar?.snapshot?.threads.first { $0.id == id }?.pullRequests ?? []
+                    var show = PaletteEntry(value: "action:open-thread-pull-requests", searchTerms: ["pull requests", "linked", "stack", "prs"],
+                                            title: "Show linked pull requests", icon: .link2,
+                                            action: .run({ [weak self] in self?.threads.panel.mutatePanel { $0.open(.pullRequests); return [] } }, keepOpen: false))
+                    show.isDisabled = ThreadPullRequests.visible(links).isEmpty
+                    actions.append(show)
+                }
+            }
         }
         actions.append(PaletteEntry(value: "action:open-file-picker", searchTerms: ["go to file", "open file", "file picker", "find file", "quick open"],
                                     title: "Go to file", icon: .fileSearch, shortcutCommand: "filePicker.toggle",

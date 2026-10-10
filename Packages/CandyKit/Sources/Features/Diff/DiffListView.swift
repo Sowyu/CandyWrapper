@@ -17,6 +17,10 @@ public final class DiffListView: DSView {
     /// name toggles the file like the rest of the header.
     public var onOpenFile: (@MainActor (String) -> Void)?
     var onCollapsedChange: (@MainActor () -> Void)?
+    /// The pull request Code tab's viewed marks by path; nil hides the tick.
+    public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { reconfigureAll() } }
+    /// A tick pressed: viewing a file folds it, clearing the tick opens it (`toggleFileDiffFoldForViewed`).
+    public var onSetViewed: (@MainActor (String, Bool) -> Void)?
 
     private(set) var rowLayout = DiffLayout(diff: UnifiedDiff(""), collapsed: [], style: .unified, width: 0, wrap: true, ch: 7.8)
     private var highlighter = DiffHighlighter(diff: UnifiedDiff(""))
@@ -190,6 +194,7 @@ public final class DiffListView: DSView {
         case let header as DiffFileHeaderView:
             let f = Int(row.file)
             header.configure(file: f, diff.files[f], collapsed: collapsed.contains(f), statStyle: statStyle)
+            header.configure(viewed: viewedState?(diff.files[f].path))
         case let separator as DiffSeparatorView:
             separator.configure(hidden: Int(row.right), split: rowLayout.columns[Int(row.file)].isSplit)
         case let line as DiffLineRowView:
@@ -211,6 +216,11 @@ public final class DiffListView: DSView {
             let header = DiffFileHeaderView()
             header.onToggle = { [weak self] in self?.toggle($0) }
             header.onOpenFile = { [weak self] path in self?.onOpenFile?(path) ?? self?.togglePath(path) }
+            header.onViewed = { [weak self] path, viewed in
+                guard let self else { return }
+                self.onSetViewed?(path, viewed)
+                if let f = self.diff.files.firstIndex(where: { $0.path == path }) { self.setCollapsed(f, viewed) }
+            }
             view = header
         case .separator: view = DiffSeparatorView()
         default: view = DiffLineRowView()

@@ -47,6 +47,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     /// Terminals of this thread running a subprocess (`useThreadRunningTerminalIds`); above 0 shows
     /// the pulsing terminal glyph.
     public var terminalProcessCount = 0
+    /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
+    public var pullRequestBadge: SidebarPullRequestBadge? = nil
     /// Timestamps behind the labels, for the refresh timer.
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
@@ -414,6 +416,7 @@ public enum SidebarListBuilder {
             environmentMachine: state.environments.rowMachine(shell.id),
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
+            pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
     }
 

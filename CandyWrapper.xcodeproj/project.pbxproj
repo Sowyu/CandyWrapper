@@ -23,6 +23,8 @@
 		71718717C7EBF952C5C3D99D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A5E63032239ADD1C5F8E1C /* main.swift */; };
 		7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */ = {isa = PBXBuildFile; productRef = 8A26017E3FA14E25E7143DA8 /* T3Store */; };
 		86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */; };
+		7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */; };
+		7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
@@ -35,7 +37,9 @@
 
 /* Begin PBXFileReference section */
 		045DDA2A8C6CDD4119BB7447 /* FilesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesController.swift; sourceTree = "<group>"; };
+		0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsController.swift; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
+		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
@@ -101,6 +105,8 @@
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
+				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
+				2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */,
 				CDA413FF2F602E6306049C36 /* ServerController.swift */,
 				21423E229A8AD862537E9ECA /* SettingsController.swift */,
 				E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */,
@@ -207,6 +213,8 @@
 				46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
+				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
+				7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */,
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,
 				50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */,
 				66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */,

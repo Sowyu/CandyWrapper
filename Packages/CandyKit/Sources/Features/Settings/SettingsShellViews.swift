@@ -477,7 +477,11 @@ public final class SettingsHeaderView: TopbarDragView {
     public let restore = ButtonView("Restore device defaults", icon: .rotateCcw, variant: .ghost, size: .xs)
 
     public var section: SettingsSection? = .connections {
-        didSet { current.text = section?.label ?? "Settings"; needsLayout = true }
+        didSet { current.text = plainTitle ?? section?.label ?? "Settings"; needsLayout = true }
+    }
+    /// A one-crumb page such as "Pull Requests" (`WorkspaceBreadcrumbItem current`).
+    public var plainTitle: String? {
+        didSet { if plainTitle != nil { section = nil }; current.text = plainTitle ?? section?.label ?? "Settings"; needsLayout = true }
     }
 
     public override init(frame frameRect: NSRect) {
