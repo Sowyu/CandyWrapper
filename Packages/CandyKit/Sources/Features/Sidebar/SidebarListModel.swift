@@ -273,13 +273,13 @@ public enum SidebarListBuilder {
         }
     }
 
-    /// The scope popup's projects (`projectGroups`, Sidebar.tsx:2541-2544), most recently active first.
-    // ponytail: T3's default `updated_at` project order; read `sidebarProjectSortOrder` from client settings when settings land
-    public static func projectScopeGroups(snapshot: ShellSnapshot?, primaryEnvironmentId: String? = nil) -> [SidebarModel.ProjectGroup] {
+    /// The scope popup's projects (`projectGroups`, Sidebar.tsx:2541-2544) in the `sidebarProjectSortOrder` setting's order.
+    public static func projectScopeGroups(snapshot: ShellSnapshot?, primaryEnvironmentId: String? = nil,
+                                          order: SidebarModel.SortOrder = .updatedAt) -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
         return SidebarModel.sortSidebarV2ProjectGroups(
             SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: primaryEnvironmentId),
-                                                       threads: snapshot.threads, order: .updatedAt)
+                                                       threads: snapshot.threads, order: order)
     }
 
     /// `sidebarListItems` (Sidebar.tsx:3781-3829) without the drag-only markers and the beta Working shelf,

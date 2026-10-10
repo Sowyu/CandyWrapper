@@ -45,6 +45,8 @@ public final class ButtonView: ControlView {
     public var iconSize: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Replaces the variant's icon color, for icons with their own `text-*` class.
     public var iconColor: NSColor? { didSet { restyle() } }
+    /// `font-mono` on the label (the keybinding When trigger).
+    public var monospaced = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
     /// See `LabelView.smoothsFont`: off for buttons on glass (backdrop-filter) surfaces.
     public var smoothsFont: Bool {
         get { label.smoothsFont }
@@ -150,7 +152,7 @@ public final class ButtonView: ControlView {
 
     private func restyle() {
         let m = size.metrics
-        label.font = DSFont.ui(m.font, weight: .medium)
+        label.font = monospaced ? DSFont.mono(m.font, weight: .medium) : DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
         var look = ButtonStyles.look(variant: variant, state: state, radius: m.radius)
         if joinedSides.leading || joinedSides.trailing {

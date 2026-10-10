@@ -351,7 +351,8 @@ public final class SidebarContentView: DSView {
         guard let host = filterButton.popupHost else { return }
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
         let view = SidebarProjectScopeView(
-            groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId),
+            groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
+                                                          order: SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt),
             selectedKey: state.projectScopeKey, minimumWidth: search.frame.width, environments: state.environments)
         view.onSelect = { [weak self] key in
             self?.setProjectScope(key)

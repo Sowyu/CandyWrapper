@@ -2,12 +2,13 @@ import AppKit
 import DesignSystem
 
 /// The settings pages in T3's nav order (settingsSearch.ts `SETTINGS_SECTION_LABELS`, SettingsSidebarNav.tsx
-/// icons). "Project" only shows while a project scope is chosen, which CandyWrapper has no UI for yet.
+/// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
-    case general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
+    case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
 
     public var label: String {
         switch self {
+        case .projects: "Project"
         case .general: "General"
         case .appearance: "Appearance"
         case .keybindings: "Keybindings"
@@ -24,6 +25,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
 
     var icon: IconName {
         switch self {
+        case .projects: .panelsTopLeft
         case .general: .settings2
         case .appearance: .palette
         case .keybindings: .keyboard
@@ -39,8 +41,11 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     }
 
     /// Pages that work. The rest list like T3's and stay disabled.
-    // ponytail: only Connections is built; the other pages come with milestone 7 (settings), enable them there
-    public var isAvailable: Bool { self == .connections }
+    // ponytail: the other pages come with WP7.7b; enable each as it lands
+    public var isAvailable: Bool { [.general, .appearance, .keybindings, .connections].contains(self) }
+
+    /// The nav lists Project only for a project scope; CandyWrapper has none yet (WP7.7b).
+    static let navSections = allCases.filter { $0 != .projects }
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -85,19 +90,33 @@ public final class SettingsSidebarView: DSView {
     public var onSelect: ((SettingsSection) -> Void)?
     public var onBack: (() -> Void)?
     public var onToggleSidebar: (() -> Void)?
+    /// A search result was chosen (`handleSearchResultClick`): the page opens at its anchor.
+    public var onSearchResult: ((SettingsSearchItem) -> Void)?
+
+    /// The items search runs over (`useAvailableSettingsSearchItems`).
+    public var searchItems: [SettingsSearchItem] = SettingsSearch.available(SettingsSearchAvailability()) { didSet { runSearch() } }
+    public private(set) var results: [SettingsSearchItem] = []
+    public private(set) var activeResult = 0
+    private var resultRows: [SettingsSearchResultRow] = []
+    private let noResults = LabelView("No settings found", font: DSFont.ui(12), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
+    private var isSearching: Bool { !search.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(backdrop)
         addSubview(brand)
         addSubview(trigger)
-        // ponytail: the settings search shows but does not search; T3 searches every setting's title (M7)
-        search.field.isEditable = false
-        search.field.isSelectable = false
         search.field.setAccessibilityLabel("Search settings")
+        search.clearButton.setAccessibilityLabel("Clear settings search")
+        search.onChange = { [weak self] _ in self?.activeResult = 0; self?.runSearch() }
+        search.onCommand = { [weak self] selector in self?.searchCommand(selector) ?? false }
         addSubview(search)
         addSubview(searchKbd)
-        for section in SettingsSection.allCases {
+        noResults.alignment = .center
+        noResults.lineHeight = 16
+        noResults.isHidden = true
+        addSubview(noResults)
+        for section in SettingsSection.navSections {
             let item = SidebarMenuButtonView(section.label, icon: section.icon)
             if section == .snapShots { item.iconDefinition = SettingsSection.snapShotIcon }
             item.isEnabled = section.isAvailable
@@ -127,6 +146,77 @@ public final class SettingsSidebarView: DSView {
         onSelect?(section)
     }
 
+    /// `/` focuses and selects the search (SettingsSidebarNav.tsx:139-167).
+    public func focusSearch() {
+        window?.makeFirstResponder(search.field)
+        search.field.currentEditor()?.selectAll(nil)
+    }
+
+    /// Sets the query as if typed (tests, captures).
+    func setQuery(_ query: String) { search.text = query; activeResult = 0; runSearch() }
+
+    private func runSearch() {
+        results = isSearching ? SettingsSearch.search(search.text, in: searchItems) : []
+        activeResult = min(activeResult, max(results.count - 1, 0))
+        while resultRows.count < results.count {
+            let row = SettingsSearchResultRow()
+            addSubview(row)
+            resultRows.append(row)
+        }
+        for (i, row) in resultRows.enumerated() {
+            row.isHidden = i >= results.count
+            guard i < results.count else { continue }
+            let item = results[i]
+            row.configure(item)
+            row.isActive = i == activeResult
+            row.action = { [weak self] in self?.choose(item) }
+            row.onHover = { [weak self] in self?.setActive(i) }
+        }
+        noResults.isHidden = !(isSearching && results.isEmpty)
+        searchKbd.isHidden = isSearching
+        for item in items.values { item.isHidden = isSearching }
+        needsLayout = true
+    }
+
+    private func setActive(_ i: Int) {
+        guard i != activeResult, results.indices.contains(i) else { return }
+        activeResult = i
+        for (j, row) in resultRows.enumerated() { row.isActive = j == i }
+    }
+
+    private func choose(_ item: SettingsSearchItem) {
+        search.text = ""
+        activeResult = 0
+        runSearch()
+        onSearchResult?(item)
+    }
+
+    /// `handleSearchKeyDown`: Escape clears, arrows move the active result, Return opens it.
+    private func searchCommand(_ selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.cancelOperation(_:)):
+            guard isSearching else { return false }
+            search.text = ""
+            activeResult = 0
+            runSearch()
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            guard !results.isEmpty else { return false }
+            setActive((activeResult + 1) % results.count)
+            return true
+        case #selector(NSResponder.moveUp(_:)):
+            guard !results.isEmpty else { return false }
+            setActive((activeResult - 1 + results.count) % results.count)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            guard results.indices.contains(activeResult) else { return false }
+            choose(results[activeResult])
+            return true
+        default:
+            return false
+        }
+    }
+
     private func applyStage() {
         backdrop.isHidden = stage != .nightly
         brand.onBackdrop = stage == .nightly
@@ -147,9 +237,19 @@ public final class SettingsSidebarView: DSView {
         let kbd = searchKbd.intrinsicContentSize
         searchKbd.frame = NSRect(x: w - 8 - 8 - kbd.width, y: 60 + (32 - kbd.height) / 2, width: kbd.width, height: kbd.height)
         var y: CGFloat = 60 + 32 + 8
-        for section in SettingsSection.allCases {
-            items[section]?.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
-            y += 36
+        if isSearching {
+            // "No settings found" (`px-2 py-6 text-center text-xs`), then the results (`min-h-10`, p-2, gap-1).
+            noResults.frame = NSRect(x: 16, y: y + 24, width: w - 32, height: 16)
+            if results.isEmpty { y += 64 + 8 }
+            for row in resultRows where !row.isHidden {
+                row.frame = NSRect(x: 8, y: y, width: w - 16, height: SettingsSearchResultRow.height)
+                y += SettingsSearchResultRow.height + 4
+            }
+        } else {
+            for section in SettingsSection.navSections {
+                items[section]?.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
+                y += 36
+            }
         }
         // `SidebarFooter` (`px-2 py-1 gap-2`): the sign-in row above `flex items-center gap-1` of Back and the avatar.
         let row: CGFloat = avatar.isHidden ? 32 : 36
@@ -157,6 +257,70 @@ public final class SettingsSidebarView: DSView {
         back.frame = NSRect(x: 8, y: rowY + (row - 32) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: 32)
         avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
         signIn.frame = NSRect(x: 8, y: rowY - 8 - 32, width: w - 16, height: 32)
+    }
+}
+
+/// One settings search result (SettingsSidebarNav.tsx:296-322): `SidebarMenuButton size="sm"` with
+/// `h-auto min-h-10 items-start`, the page's icon (`mt-0.5 size-3.5`, muted at 60%), the title (14px
+/// medium) over the page label (`text-2xs`, muted at 75%). The active result is `data-active`.
+final class SettingsSearchResultRow: ControlView {
+    static let height: CGFloat = 8 + 20 + 16 + 8
+    private let decoration = BoxDecorationLayer()
+    private var icon = IconView(name: .settings2, size: 14)
+    private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.sidebarForeground, sidebar: true))
+    private let subtitle = LabelView("", font: DSFont.ui(11), color: Themed.color(\.sidebarMutedForeground, 0.75, sidebar: true))
+    var isActive = false { didSet { restyle() } }
+    var onHover: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        decoration.host = self
+        layer?.addSublayer(decoration)
+        title.lineHeight = 20
+        subtitle.lineHeight = 16
+        for v in [icon, title, subtitle] as [NSView] { addSubview(v) }
+        icon.strokeColor = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+        setAccessibilityRole(.button)
+        restyle()
+    }
+
+    func configure(_ item: SettingsSearchItem) {
+        title.text = item.title
+        subtitle.text = item.to.label
+        icon.removeFromSuperview()
+        let color = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+        icon = item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: 14, color: color)
+            : IconView(name: item.to.icon, size: 14, strokeColor: color)
+        addSubview(icon)
+        restyle()
+        needsLayout = true
+        setAccessibilityLabel("\(item.title), \(item.to.label)")
+    }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        if state.hovered && !old.hovered { onHover?() }
+        restyle()
+    }
+
+    private func restyle() {
+        var box = BoxStyle()
+        box.radius = 10
+        if state.hovered { box.fill = Themed.color(\.sidebarRowHover, sidebar: true) }
+        if isActive { box.fill = Themed.color(\.sidebarRowSelected, sidebar: true) }
+        decoration.boxStyle = box
+        // `hover:[&>svg]` and `data-[active=true]:[&>svg]:text-sidebar-foreground` beat the icon's own muted class.
+        icon.strokeColor = isActive || state.hovered ? Themed.color(\.sidebarForeground, sidebar: true)
+            : Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+    }
+
+    override func layout() {
+        super.layout()
+        decoration.layout(boxSize: bounds.size)
+        icon.frame = NSRect(x: 8, y: 10, width: 14, height: 14)
+        title.frame = NSRect(x: 30, y: 8, width: max(0, bounds.width - 38), height: 20)
+        subtitle.frame = NSRect(x: 30, y: 28, width: max(0, bounds.width - 38), height: 16)
     }
 }
 
@@ -269,6 +433,20 @@ public final class SettingsPageView: DSView {
     /// Lays the page out again after its content changed height.
     public func pageChanged() { needsLayout = true; layoutSubtreeIfNeeded() }
 
+    /// Scrolls `target` (a row or section of the page) to the middle and pulses it, as a search jump does
+    /// (settingsLayout.tsx `scrollAndFocusSettingsTarget`, `block: "center"`).
+    public func reveal(_ target: NSView, highlight: Bool = true) {
+        pageChanged()
+        let rect = document.convert(target.bounds, from: target)
+        let visible = scroll.scrollView.contentView.bounds.height
+        let y = max(0, min(rect.midY - visible / 2, document.frame.height - visible))
+        scroll.scroll(to: NSPoint(x: 0, y: y))
+        if highlight { pulseSettingsTarget(target) }
+    }
+
+    /// Back to the top for a newly opened page.
+    public func scrollToTop() { scroll.scroll(to: .zero) }
+
     public override func layout() {
         super.layout()
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: SettingsHeaderView.height)
@@ -294,6 +472,9 @@ public final class SettingsHeaderView: TopbarDragView {
     private let root = LabelView("Settings", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.mutedForeground))
     private let slash = LabelView("/", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.iconMuted))
     private let current = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    /// "Restore device defaults" (settings.tsx `RestoreDeviceDefaultsButton`), on General only: `xs ghost`
+    /// with a 14pt rotate-ccw glyph in `mx-1`.
+    public let restore = ButtonView("Restore device defaults", icon: .rotateCcw, variant: .ghost, size: .xs)
 
     public var section: SettingsSection? = .connections {
         didSet { current.text = section?.label ?? "Settings"; needsLayout = true }
@@ -304,6 +485,9 @@ public final class SettingsHeaderView: TopbarDragView {
         for l in [root, slash, current] { l.lineHeight = 20; addSubview(l) }
         current.text = section?.label ?? "Settings"
         setAccessibilityLabel("Settings breadcrumb")
+        restore.iconSize = 14
+        restore.isHidden = true
+        addSubview(restore)
     }
 
     public override func layout() {
@@ -319,5 +503,7 @@ public final class SettingsHeaderView: TopbarDragView {
             x += ceil(slash.textWidth) + 12
         }
         current.frame = NSRect(x: x, y: y, width: max(0, min(ceil(current.textWidth) + 1, bounds.width - 20 - x)), height: 20)
+        let rw = restore.intrinsicContentSize.width + 8
+        restore.frame = NSRect(x: bounds.width - 20 - rw, y: (Self.height - 24) / 2, width: rw, height: 24)
     }
 }

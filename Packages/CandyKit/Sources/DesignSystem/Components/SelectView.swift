@@ -26,6 +26,21 @@ public final class SelectView: ControlView {
     public var size: Size { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var isInvalid = false { didSet { restyle() } }
     public final var onChange: (@MainActor (Int) -> Void)?
+    /// `alignItemWithTrigger`; false opens a plain dropdown at `popupAlign` (T3's settings selects use `end`).
+    public var alignItemWithTrigger = true
+    public var popupAlign: PopupPlacement.Align = .start
+    /// `hideIndicator`: items without the check mark.
+    public var hidesIndicator = false
+    /// `w-auto`: the trigger is as wide as its value instead of filling its container.
+    public var fitsContent = false { didSet { invalidateIntrinsicContentSize() } }
+    /// A view before the value (`SelectTrigger` children such as an icon), `gap` from it.
+    public var leading: NSView? { didSet { oldValue?.removeFromSuperview(); leading.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// Items' subtitles in the popup (`SelectItem` with a description line).
+    public var optionDetails: [String?] = []
+    /// Disabled items by index.
+    public var disabledOptions: Set<Int> = []
+    /// What the trigger shows for each option when it differs from the item (`SelectValue` children).
+    public var valueLabels: [String]? { didSet { updateValue() } }
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
@@ -50,12 +65,21 @@ public final class SelectView: ControlView {
     }
 
     private func updateValue() {
-        label.text = selectedIndex.map { options[$0] } ?? placeholder
+        label.text = selectedIndex.map { i in
+            if let v = valueLabels, v.indices.contains(i) { return v[i] }
+            return options.indices.contains(i) ? options[i] : placeholder
+        } ?? placeholder
         restyle()
+        invalidateIntrinsicContentSize()
     }
 
     /// `w-full min-w-36`: the trigger fills its container, so it has no intrinsic width.
-    public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: size.metrics.height) }
+    public override var intrinsicContentSize: NSSize {
+        let m = size.metrics
+        guard fitsContent else { return NSSize(width: NSView.noIntrinsicMetric, height: m.height) }
+        let lead = leading.map { $0.frame.width + m.gap } ?? 0
+        return NSSize(width: ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + 12 - 4), height: m.height)
+    }
 
     public override func layout() {
         super.layout()
@@ -63,7 +87,12 @@ public final class SelectView: ControlView {
         let m = size.metrics
         let chevronX = bounds.width - 1 - m.padding + 4 - 12
         chevron.frame = NSRect(x: chevronX, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        label.frame = NSRect(x: 1 + m.padding, y: (bounds.height - m.line) / 2, width: max(0, chevronX - m.gap - 1 - m.padding), height: m.line)
+        var x = 1 + m.padding
+        if let leading {
+            leading.frame.origin = NSPoint(x: x, y: ((bounds.height - leading.frame.height) / 2).rounded())
+            x += leading.frame.width + m.gap
+        }
+        label.frame = NSRect(x: x, y: (bounds.height - m.line) / 2, width: max(0, chevronX - m.gap - x), height: m.line)
     }
 
     public override func stateDidChange(from old: State) {
@@ -120,18 +149,25 @@ public final class SelectView: ControlView {
     public override func performAction() {
         super.performAction()
         guard let host = popupHost else { return }
-        let items = options.enumerated().map { i, title in MenuItem(title, kind: .radio(i == selectedIndex)) }
+        let items = options.enumerated().map { i, title in
+            var item = MenuItem(title, kind: hidesIndicator ? .item : .radio(i == selectedIndex))
+            item.subtitle = optionDetails.indices.contains(i) ? optionDetails[i] : nil
+            item.isDisabled = disabledOptions.contains(i)
+            return item
+        }
         let list = MenuPopupView(items: items, style: .select)
         list.minimumWidth = bounds.width
         list.onChoose = { [weak self] i in
             self?.selectedIndex = i
             self?.onChange?(i)
         }
-        let popup = host.open(list, trigger: self, placement: .dropdown, swallowsOutsideClick: true)
+        var placement = PopupPlacement.dropdown
+        if !alignItemWithTrigger { placement.align = popupAlign }
+        let popup = host.open(list, trigger: self, placement: placement, swallowsOutsideClick: true)
         list.hostPopup = popup
         list.highlightedIndex = selectedIndex ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil)
-        if let frame = Self.alignedFrame(list: list, selected: selectedIndex, trigger: host.convert(bounds, from: self),
-                                         textInset: 1 + size.metrics.padding, bounds: host.bounds) {
+        if alignItemWithTrigger, let frame = Self.alignedFrame(list: list, selected: selectedIndex, trigger: host.convert(bounds, from: self),
+                                                               textInset: 1 + size.metrics.padding, bounds: host.bounds) {
             popup.container.frame = frame
         }
         openList = list

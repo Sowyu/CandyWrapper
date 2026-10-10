@@ -267,9 +267,9 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | ➖ | Missing: search box is inert; only Connections has content |
-| Settings breadcrumb, group and row layout, scope notice | comp/settings/SettingsBreadcrumb.tsx, comp/settings/SettingsGroup.tsx, comp/settings/SettingsScopeNotice.tsx | ➖ | Missing: scope notice |
-| Environment scope picker (All environments, per environment, mixed values) | comp/settings/SettingsScopeContext.tsx, comp/settings/settingsScope.ts | ⏳ | |
+| Settings sidebar nav with search box and results | comp/settings/SettingsSidebarNav.tsx, comp/settings/settingsSearch.ts | 🟡 | WP7.7a: T3's catalog (generated), ranking, arrows/Return/Escape, `/` to focus, jump with pulse. WP7.7b pages stay disabled |
+| Settings breadcrumb, group and row layout, scope notice | comp/settings/SettingsBreadcrumb.tsx, comp/settings/SettingsGroup.tsx, comp/settings/SettingsScopeNotice.tsx | ➖ | WP7.7a: reset arrows, inheritance indicator with chain popover, inert rows, scope boundary text, Restore device defaults. Missing: SettingsScopeNotice |
+| Environment scope picker (All environments, per environment, mixed values) | comp/settings/SettingsScopeContext.tsx, comp/settings/settingsScope.ts | ➖ | WP7.7a: sentence, environment axis, mixed switches and selects, writes to every connected target. The project axis lists projects; choosing one waits for WP7.7b |
 
 ### Settings > Project
 
@@ -289,53 +289,53 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Update track (stable / nightly) and update status/download/install | comp/settings/SettingsPanels.tsx (line ~453), desk/updates/updateChannels.ts | ⏳ | Desktop only |
-| Thread notifications (Off, Notifications, Sound only, Notifications with sound) | comp/settings/NotificationSettings.tsx, web/threadNotifications.ts | ⏳ | |
-| In-app notifications toggle | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Time format (system, 12h, 24h) | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Response streaming mode | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Hide whitespace changes; Default diff file state; Diff layout | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Proactive panels | comp/settings/SettingsPanels.tsx | ⏳ | Auto-open diff/preview panels |
-| Show skills in slash menu | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Rich text composer; Collapse composer on scroll | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Send shortcut; Follow-up behavior (Queue/Steer) | comp/settings/SettingsPanels.tsx | ➖ | Behaviors built with defaults; no settings controls |
-| Provider update checks | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Continue threads after restarts | comp/settings/SettingsPanels.tsx | ⏳ | Apply to all environments |
-| Background activity profile and advanced intervals (Git fetch, provider health, host power) | comp/settings/SettingsPanels.tsx (lines ~930-1110) | ⏳ | |
-| Organization: Project grouping, Project order | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Organization: Auto-resume limited threads; Snooze limited threads | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Organization: Working section (beta) | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Organization: Auto-settle merged threads; Auto-settle inactive threads; Days of inactivity | comp/settings/SettingsPanels.tsx | ⏳ | Per-environment scope |
-| Projects and threads: New threads defaults, Submodules, Start from origin, Add project starts in | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Confirmations: Unpin, Archive, Delete, Quit shortcut (Hold, Direct, Double press) | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Text generation model | comp/settings/SettingsPanels.tsx | ⏳ | Titles, commit messages |
-| `t3` CLI command install row | comp/settings/CliCommandSettingsRow.tsx | ⏳ | |
-| About: version, privacy policy, telemetry note, Diagnostics link, Open source licenses | comp/settings/SettingsPanels.tsx, comp/settings/OpenSourceLicenses.tsx, docs/telemetry.md | ⏳ | |
-| Legacy toggles: Plan mode, Context window indicator, Sidebar | comp/settings/SettingsPanels.tsx | ⏳ | Low priority |
-| Panel for "Reset to defaults" / restore | comp/settings/SettingsPanels.tsx | ⏳ | Verify in source before building |
+| Update track (stable / nightly) and update status/download/install | comp/settings/SettingsPanels.tsx (line ~453), desk/updates/updateChannels.ts | ➖ | WP7.7a: Version and Update track rows shown, actions unwired until M9 |
+| Thread notifications (Off, Notifications, Sound only, Notifications with sound) | comp/settings/NotificationSettings.tsx, web/threadNotifications.ts | ➖ | WP7.7a: stored (client); alerts come with WP7.8 |
+| In-app notifications toggle | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; toasts come with WP7.8 |
+| Time format (system, 12h, 24h) | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: timeline timestamps follow it live |
+| Response streaming mode | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: server setting, the server applies it |
+| Hide whitespace changes; Default diff file state; Diff layout | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: diff layout follows (toolbar writes it back); whitespace, wrap and collapsed state seed new diffs |
+| Proactive panels | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; auto-open not built |
+| Show skills in slash menu | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: wired into the / menu |
+| Rich text composer; Collapse composer on scroll | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; no rich text or resting composer yet |
+| Send shortcut; Follow-up behavior (Queue/Steer) | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: rows drive the composer |
+| Provider update checks | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: server setting |
+| Continue threads after restarts | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: server setting, gated on threadRestartContinuation |
+| Background activity profile and advanced intervals (Git fetch, provider health, host power) | comp/settings/SettingsPanels.tsx (lines ~930-1110) | 🟡 | WP7.7a: profile select, Advanced dialog (one environment), resolve and normalize ported |
+| Organization: Project grouping, Project order | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: order drives the scope popup; grouping stored only |
+| Organization: Auto-resume limited threads; Snooze limited threads | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: server settings |
+| Organization: Working section (beta) | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; shelf not built |
+| Organization: Auto-settle merged threads; Auto-settle inactive threads; Days of inactivity | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: server settings, shown with threadAutoSettlement |
+| Projects and threads: New threads defaults, Submodules, Start from origin, Add project starts in | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: New threads rows, Start from origin (seeds worktree drafts), Add project starts in. No traits picker |
+| Confirmations: Unpin, Archive, Delete, Quit shortcut (Hold, Direct, Double press) | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; prompts and the quit hold come with WP7.8 |
+| Text generation model | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: model picker writes the setting; no traits picker |
+| `t3` CLI command install row | comp/settings/CliCommandSettingsRow.tsx | ⏳ | Skipped: CandyWrapper installs no CLI |
+| About: version, privacy policy, telemetry note, Diagnostics link, Open source licenses | comp/settings/SettingsPanels.tsx, comp/settings/OpenSourceLicenses.tsx, docs/telemetry.md | ➖ | WP7.7a: version, privacy policy; Diagnostics and licenses wait for WP7.7b |
+| Legacy toggles: Plan mode, Context window indicator, Sidebar | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: folded section; plan mode wired, the other two stored |
+| Panel for "Reset to defaults" / restore | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7a: Restore device defaults with T3's confirm list |
 
 ### Settings > Appearance
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Color scheme (System, Light, Dark) | comp/settings/ThemeSettings.tsx | ⏳ | |
+| Color scheme (System, Light, Dark) | comp/settings/ThemeSettings.tsx | 🟡 | WP7.7a: tiles with T3's wireframes, wired to the appearance mode |
 | Theme gallery with previews, separate light and dark themes | comp/settings/ThemeSettings.tsx, comp/settings/ThemePreviewCircles.tsx, comp/settings/ThemeWireframe.tsx | ⏳ | Built-in theme palettes in web/themePalette.ts |
 | Theme search (OpenVSX) and VS Code theme import | comp/settings/ThemeSearchSection.tsx, web/openVsxThemes.ts, web/vscodeThemeImport.ts, comp/settings/ThemeImportDialog.tsx | ⏳ | Network feature; palette JSON only |
 | Theme editor (pick area, color picker, advanced colors, export JSON) | comp/settings/ThemeEditorPanel.tsx, comp/settings/ThemeEditorHost.tsx, comp/settings/ThemeColorPicker.tsx, comp/settings/themeInspector.ts | ⏳ | `themeEditor.toggle` |
 | Environment-published themes (Duplicate) | docs/appearance.md | ⏳ | |
-| Contrast; Glass opacity | comp/settings/SettingsPanels.tsx | ⏳ | Window vibrancy |
-| Diff colors; Chat width; Composer context | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Environment identification (color/label per env) | comp/settings/SettingsPanels.tsx | ⏳ | |
-| Panel animations slider 0-400 ms | comp/settings/SettingsPanels.tsx, comp/settings/PanelAnimationsPreview.tsx | ⏳ | |
-| Fonts: Interface, Prompt, Code, Terminal; font smoothing; word wrap; advanced typography | comp/settings/FontFamilyPicker.tsx, comp/settings/SettingsFontPreviews.tsx, web/appearanceFonts.ts | ⏳ | |
+| Contrast; Glass opacity | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: sliders store; no visual effect yet |
+| Diff colors; Chat width; Composer context | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored; behaviors not built |
+| Environment identification (color/label per env) | comp/settings/SettingsPanels.tsx | ➖ | WP7.7a: stored |
+| Panel animations slider 0-400 ms | comp/settings/SettingsPanels.tsx, comp/settings/PanelAnimationsPreview.tsx | ➖ | WP7.7a: slider stores; no preview, panels don't animate |
+| Fonts: Interface, Prompt, Code, Terminal; font smoothing; word wrap; advanced typography | comp/settings/FontFamilyPicker.tsx, comp/settings/SettingsFontPreviews.tsx, web/appearanceFonts.ts | ➖ | WP7.7a: simple and advanced rows store family and size; word wrap seeds diffs and files. No previews or font picker |
 
 ### Settings > Keybindings
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Command list with search, current binding, default, conflicts | comp/settings/KeybindingsSettings.tsx, comp/settings/KeybindingsSettings.logic.ts | ⏳ | |
-| Record new shortcut, remove, reset, add when-clause | comp/settings/KeybindingsSettings.tsx | ⏳ | Writes keybindings.json on server |
-| Open keybindings.json; config warnings and update toasts | comp/KeybindingsConfigWarning.tsx, comp/KeybindingsUpdateToast.logic.ts | ⏳ | |
+| Command list with search, current binding, default, conflicts | comp/settings/KeybindingsSettings.tsx, comp/settings/KeybindingsSettings.logic.ts | 🟡 | WP7.7a: groups, search, Mod+F, source badges, conflicts |
+| Record new shortcut, remove, reset, add when-clause | comp/settings/KeybindingsSettings.tsx | 🟡 | WP7.7a: recorder, Save, Reset to default, Remove, Add keybinding, When editor (text; no visual node editor) |
+| Open keybindings.json; config warnings and update toasts | comp/KeybindingsConfigWarning.tsx, comp/KeybindingsUpdateToast.logic.ts | ➖ | WP7.7a: opens the local file; no config warnings or update toasts |
 
 ### Settings > SnapShots
 

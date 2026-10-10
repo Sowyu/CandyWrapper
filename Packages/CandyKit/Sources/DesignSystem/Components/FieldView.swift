@@ -10,6 +10,9 @@ public class FieldView: DSView {
         public var invalid = false   // `aria-invalid="true"`
         public var enabled = true
         public var hovered = false   // only InputGroup's ghost variant reacts
+        public init(focused: Bool = false, invalid: Bool = false, enabled: Bool = true, hovered: Bool = false) {
+            self.focused = focused; self.invalid = invalid; self.enabled = enabled; self.hovered = hovered
+        }
     }
 
     public internal(set) var state = State() {
@@ -178,8 +181,8 @@ public class FieldView: DSView {
 
 /// Frame styles shared by Input, Textarea and InputGroup's default variant (input.tsx:68).
 @MainActor
-enum FieldStyles {
-    static func frame(state: FieldView.State, radius: CGFloat) -> BoxStyle {
+public enum FieldStyles {
+    public static func frame(state: FieldView.State, radius: CGFloat) -> BoxStyle {
         var box = BoxStyle()
         box.radius = radius
         box.border = Themed.color(\.contrastInput)

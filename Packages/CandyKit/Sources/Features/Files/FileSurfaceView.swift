@@ -67,12 +67,16 @@ public final class FileSurfaceView: DSView {
     /// `wordWrap`, default on.
     public var wrap = true { didSet { wrapToggle.isPressed = wrap; code?.wrap = wrap } }
 
+    /// The `wordWrap` setting seeds the toggle when the surface opens.
+    private func seedWrap() { wrap = ClientSettingsStore.shared.current.bool("wordWrap") }
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for t in [renderToggle, wrapToggle, explorerToggle] { t.iconSize = 14 }
         renderToggle.onPressedChange = { [weak self] on in self?.setRendered(on) }
         wrapToggle.onPressedChange = { [weak self] on in self?.wrap = on }
         wrapToggle.setAccessibilityLabel("Disable word wrap")
+        seedWrap()
         explorerToggle.onPressedChange = { [weak self] on in
             self?.explorerOpen = on
             self?.updateActions()

@@ -382,9 +382,13 @@ enum AppearanceMode: String, CaseIterable {
 
     static var current: AppearanceMode { UserDefaults.standard.string(forKey: key).flatMap(AppearanceMode.init) ?? .system }
 
+    /// Posted after `apply` (the Appearance page follows it).
+    static let didChange = Notification.Name("CandyWrapperAppearanceModeDidChange")
+
     @MainActor func apply() {
         UserDefaults.standard.set(rawValue, forKey: Self.key)
         Self.applySaved()
+        NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
 
     @MainActor static func applySaved() {

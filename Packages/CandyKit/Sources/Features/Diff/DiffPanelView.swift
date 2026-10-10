@@ -84,6 +84,8 @@ public final class DiffPanelView: DSView {
             // A segmented group always keeps one value (T3 ignores an empty selection).
             guard let index else { layoutToggle.selectedIndex = layoutStyle == .unified ? 0 : 1; return }
             layoutStyle = index == 0 ? .unified : .split
+            // The toolbar toggle writes the `diffLayout` setting (DiffPanel.tsx:982-986).
+            ClientSettingsStore.shared.update(["diffLayout": .string(index == 0 ? "stacked" : "split")])
         }
         for toggle in [wrapToggle, whitespaceToggle, treeToggle] { toggle.iconSize = 14 }
         wrapToggle.onPressedChange = { [weak self] in self?.wrapLines = $0 }
@@ -101,6 +103,22 @@ public final class DiffPanelView: DSView {
         errorLine.isHidden = true
         totals.isHidden = true
         updateCollapseButton()
+        applySettings(initial: true)
+        settingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("diffLayout") { self?.applySettings(initial: false) }
+        }
+    }
+
+    private var settingsObserver: Int?
+
+    /// `diffLayout` follows the setting; `wordWrap` and `diffIgnoreWhitespace` seed the toggles once
+    /// (`useState(settings.wordWrap)`, DiffPanel.tsx:203-206).
+    private func applySettings(initial: Bool) {
+        let c = ClientSettingsStore.shared.current
+        layoutStyle = c.string("diffLayout") == "split" ? .split : .unified
+        guard initial else { return }
+        wrapLines = c.bool("wordWrap")
+        ignoreWhitespace = c.bool("diffIgnoreWhitespace")
     }
 
     // MARK: Public API
@@ -167,7 +185,7 @@ public final class DiffPanelView: DSView {
                 if reply.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.showMessage("No net changes in this selection.")
                 } else {
-                    self.show(parsed, collapsed: true)
+                    self.show(parsed, collapsed: ClientSettingsStore.shared.current.bool("diffFilesCollapsed"))
                 }
             } catch {
                 // T3 shows the RPC error's message, then the no-patch state under it
