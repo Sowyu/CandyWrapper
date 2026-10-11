@@ -353,6 +353,12 @@ public final class ThreadPanelView: DSView {
     // MARK: Browser
 
     /// The browser surface, for the app to fill.
+    private let panelResize = RightPanelResizeView()
+    private var preferredPanelWidth: CGFloat = {
+        let value = UserDefaults.standard.double(forKey: "t3code:preview-panel-width")
+        return value > 0 ? value : RightPanelView.defaultWidth
+    }()
+    public var devicePanel: DevicePanelView { rightPanel.device }
     public var browserPanel: BrowserPanelView { rightPanel.browser }
     /// Whether the + menu and launcher offer "Browser" (`browserAvailable`).
     public var browserAvailable: Bool {
@@ -374,6 +380,7 @@ public final class ThreadPanelView: DSView {
     public let miniPlayer = BrowserMiniPlayerView()
     /// The page size the player mirrors, and where the user dragged it.
     public var miniPlayerSource: CGSize? { didSet { if miniPlayerSource != oldValue { needsLayout = true } } }
+    public var miniPlayerSize: CGSize? { didSet { needsLayout = true } }
     public var miniPlayerOrigin: CGPoint? { didSet { needsLayout = true } }
     public var miniPlayerShown = false {
         didSet {
@@ -660,7 +667,7 @@ public final class ThreadPanelView: DSView {
         // ponytail: always inline; T3 shows the panel as a sheet over the chat below a 980px
         // viewport and animates the width. Add both when windows that narrow matter
         let panelWidth = !rightPanelOpen ? 0 : rightPanelMaximized ? bounds.width
-            : RightPanelView.width(viewport: viewportWidth, container: bounds.width)
+            : RightPanelView.width(viewport: viewportWidth, container: bounds.width, preferred: preferredPanelWidth)
         let chat = max(0, bounds.width - panelWidth)
         header.isHidden = chat == 0
         timeline.isHidden = chat == 0
@@ -673,6 +680,17 @@ public final class ThreadPanelView: DSView {
         terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
         rightPanel.frame = NSRect(x: chat, y: 0, width: panelWidth, height: bounds.height)
+        if panelResize.superview == nil {
+            addSubview(panelResize)
+            panelResize.onDrag = { [weak self] delta in
+                guard let self else { return }
+                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: self.rightPanel.frame.width + delta)
+                UserDefaults.standard.set(Double(self.preferredPanelWidth), forKey: "t3code:preview-panel-width")
+                self.needsLayout = true
+            }
+        }
+        panelResize.isHidden = !rightPanelOpen || rightPanelMaximized
+        panelResize.frame = NSRect(x: chat - 4, y: 0, width: 8, height: bounds.height)
         if rightPanelOpen {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
             var x = bounds.width - 12 - 1
@@ -698,7 +716,7 @@ public final class ThreadPanelView: DSView {
         // previewMiniPlayerLayout.ts when the player is used beside long threads
         if miniPlayerShown {
             let canvas = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
-            let size = BrowserMiniPlayerView.size(source: miniPlayerSource)
+            let size = miniPlayerSize ?? BrowserMiniPlayerView.size(source: miniPlayerSource)
             miniPlayer.frame = BrowserMiniPlayerView.frame(size: size, origin: miniPlayerOrigin, container: canvas)
             miniPlayer.isHidden = chat < size.width + 24
             miniPlayer.layer?.zPosition = 2

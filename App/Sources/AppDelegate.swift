@@ -341,6 +341,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sidebar.clearSelection()
             return true
         }
+        shortcuts.onKey { [weak panel = threads.panel] event in
+            guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
+                  let panel, panel.panelState.isOpen, panel.panelState.active?.kind == .diff,
+                  let responder = panel.window?.firstResponder as? NSView, responder.isDescendant(of: panel.diffPanel) else { return false }
+            panel.diffPanel.showFind(); return true
+        }
         threads.registerShortcuts(shortcuts)
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }
         palette.registerShortcuts(shortcuts)

@@ -108,6 +108,13 @@ public final class DiffListView: DSView {
     /// changed files card).
     /// Scrolls `path`'s header to the top; `expand` also opens it (T3's lazy git sources do, turn
     /// diffs only scroll, DiffPanel.tsx:595-650).
+    public func revealSearch(_ match: DiffPanelSearch.Match) {
+        setCollapsed(match.file, false)
+        if let row = rowLayout.rows.first(where: { $0.kind == .line && ($0.left == Int32(match.line) || $0.right == Int32(match.line)) }) {
+            scrollTo(NSPoint(x: 0, y: max(0, row.top - DiffStyle.headerHeight)))
+        }
+    }
+
     public func reveal(path: String, expand: Bool = true) {
         guard let file = diff.files.firstIndex(where: { $0.path == path }) else { return }
         if expand, collapsed.contains(file) { collapsed.remove(file); relayout(); onCollapsedChange?() }
@@ -330,6 +337,7 @@ public final class DiffListView: DSView {
     // MARK: Line clicks
 
     public override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         if onLineClick == nil { super.mouseDown(with: event) }
     }
 

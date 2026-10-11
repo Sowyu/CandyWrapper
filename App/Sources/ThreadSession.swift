@@ -231,6 +231,7 @@ final class ThreadController {
     private(set) var files: FilesController!
     private(set) var pullRequests: ThreadPullRequestsController!
     private(set) var browser: BrowserController!
+    private var devices: DevicePanelController!
     private(set) var automations: ThreadAutomationsController!
     private(set) var lineage: ThreadLineageController!
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
@@ -345,7 +346,10 @@ final class ThreadController {
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
         browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
-        files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged() }
+        terminal.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
+        pullRequests.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
+        devices = DevicePanelController(panel: panel, environments: environments, files: files)
+        files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged(); self?.devices.sync() }
         files.onTerminalTabsClosed = { [weak self] tabs in self?.terminal.panelTerminalsClosed(tabs) }
         scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
