@@ -97,7 +97,7 @@ final class TimelineContext {
 /// Base of every timeline row. A row view is configured from a `TimelineItem` and measures itself
 /// for a width; it never owns expand state. Hover drives the hover-only timestamps and buttons.
 @MainActor
-class TimelineRowView: DSView, FocusWithinObserver {
+class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
     var item: TimelineItem?
     /// The row kind this view class draws; it goes back to that kind's pool.
     var kind: TimelineView.Kind?
@@ -141,6 +141,7 @@ class TimelineRowView: DSView, FocusWithinObserver {
     override func mouseMoved(with event: NSEvent) {
         if tracksPointerMoves { hoverChanged() } else { super.mouseMoved(with: event) }
     }
+    func hoverPointerMoved() { if tracksPointerMoves, hovered { hoverChanged() } }
 
     /// A control in the row has keyboard focus (`group-focus-within`).
     private(set) var focusWithin = false

@@ -424,8 +424,18 @@ public final class TimelineView: DSView {
 
     private func layoutNow() {
         super.layout()
+        // A resize is not a scroll: a terminal drawer or banner that shrinks the viewport, often in the same
+        // pass as a thread switch, must not drop `followsEnd` and leave the newest rows under the composer.
+        let wasFollowing = followsEnd
+        adjusting = true
         scrollView.frame = bounds
+        adjusting = false
         let width = scrollView.contentSize.width
+        if wasFollowing, width == laidOutWidth, document.frame.width == width {
+            followsEnd = true
+            setScroll(maxScroll)
+            updatePill()
+        }
         if width != laidOutWidth || document.frame.width != width {
             let anchor = captureAnchor()
             laidOutWidth = width
