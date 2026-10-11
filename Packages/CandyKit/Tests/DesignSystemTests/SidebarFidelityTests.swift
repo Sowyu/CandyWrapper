@@ -229,6 +229,24 @@ struct SidebarBehaviourTests {
         #expect(layout.sidebar.frame.maxX == 0)
         #expect(layout.main.frame.minX == 0)
         #expect(layout.rail.isHidden)
+        // The collapsed sidebar's trigger floats beside the window controls; opening hides it again.
+        #expect(!layout.collapsedTrigger.isHidden && !layout.collapsedTrigger.isSidebarOpen)
+        #expect(layout.collapsedTrigger.frame == NSRect(x: 91, y: 12, width: 28, height: 28))
+        layout.toggle()
+        #expect(layout.collapsedTrigger.isHidden)
+    }
+
+    /// `COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS`: a header under the window controls starts its content at 130.
+    @Test func headersClearTheWindowControls() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780), styleMask: [.titled], backing: .buffered, defer: true)
+        let root = DSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 780))
+        window.contentView = root
+        let header = TopbarDragView(frame: NSRect(x: 0, y: 0, width: 800, height: 52))
+        root.addSubview(header)
+        #expect(header.contentStart == 130)
+        header.frame.origin.x = 256
+        #expect(header.contentStart == 20)
+        #expect(TopbarDragView(frame: .zero).contentStart == 20)
     }
 
     @Test func titlebarInsets() {

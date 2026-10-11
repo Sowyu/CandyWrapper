@@ -88,12 +88,13 @@ public final class ThreadHeaderView: TopbarDragView {
     public override func layout() {
         super.layout()
         let midY = Self.height / 2
+        let start = contentStart
         // `size-3.5` favicon: the 16px monogram drawn at 14px.
-        favicon.frame = NSRect(x: 20, y: midY - 7, width: 14, height: 14)
+        favicon.frame = NSRect(x: start, y: midY - 7, width: 14, height: 14)
         favicon.bounds = NSRect(x: 0, y: 0, width: 16, height: 16)
         let projectWidth = min(160, project.textWidth)
-        project.frame = NSRect(x: 40, y: midY - 10, width: ceil(projectWidth), height: 20)
-        let slashX = 40 + projectWidth + 12
+        project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
+        let slashX = start + 20 + projectWidth + 12
         slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
         let titleX = slashX + slash.textWidth + 12
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details

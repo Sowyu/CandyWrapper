@@ -522,7 +522,7 @@ public final class SettingsHeaderView: TopbarDragView {
     public override func layout() {
         super.layout()
         let y = (Self.height - 20) / 2
-        var x: CGFloat = 20
+        var x = contentStart
         root.isHidden = section == nil
         slash.isHidden = section == nil
         if section != nil {

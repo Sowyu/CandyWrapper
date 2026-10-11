@@ -84,6 +84,10 @@ public final class SidebarLayoutView: DSView {
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
     public final var onOpenChange: (@MainActor (Bool) -> Void)?
+    /// T3's fixed `SidebarTrigger` (AppSidebarLayout.tsx:137-163) while the sidebar is collapsed: the sidebar's own
+    /// trigger slides away with it, so this one takes the same spot over the main area. It stays up through the
+    /// open animation, until the sidebar's trigger is back underneath it.
+    public let collapsedTrigger = SidebarTriggerView()
 
     public var effectiveWidth: CGFloat { widthRules.clamp(width, viewport: bounds.width) }
 
@@ -96,6 +100,9 @@ public final class SidebarLayoutView: DSView {
         addSubview(main)
         addSubview(sidebar)
         addSubview(rail)
+        addSubview(collapsedTrigger)
+        collapsedTrigger.isHidden = true
+        collapsedTrigger.action = { [weak self] in self?.toggle() }
         if let sidebarContent { sidebar.content = sidebarContent }
         if let mainContent { main.addSubview(mainContent) }
         rail.layoutView = self
@@ -106,6 +113,16 @@ public final class SidebarLayoutView: DSView {
         guard open != isOpen else { return }
         isOpen = open
         rail.isOpen = open
+        collapsedTrigger.isSidebarOpen = open
+        if !open {
+            collapsedTrigger.isHidden = false
+        } else if SettingsPanelMotion.duration > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + SettingsPanelMotion.duration) { [weak self] in
+                if self?.isOpen == true { self?.collapsedTrigger.isHidden = true }
+            }
+        } else {
+            collapsedTrigger.isHidden = true
+        }
         needsLayout = true
         onOpenChange?(open)
         if SettingsPanelMotion.duration > 0 {
@@ -167,6 +184,7 @@ public final class SidebarLayoutView: DSView {
         let inner = sidebar.frame.minX + w - 1
         rail.frame = NSRect(x: inner - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
         rail.isHidden = !isOpen // collapsed offcanvas rail has `pointer-events: none`
+        collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
     }
 }
 

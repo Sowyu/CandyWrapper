@@ -21,7 +21,7 @@ Update `PROGRESS.md` before you stop: tick what you finished, add what you learn
 
 - Delegate research and mechanical edits to `sonnet-medium`. Use `opus-medium` only when the agent must make a judgement call. Use `opus-high` almost never.
 - Every agent brief must say "Do not use the Agent tool". Nested agents multiplied the cost once already.
-- Run at most two agents at a time. Check signs of life within 2 minutes and kill stalled ones.
+- Run at most four Claude agents at a time (the user raised it from two on 2026-10-11, "for now"). Check signs of life within 2 minutes and kill stalled ones.
 - Read files in slices. Do not dump large JSON or whole files into context.
 
 ## Machine facts
