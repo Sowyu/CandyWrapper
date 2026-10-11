@@ -10,6 +10,7 @@ public final class PullRequestsPageContainer: DSView {
     public let toasts = ToastViewport()
     let rightPanel = RightPanelView()
     public var detail: PullRequestDetailView { rightPanel.pullRequest }
+    public var lazyDetail: LazyView<PullRequestDetailView> { rightPanel.lazyPullRequest }
     public private(set) var panelState = RightPanelState()
     /// The panel changed: activate, close, close others.
     public var onPanelChange: ((RightPanelState) -> Void)?
@@ -27,7 +28,7 @@ public final class PullRequestsPageContainer: DSView {
         rightPanel.isHidden = true
         rightPanel.filesAvailable = false
         rightPanel.diffAvailable = false
-        detail.context = .page
+        lazyDetail.set(\.context, .page)
         rightPanel.onActivate = { [weak self] id in self?.mutate { $0.activate(id) } }
         rightPanel.onClose = { [weak self] id in self?.mutate { _ = $0.close(id) } }
         rightPanel.onCloseOthers = { [weak self] id in self?.mutate { _ = $0.closeOthers(id) } }

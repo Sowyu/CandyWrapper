@@ -216,12 +216,14 @@ public final class SidebarContentView: DSView {
 
     private func wireActions() {
         list.onOpen = { [weak self] id in self?.rowClicked(id) }
-        list.renameField.onCommit = { [weak self] id, title, original in
-            guard let self else { return }
-            self.endRename()
-            self.actions.rename(id, title, original)
+        list.lazyRenameField.configure { [weak self] field in
+            field.onCommit = { [weak self] id, title, original in
+                guard let self else { return }
+                self.endRename()
+                self.actions.rename(id, title, original)
+            }
+            field.onCancel = { [weak self] in self?.endRename() }
         }
-        list.renameField.onCancel = { [weak self] in self?.endRename() }
         // Rows keep these closures across reuse, so they read `actions` when they fire.
         list.rowActions = SidebarRowActions(
             settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },

@@ -234,11 +234,11 @@ final class ComposerController {
         question.onChange = { [weak self] in self?.syncQuestion() }
         composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
-        panel.goalBanner.onAction = { [weak self] index in
+        panel.lazyGoalBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in
             guard let self, let goal = self.shellThread?.goal, let index else { return }
             self.sendThreadStandalone(index == 0 && ThreadGoalPresentation.canResume(goal) ? "/goal resume" : "/goal clear")
-        }
-        panel.recoveryBanner.onAction = { [weak self] index in self?.updateThreadRecovery(index) }
+        } }
+        panel.lazyRecoveryBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in self?.updateThreadRecovery(index) } }
         panel.model.onEditPrompt = { [weak self] message in self?.editEarlierPrompt(message) }
         panel.header.onEmptyTitle = { [weak self] in self?.toast(.warning, "Thread title cannot be empty") }
         panel.header.onRenameThread = { [weak self] title in
@@ -248,10 +248,12 @@ final class ComposerController {
                 catch { self.toast(.error, "Failed to rename thread", error.localizedDescription) }
             }
         }
-        panel.findBar.input.onChange = { [weak self] _ in self?.searchThread() }
-        panel.findBar.onStep = { [weak self] delta in self?.searchThread(delta: delta) }
-        panel.findBar.onRetry = { [weak self] in self?.searchThread() }
-        panel.findBar.onClose = { [weak self] in self?.closeThreadFind() }
+        panel.lazyFindBar.configure { [weak self] bar in
+            bar.input.onChange = { [weak self] _ in self?.searchThread() }
+            bar.onStep = { [weak self] delta in self?.searchThread(delta: delta) }
+            bar.onRetry = { [weak self] in self?.searchThread() }
+            bar.onClose = { [weak self] in self?.closeThreadFind() }
+        }
         setUpMenus()
         setUpAttachments()
         refresh()
@@ -971,7 +973,7 @@ final class ComposerController {
 
     private func refresh() {
         panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
-        panel.diffPanel.reviewComments = contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") }
+        panel.lazyDiffPanel.set(\.reviewComments, contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") })
         if threadFindTarget != openThreadId { closeThreadFind() }
 
         syncWorktreeSetup()
@@ -3324,7 +3326,7 @@ extension ComposerController {
         threadFindResult = nil; threadFindTarget = nil
         panel.findOpen = false
         panel.timeline.threadFindQuery = ""
-        if !panel.findBar.input.text.isEmpty { panel.findBar.input.text = "" }
+        if let bar = panel.lazyFindBar.loaded, !bar.input.text.isEmpty { bar.input.text = "" }
         if wasOpen { focusComposer() }
     }
 

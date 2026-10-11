@@ -37,7 +37,9 @@ public final class SidebarListView: DSView {
     var rowActions = SidebarRowActions()
     var onVisibleRowsChange: (@MainActor () -> Void)?
     /// The one rename field, lent to the row being renamed.
-    let renameField = SidebarRenameFieldView()
+    /// Built on the first rename.
+    let lazyRenameField = LazyView { SidebarRenameFieldView() }
+    var renameField: SidebarRenameFieldView { lazyRenameField.view }
     /// The hover card's content for a thread, nil for none.
     var hoverCard: (@MainActor (ThreadId) -> SidebarThreadHoverCardModel?)?
     private var hoverWork: DispatchWorkItem?
@@ -260,7 +262,7 @@ public final class SidebarListView: DSView {
             view.renameField = renameField
         } else if view.renameField != nil {
             view.renameField = nil
-            if renameField.superview === view { renameField.removeFromSuperview() }
+            if let field = lazyRenameField.loaded, field.superview === view { field.removeFromSuperview() }
         }
     }
 

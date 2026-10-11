@@ -22,13 +22,21 @@ final class RightPanelView: DSView {
 
     var onRenameDevice: ((String, String) -> Void)?
     let device = DevicePanelView()
-    let diff = DiffPanelView()
-    let files = FilesPanelView()
-    let file = FileSurfaceView()
-    let launcher = SurfaceLauncherView()
+    /// The surfaces below are built the first time they show (`LazyView`); wire and feed them
+    /// through the lazy holders so a closed panel builds nothing.
+    let lazyDiff = LazyView { DiffPanelView() }
+    let lazyFiles = LazyView { FilesPanelView() }
+    let lazyFile = LazyView { FileSurfaceView() }
+    let lazyLauncher = LazyView { SurfaceLauncherView() }
     /// A `pull-request` tab's surface and the thread's linked pull requests.
-    public let pullRequest = PullRequestDetailView()
-    public let linkedPullRequests = ThreadPullRequestsListView()
+    let lazyPullRequest = LazyView { PullRequestDetailView() }
+    let lazyLinkedPullRequests = LazyView { ThreadPullRequestsListView() }
+    var diff: DiffPanelView { lazyDiff.view }
+    var files: FilesPanelView { lazyFiles.view }
+    var file: FileSurfaceView { lazyFile.view }
+    var launcher: SurfaceLauncherView { lazyLauncher.view }
+    public var pullRequest: PullRequestDetailView { lazyPullRequest.view }
+    public var linkedPullRequests: ThreadPullRequestsListView { lazyLinkedPullRequests.view }
     /// A browser tab's surface; the app shows the active tab's server stream in it.
     public let browser = BrowserPanelView()
     /// A terminal tab's surface (`PersistentThreadTerminalPanel`, ChatView.tsx:1383-1530); the
@@ -67,14 +75,14 @@ final class RightPanelView: DSView {
     var onCloseAll: (() -> Void)?
     var onCopyPath: ((String) -> Void)?
     /// What the + menu and the launcher may open (`filesAvailable`, `diffAvailable`).
-    var filesAvailable = true { didSet { launcher.filesAvailable = filesAvailable } }
-    var diffAvailable = true { didSet { launcher.diffAvailable = diffAvailable } }
-    var pullRequestAvailable = false { didSet { launcher.pullRequestAvailable = pullRequestAvailable } }
-    var pullRequestsAvailable = false { didSet { launcher.pullRequestsAvailable = pullRequestsAvailable } }
+    var filesAvailable = true { didSet { lazyLauncher.set(\.filesAvailable, filesAvailable) } }
+    var diffAvailable = true { didSet { lazyLauncher.set(\.diffAvailable, diffAvailable) } }
+    var pullRequestAvailable = false { didSet { lazyLauncher.set(\.pullRequestAvailable, pullRequestAvailable) } }
+    var pullRequestsAvailable = false { didSet { lazyLauncher.set(\.pullRequestsAvailable, pullRequestsAvailable) } }
     /// `browserAvailable`: the environment hosts browser tabs (`serverBrowser`).
-    var browserAvailable = false { didSet { launcher.browserAvailable = browserAvailable } }
+    var browserAvailable = false { didSet { lazyLauncher.set(\.browserAvailable, browserAvailable) } }
     /// `terminalAvailable`: the thread has a project.
-    var terminalAvailable = false { didSet { launcher.terminalAvailable = terminalAvailable } }
+    var terminalAvailable = false { didSet { lazyLauncher.set(\.terminalAvailable, terminalAvailable) } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -83,8 +91,8 @@ final class RightPanelView: DSView {
         add.action = { [weak self] in self?.showAddMenu() }
         border.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(border)
-        launcher.onPick = { [weak self] kind in self?.onAdd?(kind) }
-        file.explorer = files
+        lazyLauncher.configure { [weak self] launcher in launcher.onPick = { [weak self] kind in self?.onAdd?(kind) } }
+        lazyFile.configure { [weak self] file in file.explorer = self?.files }
         strip.onScroll = { [weak self] delta in self?.scrollTabs(delta) }
         scrollLeft.action = { [weak self] in guard let self else { return }; self.scrollTabs(-max(120, self.strip.bounds.width * 0.75)) }
         scrollRight.action = { [weak self] in guard let self else { return }; self.scrollTabs(max(120, self.strip.bounds.width * 0.75)) }
@@ -93,7 +101,7 @@ final class RightPanelView: DSView {
         scrollLeft.iconSize = 14; scrollRight.iconSize = 14
         strip.clipsToBounds = true
         strip.addSubview(add)
-        [diff, launcher, strip, scrollLeft, scrollRight].forEach(addSubview)
+        [strip, scrollLeft, scrollRight].forEach(addSubview)
         clipsToBounds = true
     }
 
@@ -119,22 +127,31 @@ final class RightPanelView: DSView {
         }
         tabs.forEach(strip.addSubview)
         let active = state.active
-        diff.isHidden = active?.kind != .diff
-        let showFiles = active?.kind == .files
-        let showFile = active?.kind == .file
-        if showFile { if file.superview !== self { addSubview(file) } } else { file.removeFromSuperview() }
-        if showFiles {
-            if files.superview !== self { addSubview(files) }
-        } else if files.superview === self {
-            files.removeFromSuperview()
+        // A closed panel shows nothing, so it builds nothing.
+        let shown = state.isOpen ? active?.kind : nil
+        show(lazyDiff, shown == .diff)
+        show(lazyFile, shown == .file)
+        // A file tab hosts the explorer inside it; only the files tab's own copy leaves here.
+        if shown == .files { show(lazyFiles, true) } else if let files = lazyFiles.loaded, files.superview === self { files.removeFromSuperview() }
+        show(lazyPullRequest, shown == .pullRequest)
+        show(lazyLinkedPullRequests, shown == .pullRequests)
+        show(lazyLauncher, state.isOpen && active == nil)
+        if !state.isOpen {
+            // A closed panel gives back what its surfaces hold; their controllers refill a rebuilt
+            // one. The diff keeps its selected turn, so it stays.
+            // ponytail: the diff panel stays built after its first use; release it once it can restore its turn selection
+            [lazyFile.release, lazyFiles.release, lazyPullRequest.release, lazyLinkedPullRequests.release, lazyLauncher.release].forEach { $0() }
         }
-        if active?.kind == .pullRequest { if pullRequest.superview !== self { addSubview(pullRequest) } } else { pullRequest.removeFromSuperview() }
-        if active?.kind == .pullRequests { if linkedPullRequests.superview !== self { addSubview(linkedPullRequests) } } else { linkedPullRequests.removeFromSuperview() }
         if active?.kind == .browser { if browser.superview !== self { addSubview(browser) } } else { browser.removeFromSuperview() }
         if active?.kind == .terminal { if terminal.superview !== self { addSubview(terminal) } } else { terminal.removeFromSuperview() }
         if active?.kind == .device { if device.superview !== self { addSubview(device) } } else { device.removeFromSuperview(); device.viewer.clear() }
-        launcher.isHidden = active != nil
         needsLayout = true
+    }
+
+    private func show<V: NSView>(_ surface: LazyView<V>, _ shown: Bool) {
+        guard shown else { surface.loaded?.removeFromSuperview(); return }
+        let view = surface.view
+        if view.superview !== self { addSubview(view, positioned: .below, relativeTo: strip) }
     }
 
     func icon(for surface: RightPanelSurface) -> NSView {
@@ -247,16 +264,16 @@ final class RightPanelView: DSView {
         }
         add.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: 24, height: 24)
         let content = NSRect(x: 1, y: Self.tabBarHeight, width: max(0, bounds.width - 1), height: max(0, bounds.height - Self.tabBarHeight))
-        diff.frame = content
-        files.superview === self ? (files.frame = content) : ()
-        file.frame = content
-        pullRequest.frame = content
-        linkedPullRequests.frame = content
+        lazyDiff.loaded?.frame = content
+        if let files = lazyFiles.loaded, files.superview === self { files.frame = content }
+        lazyFile.loaded?.frame = content
+        lazyPullRequest.loaded?.frame = content
+        lazyLinkedPullRequests.loaded?.frame = content
         browser.frame = content
         terminal.frame = content
         device.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
-        launcher.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
+        lazyLauncher.loaded?.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
 
     override func updateLayer() {
