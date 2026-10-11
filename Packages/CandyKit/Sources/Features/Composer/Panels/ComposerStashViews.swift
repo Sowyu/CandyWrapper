@@ -12,6 +12,25 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     public var pulsing = false { didSet { if pulsing != oldValue { restyle() } } }
     public var onToggleMenu: (() -> Void)?
 
+    /// A stash: the badge lifts and the count remounts (`key={pulseKey}`), so its `starting:` style
+    /// replays: up from 2pt lower and in from transparent, 180 ms ease-out (ComposerStashBadge.tsx:24-34).
+    /// One animation per stash, nothing while idle.
+    public func pulse() {
+        pulsing = true
+        guard window != nil, !Motion.reduced, let layer = countLabel.layer else { return }
+        let rise = CABasicAnimation(keyPath: "transform.translation.y")
+        rise.fromValue = 2
+        rise.toValue = 0
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        for a in [rise, fade] {
+            a.duration = 0.18
+            a.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+            layer.add(a, forKey: "pulse." + a.keyPath!)
+        }
+    }
+
     static let padY: CGFloat = 5, padX: CGFloat = 4, row: CGFloat = 24
     private let row = BannerRowButton()
     private let icon = IconView(name: .bookmark, size: 12, strokeColor: Themed.color(\.mutedForeground))
@@ -40,8 +59,9 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         // `transition-colors duration-200` on the row (ComposerStashBadge.tsx:49).
         Motion.transitioning(window == nil ? [] : .colors, duration: 0.2) {
             title.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
-            countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
         }
+        // The count has its own color class outside the row's `transition-colors`: it switches at once.
+        countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
         row.setAccessibilityLabel("Stashed prompts: \(count). Open stash.")
     }
 

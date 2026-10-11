@@ -163,7 +163,7 @@ final class ProjectCloneController {
         bannerProject = project
         let name = clone.displayName
         let content: ComposerNoticeBannerView.Content = clone.phase == .running
-            ? .init(variant: .neutral, icon: .download, title: "Cloning \(name)", description: clone.progressSummary, actions: ["Cancel"], compact: true)
+            ? .init(variant: .neutral, icon: .download, title: "Cloning \(name)", description: clone.progressSummary, actions: ["Cancel"], compact: true, priority: .activity)
             : .init(variant: clone.phase == .cancelled ? .warning : .error, icon: .download,
                     title: clone.phase == .cancelled ? "Cancelled cloning \(name)" : "Failed to clone \(name)",
                     description: clone.phase == .cancelled ? "Retry to bring in the repository." : clone.error,
