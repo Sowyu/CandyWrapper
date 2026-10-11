@@ -1023,7 +1023,8 @@ final class ProviderListRow: ControlView {
     private func restyle() {
         fill.backgroundColor = isSelected ? Themed.color(\.muted, 0.45).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil
         let dim: CGFloat = !enabled && !isSelected && !state.hoverOrPressed ? 0.6 : 1
-        for v in [icon, name, version, status] as [NSView] { v.alphaValue = dim }
+        // `opacity-60 transition-opacity group-hover:opacity-100` (ProviderInstanceCard.tsx:918-922).
+        for v in [icon, name, version, status] as [NSView] { HoverReveal.fade(v, to: dim) }
     }
 
     override func layout() {

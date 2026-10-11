@@ -15,8 +15,9 @@ final class ThreadHeaderTitleView: DSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
     override func layout() { super.layout(); chevron.frame = NSRect(x: bounds.width - 14, y: 3, width: 14, height: 14) }
-    override func mouseEntered(with event: NSEvent) { chevron.alphaValue = 1 }
-    override func mouseExited(with event: NSEvent) { chevron.alphaValue = 0 }
+    // `opacity-0 transition-opacity group-hover/thread-title:opacity-100` (ChatHeader.tsx:338-342).
+    override func mouseEntered(with event: NSEvent) { HoverReveal.fade([chevron], visible: true) }
+    override func mouseExited(with event: NSEvent) { HoverReveal.fade([chevron], visible: false) }
     func cancelPendingMenu() { pending?.cancel(); pending = nil }
     override func mouseDown(with event: NSEvent) {
         pending?.cancel()

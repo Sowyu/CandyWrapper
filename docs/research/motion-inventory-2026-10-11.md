@@ -14,7 +14,7 @@ T3 source: `/Users/mrm/CandyWrapper-research/t3code/apps/web/src` (paths below a
 
 ## Inventory
 
-Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D, 18 X.
+Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D, 18 X at research time; 2026-10-11 hoverscope moved items 34 and 47 to M.
 
 | # | T3 item | Element, property, duration, easing, trigger | T3 source | CandyWrapper | St |
 |---|---|---|---|---|---|
@@ -39,7 +39,7 @@ Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D
 | 19 | Live tool shine | gradient band 2.2 s steps(30) over text | `index.css:521-548` | `TimelineRowSupport.swift:205-220` (2.2 s linear, not steps(30)) | M |
 | 20 | Preview loading bar | scaleX .04 to .9 over 5.3 s, fade 150 ms after 220 ms | `index.css:2171-2200` | `BrowserPanelView.swift:186-210` | M |
 | 21 | Scroll to latest | glide 300 ms | `chat/MessagesTimeline.tsx:431` | `TimelineView.swift:612-626` | M |
-| 22 | Message meta hover reveal | opacity 200 ms | `chat/MessagesTimeline.tsx:2521,2880` | `TimelineMessageRows.swift:274,353`, `TimelineRowSupport.swift:150-160` | M |
+| 22 | Message meta hover reveal | opacity 200 ms | `chat/MessagesTimeline.tsx:2521,2880` | `TimelineMessageRows.swift:274,353`, `TimelineRowSupport.swift:150-160`; 2026-10-11 hoverscope: user meta scoped to the bubble column, focus-within added (docs/research/hover-reveals-2026-10-11.md) | M |
 | 23 | Composer send and stop button | hover scale 1.05, 150 ms, `transition-all` | `chat/ComposerPrimaryActions.tsx:141,314` | `ComposerPrimaryButton.swift:140-155` | M |
 | 24 | Sidebar list reorder, enter, exit | 150 ms ease-out, translateY, fade, max 40 faded rows | `Sidebar.motion.ts:1-130` | `SidebarListView.swift:60-120` | M |
 | 25 | Settings search target pulse | box-shadow ring 650 ms ease-in-out, twice | `index.css:887-899` | `SettingsShellViews.swift:461-469` | M |
@@ -51,7 +51,7 @@ Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D
 | 31 | Collapsible sibling slide | siblings ride the height change | `ui/collapsible.tsx:33` | siblings jump, `docs/design.md` Known gaps | D |
 | 32 | Sidebar drag and drop | rows 200 ms dnd-kit transition, lifted row 150 ms ease-out, label reveal 200 ms step-end | `Sidebar.tsx:654-706`, `index.css:2207` | not checked, no drag-specific animation found in `SidebarListView.swift` | D |
 | 33 | `transition-colors` on links, rows, tabs, pills, headers | color and background 150 ms | 68 uses, e.g. `chat/MessagesTimeline.tsx:2709,2733`, `chat/ChatHeader.tsx:279`, `RightPanelTabs.tsx:511`, `Sidebar.tsx:1765,5563`, `chat/ComposerPrimaryActions.tsx:373`, `ui/toast.tsx:100,159,227` | `restyle()` snaps colors | X |
-| 34 | `transition-opacity` hover reveals | opacity 150 ms (200 ms on timeline strip and meta); sidebar row actions, labels, unpin, header pencil, attachment remove | 56 uses, e.g. `Sidebar.tsx:933,1827,1858,1903,2094`, `chat/ChatHeader.tsx:341`, `chat/ChatComposer.tsx:7203`, `MessagesTimeline.tsx:1792,1902,1971` | sidebar row actions flip `alphaValue` instantly (`SidebarRowViews.swift:492-494`) | X |
+| 34 | `transition-opacity` hover reveals | opacity 150 ms (200 ms on timeline strip and meta); sidebar row actions, labels, unpin, header pencil, attachment remove | 56 uses, e.g. `Sidebar.tsx:933,1827,1858,1903,2094`, `chat/ChatHeader.tsx:341`, `chat/ChatComposer.tsx:7203`, `MessagesTimeline.tsx:1792,1902,1971` | 2026-10-11 hoverscope: fixed through `HoverReveal.fade` for sidebar row actions, labels and favicon, draft discard, header chevron, keybinding menu, minimap, address bar, usage chevrons, diff comment and PR pencils; table in docs/research/hover-reveals-2026-10-11.md | M |
 | 35 | Disclosure chevron rotation | rotate 180 or 90, 150 or 200 ms | `MessagesTimeline.tsx:3155,3388,5715`, `chat/ModelPickerContent.tsx:1012`, `onboarding/WelcomeWizard.tsx:1613`, `settings/ThemeColorPicker.tsx:269` (29 `transition-transform` uses) | timeline fold rows swap two icons (`TimelineFoldRows.swift:10-34`) | X |
 | 36 | Streaming block fade-in | opacity 0 to 1, 600 ms ease-out, new paragraph or code block only while streaming, off under Reduce Motion | `index.css:2009-2020` | none | X |
 | 37 | Composer banner stack | grid rows 150 ms ease-out; opacity and translate 150 ms ease-out in, 220 ms ease-in out | `chat/ComposerBannerStack.tsx:9,179-224` | none in `ComposerBannerView.swift` | X |
@@ -64,7 +64,7 @@ Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D
 | 44 | Connection status ping | halo scale .75 to 2, opacity .9 to 0, 2 s steps(8) for connecting and reconnecting | `ConnectionStatusDot.tsx:21-42`, `index.css:317` | `ConnectionsHostViews.swift:307` has a `ponytail` note, no ring | X |
 | 45 | Diff expand fade | 200 ms fade on expand | `diffs/StyledDiffCodeView.tsx:232,245` | `docs/design.md` Known gaps | X |
 | 46 | Working activity band | translateX loop 2.2 s linear on the live row | `index.css:556-622` | none | X |
-| 47 | Sidebar working row recede | whole row opacity .7 to 1 on hover or focus | `Sidebar.tsx:1598,1668` | none | X |
+| 47 | Sidebar working row recede | whole row opacity .7 to 1 on hover or focus | `Sidebar.tsx:1598,1668` | 2026-10-11 hoverscope: `SidebarCardRowView.refresh` fades 0.7 to 1 in 150 ms | M |
 | 48 | Pull request panel transitions | 100, 150, 200 ms colors and opacity | `pullRequest/PullRequestDetailPanel.tsx:1687-1690,2250,2602` | none | X |
 | 49 | Menu switch item thumb | same as the switch | `ui/menu.tsx:148,151` | not checked in `MenuView.swift`, treat as missing | X |
 | 50 | Update pill dismiss | `transition-all` 180 ms `ease-drawer`, dismiss bar scale-x linear | `sidebar/SidebarProviderUpdatePill.tsx:128,155,165` | enter only (`SidebarProviderUpdatePill.swift:146-184`), dismiss bar not checked | X |
@@ -73,7 +73,7 @@ Not motion, skipped: the autofill `background-color 5000000s` hack (`ui/input.ts
 
 ## Gaps ranked by how often a user sees them
 
-1. Sidebar row actions and hover labels snap (item 34). T3 fades them in 150 ms. Native: in `SidebarRowViews` replace the `alphaValue` flips at `:492-494` with `TimelineRowBase.reveal`-style 150 ms fades, or a 150 ms `opacity` `CABasicAnimation` from the presentation value.
+1. Done 2026-10-11 (hoverscope). Sidebar row actions and hover labels snap (item 34). T3 fades them in 150 ms. Native: in `SidebarRowViews` replace the `alphaValue` flips at `:492-494` with `TimelineRowBase.reveal`-style 150 ms fades, or a 150 ms `opacity` `CABasicAnimation` from the presentation value.
 2. Text and icon color changes on hover snap everywhere (item 33). Native: add a 150 ms `CABasicAnimation` on `foregroundColor` / `backgroundColor` in `ControlView.stateDidChange` for views that opt in, starting from `presentation()`, skipped under `Motion.reduced`.
 3. Disclosure chevrons swap instead of rotating (item 35, `MessagesTimeline.tsx:3155,3388,5715`). Native: one `IconView` and a `transform.rotation.z` animation, 150 ms, as `CollapsibleView.rotateChevron` already does at `:160-172`.
 4. Focus ring appears instantly (item 27, 150 ms). Native: animate the ring layer's `opacity` in `BoxDecorationLayer` when `focusVisible` flips.
@@ -86,6 +86,7 @@ Not motion, skipped: the autofill `background-color 5000000s` hack (`ui/input.ts
 
 ## Responsiveness findings beyond motion
 
+- Thread switch flicker: fixed 2026-10-11. Every switch painted an empty panel for 18 to 94 ms; the panel now keeps the old rows until the new thread's first projection, as T3 does. See `thread-switch-flicker-2026-10-11.md`.
 - `ControlView` does not override `acceptsFirstMouse`. Only `SliderView.swift:24`, `ComposerCommandMenuView.swift:222` and `ComposerStashViews.swift:67` do. When the app window is inactive, the first click on any button probably only activates the window. Chromium delivers that click. Fix: `override func acceptsFirstMouse(for:) -> Bool { true }` in `ControlView`. I did not run it to confirm.
 - Activation happens on mouse up in `ControlView.swift:96-101`. A web `click` also fires on mouse up, so buttons match. Base UI menu triggers, however, open on pointer down. `MenuView.swift:436` swallows `mouseDown` for items. I did not trace the trigger path, so check that menu and select triggers open on press and that dragging from the trigger onto an item selects it.
 - Hover is driven by `mouseEntered` and `mouseExited` only (`ControlView.swift:61-70`). When a list scrolls or relayouts under a still pointer, AppKit does not send an enter until the mouse moves, so a row can stay un-hovered, or stay hovered after it moved away. Chromium re-evaluates hover after layout. Not tested here. A cheap fix is to call `window.mouseLocationOutsideOfEventStream` after scroll end and re-hit-test.

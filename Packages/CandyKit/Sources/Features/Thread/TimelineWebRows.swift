@@ -101,7 +101,12 @@ final class HtmlRenderRowView: TimelineRowView {
         }
     }
 
-    override func hoverChanged() { Self.reveal([open], hovered, duration: 0.15) }
+    /// `group/html-render` is the frame box, not the row's `pb-2` (HtmlRenderFrame.tsx:95-104).
+    override var tracksPointerMoves: Bool { true }
+    override func hoverChanged() {
+        let inBox = pointer.map { frameView.frame.contains($0) } ?? false
+        Self.reveal([open], inBox || focusWithin, duration: 0.15)
+    }
 
     private func frameHeight(_ width: CGFloat) -> CGFloat {
         guard let ref = reference ?? item.flatMap({ if case .htmlRender(let r) = $0.row.kind { r } else { nil } }) else { return HtmlRenderReference.minHeight }

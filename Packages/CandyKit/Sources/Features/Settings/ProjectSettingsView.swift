@@ -461,16 +461,18 @@ final class FixedSizeBox: DSView {
 }
 
 /// One action (ProjectActionsList.tsx): icon, name and role badges over the mono command; the shortcut and an
-/// edit button that shows on hover (`group py-2`).
-final class ProjectActionRowView: DSView, SettingsGroupRow {
-    let edit = ButtonView(nil, icon: .settings, variant: .ghost, size: .iconXs)
+/// edit button that shows at once on hover or keyboard focus (`group py-2`, ProjectActionsList.tsx:59-62).
+final class ProjectActionRowView: DSView, SettingsGroupRow, FocusWithinObserver {
+    let edit = ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
     private let icon: IconView
     private let name = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.contrastForeground))
     private let command = LabelView("", font: DSFont.mono(12), color: Themed.color(\.contrastMutedForeground, 0.8))
     private var badges: [RoleBadge] = []
     private let shortcut = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private var tracking: NSTrackingArea?
-    private var hovered = false { didSet { edit.alphaValue = hovered ? 1 : 0 } }
+    private var hovered = false { didSet { edit.alphaValue = hovered || focusWithin ? 1 : 0 } }
+    private var focusWithin = false { didSet { edit.alphaValue = hovered || focusWithin ? 1 : 0 } }
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused }
 
     init(script: ProjectScript, shortcut label: String?) {
         icon = IconView(name: Self.icon(script.icon), size: 16, strokeColor: Themed.color(\.mutedForeground))

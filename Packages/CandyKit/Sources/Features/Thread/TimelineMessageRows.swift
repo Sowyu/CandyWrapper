@@ -271,7 +271,13 @@ final class UserMessageRowView: TimelineRowView {
         time.frame = NSRect(x: (editButton.isHidden ? copyButton.frame.minX : editButton.frame.minX) - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
     }
 
-    override func hoverChanged() { Self.reveal([time, copyButton, editButton], hovered) }
+    /// T3 puts `group` on the bubble column (MessagesTimeline.tsx:2359), not on the row, so the
+    /// row's `pb-4` under the hover line does not reveal it.
+    override var tracksPointerMoves: Bool { true }
+    override func hoverChanged() {
+        let inGroup = pointer.map { $0.y < bounds.height - 16 } ?? false
+        Self.reveal([time, copyButton, editButton], inGroup || focusWithin)
+    }
 }
 
 /// `AssistantTimelineRow` (:2745-2793): markdown in `px-1 py-0.5`, then the meta row that shows on
@@ -350,7 +356,8 @@ final class AssistantMessageRowView: TimelineRowView {
         meta.frame = NSRect(x: 4, y: 2 + body + cardSpace + 6, width: bounds.width - 8, height: 24)
     }
 
-    override func hoverChanged() { Self.reveal([meta], hovered) }
+    /// `group/assistant` sits on the whole row, padding included (MessagesTimeline.tsx:2032-2035).
+    override func hoverChanged() { Self.reveal([meta], hovered || focusWithin) }
 }
 
 /// `AssistantMessageMeta` (:2860-2912): status pill, copy button, fork button, time; `gap-2`, `text-xs`.

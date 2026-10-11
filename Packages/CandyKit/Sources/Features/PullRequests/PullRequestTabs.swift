@@ -470,8 +470,14 @@ final class CommentsItem: DSView, StackItem {
 
 /// One comment card (`rounded-lg border border-border/60`): a `bg-muted/25` head with the author,
 /// the time and the verdict, then the body.
-final class CommentCard: DSView {
+final class CommentCard: DSView, FocusWithinObserver {
     let reactionBar = PullRequestReactionBarView()
+    /// The pencil fades in while the card (`article.group`) is hovered or holds keyboard focus
+    /// (`PullRequestEditButton`, PullRequestEditButton.tsx:17, PullRequestSummaryTab.tsx:215).
+    private var hover: HoverGroup?
+    private var focusWithin = false
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealEdit() }
+    private func revealEdit() { HoverReveal.fade([editButton], visible: hover?.hovered == true || focusWithin) }
     private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
     private(set) var editor: PullRequestMarkdownEditorView?
     var onEdit: (() -> Void)?
@@ -496,7 +502,9 @@ final class CommentCard: DSView {
         editButton.setAccessibilityLabel("Edit comment")
         editButton.isHidden = !canEdit || editing
         editButton.action = { [weak self] in self?.onEdit?() }
+        editButton.alphaValue = 0
         addSubview(editButton)
+        hover = HoverGroup(self) { [weak self] _ in self?.revealEdit() }
         if editing {
             let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
             e.onCancel = { [weak self] in self?.onCancel?() }
@@ -844,8 +852,13 @@ final class ConversationRow: DSView, StackItem {
 
 /// The Description section (PullRequestSummaryTab.tsx:826-865): the Markdown with the pencil beside it
 /// where the reader may rewrite it, or the editor (`allowEmpty`: saving nothing clears it).
-final class PullRequestDescriptionItem: DSView, StackItem {
+final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
     let view = MarkdownView()
+    /// The pencil fades in while the section body (`div.group`, PullRequestSummaryTab.tsx:827) is hovered.
+    private var hover: HoverGroup?
+    private var focusWithin = false
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealEdit() }
+    private func revealEdit() { HoverReveal.fade([editButton], visible: hover?.hovered == true || focusWithin) }
     private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
     private var editor: PullRequestMarkdownEditorView?
     private var detail: PullRequestDetail?
@@ -860,7 +873,9 @@ final class PullRequestDescriptionItem: DSView, StackItem {
         editButton.iconSize = 12
         editButton.setAccessibilityLabel("Edit description")
         editButton.action = { [weak self] in self?.startEditing() }
+        editButton.alphaValue = 0
         addSubview(editButton)
+        hover = HoverGroup(self) { [weak self] _ in self?.revealEdit() }
     }
 
     func set(_ d: PullRequestDetail) {

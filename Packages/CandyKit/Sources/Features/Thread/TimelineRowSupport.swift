@@ -97,7 +97,7 @@ final class TimelineContext {
 /// Base of every timeline row. A row view is configured from a `TimelineItem` and measures itself
 /// for a width; it never owns expand state. Hover drives the hover-only timestamps and buttons.
 @MainActor
-class TimelineRowView: DSView {
+class TimelineRowView: DSView, FocusWithinObserver {
     var item: TimelineItem?
     /// The row kind this view class draws; it goes back to that kind's pool.
     var kind: TimelineView.Kind?
@@ -123,17 +123,39 @@ class TimelineRowView: DSView {
     /// Resets hover when the view is recycled.
     override func prepareForReuse() {
         super.prepareForReuse()
-        if hovered { hovered = false; hoverChanged() }
+        if hovered || focusWithin { hovered = false; focusWithin = false; hoverChanged() }
     }
 
     func setContentVisible(_ visible: Bool) {}
 
     func hoverChanged() {}
 
+    /// A row whose reveal covers only part of it (T3 puts `group/<name>` on an inner element, or on
+    /// each work line) also hears pointer moves and reads `pointer` in `hoverChanged`.
+    var tracksPointerMoves: Bool { false }
+    /// The pointer in row coordinates while the row is hovered.
+    var pointer: NSPoint? {
+        guard hovered, let window else { return nil }
+        return convert(window.mouseLocationOutsideOfEventStream, from: nil)
+    }
+    override func mouseMoved(with event: NSEvent) {
+        if tracksPointerMoves { hoverChanged() } else { super.mouseMoved(with: event) }
+    }
+
+    /// A control in the row has keyboard focus (`group-focus-within`).
+    private(set) var focusWithin = false
+    func focusWithinChanged(_ focused: Bool) {
+        guard focused != focusWithin else { return }
+        focusWithin = focused
+        hoverChanged()
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect]
+        if tracksPointerMoves { options.insert(.mouseMoved) }
+        let area = NSTrackingArea(rect: .zero, options: options, owner: self)
         addTrackingArea(area)
         trackingArea = area
     }
@@ -150,12 +172,7 @@ class TimelineRowView: DSView {
 
     /// Fades hover-only views (`transition-opacity duration-200`, or instant).
     static func reveal(_ views: [NSView], _ on: Bool, duration: TimeInterval = 0.2) {
-        guard duration > 0, !Motion.reduced else { views.forEach { $0.alphaValue = on ? 1 : 0 }; return }
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = duration
-            ctx.timingFunction = Motion.easeInOut
-            views.forEach { $0.animator().alphaValue = on ? 1 : 0 }
-        }
+        HoverReveal.fade(views, visible: on, duration: duration)
     }
 }
 

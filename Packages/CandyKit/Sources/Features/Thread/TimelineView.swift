@@ -11,6 +11,8 @@ enum TimelineChange: Equatable, Sendable {
     case rows([Int])
     /// Rows before this index stayed; the ones from it on are new.
     case tail(Int)
+    /// Another thread's rows replace the last thread's in one pass; the view starts at the end.
+    case thread
 }
 
 /// The messages timeline (MessagesTimeline.tsx): a virtualized list in T3's centered chat lane.
@@ -20,6 +22,10 @@ enum TimelineChange: Equatable, Sendable {
 /// heights or rows above the viewport change, the first visible row keeps its place on screen.
 /// While the viewport touches the end, it follows the end as content grows (`maintainScrollAtEnd`).
 public final class TimelineView: DSView {
+    /// Paint only: while another thread opens, the rows still on screen belong to the old thread and take
+    /// no clicks, scrolls or hovers (T3 renders them inert, ChatView.tsx:3964-3974).
+    public var isInert = false
+    public override func hitTest(_ point: NSPoint) -> NSView? { isInert ? nil : super.hitTest(point) }
     static let overscan: CGFloat = 400
     /// `--chat-content-max-width` at the default `comfortable` chat width.
     static let maxLane: CGFloat = 736
@@ -201,6 +207,7 @@ public final class TimelineView: DSView {
     /// Replaces the rows. Unchanged rows keep their views and heights. `change` says which rows
     /// differ from the current ones, so an update on a long thread touches only those.
     func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
+        if change == .thread { followsEnd = true }
         let anchor = captureAnchor()
         let old = items
         items = new

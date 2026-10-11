@@ -310,7 +310,10 @@ class SidebarRowBase: ControlView {
     }
 
     func configure(_ item: SidebarItem) {
-        if self.item?.key != item.key { prepareForReuse() }
+        guard self.item?.key == item.key else {
+            // Another thread now: its hover reveals start at rest, with no fade.
+            return HoverReveal.withoutAnimation { prepareForReuse(); self.item = item; refresh() }
+        }
         self.item = item
         refresh()
     }
@@ -421,6 +424,9 @@ final class SidebarCardRowView: SidebarRowBase {
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread")
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     var actions = SidebarRowActions()
+    /// The actions hold the status slot (`static`); they keep fading out after this turns false.
+    private var showsActions = false
+    private var showsSnooze = false
     /// Working duration ticks with the list's timer.
     var nowMs: Int64 = 0
 
@@ -440,6 +446,7 @@ final class SidebarCardRowView: SidebarRowBase {
         settleButton.padding = 6
         addSubview(snoozeButton)
         addSubview(settleButton)
+        HoverReveal.snap([snoozeButton, settleButton], visible: false, hides: true)
         settleButton.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.settle(r.id) } }
         snoozeButton.action = { [weak self] in
             guard let self, case .row(let r)? = self.item else { return }
@@ -459,9 +466,9 @@ final class SidebarCardRowView: SidebarRowBase {
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
-        // Background work fades as a whole row (`opacity-70`, full on hover).
-        alphaValue = r.recedes && r.status == .working && !hovered ? 0.7 : 1
         CATransaction.commit()
+        // Background work fades as a whole row (`opacity-70 transition-opacity`, full on hover, Sidebar.tsx:1596-1598).
+        HoverReveal.fade(self, to: r.recedes && r.status == .working && !hovered ? 0.7 : 1)
 
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
@@ -489,9 +496,13 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.font = SB.tabular(12)
         }
         let woke = r.topStatus == .woke
-        for v in [statusIcon, statusLabel, duration] as [NSView] { v.alphaValue = showActions && !woke ? 0 : 1 }
-        snoozeButton.isHidden = !showActions || r.action != .settle || !r.canSnooze
-        settleButton.isHidden = !showActions
+        // The status label and the actions cross-fade over 150 ms (`transition-opacity`, Sidebar.tsx:2027,2094);
+        // the slot's width follows `showsActions` at once, as `absolute` and `static` flip without a transition.
+        HoverReveal.fade([statusIcon, statusLabel, duration], visible: !showActions || woke)
+        let snoozes = r.action == .settle && r.canSnooze
+        if !snoozes { HoverReveal.snap([snoozeButton], visible: false, hides: true) }
+        HoverReveal.fade(snoozes ? [settleButton, snoozeButton] : [settleButton], visible: showActions, hides: true)
+        if showsActions != showActions || showsSnooze != snoozes { showsActions = showActions; showsSnooze = snoozes; needsLayout = true }
         // Title (Sidebar.tsx:1658-1690), card variant.
         title.text = r.title
         title.font = SB.font(14, r.recedes ? .regular : .medium)
@@ -530,17 +541,12 @@ final class SidebarCardRowView: SidebarRowBase {
         if !monogram.isHidden { monogram.frame = NSRect(x: x, y: top + 2, width: 16, height: 16); x += 16 + 6 }
         var slotRight = right
         var slotLeft = right
-        if !settleButton.isHidden {
-            // `-mr-1` on Settle, buttons stretch to the 20px slot.
-            let sw = settleButton.preferredWidth
-            settleButton.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
-            slotLeft = settleButton.frame.minX
-            if !snoozeButton.isHidden {
-                let zw = snoozeButton.preferredWidth
-                snoozeButton.frame = NSRect(x: slotLeft - zw, y: top, width: zw, height: 20)
-                slotLeft -= zw
-            }
-        }
+        // `-mr-1` on Settle, buttons stretch to the 20px slot. Placed while hidden too, so a fade-out stays put.
+        let sw = settleButton.preferredWidth
+        settleButton.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
+        let zw = snoozeButton.preferredWidth
+        snoozeButton.frame = NSRect(x: settleButton.frame.minX - zw, y: top, width: zw, height: 20)
+        if showsActions { slotLeft = (showsSnooze ? snoozeButton : settleButton).frame.minX }
         // Status label at rest (absolute and faded while actions show).
         var sx = slotRight
         if !duration.text.isEmpty {
@@ -555,7 +561,7 @@ final class SidebarCardRowView: SidebarRowBase {
             if statusIcon.icon != nil { statusIcon.frame = NSRect(x: sx - 4 - 16, y: top + 2, width: 16, height: 16); sx -= 20 }
         }
         let restWidth = max(32, slotRight - sx) // `min-w-8`
-        if settleButton.isHidden { slotLeft = slotRight - restWidth }
+        if !showsActions { slotLeft = slotRight - restWidth }
         slotRight = slotLeft
         if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
         project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
@@ -659,7 +665,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
         monogram.dimmed = dim
-        monogram.alphaValue = dim ? 0.4 : 1
+        HoverReveal.fade(monogram, to: dim ? 0.4 : 1) // `transition-opacity` (Sidebar.tsx:1827-1830)
         title.text = r.title
         title.font = SB.font(14, r.recedes ? .regular : .medium)
         if hovered {
@@ -681,7 +687,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             time.text = r.timeLabel
             time.color = unsettle && !hovered ? SB.c(\.secondaryLabel, 0.7) : SB.c(\.secondaryLabel)
         }
-        time.alphaValue = hovered && !r.isWoke ? 0 : 1
+        HoverReveal.fade([time], visible: !hovered || r.isWoke) // Sidebar.tsx:1857-1860
         if actionKind != r.action {
             actionButton?.removeFromSuperview()
             let b: RowActionButton
@@ -699,10 +705,12 @@ final class SidebarSlimRowView: SidebarRowBase {
                 }
             }
             addSubview(b)
+            HoverReveal.snap([b], visible: false, hides: true)
             actionButton = b
             actionKind = r.action
         }
-        actionButton?.isHidden = !hovered
+        // `opacity-0 transition-opacity group-any-hover/sidebar-row:opacity-100` (Sidebar.tsx:1903,1920,1937).
+        if let actionButton { HoverReveal.fade([actionButton], visible: hovered, hides: true) }
         setAccessibilityLabel(r.title)
         needsLayout = true
     }

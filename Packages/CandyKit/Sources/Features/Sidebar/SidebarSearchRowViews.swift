@@ -27,6 +27,7 @@ final class SidebarDraftRowView: SidebarRowBase {
         project.font = SB.font(12, .medium); project.lineHeight = 16
         preview.font = SB.font(14, .medium); preview.lineHeight = 20
         discardButton.padding = 4
+        HoverReveal.snap([discardButton], visible: false, hides: true)
         discardButton.action = { [weak self] in if let d = self?.draft { self?.onDiscard?(d.id) } }
     }
 
@@ -48,8 +49,9 @@ final class SidebarDraftRowView: SidebarRowBase {
         project.color = SB.c(\.secondaryLabel)
         preview.text = d.preview
         preview.color = SB.c(\.foreground, 0.9)
-        // `opacity-0 group-hover/sidebar-row:opacity-100`, and shown while it has keyboard focus.
-        discardButton.isHidden = !(state.hovered || isKeyboardFocused)
+        // `opacity-0 transition-opacity group-hover/sidebar-row:opacity-100` (Sidebar.tsx:933), and shown
+        // while the row has keyboard focus.
+        HoverReveal.fade([discardButton], visible: state.hovered || isKeyboardFocused, hides: true)
         setAccessibilityLabel("\(d.preview), Unsent draft" + (d.projectLabel.map { ", \($0)" } ?? ""))
         needsLayout = true
     }

@@ -393,7 +393,7 @@ final class WhenEditorView: DSView {
 
 /// One binding (`KeybindingSettingsRow`): the command label with its source badge, the When line, and on
 /// the right the conflict warning, the hover menu (Reset to default, Remove) and the pill or recorder with Save.
-final class KeybindingRowView: DSView, SettingsGroupRow {
+final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     let row: KeybindingRow
     private let settingsRow: SettingsRowView
     private let pill = KeybindingPillButton()
@@ -406,6 +406,8 @@ final class KeybindingRowView: DSView, SettingsGroupRow {
     private let controls: SettingsControlGroup
     private var warningTip: TooltipController?
     private var hovering = false { didSet { updateMenu() } }
+    private var focusWithin = false { didSet { updateMenu() } }
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused }
 
     var allRows: () -> [KeybindingRow] = { [] }
     var onSave: ((KeybindingTarget, KeybindingTarget?) -> Void)?
@@ -492,11 +494,12 @@ final class KeybindingRowView: DSView, SettingsGroupRow {
         settingsRow.needsLayout = true
     }
 
-    /// `KeybindingHoverRowMenu`: shown while the row is hovered or a popup is open; only for rows it can act on.
+    /// `KeybindingHoverRowMenu`: fades in over 150 ms while the row is hovered, holds keyboard focus or has
+    /// the menu open (KeybindingsSettings.tsx:989); only for rows it can act on.
     private func updateMenu() {
         let canAct = (row.source == .custom && row.defaultKey != nil) || row.source != .default
         actionsButton.isHidden = !canAct || !isEditable
-        actionsButton.alphaValue = hovering || actionsButton.state.popupOpen ? 1 : 0
+        HoverReveal.fade([actionsButton], visible: hovering || focusWithin || actionsButton.state.popupOpen)
         actionsButton.isEnabled = !isSaving
     }
 

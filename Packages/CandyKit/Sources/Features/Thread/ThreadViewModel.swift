@@ -174,6 +174,8 @@ public final class ThreadViewModel {
     private var rowsWanted = false
     /// Bumped when the thread changes, so a late result for the old thread is dropped.
     private var generation = 0
+    /// The next rows belong to another thread than the ones shown (`TimelineChange.thread`).
+    private var threadRowsPending = false
     /// Threads with at least this many visible rows update off the main thread. A full row pass
     /// over 5,700 rows takes about 30 ms and the incremental entry pass about 3 ms; below this
     /// both fit well inside a frame, and tests and small threads stay synchronous.
@@ -194,6 +196,7 @@ public final class ThreadViewModel {
             generation += 1
             rowsTask = nil
             rowsWanted = false
+            threadRowsPending = true
             findOpenedRuns = []; findOpenedAttempts = []; findOpenedMessages = []
             expandedRunIds = []; expandedAttemptIds = []; expandedWorkGroupIds = []
             expandedEntries = []; expandedMessages = []; expandedPlans = []
@@ -320,6 +323,8 @@ public final class ThreadViewModel {
 
     /// Hands rows to the view with their UI state; `change` says which differ from `items`.
     private func apply(rows: [TimelineRow], change: TimelineChange) {
+        var change = change
+        if threadRowsPending { threadRowsPending = false; change = .thread }
         switch change {
         case .rows(let changed) where rows.count == items.count:
             for i in changed { items[i] = item(rows[i]) }

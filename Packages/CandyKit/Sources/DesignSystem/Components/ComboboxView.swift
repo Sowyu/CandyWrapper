@@ -129,6 +129,6 @@ final class ComboboxTriggerView: ControlView {
 
     private func restyle() {
         icon.strokeColor = Themed.color(\.contrastForeground)
-        alphaValue = state.hovered ? 1 : 0.8 // `opacity-80 hover:opacity-100`
+        HoverReveal.fade(self, to: state.hovered ? 1 : 0.8) // `opacity-80 transition-opacity hover:opacity-100`
     }
 }

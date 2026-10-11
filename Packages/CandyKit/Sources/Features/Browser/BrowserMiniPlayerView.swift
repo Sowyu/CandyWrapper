@@ -134,11 +134,14 @@ public final class BrowserMiniPlayerView: DSView {
         }
 
         private func restyleHover() {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = Motion.reduced ? 0 : 0.15
-                pill.animator().alphaValue = hovered ? 1 : 0
-            }
+            // Both cross-fade over 150 ms on the default curve (`transition-opacity`, ThreadPreviewMiniPlayer.tsx:492,503).
+            HoverReveal.fade([pill], visible: hovered)
+            CATransaction.begin()
+            CATransaction.setDisableActions(Motion.reduced || window == nil)
+            CATransaction.setAnimationDuration(Motion.Durations.default)
+            CATransaction.setAnimationTimingFunction(Motion.easeInOut)
             dot.opacity = hovered ? 0 : 1
+            CATransaction.commit()
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
