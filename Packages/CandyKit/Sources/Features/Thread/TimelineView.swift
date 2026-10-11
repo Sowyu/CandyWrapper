@@ -31,7 +31,11 @@ public final class TimelineView: DSView {
     enum Kind: Hashable { case user, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, secret, htmlRender, mcpApp }
 
     let context = TimelineContext()
-    let scrollView = NSScrollView()
+    let scrollView = ComposerTimelineScrollView()
+    public var onComposerScrollGesture: ((CGFloat, Bool, Bool) -> Void)? {
+        get { scrollView.onGesture }
+        set { scrollView.onGesture = newValue }
+    }
     private let document = DSView()
     private let pill = ButtonView("Scroll to end", icon: .chevronDown, variant: .glass, size: .xs)
 

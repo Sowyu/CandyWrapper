@@ -6,18 +6,18 @@ import T3Protocol
 /// picker, shortcut, command, preview URL, the four run switches, the validation error, and Delete,
 /// Cancel and Save in the footer.
 @MainActor
-final class ProjectActionEditor {
-    let dialog: DialogView
+public final class ProjectActionEditor {
+    public let dialog: DialogView
     let form: ProjectActionForm
     private let delete = ButtonView("Delete", variant: .destructiveOutline)
     private let cancel = ButtonView("Cancel", variant: .outline)
     private let save: ButtonView
     private let isEditing: Bool
-    var onSubmit: ((ProjectScriptInput) -> Void)?
-    var onCancel: (() -> Void)?
-    var onDelete: (() -> Void)?
+    public var onSubmit: ((ProjectScriptInput) -> Void)?
+    public var onCancel: (() -> Void)?
+    public var onDelete: (() -> Void)?
 
-    var isSaving = false {
+    public var isSaving = false {
         didSet {
             save.title = isSaving ? "Saving…" : isEditing ? "Save changes" : "Save action"
             save.isEnabled = !isSaving
@@ -26,9 +26,9 @@ final class ProjectActionEditor {
         }
     }
 
-    var error: String? { get { form.error } set { form.error = newValue } }
+    public var error: String? { get { form.error } set { form.error = newValue } }
 
-    init(script: ProjectScript?, keybinding: String?) {
+    public init(script: ProjectScript?, keybinding: String?) {
         isEditing = script != nil
         dialog = DialogView(title: script == nil ? "Add Action" : "Edit Action",
                             message: "Actions are project-scoped commands you can run from the top bar or keybindings.")

@@ -161,6 +161,9 @@ final class ComposerController {
             self.applyClientSettings()
             if keys.contains("planModeEnabled") { self.refresh() }
         }
+        panel.timeline.onComposerScrollGesture = { [weak self] delta, canScroll, towardEnd in
+            self?.composer.recordTimelineScroll(delta: delta, canScroll: canScroll, towardEnd: towardEnd)
+        }
         composer.onSend = { [weak self] text, mode, background in self?.send(text, mode: mode, background: background) }
         composer.contextWindowMeter.onCompact = { [weak self] in
             guard let self, self.composer.contextWindowMeter.compactDisabledReason == nil, !self.composer.runState.canInterrupt, !self.composer.isBusy else { return }
@@ -183,7 +186,10 @@ final class ComposerController {
         pickers.onBlocked = { [weak self] reason in self?.report(.modelChangeBlocked(reason), key: nil) }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
-        pickers.onChange = { [weak self] _ in self?.composer.needsLayout = true }
+        pickers.onChange = { [weak self] _ in
+            self?.composer.needsLayout = true
+            self?.onTargetChange?()
+        }
         let queue = panel.queue
         queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
         queue.onReorder = { [weak self] runId, before in
@@ -316,6 +322,8 @@ final class ComposerController {
     private func applyClientSettings() {
         let c = ClientSettingsStore.shared.current
         composer.sendShortcut = ComposerLogic.SendShortcut(rawValue: c.string("sendShortcut")) ?? .enter
+        composer.collapseOnScroll = c.bool("composerCollapseOnScroll")
+        composer.richTextEnabled = c.bool("composerRichTextEnabled")
         composer.steerByDefault = c.string("followUpBehavior") == "steer"
     }
 
@@ -375,6 +383,10 @@ final class ComposerController {
     func registerShortcuts(_ shortcuts: Shortcuts) {
         shortcuts.on("chat.find") { [weak self] _ in self?.openThreadFind() ?? false }
 
+        shortcuts.onKey { [weak self] event in
+            guard let self, self.isActive else { return false }
+            return self.panel.composer.handleFormattingKey(event)
+        }
         // Digits 1 to 9 pick a question's option unless focus is in an editable field
         // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener, not a keybinding).
         shortcuts.onKey { [weak self] event in
@@ -2127,6 +2139,14 @@ extension ComposerController {
         composer.pasteDirectory = Self.attachmentWorkDirectory
         composer.imageShelf.onRemove = { [weak self] id in self?.removeImage(id) }
         composer.imageShelf.onRetry = { [weak self] id in self?.retryAttachment(id) }
+        composer.onOpenChip = { [weak self] source in
+            guard let self, let token = ComposerInlineTokens.collect(source + " ").first,
+                  case .context(_, let contextId, _) = token.kind,
+                  let attachment = self.currentAttachments.first(where: { $0.contextId == contextId }) else { return false }
+            if attachment.kind == .image { self.expandDraftImage(attachment.id) }
+            else { self.expandDraftFile(attachment) }
+            return true
+        }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
@@ -2517,6 +2537,41 @@ extension ComposerController {
     }
 
     // MARK: Previews
+
+    private func expandDraftFile(_ attachment: ComposerAttachment) {
+        guard let window = panel.window else { return }
+        let preview = ComposerAttachmentPreview(name: attachment.name, file: attachment.fileURL, sizeBytes: attachment.sizeBytes)
+        let dialog = DialogView(title: attachment.name, message: ComposerFileRow.formatSize(attachment.sizeBytes))
+        dialog.maxWidth = 800
+        dialog.panelContent = [preview]
+        let download = ButtonView("Download", icon: .download, variant: .outline)
+        let remove = ButtonView("Remove", icon: .trash2, variant: .destructiveOutline)
+        dialog.footerButtons = [remove, download]
+        dialog.footerLeadingCount = 1
+        let host = ModalHost.present(dialog, in: window)
+        host.onDismiss = { [weak dialog, weak preview] in preview?.close(); dialog?.panelContent = [] }
+        remove.action = { [weak self, weak host] in
+            guard let self else { return }
+            self.composer.text = Self.removingReferences(to: attachment.contextId, in: self.composer.text)
+            host?.close()
+        }
+        download.action = { [weak window] in
+            guard let window else { return }
+            let save = NSSavePanel()
+            save.nameFieldStringValue = attachment.name
+            save.beginSheetModal(for: window) { response in
+                guard response == .OK, let destination = save.url else { return }
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        let data = try Data(contentsOf: attachment.fileURL)
+                        try data.write(to: destination, options: .atomic)
+                    } catch {
+                        await MainActor.run { window.presentError(error) }
+                    }
+                }
+            }
+        }
+    }
 
     private func expandDraftImage(_ id: String) {
         let images = currentAttachments.filter { $0.kind == .image }

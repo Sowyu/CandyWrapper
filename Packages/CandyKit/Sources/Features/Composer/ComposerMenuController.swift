@@ -54,7 +54,7 @@ public final class ComposerMenuController {
     private func detect() -> ComposerTrigger? {
         let editor = composer.editor
         let selection = editor.selectedRange()
-        guard composer.pending == .none, editor.isEditable, selection.length == 0, !editor.hasMarkedText() else { return nil }
+        guard composer.allowsSuggestionsAtCaret, composer.pending == .none, editor.isEditable, selection.length == 0, !editor.hasMarkedText() else { return nil }
         return ComposerTriggers.detect(editor.string, cursor: selection.location)
     }
 

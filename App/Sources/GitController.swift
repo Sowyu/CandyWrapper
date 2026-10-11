@@ -153,8 +153,8 @@ final class GitController {
             guard let project = snapshot.projects.first(where: { $0.id == projectId }), let env = projectId.environmentId else { return nil }
             let mode = draft.envMode ?? (project.defaultThreadEnvMode == "worktree" ? .worktree : .local)
             return Target(environmentId: env, threadId: nil, projectId: projectId, projectRoot: project.workspaceRoot,
-                          branch: draft.branch, worktreePath: draft.worktreePath,
-                          envMode: BranchToolbarLogic.draftEnvMode(worktreePath: draft.worktreePath, draftMode: mode),
+                          branch: draft.branch, worktreePath: forceNewWorktree ? nil : draft.worktreePath,
+                          envMode: forceNewWorktree ? .worktree : BranchToolbarLogic.draftEnvMode(worktreePath: draft.worktreePath, draftMode: mode),
                           startFromOrigin: draft.startFromOrigin ?? false)
         }
         guard let id = panel.isDraft ? nil : composer.openThreadId,
@@ -254,6 +254,8 @@ final class GitController {
         return optimisticBranch ?? BranchToolbarLogic.toolbarValue(mode: target.envMode, worktreePath: target.worktreePath,
                                                                     threadBranch: target.branch, currentGitBranch: currentGitBranch)
     }
+
+    private var forceNewWorktree: Bool { composer.currentDraft != nil && composer.pickers.currentMultiple != nil }
 
     private var isSelectingWorktreeBase: Bool {
         guard let target else { return false }
@@ -431,6 +433,7 @@ final class GitController {
         items.append(.label("Workspace"))
         var local = MenuItem.radio(BranchToolbarLogic.currentWorkspaceLabel(target.worktreePath), checked: target.envMode == .local)
         local.glyph = (target.worktreePath != nil ? IconName.folderGit : IconName.folder).definition
+        local.isDisabled = forceNewWorktree
         local.closesOnClick = true
         local.action = { [weak self] in self?.setEnvMode(.local) }
         items.append(local)
@@ -439,7 +442,7 @@ final class GitController {
         worktree.closesOnClick = true
         worktree.action = { [weak self] in self?.setEnvMode(.worktree) }
         items.append(worktree)
-        if let previous = previousWorktree {
+        if !forceNewWorktree, let previous = previousWorktree {
             var item = MenuItem.radio("Previous worktree", checked: false)
             item.glyph = IconName.history.definition
             item.subtitle = previous.branch
@@ -456,6 +459,7 @@ final class GitController {
     /// `onEnvModeChange` for a draft (ChatView.tsx:10791-10822): a new worktree leaves any picked worktree.
     /// Start from origin follows the project's `newWorktreesStartFromOrigin` (`resolveNewDraftStartFromOrigin`).
     private func setEnvMode(_ mode: EnvMode) {
+        guard !forceNewWorktree else { return }
         let fromOrigin = mode == .worktree && composer.newWorktreesStartFromOrigin
         composer.updateDraft { d in
             d.envMode = mode
@@ -469,6 +473,7 @@ final class GitController {
 
     /// `onUsePreviousWorktree`: the draft points at the newest other worktree of the project.
     func usePreviousWorktree() {
+        guard !forceNewWorktree else { return }
         guard let previous = previousWorktree else { return }
         composer.updateDraft { d in
             d.branch = previous.branch

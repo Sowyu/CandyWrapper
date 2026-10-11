@@ -1,0 +1,25 @@
+.wp711b-full-tests.log
+✔ Test run with 262 tests in 34 suites passed after 2.435 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.361 seconds.
+✔ Test run with 124 tests in 27 suites passed after 7.520 seconds.
+composer-rich code.rest.dark 3.94%
+composer-rich code.rest.light 3.80%
+composer-rich marks.rest.dark 2.68%
+composer-rich marks.rest.light 2.55%
+composer-rich nested.rest.dark 1.75%
+composer-rich nested.rest.light 1.73%
+FIDELITY composer-rich: 6 cases, mean differing 2.74%
+✔ Test run with 324 tests in 74 suites passed after 86.978 seconds.
+✔ Test run with 82 tests in 17 suites passed after 56.816 seconds.
+.wp711b-fidelity.log
+composer-rich code.rest.dark 3.94%
+composer-rich code.rest.light 3.80%
+composer-rich marks.rest.dark 2.68%
+composer-rich marks.rest.light 2.55%
+composer-rich nested.rest.dark 1.75%
+composer-rich nested.rest.light 1.73%
+FIDELITY composer-rich: 6 cases, mean differing 2.74%
+✔ Test run with 41 tests in 29 suites passed after 118.845 seconds.
+✔ Test run with 61 tests in 11 suites passed after 68.360 seconds.
+.wp711b-build.log
+** BUILD SUCCEEDED **

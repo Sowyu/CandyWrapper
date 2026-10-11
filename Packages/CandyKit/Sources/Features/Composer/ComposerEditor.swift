@@ -10,13 +10,27 @@ import T3Protocol
 /// character carrying its source text, so it deletes and selects as a unit. `string` is the
 /// display text (chips as U+FFFC); `expandedText` is the prompt T3 would hold. A token becomes a
 /// chip once whitespace follows it, as in T3 (composerInlineTokens.ts).
-// ponytail: plain text only; Tiptap's inline code, rich text and list continuation come later
 final class ComposerEditor: NSTextView, NSTextViewDelegate {
+    var richTextEnabled = false {
+        didSet {
+            guard richTextEnabled != oldValue else { return }
+            let source = expandedText
+            setText(source)
+            undoManager?.removeAllActions()
+        }
+    }
+    private var lastEditKind = ""
+    private var lastEditAt = -Double.infinity
+    private var clipboardEdit = false
+    private var applyingListEdit = false
+
     static let font = DSFont.ui(14)
     static let lineHeight: CGFloat = 14 * 1.625
 
     /// Asked on Return; true when it handled the key as a send.
     var onSubmitKey: ((ComposerLogic.Key) -> Bool)?
+    var onOpenChip: ((String) -> Bool)?
+    var onInteract: (() -> Void)?
     var onTextChange: (() -> Void)?
     /// Plain ArrowUp (true) or ArrowDown (false); true when it handled the key (prompt history).
     var onHistoryKey: ((Bool) -> Bool)?
@@ -89,8 +103,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     /// `text` is the expanded prompt; its tokens come back as chips.
     func setText(_ text: String) {
         isChipifying = true
-        string = text
+        textStorage?.setAttributedString(NSAttributedString(string: text, attributes: baseAttributes))
         applyStyle()
+        styleRichText(registerUndo: false)
         chipify(registerUndo: false)
         isChipifying = false
         setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
@@ -102,39 +117,56 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
 
     func expanded(_ range: NSRange) -> String {
         guard let storage = textStorage, range.length > 0 else { return "" }
-        var out = ""
-        storage.enumerateAttribute(.attachment, in: range) { value, sub, _ in
-            if let chip = value as? ComposerChipAttachment {
-                out += String(repeating: chip.source, count: sub.length)
-            } else {
-                out += storage.attributedSubstring(from: sub).string
-            }
-        }
-        return out
+        return ComposerRichTextStyler.serialize(storage.attributedSubstring(from: range))
     }
 
     private var isChipifying = false
 
     func textDidChange(_ notification: Notification) {
-        if !isChipifying, !hasMarkedText() { chipify(registerUndo: true) }
+        if undoManager?.isUndoing == true || undoManager?.isRedoing == true { lastEditKind = "other" }
+        if !isChipifying, !hasMarkedText(), undoManager?.isUndoing != true, undoManager?.isRedoing != true {
+            styleRichText(registerUndo: true)
+            chipify(registerUndo: true)
+        }
         onTextChange?()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) { onSelectionChange?() }
 
     /// Turns finished tokens in the plain text into chips, keeping the caret where it was.
+    private func styleRichText(registerUndo: Bool) {
+        guard richTextEnabled, let storage = textStorage else { return }
+        let rendered = ComposerRichTextStyler.render(storage, base: baseAttributes, width: bounds.width, typing: registerUndo && !applyingListEdit)
+        guard !storage.isEqual(to: rendered) else { return }
+        let selection = selectedRange()
+        let prefix = storage.attributedSubstring(from: NSRange(location: 0, length: min(selection.location, storage.length)))
+        let caret = ComposerRichTextStyler.render(prefix, base: baseAttributes, typing: registerUndo && !applyingListEdit).length
+        let was = isChipifying
+        isChipifying = true
+        defer { isChipifying = was }
+        let range = NSRange(location: 0, length: storage.length)
+        if registerUndo, !shouldChangeText(in: range, replacementString: rendered.string) { return }
+        storage.setAttributedString(rendered)
+        if registerUndo { didChangeText() }
+        setSelectedRange(NSRange(location: min(caret, storage.length), length: min(selection.length, max(0, storage.length - caret))))
+        typingAttributes = baseAttributes
+    }
+
     private func chipify(registerUndo: Bool) {
         guard let storage = textStorage, let chipLook else { return }
         let display = string as NSString
         // A token that already holds a chip character is left alone.
-        let tokens = ComposerInlineTokens.collect(string).filter { !display.substring(with: $0.range).contains("\u{FFFC}") }
+        let tokens = ComposerInlineTokens.collect(string).filter { !display.substring(with: $0.range).contains("\u{FFFC}") && storage.attribute(.composerCodeBlock, at: $0.range.location, effectiveRange: nil) == nil && !ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: $0.range.location, effectiveRange: nil)).contains(.code) }
         guard !tokens.isEmpty else { return }
         let wasChipifying = isChipifying
         isChipifying = true
         defer { isChipifying = wasChipifying }
         var selection = selectedRange()
         for token in tokens.reversed() {
-            let chip = makeChip(token, look: chipLook(token))
+            let chip = NSMutableAttributedString(attributedString: makeChip(token, look: chipLook(token)))
+            if let marks = storage.attribute(.composerMarks, at: token.range.location, effectiveRange: nil) {
+                chip.addAttribute(.composerMarks, value: marks, range: NSRange(location: 0, length: chip.length))
+            }
             if registerUndo, !shouldChangeText(in: token.range, replacementString: "\u{FFFC}") { continue }
             storage.replaceCharacters(in: token.range, with: chip)
             if registerUndo { didChangeText() }
@@ -159,8 +191,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         guard !hasMarkedText(), let storage = textStorage, storage.containsAttachments else { return }
         let caret = expanded(NSRange(location: 0, length: min(selectedRange().location, storage.length)))
         isChipifying = true
-        string = expandedText
+        textStorage?.setAttributedString(NSAttributedString(string: expandedText, attributes: baseAttributes))
         applyStyle()
+        styleRichText(registerUndo: false)
         chipify(registerUndo: false)
         isChipifying = false
         // The caret goes back to the same place in the expanded text.
@@ -193,6 +226,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         var attributes = typingAttributes
         attributes[.attachment] = nil
         attributes[.composerChipSource] = nil
+        attributes[.composerMarks] = nil
+        attributes[.composerCodeBlock] = nil
+        attributes[.backgroundColor] = nil
+        attributes[.strikethroughStyle] = nil
         attributes[.font] = Self.font
         attributes[.foregroundColor] = Themed.color(\.foreground)
         return attributes
@@ -200,7 +237,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        refreshChips()
+        if richTextEnabled { setText(expandedText) } else { refreshChips() }
     }
 
     // MARK: Clipboard
@@ -237,7 +274,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
             let records = ComposerContext.pastedRecords(html: html, pastedText: text)
             if !records.isEmpty { onPasteRecords?(records) }
         }
+        breakUndoCoalescing()
+        clipboardEdit = true
         insertText(text, replacementRange: selectedRange())
+        clipboardEdit = false
+        breakUndoCoalescing()
     }
 
     // MARK: File drops
@@ -294,7 +335,50 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         paste(sender)
     }
 
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        if !isChipifying {
+            let kind = clipboardEdit ? "other" : hasMarkedText() ? "insert" : affectedCharRange.length == 0 ? "insert" : replacementString?.isEmpty == true ? "delete" : "other"
+            let now = ProcessInfo.processInfo.systemUptime
+            if kind != lastEditKind || kind == "other" || now - lastEditAt > 1 { breakUndoCoalescing() }
+            lastEditKind = kind; lastEditAt = now
+        }
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    private func listEdit(indent: Bool) -> Bool {
+        let selection = selectedRange()
+        guard selection.length == 0 else { return false }
+        guard let storage = textStorage else { return false }
+        let mapping = ComposerRichTextStyler.mapping(storage)
+        let cursor = mapping.offsets[min(selection.location, mapping.offsets.count - 1)]
+        guard let edit = ComposerListContinuation.edit(mapping.value, selection: NSRange(location: cursor, length: 0), indent: indent) else { return false }
+        let start = mapping.offsets.lastIndex(where: { $0 <= edit.range.location }) ?? 0
+        let end = mapping.offsets.lastIndex(where: { $0 <= NSMaxRange(edit.range) }) ?? start
+        breakUndoCoalescing()
+        applyingListEdit = true
+        replace(NSRange(location: start, length: max(0, end - start)), with: edit.replacement)
+        applyingListEdit = false
+        if indent { setSelectedRange(NSRange(location: min(selection.location + 2, textStorage?.length ?? 0), length: 0)) }
+        breakUndoCoalescing()
+        return true
+    }
+
+    var codeFenceAtCaret: String? {
+        guard richTextEnabled, let storage = textStorage else { return nil }
+        var fence: String?
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: min(selectedRange().location, storage.length))) { value, _, _ in
+            guard let block = value as? ComposerBlockAttachment else { return }
+            switch block.kind {
+            case .codeHeader(let delimiter, _): fence = delimiter
+            case .codeEnd: fence = nil
+            default: break
+            }
+        }
+        return fence
+    }
+
     override func keyDown(with event: NSEvent) {
+        onInteract?()
         if let onMenuKey, !hasMarkedText() {
             let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
             let key: MenuKey? = switch event.keyCode {
@@ -307,13 +391,41 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
             }
             if let key, onMenuKey(key) { return }
         }
+        if event.keyCode == 48, codeFenceAtCaret != nil, !hasMarkedText(),
+           event.modifierFlags.intersection([.option, .command, .control]).isEmpty {
+            if event.modifierFlags.contains(.shift) {
+                let text = string as NSString, caret = selectedRange().location
+                let line = text.lineRange(for: NSRange(location: caret, length: 0))
+                let prefix = text.substring(with: NSRange(location: line.location, length: caret - line.location))
+                let count = prefix.hasPrefix("  ") ? 2 : prefix.hasPrefix(" ") || prefix.hasPrefix("\t") ? 1 : 0
+                if count > 0 { replace(NSRange(location: line.location, length: count), with: "") }
+            } else { insertText("  ", replacementRange: selectedRange()) }
+            return
+        }
+        if event.keyCode == 48, event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty,
+           !hasMarkedText(), listEdit(indent: true) { return }
         let returnKeys: Set<UInt16> = [36, 76]
         if returnKeys.contains(event.keyCode) {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let key = ComposerLogic.Key(isReturn: true, shift: flags.contains(.shift), option: flags.contains(.option),
                                         mod: flags.contains(.command), control: flags.contains(.control),
                                         isRepeat: event.isARepeat, composing: hasMarkedText())
+            let linePrefix = (expanded(NSRange(location: 0, length: selectedRange().location))).components(separatedBy: "\n").last ?? ""
+            if richTextEnabled, !key.mod, !key.control, !key.composing,
+               linePrefix.range(of: #"^(`{3,}|~{3,})[^\n]*$"#, options: .regularExpression) != nil {
+                insertNewline(nil); return
+            }
+            if richTextEnabled, !key.mod, !key.control, !key.composing, let storage = textStorage {
+                let prior = selectedRange().location > 0 ? storage.attribute(.attachment, at: selectedRange().location - 1, effectiveRange: nil) as? ComposerBlockAttachment : nil
+                var justClosed = false
+                if let prior, case .codeEnd = prior.kind { justClosed = true }
+                if codeFenceAtCaret != nil || justClosed {
+                    let indent = justClosed ? "" : String(linePrefix.prefix { $0 == " " || $0 == "\t" })
+                    insertText("\n" + indent, replacementRange: selectedRange()); return
+                }
+            }
             if onSubmitKey?(key) == true { return }
+            if !key.composing, listEdit(indent: false) { return }
         }
         // ArrowUp 126, ArrowDown 125, without modifiers or an IME composition (ChatComposer.tsx:4393-4400).
         if event.keyCode == 126 || event.keyCode == 125,
@@ -331,7 +443,85 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
             keyDown(with: event)
             return true
         }
+        if handleFormattingKey(event) { return true }
         return super.performKeyEquivalent(with: event)
+    }
+
+    func handleFormattingKey(_ event: NSEvent) -> Bool {
+        if window?.firstResponder === self, richTextEnabled, event.type == .keyDown {
+            let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
+            let mark: ComposerRichText.Mark? = switch (event.charactersIgnoringModifiers?.lowercased(), flags) {
+            case ("b", .command): .bold
+            case ("i", .command): .italic
+            case ("e", .command): .code
+            case ("s", [.command, .shift]): .strike
+            default: nil
+            }
+            if let mark { toggleMark(mark); return true }
+        }
+        return false
+    }
+
+    func toggleMark(_ mark: ComposerRichText.Mark) {
+        let range = selectedRange()
+        guard let storage = textStorage else { return }
+        if range.length == 0 {
+            var marks = ComposerRichTextStyler.marks(typingAttributes[.composerMarks])
+            if marks.contains(mark) { marks.removeAll { $0 == mark } } else { marks.append(mark) }
+            typingAttributes = ComposerRichTextStyler.attributes(marks, base: baseAttributes)
+            return
+        }
+        let old = storage.attributedSubstring(from: range)
+        let updated = NSMutableAttributedString(attributedString: old)
+        var remove = true
+        old.enumerateAttribute(.composerMarks, in: NSRange(location: 0, length: old.length)) { value, _, _ in
+            if !ComposerRichTextStyler.marks(value).contains(mark) { remove = false }
+        }
+        old.enumerateAttributes(in: NSRange(location: 0, length: old.length)) { attrs, sub, _ in
+            guard attrs[.composerCodeBlock] == nil else { return }
+            var marks = ComposerRichTextStyler.marks(attrs[.composerMarks]).filter { $0 != mark }
+            if !remove { marks.append(mark) }
+            updated.addAttributes(ComposerRichTextStyler.attributes(marks, base: baseAttributes), range: sub)
+        }
+        breakUndoCoalescing()
+        isChipifying = true
+        if shouldChangeText(in: range, replacementString: updated.string) {
+            storage.replaceCharacters(in: range, with: updated)
+            didChangeText()
+        }
+        isChipifying = false
+        setSelectedRange(range)
+        breakUndoCoalescing()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onInteract?()
+        let point = convert(event.locationInWindow, from: nil)
+        let index = characterIndexForInsertion(at: point)
+        if let storage = textStorage, index < storage.length {
+            if let chip = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerChipAttachment,
+               onOpenChip?(chip.source) == true { return }
+            if let block = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerBlockAttachment,
+               case .codeHeader(let fence, let info) = block.kind {
+                let items = ComposerCodeLanguages.entries.map { entry in
+                    var item = MenuItem.radio(entry.label, checked: ComposerCodeLanguages.label(info) == entry.label)
+                    item.closesOnClick = true
+                    item.action = { [weak self] in
+                        self?.replace(NSRange(location: index, length: 1), with: fence + ComposerCodeLanguages.replacing(info, with: entry.id))
+                    }
+                    return item
+                }
+                MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none), minimumWidth: 224, anchorRect: NSRect(x: point.x, y: point.y, width: 1, height: 1))
+                return
+            }
+        }
+        if let storage = textStorage, index < storage.length,
+           let block = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerBlockAttachment,
+           case .task(let checked) = block.kind {
+            replace(NSRange(location: index, length: 1), with: block.source.replacingOccurrences(of: checked ? "[x]" : "[ ]", with: checked ? "[ ]" : "[x]"))
+            return
+        }
+        super.mouseDown(with: event)
     }
 
     override func flagsChanged(with event: NSEvent) {
