@@ -144,8 +144,9 @@ enum ComposerRichText {
             let close = marks.dropFirst(common(marks, after)).reversed().map(\.delimiter).joined()
             value += open + spans[i].text + close
             sourceOffset += open.utf16.count
-            // At a shared styled edge the trailing side belongs to the preceding run.
-            if offsets.count == 1 { offsets[0] = sourceOffset }
+            // A run's start owns its edge, after its opening markers (`runOwnsOffset`):
+            // the caret before `**bold**` lands inside the bold, the one after it past `**`.
+            offsets[offsets.count - 1] = sourceOffset
             if spans[i].atomic {
                 sourceOffset += spans[i].text.utf16.count
                 offsets.append(sourceOffset)

@@ -200,10 +200,13 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     }
 
     private func makeChip(_ token: ComposerInlineToken, look: ComposerChipLook) -> NSAttributedString {
-        let attachment = ComposerChipAttachment(look: look, source: token.source, maxWidth: max(40, bounds.width - 8))
+        // A skill chip writes `$name` whatever currency sigil was typed (`readAtomSource`).
+        var source = token.source
+        if case .skill(let name) = token.kind { source = "$" + name }
+        let attachment = ComposerChipAttachment(look: look, source: source, maxWidth: max(40, bounds.width - 8))
         let out = NSMutableAttributedString(attachment: attachment)
         out.addAttributes(baseAttributes, range: NSRange(location: 0, length: out.length))
-        out.addAttribute(.composerChipSource, value: token.source, range: NSRange(location: 0, length: out.length))
+        out.addAttribute(.composerChipSource, value: source, range: NSRange(location: 0, length: out.length))
         return out
     }
 
@@ -256,6 +259,202 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         return attributes
     }
 
+    // MARK: Blocks and caret stops (composer-rich-text-doc.ts, composer-code-block.ts)
+
+    private func lineStart(_ location: Int) -> Int {
+        let text = string as NSString
+        let newline = text.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: min(location, text.length)))
+        return newline.location == NSNotFound ? 0 : newline.location + 1
+    }
+
+    private func lineEnd(_ location: Int) -> Int {
+        let text = string as NSString
+        let newline = text.range(of: "\n", range: NSRange(location: location, length: text.length - location))
+        return newline.location == NSNotFound ? text.length : newline.location
+    }
+
+    private func block(at location: Int) -> ComposerBlockAttachment? {
+        guard let storage = textStorage, location >= 0, location < storage.length else { return nil }
+        return storage.attribute(.attachment, at: location, effectiveRange: nil) as? ComposerBlockAttachment
+    }
+
+    private func blockAttachment(_ source: String, _ kind: ComposerBlockAttachment.Kind) -> NSMutableAttributedString {
+        let out = NSMutableAttributedString(attachment: ComposerBlockAttachment(source: source, kind: kind, width: bounds.width))
+        out.addAttributes(baseAttributes, range: NSRange(location: 0, length: out.length))
+        return out
+    }
+
+    /// One undoable edit that inserts atoms as they are; `replace` takes text the renderer reads.
+    private func replaceAttributed(_ range: NSRange, with text: NSAttributedString, caret: Int) {
+        guard let storage = textStorage, shouldChangeText(in: range, replacementString: text.string) else { return }
+        storage.replaceCharacters(in: range, with: text)
+        didChangeText()
+        setSelectedRange(NSRange(location: min(caret, storage.length), length: 0))
+    }
+
+    /// `convertCodeFenceOnEnter`: Return at the end of a top-level line that is only an opening
+    /// fence opens a closed, empty block with the caret inside.
+    private func convertCodeFenceOnEnter() -> Bool {
+        let selection = selectedRange()
+        let start = lineStart(selection.location)
+        guard selection.length == 0, selection.location == lineEnd(selection.location), selection.location > start,
+              block(at: start) == nil,
+              let open = ComposerBlockAttachment.openingFence(expanded(NSRange(location: start, length: selection.location - start)))
+        else { return false }
+        breakUndoCoalescing()
+        replace(NSRange(location: selection.location, length: 0), with: "\n\n" + open.fence)
+        // The fence line is now one atom: the empty code line follows it.
+        setSelectedRange(NSRange(location: start + 2, length: 0))
+        breakUndoCoalescing()
+        return true
+    }
+
+    /// Return inside a fence: after a typed closing fence it ends the block there
+    /// (`exitCodeBlockOnClosingFence`); on the second blank line at the end of the code it leaves
+    /// the block (`exitCodeBlockOnTrailingBlankLines`).
+    private func exitCodeBlock(fence: String) -> Bool {
+        let selection = selectedRange(), text = string as NSString
+        let caret = selection.location, start = lineStart(caret)
+        guard selection.length == 0, caret == lineEnd(caret), block(at: start) == nil else { return false }
+        let line = text.substring(with: NSRange(location: start, length: caret - start))
+        func blank(_ s: String) -> Bool { s.allSatisfy { $0 == " " || $0 == "\t" } }
+        if ComposerBlockAttachment.isClosingFence(line, fence) {
+            // The block's old closing fence goes; the lines between stay, as paragraphs.
+            var next = caret
+            var oldClose: Int?
+            while next < text.length {
+                if let b = block(at: next + 1) {
+                    if case .codeEnd = b.kind { oldClose = next + 1 }
+                    if case .codeEnd = b.kind { break }
+                    if case .codeHeader = b.kind { break }
+                }
+                next = lineEnd(next + 1)
+            }
+            breakUndoCoalescing()
+            if let oldClose { replaceAttributed(NSRange(location: oldClose - 1, length: 2), with: NSAttributedString(), caret: caret) }
+            let close = blockAttachment(line, .codeEnd(fence))
+            close.append(NSAttributedString(string: "\n", attributes: baseAttributes))
+            replaceAttributed(NSRange(location: start, length: caret - start), with: close, caret: start + 2)
+            breakUndoCoalescing()
+            return true
+        }
+        let closed: Bool
+        if caret == text.length { closed = false }
+        else if let b = block(at: caret + 1), case .codeEnd = b.kind { closed = true }
+        else { return false }
+        guard blank(line), start >= 1 else { return false }
+        let previous = lineStart(start - 1)
+        guard previous >= 1, block(at: previous) == nil,
+              blank(text.substring(with: NSRange(location: previous, length: start - 1 - previous))) else { return false }
+        // The code must keep a line before the two blank ones: the header line does not count.
+        if let b = block(at: lineStart(previous - 1)), case .codeHeader = b.kind { return false }
+        breakUndoCoalescing()
+        let end = previous - 1
+        replaceAttributed(NSRange(location: end, length: caret - end), with: NSAttributedString(), caret: end)
+        let after = NSMutableAttributedString()
+        if !closed {
+            // An unclosed fence would read the prose after it as code: leaving writes the close.
+            after.append(NSAttributedString(string: "\n", attributes: baseAttributes))
+            after.append(blockAttachment(fence, .codeEnd(fence)))
+        }
+        after.append(NSAttributedString(string: "\n", attributes: baseAttributes))
+        replaceAttributed(NSRange(location: closed ? end + 2 : end, length: 0), with: after, caret: end + 3)
+        breakUndoCoalescing()
+        return true
+    }
+
+    /// `unwrapCodeBlockAtStart`: Backspace at the start of the code keeps its lines as paragraphs
+    /// and drops both fences.
+    private func unwrapCodeBlockAtStart() -> Bool {
+        guard richTextEnabled, selectedRange().length == 0 else { return false }
+        let caret = selectedRange().location
+        guard caret >= 2, caret == lineStart(caret) else { return false }
+        let header = lineStart(caret - 1)
+        guard let b = block(at: header), case .codeHeader = b.kind else { return false }
+        let text = string as NSString
+        var next = lineEnd(caret)
+        while next < text.length {
+            if let b = block(at: next + 1) {
+                if case .codeEnd = b.kind {
+                    breakUndoCoalescing()
+                    replaceAttributed(NSRange(location: next, length: 2), with: NSAttributedString(), caret: caret)
+                    break
+                }
+                if case .codeHeader = b.kind { break }
+            }
+            next = lineEnd(next + 1)
+        }
+        replaceAttributed(NSRange(location: header, length: caret - header), with: NSAttributedString(), caret: header)
+        breakUndoCoalescing()
+        return true
+    }
+
+    /// The marks on each side of a collapsed caret, when they differ (`styledEdge`). A line's
+    /// edges and block markers carry none.
+    private func styledEdge() -> (before: Set<ComposerRichText.Mark>, after: Set<ComposerRichText.Mark>, current: Set<ComposerRichText.Mark>)? {
+        guard richTextEnabled, let storage = textStorage, selectedRange().length == 0 else { return nil }
+        let caret = selectedRange().location, text = storage.string as NSString
+        func marks(_ i: Int) -> Set<ComposerRichText.Mark> {
+            guard i >= 0, i < text.length, text.character(at: i) != 10, block(at: i) == nil else { return [] }
+            return Set(ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: i, effectiveRange: nil)))
+        }
+        let before = marks(caret - 1), after = marks(caret)
+        guard before != after else { return nil }
+        return (before, after, Set(ComposerRichTextStyler.marks(typingAttributes[.composerMarks])))
+    }
+
+    /// True when the caret sits on a styled edge and types with the marks before it.
+    var caretTakesMarksBefore: Bool {
+        guard let edge = styledEdge() else { return false }
+        return edge.current == edge.before
+    }
+
+    /// Moves the caret to the other stop of the styled edge it sits on, toward `direction`
+    /// (-1 left, 1 right). False when there is no stop to take, so the arrow moves as usual.
+    func stepCaretAcrossStyledEdge(_ direction: Int) -> Bool {
+        guard let edge = styledEdge(), edge.current == edge.before || edge.current == edge.after else { return false }
+        let target = direction < 0 ? edge.before : edge.after
+        guard edge.current != target else { return false }
+        typingAttributes = ComposerRichTextStyler.attributes(ComposerRichText.Mark.allCases.filter(target.contains), base: baseAttributes)
+        return true
+    }
+
+    /// ProseMirror's caret marks (`ResolvedPos.marks`): the text before the caret, or at the
+    /// start of a line the text after it. A rule holds no caret: one landing after it moves on.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        var ranges = ranges
+        let old = selectedRange().location
+        if richTextEnabled, ranges.count == 1, ranges[0].rangeValue.length == 0, let storage = textStorage {
+            let caret = ranges[0].rangeValue.location
+            if caret > 0, caret < storage.length, let b = block(at: caret - 1), case .rule = b.kind,
+               (storage.string as NSString).character(at: caret) == 10 {
+                ranges = [NSValue(range: NSRange(location: caret < old ? caret - 1 : caret + 1, length: 0))]
+            }
+        }
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        guard richTextEnabled, !stillSelecting, !hasMarkedText(), ranges.count == 1, ranges[0].rangeValue.length == 0,
+              let storage = textStorage else { return }
+        let caret = ranges[0].rangeValue.location, text = storage.string as NSString
+        let atLineStart = caret == 0 || text.character(at: caret - 1) == 10 || block(at: caret - 1) != nil
+        let source = atLineStart ? caret : caret - 1
+        guard source < text.length, text.character(at: source) != 10, block(at: source) == nil,
+              storage.attribute(.composerCodeBlock, at: source, effectiveRange: nil) == nil else { return }
+        let marks = ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: source, effectiveRange: nil))
+        typingAttributes = ComposerRichTextStyler.attributes(marks, base: baseAttributes)
+    }
+
+    /// The Markdown copy writes (`serializeSelection`): across lines, the first line keeps its
+    /// list, quote or heading marker.
+    func clipboardText(_ range: NSRange) -> String {
+        let start = lineStart(range.location)
+        guard richTextEnabled, start < range.location, (string as NSString).substring(with: range).contains("\n"),
+              let b = block(at: start) else { return expanded(range) }
+        switch b.kind {
+        case .codeHeader, .codeEnd, .rule: return expanded(range)
+        default: return expanded(NSRange(location: start, length: NSMaxRange(range) - start))
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         if richTextEnabled { setText(expandedText) } else { refreshChips() }
@@ -268,7 +467,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     /// Copy writes the expanded text, and an HTML flavor carrying the context records behind any
     /// copied links (T3's `data-t3-context-fragment`), so a paste in another draft keeps them.
     override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
-        let text = expanded(selectedRange())
+        let text = clipboardText(selectedRange())
         guard !text.isEmpty else { return false }
         pboard.declareTypes([.string, .html], owner: nil)
         pboard.setString(text, forType: .string)
@@ -432,14 +631,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
                                         mod: flags.contains(.command), control: flags.contains(.control),
                                         isRepeat: event.isARepeat, composing: hasMarkedText())
             let linePrefix = (expanded(NSRange(location: 0, length: selectedRange().location))).components(separatedBy: "\n").last ?? ""
-            if richTextEnabled, !key.mod, !key.control, !key.composing,
-               linePrefix.range(of: #"^(`{3,}|~{3,})[^\n]*$"#, options: .regularExpression) != nil {
-                insertNewline(nil); return
-            }
             if richTextEnabled, !key.mod, !key.control, !key.composing, let storage = textStorage {
                 let prior = selectedRange().location > 0 ? storage.attribute(.attachment, at: selectedRange().location - 1, effectiveRange: nil) as? ComposerBlockAttachment : nil
                 var justClosed = false
                 if let prior, case .codeEnd = prior.kind { justClosed = true }
+                if let fence = codeFenceAtCaret, exitCodeBlock(fence: fence) { return }
+                if codeFenceAtCaret == nil, !justClosed, convertCodeFenceOnEnter() { return }
                 if codeFenceAtCaret != nil || justClosed {
                     let indent = justClosed ? "" : String(linePrefix.prefix { $0 == " " || $0 == "\t" })
                     insertText("\n" + indent, replacementRange: selectedRange()); return
@@ -448,6 +645,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
             if onSubmitKey?(key) == true { return }
             if !key.composing, listEdit(indent: false) { return }
         }
+        let plainKey = event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty && !hasMarkedText()
+        // ArrowLeft 123, ArrowRight 124: a styled edge is two caret stops (`stepCaretAcrossStyledEdge`).
+        if plainKey, event.keyCode == 123 || event.keyCode == 124, stepCaretAcrossStyledEdge(event.keyCode == 123 ? -1 : 1) { return }
+        // Backspace 51 at the start of a fence's code removes the fence (`unwrapCodeBlockAtStart`).
+        if plainKey, event.keyCode == 51, unwrapCodeBlockAtStart() { return }
         // ArrowUp 126, ArrowDown 125, without modifiers or an IME composition (ChatComposer.tsx:4393-4400).
         if event.keyCode == 126 || event.keyCode == 125,
            event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty, !hasMarkedText(),

@@ -54,13 +54,33 @@ final class ComposerBlockAttachment: NSTextAttachment {
 
     /// The block markers `prefix` tries, compiled once: it runs for every line on every edit.
     private static let blockPatterns: [String: NSRegularExpression] = Dictionary(uniqueKeysWithValues: [
+        #"^([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$"#,
         #"^([ \t]*)-([ \t]+)\[([ xX])\]([ \t]+|$)"#,
         #"^([ \t]*)(\d+[.)])([ \t]+|$)"#,
         #"^([ \t]*)([-*+])([ \t]+|$)"#,
         #"^(#{1,6})([ \t]+)"#,
-        #"^>([ \t]?)"#,
-        #"^(---|\*\*\*|___)[ \t]*$"#,
+        #"^>([ \t]*)"#,
     ].map { ($0, try! NSRegularExpression(pattern: $0)) })
+
+    /// `parseOpeningFence`: three or more backticks or tildes, then an info string. A backtick
+    /// fence cannot carry a backtick in its info string.
+    static func openingFence(_ line: String) -> (fence: String, info: String)? {
+        guard let c = line.first, c == "`" || c == "~" else { return nil }
+        let run = line.prefix { $0 == c }
+        guard run.count >= 3 else { return nil }
+        let info = String(line.dropFirst(run.count))
+        if c == "`" && info.contains("`") { return nil }
+        return (String(run), info)
+    }
+
+    /// `isClosingFence`: the opening run's character, at least as long, then only spaces or tabs.
+    static func isClosingFence(_ line: String, _ fence: String) -> Bool {
+        guard let c = fence.first else { return false }
+        var body = Substring(line)
+        if body.hasSuffix("\r") { body = body.dropLast() }
+        while let last = body.last, last == " " || last == "\t" { body = body.dropLast() }
+        return body.count >= max(3, fence.count) && body.allSatisfy { $0 == c }
+    }
 
     static func prefix(_ line: String) -> (source: String, kind: Kind)? {
         func match(_ pattern: String) -> [String]? {
@@ -69,14 +89,15 @@ final class ComposerBlockAttachment: NSTextAttachment {
                   let m = regex.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) else { return nil }
             return (0..<m.numberOfRanges).map { m.range(at: $0).location == NSNotFound ? "" : ns.substring(with: m.range(at: $0)) }
         }
+        // A thematic break outranks a list: `- - -` and `* * *` are rules (buildTiptapContent).
+        if match(#"^([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$"#) != nil { return (line, .rule) }
         if let m = match(#"^([ \t]*)-([ \t]+)\[([ xX])\]([ \t]+|$)"#) {
             return (m[0].replacingOccurrences(of: "[X]", with: "[x]"), .task(m[3].lowercased() == "x"))
         }
         if let m = match(#"^([ \t]*)(\d+[.)])([ \t]+|$)"#) { return (m[0], .ordered) }
         if let m = match(#"^([ \t]*)([-*+])([ \t]+|$)"#) { return (m[0], .bullet) }
         if let m = match(#"^(#{1,6})([ \t]+)"#) { return (m[0], .heading(m[1].count)) }
-        if let m = match(#"^>([ \t]?)"#) { return (m[0], .quote) }
-        if match(#"^(---|\*\*\*|___)[ \t]*$"#) != nil { return (line, .rule) }
+        if let m = match(#"^>([ \t]*)"#) { return (m[0], .quote) }
         return nil
     }
 }
