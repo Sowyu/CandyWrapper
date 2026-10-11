@@ -206,7 +206,13 @@ Milestone 9 started on 2026-10-11 after the M8 demo (v0.1.2). The user chose a s
 - [ ] Updater (task updater): Sparkle 2.10.0 behind T3's update pill, release notes popover, status icon, toasts, Settings rows and menu items; `scripts/release` with appcast, DMG and dry run. Plan and T3 citations in docs/research/m9-updater-2026-10-11.md.
 - [ ] Composer banner stack and compact mode (task banners): motion inventory items 37 to 39.
 - [ ] Motion and hover leftovers (task polish): inventory items 30, 31, 32, 43, 48, 49, the hovers CandyWrapper does not draw yet, the device panel's JPEG decode.
-- [ ] Partly built features (task partials, research): sort the 92 partly built rows of docs/parity-checklist.md into skipped by design, blocked, and gaps to build, with state restoration and T3 Connect's cloud state included.
+- [x] Partly built features (2026-10-11, task partials, research): docs/research/m9-partials-2026-10-11.md. Of the 92 partly built rows, 51 are gaps to build, 28 blocked, 10 built with only fidelity or checklist upkeep left, 3 skipped by design. State restoration already covers more than T3 restores; four small gaps remain. T3 Connect's cloud state is a medium port plus half a day on the user's real account.
+- [ ] Thread header densities, the details card and chips in sent messages (task threadview): partials items 1 and 2.
+- [ ] Composer rich text structure: lists, blockquote, headings, HTML paste and list splitting (partials item 3), after the banners task.
+- [ ] The weekly gaps, partials items 4 to 30, in waves of up to four agents.
+- [ ] State restoration gaps: draft attachments across relaunch, sidebar shelf expansion, diff scope per thread, display and zoom checks on the saved window frame.
+- [ ] Checklist upkeep: the 10 built rows and the 5 stale keybinding lines the research found.
+- [ ] T3 Connect cloud state (reconcileCloudState port): needs half a day on the user's real account, so ask first.
 - [ ] First release through `scripts/release` (main session), then the `appcast` feed tag.
 - [ ] Off-machine backup of the signing identity and EdDSA seed (ask the user).
 
