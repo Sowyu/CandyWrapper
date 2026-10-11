@@ -11,6 +11,8 @@ public struct SidebarThreadHoverCardModel: Equatable {
     public var environmentLabel: String?
     public var environmentMachine: String
     public var branch: String?
+    /// "You're currently checked out on another branch." (`branchMismatch`, Sidebar.tsx:1350-1355, 498-505).
+    public var branchMismatch = false
     /// The provider glyph's driver and "<model> · <instance>" or the model alone.
     public var provider: (driver: String, label: String)?
     /// "Handed off from <names>".
@@ -25,7 +27,7 @@ public struct SidebarThreadHoverCardModel: Equatable {
 
     public static func == (a: Self, b: Self) -> Bool {
         a.title == b.title && a.projectLabel == b.projectLabel && a.projectIcon == b.projectIcon && a.environmentLabel == b.environmentLabel
-            && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.provider?.driver == b.provider?.driver
+            && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.branchMismatch == b.branchMismatch && a.provider?.driver == b.provider?.driver
             && a.provider?.label == b.provider?.label && a.handedOffFrom == b.handedOffFrom && a.terminalProcessCount == b.terminalProcessCount
             && a.errorIsUsageLimit == b.errorIsUsageLimit && a.pullRequests == b.pullRequests
     }
@@ -36,7 +38,7 @@ public struct SidebarThreadHoverCardModel: Equatable {
 /// font-medium`), the detail rows (`grid gap-1.5 pl-0.5 text-xs text-muted-foreground`, each a 12px glyph,
 /// `gap-2`, the text at 75% foreground) and the pull request footer.
 public final class SidebarThreadHoverCardView: DSView, PopupContent {
-    private struct Row { let glyph: NSView; let label: LabelView; let tone: NSColor?; let muted: Bool }
+    private struct Row { let glyph: NSView; let label: LabelView; let tone: NSColor?; let muted: Bool; var block: TextBlockView? = nil; var hidden = false }
     private let decoration = BoxDecorationLayer()
     private let title = LabelView()
     private var rows: [Row] = []
@@ -80,6 +82,20 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         }
         // The branch is a `MiddleTruncate` in the grid's `text-muted-foreground`, not at 75% foreground.
         if let branch = model.branch { add(IconView(name: .gitBranch, size: 12, strokeColor: muted), branch, muted: true) }
+        // `items-start gap-2 text-warning`, the glyph `mt-0.5`, the text `leading-5`. Built with every branch
+        // row: the checkout's branch arrives after the card opens (`branchMismatch`).
+        if model.branch != nil {
+            let tone = Themed.color(\.warning)
+            add(IconView(name: .circleAlert, size: 12, strokeColor: tone), "", tone: tone)
+            let block = TextBlockView()
+            block.text = "You're currently checked out on another branch."
+            block.font = DSFont.ui(12)
+            block.lineHeight = 20
+            block.balanced = true // the popup's `text-balance`
+            addSubview(block)
+            rows[rows.count - 1].block = block
+            mismatchRow = rows.count - 1
+        }
         if let provider = model.provider {
             let glyph = IconView(name: provider.driver == "codex" ? .brandOpenAI : .brandClaudeAI, size: 12, strokeColor: Themed.color(\.foreground))
             glyph.alphaValue = 0.6 // `grayscale opacity-60`
@@ -104,21 +120,41 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         }
         setAccessibilityRole(.group)
         setAccessibilityLabel(model.title)
+        branchMismatch = model.branchMismatch
+        applyMismatch()
     }
+
+    private var mismatchRow: Int?
+    /// Shows or hides the mismatch line; the caller repositions the popup for the new size.
+    public var branchMismatch = false { didSet { if branchMismatch != oldValue { applyMismatch() } } }
+    private func applyMismatch() {
+        guard let i = mismatchRow else { return }
+        rows[i].hidden = !branchMismatch
+        rows[i].glyph.isHidden = !branchMismatch
+        rows[i].block?.isHidden = !branchMismatch
+        needsLayout = true
+    }
+    private var shown: [Row] { rows.filter { !$0.hidden } }
 
     /// The text column: up to `max-w-80` less the viewport's `px-2`, the card's `px-1`, the rows' `pl-0.5`.
     private static let maxWidth: CGFloat = 320
 
     public var popupSize: CGSize {
-        let rowWidths = rows.map { 2 + 12 + 8 + ceil($0.label.textWidth) }
+        let rows = shown
+        let rowWidths = rows.map { 2 + 12 + 8 + ceil($0.block?.naturalWidth ?? $0.label.textWidth) }
         let content = max(ceil(title.textWidth), rowWidths.max() ?? 0, footer == nil ? 0 : 300)
         let width = min(Self.maxWidth, content + 2 * (8 + 4) + 2)
-        let rowsHeight = rows.isEmpty ? 0 : CGFloat(rows.count) * 16 + CGFloat(rows.count - 1) * 6
+        let rowsHeight = rows.isEmpty ? 0 : rows.map { height(of: $0, cardWidth: width) }.reduce(0, +) + CGFloat(rows.count - 1) * 6
         var height = 4 + 8 + 15 + (rows.isEmpty ? 0 : 8 + rowsHeight) + 8 + 4 + 2
         if let footer { height += 8 + 1 + 8 + footer.popupSize.height - 16 }
         return CGSize(width: width, height: height)
     }
     public override var intrinsicContentSize: NSSize { popupSize }
+
+    /// 16, or the wrapped block's lines at `leading-5`.
+    private func height(of row: Row, cardWidth: CGFloat) -> CGFloat {
+        row.block.map { $0.height(forWidth: max(0, cardWidth - 2 * (1 + 8 + 4) - 22)) } ?? 16
+    }
 
     public override func layout() {
         super.layout()
@@ -127,10 +163,12 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         var y: CGFloat = 1 + 4 + 8
         title.frame = NSRect(x: left, y: y, width: max(0, right - left), height: 15)
         y += 15 + 8
-        for r in rows {
+        for r in shown {
             r.glyph.frame = NSRect(x: left + 2, y: y + 2, width: 12, height: 12)
+            let h = height(of: r, cardWidth: bounds.width)
             r.label.frame = NSRect(x: left + 2 + 12 + 8, y: y, width: max(0, right - left - 22), height: 16)
-            y += 16 + 6
+            r.block?.frame = NSRect(x: left + 2 + 12 + 8, y: y, width: max(0, right - left - 22), height: h)
+            y += h + 6
         }
         if let footer {
             y += 2
@@ -142,7 +180,10 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
     public override func updateLayer() {
         decoration.setNeedsDisplay()
         title.color = Themed.color(\.foreground)
-        for r in rows { r.label.color = r.tone ?? (r.muted ? Themed.color(\.mutedForeground) : Themed.color(\.foreground, 0.75)) }
+        for r in rows {
+            r.label.color = r.tone ?? (r.muted ? Themed.color(\.mutedForeground) : Themed.color(\.foreground, 0.75))
+            r.block?.color = r.label.color
+        }
         divider.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
     }
 }

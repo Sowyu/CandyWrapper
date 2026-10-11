@@ -9,7 +9,8 @@ public struct FontRuntimeInput: Equatable, Sendable {
     public init() {}
 }
 
-public enum FontRuntimeRole: Sendable { case interface, prompt, code, terminal }
+/// The terminal reads `input` itself (TerminalFontSettings): it needs a fixed-pitch family and glyph fallbacks.
+public enum FontRuntimeRole: Sendable { case interface, prompt, code }
 
 public struct FontRuntimeRecipe: Sendable {
     public let role: FontRuntimeRole
@@ -71,10 +72,6 @@ public enum FontRuntime {
             case .interface: family = p.interfaceFamily; resolvedSize = size * p.interfaceSize / 16
             case .prompt: family = p.promptFamily.isEmpty ? p.interfaceFamily : p.promptFamily; resolvedSize = size * p.promptSize / 14
             case .code: family = p.codeFamily; resolvedSize = size * p.codeSize / 13
-            case .terminal:
-                family = p.advanced ? p.terminalFamily : p.codeFamily
-                // ponytail: preserve the old default terminal metrics; unify with code size when baseline fidelity is approved.
-                resolvedSize = p.advanced ? p.terminalSize : (p.codeSize == 13 ? size : p.codeSize)
             }
             var chosen: NSFont?
             for item in family.split(separator: ",") {
@@ -86,13 +83,12 @@ public enum FontRuntime {
             }
             let font = chosen ?? {
                 if role == .interface || role == .prompt { return NSFont.systemFont(ofSize: resolvedSize, weight: weight) }
-                if role == .terminal { return NSFont.monospacedSystemFont(ofSize: resolvedSize, weight: weight) }
                 let base = CTFontCreateUIFontForLanguage(.userFixedPitch, resolvedSize, nil).map { $0 as NSFont }
                     ?? NSFont.monospacedSystemFont(ofSize: resolvedSize, weight: weight)
                 return weight >= .semibold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
             }()
             s.fonts[key] = font
-            // Prompt and terminal own their refresh hooks. Avoid aliasing the system UI recipe.
+            // Prompt owns its refresh hook. Avoid aliasing the system UI recipe.
             if role == .interface || role == .code { s.recipes[font] = FontRuntimeRecipe(role: role, size: size, weight: weight) }
             return font
         }

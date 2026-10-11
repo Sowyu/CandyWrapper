@@ -78,7 +78,8 @@ final class SnapShotController {
         guard ready else { showSetup(); return }
         if !test, !ClientSettingsStore.shared.current.bool("snapShotEnabled") { showSetup(); return }
         let destination = composer.snapShotDestination
-        if !test, destination == nil { composer.toastPublic(.error, "Could not attach snapshot", "Open a draft, then try again."); return }
+        // SnapShotCoordinator.tsx:282-292.
+        if !test, destination == nil { composer.toastPublic(.error, "Snapshot taken, but no project is available", "Add a project, then capture the window again."); return }
         let app = NSWorkspace.shared.frontmostApplication
         let pid = app?.processIdentifier
         let capturedAt = ISO8601DateFormatter().string(from: Date())
@@ -139,6 +140,7 @@ final class SnapShotController {
                 let attachmentId = try await composer.attachSnapShot(data, source: .object(source), destination: destination)
                 window?.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
+                composer.showSnapShotTarget(destination.key)
                 if ClientSettingsStore.shared.current.bool("snapShotAnimations"), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                    let end = composer.snapShotFrame(id: attachmentId, key: destination.key) {
                     await SnapShotCaptureFeedback.fly(image: image, frame: target.frame, destination: end)

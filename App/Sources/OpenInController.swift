@@ -91,19 +91,13 @@ final class OpenInController {
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
     }
 
-    var revealFileLabel: String? {
-        environmentId == environments.primaryId && available.contains("file-manager") && environmentId.flatMap { composer.config($0) }?.revealsInFileManager == true ? "Reveal in Finder" : nil
-    }
-
-    func openFile(_ meta: FileLinkMeta, reveal: Bool = false) {
-        guard !reveal || revealFileLabel != nil else { return }
-        guard let environmentId, let editor = reveal ? "file-manager" : preferred else { return }
-        let path = reveal ? meta.filePath : meta.targetPath
-        if let remoteHost, !reveal {
-            if let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost, path: path) { NSWorkspace.shared.open(url) }
+    func openFile(_ meta: FileLinkMeta) {
+        guard let environmentId, let editor = preferred else { return }
+        if let remoteHost {
+            if let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost, path: meta.targetPath) { NSWorkspace.shared.open(url) }
             return
         }
-        Task { _ = try? await environments.request(environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor, reveal: reveal)) }
+        Task { _ = try? await environments.request(environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: meta.targetPath, editor: editor)) }
     }
 
     private func open(_ editorId: String?) {

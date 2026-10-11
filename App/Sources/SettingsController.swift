@@ -25,6 +25,8 @@ final class SettingsController {
     var section: SettingsSection = .general
     /// `ThreadNotificationCoordinator.choose`, set by the app.
     var chooseNotificationMode: ((ThreadNotificationMode) async -> String?)?
+    /// The project icon file picker (the palette's `ProjectFaviconPickerDialog`), set by the app.
+    var chooseIconFile: ((String, String, String, Bool, @escaping (String) -> Void) -> Void)?
     // Pages and their shared context (SettingsPages.swift).
     let pageContext = SettingsPageContext()
     var scopeSelection = SettingsScopeSelection()

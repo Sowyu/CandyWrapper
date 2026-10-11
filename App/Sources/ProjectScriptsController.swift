@@ -21,6 +21,15 @@ final class ProjectScriptsController {
     var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
     private var editor: ProjectActionEditor?
     var openProjectSettings: ((String) -> Void)?
+    /// `useT3ProjectFileScripts`: the scripts of the workspace's `t3.json`, keyed by environment and cwd.
+    private var fileScripts: (key: String, scripts: [T3ProjectFile.Script])?
+    private var fileTask: Task<Void, Never>?
+    /// `projects.readFile` on an environment; nil when unreadable.
+    var readFile: ((_ environmentId: String, _ cwd: String, _ path: String) async -> (contents: String, truncated: Bool)?)?
+    /// The script's checked-in t3.json counterparts not yet imported (`importableScripts`).
+    private var importable: [T3ProjectFile.Script] {
+        T3ProjectFile.importable(fileScripts?.scripts ?? [], existing: scripts)
+    }
 
     init(panel: ThreadPanelView, sidebar: SidebarContentView, composer: ComposerController, terminal: TerminalController) {
         self.panel = panel
@@ -51,13 +60,35 @@ final class ProjectScriptsController {
         }
         let settings = ServerSettingsValues(composer?.config(env)?.settings.raw ?? .null)
         scripts = ProjectScripts.resolve(settings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)))
+        loadProjectFile(env, cwd: thread(threadId)?.worktreePath ?? project.workspaceRoot)
+        // ProjectScriptsControl.tsx:269-300, 372-375: "Actions" while only a settle action or t3.json imports exist.
         panel.detailsCard.scriptsRow = ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
-            ?? (scripts.isEmpty ? .add : .actions)
+            ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions)
+    }
+
+    /// `useT3ProjectFileState` (hooks/useT3ProjectFileScripts.ts:31-53): `t3.json` at the workspace root; a missing,
+    /// truncated or invalid file offers nothing.
+    // ponytail: read once per workspace while it is open; T3's file query refreshes on its cache policy. Re-read on focus if edits to t3.json go unseen
+    private func loadProjectFile(_ env: String, cwd: String) {
+        let key = env + "\u{0}" + cwd
+        guard fileScripts?.key != key else { return }
+        fileScripts = (key, [])
+        fileTask?.cancel()
+        fileTask = Task { [weak self] in
+            guard let read = self?.readFile, let reply = await read(env, cwd, T3ProjectFile.fileName), !reply.truncated,
+                  let file = T3ProjectFile.parse(reply.contents), !Task.isCancelled, let self, self.fileScripts?.key == key else { return }
+            self.fileScripts = (key, file.scripts)
+            self.refresh()
+        }
     }
 
     private func project(_ threadId: ThreadId) -> ProjectShell? {
-        guard let snapshot = sidebar?.snapshot, let thread = snapshot.threads.first(where: { $0.id == threadId }) else { return nil }
+        guard let snapshot = sidebar?.snapshot, let thread = thread(threadId) else { return nil }
         return snapshot.projects.first { $0.id == thread.projectId }
+    }
+
+    private func thread(_ threadId: ThreadId) -> ThreadShell? {
+        sidebar?.snapshot?.threads.first { $0.id == threadId }
     }
 
     func registerShortcuts(_ shortcuts: Shortcuts) {
@@ -87,6 +118,19 @@ final class ProjectScriptsController {
             }
             return item
         }
+        // "From t3.json" (ProjectScriptsControl.tsx:169-188): each importable script with the download glyph.
+        let imports = importable
+        if !imports.isEmpty {
+            if !scripts.isEmpty { items.append(.separator) }
+            items.append(.label("From t3.json"))
+            for fileScript in imports {
+                var item = MenuItem(fileScript.name, icon: ProjectScriptIcon.name(fileScript.icon ?? "play"))
+                item.badge = IconName.download.definition
+                item.badgeTooltip = "Import"
+                item.action = { [weak self] in self?.importFileScript(fileScript) }
+                items.append(item)
+            }
+        }
         var add = MenuItem("Add project script", icon: .plus)
         add.action = { [weak self] in self?.openEditor(nil) }
         items.append(add)
@@ -94,21 +138,43 @@ final class ProjectScriptsController {
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
     }
 
-    private func openEditor(_ script: ProjectScript?) {
-        guard let threadId, let project = project(threadId), let env = threadId.environmentId,
-              let config = composer?.config(env), let window = panel.window else { return }
+    /// `importFileScript`: adds the script as a new action; a failure reopens the add form prefilled with the error.
+    private func importFileScript(_ fileScript: T3ProjectFile.Script) {
+        guard let saveActions, let target = actionsTarget() else { return }
+        // A new action has no shortcut to clear, so T3's `keybinding: null` (write scope only) changes nothing here.
+        let input = T3ProjectFile.importInput(fileScript, canWriteSettings: false)
+        let id = ProjectActionsLogic.newId(input.name, targets: [target])
+        let writes = ProjectActionsLogic.plan([target], transform: { ProjectScripts.applySubmit($0, id: id, isNew: true, input: input) },
+                                              scriptId: id, keybinding: input.keybinding)
+        Task { [weak self] in
+            if let error = await saveActions(writes) {
+                self?.openEditor(nil, prefill: input, error: error)
+            } else {
+                self?.refresh()
+            }
+        }
+    }
+
+    private func actionsTarget() -> ProjectActionsLogic.Target? {
+        guard let threadId, let project = project(threadId), let env = threadId.environmentId, let config = composer?.config(env) else { return nil }
+        return ProjectActionsLogic.Target(environmentId: env, settings: ServerSettingsValues(config.settings.raw),
+            keybindings: config.keybindings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)),
+            otherProjects: (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != project.id }
+                .map { ($0.id.localId.rawValue, ProjectScript.list(.array($0.scripts))) })
+    }
+
+    private func openEditor(_ script: ProjectScript?, prefill: ProjectScriptInput? = nil, error: String? = nil) {
+        guard let threadId, project(threadId) != nil, let env = threadId.environmentId,
+              let config = composer?.config(env), let window = panel.window, let target = actionsTarget() else { return }
         let editor = ProjectActionEditor(script: script, keybinding: script.flatMap {
             ProjectActionsLogic.keybindingValue(config.keybindings, command: ProjectScripts.command($0.id))
-        })
+        }, prefill: prefill)
+        editor.error = error
         self.editor = editor
         let host = ModalHost.present(editor.dialog, in: window)
         editor.dialog.onClose = { [weak host] in host?.close() }
         host.onDismiss = { [weak self] in self?.editor = nil }
         editor.onCancel = { [weak host] in host?.close() }
-        let target = ProjectActionsLogic.Target(environmentId: env, settings: ServerSettingsValues(config.settings.raw),
-            keybindings: config.keybindings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)),
-            otherProjects: (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != project.id }
-                .map { ($0.id.localId.rawValue, ProjectScript.list(.array($0.scripts))) })
         editor.onSubmit = { [weak self, weak editor, weak host] input in
             guard let self, let editor, let saveActions = self.saveActions else { return }
             let id = script?.id ?? ProjectActionsLogic.newId(input.name, targets: [target])

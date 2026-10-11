@@ -64,6 +64,9 @@ extension SettingsController {
             self?.toast(title, nil, .success)
         }
         c.updateProject = { [weak self] members, fields, title in self?.updateProject(members, fields, failureTitle: title) }
+        c.chooseIconFile = { [weak self] env, cwd, name, external, onSelect in
+            self?.chooseIconFile?(env, cwd, name, external, onSelect)
+        }
         c.deleteProjects = { [weak self] members, leave in self?.deleteProjects(members, leave: leave) }
         c.threadCount = { [weak self] env, projectId in
             self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0

@@ -60,6 +60,10 @@ public final class SettingsPageContext {
     public var copy: ((String, String) -> Void)?
     /// `projects.mutate project.update` on every member, stopping at the first failure (`updateAllMembers`).
     public var updateProject: ((_ members: [SettingsScopeProject.Member], _ fields: [String: JSONValue], _ failureTitle: String) -> Void)?
+    /// "Choose file": the project icon file picker over a checkout (environment, workspace root, group name,
+    /// whether a file on this Mac may be picked); the pick is a path.
+    public var chooseIconFile: ((_ environmentId: String, _ cwd: String, _ projectName: String, _ external: Bool,
+                                 _ onSelect: @escaping (String) -> Void) -> Void)?
     /// `projects.mutate project.delete {force: true}` for each member; `leave` returns to the thread view.
     public var deleteProjects: ((_ members: [SettingsScopeProject.Member], _ leave: Bool) -> Void)?
     /// Active threads of a project on an environment (environment id, project id), for the removal prompt.

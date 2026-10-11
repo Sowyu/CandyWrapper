@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import DesignSystem
 import Features
 import T3Client
@@ -102,7 +103,11 @@ final class PaletteCommands {
         let overlay = CommandPaletteOverlay(controller: controller)
         controller.onClose = { [weak self] in self?.close() }
         controller.onQueryChange = { [weak self, weak controller] query in
-            if controller?.mode?.name == "files" { self?.searchFiles(query) } else { self?.searchMessages(query) }
+            switch controller?.mode?.name {
+            case "files": self?.searchFiles(query)
+            case "project-favicon": self?.searchFavicons(query)
+            default: self?.searchMessages(query)
+            }
         }
         overlay.onDismiss = { [weak self, weak overlay] in if self?.overlay === overlay { self?.overlay = nil } }
         // A path typed anywhere browses folders on the add-project machine (`isBrowsing`).
@@ -143,6 +148,101 @@ final class PaletteCommands {
             }
             return (items.isEmpty ? [] : [PaletteGroup(value: "project-files", label: project, items: items)],
                     searching ? "No matching files." : "No files found.")
+        }
+    }
+
+    // MARK: Project icon file
+
+    /// The open "Choose project icon" picker: its checkout, group name and what a pick does.
+    private var favicon: (environmentId: String, cwd: String, projectName: String, onSelect: (String) -> Void)?
+    private var faviconPicker: (query: String, entries: [ProjectEntry]?, error: String?)?
+    private var pickingFaviconFile = false
+
+    /// `ProjectFaviconPickerDialog` (settings/ProjectFaviconPickerDialog.tsx:30-142): the palette over the
+    /// checkout's image files (`projects.searchEntries` with `kind: "file"`, `imageOnly: true`, 200 results,
+    /// an empty query lists recent files). Enter selects; "Open in Finder" picks any image on this Mac when
+    /// every checkout of the group is on the primary environment (ProjectSettingsPanel.tsx:196-204).
+    func openProjectFaviconPicker(environmentId: String, cwd: String, projectName: String, external: Bool, onSelect: @escaping (String) -> Void) {
+        if overlay == nil { open() }
+        guard let controller = overlay?.controller else { return }
+        favicon = (environmentId, cwd, projectName, onSelect)
+        faviconPicker = nil
+        controller.onLeaveMode = { [weak self] in self?.close() }
+        var mode = CommandPaletteController.Mode(name: "project-favicon", placeholder: "Search image files\u{2026}",
+                                                 footerActionLabel: "Select icon") { [weak self] query in
+            guard let self, let favicon = self.favicon else { return ([], "") }
+            let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
+            // `emptyMessage`: the error, then pending, then no results.
+            guard let picker = self.faviconPicker, picker.query == query else {
+                return ([], searching ? "Searching project files\u{2026}" : "Indexing project files\u{2026}")
+            }
+            if let error = picker.error { return ([], error) }
+            let highlight = !FilePicker.normalize(picker.query).isEmpty
+            let items = FilePicker.matches(picker.entries ?? [], query: picker.query).map { match in
+                var entry = PaletteEntry(value: "project-favicon:\(match.path)", searchTerms: [match.name, match.path], title: match.name,
+                                         description: match.path, icon: .file,
+                                         action: .run({ favicon.onSelect(match.path) }, keepOpen: false))
+                entry.glyph = FileTypeIcon.icon(for: match.path)
+                if highlight { entry.titleHighlights = match.nameMatches; entry.descriptionHighlights = match.pathMatches }
+                return entry
+            }
+            return (items.isEmpty ? [] : [PaletteGroup(value: "project-favicon-files", label: favicon.projectName, items: items)],
+                    searching ? "No matching image files." : "No image files found.")
+        }
+        mode.escapeLabel = "Close"
+        if external {
+            let finder = ButtonView("Open in Finder", variant: .ghostMuted, size: .xs)
+            finder.action = { [weak self, weak finder] in self?.pickFaviconFile(cwd: cwd, button: finder) }
+            mode.footerTrailing = finder
+        }
+        controller.setMode(mode)
+        controller.view.setAccessibilityLabel("Choose project icon")
+        searchFavicons("")
+    }
+
+    /// 120 ms debounce like Go to file; the server filters to image files.
+    private func searchFavicons(_ query: String) {
+        pickerTask?.cancel()
+        guard let favicon, let shell = environments.session(favicon.environmentId) else { return }
+        pickerTask = Task { [weak self] in
+            if !query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
+            guard !Task.isCancelled else { return }
+            let payload: JSONValue = .object(["cwd": .string(favicon.cwd),
+                                              "query": .string(String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(256))),
+                                              "limit": .number(Double(FilePicker.resultLimit)), "kind": .string("file"), "imageOnly": .bool(true)])
+            var result: (String, [ProjectEntry]?, String?)
+            do {
+                let reply = try await shell.supervisor.request("projects.searchEntries", payload: payload)
+                result = (query, FilesController.entries(reply), nil)
+            } catch {
+                result = (query, nil, (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "Unable to search project files.")
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.pickerTask = nil
+            self.faviconPicker = result
+            if self.overlay?.controller.mode?.name == "project-favicon", self.overlay?.controller.query == query { self.overlay?.controller.refresh() }
+        }
+    }
+
+    /// `onPickExternal`: the system file picker at the checkout, filtered to T3's image types.
+    private func pickFaviconFile(cwd: String, button: ButtonView?) {
+        guard !pickingFaviconFile, let window, let favicon else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = FilePreviewKind.imageExtensions.compactMap { UTType(filenameExtension: String($0.dropFirst())) }
+        panel.directoryURL = URL(fileURLWithPath: cwd)
+        pickingFaviconFile = true
+        button?.isEnabled = false
+        panel.beginSheetModal(for: window) { [weak self, weak button] response in
+            MainActor.assumeIsolated {
+                self?.pickingFaviconFile = false
+                button?.isEnabled = true
+                guard response == .OK, let url = panel.url else { return }
+                self?.close()
+                favicon.onSelect(url.path)
+            }
         }
     }
 
@@ -231,6 +331,8 @@ final class PaletteCommands {
 
     func close() {
         addProjectFlow.reset()
+        favicon = nil
+        faviconPicker = nil
         pickerTask?.cancel()
         contentTask?.cancel()
         searchTask?.cancel()

@@ -32,7 +32,6 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     private var projectFileContents: String?
     private var projectFileKey: String?
     private var projectFileTask: Task<Void, Never>?
-    private var faviconPicker: SettingsProjectFaviconPicker?
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -52,7 +51,6 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
-            faviconPicker?.close(); faviconPicker = nil
             projectFileTask?.cancel(); projectFileTask = nil; projectFileContents = nil; projectFileKey = nil
         } else { loadProjectFile() }
     }
@@ -110,6 +108,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         shownKey = group.key
         nameInput.isEnabled = canEditGroup
         chooseIconButton?.isEnabled = canEditGroup
+        chooseFileButton?.isEnabled = canEditGroup
         favicon.source = ProjectIconSource(title: representative.title, workspaceRoot: representative.workspaceRoot,
                                            faviconPath: representative.faviconPath, override: ProjectIconSource.override(representative.projectIcon))
         favicon.source?.environmentId = representative.environmentId
@@ -144,6 +143,20 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     }
 
     private weak var chooseIconButton: ButtonView?
+    private weak var chooseFileButton: ButtonView?
+
+    /// "Choose file" (ProjectSettingsPanel.tsx:527-535, 577-588): the image picker over the representative's
+    /// checkout; a pick writes `{faviconPath: path, projectIcon: null}` to every member. A file on this Mac may
+    /// be picked when every member lives on the primary environment (`pickProjectFavicon`, :196-204).
+    private func chooseIconFile() {
+        guard canEditGroup, let group, let representative = members.first(where: { m in context.scope.connected.contains { $0.id == m.environmentId } }) ?? members.first
+        else { return }
+        let external = context.scope.primaryId.map { primary in members.allSatisfy { $0.environmentId == primary } } ?? false
+        context.chooseIconFile?(representative.environmentId, representative.workspaceRoot, group.displayName, external) { [weak self] path in
+            guard let self else { return }
+            self.context.updateProject?(self.members, ["faviconPath": .string(path), "projectIcon": .null], "Failed to update project icon")
+        }
+    }
 
     /// "Choose icon" (ProjectSettingsPanel.tsx:515-525, 589-598): the picker over the representative's icon;
     /// Save writes `{faviconPath: null, projectIcon}` to every member.
@@ -184,16 +197,8 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         self.chooseIconButton = chooseIcon
         let chooseFile = ButtonView("Choose file", variant: .outline, size: .sm)
         chooseFile.setAccessibilityLabel("Choose a project icon file")
-        chooseFile.action = { [weak self] in
-            guard let self, self.canEditGroup, let member = self.members.first, let window = self.window else { return }
-            let members = self.members
-            let picker = SettingsProjectFaviconPicker(context: self.context, member: member) { [weak self] path in
-                self?.context.updateProject?(members, ["faviconPath": .string(path), "projectIcon": .null], "Failed to update project icon")
-            }
-            self.faviconPicker = picker
-            picker.present(in: window)
-        }
-        binder.add { [weak self, weak chooseFile] in chooseFile?.isEnabled = self?.canEditGroup == true }
+        chooseFile.action = { [weak self] in self?.chooseIconFile() }
+        self.chooseFileButton = chooseFile
         let controls = SettingsControlGroup([FixedSizeBox(favicon, size: NSSize(width: 24, height: 24)), chooseIcon, chooseFile])
         iconRow = SettingsRowView(title: "Project icon", detail: "Automatic", control: controls)
         let reset = ResetSlot(label: "project icon")

@@ -23,6 +23,8 @@ final class GitController {
     private let environments: Environments
     private let composer: ComposerController
     private var modal: ModalHost?
+    /// Settings > Source Control, set by the app.
+    var openSourceControlSettings: (() -> Void)?
 
     /// What the toolbar works on.
     struct Target: Equatable {
@@ -890,7 +892,9 @@ final class GitController {
             let wizard = PublishRepositoryDialog(discovered: value.map(SourceControlProviderDiscovery.list) ?? [], canWrite: true)
             let host = self.present(wizard.dialog, in: window)
             wizard.onClose = { [weak host] in host?.close() }
-            wizard.onOpenSettings = { [weak host] in host?.close() }
+            // "Setup Required" closes the wizard and opens Settings > Source Control (`openSourceControlSettings`,
+            // GitActionsControl.tsx:712-715).
+            wizard.onOpenSettings = { [weak host, weak self] in host?.close(); self?.openSourceControlSettings?() }
             wizard.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
             wizard.onPublish = { [weak self, weak wizard] provider, repository, visibility, remote, proto in
                 let payload = VcsRPC.publishInput(cwd: target.cwd, provider: provider, repository: repository, visibility: visibility,

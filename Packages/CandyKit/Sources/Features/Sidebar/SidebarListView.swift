@@ -221,6 +221,9 @@ public final class SidebarListView: DSView {
             row.onAddProject = { [weak self] in self?.onAddProject?() }
             view = row
         }
+        if kind == .searchResult {
+            view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
+        }
         if kind == .card || kind == .slim {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
             view.onBeginDrag = { [weak self] row, id, event in self?.beginThreadDrag(row, id, event: event) }
@@ -234,7 +237,7 @@ public final class SidebarListView: DSView {
     }
 
     private func recycle(_ view: SidebarRowBase) {
-        if case .row(let r)? = view.item, hoverPopup?.id == r.id { closeHoverCard() }
+        if let id = Self.hoverThreadId(view.item), hoverPopup?.id == id { closeHoverCard() }
         lendRenameField(to: view, nil)
         view.prepareForReuse()
         view.layer?.removeAllAnimations()
@@ -266,15 +269,25 @@ public final class SidebarListView: DSView {
     /// `TooltipProvider delay={150} closeDelay={0} timeout={400}`, `side="right" align="start" sideOffset={4}`.
     private func rowHoverChanged(_ row: SidebarRowBase, _ hovered: Bool) {
         hoverWork?.cancel()
-        guard hovered, case .row(let r)? = row.item, !r.isRenaming else { closeHoverCard(); return }
-        if let open = hoverPopup, open.id == r.id { return }
+        guard hovered, let id = Self.hoverThreadId(row.item) else { closeHoverCard(); return }
+        if let open = hoverPopup, open.id == id { return }
         let instant = hoverClosedAt.map { Date().timeIntervalSince($0) < 0.4 } ?? false
         let work = DispatchWorkItem { [weak self, weak row] in
-            guard let self, let row, row.state.hovered, case .row(let current)? = row.item, current.id == r.id else { return }
-            self.showHoverCard(r.id, over: row)
+            guard let self, let row, row.state.hovered, Self.hoverThreadId(row.item) == id else { return }
+            self.showHoverCard(id, over: row)
         }
         hoverWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + (instant ? 0 : 0.15), execute: work)
+    }
+
+    /// The thread a row's card describes: a thread row not being renamed, or a search result, which gets the
+    /// same card "to disambiguate identically-titled results" (Sidebar.tsx:2259-2261, 2364-2378).
+    private static func hoverThreadId(_ item: SidebarItem?) -> ThreadId? {
+        switch item {
+        case .row(let r)?: r.isRenaming ? nil : r.id
+        case .searchResult(let r)?: r.id
+        default: nil
+        }
     }
 
     private func showHoverCard(_ id: ThreadId, over row: SidebarRowBase) {
@@ -288,6 +301,14 @@ public final class SidebarListView: DSView {
                               placement: PopupPlacement(side: .right, align: .start, sideOffset: 4),
                               motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
         hoverPopup = (id, popup)
+    }
+
+    /// Data the open card waits on arrived (the checkout's branch): the card updates in place.
+    func refreshHoverCard() {
+        guard let open = hoverPopup, let card = open.popup.content as? SidebarThreadHoverCardView,
+              let model = hoverCard?(open.id), card.branchMismatch != model.branchMismatch, let window else { return }
+        card.branchMismatch = model.branchMismatch
+        PopupHost.host(for: window).reposition(open.popup)
     }
 
     func closeHoverCard() {

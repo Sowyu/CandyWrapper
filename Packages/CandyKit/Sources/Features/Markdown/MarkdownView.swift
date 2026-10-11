@@ -33,8 +33,6 @@ public final class MarkdownView: DSView {
     /// in its right files panel (`panelPath`; media in the media viewer, PDF and HTML in the browser
     /// preview when one is available) and Cmd-click opens it in the preferred editor. Without a
     /// handler a click shows the chip's menu, as T3 does when no open action is available.
-    public var revealFileLabel: (() -> String?)?
-    public var onRevealFile: ((FileLinkMeta) -> Void)?
     public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
 
     /// Mermaid fences render as diagrams once the response settles (false while it streams).
@@ -63,6 +61,13 @@ public final class MarkdownView: DSView {
     /// open thread, the browser panel and the pull request reads). Without one a click opens the
     /// system browser and the menu offers that and Copy Link.
     public static var onOpenCitation: ((ThreadAssistantCitation) -> Void)?
+    /// The file chip menu's shell items for the open thread (ChatMarkdown.tsx:2335-2397): the preferred editor's
+    /// "Open in ..." and the reveal label, each nil when the environment cannot run it. Set by the app.
+    public static var fileChipShell: (() -> (openLabel: String?, revealLabel: String?))?
+    /// "Open in <editor>": the chip's target path in the preferred editor (`openInPreferredEditor`).
+    public static var onOpenFileInEditor: ((FileLinkMeta) -> Void)?
+    /// "Reveal in Finder": the chip's file in the server's file manager (`revealMarkdownFileInFileManager`).
+    public static var onRevealFile: ((FileLinkMeta) -> Void)?
     public static weak var linkHandler: MarkdownLinkHandler?
     private var hoveredChip: Int? {
         didSet { if hoveredChip != oldValue { needsDisplay = true } }
@@ -260,19 +265,19 @@ public final class MarkdownView: DSView {
         }
     }
 
-    /// T3's native file menu (ChatMarkdown.tsx `showFileContextMenu`). Open, browser and reveal items
-    /// appear only once the app supplies those actions.
+    /// T3's native file menu (ChatMarkdown.tsx:2115-2160 `showFileContextMenu`): "Open in <editor>" and the reveal item
+    /// where the environment runs shell actions, then the two copies.
+    // ponytail: no "Preview media" or "Open in integrated browser" items; add them when chips open media and local preview tabs
     fileprivate func chipMenu(_ chip: FileChip, event: NSEvent, view: NSView) {
         let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) } ?? chip.meta.targetPath
-        var items = [ThreadMenuItem("relative", "Copy relative path"), ThreadMenuItem("full", "Copy full path")]
-        if onOpenFile != nil {
-            items.append(ThreadMenuItem("viewer", "Open in file viewer"))
-            items.append(ThreadMenuItem("editor", "Open in editor"))
-        }
-        if let label = revealFileLabel?(), onRevealFile != nil { items.append(ThreadMenuItem("reveal", label)) }
-        let menu = NativeItemContextMenu.make(items) { [weak self, weak view] action in
-            if action == "reveal" { self?.onRevealFile?(chip.meta); return }
-            if action == "viewer" || action == "editor" { self?.onOpenFile?(chip.meta, action == "editor"); return }
+        let shell = Self.fileChipShell?()
+        var items: [ThreadMenuItem] = []
+        if let open = shell?.openLabel { items.append(ThreadMenuItem("open", open)) }
+        if let reveal = shell?.revealLabel { items.append(ThreadMenuItem("reveal", reveal)) }
+        items += [ThreadMenuItem("relative", "Copy relative path"), ThreadMenuItem("full", "Copy full path")]
+        let menu = NativeItemContextMenu.make(items) { [weak view] action in
+            if action == "open" { Self.onOpenFileInEditor?(chip.meta); return }
+            if action == "reveal" { Self.onRevealFile?(chip.meta); return }
             NSPasteboard.general.clearContents()
             let copied = NSPasteboard.general.setString(action == "relative" ? relative : chip.meta.targetPath, forType: .string)
             if let view { AnchoredCopyToast.show(from: view, success: copied) }

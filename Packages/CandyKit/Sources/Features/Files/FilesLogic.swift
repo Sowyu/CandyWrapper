@@ -26,7 +26,7 @@ public enum FilePreviewKind: Equatable, Sendable {
     case text
 
     /// `WORKSPACE_IMAGE_PREVIEW_EXTENSIONS`.
-    static let imageExtensions = [".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"]
+    public static let imageExtensions = [".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"]
     /// `AUDIO_MIME_TYPE_BY_EXTENSION`.
     static let audioExtensions = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".aiff"]
     /// `videoMimeType` (packages/shared/src/video.ts).

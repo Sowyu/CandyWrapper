@@ -97,6 +97,27 @@ public enum PullRequestWriteLogic {
         !supportsStackActions || (!hasStack && !stackPending && !stackError)
     }
 
+    /// `savedPullRequestStack` (pullRequestStackSnapshot.ts:4-48): the newest saved native stack among the
+    /// environment's linked pull requests of the same host and repository that holds `reference`, for navigation
+    /// while the live read is pending or failed. Saved layers never carry head SHAs, so stack actions stay off.
+    public static func savedStack(_ links: [ThreadPullRequestLink], reference: PullRequestRef) -> PullRequestStackDetail? {
+        guard let host = reference.host?.lowercased(), !host.isEmpty else { return nil }
+        let repository = reference.repository.lowercased()
+        let matching = links.filter { $0.host.lowercased() == host && $0.repository.lowercased() == repository }
+        let newestFirst: (ThreadPullRequestLink, ThreadPullRequestLink) -> Bool = {
+            ($0.snapshot?.syncedAt.epochMs ?? $0.linkedAt.epochMs ?? 0) > ($1.snapshot?.syncedAt.epochMs ?? $1.linkedAt.epochMs ?? 0)
+        }
+        let exact = matching.filter { $0.number == reference.number }
+        let candidates = !exact.isEmpty ? exact : matching.filter { $0.stack?.layers.contains { $0.number == reference.number } == true }
+        guard let stack = candidates.sorted(by: newestFirst).first?.stack,
+              stack.layers.contains(where: { $0.number == reference.number }) else { return nil }
+        return PullRequestStackDetail(id: stack.id, number: stack.number, url: stack.url, base: stack.base, layers: stack.layers.map { layer in
+            let snapshot = matching.filter { $0.number == layer.number }.sorted(by: newestFirst).first?.snapshot
+            return PullRequestStackDetail.Layer(number: layer.number, title: snapshot?.title, isDraft: snapshot?.isDraft, headSha: nil,
+                                                headBranch: layer.headBranch, state: layer.state.rawValue)
+        })
+    }
+
     /// `pullRequestStackView` notice (pullRequestStackSnapshot.ts:51-72).
     public static func stackNotice(hasData: Bool, isSuccess: Bool, isPending: Bool, error: Bool) -> String? {
         guard hasData else { return nil }

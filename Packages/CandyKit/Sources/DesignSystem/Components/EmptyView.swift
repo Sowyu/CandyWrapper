@@ -22,6 +22,8 @@ public final class EmptyView: DSView {
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     /// A `min-h-*` class on the root, such as the Environments list's `min-h-52`. Nil keeps the size's.
     public var minimumHeight: CGFloat? { didSet { invalidateIntrinsicContentSize() } }
+    /// The header's text width cap: `max-w-sm` (384), or unbounded for `EmptyHeader className="max-w-none"`.
+    public var headerMaxWidth: CGFloat = 384 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// `EmptyContent` (buttons and so on), below the header with the size's gap.
     public var content: NSView? {
         didSet { oldValue?.removeFromSuperview(); content.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
@@ -63,7 +65,7 @@ public final class EmptyView: DSView {
 
     /// Header text width: `max-w-sm` inside the padding. Before the first frame, unbounded.
     private func textWidth(_ width: CGFloat) -> CGFloat {
-        width > 0 ? min(384, width - 2 * size.metrics.padding) : .greatestFiniteMagnitude
+        width > 0 ? min(headerMaxWidth, width - 2 * size.metrics.padding) : .greatestFiniteMagnitude
     }
 
     private func headerHeight(_ width: CGFloat) -> CGFloat {

@@ -10,8 +10,7 @@ import T3Store
 /// closed drawer costs no memory, drawing or timers.
 @MainActor
 public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDelegate {
-    /// `DEFAULT_TERMINAL_FONT_SIZE` and `CONTENT_PADDING` (surface.ts:20, 36).
-    public static var fontSize: CGFloat { font.pointSize }
+    /// `CONTENT_PADDING` (surface.ts:36).
     static let padding: CGFloat = 4
     /// `MAX_SCROLLBACK_ROWS` (core.ts:12).
     public static let scrollbackRows = 10_000
@@ -31,7 +30,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     public override init(frame frameRect: NSRect) {
         var options = TerminalOptions.default
         options.scrollback = Self.scrollbackRows
-        terminal = InputTerminalView(frame: NSRect(x: 0, y: 0, width: 400, height: 200), font: Self.font, options: options)
+        terminal = InputTerminalView(frame: NSRect(x: 0, y: 0, width: 400, height: 200), font: TerminalFontSettings.current(), options: options)
         super.init(frame: frameRect)
         terminal.terminalDelegate = self
         terminal.surface = self
@@ -40,27 +39,33 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         // libghostty's embedder in T3 does not ring; nothing in the drawer reacts to BEL.
         terminal.bellStyle = .none
         terminal.optionAsMetaKey = false
-        terminal.lineSpacing = Self.lineSpacing(for: Self.font)
+        terminal.lineSpacing = Self.lineSpacing(for: terminal.font)
         terminal.installColors(Self.palette)
         addSubview(terminal)
         applyTheme()
     }
 
-    /// ProviderAuthTerminal uses 13px; thread terminals keep their default 12px.
+    /// ProviderAuthTerminal uses 13px in the default face (ProviderAuthTerminal.tsx:19-59); thread terminals follow the
+    /// Terminal font settings.
     public func setFontSize(_ points: CGFloat) {
-        let font = NSFont.monospacedSystemFont(ofSize: points, weight: .regular)
+        fixedFontSize = points
+        applyFont(TerminalFontSettings.font(family: "", size: points))
+    }
+
+    private var fixedFontSize: CGFloat?
+
+    private func applyFont(_ font: NSFont) {
+        guard font != terminal.font else { return }
         terminal.font = font
         terminal.lineSpacing = Self.lineSpacing(for: font)
         needsLayout = true
     }
 
-    /// The system monospace face (`"SF Mono"` heads T3's family list) at 12px.
-    static var font: NSFont { FontRuntime.font(.terminal, size: 12) }
-
+    /// The Terminal (or, in simple typography, the code) font settings (ThreadTerminalDrawer.tsx:428-539 `setFont`).
+    /// DSView calls this on a font settings change and when a detached surface returns to a window.
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
-        terminal.font = Self.font
-        terminal.lineSpacing = Self.lineSpacing(for: Self.font)
+        if fixedFontSize == nil { applyFont(TerminalFontSettings.current()) }
     }
 
     /// T3's cell is `round(fontSize * 1.35)` tall (renderer.ts `measureGhosttyCell`), 16pt at 12px;
@@ -118,10 +123,29 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
 
     public override func updateLayer() { applyTheme() }
 
+    /// Whether the grid sits on the bottom edge (scrollback exists), as last laid out.
+    private var anchoredBottom = false
+
+    /// `terminalContentOriginY` (surface.ts:152-169, 1900-1915): at the top like a fresh terminal until scrollback
+    /// exists, then on the bottom edge with the sub-row remainder above row 0, so the prompt stays put while the
+    /// height changes within a row.
     public override func layout() {
         super.layout()
-        let frame = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        var frame = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        anchoredBottom = terminal.canScroll
+        let rows = max(1, terminal.getTerminal().rows)
+        let cell = terminal.getOptimalFrameSize().height / CGFloat(rows)
+        if anchoredBottom, cell > 0, frame.height > cell {
+            let fit = (frame.height / cell).rounded(.down) * cell
+            frame.origin.y += frame.height - fit
+            frame.size.height = fit + 0.01
+        }
         if terminal.frame != frame { terminal.frame = frame }
+    }
+
+    /// Output that creates or clears scrollback moves the grid between the edges.
+    private func checkAnchor() {
+        if terminal.canScroll != anchoredBottom { needsLayout = true }
     }
 
     // MARK: Output
@@ -142,6 +166,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         case .message(let message):
             terminal.feed(text: TerminalSessionModel.messageText(message))
         }
+        checkAnchor()
     }
 
     /// Reports the current grid again (after the session became writable).
@@ -287,4 +312,45 @@ final class InputTerminalView: TerminalView {
         guard event.clickCount >= 2 || selectionActive, selectionActive else { return }
         surface?.selectionEnded(clickCount: event.clickCount, at: convert(event.locationInWindow, from: nil))
     }
+}
+
+/// The terminal face (surface.ts:20-130): the Terminal font setting when it names an installed fixed-pitch family,
+/// else the platform's monospace face, with the bundled Symbols Nerd Font and the common Nerd Fonts as glyph
+/// fallbacks so prompt symbols and devicons draw on any machine.
+enum TerminalFontSettings {
+    /// `MIN_TERMINAL_FONT_SIZE`, `MAX_TERMINAL_FONT_SIZE` (surface.ts:21-22).
+    static let sizes: ClosedRange<CGFloat> = 6...32
+    /// `TERMINAL_GLYPH_FALLBACKS` without the generic `monospace`.
+    static let glyphFallbacks = ["Symbols Nerd Font Mono", "Symbols Nerd Font", "JetBrainsMono Nerd Font", "JetBrainsMono NF",
+                                 "FiraCode Nerd Font", "Hack Nerd Font", "MesloLGS NF", "CaskaydiaCove Nerd Font", "PowerlineSymbols"]
+
+    /// Simple typography treats the terminal as another monospace surface: the code font and size; Advanced uses the
+    /// terminal's own (`resolveTerminalFontPreference`, appearanceFonts.ts:30-50, ThreadTerminalDrawer.tsx:428-441).
+    static func current() -> NSFont {
+        let p = FontRuntime.input
+        return font(family: p.advanced ? p.terminalFamily : p.codeFamily, size: p.advanced ? p.terminalSize : p.codeSize)
+    }
+
+    /// The family list as written (`quoteTerminalFontFamilies`): comma separated, quotes dropped.
+    static func families(_ list: String) -> [String] {
+        list.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"'")) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The first installed family of `family` when it is fixed pitch (`isMonospaceFamily` refuses a proportional
+    /// face), else SF Mono; 12pt when the size is out of range.
+    static func font(family: String, size: CGFloat) -> NSFont {
+        let points = sizes.contains(size) ? size : 12 // `DEFAULT_TERMINAL_FONT_SIZE`
+        let base = families(family).lazy.compactMap { NSFontManager.shared.font(withFamily: $0, traits: [], weight: 5, size: points) }
+            .first { $0.isFixedPitch } ?? NSFont.monospacedSystemFont(ofSize: points, weight: .regular)
+        _ = registerSymbols
+        let cascade = glyphFallbacks.map { NSFontDescriptor(fontAttributes: [.family: $0]) }
+        return NSFont(descriptor: base.fontDescriptor.addingAttributes([.cascadeList: cascade]), size: points) ?? base
+    }
+
+    /// `ensureTerminalSymbolsFont`: the bundled symbols-only face, registered for this process on first use.
+    private static let registerSymbols: Void = {
+        guard let url = Bundle.module.url(forResource: "SymbolsNerdFontMono-Regular", withExtension: "woff2") else { return }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }()
 }

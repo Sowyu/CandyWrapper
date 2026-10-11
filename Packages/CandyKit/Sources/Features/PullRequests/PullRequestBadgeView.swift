@@ -44,7 +44,10 @@ public struct SidebarPullRequestBadge: Equatable, Sendable {
             lines = ThreadPullRequests.lines(links)
             return
         }
-        guard let legacy = thread.linkedPullRequest else { return nil }
+        // `useLinkedThreadPullRequest`'s fallback (ThreadStatusIndicators.tsx:95-96): the linked pull request, then
+        // the one the server found for the thread's branch.
+        // ponytail: shows the fallback at once as "status pending"; T3 waits for `linkedPullRequestDetailAtom`. Query the detail per row once a host is testable
+        guard let legacy = thread.linkedPullRequest ?? thread.branchPullRequest else { return nil }
         self.init(glyph: .unknown, tone: nil, text: "\(legacy.number)", label: "PR #\(legacy.number), status pending", opensList: false)
         self.legacy = (legacy.number, legacy.url)
     }
@@ -59,6 +62,9 @@ public final class PullRequestBadgeView: DSView {
     private var icon: IconView?
     private let label = LabelView("", font: DSFont.ui(12))
     public var onClick: (() -> Void)?
+    /// A mini list row clicked: its pull request's URL.
+    public var onOpenURL: ((String) -> Void)?
+    private var pointerInPopup = false
     public var badge: SidebarPullRequestBadge? {
         didSet {
             guard badge != oldValue else { return }
@@ -104,7 +110,15 @@ public final class PullRequestBadgeView: DSView {
 
     public override func mouseExited(with event: NSEvent) {
         hoverWork?.cancel()
-        if let hoverPopup, let window { PopupHost.host(for: window).close(hoverPopup, returnFocus: false) }
+        // The pointer may cross into the tooltip, which stays open while it is there.
+        DispatchQueue.main.async { [weak self] in self?.closeMiniListUnlessHovered() }
+    }
+
+    private func closeMiniListUnlessHovered() {
+        guard !pointerInPopup, let window else { return }
+        let inside = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        guard !inside else { return }
+        if let hoverPopup { PopupHost.host(for: window).close(hoverPopup, returnFocus: false) }
         hoverPopup = nil
     }
 
@@ -112,6 +126,19 @@ public final class PullRequestBadgeView: DSView {
         guard let badge, let host = popupHost else { return }
         let list = ThreadPullRequestsMiniListView(badge: badge)
         guard !list.isEmpty else { return }
+        if onOpenURL != nil {
+            list.onOpen = { [weak self] url in
+                guard let self else { return }
+                if let hoverPopup, let window { PopupHost.host(for: window).close(hoverPopup, returnFocus: false) }
+                hoverPopup = nil
+                pointerInPopup = false
+                onOpenURL?(url)
+            }
+            list.onPointerInside = { [weak self] inside in
+                self?.pointerInPopup = inside
+                if !inside { DispatchQueue.main.async { self?.closeMiniListUnlessHovered() } }
+            }
+        }
         hoverPopup = host.open(list, trigger: self, placement: PopupPlacement(side: .top, align: .center, sideOffset: 0, fallbackAxisSide: .end),
                                motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
     }
@@ -133,10 +160,16 @@ public final class PullRequestBadgeView: DSView {
 /// `ThreadPullRequestsMiniList` (ThreadStatusIndicators.tsx:342-430) on the glass tooltip surface:
 /// one row per pull request (`gap-2`, the state glyph at `size-3`, `#n` in mono, the title at 75%
 /// foreground), stepped `0.75rem` per stack depth, "stack · n" or "chain · n" on a chain's first row.
-// ponytail: rows are not links here; T3's badge tooltip opens a row's pull request on click. Add it with the hover card
 public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
-    private struct Row { let icon: IconView; let number: LabelView; let title: LabelView; let stack: LabelView?; let depth: Int }
+    private struct Row { let icon: IconView; let number: LabelView; let title: LabelView; let stack: LabelView?; let depth: Int; let url: String }
     private var rows: [Row] = []
+    /// Set by the badge: each row is a link (`<a>` with `px-1 py-1 rounded-sm hover:bg-accent`) that opens
+    /// its pull request (`onOpenPullRequest(event, url)`, ThreadStatusIndicators.tsx:414-428).
+    public var onOpen: ((String) -> Void)? { didSet { needsDisplay = true } }
+    private var hovered: Int? { didSet { if hovered != oldValue { highlight.isHidden = hovered == nil; needsLayout = true } } }
+    private let highlight = CALayer()
+    /// The pointer is over the popup: the badge keeps it open (`pointer-events-auto`).
+    var onPointerInside: ((Bool) -> Void)?
     private let decoration = BoxDecorationLayer()
     var isEmpty: Bool { rows.isEmpty }
 
@@ -153,7 +186,11 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
         box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)), BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]
         decoration.boxStyle = box
         decoration.outset = 32
-        func make(number: Int, title: String, tone: PullRequestStateTone?, depth: Int, stack: String?) -> Row {
+        highlight.cornerRadius = 4
+        highlight.isHidden = true
+        highlight.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        layer?.addSublayer(highlight)
+        func make(number: Int, title: String, tone: PullRequestStateTone?, depth: Int, stack: String?, url: String) -> Row {
             let icon = IconView(name: tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow, size: 12,
                                 strokeColor: tone.map(PullRequestStyle.color) ?? Themed.color(\.mutedForeground))
             let n = LabelView("#\(number)", font: DSFont.mono(12))
@@ -163,17 +200,17 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
             s?.lineHeight = 12
             [icon, n, t].forEach(addSubview)
             s.map(addSubview)
-            return Row(icon: icon, number: n, title: t, stack: s, depth: depth)
+            return Row(icon: icon, number: n, title: t, stack: s, depth: depth, url: url)
         }
         if !badge.lines.isEmpty {
             rows = badge.lines.map { line in
                 let snap = line.link.snapshot
                 return make(number: line.link.number, title: snap?.title ?? line.link.repository,
                             tone: snap.map { PullRequestStateTone(state: $0.state.rawValue, isDraft: $0.isDraft) }, depth: line.depth,
-                            stack: line.stackSize.map { "\(line.native ? "stack" : "chain") · \($0)" })
+                            stack: line.stackSize.map { "\(line.native ? "stack" : "chain") · \($0)" }, url: line.link.url)
             }
         } else if let legacy = badge.legacy {
-            rows = [make(number: legacy.number, title: badge.label, tone: badge.tone, depth: 0, stack: nil)]
+            rows = [make(number: legacy.number, title: badge.label, tone: badge.tone, depth: 0, stack: nil, url: legacy.url)]
         }
     }
 
@@ -189,6 +226,10 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         var y: CGFloat = 8
+        if let hovered, hovered < rows.count {
+            let indent = CGFloat(min(rows[hovered].depth, 3)) * 12
+            highlight.frame = CGRect(x: 12 + indent, y: 8 + CGFloat(hovered) * 28, width: bounds.width - 24 - indent, height: 24)
+        }
         for r in rows {
             var x: CGFloat = 12 + 4 + CGFloat(min(r.depth, 3)) * 12
             r.icon.frame = NSRect(x: x, y: y + 6, width: 12, height: 12); x += 12 + 8
@@ -204,8 +245,34 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
         }
     }
 
+    private func row(at event: NSEvent) -> Int? {
+        let p = convert(event.locationInWindow, from: nil)
+        guard p.x >= 12, p.x <= bounds.width - 12, p.y >= 8 else { return nil }
+        let i = Int((p.y - 8) / 28)
+        return i < rows.count && p.y - 8 - CGFloat(i) * 28 < 24 ? i : nil
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+    public override func mouseEntered(with event: NSEvent) { onPointerInside?(true); mouseMoved(with: event) }
+    public override func mouseExited(with event: NSEvent) { hovered = nil; onPointerInside?(false) }
+    public override func mouseMoved(with event: NSEvent) { hovered = onOpen == nil ? nil : row(at: event) }
+    public override func mouseDown(with event: NSEvent) {}
+    public override func mouseUp(with event: NSEvent) {
+        guard let onOpen, let i = row(at: event) else { return }
+        onOpen(rows[i].url)
+    }
+    public override func resetCursorRects() {
+        guard onOpen != nil else { return }
+        for i in rows.indices { addCursorRect(NSRect(x: 12, y: 8 + CGFloat(i) * 28, width: bounds.width - 24, height: 24), cursor: .pointingHand) }
+    }
+
     public override func updateLayer() {
         decoration.setNeedsDisplay()
+        highlight.backgroundColor = Themed.color(\.accent).cgColor(in: self)
         for r in rows {
             r.number.color = Themed.color(\.mutedForeground)
             r.title.color = Themed.color(\.foreground, 0.75)

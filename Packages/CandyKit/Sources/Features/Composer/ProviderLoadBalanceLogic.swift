@@ -10,6 +10,15 @@ public enum ProviderLoadBalanceLogic {
             self.id = id; self.resources = resources; self.receivedAt = receivedAt; self.weight = weight
         }
     }
+    /// `automaticEnvironment` (ChatView.tsx:3037-3047): a draft routes itself while balancing is on, it can move between
+    /// several machines, nothing pinned it (a manual pick, a branch picked outside Auto, a worktree), and its
+    /// attachments, if any, were made on the machine already chosen.
+    public static func isAutomatic(enabled: Bool, canBalance: Bool, locked: Bool, selection: String?, resolved: String?,
+                                   hasAttachments: Bool, branch: String?, worktreePath: String?) -> Bool {
+        enabled && canBalance && !locked && selection != "manual" && (!hasAttachments || resolved != nil)
+            && (branch == nil || selection == "auto") && worktreePath == nil
+    }
+
     public static func choose(_ candidates: [Candidate], now: Double) -> String? {
         var selected: String?, best = 0.0
         for c in candidates {

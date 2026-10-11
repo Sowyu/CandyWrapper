@@ -373,6 +373,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var remoteOpenTargets: [JSONValue] = []
     /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
     public var revealsInFileManager = false
+    /// `shellRevealInFileManagerKind`: `finder`, `file-explorer` or `files`, the server's wording for its file manager.
+    public var revealKind: String?
     /// `scratchWorkspaceRoot`: the folder threads without a project live in, nil when the server offers none.
     public var scratchWorkspaceRoot: String?
     /// `newProjectsRoot`: where "New project" creates name-only projects, nil when the server offers none.
@@ -389,6 +391,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
+             shellRevealInFileManagerKind,
              scratchWorkspaceRoot, newProjectsRoot, threadFind, threadFindProgressive, observability, issues
     }
 
@@ -409,6 +412,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
         remoteOpenTargets = (try? c.decodeIfPresent([JSONValue].self, forKey: .remoteOpenTargets)) ?? []
         revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false
+        revealKind = try? c.decodeIfPresent(String.self, forKey: .shellRevealInFileManagerKind)
         scratchWorkspaceRoot = try? c.decodeIfPresent(String.self, forKey: .scratchWorkspaceRoot)
         newProjectsRoot = try? c.decodeIfPresent(String.self, forKey: .newProjectsRoot)
     }

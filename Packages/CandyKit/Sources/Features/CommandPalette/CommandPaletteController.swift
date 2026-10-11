@@ -54,6 +54,8 @@ public final class CommandPaletteController {
         public var footerLabel: ((PaletteEntry?) -> String?)?
         /// A status line in place of the rows while there are none ("Loading folders...").
         public var status: ((String) -> String?)?
+        /// The Escape hint's label: "Back" to commands, "Close" for a dialog of its own (the project icon picker).
+        public var escapeLabel = "Back"
         /// The input's start addon outside submenus (browse shows the folder-plus).
         public var startIcon: IconName = .search
         public init(name: String, placeholder: String, footerActionLabel: String, results: @escaping (String) -> (groups: [PaletteGroup], empty: String)) {
@@ -164,7 +166,7 @@ public final class CommandPaletteController {
             let overlay = mode != nil
             view.showsBackButton = !overlay && isInSubmenu
             view.showsBackHint = !overlay && isInSubmenu
-            view.escapeLabel = overlay ? "Back" : "Close"
+            view.escapeLabel = overlay ? active.escapeLabel : "Close"
             if view.inputAccessory !== active.accessory { view.inputAccessory = active.accessory }
             // The accessory reads the app's state when it lays out (its label and enabled state).
             if let accessory = active.accessory { accessory.needsLayout = true; accessory.layoutSubtreeIfNeeded(); view.needsLayout = true }

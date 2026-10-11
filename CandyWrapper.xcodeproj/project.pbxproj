@@ -19,6 +19,7 @@
 		46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FB4EFB4DBDAF423D7789DC /* GitController.swift */; };
 		4F0A678A7750FE0672129144 /* notification-completion.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */; };
 		50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21423E229A8AD862537E9ECA /* SettingsController.swift */; };
+		5268E62A48D11E088745C629 /* SidebarCheckoutStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C298150579592D845F630EC /* SidebarCheckoutStatus.swift */; };
 		54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37909056866A108B1B58D3C6 /* MainWindow.swift */; };
 		5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28281CD4D81D6A990C1B210 /* ThreadSession.swift */; };
 		617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */; };
@@ -64,6 +65,7 @@
 		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
 		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
+		3C298150579592D845F630EC /* SidebarCheckoutStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCheckoutStatus.swift; sourceTree = "<group>"; };
 		3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePanelController.swift; sourceTree = "<group>"; };
 		3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapShotController.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */,
 				606083DF126114F0273EEEDD /* ShellSession.swift */,
 				527913F33E671EBA3009A953 /* Shortcuts.swift */,
+				3C298150579592D845F630EC /* SidebarCheckoutStatus.swift */,
 				5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */,
 				3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */,
 				92B1A20A927434B822A78FBE /* T3ConnectController.swift */,
@@ -319,6 +322,7 @@
 				86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */,
 				430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */,
 				FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */,
+				5268E62A48D11E088745C629 /* SidebarCheckoutStatus.swift in Sources */,
 				357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */,
 				38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */,
 				EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */,

@@ -6,6 +6,15 @@ public enum EnvMode: String, Codable, Sendable { case local, worktree }
 
 /// BranchToolbar.logic.ts and shared/git.ts helpers the branch toolbar uses.
 public enum BranchToolbarLogic {
+    /// `resolveLocalCheckoutBranchMismatch` (BranchToolbar.logic.ts:250-264): a Current checkout thread whose
+    /// branch differs from the branch the checkout is on now.
+    public static func localCheckoutBranchMismatch(envMode: EnvMode, worktreePath: String?, threadBranch: String?,
+                                                    currentBranch: String?) -> (threadBranch: String, currentBranch: String)? {
+        guard envMode == .local, worktreePath == nil else { return nil }
+        guard let threadBranch, !threadBranch.isEmpty, let currentBranch, !currentBranch.isEmpty, threadBranch != currentBranch else { return nil }
+        return (threadBranch, currentBranch)
+    }
+
     /// `resolveEnvModeLabel`.
     public static func envModeLabel(_ mode: EnvMode) -> String { mode == .worktree ? "New worktree" : "Current checkout" }
 
