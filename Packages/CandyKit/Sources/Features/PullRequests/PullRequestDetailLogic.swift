@@ -59,9 +59,11 @@ public enum PullRequestDetailLogic {
         return detail.capabilities.mergeMethods.filter { detail.mergeCapabilities.allows($0) }
     }
 
-    /// `resolveSelectedMergeMethod`.
-    public static func selectedMergeMethod(_ allowed: [String], preferred: String) -> String {
-        allowed.contains(preferred) ? preferred : allowed.first ?? "merge"
+    /// `resolvePullRequestMergeMethod` (pullRequestDetail.logic.ts:59-69): this pull request's pick, then the
+    /// project's default merge method setting, then the method last picked on this device.
+    public static func selectedMergeMethod(_ allowed: [String], current: String? = nil, projectDefault: String? = nil, preferred: String) -> String {
+        for m in [current, projectDefault, preferred] { if let m, allowed.contains(m) { return m } }
+        return allowed.first ?? "merge"
     }
 
     /// `resolvePullRequestPrimaryControl`: merged, closed, resolve, ready, auto-merge-armed,

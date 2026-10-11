@@ -140,7 +140,7 @@ public final class ToastView: DSView {
         box.radius = 10
         // ponytail: `dropdown-glass` is popover at 83.6% blurred over whatever is behind; drawn as that alpha over
         // --background, which is what it gives over a plain window. Real blur if toasts sit over busy content.
-        box.fill = Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: 0.836)
+        box.fill = Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: PopupSurface.dropdownGlassAlpha)
         box.border = Themed.color(\.contrastForeground, 0.1)
         box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)),
                        BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]

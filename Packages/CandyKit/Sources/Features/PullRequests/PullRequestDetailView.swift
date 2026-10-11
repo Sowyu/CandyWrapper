@@ -38,6 +38,10 @@ public final class PullRequestDetailView: DSView {
     public var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) { didSet { rebuild() } }
     /// The merge method the reader last picked (`pullRequestMergeMethod` in the UI state store).
     public var preferredMergeMethod = "merge" { didSet { rebuildActions() } }
+    /// This pull request's own pick (`mergeMethodSelection`), cleared when another one shows.
+    public var currentMergeMethod: String? { didSet { rebuildActions() } }
+    /// The project's `pullRequestMergeMethod` setting (Settings > Source Control > Default merge method).
+    public var projectDefaultMergeMethod: String? { didSet { rebuildActions() } }
 
     // Callbacks.
     public var onTab: ((Tab) -> Void)?
@@ -440,7 +444,8 @@ public final class PullRequestDetailView: DSView {
         primary = nil
         guard let d = detail else { stackButton.isHidden = true; stackMergeButton.isHidden = true; return }
         let allowed = PullRequestDetailLogic.allowedMergeMethods(d)
-        let method = PullRequestDetailLogic.selectedMergeMethod(allowed, preferred: preferredMergeMethod)
+        let method = PullRequestDetailLogic.selectedMergeMethod(allowed, current: currentMergeMethod, projectDefault: projectDefaultMergeMethod,
+                                                                preferred: preferredMergeMethod)
         updateStackControls(d)
         var control = PullRequestDetailLogic.primaryControl(d)
         // ponytail: a stack gates only the merge and auto-merge controls here; T3 feeds `canMerge` and
@@ -570,7 +575,8 @@ public final class PullRequestDetailView: DSView {
                 item.action = { [weak self] in self?.onAction?(d.isDraft ? "ready" : "draft", nil) }
                 items.append(item)
             }
-            let method = PullRequestDetailLogic.selectedMergeMethod(allowed, preferred: preferredMergeMethod)
+            let method = PullRequestDetailLogic.selectedMergeMethod(allowed, current: currentMergeMethod, projectDefault: projectDefaultMergeMethod,
+                                                                preferred: preferredMergeMethod)
             let showsMergeNow = (primaryControl == "enable-auto-merge" || primaryControl == "auto-merge-armed") && can("merge") && !d.isDraft && !conflicting && !allowed.isEmpty
             if showsMergeNow {
                 var item = MenuItem("Merge now", icon: .gitMerge, disabled: actionPending)
@@ -594,6 +600,7 @@ public final class PullRequestDetailView: DSView {
                 if showsDraftToggle || showsMergeNow || showsAutoMerge { items.append(.separator) }
                 for m in allowed {
                     var item = MenuItem.radio(PullRequestDetailLogic.mergeMethodLabel(m), checked: m == method) { [weak self] _ in
+                        self?.currentMergeMethod = m
                         self?.preferredMergeMethod = m
                         self?.onMergeMethod?(m)
                     }
@@ -760,7 +767,8 @@ public final class PullRequestDetailView: DSView {
     /// The stack confirmation (PullRequestStackMenu.tsx:220-260): the layers it touches, Cancel, go.
     private func confirmStack(_ action: String) {
         guard let stack, let d = detail, let window else { return }
-        let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: preferredMergeMethod)
+        let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), current: currentMergeMethod,
+                                                                projectDefault: projectDefaultMergeMethod, preferred: preferredMergeMethod)
         let copy = PullRequestWriteLogic.stackConfirmation(stack, current: d.number, action: action, mergeMethod: method)
         let plan = PullRequestWriteLogic.stackPlan(stack, current: d.number, pending: stackPending)
         let dialog = DialogView(kind: .dialog, title: copy.title, message: copy.message)

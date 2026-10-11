@@ -77,7 +77,7 @@ extension SettingsController {
         }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
         composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
-        NotificationCenter.default.addObserver(forName: AppearanceMode.didChange, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshPages() }
         }
     }
@@ -414,7 +414,10 @@ extension SettingsController {
         let s = pageContext.scope.values
         func client(_ key: String, _ label: String) -> [String] { c.isDefault(key) ? [] : [label] }
         func server(_ key: String, _ label: String) -> [String] { s.isDefault(key) ? [] : [label] }
-        var labels: [String] = AppearanceMode.current == .system ? [] : ["Theme"]
+        let themes = ThemeLibrary.shared
+        var labels: [String] = themes.preference == "system" ? [] : ["Theme"]
+        labels += themes.appearanceMode == "system" ? [] : ["Follow system"]
+        labels += themes.halves.light == nil && themes.halves.dark == nil ? [] : ["Theme mix"]
         labels += client("appearanceContrast", "Contrast") + client("glassOpacity", "Glass opacity") + client("diffColorScheme", "Diff colors")
         labels += client("chatWidth", "Chat width") + client("panelAnimationDurationMs", "Panel animations")
         labels += client("environmentIdentificationMode", "Environment identification") + client("timestampFormat", "Time format")
@@ -459,7 +462,10 @@ extension SettingsController {
     }
 
     private func restoreDefaults() {
-        if AppearanceMode.current != .system { AppearanceMode.system.apply() }
+        let themes = ThemeLibrary.shared
+        if themes.preference != "system" { themes.setTheme("system") }
+        themes.clearThemeHalves()
+        if themes.appearanceMode != "system" { AppearanceMode.system.apply() }
         let clientKeys = ["appearanceContrast", "glassOpacity", "diffColorScheme", "chatWidth", "panelAnimationDurationMs", "environmentIdentificationMode",
                           "timestampFormat", "notificationMode", "inAppNotificationsEnabled", "sidebarThreadPreviewCount", "sidebarProjectGroupingMode",
                           "sidebarProjectSortOrder", "sidebarWorkingShelfEnabled", "wordWrap", "persistComposerContextStrip", "fontFamilySans",

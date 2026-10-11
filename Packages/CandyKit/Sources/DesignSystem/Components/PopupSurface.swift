@@ -8,21 +8,16 @@ public enum PopupSurface {
     case tooltip      // Tooltip default: `border bg-popover shadow-md/5` and the ::before line
     case tooltipGlass // Tooltip glass: `dropdown-glass shadow-xl shadow-black/25 before:hidden`
 
-    /// `dropdown-glass` over a uniform `--background`: popover at 18% + 82% x 80% = 83.6% alpha, composited.
+    /// `dropdown-glass`'s alpha: popover at 18% plus 82% of popover at `--glass-opacity` (83.6% at T3's 80%).
+    public static var dropdownGlassAlpha: CGFloat { 0.18 + 0.82 * ThemeRuntime.glassOpacity }
+
+    /// `dropdown-glass` over a uniform `--background`, composited. Built when a surface restyles, which
+    /// a glass opacity change triggers.
     // ponytail: solid color instead of a live 12/16px backdrop blur; identical over flat backgrounds, use an
     // NSVisualEffectView-like blur if popups ever sit over busy content and users notice
-    public static let glassFill: NSColor = {
-        func mix(_ over: TokenColor, _ under: TokenColor) -> NSColor {
-            let a = over.nsColor.usingColorSpace(.sRGB)!, b = under.nsColor.usingColorSpace(.sRGB)!
-            let t = 0.836 * a.alphaComponent
-            func c(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x * t + y * (1 - t) }
-            return NSColor(srgbRed: c(a.redComponent, b.redComponent), green: c(a.greenComponent, b.greenComponent),
-                           blue: c(a.blueComponent, b.blueComponent), alpha: 1)
-        }
-        let light = mix(Tokens.light.popover, Tokens.light.background)
-        let dark = mix(Tokens.dark.popover, Tokens.dark.background)
-        return NSColor(name: nil) { $0.isDark ? dark : light }
-    }()
+    public static var glassFill: NSColor {
+        Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: dropdownGlassAlpha)
+    }
 
     /// `--popover-foreground` through the contrast layer.
     static var text: NSColor { Themed.color(\.contrastPopoverForeground) }

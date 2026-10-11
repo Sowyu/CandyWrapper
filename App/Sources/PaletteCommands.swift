@@ -53,6 +53,11 @@ final class PaletteCommands {
             if !call.isRepeat { self?.cycleAppearance() }
             return true
         }
+        // `theme.select` (CommandPalette.tsx:550-556).
+        shortcuts.on("theme.select") { [weak self] call in
+            if !call.isRepeat { self?.openChangeTheme() }
+            return true
+        }
         // `chat.new`: with several projects the palette's project chooser, else a draft for the open
         // thread's project (_chat.tsx:121-140). `chat.newLocal` skips the chooser.
         shortcuts.on(["chat.new", "chat.newLocal"]) { [weak self] call in
@@ -354,9 +359,16 @@ final class PaletteCommands {
                                                                                 "azure", "devops", "url", "environment"],
                                     title: "Add project", icon: .folderPlus,
                                     action: .run({ [weak self] in self?.addProjectFlow.open() }, keepOpen: true)))
+        actions.append(PaletteEntry(value: "action:change-theme", searchTerms: ["change theme", "appearance", "colors", "palette"],
+                                    title: "Change theme", icon: .palette, shortcutCommand: "theme.select",
+                                    action: .submenu(themePage())))
         actions.append(PaletteEntry(value: "action:change-appearance", searchTerms: ["change appearance", "light", "dark", "system", "mode", "toggle"],
                                     title: "Change appearance", icon: .monitor, shortcutCommand: "appearance.cycle",
                                     action: .submenu(appearancePage())))
+        actions.append(PaletteEntry(value: "action:theme-editor", searchTerms: ["theme", "appearance", "colors", "palette", "customize"],
+                                    title: "Toggle theme editor", icon: .palette, shortcutCommand: "themeEditor.toggle",
+                                    action: .run({ ThemeEditorController.shared.toggle(initialAppearance: ThemeLibrary.shared.resolvedAppearance) },
+                                                 keepOpen: false)))
         if sidebar?.showsPullRequests == true {
             actions.append(PaletteEntry(value: "action:pull-requests", searchTerms: ["pull requests", "prs", "pr", "github", "review", "merge", "branch"],
                                         title: "Open pull requests", icon: .gitPullRequestArrow,
@@ -632,6 +644,30 @@ final class PaletteCommands {
         return PalettePage(addonIcon: .monitor, groups: [PaletteGroup(value: "appearance", label: "Change appearance", items: items)])
     }
 
+    /// "Change theme" (CommandPalette.tsx:2122-2165): the standard look, the built-ins and saved themes. A
+    /// one-appearance theme takes its side of the mix.
+    // ponytail: no preview circles beside the titles; PaletteEntry has no trailing view slot, add one if missed
+    private func themePage() -> PalettePage {
+        let lib = ThemeLibrary.shared
+        let current = lib.ownerCard(lib.resolvedAppearance)
+        let cards = [ThemeCardDefinition.standard] + (ThemeDefinition.builtIns + lib.customThemes).map(ThemeCardDefinition.init)
+        let items = cards.map { card in
+            PaletteEntry(value: card.id.map { "theme:palette:\($0)" } ?? "theme:standard", searchTerms: [card.label, "theme", "appearance"],
+                         title: card.label, description: card.previews.count == 1 ? "For \(card.previews[0].mode.rawValue) mode" : nil,
+                         icon: .palette, note: current == card.id ? "Current" : nil,
+                         action: .run({
+                             if card.previews.count == 1, let id = card.id { lib.setThemeHalf(card.previews[0].mode, id) } else { lib.setTheme(card.id ?? lib.appearanceMode) }
+                         }, keepOpen: false))
+        }
+        return PalettePage(addonIcon: .palette, groups: [PaletteGroup(value: "themes", label: "Change theme", items: items)])
+    }
+
+    /// `theme.select`: the palette on its Change theme page.
+    func openChangeTheme() {
+        if overlay == nil { open() }
+        overlay?.controller.push(themePage())
+    }
+
     private func cycleAppearance() {
         let next: AppearanceMode = switch AppearanceMode.current { case .system: .light; case .light: .dark; case .dark: .system }
         next.apply()
@@ -644,27 +680,16 @@ final class PaletteCommands {
 enum AppearanceMode: String, CaseIterable {
     case system, light, dark
 
-    private static let key = "appearance.mode"
-
     var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
     var icon: IconName { switch self { case .system: .monitor; case .light: .sun; case .dark: .moon } }
 
-    static var current: AppearanceMode { UserDefaults.standard.string(forKey: key).flatMap(AppearanceMode.init) ?? .system }
+    @MainActor static var current: AppearanceMode { AppearanceMode(rawValue: ThemeLibrary.shared.appearanceMode) ?? .system }
 
     /// Posted after `apply` (the Appearance page follows it).
     static let didChange = Notification.Name("CandyWrapperAppearanceModeDidChange")
 
     @MainActor func apply() {
-        UserDefaults.standard.set(rawValue, forKey: Self.key)
-        Self.applySaved()
+        ThemeLibrary.shared.setAppearanceMode(rawValue)
         NotificationCenter.default.post(name: Self.didChange, object: nil)
-    }
-
-    @MainActor static func applySaved() {
-        switch current {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-        }
     }
 }

@@ -1,0 +1,154 @@
+import AppKit
+
+/// The four palettes the app draws with: the main surface and the sidebar subtree, light and dark.
+public struct ThemePalettes: Sendable {
+    public let light: Palette
+    public let dark: Palette
+    public let sidebarLight: Palette
+    public let sidebarDark: Palette
+
+    public func palette(dark: Bool, sidebar: Bool) -> Palette {
+        sidebar ? (dark ? sidebarDark : sidebarLight) : (dark ? self.dark : light)
+    }
+
+    /// T3's stock look, exactly as extracted (no evaluation).
+    public static let standard = ThemePalettes(light: Tokens.light, dark: Tokens.dark,
+                                               sidebarLight: Tokens.sidebarLight, sidebarDark: Tokens.sidebarDark)
+
+    func isSame(as other: ThemePalettes) -> Bool {
+        light.members == other.light.members && dark.members == other.dark.members
+            && sidebarLight.members == other.sidebarLight.members && sidebarDark.members == other.sidebarDark.members
+    }
+}
+
+/// What one appearance wears: a theme's role colors (canonical CSS, keyed by role), or nil for T3's stock look.
+public struct ThemeRuntimeHalf: Equatable, Sendable {
+    public var colors: [ThemeColorRole: String]
+    /// A built-in theme id, whose own CSS blocks change a few tokens (the sidebar artwork).
+    public var builtInId: String?
+
+    public init(colors: [ThemeColorRole: String], builtInId: String? = nil) {
+        self.colors = colors
+        self.builtInId = builtInId
+    }
+}
+
+/// Everything that decides the palettes: T3's `applyThemePalette` (themePalette.ts:1540-1563) per appearance,
+/// `applyThemeColorPreview` for the editor's draft (1524-1538) and `applyAppearanceContrast`
+/// (appearanceContrast.ts). `glassOpacity` is the `--glass-opacity` setting (__root.tsx:291-301).
+public struct ThemeRuntimeInput: Equatable, Sendable {
+    public var light: ThemeRuntimeHalf?
+    public var dark: ThemeRuntimeHalf?
+    public var contrast: Int
+    public var glassOpacity: Int
+
+    public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
+        self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
+    }
+}
+
+/// Runtime override of the generated tokens. T3 themes by setting `--app-theme-*` variables on `<html>`; every
+/// semantic token is a CSS expression of those (extracted into `ThemeExpressions` by scripts/extract-tokens).
+/// `apply` evaluates the expressions once per change into four palettes; `Themed` colors read them when AppKit
+/// resolves a color, so drawing costs nothing extra and nothing runs while idle. A change that leaves the
+/// palettes as they were redraws nothing; one that changes them tells each view as an appearance change does.
+@MainActor
+public enum ThemeRuntime {
+    /// Read from color providers during drawing, written only on the main thread by `apply`.
+    nonisolated(unsafe) public private(set) static var palettes = ThemePalettes.standard
+    /// Bumped whenever `palettes` changes; cached colors compare against it.
+    nonisolated(unsafe) public private(set) static var generation = 0
+    /// `--glass-opacity` as a fraction (0.4...1).
+    nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
+    public private(set) static var input = ThemeRuntimeInput()
+
+    /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
+    public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
+
+    public static func apply(_ next: ThemeRuntimeInput) {
+        guard next != input else { return }
+        let old = input
+        input = next
+        var changed = false
+        if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast {
+            let resolved = resolve(next)
+            if !resolved.isSame(as: palettes) {
+                palettes = resolved
+                changed = true
+            }
+        }
+        if next.glassOpacity != old.glassOpacity {
+            glassOpacity = CGFloat(min(max(next.glassOpacity, 40), 100)) / 100
+            changed = true
+        }
+        guard changed else { return }
+        generation += 1
+        for window in NSApp?.windows ?? [] {
+            if let view = window.contentView?.superview ?? window.contentView { refresh(view) }
+        }
+        NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    /// Tells every view in the tree its colors changed, the same way AppKit tells them about light and dark.
+    static func refresh(_ view: NSView) {
+        view.viewDidChangeEffectiveAppearance()
+        view.needsDisplay = true
+        view.layer.map(redrawDecorations)
+        for sub in view.subviews { refresh(sub) }
+    }
+
+    /// Box decorations keep their style when the colors behind it change, so they redraw here.
+    private static func redrawDecorations(_ layer: CALayer) {
+        for sub in layer.sublayers ?? [] where sub is ThemeRedrawingLayer { sub.setNeedsDisplay() }
+    }
+
+    /// The palettes for an input, without applying them.
+    public nonisolated static func resolve(_ input: ThemeRuntimeInput) -> ThemePalettes {
+        // The stock palettes at stock contrast are the extracted tokens themselves.
+        let stock = input.contrast == 100
+        let light = input.light == nil && stock ? nil : evaluate(input.light, contrast: input.contrast, contexts: (0, 2))
+        let dark = input.dark == nil && stock ? nil : evaluate(input.dark, contrast: input.contrast, contexts: (1, 3))
+        return ThemePalettes(light: light?.0 ?? Tokens.light, dark: dark?.0 ?? Tokens.dark,
+                             sidebarLight: light?.1 ?? Tokens.sidebarLight, sidebarDark: dark?.1 ?? Tokens.sidebarDark)
+    }
+
+    private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }
+    private nonisolated static let parsedThemed = ThemeExpressions.themed.map { $0.map(parse) }
+    private nonisolated static let parsedBuiltIn = ThemeExpressions.builtIn.mapValues { $0.mapValues { $0.map(parse) } }
+
+    private nonisolated static func parse(_ css: String) -> ThemeCSSExpression {
+        ThemeCSSExpression.parse(css) ?? .literal(.transparent)
+    }
+
+    /// The main and sidebar palettes for one appearance (`contexts` index the expression columns).
+    nonisolated static func evaluate(_ half: ThemeRuntimeHalf?, contrast: Int, contexts: (Int, Int)) -> (Palette, Palette) {
+        let percents = [
+            "--appearance-contrast-base": Double(min(contrast, 100)),
+            "--appearance-contrast-boost": Double(max(contrast - 100, 0)),
+            "--appearance-contrast-border-boost": Double(max(contrast - 100, 0)) / 4,
+        ]
+        var colors: [String: ThemeCSSColor] = [:]
+        for (role, value) in half?.colors ?? [:] { colors[role.cssVariable] = ThemeCSSColor.parse(value) }
+        let table = half == nil ? parsedStandard : parsedThemed
+        let builtIn = half?.builtInId.flatMap { parsedBuiltIn[$0] } ?? [:]
+        func palette(_ column: Int) -> Palette {
+            Palette(members: { i in
+                (builtIn[i]?[column] ?? table[i][column]).evaluate(colors: colors, percents: percents).token
+            })
+        }
+        return (palette(contexts.0), palette(contexts.1))
+    }
+}
+
+public extension ThemeCSSColor {
+    /// The color in Display P3, as the design system draws tokens.
+    var nsColor: NSColor { token.nsColor }
+
+    /// A literal CSS color as an NSColor, or nil when it does not parse.
+    static func nsColor(_ css: String) -> NSColor? { parse(css)?.nsColor }
+}
+
+/// Layers that paint theme colors into their contents and must redraw when the theme changes.
+public protocol ThemeRedrawingLayer: CALayer {}
+extension BoxDecorationLayer: ThemeRedrawingLayer {}
+extension PopupShadowLayer: ThemeRedrawingLayer {}

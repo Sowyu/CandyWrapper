@@ -32,7 +32,17 @@ open class DSView: NSView {
     /// Re-resolve dynamic colors stored on layers (CGColor does not follow appearance).
     open override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        themeGeneration = ThemeRuntime.generation
         needsDisplay = true
+    }
+
+    /// The theme this view last resolved its colors for. A view out of the window while the theme changed
+    /// (a recycled row) catches up when it comes back, as AppKit does for appearance changes.
+    private var themeGeneration = ThemeRuntime.generation
+
+    open override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, themeGeneration != ThemeRuntime.generation { viewDidChangeEffectiveAppearance() }
     }
 
     /// Runs `body` with the view's appearance current so dynamic NSColors resolve for it.

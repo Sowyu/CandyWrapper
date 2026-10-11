@@ -2,16 +2,24 @@ import AppKit
 
 /// Dynamic theme colors with T3's opacity modifiers (`bg-primary/90` is the color at 90% alpha).
 public enum Themed {
-    /// A main-palette color, optionally at an alpha multiplier.
+    /// A main-palette color, optionally at an alpha multiplier. It follows the window's appearance and
+    /// `ThemeRuntime`'s palettes.
     public static func color(_ key: KeyPath<Palette, TokenColor>, _ alpha: Double = 1, sidebar: Bool = false) -> NSColor {
-        let palette = sidebar ? ThemeColors.sidebar : ThemeColors.main
-        return color(light: palette.light[keyPath: key], alpha, dark: palette.dark[keyPath: key], alpha)
+        runtime(light: key, alpha, dark: key, alpha, sidebar: sidebar)
     }
 
     /// Different tokens per theme, for `dark:` overrides such as `dark:bg-input/32`.
     public static func color(light: KeyPath<Palette, TokenColor>, _ lightAlpha: Double = 1,
                              dark: KeyPath<Palette, TokenColor>, _ darkAlpha: Double = 1) -> NSColor {
-        color(light: Tokens.light[keyPath: light], lightAlpha, dark: Tokens.dark[keyPath: dark], darkAlpha)
+        runtime(light: light, lightAlpha, dark: dark, darkAlpha, sidebar: false)
+    }
+
+    /// Resolves from the runtime palettes, remembering the result until the theme changes, so a draw
+    /// costs what a fixed color costs.
+    private static func runtime(light: KeyPath<Palette, TokenColor>, _ lightAlpha: Double, dark: KeyPath<Palette, TokenColor>,
+                                _ darkAlpha: Double, sidebar: Bool) -> NSColor {
+        let cache = ThemedColorCache(light: light, lightAlpha: lightAlpha, dark: dark, darkAlpha: darkAlpha, sidebar: sidebar)
+        return NSColor(name: nil) { cache.color(dark: $0.isDark) }
     }
 
     static func color(light: TokenColor, _ lightAlpha: Double, dark: TokenColor, _ darkAlpha: Double) -> NSColor {
@@ -35,6 +43,30 @@ public enum Themed {
     /// Picks per theme from two already-dynamic or fixed colors.
     public static func pick(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { $0.isDark ? dark : light }
+    }
+}
+
+/// One `Themed` color's resolved values for the current `ThemeRuntime.generation`. Color providers run
+/// on the main thread while drawing, which is also where the theme changes.
+private final class ThemedColorCache: @unchecked Sendable {
+    nonisolated(unsafe) let light: KeyPath<Palette, TokenColor>
+    nonisolated(unsafe) let dark: KeyPath<Palette, TokenColor>
+    let lightAlpha: Double, darkAlpha: Double, sidebar: Bool
+    private var generation = -1
+    private var lightColor: NSColor?, darkColor: NSColor?
+
+    init(light: KeyPath<Palette, TokenColor>, lightAlpha: Double, dark: KeyPath<Palette, TokenColor>, darkAlpha: Double, sidebar: Bool) {
+        self.light = light; self.lightAlpha = lightAlpha; self.dark = dark; self.darkAlpha = darkAlpha; self.sidebar = sidebar
+    }
+
+    func color(dark isDark: Bool) -> NSColor {
+        let current = ThemeRuntime.generation
+        if generation != current { generation = current; lightColor = nil; darkColor = nil }
+        if let c = isDark ? darkColor : lightColor { return c }
+        let palette = ThemeRuntime.palettes.palette(dark: isDark, sidebar: sidebar)
+        let c = palette[keyPath: isDark ? dark : light].nsColor.multiplyingAlpha(isDark ? darkAlpha : lightAlpha)
+        if isDark { darkColor = c } else { lightColor = c }
+        return c
     }
 }
 

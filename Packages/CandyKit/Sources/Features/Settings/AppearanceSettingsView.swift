@@ -5,7 +5,6 @@ import T3Protocol
 /// Settings > Appearance (SettingsPanels.tsx `AppearanceSettingsPanel`, ThemeSettings.tsx `ThemeLibrary`'s
 /// mode tiles). Every row is a client setting, so the page has no scope sentence
 /// (`SETTINGS_DEVICE_ONLY_PATHS`).
-// ponytail: no theme gallery, editor or import; CandyWrapper draws T3's default palette only. Add them with a theme runtime
 public final class AppearanceSettingsView: SettingsPageBase {
     static let advancedKey = "settings.typographyAdvanced"
     private var typography: SettingsSectionView?
@@ -38,15 +37,133 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     // MARK: Colors & themes
 
+    /// `ThemeLibrary` (ThemeSettings.tsx:420-1043): the mode tiles, the Theme heading with Create and Add,
+    /// and the card grid (standard, built-ins, saved themes).
     private func colorsSection() -> SettingsPlainSectionView {
         let heading = SettingsSubheadingView(SettingsSearch.title("color-scheme"))
         let tiles = ModeTilesView()
         tiles.onPick = { [weak self] mode in self?.context.setAppearanceMode?(mode) }
-        binder.add { [weak self, weak tiles] in tiles?.mode = self?.context.appearanceMode ?? "system" }
+        let themeHeading = SettingsSubheadingView(SettingsSearch.title("theme"))
+        // `flex min-h-8 pt-2`: 8 of the 32 are the top padding.
+        themeHeading.minHeight = 24
+        themeHeading.topPadding = 8
+        let buttons = ThemeHeaderButtonsView()
+        themeHeading.trailing = buttons
+        buttons.create.action = { [weak self] in self?.createTheme() }
+        buttons.add.action = { [weak self] in self?.addTheme() }
+        let grid = ThemeCardGridView()
+        var signature = ""
+        binder.add { [weak self, weak tiles, weak grid] in
+            guard let self else { return }
+            let lib = self.themes
+            tiles?.mode = lib.appearanceMode
+            let colors = ThemeAppearance.allCases.map { a in
+                (lib.ownerCard(a).flatMap { lib.definition($0) }.map(ThemeCardDefinition.init) ?? .standard).colors(a)
+            }
+            tiles?.wireframeColors = (colors[0], colors[1])
+            // Rebuilt only when what the cards show changed.
+            let custom = lib.customThemes
+            let next = "\(lib.pickedModes(nil))|\(ThemeDefinition.builtIns.map { lib.pickedModes($0.id) })|"
+                + custom.map { "\($0.id):\($0.label):\(lib.pickedModes($0.id)):\(ThemeCardDefinition($0).previews.map(\.colors))" }.joined(separator: ",")
+            guard next != signature, let grid else { return }
+            signature = next
+            grid.cards = self.themeCards(custom)
+            self.onHeightChange?()
+        }
         let s = SettingsPlainSectionView()
-        s.body = [heading, tiles]
+        s.body = [heading, tiles, themeHeading, grid]
         anchors["appearance"] = s
+        anchors["theme"] = themeHeading
         return s
+    }
+
+    private var themes: ThemeLibrary { ThemeLibrary.shared }
+
+    private func themeCards(_ custom: [ThemeDefinition]) -> [ThemeLibraryCardView] {
+        let lib = themes
+        let appearance = lib.resolvedAppearance
+        let editor = ThemeEditorController.shared
+        var cards = [ThemeLibraryCardView(card: .standard, picked: lib.pickedModes(nil), actions: .init(
+            use: { lib.useStandard() }, useMode: { lib.assignHalf($0, nil) },
+            duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) }))]
+        for theme in ThemeDefinition.builtIns {
+            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
+                use: { lib.setTheme(theme.id) }, useMode: { lib.assignHalf($0, theme.id) },
+                duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) })))
+        }
+        // ponytail: saved themes only; collections (imported VS Code variants) and environment-published themes have no cards, add them with ThemeImportDialog's VS Code and Open VSX paths
+        for theme in custom {
+            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
+                use: { lib.use(theme) }, useMode: { lib.assignHalf($0, theme.id) },
+                duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) },
+                edit: { editor.open(.init(editingThemeId: theme.id, seedThemeId: nil, seedName: nil, initialAppearance: appearance)) },
+                export: { [weak self] in self?.exportTheme(theme) },
+                remove: { [weak self] in self?.confirmRemoveTheme(theme) })))
+        }
+        return cards
+    }
+
+    /// "Create theme" starts from the theme on screen for the current appearance.
+    private func createTheme() {
+        let lib = themes
+        let appearance = lib.resolvedAppearance
+        let seed = lib.ownerCard(appearance).flatMap { lib.definition($0) }?.id
+        ThemeEditorController.shared.open(.init(editingThemeId: nil, seedThemeId: seed, seedName: nil, initialAppearance: appearance))
+    }
+
+    /// `downloadThemeFile(`${id}.json`, serializeThemeFile(theme))`, as a save panel.
+    private func exportTheme(_ theme: ThemeDefinition) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(theme.id).json"
+        panel.allowedContentTypes = [.json]
+        let text = ThemePalette.serializeFile(theme)
+        let done: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
+                self?.context.toast?("Couldn’t export theme", error.localizedDescription, .error)
+            }
+        }
+        if let window { panel.beginSheetModal(for: window, completionHandler: done) } else { done(panel.runModal()) }
+    }
+
+    /// "Add theme": a theme file (ThemeImportDialog's JSON path), then T3's `onImported`.
+    // ponytail: JSON theme files only; T3's dialog also pastes JSON, converts VS Code themes and searches Open VSX
+    private func addTheme() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        let done: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            do {
+                let data = try Data(contentsOf: url)
+                guard data.count <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
+                let theme = try self.themes.install(ThemePalette.parseFile(JSONSerialization.jsonObject(with: data)))
+                if let single = theme.singleAppearance {
+                    self.themes.assignHalf(single, theme.id)
+                    self.context.toast?("\(theme.label) added", "It’s now your \(single.rawValue) theme.", .success)
+                } else {
+                    self.themes.setTheme(theme.id)
+                    self.context.toast?("\(theme.label) added", "It’s now active.", .success)
+                }
+            } catch {
+                self.context.toast?("Couldn’t add theme", (error as? LocalizedError)?.errorDescription ?? "That theme file is invalid.", .error)
+            }
+        }
+        if let window { panel.beginSheetModal(for: window, completionHandler: done) } else { done(panel.runModal()) }
+    }
+
+    /// The single-theme removal dialog (ThemeSettings.tsx:933-1037).
+    private func confirmRemoveTheme(_ theme: ThemeDefinition) {
+        let dialog = DialogView(kind: .alertDialog, title: "Remove “\(theme.label)”?", message: "You can bring it back anytime by importing its JSON file.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let remove = ButtonView("Remove theme", variant: .destructive)
+        dialog.footerButtons = [cancel, remove]
+        guard let host = context.presentDialog?(dialog) else { return }
+        cancel.action = { [weak host] in host?.close() }
+        remove.action = { [weak self, weak host] in
+            host?.close()
+            self?.themes.removeThemes([theme.id])
+        }
     }
 
     // MARK: Interface
@@ -214,6 +331,14 @@ final class DiffDotsView: DSView {
 /// of the app above its label. The active tile has `bg-accent/30` and an inset 1px `ring`.
 final class ModeTilesView: DSView, SettingsGroupRow {
     var mode = "system" { didSet { tiles.forEach { $0.isActive = $0.mode == mode } } }
+    /// The preview colors of the theme that owns each appearance (`wireframeColors`).
+    var wireframeColors: (light: [ThemeColorRole: String], dark: [ThemeColorRole: String]) = (ThemeCardDefinition.standard.colors(.light),
+                                                                                              ThemeCardDefinition.standard.colors(.dark)) {
+        didSet {
+            let light = Wireframe.Colors(wireframeColors.light), dark = Wireframe.Colors(wireframeColors.dark)
+            for t in tiles { t.wireframe.palettes = (light, dark) }
+        }
+    }
     var onPick: ((String) -> Void)?
     private var tiles: [Tile] = []
 
@@ -242,7 +367,7 @@ final class ModeTilesView: DSView, SettingsGroupRow {
         let mode: String
         var isActive = false { didSet { restyle(); setAccessibilityValue(isActive) } }
         private let decoration = BoxDecorationLayer()
-        private let wireframe: Wireframe
+        let wireframe: Wireframe
         private let label = LabelView("", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground))
 
         init(mode: String) {
@@ -288,20 +413,26 @@ final class ModeTilesView: DSView, SettingsGroupRow {
         }
     }
 
-    /// `ThemeWireframe` with T3's standard preview colors (themePreview.ts, ThemePreviewCircles.tsx).
+    /// `ThemeWireframe` (ThemeWireframe.tsx) painted with a theme card's preview colors (ThemePreviewCircles.tsx).
     final class Wireframe: DSView {
         let mode: String
+        var palettes = (light: Colors(ThemeCardDefinition.standard.colors(.light)), dark: Colors(ThemeCardDefinition.standard.colors(.dark))) {
+            didSet { needsDisplay = true }
+        }
         init(mode: String) { self.mode = mode; super.init(frame: .zero) }
         override var wantsUpdateLayer: Bool { false }
 
-        struct Colors { let canvas, sidebar, surface, accentSurface, messageSurface, messageAction: NSColor }
+        struct Colors {
+            let canvas, sidebar, surface, accentSurface, messageSurface, messageAction: NSColor
+            init(_ c: [ThemeColorRole: String]) {
+                func color(_ r: ThemeColorRole) -> NSColor { ThemeCSSColor.nsColor(c[r] ?? "") ?? .clear }
+                canvas = color(.canvas); sidebar = color(.sidebar); surface = color(.surface); accentSurface = color(.accentSurface)
+                messageSurface = color(.messageSurface); messageAction = color(.messageAction)
+            }
+        }
         static func hex(_ v: UInt32) -> NSColor {
             NSColor(srgbRed: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
         }
-        static let light = Colors(canvas: hex(0xfcfcfc), sidebar: hex(0xfafafa), surface: hex(0xffffff), accentSurface: hex(0xf4f4f5),
-                                  messageSurface: hex(0xe4e4e7), messageAction: hex(0x4f46e5))
-        static let dark = Colors(canvas: hex(0x0a0a0a), sidebar: hex(0x0f0f10), surface: hex(0x121212), accentSurface: hex(0x27272a),
-                                 messageSurface: hex(0x27272a), messageAction: hex(0x8b9cff))
 
         override func draw(_ dirtyRect: NSRect) {
             let outer = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 8, yRadius: 8)
@@ -310,14 +441,14 @@ final class ModeTilesView: DSView, SettingsGroupRow {
             if mode == "system" {
                 NSGraphicsContext.saveGraphicsState()
                 NSRect(x: 0, y: 0, width: bounds.width / 2 - 1, height: bounds.height).clip()
-                pane(Self.light)
+                pane(palettes.light)
                 NSGraphicsContext.restoreGraphicsState()
                 NSGraphicsContext.saveGraphicsState()
                 NSRect(x: bounds.width / 2 + 1, y: 0, width: bounds.width / 2 - 1, height: bounds.height).clip()
-                pane(Self.dark)
+                pane(palettes.dark)
                 NSGraphicsContext.restoreGraphicsState()
             } else {
-                pane(mode == "dark" ? Self.dark : Self.light)
+                pane(mode == "dark" ? palettes.dark : palettes.light)
             }
             NSGraphicsContext.restoreGraphicsState()
             Themed.color(\.border, 0.6).setStroke()
