@@ -34,12 +34,21 @@ final class OpenInController {
     private var environmentId: String? { git.target?.environmentId }
     private var cwd: String? { git.target?.cwd }
     /// `primaryServerAvailableEditorsAtom`: the primary environment's editors.
-    private var available: [String] { environments.primaryId.flatMap { composer.config($0)?.availableEditors } ?? [] }
+    private var remoteHost: String? {
+        guard let environmentId, environmentId != environments.primaryId else { return nil }
+        return composer.config(environmentId)?.remoteOpenTargets.first?["host"]?.stringValue
+    }
+    private var available: [String] {
+        let local = environments.primaryId.flatMap { composer.config($0)?.availableEditors } ?? []
+        guard remoteHost != nil else { return local }
+        let remote = local.filter { OpenInEditors.remoteURL(editor: $0, host: "host", path: "/") != nil }
+        return remote.isEmpty ? ["vscode"] : remote
+    }
     private var preferred: String? {
         OpenInEditors.preferred(available: available, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
     }
     private var isShown: Bool {
-        OpenInEditors.showsPicker(hasProject: git.target != nil, environmentId: environmentId, primaryId: environments.primaryId)
+        git.target != nil && (environmentId == environments.primaryId || remoteHost != nil)
     }
 
     private static func icon(_ editor: String) -> IconName {
@@ -83,6 +92,12 @@ final class OpenInController {
 
     private func open(_ editorId: String?) {
         guard let environmentId, let cwd, let editor = editorId ?? preferred else { return }
+        if let remoteHost {
+            guard let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost, path: cwd), NSWorkspace.shared.open(url) else { return }
+            UserDefaults.standard.set(editor, forKey: OpenInEditors.lastEditorKey)
+            render()
+            return
+        }
         UserDefaults.standard.set(editor, forKey: OpenInEditors.lastEditorKey)
         render()
         // T3 reports a failure only to the console (`useAtomCommand(…, "open in editor")`).

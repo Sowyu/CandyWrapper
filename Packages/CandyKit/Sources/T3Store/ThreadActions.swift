@@ -96,11 +96,11 @@ public enum ThreadCommands {
 /// (CommandPalette.tsx:2465-2474): the folder's name as title, create the folder if missing, no
 /// default model.
 public enum ProjectCommands {
-    public static func create(projectId: ProjectId, workspaceRoot: String, commandId: String = ThreadCommands.newCommandId()) -> JSONValue {
+    public static func create(projectId: ProjectId, workspaceRoot: String, createWorkspaceRootIfMissing: Bool = true, title: String? = nil, commandId: String = ThreadCommands.newCommandId()) -> JSONValue {
         .object([
             "type": .string("project.create"), "commandId": .string(commandId), "projectId": .string(projectId.rawValue),
-            "title": .string(inferTitle(fromPath: workspaceRoot)), "workspaceRoot": .string(workspaceRoot),
-            "createWorkspaceRootIfMissing": .bool(true), "defaultModelSelection": .null,
+            "title": .string(title ?? inferTitle(fromPath: workspaceRoot)), "workspaceRoot": .string(workspaceRoot),
+            "createWorkspaceRootIfMissing": .bool(createWorkspaceRootIfMissing), "defaultModelSelection": .null,
         ])
     }
 

@@ -3,9 +3,6 @@ import DesignSystem
 import T3Protocol
 
 /// Settings > SnapShots (SnapShotSettings.tsx, SnapShotSettings.logic.ts): device-only rows, no scope sentence.
-// ponytail: capture itself (ScreenCaptureKit, the modifier-pair shortcut monitor, the setup dialog, permissions)
-// is not built, so these rows store T3's client settings and the status reads as setup not finished.
-// Build capture with the desktop package (WP7.8) and feed its state here.
 public final class SnapShotSettingsView: ScopedSettingsPage {
     public init(context: SettingsPageContext) {
         super.init(context: context, sentence: false)
@@ -35,13 +32,16 @@ public final class SnapShotSettingsView: ScopedSettingsPage {
         enable.setAccessibilityLabel("Enable snapshots")
         let enabledRow = row("snap-shot-enabled", detail: "Capture a window and attach it to your current draft.", control: enable)
         enabledRow.accessories = [ResetSlot(label: "")]
-        enable.onChange = { [weak self] on in self?.context.writeClient?(["snapShotEnabled": .bool(on)]) }
+        enable.onChange = { [weak self, weak enable] on in if on { enable?.isOn = self?.client.bool("snapShotEnabled") ?? false; self?.context.setupSnapShot?() } else { self?.context.writeClient?(["snapShotEnabled": .bool(false)]) } }
 
         let text = clientSwitch("snap-shot-accessibility", "Include text and controls when the app makes them available.",
                                 key: "snapShotIncludeAccessibility", label: "Include app text in snapshots")
         let shortcutBox = ShortcutRecorderView()
         shortcutBox.preferredWidth = 176
-        shortcutBox.isEnabled = false
+        shortcutBox.onRecord = { [weak self] binding in
+            guard let chord = SnapShotShortcutState.chord(binding) else { return }
+            self?.context.writeClient?(["snapShotShortcut": chord])
+        }
         let shortcut = row("snap-shot-shortcut", detail: "Capture the window you're using without switching apps.", control: shortcutBox)
         shortcut.accessories = [ResetSlot(label: "")]
         let sounds: [(String, String)] = [("off", "Off"), ("soft-pop", "Whoosh (Default)"), ("camera-shutter", "Click")]
@@ -59,7 +59,7 @@ public final class SnapShotSettingsView: ScopedSettingsPage {
             guard let self else { return }
             let on = self.client.bool("snapShotEnabled")
             enable?.isOn = on
-            enabledRow?.status = on ? "Finish shortcut setup" : "Turn this on to set up snapshots."
+            enabledRow?.status = on ? (self.context.snapShotReady?() == true ? "Ready to capture" : "Finish shortcut setup") : "Turn this on to set up snapshots."
             for r in [text, shortcut, soundRow, flash, animations] { r.isHidden = !on }
             shortcutBox?.value = Self.shortcutLabel(self.client["snapShotShortcut"])
             let selection = self.client.bool("snapShotPlaySound") ? self.client.string("snapShotSound") : "off"

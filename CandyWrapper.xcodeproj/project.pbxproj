@@ -13,6 +13,7 @@
 		237342D7C8F16250C670D589 /* BrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */; };
 		27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */; };
 		357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */; };
+		38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */; };
 		3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */; };
 		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
 		46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FB4EFB4DBDAF423D7789DC /* GitController.swift */; };
@@ -22,6 +23,7 @@
 		5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28281CD4D81D6A990C1B210 /* ThreadSession.swift */; };
 		617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */; };
 		66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */; };
+		67B6D57E1F6DB6A1E41ABE9B /* snap-shot-whoosh.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = C76F44D11306FA7AAC154796 /* snap-shot-whoosh.mp3 */; };
 		6853335632C49221DEDD17A8 /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA413FF2F602E6306049C36 /* ServerController.swift */; };
 		6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812D0A51D97E799EF04BF25 /* Environments.swift */; };
 		70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045DDA2A8C6CDD4119BB7447 /* FilesController.swift */; };
@@ -36,9 +38,11 @@
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
+		A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
 		A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
+		BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */; };
 		BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 162121B8686607C8F5B9672C /* notification-input.mp3 */; };
 		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
 		CC7E68D849C3162650E6B75F /* DevicePanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */; };
@@ -57,9 +61,11 @@
 		162121B8686607C8F5B9672C /* notification-input.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "notification-input.mp3"; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
+		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
 		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePanelController.swift; sourceTree = "<group>"; };
+		3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapShotController.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
 		55FB4EFB4DBDAF423D7789DC /* GitController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitController.swift; sourceTree = "<group>"; };
@@ -82,10 +88,12 @@
 		B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserController.swift; sourceTree = "<group>"; };
 		C28281CD4D81D6A990C1B210 /* ThreadSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSession.swift; sourceTree = "<group>"; };
 		C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectScriptsController.swift; sourceTree = "<group>"; };
+		C76F44D11306FA7AAC154796 /* snap-shot-whoosh.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-whoosh.mp3"; sourceTree = "<group>"; };
 		CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTasksStore.swift; sourceTree = "<group>"; };
 		CB23CCA031F2AB693BDD07D9 /* CandyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CandyKit; path = Packages/CandyKit; sourceTree = SOURCE_ROOT; };
 		CDA413FF2F602E6306049C36 /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
 		E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsHostAccess.swift; sourceTree = "<group>"; };
+		EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingController.swift; sourceTree = "<group>"; };
 		EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadAutomationsController.swift; sourceTree = "<group>"; };
 		F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "notification-completion.mp3"; sourceTree = "<group>"; };
 		FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteAddProject.swift; sourceTree = "<group>"; };
@@ -162,12 +170,14 @@
 				606083DF126114F0273EEEDD /* ShellSession.swift */,
 				527913F33E671EBA3009A953 /* Shortcuts.swift */,
 				5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */,
+				3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */,
 				92B1A20A927434B822A78FBE /* T3ConnectController.swift */,
 				7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */,
 				EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */,
 				7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */,
 				C28281CD4D81D6A990C1B210 /* ThreadSession.swift */,
 				35F79E1B4BAC92B09DE28732 /* UsageController.swift */,
+				EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -177,6 +187,8 @@
 			children = (
 				F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */,
 				162121B8686607C8F5B9672C /* notification-input.mp3 */,
+				2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */,
+				C76F44D11306FA7AAC154796 /* snap-shot-whoosh.mp3 */,
 			);
 			path = Sounds;
 			sourceTree = "<group>";
@@ -269,6 +281,8 @@
 			files = (
 				4F0A678A7750FE0672129144 /* notification-completion.mp3 in Resources */,
 				BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */,
+				BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */,
+				67B6D57E1F6DB6A1E41ABE9B /* snap-shot-whoosh.mp3 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -306,12 +320,14 @@
 				430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */,
 				FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */,
 				357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */,
+				38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */,
 				EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */,
 				3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */,
 				D050126CAF44FEFD05E6EEF0 /* ThreadAutomationsController.swift in Sources */,
 				7AEB67D7EED3460CC950037F /* ThreadNotificationCoordinator.swift in Sources */,
 				5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */,
 				87959F581610CF381EEC6C11 /* UsageController.swift in Sources */,
+				A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -81,6 +81,7 @@ public final class ToastView: DSView {
         guard titleText.text != title || messageText.text != (message ?? "") else { return }
         titleText.text = title
         messageText.text = message ?? ""
+        messageText.isHidden = message == nil
         setAccessibilityLabel(title)
         needsLayout = true
     }

@@ -172,6 +172,7 @@ public final class FileTreeView: DSView {
     /// The open file, drawn selected (`selectedPath`).
     public var selectedPath: String? { didSet { if selectedPath != oldValue { reconfigureAll() } } }
     /// Drags a file row into the composer as a mention (fileTreeDragMention.ts).
+    public var onContextMenu: ((String, NSView, NSEvent) -> Void)?
     public var onDragPayload: ((String) -> String?)?
 
     private var rows: [FileTreeModel.Row] = []
@@ -240,6 +241,7 @@ public final class FileTreeView: DSView {
         if let v = pool.popLast() { v.isHidden = false; return v }
         let v = FileTreeRowView()
         v.onClick = { [weak self] row in self?.clicked(row) }
+        v.onContextMenu = { [weak self] path, view, event in self?.onContextMenu?(path, view, event) }
         v.onDragPayload = { [weak self] path in self?.onDragPayload?(path) }
         addSubview(v)
         return v
@@ -288,6 +290,7 @@ final class FileTreeRowView: DSView {
     private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     var guidesVisible = false { didSet { guides.forEach { $0.opacity = guidesVisible ? 0.75 : 0 } } }
     var onClick: ((FileTreeModel.Row) -> Void)?
+    var onContextMenu: ((String, NSView, NSEvent) -> Void)?
     var onDragPayload: ((String) -> String?)?
     private var tracking: NSTrackingArea?
     private var downPoint: NSPoint?
@@ -390,6 +393,7 @@ final class FileTreeRowView: DSView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) { downPoint = event.locationInWindow }
+    override func rightMouseDown(with event: NSEvent) { onContextMenu?(row.path, self, event) }
 
     override func mouseDragged(with event: NSEvent) {
         guard let start = downPoint, hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > 3,

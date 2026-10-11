@@ -236,6 +236,8 @@ final class ComposerController {
         return stream
     }
 
+    private var keybindingsNotice = KeybindingsUpdateNotice()
+
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
         switch event {
@@ -247,7 +249,14 @@ final class ComposerController {
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
         case .providerStatuses(let providers): config.providers = providers
         case .settingsUpdated(let settings): config.settings = settings
-        case .keybindingsUpdated(let rules): config.keybindings = rules
+        case .keybindingsUpdated(let rules):
+            config.keybindings = rules
+            if environmentId == environments.primaryId, keybindingsNotice.shouldShowSuccess(now: Date.timeIntervalSinceReferenceDate) {
+                toast(.success, "Keybindings updated", "Keybindings configuration reloaded successfully.")
+            }
+        case .keybindingsInvalid(let rules, let message):
+            config.keybindings = rules
+            if environmentId == environments.primaryId { toast(.warning, "Invalid keybindings configuration", message) }
         case .other: return
         }
         serverConfigs[environmentId] = config
@@ -2108,6 +2117,33 @@ extension ComposerController {
     /// main thread first and get a chip only when the prompt already has prose.
     /// Files dropped on the open thread's sidebar row (`consumePendingFileDrop`, ChatView.tsx:10930-10950).
     func attachDroppedFiles(_ urls: [URL]) { addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
+
+    var snapShotDestination: (key: String, environment: String)? {
+        guard questionRequestId == nil, let draftKey, let targetEnvironmentId else { return nil }
+        return (draftKey, targetEnvironmentId)
+    }
+
+    /// Preserve the draft selected at capture start even if navigation changes during ScreenCaptureKit.
+    func attachSnapShot(_ data: Data, destination: (key: String, environment: String)) async throws {
+        let key = destination.key, env = destination.environment
+        guard (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments else { throw CancellationError() }
+        preparingImages[key, default: 0] += 1
+        defer { preparingImages[key, default: 1] -= 1 }
+        let work = Self.attachmentWorkDirectory
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let url = work.appendingPathComponent("snapshot-\(UUID().uuidString).png")
+        try data.write(to: url, options: .atomic)
+        var keepsSource = false
+        defer { if !keepsSource { try? FileManager.default.removeItem(at: url) } }
+        let prepared = try await ComposerImageIO.prepare(url, name: "Snapshot.png", mimeType: "image/png",
+                                                        maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
+        keepsSource = prepared.url == url
+        let attachment = ComposerAttachment(kind: .image, name: prepared.name, mimeType: prepared.mimeType,
+                                            sizeBytes: prepared.sizeBytes, fileURL: prepared.url, environmentId: env)
+        draftAttachments[key, default: []].append(attachment)
+        startUpload(attachment.id, key: key)
+        refresh()
+    }
 
     /// Sidebar threads dropped on the composer (ChatComposer.tsx:6245-6267): threads from another
     /// environment are refused; the rest become thread context references at the caret, once each.
