@@ -3063,7 +3063,6 @@ extension ComposerController {
             return false
         }
         let banner = UsageLimitsBannerView(report: report)
-        banner.dismiss.action = { [weak self] in self?.panel.usageLimitsBanner = nil }
         banner.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         for (account, view) in banner.resetViews {
             guard let target = account.resetCreditTarget ?? account.instanceId.map({ .instance($0) }) else { continue }
@@ -3200,7 +3199,7 @@ extension ComposerController {
     /// The badge lifts to full opacity and the count turns primary for 1.2 s (`pulseStashBadge`).
     private func pulseStashBadge() {
         stashPulseWork?.cancel()
-        panel.stashBadge.pulsing = true
+        panel.stashBadge.pulse()
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.panel.stashBadge.pulsing = false } }
         stashPulseWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)

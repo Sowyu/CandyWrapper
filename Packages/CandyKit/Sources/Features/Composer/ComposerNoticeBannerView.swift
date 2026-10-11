@@ -15,10 +15,12 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var actions: [String]
         public var dismissLabel: String?
         public var compact: Bool
+        /// The item's `priority` in the banner stack.
+        public var priority: ComposerBannerStackItem.Priority?
         public init(variant: Variant, icon: IconName, title: String, description: String? = nil, actions: [String] = [],
-                    dismissLabel: String? = nil, compact: Bool = false) {
+                    dismissLabel: String? = nil, compact: Bool = false, priority: ComposerBannerStackItem.Priority? = nil) {
             self.variant = variant; self.icon = icon; self.title = title; self.description = description
-            self.actions = actions; self.dismissLabel = dismissLabel; self.compact = compact
+            self.actions = actions; self.dismissLabel = dismissLabel; self.compact = compact; self.priority = priority
         }
     }
 
@@ -31,14 +33,19 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         for (index, button) in buttons.enumerated() { button.isEnabled = !disabledActions.contains(index) }
     }
     private let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
+    public override var dismissControl: ButtonView? { dismiss.isHidden ? nil : dismiss }
     public private(set) var content: Content?
     /// An action button by its index in `content.actions`, or the X (nil).
     public var onAction: ((Int?) -> Void)?
+    /// Set by the banner stack: the X asks it to play the exit, which then calls `onAction(nil)`.
+    public var onDismissRequest: (() -> Void)?
 
     public init() {
         super.init(variant: .neutral)
         dismiss.iconSize = 14
-        dismiss.action = { [weak self] in self?.onAction?(nil) }
+        dismiss.action = { [weak self] in
+            if let request = self?.onDismissRequest { request() } else { self?.onAction?(nil) }
+        }
         for v in [iconView, title, detail, dismiss] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("alert")
@@ -88,7 +95,8 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         // `gap-1`; a compact banner hides the description under 400pt (`@max-[400px]:sr-only`).
         let hideDetail = detail.text.isEmpty || (content?.compact == true && bounds.width < 400)
         detail.isHidden = hideDetail
-        let dx = title.frame.maxX + 4
+        // The description starts `gap-1` after the title's text, on a device pixel.
+        let dx = ((x + min(title.textWidth, titleWidth) + 4) * 2).rounded() / 2
         detail.frame = NSRect(x: dx, y: rowY, width: max(0, right - dx), height: 24)
     }
 }

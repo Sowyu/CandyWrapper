@@ -194,14 +194,60 @@ public final class ThreadPanelView: DSView {
         }
     }
     public var showsNoticeBanner = false { didSet { if showsNoticeBanner != oldValue { needsLayout = true } } }
-    /// The `/usage-limits` result, a notice in the banner stack above the environment banner.
+    /// The `/usage-limits` result, a notice in the banner stack. Its X plays the stack's exit, then clears it.
     public var usageLimitsBanner: UsageLimitsBannerView? {
         didSet {
             oldValue?.removeFromSuperview()
-            if let b = usageLimitsBanner { addSubview(b, positioned: .below, relativeTo: environmentBanner) }
+            if let b = usageLimitsBanner {
+                addSubview(b, positioned: .above, relativeTo: queue)
+                b.dismiss.action = { [weak self, weak b] in
+                    guard let self, let b else { return }
+                    bannerStack.requestDismiss(Self.usageLimitsId(b))
+                }
+            }
             needsLayout = true
         }
     }
+    /// The notices behind the front banner: the peek, and the floating cards it opens on hover.
+    public let bannerStack = ComposerBannerStackView()
+    static func usageLimitsId(_ banner: UsageLimitsBannerView) -> String { "usage-limits:\(ObjectIdentifier(banner).hashValue)" }
+
+    /// `composerBannerItems` (ChatView.tsx:7776-7839) in T3's order: limit recovery, usage limits, the
+    /// project clone, the system items (environment, server update; ChatView.tsx:3091-3224), then the
+    /// goal. Not built yet: Codex feedback, background work, auto balance updates, branch mismatch.
+    func bannerStackItems(docked: Bool, composerVisible: Bool) -> [ComposerBannerStackItem] {
+        var items: [ComposerBannerStackItem] = []
+        let notice = { (id: String, view: ComposerNoticeBannerView) -> ComposerBannerStackItem in
+            var item = ComposerBannerStackItem(id: id, view: view, priority: view.content?.priority, height: { _ in ComposerNoticeBannerView.height })
+            if view.content?.dismissLabel != nil {
+                view.onDismissRequest = { [weak self] in self?.bannerStack.requestDismiss(id) }
+                item.onDismiss = { [weak view] in view?.onAction?(nil) }
+            } else {
+                view.onDismissRequest = nil
+            }
+            return item
+        }
+        if docked && showsRecovery {
+            items.append(ComposerBannerStackItem(id: "usage-limit-recovery", view: recoveryBanner, priority: .urgent,
+                                                 height: { _ in ComposerNoticeBannerView.height }))
+        }
+        if docked, let usage = usageLimitsBanner {
+            items.append(ComposerBannerStackItem(id: Self.usageLimitsId(usage), view: usage, priority: .notice,
+                                                 height: { [usage] in usage.height(forWidth: $0) },
+                                                 onDismiss: { [weak self, weak usage] in
+                                                     if let self, usageLimitsBanner === usage { usageLimitsBanner = nil }
+                                                 }))
+        }
+        if showsNoticeBanner && composerVisible { items.append(notice("project-clone", noticeBanner)) }
+        if docked && showsEnvironmentBanner {
+            items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,
+                                                 height: { _ in EnvironmentBannerView.height }))
+        }
+        if serverUpdateNotice != nil && composerVisible { items.append(notice("server-version", serverUpdateBanner)) }
+        if docked && showsGoal { items.append(notice("goal", goalBanner)) }
+        return items
+    }
+
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero and during approvals.
@@ -354,6 +400,10 @@ public final class ThreadPanelView: DSView {
         addSubview(activityRow)
         stashBadge.isHidden = true
         addSubview(stashBadge)
+        // Above every attachment (`z-20`), under the drawers and menus.
+        bannerStack.isHidden = true
+        bannerStack.onLayoutChange = { [weak self] in self?.needsLayout = true }
+        addSubview(bannerStack)
         addSubview(approvalPanel)
         addSubview(questionPanel)
         contextStrip.isHidden = true
@@ -829,8 +879,10 @@ public final class ThreadPanelView: DSView {
             let block = height + 32 + 20
             let top = ThreadHeaderView.height + (chatHeight - ThreadHeaderView.height - block) / 2
             y = top.rounded()
-            // A docked notice sits between the hero and the composer.
-            let notice = showsNoticeBanner && composerShown ? ComposerNoticeBannerView.height - ComposerBannerView.overlap : 0
+            // The banner stack sits between the hero and the composer: the front notice and the peek.
+            let stack = composerShown && chat > 0 ? ComposerBannerStackItem.ordered(bannerStackItems(docked: false, composerVisible: true)) : []
+            let notice = (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0)
+                + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
             hero.frame = NSRect(x: x, y: y - 16 - notice - DraftHeroView.height, width: width, height: DraftHeroView.height)
         } else {
             y = chatHeight - 20 - height
@@ -899,63 +951,59 @@ public final class ThreadPanelView: DSView {
             planFollowUpBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = planFollowUpBanner.frame.minY
         }
+        // The banner stack (ChatComposer.tsx:6713-6735): with banner items, the sync row is the stack's
+        // activity item and stays attached; without, it is its own strip under the stack.
+        var items = bannerStackItems(docked: docked, composerVisible: !composer.isHidden)
         let activityShown = docked && showsActivity
+        let activityInStack = activityShown && !items.isEmpty
+        if activityInStack {
+            items.insert(ComposerBannerStackItem(id: "composer-activity", view: activityRow, priority: .activity,
+                                                 height: { [activityRow] _ in activityRow.preferredHeight }), at: 0)
+        }
         activityRow.isHidden = !activityShown
-        if activityShown {
+        activityRow.joinsAbove = false
+        if activityShown && !activityInStack {
             let h = activityRow.preferredHeight
             activityRow.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = activityRow.frame.minY
         }
-        activityRow.joinsAbove = false
-        let bannerShown = docked && showsEnvironmentBanner
-        environmentBanner.isHidden = !bannerShown
-        if bannerShown {
-            let h = EnvironmentBannerView.height
-            environmentBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-            top = environmentBanner.frame.minY
-        }
-        let noticeShown = showsNoticeBanner && !composer.isHidden
-        if noticeShown { noticeBanner.isHidden = false } else { lazyNoticeBanner.loaded?.isHidden = true }
-        if noticeShown {
-            let h = ComposerNoticeBannerView.height
-            noticeBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-            top = noticeBanner.frame.minY
-        }
-        let updateShown = serverUpdateNotice != nil && !composer.isHidden
-        if updateShown { serverUpdateBanner.isHidden = false } else { lazyServerUpdateBanner.loaded?.isHidden = true }
-        if updateShown {
-            let h = ComposerNoticeBannerView.height
-            serverUpdateBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-            top = serverUpdateBanner.frame.minY
-        }
-        if let usage = usageLimitsBanner {
-            usage.isHidden = !docked
-            if docked {
-                let h = usage.height(forWidth: bannerWidth)
-                usage.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-                top = usage.frame.minY
+        let ordered = ComposerBannerStackItem.ordered(items)
+        let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
+                                                 lazyGoalBanner.loaded, lazyRecoveryBanner.loaded, usageLimitsBanner]
+        for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
+        bannerStack.update(ordered)
+        let front = ordered.first
+        if let front {
+            let view = front.view
+            // Back to front: queue, the front item, then the strips and drawers below it.
+            if view.superview !== self || subviews.firstIndex(of: view) != subviews.firstIndex(of: queue).map({ $0 + 1 }) {
+                addSubview(view, positioned: .above, relativeTo: queue)
             }
-        }
-        for (lazyBanner, shown) in [(lazyGoalBanner, showsGoal), (lazyRecoveryBanner, showsRecovery)] {
-            guard docked && shown else { lazyBanner.loaded?.isHidden = true; continue }
-            let banner = lazyBanner.view
-            banner.isHidden = false
-            let h = ComposerNoticeBannerView.height
-            banner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-            top = banner.frame.minY
+            view.placement = .attached
+            view.isHidden = false
+            let h = front.height(bannerWidth)
+            view.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = view.frame.minY
         }
         let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
-        environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil) || noticeShown
-        lazyNoticeBanner.loaded?.joinsAbove = updateShown || queueHeight > 0 || (docked && usageLimitsBanner != nil)
-        lazyServerUpdateBanner.loaded?.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
-        usageLimitsBanner?.joinsAbove = queueHeight > 0
-        activityRow.joinsAbove = queueHeight > 0 || bannerShown || noticeShown
-        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
-        questionPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
-        let above = max(y - top, badgeShown ? stashBadge.preferredHeight - overlap : 0)
+        // The other notices peek above the whole column, never from between two attachments.
+        if bannerStack.hasStack {
+            let h = bannerStack.height(width: bannerWidth)
+            bannerStack.frame = NSRect(x: bannerX, y: top - h, width: bannerWidth, height: h)
+        }
+        // Adjacent attachments share their outline (ComposerBanner.tsx `Attachment`).
+        front?.view.joinsAbove = queueHeight > 0
+        let attachedAbove = queueHeight > 0 || front != nil
+        if activityShown && !activityInStack { activityRow.joinsAbove = attachedAbove }
+        let stripAbove = attachedAbove || (activityShown && !activityInStack)
+        approvalPanel.joinsAbove = stripAbove
+        questionPanel.joinsAbove = stripAbove
+        // ponytail: the timeline keeps room for the collapsed stack only; an open stack overlays it, reserve it if T3's inset jump matters
+        let stackCap = bannerStack.hasStack ? ComposerBannerStackView.peekHeight : 0
+        let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }

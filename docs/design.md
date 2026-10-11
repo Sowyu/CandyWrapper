@@ -92,6 +92,7 @@ Each row is diffed against T3's own markup in Chromium at 2x in light and dark, 
 | Wrapped text | TextBlockView | 16 | 7.53% (line breaks identical; glyph antialiasing) |
 | ChatMarkdown.tsx, `.chat-markdown` (index.css) | MarkdownView (Features/Markdown) | 14 | 1.61%: text 1.72/2.07, lists 1.35/1.71, quotes 1.10/1.21, table 0.94/1.35, code 2.64/1.97, rule and image 0.16/0.25, file chips 2.75/3.35 (light/dark). Spec `scripts/gen-markdown-spec.py`, code colored by T3's own Shiki in the page |
 | DiffPanel.tsx, @pierre/diffs with StyledDiffCodeView.tsx CSS | DiffPanelView, DiffListView (Features/Diff) | 18 + 4 | body 2.42% against pierre itself rendering each patch in Chromium (spec `scripts/gen-diff-spec.py`; wrapped text cases 4-5%); panel against 09 and 10 5.1% light, 5.5% dark (glyph antialiasing over 23 rows of file names) |
+| chat/ComposerBannerStack.tsx, ComposerBanner.tsx (notices in each variant, the floating card, the stack collapsed with its peek and expanded) | ComposerNoticeBannerView, EnvironmentBannerView, ComposerBannerStackView (Features/Composer) | 20 | 2.04% (spec `scripts/gen-banner-stack-spec.py`; the peek's `shadow-md` is drawn as the 8pt band it leaves, measured on T3's rendering) |
 
 Behaviour tests cover popup positioning and keyboard navigation, toast timing and stacking, modal focus trapping, and sidebar resize limits.
 

@@ -10,6 +10,7 @@ public final class UsageLimitsBannerView: ComposerBannerView {
     private let title: LabelView
     private let detail: LabelView
     public let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
+    public override var dismissControl: ButtonView? { dismiss }
     private var blocks: [(view: NSView, height: CGFloat, gap: CGFloat)] = []
     public private(set) var resetViews: [(account: UsageLimitsReport.Account, view: UsageResetCreditsView)] = []
     public var onOpenURL: ((String) -> Void)?

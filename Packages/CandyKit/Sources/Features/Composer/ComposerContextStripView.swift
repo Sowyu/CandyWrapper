@@ -43,6 +43,9 @@ public final class ComposerContextStripView: DSView {
     private let surface = DSView()
     private let seam = CAGradientLayer()
     private let tint = CALayer()
+    /// `data-compact` (BranchToolbar.tsx:432-600, 760): the labels collapse to icons when the controls'
+    /// natural widths no longer fit, with 16pt of hysteresis before they come back.
+    public private(set) var labelsCompact = false
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -94,19 +97,61 @@ public final class ComposerContextStripView: DSView {
         seam.startPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 0 : 1)
         seam.endPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 1 : 0)
         CATransaction.commit()
-        // `ps-1 pe-2 pt-5`: the 24px row starts 20 down.
+        if updateCompact(width: w) { return }
+        for (control, frame) in controlFrames(width: w) { control.frame = frame }
+    }
+
+    /// `ps-1 pe-2 pt-5`: the 24px row starts 20 down.
+    private func controlFrames(width w: CGFloat) -> [(ComposerContextControl, NSRect)] {
         guard showsGitControls else {
             let size = runOn.intrinsicContentSize
-            runOn.frame = NSRect(x: 4, y: 20, width: min(size.width, max(0, w - 12)), height: size.height)
-            return
+            return [(runOn, NSRect(x: 4, y: 20, width: min(size.width, max(0, w - 12)), height: size.height))]
         }
         // `gap-1`: the run context takes at most 48% (`max-w-[48%]`), the empty controls host flexes, and the
         // branch sits at the end (`justify-end`), giving way first.
         let inner = max(0, w - 12)
         let left = min(runContext.intrinsicContentSize.width, (inner * 0.48).rounded(.down))
-        runContext.frame = NSRect(x: 4, y: 20, width: left, height: 24)
         let right = min(branch.intrinsicContentSize.width, max(0, inner - left - 8))
-        branch.frame = NSRect(x: w - 8 - right, y: 20, width: right, height: 24)
+        return [(runContext, NSRect(x: 4, y: 20, width: left, height: 24)), (branch, NSRect(x: w - 8 - right, y: 20, width: right, height: 24))]
+    }
+
+    /// `useLabelsOverflow`: the width the strip's groups need with every label shown, against the strip's
+    /// own width (`clientWidth`, padding included). The run context and "Run on" sit in wrapper groups, so
+    /// their whole buttons count; the branch selector is a direct child, so only its content does
+    /// (`contentWidth` sums the button's children, not its padding and border). `gap-1` between groups.
+    static func neededWidth(groups: [ComposerContextControl], directChild: ComposerContextControl?) -> CGFloat {
+        let widths = groups.map(\.expandedWidth) + (directChild.map { [$0.expandedWidth - 16] } ?? [])
+        let shown = widths.filter { $0 > 1 }
+        return shown.reduce(0, +) + 4 * CGFloat(max(0, shown.count - 1))
+    }
+
+    /// `resolveContextStripLabelsCompact` (BranchToolbar.logic.ts:85-95).
+    static func compact(was: Bool, needed: CGFloat, available: CGFloat) -> Bool {
+        was ? needed > available - 16 : needed > available
+    }
+
+    /// Flips compact mode when the measure says so. Returns true when it laid the controls out itself.
+    private func updateCompact(width: CGFloat) -> Bool {
+        guard width > 0 else { return false }
+        let needed = showsGitControls ? Self.neededWidth(groups: [runContext], directChild: branch) : Self.neededWidth(groups: [runOn], directChild: nil)
+        let next = Self.compact(was: labelsCompact, needed: needed, available: width)
+        guard next != labelsCompact else { return false }
+        labelsCompact = next
+        let controls = [runOn, runContext, branch]
+        controls.forEach { $0.labelsHidden = next }
+        // The label boxes resize over 180 ms `ease-drawer` and the text fades with them, the controls
+        // after them keeping their place (BranchToolbar.tsx:404-405, 532-556; ComposerContextLabel.tsx:28).
+        // Core Animation runs it; nothing ticks after.
+        guard window != nil, !Motion.reduced else { return false }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            for (control, frame) in controlFrames(width: width) {
+                control.animator().frame = frame
+                control.layoutChildren(animated: true)
+            }
+        }
+        return true
     }
 }
 
@@ -143,6 +188,9 @@ open class ComposerContextControl: ControlView {
     public var onSizeChange: (@MainActor () -> Void)?
 
     private var glyphViews: [IconView] = []
+    /// `ComposerContextLabel`'s outer box: compact collapses it to zero and fades it out while the text
+    /// inside keeps its width.
+    private let labelBox = DSView()
     private let label = LabelView()
     private let middle = MiddleTruncateView("", font: DSFont.ui(12))
     private var chevron = IconView(definition: ComposerControlView.chevronDefinition, size: 12)
@@ -166,8 +214,10 @@ open class ComposerContextControl: ControlView {
         middle.lineHeight = 16
         middle.showsTitle = false
         middle.isHidden = true
-        addSubview(label)
-        addSubview(middle)
+        labelBox.clipsToBounds = true
+        labelBox.addSubview(label)
+        labelBox.addSubview(middle)
+        addSubview(labelBox)
         addSubview(chevron)
         chevron.alphaValue = 0.5
         tooltip = TooltipController.attach(to: self, text: "")
@@ -201,8 +251,20 @@ open class ComposerContextControl: ControlView {
     }
 
     private var textWidth: CGFloat { middleTruncates ? middle.intrinsicContentSize.width : ceil(label.textWidth) }
-    /// `ComposerContextLabel`: at most 240 wide, truncated.
-    private var labelWidth: CGFloat { min(240, textWidth) }
+    /// `ComposerContextLabel`: at most 240 wide, truncated; zero while the strip is compact
+    /// (`group-data-[compact]/composer-context:max-w-0`).
+    private var fullLabelWidth: CGFloat { min(240, textWidth) }
+    private var labelWidth: CGFloat { labelsHidden ? 0 : fullLabelWidth }
+    /// Set by the strip in compact mode.
+    public var labelsHidden = false {
+        didSet {
+            guard labelsHidden != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            needsLayout = true
+        }
+    }
+    /// The width with the label shown, for the strip's measure.
+    var expandedWidth: CGFloat { intrinsicContentSize.width - labelWidth + fullLabelWidth }
     /// The glyphs' advance: a single glyph loses its -2 margins when interactive.
     private var glyphAdvance: CGFloat {
         switch glyphViews.count {
@@ -220,6 +282,12 @@ open class ComposerContextControl: ControlView {
 
     open override func layout() {
         super.layout()
+        layoutChildren(animated: false)
+    }
+
+    /// Animated: inside the strip's compact animation, against the frame the control is heading to.
+    func layoutChildren(animated: Bool) {
+        let bounds = NSRect(origin: .zero, size: frame.size)
         fill.frame = bounds
         ring.frame = bounds.insetBy(dx: -3, dy: -3)
         let midY = bounds.height / 2
@@ -232,9 +300,21 @@ open class ComposerContextControl: ControlView {
         if !glyphViews.isEmpty { x += glyphAdvance + 4 }
         let room = max(0, bounds.width - x - (interactive ? 4 + 8 + 8 : 8))
         let frame = NSRect(x: x, y: midY - 8, width: min(labelWidth, room), height: 16)
-        label.frame = frame
-        middle.frame = frame
-        chevron.frame = NSRect(x: frame.maxX + (plainChevron ? 2 : 4), y: midY - 6, width: 12, height: 12)
+        // Compact keeps the text at its shown width, so it clips and fades instead of truncating again.
+        if !labelsHidden {
+            label.frame = NSRect(origin: .zero, size: frame.size)
+            middle.frame = label.frame
+        }
+        let chevronFrame = NSRect(x: frame.maxX + (plainChevron ? 2 : 4), y: midY - 6, width: 12, height: 12)
+        if animated {
+            labelBox.animator().frame = frame
+            labelBox.animator().alphaValue = labelsHidden ? 0 : 1
+            chevron.animator().frame = chevronFrame
+        } else {
+            labelBox.frame = frame
+            labelBox.alphaValue = labelsHidden ? 0 : 1
+            chevron.frame = chevronFrame
+        }
     }
 
     open override func stateDidChange(from old: State) {

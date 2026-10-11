@@ -1,0 +1,42 @@
+{
+  "clone-failed" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "environment" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "floating" : {
+    "height" : 34,
+    "width" : 692
+  },
+  "goal" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "notice-dismiss" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "offline" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "recovery" : {
+    "height" : 51,
+    "width" : 692
+  },
+  "stack-collapsed" : {
+    "height" : 63,
+    "width" : 692
+  },
+  "stack-collapsed-neutral" : {
+    "height" : 63,
+    "width" : 692
+  },
+  "stack-expanded" : {
+    "height" : 135,
+    "width" : 692
+  }
+}
