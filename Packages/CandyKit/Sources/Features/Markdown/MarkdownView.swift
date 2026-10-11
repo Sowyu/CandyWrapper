@@ -84,6 +84,20 @@ public final class MarkdownView: DSView {
     }
 
     public var inlineSkills: [ServerProviderSkill] = [] { didSet { if inlineSkills != oldValue { invalidate() } } }
+    /// Draws `t3-context://` links as T3's context chips (user messages); nil shows their labels as text.
+    public var contextChips: MarkdownContextChips? { didSet { if contextChips != oldValue { invalidate() } } }
+    /// A click on an interactive context chip other than a terminal excerpt, which opens its own popover.
+    public var onContextChip: ((MarkdownContextChip.Action, NSView) -> Void)?
+    /// An image attachment decoded at a pixel side, for the image chip's thumbnail and accent.
+    public var contextImageLoader: (@Sendable (_ attachmentId: String, _ side: Int) async -> CGImage?)?
+    private var contextChipViews: [ContextChipHitView] = []
+    private var hoveredContextChip: Int? {
+        didSet {
+            guard hoveredContextChip != oldValue else { return }
+            if window != nil, !Motion.reduced, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
+    }
     private var unwrappedCode: Set<Int> = []
     private var cache: [CGFloat: MarkdownLayout] = [:]
     private var buttons: [ButtonView] = []
@@ -158,7 +172,8 @@ public final class MarkdownView: DSView {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
-        let made = MarkdownLayout(document: MarkdownInlineSkills.document(document, skills: inlineSkills), width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams)
+        let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
+                                  unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips)
         cache[width] = made
         return made
     }
@@ -261,6 +276,7 @@ public final class MarkdownView: DSView {
         super.layout()
         layoutFadeMask()
         layoutChips()
+        layoutContextChips()
         layoutLinks()
         layoutImages()
         let controls = bounds.width > 0 ? layout(forWidth: bounds.width).controls : []
@@ -319,6 +335,52 @@ public final class MarkdownView: DSView {
             view.chip = chips[i]
         }
         if let hovered = hoveredChip, hovered >= chips.count { hoveredChip = nil }
+    }
+
+    /// One transparent view per context chip: cursor and hover for interactive chips, tooltip, click.
+    private func layoutContextChips() {
+        let chips = bounds.width > 0 ? layout(forWidth: bounds.width).contextChips : []
+        while contextChipViews.count < chips.count {
+            let view = ContextChipHitView(owner: self, index: contextChipViews.count)
+            addSubview(view)
+            contextChipViews.append(view)
+        }
+        for (i, view) in contextChipViews.enumerated() {
+            guard i < chips.count else { view.isHidden = true; continue }
+            view.isHidden = false
+            view.frame = chips[i].frame
+            view.chip = chips[i]
+        }
+        if let hovered = hoveredContextChip, hovered >= chips.count { hoveredContextChip = nil }
+        loadContextThumbnails(chips)
+    }
+
+    /// Loads each image chip's thumbnail once, then redraws with the picture and its average color.
+    private func loadContextThumbnails(_ chips: [MarkdownContextChip]) {
+        guard let loader = contextImageLoader else { return }
+        for id in chips.compactMap(\.imageAttachmentId) where MarkdownContextChips.thumbnails[id] == nil && !MarkdownContextChips.loading.contains(id) {
+            MarkdownContextChips.loading.insert(id)
+            Task { [weak self] in
+                let image = await loader(id, 32)
+                MarkdownContextChips.loading.remove(id)
+                guard let image else { return }
+                MarkdownContextChips.thumbnails[id] = (image, MarkdownContextChips.averageColor(image))
+                self?.needsDisplay = true
+            }
+        }
+    }
+
+    fileprivate func contextChipHover(_ index: Int, _ inside: Bool) {
+        if inside { hoveredContextChip = index } else if hoveredContextChip == index { hoveredContextChip = nil }
+    }
+
+    fileprivate func contextChipClicked(_ chip: MarkdownContextChip, view: NSView) {
+        if case .terminal(let record) = chip.action {
+            PopoverView(content: TerminalContextDetailsView(record: record), padding: .compact, width: .lg)
+                .show(from: view, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4, fallbackAxisSide: .end))
+            return
+        }
+        onContextChip?(chip.action, view)
     }
 
     /// One transparent view per line a web link touches: pointer cursor, click, menu, hover.
@@ -512,6 +574,7 @@ public final class MarkdownView: DSView {
         ctx.setAllowsFontSmoothing(true)
         let dark = effectiveAppearance.isDark
         var chipIndex = -1
+        var contextIndex = -1
         var findOccurrence = 0
         var selectionOffset = 0
         for item in layout(forWidth: bounds.width).items {
@@ -576,6 +639,14 @@ public final class MarkdownView: DSView {
                         fillUnderBorder: true, in: ctx)
                 let (icon, color) = FileChipStyle.icon(for: chip.meta)
                 Self.drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
+            case .contextChip(let chip):
+                contextIndex += 1
+                var look = chip.look
+                let thumbnail = chip.imageAttachmentId.flatMap { MarkdownContextChips.thumbnails[$0] }
+                if let accent = thumbnail?.accent { look.accentOverride = accent }
+                let (icon, iconColor) = look.icon
+                ComposerChipAttachment.draw(look: look, label: chip.label, icon: icon, iconColor: iconColor, in: chip.snappedFrame, ctx: ctx,
+                                            hovered: chip.isInteractive && hoveredContextChip == contextIndex, thumbnail: thumbnail?.image)
             case .remoteImage:
                 break
             case .link:
@@ -728,6 +799,46 @@ private final class FileChipHitView: NSView, HoverSyncClient {
         guard let value = sender.representedObject as? String else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+}
+
+/// The interactive part of a context chip; the chip itself is drawn by `MarkdownView`.
+private final class ContextChipHitView: NSView, HoverSyncClient {
+    weak var owner: MarkdownView?
+    let index: Int
+    var chip: MarkdownContextChip? {
+        didSet {
+            tooltip.text = chip?.tooltip ?? ""
+            setAccessibilityRole(chip?.isInteractive == true ? .button : .staticText)
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+    private lazy var tooltip = TooltipController.attach(to: self, text: "")
+
+    init(owner: MarkdownView, index: Int) {
+        self.owner = owner
+        self.index = index
+        super.init(frame: .zero)
+        _ = tooltip
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func resetCursorRects() { if chip?.isInteractive == true { addCursorRect(bounds, cursor: .pointingHand) } }
+    override func mouseEntered(with event: NSEvent) { owner?.contextChipHover(index, true) }
+    override func mouseExited(with event: NSEvent) { owner?.contextChipHover(index, false) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        guard let chip, chip.isInteractive, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        tooltip.hide()
+        owner?.contextChipClicked(chip, view: self)
+    }
+    override func accessibilityLabel() -> String? { chip?.accessibility }
+    override func accessibilityPerformPress() -> Bool {
+        guard let chip, chip.isInteractive else { return false }
+        owner?.contextChipClicked(chip, view: self)
+        return true
     }
 }
 

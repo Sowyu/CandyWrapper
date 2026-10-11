@@ -423,7 +423,7 @@ public final class ThreadDetailsCardView: DSView {
     /// `OpenInPicker` with `displayMode="panel"` (ThreadDetailsPanel.tsx:121-128): open the workspace in the
     /// preferred editor, the chevron picks another.
     public let openIn = DetailsSplitControl()
-    public var showsOpenIn = false { didSet { if showsOpenIn != oldValue { openIn.isHidden = !showsOpenIn; relayout() } } }
+    public var showsOpenIn = false { didSet { if showsOpenIn != oldValue { updateRows() } } }
     /// `ProjectScriptsControl displayMode="panel"` (ProjectScriptsControl.tsx:283-470): "Run" the primary
     /// action with the chevron listing every action, "Actions" when none is a one-click action, or
     /// "Add project script" without actions. Nil hides the row (no project).
@@ -441,8 +441,9 @@ public final class ThreadDetailsCardView: DSView {
     public let initGit = DetailsRowControl(kind: .row)
     public let totals = DiffTotalsView()
     /// The thread's pull request rows under the branch (ThreadDetailsPrRows.tsx): the current one,
-    /// then the rest of its links while expanded, then "Show N more" or "Show less".
-    public var pullRequestRows: [DetailsRowControl] = [] {
+    /// then the rest of its links while expanded, then "Show N more" or "Show less". A row the host
+    /// answered for is a `ThreadDetailsPrRowView` (two lines), the rest are `DetailsRowControl`s.
+    public var pullRequestRows: [NSView] = [] {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; pullRequestRows.forEach(addSubview); relayout() }
     }
 
@@ -452,6 +453,28 @@ public final class ThreadDetailsCardView: DSView {
     public var showsVersionControl = true { didSet { if showsVersionControl != oldValue { updateRows() } } }
     /// The git actions need a project (`activeProjectName`).
     public var showsGitActions = true { didSet { if showsGitActions != oldValue { updateRows() } } }
+
+    /// How much the card shows (ThreadDetailsPanel.tsx:100-185): `full` shows everything; `compact`
+    /// drops the run context row, the Version Control rule, the idle git actions, automations and
+    /// lineage; `essential` also drops Open in. The panel picks it from the height it has
+    /// (`resolveDensity`).
+    public enum Density: Sendable { case full, compact, essential }
+    public var density = Density.full { didSet { if density != oldValue { updateRows() } } }
+
+    /// `resolveThreadDetailsCardDensity` (threadDetailsCardLayout.ts:7-14): the richest density whose
+    /// content fits `height`. T3 measures each density's content once it renders; the card knows its
+    /// heights up front, so it asks for them directly.
+    public static func resolveDensity(height: CGFloat, full: CGFloat, compact: CGFloat) -> Density {
+        if full == 0 || full <= height { return .full }
+        if compact == 0 || compact <= height { return .compact }
+        return .essential
+    }
+
+    /// The density for the height the card can take. Lineage scrolls as it grows, so it does not count
+    /// toward the fit (ThreadDetailsCard.tsx:93-97).
+    public func density(fitting height: CGFloat) -> Density {
+        Self.resolveDensity(height: height, full: preferredHeight(.full) - lineage.preferredHeight, compact: preferredHeight(.compact))
+    }
 
     private let decoration = BoxDecorationLayer()
     private let divider = CALayer()
@@ -489,7 +512,8 @@ public final class ThreadDetailsCardView: DSView {
         addScript.icons = [IconName.plus.definition]
         addScript.text = "Add project script"
         for v in [runContext, openIn, scripts, addScript, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
-        gitActions.primary.onStateChange = { [weak self] in self?.relayout() }
+        // Compact shows the git actions only while one runs or reports success (GitActionsControl.tsx:1824).
+        gitActions.primary.onStateChange = { [weak self] in self?.updateRows() }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread details")
         updateRows()
@@ -523,23 +547,38 @@ public final class ThreadDetailsCardView: DSView {
     private var scriptsView: NSView? { !scripts.isHidden ? scripts : !addScript.isHidden ? addScript : nil }
 
     private func updateRows() {
+        runContext.isHidden = density != .full
+        openIn.isHidden = !showsOpenIn || density == .essential
         branch.isHidden = !showsVersionControl || !isRepo
-        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions
+        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
         changes.isHidden = !showsVersionControl || !isRepo
         initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions
         relayout()
     }
 
-    private var versionRows: [NSView] {
-        ([branch] + pullRequestRows.filter { _ in !branch.isHidden } + [gitActions, changes, initGit]).filter { !$0.isHidden }
+    private func versionRows(_ density: Density) -> [NSView] {
+        guard showsVersionControl else { return [] }
+        guard isRepo else { return showsGitActions ? [initGit] : [] }
+        let actions: [NSView] = showsGitActions && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
+        return [branch] + pullRequestRows + actions + [changes]
     }
 
-    public var preferredHeight: CGFloat {
-        var h: CGFloat = 2 + 8 + 32 + (showsOpenIn ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
-        let rows = versionRows
+    private var versionRows: [NSView] { versionRows(density) }
+
+    private func rowHeight(_ row: NSView) -> CGFloat {
+        row === gitActions ? gitActions.preferredHeight : row is ThreadDetailsPrRowView ? ThreadDetailsPrRowView.height : 32
+    }
+
+    public var preferredHeight: CGFloat { preferredHeight(density) }
+
+    /// The card's height at a density, with every section it shows there.
+    public func preferredHeight(_ density: Density) -> CGFloat {
+        var h: CGFloat = 2 + 8 + (density == .full ? 32 : 0) + (showsOpenIn && density != .essential ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
+        let rows = versionRows(density)
         if showsVersionControl, !rows.isEmpty {
-            h += 1 + 8 + 10 + rows.reduce(0) { $0 + ($1 === gitActions ? gitActions.preferredHeight : 32) }
+            h += (density == .full ? 1 : 0) + 8 + 10 + rows.reduce(0) { $0 + rowHeight($1) }
         }
+        guard density == .full else { return h }
         if !automations.isEmpty { h += 1 + automations.preferredHeight }
         h += lineage.preferredHeight
         return h
@@ -552,9 +591,11 @@ public final class ThreadDetailsCardView: DSView {
         decoration.layout(boxSize: bounds.size)
         let inner = bounds.width - 2 - 16
         var y: CGFloat = 1 + 8
-        runContext.frame = NSRect(x: 9, y: y, width: inner, height: 32)
-        y += 32
-        if showsOpenIn {
+        if density == .full {
+            runContext.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            y += 32
+        }
+        if !openIn.isHidden {
             openIn.frame = NSRect(x: 9, y: y, width: inner, height: 32)
             y += 32
         }
@@ -564,20 +605,22 @@ public final class ThreadDetailsCardView: DSView {
         }
         y += 10
         let rows = versionRows
-        divider.isHidden = rows.isEmpty || !showsVersionControl
+        let separated = density == .full
+        divider.isHidden = rows.isEmpty || !showsVersionControl || !separated
         divider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)
-        y += 1 + 8
+        y += (separated ? 1 : 0) + 8
         for row in rows {
-            let h = row === gitActions ? gitActions.preferredHeight : 32
+            let h = rowHeight(row)
             row.frame = NSRect(x: 9, y: y, width: inner, height: h)
             y += h
         }
-        let lineageHeight = lineage.preferredHeight
-        lineage.isHidden = lineage.isEmpty
+        let full = density == .full
+        let lineageHeight = full ? lineage.preferredHeight : 0
+        lineage.isHidden = lineage.isEmpty || !full
         lineage.frame = NSRect(x: 1, y: preferredHeight - lineageHeight, width: bounds.width - 2, height: lineageHeight)
-        y = automations.isEmpty ? y : preferredHeight - lineageHeight - 1 - automations.preferredHeight
-        automations.isHidden = automations.isEmpty
-        automationsDivider.isHidden = automations.isEmpty
+        y = automations.isEmpty || !full ? y : preferredHeight - lineageHeight - 1 - automations.preferredHeight
+        automations.isHidden = automations.isEmpty || !full
+        automationsDivider.isHidden = automations.isHidden
         automationsDivider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)
         automations.frame = NSRect(x: 1, y: y + 1, width: bounds.width - 2, height: automations.preferredHeight)
     }

@@ -668,12 +668,147 @@ final class ThreadPullRequestsController {
     /// while expanded. Each opens its pull request in the right panel.
     /// A watched link's eye stops the watch (ThreadDetailsPrRows.tsx:77-93); the server ends a watch
     /// when the pull request closes, so only an open one shows it.
-    // ponytail: rows show the linked snapshot only; T3 reads the detail and checks for the second line
-    // (checks, Resolve/Ready/Fix/Merge). Add it when a server here can read a host
+    /// Once the host answers, a row reads the pull request's detail and checks (ThreadDetailsPrRow.tsx:119-150)
+    /// and shows the second line (`cardRow`).
+    // ponytail: read once per thread visit; T3 refreshes an open pull request every 10 minutes and its
+    // checks while they run (useLiveRefresh, usePullRequestChecksRefresh). Add a refresh when stale rows show up
+    private var cardDetails: [String: PullRequestDetail] = [:]
+    private var cardDetailsTried: Set<String> = []
+    private var cardDetailsThread: ThreadId?
+    private var cardActionPending: Set<String> = []
+
+    /// `ThreadDetailsPrRow`'s reference: the project on the link's host that reads it (`findProjectOnChangeRequestHost`).
+    private func cardReference(_ link: ThreadPullRequestLink, env: String) -> PullRequestRef? {
+        guard capabilities.has(env, "pullRequests"), let parsed = ChangeRequestURL.parse(link.url) else { return nil }
+        let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }
+        guard let project = projects.first(where: { $0.repositoryIdentity?.owns(parsed) == true })
+                ?? projects.first(where: { $0.repositoryIdentity?.pullRequestHost == parsed.host }) else { return nil }
+        return PullRequestRef(projectId: project.id.localId.rawValue, host: link.host, repository: link.repository, number: link.number)
+    }
+
+    private func loadCardDetail(_ link: ThreadPullRequestLink, env: String) {
+        let key = link.key.id
+        guard cardDetails[key] == nil, !cardDetailsTried.contains(key), let ref = cardReference(link, env: env) else { return }
+        cardDetailsTried.insert(key)
+        let checks = capabilities.has(env, "pullRequestChecks")
+        Task { [weak self] in
+            guard let self else { return }
+            var payload = ref.json
+            payload["allowStale"] = .bool(false)
+            guard var d = try? await self.environments.request(env, "pullRequests.detail", .object(payload)).decode(as: PullRequestDetail.self) else { return }
+            if checks, let c = try? await self.environments.request(env, "pullRequests.checks", ref.payload).decode(as: PullRequestChecks.self) { d.apply(c) }
+            self.cardDetails[key] = d
+            self.cardKey = nil
+            self.sync()
+        }
+    }
+
+    /// `usePullRequestActionRunner` for the row's Ready and Merge: `pullRequests.runAction`, then a fresh read.
+    private func runCardAction(_ link: ThreadPullRequestLink, env: String, action: String, mergeMethod: String?) {
+        guard let ref = cardReference(link, env: env), cardActionPending.insert(link.key.id).inserted else { return }
+        cardKey = nil
+        sync()
+        Task { [weak self] in
+            guard let self else { return }
+            let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
+            self.cardActionPending.remove(link.key.id)
+            self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action) : PullRequestDetailLogic.actionFailure(action), kind: ok ? .success : .error))
+            self.cardDetails[link.key.id] = nil
+            self.cardDetailsTried.remove(link.key.id)
+            self.cardKey = nil
+            self.sync()
+        }
+    }
+
+    /// The two-line row (ThreadDetailsPrRow.tsx:434-476): the title, then `#n`, the checks, the watch eye
+    /// and the one action that unblocks the merge next. Nil when the host has not answered or the second
+    /// line would be empty, so the row stays the one-line link.
+    private func cardRow(_ link: ThreadPullRequestLink, env: String, watching: Bool, open: @escaping @MainActor @Sendable () -> Void) -> NSView? {
+        guard let d = cardDetails[link.key.id] else { return nil }
+        let conflicting = d.mergeability == "conflicting"
+        let rollup = PullRequestDetailLogic.checksState(d.checks)
+        let showChecks = rollup != nil && !conflicting && !d.isDraft
+        let action = PullRequestDetailLogic.threadPanelAction(d)
+        let watching = watching && d.state == "open"
+        guard showChecks || action != nil || watching else { return nil }
+        let r = ThreadDetailsPrRowView()
+        let tone = PullRequestStateTone(state: d.state, isDraft: d.isDraft)
+        r.open.icons = [PullRequestStyle.icon(tone).definition]
+        r.open.iconColor = PullRequestStyle.color(tone)
+        r.open.text = d.title
+        r.open.setAccessibilityLabel(link.url)
+        r.open.action = open
+        r.numberText = "#\(link.number)"
+        r.checks.isHidden = !showChecks
+        if showChecks, let rollup {
+            let (icon, color) = PullRequestStyle.checksState(rollup)
+            r.checks.icon = icon.definition
+            r.checks.iconColor = color
+            let running = d.checks.filter { $0.status == "pending" }.count
+            let failed = d.checks.filter { $0.status == "failure" || $0.status == "cancelled" }.count
+            r.checks.text = running > 0 ? "\(running)/\(d.checks.count)" : failed > 0 ? "\(failed) failed" : ""
+            r.checks.setAccessibilityLabel("Open checks: \(PullRequestDetailLogic.summarizeChecks(d.checks))")
+            r.checks.action = { [weak r] in
+                guard let anchor = r?.checks else { return }
+                let view = PullRequestChecksPopoverView(checksState: rollup, summary: PullRequestDetailLogic.summarizeChecks(d.checks), body: .checks(d.checks))
+                view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+                _ = view.present(from: anchor)
+            }
+        }
+        r.watch.isHidden = !watching
+        r.watch.setAccessibilityLabel("Stop watching #\(link.number)")
+        r.watch.action = { [weak self] in self?.watch(link, false) }
+        let pending = cardActionPending.contains(link.key.id)
+        let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: "merge")
+        r.action.isHidden = action == nil
+        switch action {
+        case "resolve", "fix":
+            // ponytail: Resolve and Fix hand off to a new thread in T3 (usePullRequestHandoffs); the handoff is not
+            // ported, so they show disabled as the panel's Resolve conflicts does. Port them with the handoffs
+            r.action.text = action == "resolve" ? "Resolve" : "Fix"
+            r.action.tone = .destructive
+            r.action.suffix = IconName.arrowUpRight.definition
+            r.action.tooltipText = action == "resolve" ? "Check the branch out and resolve the conflicts in a new thread" : "Fix the failing checks in a new thread"
+            r.action.isEnabled = false
+        case "ready":
+            r.action.text = pending ? "Marking..." : "Ready"
+            r.action.tone = .primary
+            r.action.tooltipText = "Mark this pull request as ready for review"
+            r.action.isEnabled = !pending
+            r.action.action = { [weak self] in self?.runCardAction(link, env: env, action: "ready", mergeMethod: nil) }
+        case "merge":
+            r.action.text = pending ? "Merging..." : "Merge"
+            r.action.tone = .primary
+            r.action.tooltipText = "Merge this pull request (\(method))"
+            r.action.isEnabled = !pending
+            r.action.action = { [weak self] in
+                guard let self, let window = self.panel.window else { return }
+                let dialog = DialogView(kind: .alertDialog, title: "Merge pull request?", message: "This merges #\(link.number) using \(method).")
+                let cancel = ButtonView("Cancel", variant: .outline, size: .sm)
+                let go = ButtonView("Merge", variant: .default, size: .sm)
+                dialog.footerButtons = [cancel, go]
+                let host = ModalHost.present(dialog, in: window)
+                cancel.action = { host.close() }
+                go.action = { [weak self] in host.close(); self?.runCardAction(link, env: env, action: "merge", mergeMethod: method) }
+            }
+        default:
+            break
+        }
+        return r
+    }
+
     private func updateCardRows(_ thread: ThreadShell) {
         let links = ThreadPullRequests.visible(thread.pullRequests ?? [])
         let current = ThreadPullRequests.current(links)
         let expanded = expandedCards.contains(thread.id)
+        if cardDetailsThread != thread.id {
+            cardDetailsThread = thread.id
+            cardDetails = [:]
+            cardDetailsTried = []
+        }
+        let env = thread.id.environmentId ?? ""
+        let shown = current.map { current in [current] + (expanded ? ThreadPullRequests.lines(links).map(\.link).filter { $0.key.id != current.key.id } : []) } ?? []
+        for link in shown { loadCardDetail(link, env: env) }
         // The capability can arrive after the first rows.
         let canWatch = thread.id.environmentId.map { capabilities.has($0, "threadPullRequestWatch") } ?? false
         let key = "\(thread.id.rawValue)|\(expanded)|" + links.map { "\($0.key.id):\($0.snapshot?.state.rawValue ?? "-"):\($0.snapshot?.isDraft == true):\($0.snapshot?.title ?? ""):\($0.watch != nil)" }.joined(separator: ",")
@@ -681,7 +816,8 @@ final class ThreadPullRequestsController {
         guard key != cardKey else { return }
         cardKey = key
         func row(number: Int, title: String?, state: PullRequestState?, isDraft: Bool, link: ThreadPullRequestLink? = nil,
-                 open: @escaping @MainActor @Sendable () -> Void) -> DetailsRowControl {
+                 open: @escaping @MainActor @Sendable () -> Void) -> NSView {
+            if let link, let detailed = cardRow(link, env: env, watching: canWatch && link.watch != nil, open: open) { return detailed }
             let r = DetailsRowControl(kind: .row)
             if let link, canWatch, link.watch != nil, (state ?? .open) == .open {
                 let eye = PullRequestWatchToggle(number: number)
@@ -696,7 +832,7 @@ final class ThreadPullRequestsController {
             r.action = open
             return r
         }
-        var rows: [DetailsRowControl] = []
+        var rows: [NSView] = []
         if let current {
             rows.append(row(number: current.number, title: current.snapshot?.title, state: current.snapshot?.state, isDraft: current.snapshot?.isDraft ?? false, link: current) { [weak self] in self?.open(current) })
             let rest = ThreadPullRequests.lines(links).map(\.link).filter { $0.key.id != current.key.id }

@@ -194,6 +194,16 @@ final class UserMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
+        // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
+        let model = context.model
+        markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments,
+                                                             threadTitle: { model?.threadTitle?(ThreadId($0)) })
+        if let load = model?.attachmentImage {
+            markdown.contextImageLoader = { id, side in await load(id, side, true) }
+        } else {
+            markdown.contextImageLoader = nil
+        }
+        markdown.onContextChip = { [weak self] action, _ in self?.openContextChip(action, message: m) }
         markdown.document = context.document(item.id, text, lineBreaks: true)
         attachments.configure(m, model: context.model)
         collapsible = shouldCollapseUserMessage(text)
@@ -209,6 +219,37 @@ final class UserMessageRowView: TimelineRowView {
 
     override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
     override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
+
+    /// A context chip click (MessagesTimeline.tsx:4243-4709): a mention previews its file, a thread
+    /// opens, an image opens the media viewer over the message's images, a file opens, a pull
+    /// request opens through the link handler.
+    private func openContextChip(_ action: MarkdownContextChip.Action, message m: ChatMessage) {
+        guard let model = context.model else { return }
+        switch action {
+        case .openFile(let path):
+            let base = (path as NSString).lastPathComponent
+            model.openFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path, basename: base, line: nil, column: nil), false)
+        case .openThread(let id):
+            model.onOpenThread?(ThreadId(id))
+        case .expandImage(let id):
+            guard let loader = model.attachmentImage else { return }
+            let images = m.attachments.filter { $0["type"]?.stringValue == "image" && !($0["name"]?.stringValue ?? "").hasPrefix("preview-annotation-") }
+            let items = images.map { image in
+                let imageId = image["id"]?.stringValue ?? ""
+                return ExpandedImagePreviewView.Item(key: imageId, name: image["name"]?.stringValue ?? "image") { side in await loader(imageId, side, false) }
+            }
+            guard let index = items.firstIndex(where: { $0.key == id }) else { return }
+            model.onExpandImage?(items, index)
+        case .openAttachment(let id):
+            guard let file = m.attachments.first(where: { $0["id"]?.stringValue == id }) else { return }
+            model.onOpenAttachment?(file, false)
+        case .openURL(let url):
+            guard let u = URL(string: url) else { return }
+            if let handler = MarkdownView.linkHandler { handler.openLink(u, from: markdown) } else if SafeExternalURL.isSafe(u) { NSWorkspace.shared.open(u) }
+        case .terminal, .none:
+            break
+        }
+    }
 
     /// The attribution and marker lines, each with the 4px gap under it (`flex-col gap-1`).
     private var attributionSpace: CGFloat { attribution.isHidden ? 0 : UserMessageAttributionView.height + 4 }

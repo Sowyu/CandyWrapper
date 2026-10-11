@@ -17,6 +17,8 @@ public struct ComposerChipLook: Equatable, Sendable {
         /// A draft attachment (`ImageChipButton`, `FileChip`): label middle-truncated to 36, then the size.
         case image
         case file(name: String)
+        /// A video file attachment (`FileChip` with `isVideo`): kind `video`, lucide `film`.
+        case video
         /// A terminal excerpt (`TerminalContextInlineChip`).
         case reviewComment
         case terminal
@@ -26,8 +28,16 @@ public struct ComposerChipLook: Equatable, Sendable {
     public var label: String
     /// `text-3xs` after the label: the size, then the upload state ("42%", "upload failed").
     public var detail: String?
+    /// `--context-chip-accent` from content: an image chip's average color once its thumbnail loads
+    /// (contextChipParts.tsx:184-192).
+    public var accentOverride: NSColor?
+    /// Text and icon color from the surrounding markup: a chip rendered as a link inside chat markdown takes
+    /// `.chat-markdown a { color: var(--info-foreground) }`.
+    public var foregroundOverride: NSColor?
 
-    public init(kind: Kind, label: String, detail: String? = nil) { self.kind = kind; self.label = label; self.detail = detail }
+    public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil) {
+        self.kind = kind; self.label = label; self.detail = detail; self.accentOverride = accentOverride; self.foregroundOverride = foregroundOverride
+    }
 
     /// Mentions and skills only; every context link shows as unavailable.
     public static func basic(_ token: ComposerInlineToken) -> ComposerChipLook {
@@ -64,15 +74,16 @@ public struct ComposerChipLook: Equatable, Sendable {
 
     /// `--context-chip-accent` per kind.
     var accent: NSColor? {
-        switch kind {
+        if let accentOverride { return accentOverride }
+        return switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
-        case .citation: OKLab.oklch(0.62, 0.12, 190)
+        case .citation: OKLab.oklch(0.62, 0.16, 259)
         case .skill: OKLab.oklch(0.62, 0.16, 322)
-        // ponytail: the image accent stays T3's default; T3 tints it with the picture's average color once loaded
         case .image: OKLab.oklch(0.62, 0.16, 16)
         case .file: OKLab.oklch(0.62, 0.136, 237)
+        case .video: OKLab.oklch(0.62, 0.16, 48)
         case .thread: OKLab.oklch(0.62, 0.12, 190)
-        case .reviewComment: OKLab.oklch(0.62, 0.15, 260)
+        case .reviewComment: OKLab.oklch(0.62, 0.16, 292)
         case .terminal: OKLab.oklch(0.62, 0.134, 163)
         case .pullRequest(let state):
             switch state {
@@ -99,6 +110,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .file(let name):
             let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
             return FileChipStyle.icon(for: meta)
+        case .video: return (IconName.film.definition, nil)
         case .thread: return (IconName.messagesSquare.definition, nil)
         case .reviewComment: return (IconName.messageSquare.definition, nil)
         case .terminal: return (IconName.terminal.definition, nil)
@@ -115,6 +127,7 @@ public struct ComposerChipLook: Equatable, Sendable {
     }
 
     var foreground: NSColor {
+        if let foregroundOverride { return foregroundOverride }
         guard let accent else { return Themed.color(\.foreground) }
         return OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
     }
@@ -125,6 +138,14 @@ public struct ComposerChipLook: Equatable, Sendable {
     }
 
     var fill: NSColor { accent?.withAlphaComponent(0.11) ?? Themed.color(\.accent, 0.4) }
+
+    /// `[button:enabled&,a&]:hover`: the border at 48% and the fill at 17% on interactive chips.
+    var hoverBorder: NSColor {
+        guard let accent else { return border }
+        return OKLab.mix(accent, 0.48, Themed.color(\.contrastBorder))
+    }
+
+    var hoverFill: NSColor { accent?.withAlphaComponent(0.17) ?? fill }
 }
 
 extension NSAttributedString.Key {
@@ -145,22 +166,26 @@ final class ComposerChipAttachment: NSTextAttachment {
     @MainActor init(look: ComposerChipLook, source: String, maxWidth: CGFloat) {
         self.look = look
         self.source = source
-        let font = Self.chipFont
-        func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
-        let detailWidth = look.detail.map { 0.33 * FileChipStyle.em(Self.size) + TextLine(NSAttributedString(string: $0, attributes: [.font: Self.detailFont])).width } ?? 0
-        let reserve = FileChipStyle.leading(Self.size) + FileChipStyle.trailing(Self.size) + detailWidth
-        var text = look.label
-        if width(text) + reserve > maxWidth {
-            while !text.isEmpty, width(text + "…") + reserve > maxWidth { text.removeLast() }
-            text += "…"
-        }
-        label = text
-        size = CGSize(width: width(text) + reserve, height: FileChipStyle.height(Self.size))
+        (label, size) = Self.measure(look, maxWidth: maxWidth)
         parentXHeight = ComposerEditor.font.xHeight
         super.init(data: nil, ofType: nil)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// The label after `truncate` within `maxWidth` (`max-w-full`), and the chip's size.
+    @MainActor static func measure(_ look: ComposerChipLook, maxWidth: CGFloat) -> (label: String, size: CGSize) {
+        let font = chipFont
+        func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
+        let detailWidth = look.detail.map { 0.33 * FileChipStyle.em(size) + TextLine(NSAttributedString(string: $0, attributes: [.font: detailFont])).width } ?? 0
+        let reserve = FileChipStyle.leading(size) + FileChipStyle.trailing(size) + detailWidth
+        var text = look.label
+        if width(text) + reserve > maxWidth {
+            while !text.isEmpty, width(text + "…") + reserve > maxWidth { text.removeLast() }
+            text += "…"
+        }
+        return (text, CGSize(width: width(text) + reserve, height: FileChipStyle.height(size)))
+    }
 
     static let size: CGFloat = 14
     @MainActor static var chipFont: NSFont { FileChipStyle.font(size) }
@@ -211,16 +236,18 @@ final class ComposerChipAttachment: NSTextAttachment {
         }
     }
 
-    /// The chip box, icon and label in a flipped context.
-    @MainActor static func draw(look: ComposerChipLook, label: String, icon: IconDefinition, iconColor: NSColor?, in rect: CGRect, ctx: CGContext) {
+    /// The chip box, icon and label in a flipped context. `thumbnail` replaces the icon with the
+    /// picture (`size-[1.17em] rounded-sm object-cover`); `hovered` draws the interactive hover colors.
+    @MainActor static func draw(look: ComposerChipLook, label: String, icon: IconDefinition, iconColor: NSColor?, in rect: CGRect, ctx: CGContext,
+                                hovered: Bool = false, thumbnail: CGImage? = nil) {
         let em = FileChipStyle.em(size)
         let radius = 0.5 * em
         let box = rect.insetBy(dx: 0.5, dy: 0.5)
         let path = CGPath(roundedRect: box, cornerWidth: radius - 0.5, cornerHeight: radius - 0.5, transform: nil)
-        ctx.setFillColor(look.fill.cgColor)
+        ctx.setFillColor((hovered ? look.hoverFill : look.fill).cgColor)
         ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
         ctx.fillPath()
-        ctx.setStrokeColor(look.border.cgColor)
+        ctx.setStrokeColor((hovered ? look.hoverBorder : look.border).cgColor)
         ctx.setLineWidth(1)
         if look.kind == .unresolved { ctx.setLineDash(phase: 0, lengths: [3, 3]) }
         ctx.addPath(path)
@@ -228,7 +255,22 @@ final class ComposerChipAttachment: NSTextAttachment {
         ctx.setLineDash(phase: 0, lengths: [])
         let iconSize = 1.17 * em
         let iconRect = CGRect(x: rect.minX + 1 + 0.5 * em, y: rect.midY - iconSize / 2, width: iconSize, height: iconSize)
-        MarkdownView.drawIcon(icon, in: iconRect, color: (iconColor ?? look.foreground).cgColor, ctx: ctx)
+        if let thumbnail {
+            ctx.saveGState()
+            // `rounded-sm`: calc(var(--radius) - 4px), 6px.
+            ctx.addPath(CGPath(roundedRect: iconRect, cornerWidth: min(6, iconRect.width / 2), cornerHeight: min(6, iconRect.height / 2), transform: nil))
+            ctx.clip()
+            // `object-cover`: the shorter side fills the square.
+            let scale = max(iconRect.width / CGFloat(thumbnail.width), iconRect.height / CGFloat(thumbnail.height))
+            let w = CGFloat(thumbnail.width) * scale, h = CGFloat(thumbnail.height) * scale
+            ctx.translateBy(x: iconRect.midX - w / 2, y: iconRect.midY + h / 2)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.interpolationQuality = .high
+            ctx.draw(thumbnail, in: CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.restoreGState()
+        } else {
+            MarkdownView.drawIcon(icon, in: iconRect, color: (iconColor ?? look.foreground).cgColor, ctx: ctx)
+        }
         // The label's `leading-tight` line box, centered in the chip.
         let line = TextLine(NSAttributedString(string: label, attributes: [.font: chipFont, .foregroundColor: look.foreground]))
         let lineHeight = 1.25 * em

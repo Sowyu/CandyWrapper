@@ -1,0 +1,38 @@
+{
+  "card.compact" : {
+    "height" : 134,
+    "width" : 264
+  },
+  "card.essential" : {
+    "height" : 102,
+    "width" : 264
+  },
+  "card.full" : {
+    "height" : 199,
+    "width" : 264
+  },
+  "chip.file" : {
+    "height" : 22.75,
+    "width" : 360
+  },
+  "chip.folder" : {
+    "height" : 22.75,
+    "width" : 360
+  },
+  "chip.image" : {
+    "height" : 22.75,
+    "width" : 360
+  },
+  "chip.terminal" : {
+    "height" : 22.75,
+    "width" : 360
+  },
+  "chip.thread" : {
+    "height" : 22.75,
+    "width" : 360
+  },
+  "pr.merge" : {
+    "height" : 60,
+    "width" : 246
+  }
+}

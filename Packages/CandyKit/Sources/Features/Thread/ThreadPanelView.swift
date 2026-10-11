@@ -466,7 +466,6 @@ public final class ThreadPanelView: DSView {
             header.toggles[0].isPressed = detailsOpen // the controller decides
             onDetailsToggle?()
         }
-        detailsCard.gitActions.primary.onStateChange = { [weak self] in self?.needsLayout = true }
         header.toggles[2].onPressedChange = { [weak self] _ in
             guard let self else { return }
             header.toggles[2].isPressed = rightPanelOpen // a toggle flips itself; the state decides
@@ -1087,6 +1086,10 @@ public final class ThreadPanelView: DSView {
             findBar.layer?.zPosition = 4
         }
         if detailsOpen {
+            // The card folds to the height it has: inline, the placement's height; as a popover, the
+            // canvas minus 52 (ThreadDetailsCard.tsx:62-63).
+            let canvasHeight = max(0, chatHeight - ThreadHeaderView.height)
+            detailsCard.density = detailsCard.density(fitting: inlineDetails?.height ?? max(0, canvasHeight - 52))
             if let inlineDetails {
                 detailsCard.frame = NSRect(x: inlineDetails.minX, y: ThreadHeaderView.height + inlineDetails.minY,
                     width: inlineDetails.width, height: min(detailsCard.preferredHeight, inlineDetails.height))

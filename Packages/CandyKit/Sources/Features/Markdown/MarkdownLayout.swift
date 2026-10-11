@@ -46,6 +46,8 @@ enum MarkdownStyle {
         var files: [(range: NSRange, meta: FileLinkMeta, label: String)]
         /// Web links (not file links), for hit testing.
         var links: [(range: NSRange, url: URL)] = []
+        /// `t3-context://` chips: a placeholder space in the text, drawn by the layout item.
+        var contexts: [(range: NSRange, chip: MarkdownContextChip)] = []
     }
 
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
@@ -53,8 +55,10 @@ enum MarkdownStyle {
     /// With `files`, path-shaped inline code and file links become file chips (`FileChipStyle`).
     @MainActor static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
                        alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
-                       files: FileChipResolver? = nil, maxChipWidth: CGFloat = .greatestFiniteMagnitude) -> Inline {
+                       files: FileChipResolver? = nil, contexts: MarkdownContextChips? = nil,
+                       maxChipWidth: CGFloat = .greatestFiniteMagnitude) -> Inline {
         let out = NSMutableAttributedString()
+        var contextChips: [(range: NSRange, chip: MarkdownContextChip)] = []
         var chips: [NSRange] = []
         var fileChips: [(range: NSRange, meta: FileLinkMeta, label: String)] = []
         var webLinks: [(range: NSRange, url: URL)] = []
@@ -90,6 +94,29 @@ enum MarkdownStyle {
                 }
                 appendFile(meta)
                 i = end
+                continue
+            }
+            if let url = run.link, url.scheme == "t3-context", let parsed = ComposerContext.parseHref(url.absoluteString) {
+                var end = i
+                while end < runs.count, runs[end].link == url { end += 1 }
+                let text = runs[i..<end].map(\.text).joined()
+                let label = text.isEmpty ? parsed.contextId : text
+                i = end
+                guard let contexts else {
+                    // Without a renderer the link shows its label as text (ChatMarkdown.tsx:2933-2937).
+                    out.append(NSAttributedString(string: label, attributes: [.font: parent, .foregroundColor: color]))
+                    continue
+                }
+                var chip = contexts.chip(kind: parsed.kind, contextId: parsed.contextId, label: label)
+                let measured = ComposerChipAttachment.measure(chip.look, maxWidth: maxChipWidth)
+                chip.label = measured.label
+                chip.frame.size = measured.size
+                // One no-break space as wide as the chip: the chip never wraps and the layout item draws it.
+                let space = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent])).width
+                let start = out.length
+                out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent, .foregroundColor: color,
+                                                                                .kern: measured.size.width - space]))
+                contextChips.append((NSRange(location: start, length: 1), chip))
                 continue
             }
             if let url = run.link, let citation = ThreadAssistantCitation.parse(url.absoluteString) {
@@ -141,7 +168,7 @@ enum MarkdownStyle {
         paragraph.firstLineHeadIndent = (firstLineIndent ?? headIndent) + (leadingChip ? pad : 0)
         paragraph.headIndent = headIndent
         out.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: out.length))
-        return Inline(string: out, code: chips, files: fileChips, links: webLinks)
+        return Inline(string: out, code: chips, files: fileChips, links: webLinks, contexts: contextChips)
     }
 }
 
@@ -163,6 +190,8 @@ public final class MarkdownLayout {
         case icon(IconName, CGRect, NSColor)
         /// A file path chip's box and icon; its label is part of the text item drawn after it.
         case fileChip(FileChip)
+        /// A `t3-context://` chip, drawn whole over its placeholder space.
+        case contextChip(MarkdownContextChip)
         /// A web link's area on one line (not drawn; hit tested by `MarkdownView`).
         case link(CGRect, URL)
         /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
@@ -196,6 +225,8 @@ public final class MarkdownLayout {
     private(set) var controls: [Control] = []
     /// File chips in drawing order, for hit testing.
     public private(set) var fileChips: [FileChip] = []
+    /// Context chips in drawing order, for hit testing.
+    public private(set) var contextChips: [MarkdownContextChip] = []
     /// Web link areas, one per line a link touches.
     public private(set) var links: [(frame: CGRect, url: URL)] = []
     /// The y of each top-level block, so a streaming update can redraw from its first changed block down.
@@ -205,15 +236,17 @@ public final class MarkdownLayout {
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
     public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil) {
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files)
+        builder.contexts = contexts
         builder.diagrams = diagrams
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
         items = flow.items
         controls = flow.controls
         fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
+        contextChips = items.compactMap { if case .contextChip(let chip) = $0 { chip } else { nil } }
         links = items.compactMap { if case .link(let r, let url) = $0 { (r, url) } else { nil } }
         height = flow.height
         blockTops = builder.rootTops
@@ -250,6 +283,7 @@ private struct Builder {
     let files: FileChipResolver?
     var codeIndex = 0
     var diagrams: MarkdownLayout.Diagrams?
+    var contexts: MarkdownContextChips?
     var rootTops: [CGFloat] = []
 
     init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
@@ -340,7 +374,7 @@ private struct Builder {
     func text(_ runs: [InlineRun], width: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular, lineHeight: CGFloat,
               color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil) -> Box {
         let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
-                                          headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, maxChipWidth: width)
+                                          headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts, maxChipWidth: width)
         let textBox = MarkdownTextBox(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
                                       chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
@@ -348,6 +382,7 @@ private struct Builder {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
+        box.items += Self.contextChips(inline, in: textBox, size: size, weight: weight)
         box.items += Self.links(inline, in: textBox, lineHeight: lineHeight)
         box.items.append(.text(textBox, .zero))
         return box
@@ -359,6 +394,18 @@ private struct Builder {
             textBox.spans(link.range).map { span in
                 MarkdownLayout.Item.link(CGRect(x: span.x0, y: span.baseline - lineHeight * 0.75, width: span.x1 - span.x0, height: lineHeight), link.url)
             }
+        }
+    }
+
+    /// Each context chip at its placeholder, `align-middle` like the file chips.
+    @MainActor
+    static func contextChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
+        let top = FileChipStyle.top(parent: MarkdownStyle.font(size, weight: weight), size: size)
+        return inline.contexts.compactMap { entry in
+            guard let span = textBox.spans(entry.range).first else { return nil }
+            var chip = entry.chip
+            chip.frame.origin = CGPoint(x: span.x0, y: span.baseline + top)
+            return .contextChip(chip)
         }
     }
 
@@ -615,7 +662,7 @@ private struct Builder {
             case .right: .right
             default: .left
             }
-            return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment, files: files)
+            return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment, files: files, contexts: contexts)
         }
         func natural(_ s: NSAttributedString) -> CGFloat {
             MarkdownTextBox(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
@@ -651,6 +698,7 @@ private struct Builder {
                     cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
                 }
                 cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
+                cell.items += Self.contextChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items.append(.text(textBox, .zero))
                 rowHeight = max(rowHeight, textBox.height)
                 cells.append((cell, x + 12))
@@ -700,6 +748,7 @@ private extension MarkdownLayout.Item {
         case .icon(let name, let r, let color): .icon(name, r.offsetBy(dx: p.x, dy: p.y), color)
         case .fileChip(let chip):
             .fileChip(FileChip(frame: chip.frame.offsetBy(dx: p.x, dy: p.y), icon: chip.icon.offsetBy(dx: p.x, dy: p.y), meta: chip.meta, label: chip.label))
+        case .contextChip(var chip): { chip.frame = chip.frame.offsetBy(dx: p.x, dy: p.y); return .contextChip(chip) }()
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
