@@ -126,6 +126,7 @@ final class PullRequestsPageController {
         liveTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload(keepRows: true) }
         }
+        liveTimer?.tolerance = 6
         let flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             let m = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             self?.setSpeedMode(m.contains(.shift) && !m.contains(.command) && !m.contains(.control) && !m.contains(.option))

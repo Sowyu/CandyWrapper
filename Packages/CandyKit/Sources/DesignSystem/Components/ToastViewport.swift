@@ -191,7 +191,7 @@ public final class ToastViewport: DSView {
         let t = Timer(timeInterval: max(0, deadline - now()), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.fire() }
         }
-        t.tolerance = 0.05
+        t.tolerance = max(0.05, (deadline - now()) / 10)
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }

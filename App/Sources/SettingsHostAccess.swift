@@ -37,15 +37,22 @@ extension SettingsController {
         accessError = nil
         access = AuthAccessSnapshot()
         loadHosts()
-        ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                // `useRelativeTimeTick(1_000)`: expiry and connected-for labels count down. Only the access
-                // section has them, so only it is rebuilt, and the page updates only when a label changed.
-                guard let self, self.isOpen, !self.access.pairingLinks.isEmpty || !self.access.clientSessions.isEmpty else { return }
-                self.refreshAccess()
+    }
+
+    /// `useRelativeTimeTick(1_000)`: expiry and connected-for labels count down. Only the access
+    /// section has them, so only it is rebuilt, and the page updates only when a label changed.
+    /// The tick runs only while there is a link or session to count; nothing runs otherwise.
+    private func updateAccessTicker() {
+        let live = isOpen && (!access.pairingLinks.isEmpty || !access.clientSessions.isEmpty)
+        if live, ticker == nil {
+            ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshAccess() }
             }
+            ticker?.tolerance = 0.2
+        } else if !live {
+            ticker?.invalidate()
+            ticker = nil
         }
-        ticker?.tolerance = 0.2
     }
 
     /// Page closed: the stream stops and created credentials are forgotten (T3 keeps them only while the
@@ -97,6 +104,7 @@ extension SettingsController {
                     do {
                         try self.access.apply(json)
                         self.accessLoaded = true
+                        self.updateAccessTicker()
                     } catch {
                         self.accessError = "Could not read authorized clients."
                     }

@@ -125,6 +125,45 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 - `cached sidebar` is empty on the `--server` path: nothing writes the sandbox environment's shell cache there.
 - The machine has no display; the GUI session draws a virtual 1920x1080 screen at 2x (3840x2160 backing). Window buffers are four times a 1x screen's.
 
+## OS cooperation and the performance HUD (WP8.4, 2026-10-11)
+
+Release builds of dc64b72 plus this change (`dev.candywrapper.test.oscoop`) and of dc64b72 alone (`.oscoopbase`), against the sandbox server while three other agents built and ran turns. CPU and wakeups from `scripts/procstat`, App Nap state from `sudo taskinfo <pid>` ("req suppression (App Nap) behaviors"), assertions from `pmset -g assertions`.
+
+Timer audit. Every repeating timer or loop, what it does and whether it runs while nothing changes:
+
+| Where | Purpose | Runs while idle? |
+|---|---|---|
+| `ConnectionSupervisor.startPinging` | socket keepalive ping, 10% tolerance | only while the app is active |
+| `SidebarView.scheduleLabelTimer` | one-shot aimed at the next relative-time label change, 10% | only while a visible label can change and the window is visible |
+| `TimelineWorkRows`, `SubagentCardRowView`, `ProviderSubagentBarView`, `ThreadLineageSectionView` | 1 s elapsed-time labels, 10 to 25% tolerance | only while a run or subagent is live |
+| `GitController.startTicking` | 1 s progress label | only while a git action runs (tolerance added) |
+| `PullRequestsPage.liveTimer` | `useLiveRefresh`, 60 s | only while the page is in front (tolerance added) |
+| `SettingsHostAccess` ticker | 1 s countdown labels | was: whenever Settings was open. Now: only while a link or session is listed |
+| `DesktopManagedController.startPasswordClock` | SSH password expiry, 1 s | only while the prompt is visible (tolerance added) |
+| `ThreadCache.drain`, `ShellCache.writeWhenQuiet` | disk cache writes | only while writes are pending (now `.utility`, tolerance added) |
+| `ServerLifecycle` idle timer | stop our server after the idle timeout | one dispatch timer, `min(60 s, 10%)` leeway |
+| `LoopingAnimation` (spinner, skeleton, working shine) | infinite CA loops in the render server | only while visible, unoccluded and motion allowed |
+| `TerminalStatusGlyph` pulse | sidebar terminal indicator | was: whenever a terminal ran, even hidden or occluded. Now through `LoopingAnimation` |
+| `BrowserPanelView` reload spin | page loading | only while loading |
+| `TimelineView.markFirstFrame` | display link | development timing only, one frame |
+
+The rest are one-shot `asyncAfter` and `Task.sleep` debounces, copy confirmations and request timeouts tied to a user action. One-shot `Timer`s that remain got at least 10% tolerance (toast dismissal, quit hold, browser resize, Codex sign-in).
+
+App Nap. Nothing calls `beginActivity`, sets `NSAppSleepDisabled` or holds a power assertion (`pmset -g assertions` lists none for the app). Launched with `open -a` and hidden with Cmd+H, the app naps after 40 to 60 s: "active low-priority-cpu (4) timer-throttling (LATENCY_QOS_TIER_5) disk-throttling bg-sockets", the same set Safari gets when hidden. An app started by `scripts/run-app` never naps, because exec'ing the binary under `launchctl asuser` gives it no LaunchServices task role (`TASK_UNSPECIFIED`, bundleID NULL in `lsappinfo`). Measure App Nap through `open`. T3 holds no exemption during turns, so neither does the app.
+
+| State (new build) | CPU | Interrupt wakeups/s | Footprint |
+|---|---|---|---|
+| Draft page, visible, update toast showing, HUD hidden | 0.26% | 0.70 | 46.5 MB |
+| Welcome page, own server, HUD hidden | 0.01 to 0.02% | 0.37 | 49 to 52 MB |
+| Same, HUD shown | 0.26% | 4.47 | 52.8 MB |
+| Same, hidden and napping | 0.01% | 0.40 | 52.1 MB |
+
+Settings open, 40 s windows alternating builds: dc64b72 2.30 and 1.05 wakeups/s, this change 0.53, 1.35, 0.62 and 1.30. The removed 1 Hz ticker is below the noise from the other agents' turns; the code no longer creates it.
+
+Server. The app starts its own server only when nothing serves the home, from `ensureRunning` at launch and after an idle stop. The owned server ran with "low-priority-cpu (4) bg-allsockets" (`PRIO_DARWIN_BG`) while no run was active, idle at 0.21% CPU, 12.8 interrupt and 1.2 package idle wakeups/s and 187 MB, plus `t3-resource-monitor` at 0.55% and 0.2 wakeups/s (60 s, `procstat --tree`). That matches the M1 baseline: the wakeups are T3's own timers. Quitting with an Apple Event stopped the server and its child within 250 ms; `LocalServerIntegrationTests` reports "stop took 0.42 s, family of 2".
+
+HUD. ⌥⇧⌘P or "hud" in the palette. It reads `proc_pid_rusage` every 0.5 s with 10% tolerance, only while the window is visible. Frame time is the longest main run loop pass, wake to sleep, since the last sample: a frame's layout, drawing and Core Animation commit happen inside one pass, and measuring it needs no display link. Events are server messages decoded by any socket, counted only while the HUD is shown. During a haiku turn it read 12.3% CPU, a 29.6 ms longest pass, 14.5 events/s and 145 MB. Showing it costs about 4 wakeups/s. Hidden it costs nothing beyond one uncontended lock per received frame.
+
 ## Milestone 7 wrap-up (2026-10-11)
 
 `2026-10-11-8739e4f-w1` (with `--stream`) against 35e734e, 36 commits apart. Real changes, which M8 picks up:

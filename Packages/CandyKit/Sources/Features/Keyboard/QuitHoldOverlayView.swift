@@ -58,6 +58,7 @@ public final class QuitHoldOverlayView: DSView {
                 self?.hideTimer = nil
             }
         }
+        hideTimer?.tolerance = QuitHoldController.holdHintLinger / 10
         hideTimer?.tolerance = 0.06
     }
 

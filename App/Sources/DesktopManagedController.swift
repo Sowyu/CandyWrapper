@@ -76,7 +76,7 @@ final class DesktopManagedController {
         guard window?.occlusionState.contains(.visible) == true, request.remaining(at: Date()) > 0 else { return }
         passwordClock = Task { [weak dialog] in
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                do { try await Task.sleep(for: .seconds(1), tolerance: .milliseconds(100)) } catch { return }
                 guard let dialog else { return }
                 dialog.update(state: request, now: Date())
                 if request.remaining(at: Date()) == 0 { return }
