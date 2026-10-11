@@ -110,6 +110,9 @@ public struct ClientSettings: Equatable, Sendable {
         "browserAutoShowFloatingPreview": SettingSpec(.bool, .bool(true)),
         // Settings > Providers: favorites, visibility and order per instance (client settings).
         "providerModelPreferences": SettingSpec(.any, .object([:])),
+        // Settings > Connections > Load balancing (contracts settings.ts:289-310): stored per client.
+        "loadBalancingEnabled": SettingSpec(.bool, .bool(false)),
+        "loadBalancingWeights": SettingSpec(.any, .object([:])),
     ]
 
     public static let defaults = ClientSettings(values: fields.mapValues(\.defaultValue))

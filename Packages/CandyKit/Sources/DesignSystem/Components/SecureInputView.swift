@@ -49,7 +49,13 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
     public override func mouseDown(with event: NSEvent) { if state.enabled { window?.makeFirstResponder(field) } }
 
     public func controlTextDidBeginEditing(_ obj: Notification) { state.focused = true }
-    public func controlTextDidEndEditing(_ obj: Notification) { state.focused = false }
+    public func controlTextDidEndEditing(_ obj: Notification) { state.focused = false; onCommit?(field.stringValue) }
+    /// DraftInput: the value when focus leaves or on Return.
+    public var onCommit: (@MainActor (String) -> Void)?
+    /// Inline padding: 12 for the default size, 9 for `size="sm"` (T3 `px-[calc(--spacing(2.5)-1px)]` plus the border).
+    public var inset: CGFloat = 12 { didSet { needsLayout = true } }
+    /// `font="mono"`.
+    public var monospaced = false { didSet { field.font = monospaced ? DSFont.mono(14) : DSFont.ui(14); applyPlaceholder() } }
     /// Each edit (a Save button follows the draft).
     public var onChange: (@MainActor (String) -> Void)?
     public func controlTextDidChange(_ obj: Notification) { onChange?(field.stringValue) }
@@ -62,7 +68,7 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
 
     private func applyPlaceholder() {
         field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
-            .font: DSFont.ui(14),
+            .font: field.font ?? DSFont.ui(14),
             .foregroundColor: Themed.color(\.contrastPlaceholder),
         ])
     }
@@ -82,7 +88,7 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         let h = ceil(field.intrinsicContentSize.height)
-        field.frame = NSRect(x: 12, y: (bounds.height - h) / 2, width: max(0, bounds.width - 24), height: h)
+        field.frame = NSRect(x: inset, y: (bounds.height - h) / 2, width: max(0, bounds.width - 2 * inset), height: h)
     }
 
     /// Focus arrives before the first key, so the field reports it itself.

@@ -209,11 +209,26 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
         providersSection.headerAction = vcs.isEmpty ? scanButton : nil
         anchors["source-control"] = vcs.isEmpty ? providersSection : vcsSection
         vcsSection.group.rows = vcs.map { item in discoveryRow(item, details: item.kind == "git" ? fetchIntervalView() : nil) }
+        let env = environmentId!
+        let rescan: () -> Void = { [weak self] in self?.scan() }
         providersSection.group.rows = providers.map { item in
-            discoveryRow(item, details: item.kind == "github" ? GitHubTokenView(context: context, environmentId: environmentId!, onSaved: { [weak self] in self?.scan() }) : nil)
+            switch item.kind {
+            case "bitbucket":
+                return discoveryRow(item, details: BitbucketCredentialsView(context: context, environmentId: env, onSaved: rescan))
+            case "github":
+                // The token shows even without gh: a saved token is how GitHub works without the CLI.
+                let accounts = item.status == "available"
+                    ? GitHubAccountsView(context: context, environmentId: env,
+                                         accounts: (item.auth?["accounts"]?.arrayValue ?? []).compactMap(GitHubDiscoveredAccount.init), onSaved: rescan)
+                    : nil
+                return discoveryRow(item, details: GitHubDetailsView(token: GitHubTokenView(context: context, environmentId: env, onSaved: rescan), accounts: accounts))
+            default:
+                return discoveryRow(item, details: nil)
+            }
         }
         if let gitRow = vcsSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "git" }) { anchors["git-fetch-interval"] = gitRow }
         if let ghRow = providersSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "github" }) { anchors["github-accounts"] = ghRow }
+        if let bbRow = providersSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "bitbucket" }) { anchors["bitbucket-credentials"] = bbRow }
     }
 
     private func discoveryRow(_ item: SourceControlDiscoveryItem, details: (NSView & SettingsGroupRow)?) -> SourceControlDiscoveryRow {
@@ -233,7 +248,8 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
     public override func anchor(_ id: String) -> NSView? {
         if id == "git-fetch-interval" { expanded.insert("git") }
         if id == "github-accounts" { expanded.insert("github") }
-        if id == "git-fetch-interval" || id == "github-accounts" { updateDiscovery(); onHeightChange?() }
+        if id == "bitbucket-credentials" { expanded.insert("bitbucket") }
+        if ["git-fetch-interval", "github-accounts", "bitbucket-credentials"].contains(id) { updateDiscovery(); onHeightChange?() }
         return super.anchor(id)
     }
 
