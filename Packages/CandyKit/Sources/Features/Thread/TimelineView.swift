@@ -162,6 +162,18 @@ public final class TimelineView: DSView {
 
     private var diagramObserver: NSObjectProtocol?
 
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        measured.removeAll()
+        func refreshText(_ view: NSView) {
+            if let markdown = view as? MarkdownView { markdown.fontRuntimeDidChange() }
+            for child in view.subviews { refreshText(child) }
+        }
+        for view in visible.values { refreshText(view) }
+        heights = items.map { height(of: $0) }
+        relayout()
+    }
+
     private func remeasureDiagrams() {
         var changed = false
         for item in items {

@@ -36,12 +36,20 @@ open class DSView: NSView {
         needsDisplay = true
     }
 
-    /// The theme this view last resolved its colors for. A view out of the window while the theme changed
-    /// (a recycled row) catches up when it comes back, as AppKit does for appearance changes.
+    /// Detached and recycled views catch up when they return to a window.
+    private var fontGeneration = FontRuntime.generation
+    open func fontRuntimeDidChange() {
+        fontGeneration = FontRuntime.generation
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+        needsDisplay = true
+    }
+
     private var themeGeneration = ThemeRuntime.generation
 
     open override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil, fontGeneration != FontRuntime.generation { fontRuntimeDidChange() }
         if window != nil, themeGeneration != ThemeRuntime.generation { viewDidChangeEffectiveAppearance() }
     }
 

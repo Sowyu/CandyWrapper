@@ -69,6 +69,11 @@ public final class MarkdownView: DSView {
         layer?.isOpaque = false
     }
 
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        invalidate()
+    }
+
     private func invalidate() {
         cache.removeAll()
         invalidateIntrinsicContentSize()

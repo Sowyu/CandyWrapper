@@ -25,7 +25,7 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
     public var wrap = true { didSet { if wrap != oldValue { applyWrap() } } }
 
     static var font: NSFont { DSFont.mono(13) }
-    static let lineHeight: CGFloat = 20
+    static var lineHeight: CGFloat { 20 * FontRuntime.codeScale }
 
     public override init(frame frameRect: NSRect) {
         textView = NSTextView(usingTextLayoutManager: true)
@@ -90,6 +90,16 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
     }
 
     public var text: String { textView.string }
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        textView.font = Self.font
+        textView.typingAttributes = Self.baseAttributes
+        if let storage = textView.textStorage {
+            storage.addAttributes(Self.baseAttributes, range: NSRange(location: 0, length: storage.length))
+        }
+        gutter.needsDisplay = true
+        scheduleHighlight(delay: 0)
+    }
 
     private func applyWrap() {
         guard let container = textView.textContainer else { return }

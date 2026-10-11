@@ -6,17 +6,13 @@ import os
 /// at rem-based sizes from `Tokens.Text`. Weights in use: 400, 500, 600, rarely 700.
 public enum DSFont {
     public static func ui(_ px: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        .systemFont(ofSize: px, weight: weight)
+        FontRuntime.font(.interface, size: px, weight: weight)
     }
 
     /// `ui-monospace`: Chromium resolves it to the user fixed-pitch font (Menlo), because SF Mono
     /// is not an installed font. Measured against Chromium in the Input fidelity test.
     public static func mono(_ px: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        cached("mono", px, weight) {
-            let base = CTFontCreateUIFontForLanguage(.userFixedPitch, px, nil).map { $0 as NSFont }
-                ?? .monospacedSystemFont(ofSize: px, weight: weight)
-            return weight >= .semibold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
-        }
+        FontRuntime.font(.code, size: px, weight: weight)
     }
 
     /// Fonts made from descriptors are new objects with their own tables and caches (about 150 KB
@@ -30,6 +26,8 @@ public enum DSFont {
             return font
         }
     }
+
+    static func clearCache() { cache.withLockUnchecked { $0.removeAll() } }
 
     private static let cache = OSAllocatedUnfairLock(uncheckedState: [String: NSFont]())
 }
@@ -66,7 +64,12 @@ public struct TextLine {
 /// Font smoothing is on: measured closer to Chromium than plain antialiasing.
 public final class LabelView: DSView {
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
-    public var font: NSFont = DSFont.ui(14) { didSet { invalidate() } }
+    public var font: NSFont = DSFont.ui(14) { didSet { fontRecipe = FontRuntime.recipe(for: font); invalidate() } }
+    private var fontRecipe = FontRuntime.recipe(for: DSFont.ui(14))
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        if let recipe = fontRecipe { font = recipe.resolve() }
+    }
     public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { needsDisplay = true } }
     /// CSS line-height in points. Defaults to the font's natural height.
     public var lineHeight: CGFloat? { didSet { invalidate() } }
@@ -126,11 +129,11 @@ public final class LabelView: DSView {
             result.addAttribute(.foregroundColor, value: prefixColor.color, range: NSRange(location: 0, length: prefixColor.count))
         }
         if let emphasizedSuffix {
-            attributes[.font] = DSFont.ui(font.pointSize, weight: .semibold)
+            attributes[.font] = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: .semibold)
             result.append(NSAttributedString(string: emphasizedSuffix, attributes: attributes))
         }
         if let highlightedIndices {
-            let bold = DSFont.ui(font.pointSize, weight: .semibold)
+            let bold = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: .semibold)
             for i in highlightedIndices where i < result.length {
                 let range = (result.string as NSString).rangeOfComposedCharacterSequence(at: i)
                 result.addAttributes([.font: bold, .foregroundColor: highlightColor ?? color], range: range)
@@ -150,8 +153,8 @@ public final class LabelView: DSView {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty || emphasizedSuffix != nil else { return }
         // Core Text's smoothing (stem darkening) matches Chromium's glyph weight better than
         // plain antialiasing: Button fidelity 2.91% differing pixels with it, 3.27% without.
-        ctx.setShouldSmoothFonts(smoothsFont)
-        ctx.setAllowsFontSmoothing(smoothsFont)
+        ctx.setShouldSmoothFonts(smoothsFont && FontRuntime.smoothing)
+        ctx.setAllowsFontSmoothing(smoothsFont && FontRuntime.smoothing)
         var line = TextLine(attributed())
         if truncates, line.width > bounds.width, bounds.width > 0 {
             let ellipsis = CTLineCreateWithAttributedString(

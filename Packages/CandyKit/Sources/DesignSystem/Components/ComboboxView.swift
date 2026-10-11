@@ -45,6 +45,14 @@ public final class ComboboxView: DSView {
         trigger?.frame = NSRect(x: bounds.width - 2 - 28, y: (bounds.height - 28) / 2, width: 28, height: 28)
     }
 
+    /// Apply an external value without opening the list as if the user had typed.
+    public func setValue(_ text: String) {
+        settingText = true
+        input.text = text
+        selectedIndex = options.firstIndex(of: text)
+        settingText = false
+    }
+
     /// Items matching the input text: case-insensitive substring, base-ui's default `contains` filter.
     static func filter(_ options: [String], _ query: String) -> [Int] {
         let q = query.trimmingCharacters(in: .whitespaces)

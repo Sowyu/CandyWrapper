@@ -501,6 +501,12 @@ final class ThreadController {
         lineage.update(threadId: id, projection: nil)
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
         session.onProjection = { [weak self] projection in
+            if let self {
+                let thread = self.sidebar?.snapshot?.threads.first { $0.id == id }
+                let link = thread?.linkedPullRequest ?? thread?.branchPullRequest
+                self.panel.onProactivePullRequest = { [weak self] in self?.pullRequests.openCurrentPullRequest() }
+                self.panel.proactiveLinkedPullRequestKey = link.map { "\($0.projectId):\($0.repository):\($0.number)" }
+            }
             self?.composer.projectionChanged(projection, threadId: id)
             self?.lineage.update(threadId: id, projection: projection)
         }

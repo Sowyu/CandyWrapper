@@ -1,0 +1,35 @@
+{
+  "component": "settings-runtime",
+  "source": "apps/web/src/appearanceFonts.ts; components/settings/ResourceTelemetryDiagnostics.tsx",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "telemetry",
+      "html": "<div class=\"border-t border-border/60 px-4 py-4 sm:px-5\"><div class=\"mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-3xs text-muted-foreground/65\"><span class=\"inline-flex items-center gap-1.5\"><span class=\"h-1.5 w-3 rounded-full bg-foreground/70\"></span>CPU average</span><span class=\"inline-flex items-center gap-1.5\"><span class=\"h-1.5 w-3 rounded-full bg-info/70\"></span>I/O reads</span><span class=\"inline-flex items-center gap-1.5\"><span class=\"h-1.5 w-3 rounded-full bg-warning/80\"></span>I/O writes</span></div><div class=\"flex h-32 items-end gap-1 overflow-hidden rounded-lg border border-border/40 bg-muted/8 px-2 pt-3 pb-2\"><div class=\"grid h-full min-w-1 flex-1 grid-cols-3 items-end gap-px\"><span class=\"block rounded-t-sm bg-foreground/65\" style=\"height:0%\"></span><span class=\"block rounded-t-sm bg-info/70\" style=\"height:0%\"></span><span class=\"block rounded-t-sm bg-warning/80\" style=\"height:0%\"></span></div><div class=\"grid h-full min-w-1 flex-1 grid-cols-3 items-end gap-px\"><span class=\"block rounded-t-sm bg-foreground/65\" style=\"height:20.0%\"></span><span class=\"block rounded-t-sm bg-info/70\" style=\"height:75.0%\"></span><span class=\"block rounded-t-sm bg-warning/80\" style=\"height:25.0%\"></span></div><div class=\"grid h-full min-w-1 flex-1 grid-cols-3 items-end gap-px\"><span class=\"block rounded-t-sm bg-foreground/65\" style=\"height:100.0%\"></span><span class=\"block rounded-t-sm bg-info/70\" style=\"height:37.5%\"></span><span class=\"block rounded-t-sm bg-warning/80\" style=\"height:12.5%\"></span></div><div class=\"grid h-full min-w-1 flex-1 grid-cols-3 items-end gap-px\"><span class=\"block rounded-t-sm bg-foreground/65\" style=\"height:50.0%\"></span><span class=\"block rounded-t-sm bg-info/70\" style=\"height:12.5%\"></span><span class=\"block rounded-t-sm bg-warning/80\" style=\"height:87.5%\"></span></div><div class=\"grid h-full min-w-1 flex-1 grid-cols-3 items-end gap-px\"><span class=\"block rounded-t-sm bg-foreground/65\" style=\"height:5.0%\"></span><span class=\"block rounded-t-sm bg-info/70\" style=\"height:1.25%\"></span><span class=\"block rounded-t-sm bg-warning/80\" style=\"height:0%\"></span></div></div></div>",
+      "wrapperStyle": "width:600px",
+      "native": {
+        "kind": "telemetry"
+      }
+    },
+    {
+      "name": "fonts.default",
+      "html": "<div style=\"width:360px;height:52px;color:var(--foreground)\"><div style=\"font-family:-apple-system;font-size:14px;line-height:24px\">The quick brown fox 0O 1lI</div><div style=\"font-family:Menlo;font-size:13px;line-height:24px\">let value = 42;</div></div>",
+      "native": {
+        "kind": "default"
+      }
+    },
+    {
+      "name": "fonts.custom",
+      "html": "<div style=\"width:360px;height:52px;color:var(--foreground)\"><div style=\"font-family:Menlo;font-size:17.5px;line-height:24px\">The quick brown fox 0O 1lI</div><div style=\"font-family:Menlo;font-size:16px;line-height:24px\">let value = 42;</div></div>",
+      "native": {
+        "kind": "custom"
+      }
+    }
+  ]
+}

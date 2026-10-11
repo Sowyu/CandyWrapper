@@ -230,6 +230,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     private func setAdvanced(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.advancedKey)
+        SettingsFontRuntime.apply()
         advancedSwitch.isOn = on
         typography?.group.rows = (on ? advancedRows : simpleRows) + [wordWrap]
         binder.refresh()
@@ -254,23 +255,31 @@ public final class AppearanceSettingsView: SettingsPageBase {
     }
 
     /// `FontFamilySettingsRow`: a family input (the probed default as placeholder) and a size select, reset clears both.
-    // ponytail: fonts store their family and size; the interface, prompt, code and terminal fonts don't follow them yet. Apply them when text styles become settings-driven
     private func fontRow(_ id: String, title: String? = nil, detail: String, family: String, size: String, range: ClosedRange<Int>,
                          defaultFamily: String, reset: String) -> SettingsRowView {
-        let input = InputView(placeholder: defaultFamily, text: "", size: .sm)
+        let picker = ComboboxView(options: NSFontManager.shared.availableFontFamilies.sorted(), placeholder: defaultFamily)
+        let input = picker.input
+        input.size = .sm
+        picker.frame.size = NSSize(width: 176, height: 28)
+        picker.onChange = { [weak self, weak picker] i in
+            guard let picker else { return }
+            self?.context.writeClient?([family: .string(picker.options[i])])
+        }
         input.frame.size = NSSize(width: 176, height: 28)
         input.setAccessibilityLabel("\(title ?? SettingsSearch.title(id)) family")
         let sizes = Array(range)
         let select = settingsSelect(sizes.map { "\($0) px" }, width: 88)
         select.setAccessibilityLabel("\(title ?? SettingsSearch.title(id)) size")
-        let r = row(id, title: title, detail: detail, control: SettingsControlGroup([input, select]))
+        let r = row(id, title: title, detail: detail, control: SettingsControlGroup([picker, select]))
+        r.footer = SettingsFontPreviewView(family == "fontFamilyTerminal" ? .terminal : family == "fontFamilyCode" ? .code : .prompt)
         let slot = ResetSlot(label: reset)
         r.accessories = [slot]
         slot.action = { [weak self] in
             self?.context.writeClient?([family: .string(""), size: ClientSettings.fields[size]!.defaultValue])
         }
         // The family commits when typing pauses or on Return, only for a font this Mac has (or an empty field).
-        input.onCommit = { [weak self] text in
+        input.onCommit = { [weak self, weak input] text in
+            guard let input else { return }
             let name = text.trimmingCharacters(in: .whitespaces)
             guard name.isEmpty || NSFontManager.shared.availableFontFamilies.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
                 input.isInvalid = true
@@ -280,9 +289,9 @@ public final class AppearanceSettingsView: SettingsPageBase {
             self?.context.writeClient?([family: .string(name)])
         }
         select.onChange = { [weak self] i in self?.context.writeClient?([size: .number(Double(sizes[i]))]) }
-        binder.add { [weak self, weak input, weak select] in
+        binder.add { [weak self, weak input, weak select, weak picker] in
             guard let self else { return }
-            if let input, !input.state.focused { input.text = self.client.string(family) }
+            if let input, !input.state.focused { picker?.setValue(self.client.string(family)) }
             select?.selectedIndex = sizes.firstIndex(of: self.client.int(size))
             slot.isShown = !self.client.isDefault(family) || !self.client.isDefault(size)
         }

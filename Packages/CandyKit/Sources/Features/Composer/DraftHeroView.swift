@@ -26,9 +26,9 @@ public final class DraftHeroView: DSView {
         addSubview(projectAnchor)
     }
 
-    static let sentence = DSFont.ui(30)
-    static let projectFont = DSFont.ui(30, weight: .medium)
-    static let subFont = DSFont.ui(14, weight: .medium)
+    static var sentence: NSFont { DSFont.ui(30) }
+    static var projectFont: NSFont { DSFont.ui(30, weight: .medium) }
+    static var subFont: NSFont { DSFont.ui(14, weight: .medium) }
 
     private func pieces() -> (NSAttributedString, NSRange) {
         let kern = -0.025 * 30

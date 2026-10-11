@@ -10,7 +10,7 @@ import T3Protocol
 /// character carrying its source text, so it deletes and selects as a unit. `string` is the
 /// display text (chips as U+FFFC); `expandedText` is the prompt T3 would hold. A token becomes a
 /// chip once whitespace follows it, as in T3 (composerInlineTokens.ts).
-final class ComposerEditor: NSTextView, NSTextViewDelegate {
+final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer {
     var richTextEnabled = false {
         didSet {
             guard richTextEnabled != oldValue else { return }
@@ -24,8 +24,15 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     private var clipboardEdit = false
     private var applyingListEdit = false
 
-    static let font = DSFont.ui(14)
-    static let lineHeight: CGFloat = 14 * 1.625
+    static var font: NSFont { FontRuntime.font(.prompt, size: 14) }
+    static var lineHeight: CGFloat { FontRuntime.promptSize * 1.625 }
+
+    func applyFontRuntime() {
+        applyStyle()
+        styleRichText(registerUndo: false)
+        needsDisplay = true
+        onTextChange?()
+    }
 
     /// Asked on Return; true when it handled the key as a send.
     var onSubmitKey: ((ComposerLogic.Key) -> Bool)?
