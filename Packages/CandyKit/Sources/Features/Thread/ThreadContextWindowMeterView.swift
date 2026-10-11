@@ -113,7 +113,7 @@ private final class ThreadContextWindowDetailsView: DSView {
         if let total = usage.total, total > 0 { lines.append("Total processed  \(ThreadContextWindowUsage.tokens(total))") }
         if let cost = usage.cost { lines.append("Cost  " + usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
         if usage.automatically {
-            if let threshold = usage.autoCompactThreshold, threshold > 0 {
+            if let threshold = usage.autoCompactThreshold, threshold > 0, threshold < 9e15 {
                 lines.append("Compacts automatically at " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens.")
             } else { lines.append(model.map { "Context for " + $0 + " compacts automatically when needed." } ?? "Context compacts automatically when needed.") }
         }

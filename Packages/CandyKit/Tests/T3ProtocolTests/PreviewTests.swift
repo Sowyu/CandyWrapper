@@ -37,6 +37,9 @@ struct PreviewTests {
         #expect(c.dialog?.type == "prompt" && c.dialog?.defaultValue == "a")
         #expect(PreviewStream.Message.decode(#"{"type":"pointer","phase":"click","x":1,"y":2,"sequence":7}"#) == .pointer(phase: "click", x: 1, y: 2, sequence: 7))
         #expect(PreviewStream.Message.decode(#"{"type":"pointer","phase":"drag","x":1,"y":2,"sequence":7}"#) == nil)
+        // Numbers past Int's range are refused instead of trapping.
+        #expect(PreviewStream.Message.decode(#"{"type":"pointer","phase":"click","x":1,"y":2,"sequence":1e300}"#) == nil)
+        #expect(PreviewStream.Message.decode(#"{"type":"control","canOperate":true,"controller":"you","generation":1e300,"dialog":null}"#) == nil)
         #expect(PreviewStream.Message.decode(#"{"type":"fileChooser","id":"c1","multiple":false,"accept":"image/*"}"#) == .fileChooser(id: "c1", multiple: false, accept: "image/*"))
         #expect(PreviewStream.Message.decode(#"{"type":"popup","tabId":"t2"}"#) == .popup(tabId: "t2"))
         #expect(PreviewStream.Message.decode(#"{"type":"control","canOperate":true,"controller":"boss","generation":1,"dialog":null}"#) == nil)

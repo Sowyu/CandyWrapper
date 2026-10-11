@@ -440,8 +440,8 @@ public enum PreviewStream {
                 return str("id").map { .fileChooserClosed(id: $0) }
             case "pointer":
                 guard let phase = str("phase"), phase == "move" || phase == "click", let x = num("x"), let y = num("y"),
-                      let sequence = num("sequence") else { return nil }
-                return .pointer(phase: phase, x: x, y: y, sequence: Int(sequence))
+                      let sequence = o["sequence"]?.intValue else { return nil }
+                return .pointer(phase: phase, x: x, y: y, sequence: sequence)
             case "popup": return str("tabId").map { .popup(tabId: $0) }
             case "clipboard": return str("text").map { .clipboard($0) }
             case "download":
@@ -455,7 +455,7 @@ public enum PreviewStream {
                 return .probe(x: x, y: y, editable: editable)
             case "control":
                 guard let canOperate = bool("canOperate"), let raw = str("controller"), let controller = Control.Controller(rawValue: raw),
-                      let generation = num("generation") else { return nil }
+                      let generation = o["generation"]?.intValue else { return nil }
                 var dialog: Control.Dialog?
                 switch o["dialog"] {
                 case .none, .null?: dialog = nil
@@ -464,7 +464,7 @@ public enum PreviewStream {
                     dialog = Control.Dialog(type: t, message: m, defaultValue: v)
                 default: return nil
                 }
-                return .control(Control(canOperate: canOperate, controller: controller, generation: Int(generation), dialog: dialog))
+                return .control(Control(canOperate: canOperate, controller: controller, generation: generation, dialog: dialog))
             default: return nil
             }
         }

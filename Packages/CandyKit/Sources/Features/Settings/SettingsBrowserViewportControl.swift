@@ -69,8 +69,9 @@ final class SettingsBrowserViewportControl: DSView {
         }
         refresh()
     }
-    private var width: Int { Int(value["width"]?.doubleValue ?? 1280) }
-    private var height: Int { Int(value["height"]?.doubleValue ?? 800) }
+    // `intValue`: a synced setting like 1e300 must not trap in `Int(_:)`.
+    private var width: Int { value["width"]?.intValue ?? 1280 }
+    private var height: Int { value["height"]?.intValue ?? 800 }
     private var sized: Bool { value["_tag"]?.stringValue != "fill" }
     private func refresh() {
         select.selectedIndex = !sized ? 0 : value["_tag"]?.stringValue == "preset" ? SettingsBrowserViewport.presets.firstIndex { $0.id == value["presetId"]?.stringValue }.map { $0 + 2 } ?? 1 : 1
