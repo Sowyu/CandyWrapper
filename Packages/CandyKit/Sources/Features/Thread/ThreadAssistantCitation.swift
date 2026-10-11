@@ -64,8 +64,9 @@ public struct ThreadAssistantCitation: Equatable, Sendable {
 
 @MainActor
 public enum ThreadAssistantCitationEditor {
-    /// Uses the existing modal host. Source-range anchored popovers remain a separate selection feature.
-    // ponytail: comments use a dialog, switch to source-anchored popovers when rendered selection mapping is built
+    /// The dialog for a citation chip already in the composer or a sent message. A fresh Cite opens
+    /// `AssistantCitationCommentPopup` under the selection instead.
+    // ponytail: a composer chip edits its comment in this dialog; T3 opens the same popover from the chip's pencil. Move it when the composer chips get their pencil
     public static func present(_ citation: ThreadAssistantCitation, in window: NSWindow, save: (@MainActor (ThreadAssistantCitation) -> Void)? = nil, openSource: (@MainActor () -> Void)? = nil) {
         let dialog = DialogView(title: "Assistant quote", message: citation.text)
         dialog.maxWidth = 400
@@ -87,5 +88,142 @@ public enum ThreadAssistantCitationEditor {
         commit.action = submit
         comment.onChange = { [weak commit] text in commit?.isEnabled = text.utf16.count <= 8000; commit?.title = text.utf16.count <= 8000 ? "Save" : "Shorten comment" }
         comment.onSubmit = submit
+    }
+}
+
+/// `AssistantCitationCommentEditor` (AssistantCitationCommentEditor.tsx:6-102) in the citation chip's popover
+/// (AssistantCitationChip.tsx:167-240): `PopoverPopup width="md" padding="compact"`, anchored under the
+/// selection's last line, `side="bottom" align="end"`. Enter saves, Command-Enter saves and sends,
+/// Shift-Enter starts a new line, Escape closes. Cancel removes a fresh citation (`removeOnCancel`).
+@MainActor
+public final class AssistantCitationCommentEditorView: DSView {
+    static let maxComment = 8000
+    static let width: CGFloat = 320 - 2 - 24
+    let input = TextareaView(placeholder: "Add an optional comment...")
+    private let error = TextBlockView("Comments can contain up to 8,000 characters.", font: DSFont.ui(12), lineHeight: 16,
+                                      color: Themed.color(\.destructive))
+    let cancel = ButtonView("Cancel", variant: .outline, size: .xs)
+    let save = ButtonView("Save", size: .xs)
+    var onSave: ((String) -> Void)?
+    var onSaveAndSend: ((String) -> Void)?
+    var onCancel: (() -> Void)?
+    var onEscape: (() -> Void)?
+    var onHeightChange: (() -> Void)?
+
+    public init(comment: String?) {
+        super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 100))
+        input.bare = true
+        input.text = comment ?? ""
+        input.setAccessibilityLabel("Comment on selected text")
+        input.setAccessibilityHelp("Enter to save the citation comment; Command/Ctrl+Enter to save and send; Shift+Enter for a new line.")
+        error.isHidden = true
+        [input, error, cancel, save].forEach(addSubview)
+        cancel.action = { [weak self] in self?.onCancel?() }
+        save.action = { [weak self] in self?.submit(send: false) }
+        input.onChange = { [weak self] _ in self?.update() }
+        update()
+    }
+
+    var tooLong: Bool { input.text.utf16.count > Self.maxComment }
+
+    private func update() {
+        error.isHidden = !tooLong
+        save.isEnabled = !tooLong
+        save.title = tooLong ? "Shorten comment" : "Save"
+        input.isInvalid = tooLong
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+        onHeightChange?()
+    }
+
+    func submit(send: Bool) {
+        guard !tooLong else { return }
+        if send { onSaveAndSend?(input.text) } else { onSave?(input.text) }
+    }
+
+    /// `onKeyDown` on the textarea: Enter without Shift submits, unless an input method is composing.
+    func handle(_ key: PopupKey) -> Bool {
+        switch key {
+        case .escape: onEscape?(); return true
+        case .enter:
+            let flags = NSApp.currentEvent?.modifierFlags ?? []
+            guard !flags.contains(.shift), !input.hasMarkedText else { return false }
+            submit(send: flags.contains(.command) || flags.contains(.control))
+            return true
+        default: return false
+        }
+    }
+
+    private func errorHeight(_ width: CGFloat) -> CGFloat { error.isHidden ? 0 : 4 + error.height(forWidth: width) }
+
+    public override var intrinsicContentSize: NSSize {
+        NSSize(width: Self.width, height: input.height(forWidth: Self.width) + errorHeight(Self.width) + 8 + 24)
+    }
+
+    public override func layout() {
+        super.layout()
+        let h = input.height(forWidth: bounds.width), eh = errorHeight(bounds.width)
+        input.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
+        error.frame = NSRect(x: 0, y: h + 4, width: bounds.width, height: max(0, eh - 4))
+        let y = h + eh + 8
+        let sw = save.intrinsicContentSize.width, cw = cancel.intrinsicContentSize.width
+        save.frame = NSRect(x: bounds.width - sw, y: y, width: sw, height: 24)
+        cancel.frame = NSRect(x: save.frame.minX - 8 - cw, y: y, width: cw, height: 24)
+    }
+}
+
+/// Where a selection's comment popover anchors: the selection's last line in `view`'s coordinates.
+public struct AssistantSelectionAnchor {
+    public weak var view: NSView?
+    public var rect: CGRect
+    public init(view: NSView?, rect: CGRect) { self.view = view; self.rect = rect }
+}
+
+@MainActor
+public enum AssistantCitationCommentPopup {
+    /// Opens the editor under `anchor`. `save` gets the edited citation and whether to send; `remove` drops the
+    /// fresh chip (Cancel). Escape closes and keeps the chip as inserted; a click outside commits a changed
+    /// comment (`resolveAssistantCitationCommentDismissal`).
+    @discardableResult
+    public static func present(_ citation: ThreadAssistantCitation, anchor: AssistantSelectionAnchor,
+                               save: @escaping @MainActor (ThreadAssistantCitation, _ send: Bool) -> Void,
+                               remove: @escaping @MainActor () -> Void,
+                               restoreFocus: @escaping @MainActor () -> Void) -> OpenPopup? {
+        guard let view = anchor.view, let host = view.popupHost else { return nil }
+        let editor = AssistantCitationCommentEditorView(comment: citation.comment)
+        let popover = PopoverView(content: editor, padding: .compact, width: .md)
+        popover.setAccessibilityLabel("Edit citation comment")
+        popover.onKey = { [weak editor] key in editor?.handle(key) ?? false }
+        let placement = PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .end)
+        let popup = host.open(popover, trigger: view, anchorRect: anchor.rect, placement: placement, motion: .popover,
+                              pressesTrigger: false, returnsFocus: false)
+        var settled = false
+        let finish: @MainActor (() -> Void) -> Void = { [weak host, weak popup] run in
+            guard !settled else { return }
+            settled = true
+            run()
+            if let popup { host?.close(popup, returnFocus: false) }
+            restoreFocus()
+        }
+        editor.onSave = { comment in finish { save(citation.withComment(comment), false) } }
+        editor.onSaveAndSend = { comment in finish { save(citation.withComment(comment), true) } }
+        editor.onCancel = { finish(remove) }
+        editor.onEscape = { finish {} }
+        editor.onHeightChange = { [weak host, weak popup] in if let popup { host?.reposition(popup) } }
+        popup.onClose = { [weak editor] in
+            guard !settled, let editor else { return }
+            settled = true
+            let draft = editor.input.text
+            // ponytail: a too-long draft closes on an outside click; T3 keeps the popover open. Needs a veto hook in PopupHost
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines) != (citation.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+               !editor.tooLong {
+                save(citation.withComment(draft), false)
+            }
+        }
+        DispatchQueue.main.async { [weak editor] in
+            guard let editor, let window = editor.window else { return }
+            window.makeFirstResponder(editor.input)
+        }
+        return popup
     }
 }

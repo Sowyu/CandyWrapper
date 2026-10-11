@@ -35,13 +35,14 @@ public struct ComposerFileRow: Equatable, Sendable {
 /// The file list (`mb-3 flex flex-col gap-1`): rows `flex items-center gap-2 py-1 text-sm`, each the
 /// pierre file icon, the name, the size or upload progress in `text-xs text-secondary-label`, a
 /// ghost `icon-xs` retry after a failed upload and a ghost `icon-xs` remove.
-// ponytail: the name doesn't open T3's file preview dialog; add it with the composer's attachments
+/// The name is a button (`hover:underline`) that opens the file's preview.
 public final class ComposerFileListView: DSView {
     static let rowHeight: CGFloat = 32, gap: CGFloat = 4, marginBottom: CGFloat = 12
 
     public var rows: [ComposerFileRow] = [] { didSet { if rows != oldValue { rebuild() } } }
     public var onRemove: ((String) -> Void)?
     public var onRetry: ((String) -> Void)?
+    public var onOpen: ((String) -> Void)?
 
     /// Height including the 12pt bottom margin; 0 without files.
     public var preferredHeight: CGFloat {
@@ -64,6 +65,7 @@ public final class ComposerFileListView: DSView {
             view.hidesIcon = hidesIconsForTests
             view.onRemove = { [weak self] in self?.onRemove?(row.id) }
             view.onRetry = { [weak self] in self?.onRetry?(row.id) }
+            view.onOpen = { [weak self] in self?.onOpen?(row.id) }
         }
         needsLayout = true
     }
@@ -78,7 +80,9 @@ public final class ComposerFileListView: DSView {
     private final class RowView: DSView {
         var onRemove: (() -> Void)?
         var onRetry: (() -> Void)?
+        var onOpen: (() -> Void)?
         private var icon: IconView?
+        private var tracking: NSTrackingArea?
         private var path = ""
         var hidesIcon = false { didSet { icon?.isHidden = hidesIcon } }
         private let name = LabelView("", font: DSFont.ui(14), color: Themed.color(\.foreground))
@@ -134,6 +138,23 @@ public final class ComposerFileListView: DSView {
             detail.frame = NSRect(x: right - 8 - dw, y: (h - 16) / 2, width: dw, height: 16)
             icon?.frame = NSRect(x: 0, y: (h - 16) / 2, width: 16, height: 16)
             name.frame = NSRect(x: 24, y: (h - 20) / 2, width: max(0, detail.frame.minX - 8 - 24), height: 20)
+        }
+
+        // The name's button (`hover:underline`, pointer cursor) opens the preview.
+        private var nameRect: NSRect { NSRect(x: name.frame.minX, y: 0, width: min(name.frame.width, ceil(name.textWidth)), height: bounds.height) }
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let tracking { removeTrackingArea(tracking) }
+            let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+            addTrackingArea(area)
+            tracking = area
+        }
+        override func mouseMoved(with event: NSEvent) { name.isUnderlined = onOpen != nil && nameRect.contains(convert(event.locationInWindow, from: nil)) }
+        override func mouseExited(with event: NSEvent) { name.isUnderlined = false }
+        override func resetCursorRects() { if onOpen != nil { addCursorRect(nameRect, cursor: .pointingHand) } }
+        override func mouseDown(with event: NSEvent) {}
+        override func mouseUp(with event: NSEvent) {
+            if nameRect.contains(convert(event.locationInWindow, from: nil)) { onOpen?() }
         }
     }
 }

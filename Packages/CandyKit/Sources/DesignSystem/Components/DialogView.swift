@@ -40,6 +40,12 @@ open class DialogView: DSView {
     public var showsCloseButton: Bool { didSet { closeButton.isHidden = !showsCloseButton } }
     /// The popup's `max-w-*` for dialogs (`max-w-lg` by default; Add Environment uses `sm:max-w-3xl`).
     public var maxWidth: CGFloat = 512
+    /// A popup that holds one view edge to edge at a fixed height and nothing else (`DialogPopup
+    /// className="h-[...] overflow-hidden"` around a single child, ChatComposer.tsx:7399-7434).
+    public var fillContent: NSView? {
+        didSet { oldValue?.removeFromSuperview(); if let fillContent { addSubview(fillContent) }; changed() }
+    }
+    public var fillHeight: CGFloat = 480 { didSet { changed() } }
     /// Sheet `variant="inset"`: rounded and bordered all round, 16px from the viewport edges.
     public var isInset = false { didSet { restyle(); changed() } }
     /// Called by the close button. `ModalHost` sets it.
@@ -125,6 +131,7 @@ open class DialogView: DSView {
 
     private func frames(width: CGFloat) -> Frames {
         var f = Frames()
+        if fillContent != nil { f.height = fillHeight; return f }
         let b = borders
         let inner = width - b.left - b.right
         var y = b.top + 24
@@ -213,7 +220,16 @@ open class DialogView: DSView {
             wizardTint.layout(boxSize: f.panelArea.size)
             wizardTint.frame.origin = CGPoint(x: f.panelArea.minX - wizardTint.outset, y: f.panelArea.minY - wizardTint.outset)
         }
-        messageText.isHidden = !hasMessage
+        messageText.isHidden = !hasMessage || fillContent != nil
+        titleText.isHidden = fillContent != nil
+        if let fillContent {
+            // `overflow-hidden` on the rounded popup: the child is clipped to the inner radius.
+            let b = borders
+            fillContent.frame = NSRect(x: b.left, y: b.top, width: bounds.width - b.left - b.right, height: bounds.height - b.top - b.bottom)
+            fillContent.wantsLayer = true
+            fillContent.layer?.cornerRadius = 17
+            fillContent.layer?.masksToBounds = true
+        }
         // `DialogPanel` is a ScrollArea: when the host caps the dialog below its natural height, the panel scrolls
         // between the fixed header and footer.
         let overflow = f.height - bounds.height

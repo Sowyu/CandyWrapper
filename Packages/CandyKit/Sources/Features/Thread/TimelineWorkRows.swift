@@ -81,203 +81,6 @@ enum WorkIcons {
     }
 }
 
-/// What an expanded entry shows: blocks of mono text (the `V2ItemInspector` essentials).
-struct WorkDetail: Hashable {
-    /// `note` is the muted italic of "Loading output…" and "No output.".
-    enum Tone: Hashable { case command, output, error, note, json }
-    var blocks: [(String, Tone)] = []
-    /// The stream left this entry's output out; it loads when the row opens, so the row expands
-    /// even before anything is fetched (`turnItemHasDetail`, itemDetail.ts:227-248).
-    var links: [Int: String] = [:]
-    var diffPath: String?
-    var fetches = false
-    var isEmpty: Bool { blocks.isEmpty && !fetches }
-
-    static func == (a: WorkDetail, b: WorkDetail) -> Bool { a.blocks.map(\.0) == b.blocks.map(\.0) && a.blocks.map(\.1) == b.blocks.map(\.1) && a.fetches == b.fetches && a.links == b.links && a.diffPath == b.diffPath }
-    func hash(into h: inout Hasher) { h.combine(blocks.map(\.0)) }
-
-    /// `V2ItemInspector.tsx:222-424` reduced to text: the command, the output, a failing exit code,
-    /// read paths, changed files, or the entry's detail. `output` is the fetch state of an output
-    /// the stream left out.
-    static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState? = nil) -> WorkDetail {
-        var d = WorkDetail()
-        d.fetches = e.projectedItem.map { TurnItemDetail.needsFetch($0.item) } ?? false
-        func add(_ text: String?, _ tone: Tone) {
-            guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, t != label,
-                  !d.blocks.contains(where: { $0.0 == t }) else { return }
-            d.blocks.append((t, tone))
-        }
-        /// `ToolOutput` (V2ItemInspector.tsx:149-175): the text, else loading, error or empty.
-        func addFetched() {
-            switch output {
-            case .loading: d.blocks.append(("Loading output…", .note))
-            case .failed(let message): d.blocks.append(("Couldn't load output: " + message, .error))
-            case .fetched(.gone): d.blocks.append(("Couldn't load output: Output is no longer available.", .error))
-            case .fetched(.output(let text?)) where !text.isEmpty: d.blocks.append((text, .output))
-            case .fetched(.output): d.blocks.append(("No output.", .note))
-            case .fetched(.mismatch), nil: break
-            }
-        }
-        let item = e.structuredPayload
-        func structured(_ value: JSONValue?) {
-            guard let value else { return }
-            if let text = value.stringValue { add(text, .output); return }
-            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            if let data = try? encoder.encode(value), let text = String(data: data, encoding: .utf8) { add(text, .json) }
-        }
-        if e.itemType == .fileSearch || e.itemType == .webSearch {
-            add(item?["pattern"]?.stringValue, .command)
-            add(item?["patterns"]?.arrayValue?.compactMap(\.stringValue).joined(separator: "\n"), .command)
-            for result in item?["results"]?.arrayValue ?? [] {
-                if e.itemType == .webSearch {
-                    let url = result["url"]?.stringValue ?? ""
-                    let title = result["title"]?.stringValue ?? url
-                    let i = d.blocks.count
-                    add(title, .output)
-                    if i < d.blocks.count, let parsed = URL(string: url), ["https", "http"].contains(parsed.scheme?.lowercased() ?? "") { d.links[i] = url }
-                    add(result["snippet"]?.stringValue, .note)
-                } else {
-                    let path = result["fileName"]?.stringValue ?? ""
-                    add(formatWorkspaceRelativePath(path, workspaceRoot: workspaceRoot) + (result["line"]?.intValue.map { ":\($0)" } ?? ""), .command)
-                    add(result["preview"]?.stringValue, .output)
-                }
-            }
-            if !d.blocks.isEmpty { return d }
-        }
-        if e.itemType == .dynamicTool {
-            structured(item?.input)
-            if d.fetches { addFetched() } else { structured(item?.output) }
-            return d
-        }
-        if let read = WorkLog.readOutput(e, workspaceRoot: workspaceRoot), WorkLog.toolGroupAction(e) == .read {
-            // A read expands to its plain text, then the output fetched for it (MessagesTimeline.tsx:5549-5553, :5764-5770).
-            add(read, .output)
-            if d.fetches { addFetched() }
-            return d
-        }
-        if e.itemType == .commandExecution || e.command != nil {
-            add((e.command ?? item?.input?.stringValue).map(commandDisplayText), .command)
-            if d.fetches { addFetched() } else { add(item?.output?.stringValue ?? e.detail, .output) }
-            if let code = item?.exitCode, code != 0 { d.blocks.append(("exit \(code)", .error)) }
-            return d
-        }
-        if e.itemType == .fileChange, let files = e.changedFiles {
-            add(files.map { formatWorkspaceRelativePath($0, workspaceRoot: workspaceRoot) }.joined(separator: "\n"), .output)
-            if item?.runId != nil { d.diffPath = item?["fileName"]?.stringValue ?? files.first }
-            if item?.status == .failed { add(item?["diffStr"]?.stringValue, .output) }
-            return d
-        }
-        add(e.detail, .output)
-        if d.fetches { addFetched() } else if let out = item?.output?.stringValue { add(out, .output) }
-        return d
-    }
-}
-
-/// Mono detail blocks, `space-y-1.5`, 13px at `leading-relaxed`, each clipped at 320px.
-final class WorkDetailView: DSView {
-    static var font: NSFont { DSFont.mono(13) }
-    static let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-    static let lineHeight: CGFloat = 13 * 1.625
-    static let maxBlock: CGFloat = 320
-
-    var detail = WorkDetail() { didSet { if detail != oldValue { cache = nil; needsDisplay = true; needsLayout = true } } }
-    private var cache: (width: CGFloat, layouts: [TextBlockLayout])?
-    private var blockScrollers: [NSScrollView] = []
-
-    override var wantsUpdateLayer: Bool { false }
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        layer?.isOpaque = false
-        clipsToBounds = true
-    }
-    var onOpenDiff: (() -> Void)?
-    private let diffButton = ButtonView("Open diff", variant: .outline, size: .xs)
-    override func layout() {
-        super.layout()
-        if diffButton.superview == nil { addSubview(diffButton); diffButton.action = { [weak self] in self?.onOpenDiff?() } }
-        diffButton.isHidden = detail.diffPath == nil
-        diffButton.frame = NSRect(x: 0, y: max(0, bounds.height - 24), width: 82, height: 24)
-        let blocks = layouts(bounds.width)
-        while blockScrollers.count > blocks.count { blockScrollers.removeLast().removeFromSuperview() }
-        while blockScrollers.count < blocks.count {
-            let scroll = NSScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true
-            scroll.autohidesScrollers = true; scroll.documentView = ThreadWorkDetailBlockView()
-            addSubview(scroll); blockScrollers.append(scroll)
-        }
-        var y: CGFloat = 0
-        for (index, block) in blocks.enumerated() {
-            let scroll = blockScrollers[index]
-            let height = min(block.height, Self.maxBlock)
-            scroll.isHidden = block.height <= Self.maxBlock
-            scroll.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
-            if let body = scroll.documentView as? ThreadWorkDetailBlockView {
-                body.textLayout = block
-                body.frame = NSRect(x: 0, y: 0, width: bounds.width, height: block.height)
-            }
-            y += height + 6
-        }
-    }
-    override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        var y: CGFloat = 0
-        for (i, layout) in layouts(bounds.width).enumerated() {
-            let h = min(layout.height, Self.maxBlock)
-            if p.y >= y, p.y < y + h, let href = detail.links[i], let url = URL(string: href) { NSWorkspace.shared.open(url); return }
-            y += h + 6
-        }
-    }
-
-    private func layouts(_ width: CGFloat) -> [TextBlockLayout] {
-        if let cache, cache.width == width { return cache.layouts }
-        let made = detail.blocks.map { text, tone in
-            let color: NSColor = switch tone {
-            case .command: TL.c(\.foreground, 0.85)
-            case .output, .note, .json: TL.c(\.mutedForeground)
-            case .error: TL.c(\.destructive)
-            }
-            let font = tone == .note ? Self.italic : Self.font
-            let text = tone == .command ? MarkdownShellCommand.visible(text) : text
-            let attributed = NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
-            if tone == .json || tone == .command {
-                for token in CodeHighlighter.tokens(text, language: tone == .json ? "json" : "bash") { attributed.addAttribute(.foregroundColor, value: token.kind.color, range: token.range) }
-            }
-            return TextBlockLayout(attributed, width: width, lineHeight: Self.lineHeight)
-        }
-        cache = (width, made)
-        return made
-    }
-
-    func height(forWidth width: CGFloat) -> CGFloat {
-        let ls = layouts(width)
-        guard !ls.isEmpty else { return 0 }
-        return ls.reduce(0) { $0 + min($1.height, Self.maxBlock) } + CGFloat(ls.count - 1) * 6 + (detail.diffPath == nil ? 0 : 30)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
-        var y: CGFloat = 0
-        for layout in layouts(bounds.width) {
-            let h = min(layout.height, Self.maxBlock)
-            ctx.saveGState()
-            ctx.clip(to: CGRect(x: 0, y: y, width: bounds.width, height: h))
-            if layout.height <= Self.maxBlock { layout.draw(in: ctx, origin: CGPoint(x: 0, y: y), width: bounds.width, alignment: .left) }
-            ctx.restoreGState()
-            y += h + 6
-        }
-    }
-}
-
-/// Only expanded blocks larger than the source's 320pt viewport own a scroller.
-private final class ThreadWorkDetailBlockView: DSView {
-    var textLayout: TextBlockLayout? { didSet { needsDisplay = true } }
-    override var wantsUpdateLayer: Bool { false }
-    override func draw(_ rect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        textLayout?.draw(in: ctx, origin: .zero, width: bounds.width, alignment: .left)
-    }
-}
-
 // MARK: - One work log line
 
 /// `WorkLogRow` + `WorkLogLine` (WorkLog.tsx:52-100): a 24px line with a 24px icon cell, `gap-1.5`,
@@ -464,7 +267,9 @@ final class WorkRowView: WorkRowBase {
         let root = context.workspaceRoot
         entries = grouped.map { e in
             let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
-            return (e, WorkDetail.of(e, label: label, workspaceRoot: root, output: item.ui.outputs[e.id]), item.ui.expandedEntries.contains(e.id))
+            return (e, WorkDetail.of(e, label: label, workspaceRoot: root, output: item.ui.outputs[e.id],
+                                     checkpointStatus: { [weak model = context.model] id in model?.checkpointStatus(id) }),
+                    item.ui.expandedEntries.contains(e.id))
         }
         while cards.count < entries.count { cards.append(nil) }
         for (i, (e, detail, open)) in entries.enumerated() {
@@ -510,10 +315,7 @@ final class WorkRowView: WorkRowBase {
                 details.append(d)
             }
             details[i].detail = detail
-            details[i].onOpenDiff = { [weak self] in
-                guard let run = e.structuredPayload?.runId else { return }
-                self?.context.model?.onOpenTurnDiff?(run, detail.diffPath)
-            }
+            details[i].onAction = { [weak self] action in self?.context.model?.perform(action) }
             details[i].isHidden = !open || detail.blocks.isEmpty
         }
         hideLines(from: entries.count)

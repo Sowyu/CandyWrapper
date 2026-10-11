@@ -500,7 +500,7 @@ public final class MarkdownView: DSView {
     // ponytail: selection uses layout text and a local toolbar; add chip text mapping and viewport dismissal with full selection parity
 
     public var citationSourceID: String? { didSet { if citationSourceID != oldValue { clearAssistantSelection() } } }
-    public var onCiteSelection: ((AssistantSelectionText) -> Void)? {
+    public var onCiteSelection: ((AssistantSelectionText, AssistantSelectionAnchor) -> Void)? {
         didSet { if onCiteSelection == nil { clearAssistantSelection() } }
     }
     private var selectionAnchor: Int?
@@ -548,8 +548,23 @@ public final class MarkdownView: DSView {
         let point = convert(event.locationInWindow, from: nil), size = button.intrinsicContentSize
         button.frame = NSRect(x: max(0, min(point.x + 8, bounds.width - size.width)),
                               y: max(0, min(point.y + 8, bounds.height - size.height)), width: size.width, height: size.height)
-        button.action = { [weak self] in self?.onCiteSelection?(captured); self?.clearAssistantSelection() }
+        let anchor = AssistantSelectionAnchor(view: self, rect: lastLineRect(range) ?? NSRect(origin: point, size: .zero))
+        button.action = { [weak self] in self?.clearAssistantSelection(); self?.onCiteSelection?(captured, anchor) }
         citeButton?.removeFromSuperview(); citeButton = button; addSubview(button)
+    }
+    /// The selection's last line box: a multi-line selection anchors its comment where the pointer let go
+    /// (AssistantCitationChip.tsx:92-102).
+    private func lastLineRect(_ range: NSRange) -> NSRect? {
+        var last: NSRect?
+        for (box, origin, offset) in selectionBoxes {
+            let overlap = NSIntersectionRange(range, NSRange(location: offset, length: (box.text as NSString).length))
+            guard overlap.length > 0 else { continue }
+            if let span = box.spans(NSRange(location: overlap.location - offset, length: overlap.length)).last {
+                last = NSRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                              width: max(1, span.x1 - span.x0), height: box.lineHeight)
+            }
+        }
+        return last
     }
     public override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { clearAssistantSelection(); return }

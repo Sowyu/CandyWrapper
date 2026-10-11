@@ -45,6 +45,8 @@ public class FieldView: DSView {
     public final var onStateChange: (@MainActor (State) -> Void)?
     /// Return in a single-line field, which then keeps focus. Without it Return ends editing.
     public final var onSubmit: (@MainActor () -> Void)?
+    /// An input method is composing (`isComposing`): Enter belongs to it.
+    public var hasMarkedText: Bool { editor.hasMarkedText() }
     /// Sees every editing command first (`moveUp:`, `insertNewline:`, `deleteBackward:`, `cancelOperation:`);
     /// true means handled. Lets a field drive a list the way an autocomplete input does.
     public final var onCommand: (@MainActor (Selector) -> Bool)?

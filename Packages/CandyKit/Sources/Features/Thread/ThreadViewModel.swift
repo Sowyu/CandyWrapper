@@ -150,7 +150,26 @@ public final class ThreadViewModel {
 
     /// "Fork from this response" on an assistant message: its source thread (local id) and run.
     public var inlineSkills: [ServerProviderSkill] = []
-    public var onCiteSelection: ((String, AssistantSelectionText) -> Void)?
+    public var onCiteSelection: ((String, AssistantSelectionText, AssistantSelectionAnchor) -> Void)?
+    /// The inspector's Roll back on a ready checkpoint (V2ItemInspector.tsx:367-386).
+    public var onRollbackCheckpoint: (@MainActor (_ checkpointId: String, _ scopeId: String) -> Void)?
+
+    /// `useV2ItemSupport`'s checkpoint status for a checkpoint id.
+    func checkpointStatus(_ id: String) -> String? {
+        projection?.checkpoints.first { $0.id.rawValue == id }?.status
+    }
+
+    /// An inspector button.
+    func perform(_ action: WorkDetail.Action) {
+        switch action {
+        case .openDiff(let run, let path): onOpenTurnDiff?(run, path)
+        case .rollBack(let checkpoint, let scope): onRollbackCheckpoint?(checkpoint, scope)
+        case .openFork(let id), .openSubagent(let id): onOpenThread?(id)
+        }
+    }
+
+    /// The plan card's Save to workspace: the export text and the suggested name (ProposedPlanCard.tsx:105-163).
+    public var onSavePlanToWorkspace: (@MainActor (_ contents: String, _ filename: String) -> Void)?
     public var onForkFromRun: (@MainActor (ThreadId, RunId) -> Void)?
 
     /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,

@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import T3Protocol
 import DesignSystem
 import T3Store
 @testable import Features
@@ -33,9 +34,10 @@ struct ThreadCompletionFidelityTests {
                     view = tasks
                 default:
                     let inspector = WorkDetailView()
-                    var detail = WorkDetail(); detail.blocks = [("Sources/Chat.swift", .output)]
-                    if n["failed"] as? Bool == true { detail.blocks.append(("Patch did not apply", .error)) }
-                    detail.diffPath = "Sources/Chat.swift"; inspector.detail = detail
+                    var detail = WorkDetail([("Sources/Chat.swift", .output)])
+                    if n["failed"] as? Bool == true { detail.mono("Patch did not apply", .error) }
+                    detail.blocks.append(.init(text: "", kind: .caption, gap: 6, action: .openDiff(RunId("r"), "Sources/Chat.swift")))
+                    inspector.detail = detail
                     inspector.frame = NSRect(x: 8, y: 8, width: 320, height: inspector.height(forWidth: 320))
                     view = inspector
                 }

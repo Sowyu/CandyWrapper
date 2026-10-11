@@ -26,6 +26,8 @@ final class FilesController {
     var onReopenBrowser: ((ThreadId, String?) -> Void)?
     /// Terminal tabs closed: their terminals stop on the server.
     var onTerminalTabsClosed: (([TerminalPanelSurface]) -> Void)?
+    /// An attachment tab's Save file: the thread's attachment download.
+    var onSaveAttachment: ((SentAttachmentSurface) -> Void)?
 
     /// The thread the panel follows (nil on a draft).
     var currentThreadId: ThreadId? { threadId }
@@ -87,7 +89,9 @@ final class FilesController {
                 return data
             }
             surface.onExplorerChange = { [weak self] _ in self?.panel.filesPanel.treeView.selectedPath = self?.activeFilePath }
-            surface.onNeedsReload = { [weak self] in self?.showActiveFile(force: true) }
+            surface.onNeedsReload = { [weak self] in
+                if self?.panel.panelState.active?.attachment != nil { self?.showActiveAttachment(force: true) } else { self?.showActiveFile(force: true) }
+            }
         }
     }
 
@@ -209,6 +213,8 @@ final class FilesController {
         case .files:
             panel.filesPanel.treeView.selectedPath = nil
             ensureTree()
+        case .file where active.attachment != nil:
+            showActiveAttachment(force: false)
         case .file:
             showActiveFile(force: false)
             ensureTree()
@@ -342,9 +348,53 @@ final class FilesController {
 
     private func key(_ path: String) -> String { (workspace?.cwd ?? "") + "\u{0}" + path }
 
+    /// An attachment tab (AttachmentFilePreview.tsx:58-158 inside FilePreviewPanel.tsx:1347-1355): a signed
+    /// inline URL for the attachment (`assets.createUrl`), rendered media from the URL, text from its first 1 MB.
+    private func showActiveAttachment(force: Bool) {
+        guard let attachment = panel.panelState.active?.attachment, let ws = workspace else { return }
+        let surface = panel.fileSurface
+        let path = attachment.name
+        let fresh = surface.attachment?.name != attachment.name || surface.path != path || attachmentShown != attachment.id
+        surface.attachment = .init(name: attachment.name, sizeBytes: attachment.sizeBytes, inline: true,
+                                   onSave: { [weak self] in self?.onSaveAttachment?(attachment) })
+        surface.show(path: path, revealLine: nil)
+        guard fresh || force else { return }
+        attachmentShown = attachment.id
+        surface.setContent(.loading)
+        fileTask?.cancel()
+        guard let shell = environments.session(ws.environmentId) else {
+            surface.setContent(.failure("Reconnect to the environment and try again.", attemptedPath: nil, cwd: nil)); return
+        }
+        let wantsAsset = surface.wantsAsset
+        let resource: JSONValue = .object(["_tag": .string("attachment"), "attachmentId": .string(attachment.id), "fileName": .string(attachment.name),
+                                           "mimeType": .string(attachment.mimeType), "disposition": .string("inline")])
+        fileTask = Task { [weak self] in
+            var content = FileSurfaceView.Content.failure("Reconnect to the environment and try again.", attemptedPath: nil, cwd: nil)
+            if let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+               let relative = reply["relativeUrl"]?.stringValue,
+               let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL {
+                if wantsAsset {
+                    content = .asset(url)
+                } else {
+                    var request = URLRequest(url: url)
+                    if attachment.sizeBytes > 0 { request.setValue("bytes=0-\(AttachmentPreviewText.maxBytes)", forHTTPHeaderField: "Range") }
+                    let data = try? await URLSession.shared.data(for: request)
+                    let ok = data.map { (($0.1 as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 } ?? false
+                    content = ok ? AttachmentPreviewText.content(data?.0, sizeBytes: attachment.sizeBytes)
+                        : .failure("The file could not be loaded. Try again.", attemptedPath: nil, cwd: nil)
+                }
+            }
+            guard !Task.isCancelled, let self, self.panel.panelState.active?.attachment == attachment else { return }
+            self.panel.fileSurface.setContent(content)
+        }
+    }
+    private var attachmentShown: String?
+
     private func showActiveFile(force: Bool) {
         guard case .file(let path, let line, _)? = panel.panelState.active, let ws = workspace else { return }
         let surface = panel.fileSurface
+        surface.attachment = nil
+        attachmentShown = nil
         surface.projectName = ws.projectName
         surface.cwd = ws.cwd
         let samePath = surface.path == path

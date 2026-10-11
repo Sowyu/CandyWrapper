@@ -97,7 +97,7 @@ struct ToolOutputFetchTests {
 
     @Test func rowTextForEachState() throws {
         let (_, entry) = try Self.model(FakeServer())
-        func blocks(_ s: ToolOutputState?) -> [String] { WorkDetail.of(entry, label: "", workspaceRoot: nil, output: s).blocks.map(\.0) }
+        func blocks(_ s: ToolOutputState?) -> [String] { WorkDetail.of(entry, label: "", workspaceRoot: nil, output: s).blocks.map(\.text) }
         let command = "ls -la && git status --short"
         #expect(blocks(nil) == [command])
         #expect(blocks(.loading) == [command, "Loading output…"])
@@ -106,6 +106,6 @@ struct ToolOutputFetchTests {
         #expect(blocks(.fetched(.output(nil))) == [command, "No output."])
         #expect(blocks(.fetched(.output("a\nb"))) == [command, "a\nb"])
         #expect(blocks(.fetched(.mismatch)) == [command])
-        #expect(WorkDetail.of(entry, label: "", workspaceRoot: nil, output: .loading).blocks.last?.1 == .note)
+        #expect(WorkDetail.of(entry, label: "", workspaceRoot: nil, output: .loading).blocks.last?.kind == .mono(.note))
     }
 }

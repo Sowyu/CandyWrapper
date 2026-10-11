@@ -103,12 +103,12 @@ struct ThreadCompletionTests {
         #expect(!value.agentStarted)
     }
     @Test func inspectorEqualityIncludesToneAndActions() {
-        var a = WorkDetail(); a.blocks = [("42", .output)]
-        var b = a; b.blocks = [("42", .error)]
+        let a = WorkDetail([("42", .output)])
+        var b = WorkDetail([("42", .error)])
         #expect(a != b)
-        b = a; b.links = [0: "https://example.com"]
+        b = a; b.blocks[0].kind = .link("https://example.com")
         #expect(a != b)
-        b = a; b.diffPath = "a.swift"
+        b = a; b.blocks[0].action = .openDiff(RunId("r"), "a.swift")
         #expect(a != b)
     }
 }
