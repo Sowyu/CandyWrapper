@@ -44,6 +44,7 @@ final class DevicePanelController {
         }
         panel.deviceMiniPlayer.onMove = { [weak self] in self?.panel.deviceMiniPlayerOrigin = $0 }
         panel.deviceMiniPlayer.onResize = { [weak self] in self?.panel.deviceMiniPlayerSize = $0 }
+        view.onHostRequest = { [weak self] in self?.request("device.list", $0) }
         view.onRefresh = { [weak self] in self?.stopStream(); self?.request("device.list", [:]) }
         view.onConfigure = { [weak self] values in self?.request("device.configure", values) }
         view.onOpen = { [weak self] device in

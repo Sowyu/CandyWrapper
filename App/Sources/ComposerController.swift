@@ -155,6 +155,10 @@ final class ComposerController {
                 restoredSnapShots.insert(capture.id)
             }
         }
+        if let data = defaults.data(forKey: "composer.reviewComments.v1"),
+           let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
+            menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
+        }
         applyClientSettings()
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
@@ -758,6 +762,9 @@ final class ComposerController {
         // ponytail: prompts of threads deleted elsewhere stay stored; prune against the shell if it grows
         UserDefaults.standard.set(prompts, forKey: Self.promptsKey)
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: Self.sessionsKey)
+        let referenced = Set(prompts.values.flatMap { ComposerContext.referencedIds($0) })
+        let reviews = menuState.records.filter { referenced.contains($0.key) && $0.value["kind"]?.stringValue == "review-comment" }
+        UserDefaults.standard.set(try? JSONEncoder().encode(reviews), forKey: "composer.reviewComments.v1")
         syncSidebarDrafts()
     }
 
@@ -824,6 +831,7 @@ final class ComposerController {
     }
 
     private func refresh() {
+        panel.diffPanel.reviewComments = contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") }
         if threadFindTarget != openThreadId { closeThreadFind() }
 
         composer.contextWindowMeter.usage = ThreadContextWindowUsage.derive(projection)
@@ -2297,9 +2305,17 @@ extension ComposerController {
     /// excerpt record and its chip at the caret. An open question takes no context.
     func addReviewComment(_ record: JSONValue) {
         guard target != nil, questionRequestId == nil, let id = record["contextId"]?.stringValue else { return }
+        let exists = ComposerContext.referencedIds(composer.text).contains(id)
         menuState.records[id] = record
+        if exists { remember(composer.text); return }
         composer.insertAtCaret(ComposerContext.reference(ComposerContext.Reference(kind: "review-comment", contextId: id, label: record["label"]?.stringValue ?? "Comment")) + " ")
-        focusComposer()
+        if !panel.rightPanelSheetOpen { focusComposer() }
+    }
+
+    func deleteReviewComment(_ id: String) {
+        composer.text = Self.removingReferences(to: id, in: composer.text)
+        menuState.records.removeValue(forKey: id)
+        remember(composer.text)
     }
 
     func addTerminalContext(_ selection: ComposerContext.TerminalSelection) {

@@ -2,6 +2,7 @@ import AppKit
 import Testing
 import DesignSystem
 import T3Store
+import T3Protocol
 @testable import Features
 
 /// Review draft and SSH fields against official markup in headless Chromium.
@@ -10,7 +11,14 @@ struct PanelLeftoversFidelityTests {
     static let out = SidebarFidelityTests.repo.appendingPathComponent("design/panel-leftovers-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
-        let view: NSView = name == "review-draft" ? DiffReviewAnnotationView() : DeviceHostEditorForm()
+        if name == "host-failed" {
+            let data = Data(#"{"hosts":[{"id":"host","label":"Build host","kind":"ssh","platforms":[]}],"hostStatus":"failed","hostStatuses":{"host":{"status":"failed"}},"supportsHostRetry":true,"devices":[],"sessions":[],"onboardingCompleted":true,"agentAccessEnabled":false,"hubBasePath":"/api/device-hub","revision":1}"#.utf8)
+            let state = try! JSONDecoder().decode(DevicePanelState.self, from: data)
+            let view = DeviceHostStatusView(host: state.hosts[0], state: state)
+            view.frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
+            return view
+        }
+        let view: NSView = name == "review-card" ? DiffReviewCommentCardView(text: "Keep the historical revision.") : name == "review-draft" ? DiffReviewAnnotationView() : DeviceHostEditorForm()
         view.frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
         return view
     }

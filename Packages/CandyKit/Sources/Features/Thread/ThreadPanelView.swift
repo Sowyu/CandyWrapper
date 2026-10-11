@@ -217,6 +217,44 @@ public final class ThreadPanelView: DSView {
     private var composerShown = false
     public let model = ThreadViewModel()
     private let fade = CAGradientLayer()
+    private weak var sheetPreviousResponder: NSResponder?
+    private var sheetWasOpen = false
+    public var rightPanelSheetOpen: Bool { rightPanelOpen && viewportWidth <= 980 && !rightPanelMaximized }
+
+    /// SheetPopup uses a modal focus scope. Routed by the existing app key dispatcher.
+    public func handleRightPanelSheetKey(_ event: NSEvent) -> Bool {
+        guard rightPanelSheetOpen, event.window === window,
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+        var responderView = window?.firstResponder as? NSView
+        while let current = responderView {
+            if current is ModalHost { return false }
+            responderView = current.superview
+        }
+        if event.keyCode == 53 {
+            if diffPanel.handleReviewEscape() { return true }
+            mutatePanel { $0.isOpen = false; return [] }
+            return true
+        }
+        guard event.keyCode == 48 else { return false }
+        let controls = rightPanelSheetFocusTargets()
+        guard !controls.isEmpty else { window?.makeFirstResponder(rightPanel); return true }
+        var focused = window?.firstResponder as? NSView
+        if let editor = focused as? NSTextView, editor.isFieldEditor { focused = editor.delegate as? NSView }
+        let index = controls.firstIndex { control in focused === control || focused?.isDescendant(of: control) == true }
+        let reverse = event.modifierFlags.contains(.shift)
+        let next = index.map { ($0 + (reverse ? controls.count - 1 : 1)) % controls.count } ?? (reverse ? controls.count - 1 : 0)
+        window?.makeFirstResponder(controls[next])
+        return true
+    }
+    private func rightPanelSheetFocusTargets() -> [NSView] {
+        func collect(_ view: NSView) -> [NSView] {
+            guard !view.isHiddenOrHasHiddenAncestor else { return [] }
+            if let control = view as? ControlView, !control.isEnabled { return [] }
+            if view.acceptsFirstResponder { return [view] }
+            return view.subviews.flatMap(collect)
+        }
+        return rightPanel.subviews.flatMap(collect)
+    }
     private let rightPanelBackdrop = RightPanelSheetBackdropView()
     let rightPanel = RightPanelView()
     /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
@@ -813,6 +851,17 @@ public final class ThreadPanelView: DSView {
         terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
         rightPanel.frame = NSRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
+        if rightPanelSheetOpen != sheetWasOpen {
+            sheetWasOpen = rightPanelSheetOpen
+            if sheetWasOpen {
+                sheetPreviousResponder = window?.firstResponder
+                rightPanel.layoutSubtreeIfNeeded()
+                window?.makeFirstResponder(rightPanelSheetFocusTargets().first ?? rightPanel)
+            } else {
+                if let previous = sheetPreviousResponder { window?.makeFirstResponder(previous) }
+                sheetPreviousResponder = nil
+            }
+        }
         if panelResize.superview == nil {
             addSubview(panelResize)
             panelResize.onDrag = { [weak self] delta in

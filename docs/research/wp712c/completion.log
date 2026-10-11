@@ -1,0 +1,169 @@
+Another instance of SwiftPM (PID: 53001) is already running using '/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/.build', waiting until that process has finished execution...Building for debugging...
+[Computing dependencies]
+[1 / 10]
+[2 / 11] Features
+[5 / 14] Features
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Settings/IntegrationsSettingsView.swift:251:80: warning: 'weak' ownership of capture 'dialog' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+246 |                     for host in state.hosts {
+247 |                         let row = DeviceHostStatusView(host: host, state: state)
+248 |                         row.onRequest = { [weak self] payload in
+    |                                         |- note: 'dialog' implicitly strongly captured here
+    |                                         `- note: add 'dialog' as a capture list item to silence
+249 |                             guard let self, self.context.scope.canWrite, !self.context.scope.isProjectScope else { return }
+250 |                             self.deviceInventoryTask?.cancel()
+251 |                             self.deviceInventoryTask = Task { [weak self, weak dialog] in
+    |                                                                                |- warning: 'weak' ownership of capture 'dialog' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+    |                                                                                `- note: explicitly assign the capture list item to silence
+252 |                                 do {
+253 |                                     _ = try await request(target.environmentId, "device.list", .object(payload))
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+[8 / 17] Features
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:318:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+316 |     }
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:319:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:320:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:321:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:322:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:323:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:324:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:325:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:326:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:327:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:328:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:329:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+331 | 
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:330:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+331 | 
+332 |     static let posixRoots = ["/Users/", "/home/", "/tmp/", "/var/", "/etc/", "/opt/", "/mnt/", "/Volumes/", "/private/", "/root/",
+[14 / 19] Features
+[15 / 18] FeaturesTests-product
+[18 / 21] FeaturesTests-product
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Tests/FeaturesTests/PanelCompletionTests.swift:58:18: warning: weak variable 'sceneView' was never mutated; consider changing to 'let' constant [#VariableNeverMutated::WeakMutability]
+56 |         #expect(stream.threeDView == nil)
+57 |         stream.setThreeD(true)
+58 |         weak var sceneView = stream.threeDView
+   |                  `- warning: weak variable 'sceneView' was never mutated; consider changing to 'let' constant [#VariableNeverMutated::WeakMutability]
+59 |         #expect(sceneView?.rendersContinuously == false)
+60 |         #expect(sceneView?.isPlaying == false)
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+[#WeakMutability]: <https://docs.swift.org/compiler/documentation/diagnostics/weak-mutability>
+[24 / 26] FeaturesTests-product
+[26 / 26] FeaturesTests-product
+Build complete! (7,72 sec)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite PanelLeftoversFidelityTests started.
+◇ Suite PanelCompletionTests started.
+◇ Test panelLeftovers() started.
+◇ Test threeDResourcesAreVisibilityScoped() started.
+◇ Test cardsFollowComposerRecordsAndIgnoreDifferentCode() started.
+◇ Test browserDiscoveryReportsOnlyCustomProfiles() started.
+◇ Test sheetFocusCyclesAndEscapeRestoresResponder() started.
+◇ Test deviceVersionPreferenceAndRetryMessages() started.
+panel-leftovers host-failed.rest.light 7.12%
+panel-leftovers host-failed.rest.dark 7.02%
+panel-leftovers review-card.rest.dark 3.76%
+panel-leftovers review-card.rest.light 3.58%
+panel-leftovers review-draft.rest.dark 3.42%
+panel-leftovers review-draft.rest.light 3.09%
+panel-leftovers ssh-host-form.rest.dark 1.30%
+panel-leftovers ssh-host-form.rest.light 1.24%
+FIDELITY panel-leftovers: 8 cases, mean differing 3.82%
+✔ Test panelLeftovers() passed after 1.560 seconds.
+✔ Suite PanelLeftoversFidelityTests passed after 1.560 seconds.
+✔ Test cardsFollowComposerRecordsAndIgnoreDifferentCode() passed after 1.563 seconds.
+✔ Test sheetFocusCyclesAndEscapeRestoresResponder() passed after 1.563 seconds.
+✔ Test browserDiscoveryReportsOnlyCustomProfiles() passed after 1.563 seconds.
+✔ Test threeDResourcesAreVisibilityScoped() passed after 1.563 seconds.
+✔ Test deviceVersionPreferenceAndRetryMessages() passed after 1.564 seconds.
+✔ Suite PanelCompletionTests passed after 1.565 seconds.
+✔ Test run with 6 tests in 2 suites passed after 1.565 seconds.

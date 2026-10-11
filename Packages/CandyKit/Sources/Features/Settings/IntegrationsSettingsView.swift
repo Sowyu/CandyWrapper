@@ -5,6 +5,7 @@ import T3Protocol
 /// Settings > Integrations (IntegrationsSettings.tsx, ProjectDefaultsSettings.tsx with `category="integrations"`):
 /// agent browser access, the browser defaults this device keeps, and the device hub rows.
 public final class IntegrationsSettingsView: ScopedSettingsPage {
+    private var deviceInventoryTask: Task<Void, Never>?
     private var deviceHostEditor: DeviceHostEditor?
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -216,8 +217,58 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             let enabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
             addHost?.isEnabled = enabled; manage?.isEnabled = enabled
         }
-        let s = section("devices", "Devices", [hub, agent, hostRow, manageRow])
+        let inspect = ButtonView("Check devices", variant: .outline, size: .sm)
+        inspect.action = { [weak self] in self?.showDeviceInventory() }
+        let inventoryRow = row("device-inventory", detail: "Check simulator support and installed device tools on each environment.", control: inspect)
+        inventoryRow.title = "Device support"
+        let s = section("devices", "Devices", [hub, agent, hostRow, manageRow, inventoryRow])
         return s
+    }
+    private func showDeviceInventory() {
+        guard let request = context.request else { return }
+        let dialog = DialogView(title: "Device support", message: "Checking devices…")
+        guard let modal = context.presentDialog?(dialog) else { return }
+        let previous = modal.onDismiss
+        modal.onDismiss = { [weak self] in self?.deviceInventoryTask?.cancel(); self?.deviceInventoryTask = nil; previous?() }
+        let targets = context.scope.targets
+        deviceInventoryTask?.cancel()
+        deviceInventoryTask = Task { [weak self, weak dialog] in
+            var content: [NSView] = []
+            for target in targets {
+                do {
+                    let reply = try await request(target.environmentId, "device.list", .object(["inspectOnly": .bool(true)]))
+                    guard let self, let dialog, !Task.isCancelled else { return }
+                    let state = try JSONValueDecoder().decode(DevicePanelState.self, from: reply)
+                    content.append(LabelView(target.label, font: DSFont.ui(14, weight: .medium)))
+                    if state.hosts.isEmpty {
+                        content.append(TextBlockView(state.hostStatusDetail ?? "No simulators or emulators were found on this environment.", font: DSFont.ui(12), color: Themed.color(\.mutedForeground)))
+                    }
+                    for host in state.hosts {
+                        let row = DeviceHostStatusView(host: host, state: state)
+                        row.onRequest = { [weak self] payload in
+                            guard let self, self.context.scope.canWrite, !self.context.scope.isProjectScope else { return }
+                            self.deviceInventoryTask?.cancel()
+                            self.deviceInventoryTask = Task { [weak self, weak dialog] in
+                                do {
+                                    _ = try await request(target.environmentId, "device.list", .object(payload))
+                                    guard !Task.isCancelled else { return }
+                                    dialog?.message = "Device tools updated. Close and check devices again to refresh the inventory."
+                                } catch { if !Task.isCancelled { self?.context.toast?("Unable to configure devices", String(describing: error), .error) } }
+                            }
+                        }
+                        content.append(row)
+                    }
+                    for device in state.devices {
+                        content.append(LabelView("\(device.name) · \(device.version) · \(device.booted ? "Running" : "Stopped")", font: DSFont.ui(12)))
+                    }
+                    dialog.message = nil; dialog.panelContent = content
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    content.append(LabelView(target.label + ": " + String(describing: error), font: DSFont.ui(12)))
+                    dialog?.message = nil; dialog?.panelContent = content
+                }
+            }
+        }
     }
     private func editDeviceHost(_ host: JSONValue?) {
         deviceHostEditor = DeviceHostEditor(context: context, original: host)

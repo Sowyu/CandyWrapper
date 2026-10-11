@@ -20,6 +20,8 @@ final class BrowserController {
 
     /// `capabilities.serverBrowser` per environment, from its descriptor.
     private var serverBrowser: [String: Bool] = [:]
+    private var profileObserver: Int?
+    private var profileReports: [String: Task<Void, Never>] = [:]
     private var capabilityTasks: Set<String> = []
     /// One `subscribePreviewEvents` per environment with an open thread.
     private var eventStreams: [String: (session: ShellSession, task: Task<Void, Never>)] = [:]
@@ -68,6 +70,10 @@ final class BrowserController {
         files.onBrowserTabsClosed = { [weak self] tabs in self?.closeTabs(tabs) }
         files.onReopenBrowser = { [weak self] thread, url in self?.reopen(thread: thread, url: url) }
         panel.onAddBrowser = { [weak self] in self?.createTab() }
+        profileObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            guard let self, !keys.isDisjoint(with: ["browserProfiles", "browserDefaultProfileId"]) else { return }
+            for (env, supported) in self.serverBrowser where supported { self.reportProfiles(env) }
+        }
         wireChrome()
         wireViewer(view.viewer, mini: false)
         wireViewer(panel.miniPlayer.viewer, mini: true)
@@ -127,6 +133,7 @@ final class BrowserController {
             self.capabilityTasks.remove(env)
             guard let supported else { return }
             self.serverBrowser[env] = supported
+            if supported { self.reportProfiles(env) }
             if let id = self.threadId, id.environmentId == env {
                 self.panel.browserAvailable = supported
                 if supported { self.startSync(env, thread: id) }
@@ -806,7 +813,18 @@ final class BrowserController {
     }
 
     /// The environment's session changed (reconnect): the list is fetched again.
+    private func reportProfiles(_ env: String) {
+        guard serverBrowser[env] == true, let shell = environments.session(env) else { return }
+        profileReports[env]?.cancel()
+        let payload = BrowserProfiles.reportPayload(ClientSettingsStore.shared.current)
+        profileReports[env] = Task {
+            // Match the official best-effort reporter. The server enforces preview:operate.
+            _ = try? await shell.supervisor.request("preview.reportProfiles", payload: payload)
+        }
+    }
     func sessionChanged(_ environmentId: String) {
+        if serverBrowser[environmentId] == true { reportProfiles(environmentId) }
+        else { ensureCapability(environmentId) }
         eventStreams[environmentId]?.task.cancel()
         eventStreams[environmentId] = nil
         if let id = threadId, id.environmentId == environmentId, serverBrowser[environmentId] == true { startSync(environmentId, thread: id) }

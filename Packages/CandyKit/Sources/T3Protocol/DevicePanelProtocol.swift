@@ -21,6 +21,29 @@ public struct DevicePanelHost: Codable, Sendable, Equatable {
     public var label: String
     public var kind: String
     public var platforms: [Platform]
+    public var tools: DevicePanelToolVersions? = nil
+    public var toolInspectionError: String? = nil
+    public var hubInstalled: Bool? = nil
+    public var agentDeviceInstalled: Bool? = nil
+}
+public struct DevicePanelToolVersion: Codable, Sendable, Equatable {
+    public var requiredVersion: String
+    public var installedVersions: [String]
+    public var runningVersion: String?
+    public var displayedVersion: String? {
+        runningVersion ?? (installedVersions.contains(requiredVersion) ? requiredVersion : installedVersions.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.last)
+    }
+}
+public struct DevicePanelToolVersions: Codable, Sendable, Equatable {
+    public var hub: DevicePanelToolVersion
+    public var agent: DevicePanelToolVersion
+}
+public struct DevicePanelHostStatus: Codable, Sendable, Equatable {
+    public var status: String
+    public var detail: String?
+    public var message: String {
+        detail ?? (status == "failed" ? "Device support could not start." : status == "installing" ? "Installing device tools…" : status == "starting" ? "Starting device tools…" : status.capitalized)
+    }
 }
 public struct DevicePanelSession: Codable, Sendable, Equatable {
     public var threadId: String
@@ -33,6 +56,10 @@ public struct DevicePanelState: Codable, Sendable, Equatable {
     public var hosts: [DevicePanelHost]
     public var hostStatus: String
     public var hostStatusDetail: String?
+    public var hostStatuses: [String: DevicePanelHostStatus]? = nil
+    public var supportsHostRetry: Bool? = nil
+    public var supportsToolUpdate: Bool? = nil
+    public var supportsToolInspection: Bool? = nil
     public var devices: [DevicePanelDevice]
     public var sessions: [DevicePanelSession]
     public var onboardingCompleted: Bool

@@ -1659,7 +1659,7 @@ Verified 2026-10-10 against the sandbox (WP7.6b, `T3Protocol/Domain/Preview.swif
 - `preview.navigate` on a server tab needs control; viewers navigate with the stream's `navigate` message instead.
 - `subscribeDiscoveredLocalServers {configuredUrls?}` streams `{servers[{host,port,url,processName,pid,terminal}], scannedAt, configuredUrlProbing?}` while subscribed.
 - `GET /api/preview-stream/ws?threadId&tabId&maxWidth&maxHeight&wsTicket`: binary messages are whole JPEG frames, each answered with `{"type":"ack"}`; the first interactive viewer of an unclaimed tab gets control automatically. Text messages and input are listed in the research note (section 2). Close 4404 tab gone, 4503 host setup (JSON reason), 1006 before open or 1008/4401 refused.
-- `preview.reportProfiles` is not sent: the server keeps one list in memory, so a client without profiles would erase the desktop app's.
+- WP7.12c: `preview.reportProfiles {profiles, defaultProfileId}` now follows `BrowserProfileReporter.tsx:17-42` on discovery, reconnect and profile changes. Only custom profiles are sent. The server adds built-ins and retains the latest report in memory (`ServerBrowser.ts:1250-1277`); concurrent clients replace one another, as in official T3. No merge endpoint exists.
 
 ### 9.9 Scheduled tasks
 

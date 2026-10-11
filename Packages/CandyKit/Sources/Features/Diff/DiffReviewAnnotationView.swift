@@ -4,6 +4,20 @@ import T3Protocol
 
 /// reviewCommentContext.ts:404-456, partial patches use rendered line indices.
 public enum DiffReviewContext {
+    public static func anchor(_ record: JSONValue, diff: UnifiedDiff) -> DiffAnnotation? {
+        guard let id = record["contextId"]?.stringValue, let path = record["filePath"]?.stringValue,
+              let file = diff.files.first(where: { $0.path == path }), let patch = record["diff"]?.stringValue else { return nil }
+        let excerpt = UnifiedDiff("diff --git a/context b/context\n--- a/context\n+++ b/context\n" + patch + "\n")
+        guard let last = excerpt.lines.last else { return nil }
+        let indices = file.hunks.flatMap { Array($0.lines) }
+        guard let index = indices.first(where: {
+            let line = diff.lines[$0]
+            return line.oldNumber == last.oldNumber && line.newNumber == last.newNumber && line.kind == last.kind && diff.text(line) == excerpt.text(last)
+        }) else { return nil }
+        let line = diff.lines[index]
+        return DiffAnnotation(path: path, right: line.newNumber > 0, line: Int(line.newNumber > 0 ? line.newNumber : line.oldNumber), id: id)
+    }
+
     public static func record(diff: UnifiedDiff, path: String, start: Int, end: Int, text: String, section: String, title: String, id: String) -> JSONValue? {
         guard let file = diff.files.first(where: { $0.path == path }) else { return nil }
         let indices = file.hunks.flatMap { Array($0.lines) }
@@ -65,5 +79,53 @@ final class DiffReviewAnnotationView: DSView, DiffAnnotationContent {
         let submitWidth = submit.intrinsicContentSize.width, cancelWidth = cancel.intrinsicContentSize.width
         submit.frame = NSRect(x: bounds.width - 12 - submitWidth, y: 82, width: submitWidth, height: 24)
         cancel.frame = NSRect(x: submit.frame.minX - 4 - cancelWidth, y: 82, width: cancelWidth, height: 24)
+    }
+}
+
+/// DiffCommentAnnotation.tsx:68-97. Editing is also available from the card's context menu.
+final class DiffReviewCommentCardView: DSView, DiffAnnotationContent {
+    private let message: TextBlockView
+    private let icon = IconView(name: .messageCircle, size: 14, strokeColor: Themed.color(\.primary, 0.7))
+    private let remove = ButtonView(nil, icon: .trash2, variant: .ghostMuted, size: .iconXs)
+    var onDelete: (() -> Void)?
+    var onEdit: (() -> Void)?
+    init(text: String) {
+        message = TextBlockView(text, font: DSFont.ui(14))
+        super.init(frame: .zero)
+        [message, icon, remove].forEach(addSubview)
+        remove.setAccessibilityLabel("Delete comment")
+        remove.action = { [weak self] in self?.onDelete?() }
+        remove.alphaValue = 0
+        setAccessibilityLabel(text)
+    }
+    private var hover: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hover { removeTrackingArea(hover) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area); hover = area
+    }
+    override func mouseEntered(with event: NSEvent) { remove.alphaValue = 1 }
+    override func mouseExited(with event: NSEvent) { remove.alphaValue = 0 }
+    override func mouseDown(with event: NSEvent) { if event.clickCount == 2 { onEdit?() } }
+    override func rightMouseDown(with event: NSEvent) {
+        var edit = MenuItem("Edit comment"); edit.action = { [weak self] in self?.onEdit?() }
+        var delete = MenuItem("Delete comment"); delete.action = { [weak self] in self?.onDelete?() }
+        MenuPopupView.show([edit, delete], from: self, placement: .dropdown)
+    }
+    func height(forWidth width: CGFloat) -> CGFloat {
+        let rect = (message.text as NSString).boundingRect(with: NSSize(width: max(1, width - 76), height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: DSFont.ui(14)])
+        return max(40, ceil(rect.height) + 20)
+    }
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 14, y: 12, width: 14, height: 14)
+        message.frame = NSRect(x: 38, y: 10, width: max(0, bounds.width - 76), height: bounds.height - 20)
+        remove.frame = NSRect(x: bounds.width - 32, y: 6, width: 24, height: 24)
+    }
+    override var wantsUpdateLayer: Bool { false }
+    override func draw(_ dirtyRect: NSRect) {
+        Themed.color(\.primary, 0.045).setFill(); bounds.fill()
+        Themed.color(\.primary, 0.55).setFill(); NSRect(x: 0, y: 0, width: 2, height: bounds.height).fill()
     }
 }
