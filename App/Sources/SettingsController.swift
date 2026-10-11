@@ -37,6 +37,7 @@ final class SettingsController {
     var clientObserver: Int?
     private(set) var isOpen = false
     /// Settings opened, changed page or closed (route history).
+    var onOnboardingReturn: (() -> Void)?
     var onRouteChange: (() -> Void)?
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
@@ -164,6 +165,7 @@ final class SettingsController {
         layout.main.addSubview(threadPanel)
         layout.needsLayout = true
         onRouteChange?()
+        let returnToWelcome = onOnboardingReturn; onOnboardingReturn = nil; returnToWelcome?()
     }
 
     private func loadPrimaryDescriptor() {
@@ -290,7 +292,7 @@ final class SettingsController {
         page.toasts.show(ToastView(title: title, message: message, kind: kind))
     }
 
-    private func presentAdd(routeTarget: String?) {
+    func presentAdd(routeTarget: String?) {
         guard let window, modal == nil else { return }
         let targetLabel = routeTarget.flatMap { environments.label($0) }
         let (dialog, form) = AddEnvironmentDialog.make(routeTarget: targetLabel)
@@ -301,7 +303,10 @@ final class SettingsController {
         }
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         let host = ModalHost.present(dialog, in: window)
-        host.onDismiss = { [weak self] in self?.modal = nil }
+        host.onDismiss = { [weak self] in
+            self?.modal = nil
+            let callback = self?.onOnboardingReturn; self?.onOnboardingReturn = nil; callback?()
+        }
         modal = host
         self.form = form
         window.makeFirstResponder(form.host)

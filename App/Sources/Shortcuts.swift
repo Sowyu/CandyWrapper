@@ -37,7 +37,7 @@ final class Shortcuts {
             nonisolated(unsafe) let event = event
             let used = MainActor.assumeIsolated { () -> Bool in
                 guard let self else { return false }
-                self.handleSnapShot(event)
+                if self.handleSnapShot(event) { return true }
                 if self.quitHoldKey(event) { return true }
                 return event.type == .keyDown && self.handle(event)
             }
@@ -58,25 +58,27 @@ final class Shortcuts {
         guard enabled else { return }
         snapShotMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             nonisolated(unsafe) let event = event
-            MainActor.assumeIsolated { self?.handleSnapShot(event) }
+            MainActor.assumeIsolated { _ = self?.handleSnapShot(event) }
         }
     }
 
-    private func handleSnapShot(_ event: NSEvent) {
-        guard let shortcut = snapShotShortcut, (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing != true else { return }
+    private func handleSnapShot(_ event: NSEvent) -> Bool {
+        guard let shortcut = snapShotShortcut, (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing != true else { return false }
         let kind = shortcut["kind"]?.stringValue
         if kind == "modifier-pair" || kind == "both-shift-keys" {
-            guard event.type == .flagsChanged else { return }
-            if snapShotState.update(flags: UInt64(event.modifierFlags.rawValue), shortcut: shortcut) { snapShotAction?() }
+            guard event.type == .flagsChanged else { return false }
+            if snapShotState.update(flags: UInt64(event.modifierFlags.rawValue), shortcut: shortcut) { snapShotAction?(); return true }
         } else if event.type == .keyDown, !event.isARepeat {
             let flags = event.modifierFlags
             guard event.charactersIgnoringModifiers?.lowercased() == shortcut["key"]?.stringValue?.lowercased(),
                   flags.contains(.command) == (shortcut["metaKey"]?.boolValue == true || shortcut["modKey"]?.boolValue == true),
                   flags.contains(.control) == (shortcut["ctrlKey"]?.boolValue == true),
                   flags.contains(.option) == (shortcut["altKey"]?.boolValue == true),
-                  flags.contains(.shift) == (shortcut["shiftKey"]?.boolValue == true) else { return }
+                  flags.contains(.shift) == (shortcut["shiftKey"]?.boolValue == true) else { return false }
             snapShotAction?()
+            return true
         }
+        return false
     }
 
     /// Hold-to-quit sees the main window's keys before the menu does (T3's `before-input-event`,

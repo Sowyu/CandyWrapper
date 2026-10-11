@@ -112,6 +112,8 @@ final class ComposerController {
 
     /// Draft attachments by draft key, kept in memory (extension "Attachments" below).
     // ponytail: draft attachments are not persisted; a relaunch keeps the prompt but drops them (its chips show unavailable). Persist the uploaded ids with the drafts if that bites
+    private var restoredSnapShots: Set<String> = []
+    private var savedSnapShots: [SnapShotPendingCapture] = []
     private var draftAttachments: [String: [ComposerAttachment]] = [:]
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
@@ -146,6 +148,13 @@ final class ComposerController {
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
         }
         sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
+        if let data = defaults.data(forKey: "snapShotPending.v1"),
+           let captures = try? JSONDecoder().decode([SnapShotPendingCapture].self, from: data) {
+            for capture in captures where FileManager.default.fileExists(atPath: capture.fileURL.path) {
+                draftAttachments[capture.draftKey, default: []].append(capture.attachment)
+                restoredSnapShots.insert(capture.id)
+            }
+        }
         applyClientSettings()
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
@@ -248,6 +257,12 @@ final class ComposerController {
             configSubscriptions[environmentId]?.task.cancel()
             configSubscriptions[environmentId] = shell.map { ($0, subscribeConfig($0)) }
             readCapabilities(shell, environmentId: environmentId)
+        }
+        for (key, attachments) in draftAttachments {
+            for attachment in attachments where attachment.environmentId == environmentId && restoredSnapShots.contains(attachment.id) && shell != nil {
+                restoredSnapShots.remove(attachment.id)
+                startUpload(attachment.id, key: key)
+            }
         }
         refresh()
     }
@@ -2141,11 +2156,20 @@ extension ComposerController {
 
     /// The shelf, the send state and the chips for the current draft. T3 hides the shelf while an
     /// approval or a question is open (ChatComposer.tsx:7062-7066).
+    private func persistSnapShots() {
+        let records = draftAttachments.keys.sorted().flatMap { key in
+            (draftAttachments[key] ?? []).compactMap { SnapShotPendingCapture(draftKey: key, attachment: $0) }
+        }
+        guard records != savedSnapShots else { return }
+        savedSnapShots = records
+        if let data = try? JSONEncoder().encode(records) { UserDefaults.standard.set(data, forKey: "snapShotPending.v1") }
+    }
     fileprivate func syncAttachmentViews() {
+        persistSnapShots()
         let attachments = currentAttachments
         let hidden = questionRequestId != nil || requests.activeApproval != nil
         composer.imageTiles = hidden ? [] : attachments.filter { $0.kind == .image }.map {
-            ComposerImageShelfView.Tile(id: $0.id, name: $0.name, status: $0.status, fileURL: $0.fileURL)
+            ComposerImageShelfView.Tile(id: $0.id, name: $0.name, status: $0.status, fileURL: $0.fileURL, source: $0.snapShotSource)
         }
         composer.attachmentCount = questionRequestId == nil ? attachments.count : 0
         if attachments != chipAttachments {
@@ -2158,6 +2182,7 @@ extension ComposerController {
     private func updateAttachment(_ id: String, key: String, _ change: (inout ComposerAttachment) -> Void) {
         guard let i = draftAttachments[key]?.firstIndex(where: { $0.id == id }) else { return }
         change(&draftAttachments[key]![i])
+        persistSnapShots()
         if key == draftKey { refresh() }
     }
 
@@ -2182,17 +2207,27 @@ extension ComposerController {
     func attachDroppedFiles(_ urls: [URL]) { addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
 
     var snapShotDestination: (key: String, environment: String)? {
+        if target == nil { _ = newThread() }
         guard questionRequestId == nil, let draftKey, let targetEnvironmentId else { return nil }
         return (draftKey, targetEnvironmentId)
     }
 
+    func snapShotFrame(id: String, key: String) -> CGRect? {
+        guard draftKey == key, let window = composer.window else { return nil }
+        window.contentView?.layoutSubtreeIfNeeded()
+        let shelf = composer.imageShelf
+        guard let index = shelf.tiles.firstIndex(where: { $0.id == id }), shelf.subviews.indices.contains(index) else { return nil }
+        let tile = shelf.subviews[index]
+        return window.convertToScreen(tile.convert(tile.bounds, to: nil))
+    }
+
     /// Preserve the draft selected at capture start even if navigation changes during ScreenCaptureKit.
-    func attachSnapShot(_ data: Data, destination: (key: String, environment: String)) async throws {
+    func attachSnapShot(_ data: Data, source: JSONValue? = nil, destination: (key: String, environment: String)) async throws -> String {
         let key = destination.key, env = destination.environment
         guard (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments else { throw CancellationError() }
         preparingImages[key, default: 0] += 1
         defer { preparingImages[key, default: 1] -= 1 }
-        let work = Self.attachmentWorkDirectory
+        let work = URL.applicationSupportDirectory.appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("SnapShots")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         let url = work.appendingPathComponent("snapshot-\(UUID().uuidString).png")
         try data.write(to: url, options: .atomic)
@@ -2201,11 +2236,16 @@ extension ComposerController {
         let prepared = try await ComposerImageIO.prepare(url, name: "Snapshot.png", mimeType: "image/png",
                                                         maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
         keepsSource = prepared.url == url
-        let attachment = ComposerAttachment(kind: .image, name: prepared.name, mimeType: prepared.mimeType,
+        var attachment = ComposerAttachment(kind: .image, name: prepared.name, mimeType: prepared.mimeType,
                                             sizeBytes: prepared.sizeBytes, fileURL: prepared.url, environmentId: env)
+        if let source, let size = ComposerImageIO.pixelSize(prepared.url) {
+            attachment.snapShotSource = SnapShotSource.resized(source, width: Int(size.width), height: Int(size.height))
+        }
         draftAttachments[key, default: []].append(attachment)
+        persistSnapShots()
         startUpload(attachment.id, key: key)
         refresh()
+        return attachment.id
     }
 
     /// Sidebar threads dropped on the composer (ChatComposer.tsx:6245-6267): threads from another
@@ -2431,6 +2471,8 @@ extension ComposerController {
             guard let self, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
             release(image)
             draftAttachments[key]?.removeAll { $0.id == id }
+            if image.snapShotSource != nil { try? FileManager.default.removeItem(at: image.fileURL) }
+            persistSnapShots()
             if key == draftKey, ComposerContext.referencedIds(composer.text).contains(image.contextId) {
                 composer.text = Self.removingReferences(to: image.contextId, in: composer.text)
                 remember(composer.text)

@@ -50,6 +50,7 @@ final class Environments {
     /// A connection state, the saved list or a label changed (Settings > Connections, the composer banner).
     private var observers: [UUID: () -> Void] = [:]
     /// Every saved environment, enabled or not, in catalog order. Loaded by `restoreSaved`.
+    private(set) var catalogReady = false
     private(set) var saved: [EnvironmentRegistration] = []
     /// Ids being removed (the row menu reads "Removing…").
     private(set) var removing: Set<String> = []
@@ -157,6 +158,7 @@ final class Environments {
         let catalog = self.catalog
         Task {
             saved = await Task.detached { catalog.load() }.value
+            catalogReady = true
             changed()
             for registration in saved where registration.enabled { connectSaved(registration) }
         }

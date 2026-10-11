@@ -117,6 +117,8 @@ public final class ComposerContextStripView: DSView {
 /// with no margins (`mx-0!` and `gap-0.5`). The chevron at 50% has `ms-0 -me-1`. Not interactive, it is the
 /// static row (`inline-flex h-6 px-1.75`) with no chevron and no negative margins.
 open class ComposerContextControl: ControlView {
+    public var onContextMenu: ((NSEvent, NSView) -> Void)?
+    public override func rightMouseDown(with event: NSEvent) { onContextMenu?(event, self) }
     public var glyphs: [IconDefinition] = [] { didSet { if glyphs != oldValue { rebuildGlyphs() } } }
     /// The glyphs' opacity (the branch icon is `opacity-70`).
     public var glyphAlpha: CGFloat = 1 { didSet { glyphViews.forEach { $0.alphaValue = glyphAlpha } } }

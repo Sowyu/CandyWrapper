@@ -36,6 +36,7 @@ final class OpenInController {
     /// `primaryServerAvailableEditorsAtom`: the primary environment's editors.
     private var remoteHost: String? {
         guard let environmentId, environmentId != environments.primaryId else { return nil }
+        if let alias = environments.saved.first(where: { $0.environmentId == environmentId })?.sshAlias, !alias.isEmpty { return alias }
         return composer.config(environmentId)?.remoteOpenTargets.first?["host"]?.stringValue
     }
     private var available: [String] {

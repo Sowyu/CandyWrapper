@@ -1,0 +1,181 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd-astra716b PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.astra716b CANDY_URL_SCHEME=candywrapper-astra716b build
+
+Build settings from command line:
+    CANDY_URL_SCHEME = candywrapper-astra716b
+    PRODUCT_BUNDLE_IDENTIFIER = dev.candywrapper.test.astra716b
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  SwiftTerm: /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/SwiftTerm @ local
+  CandyKit: /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit
+
+2026-10-11 06:48:49.856 xcodebuild[34643:4336590] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00008132-001471CE2E21801C, name:My Mac }
+{ platform:macOS, arch:x86_64, id:00008132-001471CE2E21801C, name:My Mac }
+{ platform:macOS, name:Any Mac }
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (15 targets)
+    Target 'CandyWrapper' in project 'CandyWrapper'
+        ➜ Explicit dependency on target 'DesignSystem-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Client-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Store-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'Features-product' in project 'CandyKit'
+    Target 'Features-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'Features' in project 'CandyKit'
+        ➜ Explicit dependency on target 'CandyKit_Features' in project 'CandyKit'
+        ➜ Explicit dependency on target 'DesignSystem' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Store' in project 'CandyKit'
+        ➜ Explicit dependency on target 'SwiftTerm-product' in project 'SwiftTerm'
+    Target 'Features' in project 'CandyKit'
+        ➜ Explicit dependency on target 'CandyKit_Features' in project 'CandyKit'
+        ➜ Explicit dependency on target 'DesignSystem' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Store' in project 'CandyKit'
+        ➜ Explicit dependency on target 'SwiftTerm-product' in project 'SwiftTerm'
+    Target 'SwiftTerm-product' in project 'SwiftTerm'
+        ➜ Explicit dependency on target 'SwiftTerm' in project 'SwiftTerm'
+    Target 'SwiftTerm' in project 'SwiftTerm' (no dependencies)
+    Target 'CandyKit_Features' in project 'CandyKit' (no dependencies)
+    Target 'T3Store-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Store' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+    Target 'T3Store' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+    Target 'T3Client-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Client' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+    Target 'T3Client' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+    Target 'T3Protocol-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'T3Protocol' in project 'CandyKit'
+    Target 'T3Protocol' in project 'CandyKit' (no dependencies)
+    Target 'DesignSystem-product' in project 'CandyKit'
+        ➜ Explicit dependency on target 'DesignSystem' in project 'CandyKit'
+        ➜ Explicit dependency on target 'CandyKit_DesignSystem' in project 'CandyKit'
+    Target 'DesignSystem' in project 'CandyKit'
+        ➜ Explicit dependency on target 'CandyKit_DesignSystem' in project 'CandyKit'
+    Target 'CandyKit_DesignSystem' in project 'CandyKit' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk /tmp/cw-dd-astra716b/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/CandyWrapper.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -o /tmp/cw-dd-astra716b/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+
+note: Disabling hardened runtime with ad-hoc codesigning. (in target 'CandyWrapper' from project 'CandyWrapper')
+SwiftDriver CandyWrapper normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name CandyWrapper -Onone @/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos14.0 -g -module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/cw-dd-astra716b/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/cw-dd-astra716b/Build/Products/Debug -F /tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -F /tmp/cw-dd-astra716b/Build/Products/Debug -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/cw-dd-astra716b/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -sdk-module-cache-path /tmp/cw-dd-astra716b/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/cw-dd-astra716b/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-generated-files.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-own-target-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper-7a71be49964951cd456f8804837cbc70-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-project-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Products/Debug/include -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources-normal/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-Swift.h -working-directory /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b -experimental-emit-module-separately -disable-cmo
+
+SwiftCompile normal arm64 Compiling\ WelcomeOnboardingController.swift /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/App/Sources/WelcomeOnboardingController.swift (in target 'CandyWrapper' from project 'CandyWrapper')
+
+SwiftCompile normal arm64 /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/App/Sources/WelcomeOnboardingController.swift (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-SwiftPerFileCompile WelcomeOnboardingController.swift
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ CandyWrapper (in target 'CandyWrapper' from project 'CandyWrapper')
+
+SwiftCompile normal arm64 (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling WelcomeOnboardingController.swift (in target 'CandyWrapper' from project 'CandyWrapper')
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for CandyWrapper (in target 'CandyWrapper' from project 'CandyWrapper')
+
+SwiftDriver\ Compilation\ Requirements CandyWrapper normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name CandyWrapper -Onone @/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos14.0 -g -module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/cw-dd-astra716b/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/cw-dd-astra716b/Build/Products/Debug -F /tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -F /tmp/cw-dd-astra716b/Build/Products/Debug -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/cw-dd-astra716b/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -sdk-module-cache-path /tmp/cw-dd-astra716b/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/cw-dd-astra716b/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-generated-files.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-own-target-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper-7a71be49964951cd456f8804837cbc70-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-project-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Products/Debug/include -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources-normal/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-Swift.h -working-directory /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver\ Compilation CandyWrapper normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name CandyWrapper -Onone @/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos14.0 -g -module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/cw-dd-astra716b/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/cw-dd-astra716b/Build/Products/Debug -F /tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -F /tmp/cw-dd-astra716b/Build/Products/Debug -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/cw-dd-astra716b/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/cw-dd-astra716b/ModuleCache.noindex -sdk-module-cache-path /tmp/cw-dd-astra716b/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/cw-dd-astra716b/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-generated-files.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-own-target-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper-7a71be49964951cd456f8804837cbc70-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-project-headers.hmap -Xcc -I/tmp/cw-dd-astra716b/Build/Products/Debug/include -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources-normal/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources/arm64 -Xcc -I/tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper-Swift.h -working-directory /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftsourceinfo (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftsourceinfo /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo
+
+Copy /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.swiftmodule/arm64-apple-macos.abi.json /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.abi.json (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.abi.json /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.swiftmodule/arm64-apple-macos.abi.json
+
+Ld /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib normal (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/cw-dd-astra716b/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/tmp/cw-dd-astra716b/Build/Products/Debug -F/tmp/cw-dd-astra716b/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -F/tmp/cw-dd-astra716b/Build/Products/Debug -filelist /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.LinkFileList -install_name @rpath/CandyWrapper.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.swiftmodule -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -Xlinker -no_adhoc_codesign -o /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib
+
+ConstructStubExecutorLinkFileList /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-ExecutorLinkFileList-normal-arm64.txt (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    construct-stub-executor-link-file-list /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'CandyWrapper' from project 'CandyWrapper')
+
+Ld /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper normal (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/cw-dd-astra716b/Build/Products/Debug -F/tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -F/tmp/cw-dd-astra716b/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/cw-dd-astra716b/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper-ExecutorLinkFileList-normal-arm64.txt /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib -Xlinker -no_adhoc_codesign -o /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper
+
+CopySwiftLibs /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib --scan-folder /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/Frameworks --scan-folder /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/PlugIns --scan-folder /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/Library/SystemExtensions --scan-folder /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ExtractAppIntentsMetadata (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name CandyWrapper --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk --xcode-version 27A266a --platform-family macOS --deployment-target 14.0 --bundle-identifier dev.candywrapper.test.astra716b --output /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper --dependency-file /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper_dependency_info.dat --stringsdata-file /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.SwiftFileList --metadata-file-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper.DependencyMetadataFileList --static-metadata-file-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/Objects-normal/arm64/CandyWrapper.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-10-11 06:48:53.332 appintentsmetadataprocessor[34712:4336918] Starting appintentsmetadataprocessor export
+2026-10-11 06:48:53.335 appintentsmetadataprocessor[34712:4336918] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+CodeSign /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/CandyWrapper.debug.dylib
+
+CodeSign /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/__preview.dylib (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/__preview.dylib
+/tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app/Contents/MacOS/__preview.dylib: replacing existing signature
+
+CodeSign /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /tmp/cw-dd-astra716b/Build/Intermediates.noindex/CandyWrapper.build/Debug/CandyWrapper.build/CandyWrapper.app.xcent --timestamp\=none --generate-entitlement-der /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app
+
+Validate /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-validationUtility /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+RegisterWithLaunchServices /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app (in target 'CandyWrapper' from project 'CandyWrapper')
+    cd /Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b
+    builtin-lsregisterurl --record-path /tmp/cw-dd-astra716b/Build/Intermediates.noindex/XCBuildData/registered-launchservices.txt -- /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /tmp/cw-dd-astra716b/Build/Products/Debug/CandyWrapper.app
+
+PruneExplicitPrecompiledModules /tmp/cw-dd-astra716b/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/cw-dd-astra716b/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/cw-dd-astra716b/SDKExplicitPrecompiledModules
+
+** BUILD SUCCEEDED **
+

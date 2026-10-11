@@ -1,0 +1,1376 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 5] Features
+[2 / 6] Features
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:318:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+316 |     }
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:319:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:320:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:321:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:322:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:323:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:324:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:325:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:326:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:327:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:328:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:329:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+331 | 
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp716b/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:330:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+331 | 
+332 |     static let posixRoots = ["/Users/", "/home/", "/tmp/", "/var/", "/etc/", "/opt/", "/mnt/", "/Volumes/", "/private/", "/root/",
+[3 / 7] Features
+[7 / 10] Features
+[9 / 11] Features
+[10 / 11] FeaturesTests-product
+[12 / 12] FeaturesTests-product
+Build complete! (6,20 sec)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SidebarFidelityTests started.
+◇ Suite DevicePanelFidelityTests started.
+◇ Suite OnboardingSnapShotFidelityTests started.
+◇ Suite SidebarSearchFidelityTests started.
+◇ Suite BrowserFidelityTests started.
+◇ Suite DesktopLeftoversFidelityTests started.
+◇ Suite GitFidelityTests started.
+◇ Suite MarkdownFidelityTests started.
+◇ Suite PullRequestWritesFidelityTests started.
+◇ Suite SettingsPages2FidelityTests started.
+◇ Suite TerminalDrawerFidelityTests started.
+◇ Suite DiffFidelityTests started.
+◇ Suite SettingsPagesFidelityTests started.
+◇ Suite ComposerAttachmentsFidelityTests started.
+◇ Suite ComposerMenuFidelityTests started.
+◇ Suite UsageFidelityTests started.
+◇ Suite SidebarLeftoversFidelityTests started.
+◇ Suite FilesFidelityTests started.
+◇ Suite PickersFidelityTests started.
+◇ Suite PanelsFidelityTests started.
+◇ Suite ComposerFooterFidelityTests started.
+◇ Suite ComposerFidelityTests started.
+◇ Suite ThreadLineageFidelityTests started.
+◇ Suite RunOnFidelityTests started.
+◇ Suite NotificationsFidelityTests started.
+◇ Suite QueueFidelityTests started.
+◇ Suite ConnectionsFidelityTests started.
+◇ Suite ChangedFilesFidelityTests started.
+◇ Suite ThreadFidelityTests started.
+◇ Suite PullRequestsFidelityTests started.
+◇ Test wholeSidebar() started.
+◇ Test devicePanel() started.
+◇ Test recoveryAndSourceDetails() started.
+◇ Test sidebarSearch() started.
+◇ Test browser() started.
+◇ Test copyAndWizardStates() started.
+◇ Test behaviour() started.
+◇ Test git() started.
+◇ Test markdown() started.
+◇ Test pullRequestWrites() started.
+◇ Test settingsPages2() started.
+◇ Test terminalDrawer() started.
+◇ Test gallery() started.
+◇ Test body() started.
+◇ Test panel(_:) started.
+◇ Test settingsPages() started.
+◇ Test composerAttachments() started.
+◇ Test composerMenu() started.
+◇ Test usage() started.
+◇ Test sidebarLeftovers() started.
+◇ Test files() started.
+◇ Test gallerySections() started.
+◇ Test interactions() started.
+◇ Test popupsAgainstReferences() started.
+◇ Test dockedInPanel() started.
+◇ Test questionKeysAndAutoAdvance() started.
+◇ Test approvalActionsSendTheRecordedPayloads() started.
+◇ Test panels() started.
+◇ Test overflowMenuBehaviour() started.
+◇ Test composerFooter() started.
+◇ Test composer() started.
+◇ Test lineageBarAndSecret() started.
+◇ Test runOn() started.
+◇ Test behaviour() started.
+◇ Test notifications() started.
+◇ Test queuedMessages() started.
+◇ Test connections() started.
+◇ Test folderState() started.
+◇ Test cardAndDiff() started.
+◇ Test expandedRowsRender() started.
+◇ Test wholePanel() started.
+◇ Test pullRequests() started.
+◇ Test case passing 1 argument reference → "10-diff-unified" to panel(_:) started.
+◇ Test case passing 1 argument reference → "09-diff-split" to panel(_:) started.
+device-panels empty.rest.light 0.59%
+device-panels empty.rest.dark 0.58%
+device-panels unavailable.rest.dark 0.36%
+device-panels unavailable.rest.light 0.36%
+FIDELITY device-panels: 4 cases, mean differing 0.47%
+✔ Test devicePanel() passed after 1.884 seconds.
+✔ Suite DevicePanelFidelityTests passed after 1.885 seconds.
+browser chrome.rest.dark 4.92%
+browser chrome.rest.light 4.78%
+browser unreachable.rest.light 2.90%
+browser unreachable.rest.dark 2.89%
+browser search.rest.dark 0.95%
+browser search.rest.light 0.89%
+browser empty.rest.dark 0.87%
+browser empty.rest.light 0.87%
+browser lists.rest.light 0.87%
+browser lists.rest.dark 0.86%
+FIDELITY browser: 10 cases, mean differing 2.08%
+✔ Test browser() passed after 11.073 seconds.
+✔ Suite BrowserFidelityTests passed after 11.073 seconds.
+terminal-drawer split.rest.dark 1.16%
+terminal-drawer empty.rest.light 1.10%
+terminal-drawer empty.rest.dark 1.06%
+terminal-drawer split.rest.light 0.98%
+terminal-drawer drawer.rest.light 0.40%
+terminal-drawer drawer.rest.dark 0.39%
+FIDELITY terminal-drawer: 6 cases, mean differing 0.85%
+✔ Test terminalDrawer() passed after 14.748 seconds.
+✔ Suite TerminalDrawerFidelityTests passed after 14.748 seconds.
+files file-header.rest.dark 2.21%
+files file-header.rest.light 2.20%
+files tabs.rest.dark 1.68%
+files tabs.rest.light 1.62%
+files files.rest.dark 1.28%
+files files.rest.light 1.15%
+files launcher.rest.dark 0.76%
+files launcher.rest.light 0.60%
+FIDELITY files: 8 cases, mean differing 1.44%
+✔ Test files() passed after 18.503 seconds.
+✔ Suite FilesFidelityTests passed after 18.504 seconds.
+changed-files 47-changed-files-card.main.light: 2.63% differ
+sidebar-whole light: 11.95% differ; titlebar 99.25%, search 21.24%, first card 5.11%, list 4.90%, footer 0.18%, below the art 4.51%
+sidebar-whole dark: 12.28% differ; titlebar 99.65%, search 17.33%, first card 5.91%, list 5.54%, footer 0.56%, below the art 5.13%
+FIDELITY onboarding-snapshot connection.light: 1.08%
+FIDELITY onboarding-snapshot connection.dark: 1.05%
+FIDELITY onboarding-snapshot settings.light: 1.18%
+FIDELITY onboarding-snapshot settings.dark: 1.16%
+FIDELITY onboarding-snapshot details.light: 1.93%
+FIDELITY onboarding-snapshot details.dark: 1.93%
+FIDELITY onboarding-snapshot mean: 1.39%
+sidebar-search result.user-match.hover.dark 3.78%
+sidebar-search result.user-match.rest.dark 3.45%
+sidebar-search result.user-match.hover.light 3.42%
+sidebar-search result.user-match.rest.light 3.22%
+sidebar-search result.agent-match.rest.light 3.18%
+sidebar-search result.agent-match.rest.dark 3.17%
+sidebar-search result.hover.dark 2.57%
+sidebar-search result.highlighted.rest.dark 2.55%
+sidebar-search scope.all.rest.dark 2.54%
+sidebar-search result.highlighted.rest.light 2.43%
+sidebar-search result.hover.light 2.27%
+sidebar-search scope.all.rest.light 2.10%
+sidebar-search result.rest.dark 2.08%
+sidebar-search result.rest.light 2.00%
+sidebar-search draft.rest.dark 1.74%
+sidebar-search draft.hover.dark 1.74%
+sidebar-search draft.active.rest.light 1.57%
+sidebar-search scope.empty.rest.light 1.49%
+sidebar-search draft.active.rest.dark 1.49%
+sidebar-search scope.empty.rest.dark 1.47%
+sidebar-search draft.rest.light 1.45%
+sidebar-search draft.hover.light 1.43%
+sidebar-search status.empty.rest.dark 0.86%
+sidebar-search status.empty.rest.light 0.84%
+sidebar-search status.search.rest.dark 0.82%
+sidebar-search status.search.rest.light 0.78%
+FIDELITY sidebar-search: 26 cases, mean differing 2.09%
+FIDELITY desktop-leftovers copied.light: 3.76%
+FIDELITY desktop-leftovers copied.dark: 5.10%
+FIDELITY desktop-leftovers copy-failed.light: 4.24%
+FIDELITY desktop-leftovers copy-failed.dark: 5.38%
+FIDELITY desktop-leftovers progress-0.light: 1.05%
+FIDELITY desktop-leftovers progress-0.dark: 1.01%
+FIDELITY desktop-leftovers progress-1.light: 1.22%
+FIDELITY desktop-leftovers progress-1.dark: 1.10%
+FIDELITY desktop-leftovers progress-2.light: 1.52%
+FIDELITY desktop-leftovers progress-2.dark: 1.50%
+FIDELITY desktop-leftovers mean: 2.59%
+git strip.worktree.rest.light 10.23%
+git strip.checkout.rest.light 10.09%
+git card.push.rest.light 3.52%
+git card.push.rest.dark 3.45%
+git card.commit.rest.light 3.14%
+git card.commit.rest.dark 3.06%
+git menu.publish.rest.dark 1.97%
+git dialog.commit.rest.dark 1.61%
+git menu.publish.rest.light 1.54%
+git dialog.commit.rest.light 1.52%
+git menu.remote.rest.dark 0.90%
+git strip.worktree.rest.dark 0.68%
+git menu.remote.rest.light 0.58%
+git strip.checkout.rest.dark 0.54%
+FIDELITY git: 14 cases, mean differing 3.06%
+MARKDOWN text light: 1.72% differ, height ref 313.83 ours 313.85
+MARKDOWN text dark: 2.07% differ, height ref 313.83 ours 313.85
+MARKDOWN lists light: 1.35% differ, height ref 361.79 ours 361.80
+MARKDOWN lists dark: 1.71% differ, height ref 361.79 ours 361.80
+MARKDOWN quotes light: 1.10% differ, height ref 354.23 ours 354.25
+MARKDOWN quotes dark: 1.21% differ, height ref 354.23 ours 354.25
+MARKDOWN table light: 0.94% differ, height ref 168.77 ours 168.80
+MARKDOWN table dark: 1.35% differ, height ref 168.77 ours 168.80
+MARKDOWN code light: 2.64% differ, height ref 559.34 ours 559.38
+MARKDOWN code dark: 1.97% differ, height ref 559.34 ours 559.38
+MARKDOWN rule-image light: 0.16% differ, height ref 353.95 ours 353.95
+MARKDOWN rule-image dark: 0.25% differ, height ref 353.95 ours 353.95
+MARKDOWN file-chips light: 2.75% differ, height ref 78.65 ours 78.65
+MARKDOWN file-chips dark: 3.35% differ, height ref 78.65 ours 78.65
+FIDELITY Markdown: 14 cases, mean differing 1.61%
+pull-request-writes link-preview.rest.light 6.80%
+pull-request-writes link-preview.rest.dark 6.40%
+pull-request-writes checks-popover.rest.dark 3.11%
+pull-request-writes checks-popover.rest.light 2.92%
+pull-request-writes review-form.rest.dark 1.93%
+pull-request-writes review-form.rest.light 1.85%
+FIDELITY pull-request-writes: 6 cases, mean differing 3.83%
+settings-pages2 source-control.repositories.rest.light 2.37%
+settings-pages2 source-control.repositories.rest.dark 2.32%
+settings-pages2 providers.list.rest.light 2.22%
+settings-pages2 providers.list.rest.dark 2.09%
+settings-pages2 source-control.vcs.rest.dark 1.56%
+settings-pages2 source-control.vcs.rest.light 1.55%
+settings-pages2 project.overview.rest.dark 1.53%
+settings-pages2 project.overview.rest.light 1.53%
+settings-pages2 project.actions.rest.light 1.28%
+settings-pages2 project.actions.rest.dark 1.26%
+FIDELITY settings-pages2: 10 cases, mean differing 1.77%
+DIFF 10-diff-unified.light: 4.90% differ
+DIFF 10-diff-unified.dark: 5.40% differ
+FIDELITY Diff panel 10-diff-unified: mean differing 5.15%
+DIFF 09-diff-split.light: 4.87% differ
+DIFF 09-diff-split.dark: 5.37% differ
+FIDELITY Diff panel 09-diff-split: mean differing 5.12%
+settings-pages nav.search.rest.dark 2.93%
+settings-pages nav.search.rest.light 2.47%
+settings-pages general.behavior.rest.dark 1.76%
+settings-pages general.behavior.rest.light 1.73%
+settings-pages keybindings.navigation.rest.dark 1.24%
+settings-pages keybindings.navigation.rest.light 1.15%
+FIDELITY settings-pages: 6 cases, mean differing 1.88%
+DIFF modified.unified.light: 2.55% differ
+DIFF modified.unified.dark: 2.59% differ
+DIFF added.unified.light: 2.58% differ
+DIFF added.unified.dark: 2.70% differ
+DIFF deleted.unified.light: 0.92% differ
+DIFF deleted.unified.dark: 1.00% differ
+DIFF wrap.unified.light: 4.36% differ
+DIFF wrap.unified.dark: 5.42% differ
+DIFF modified.split.light: 2.60% differ
+DIFF modified.split.dark: 2.66% differ
+DIFF added.split.light: 1.71% differ
+DIFF added.split.dark: 1.80% differ
+DIFF deleted.split.light: 0.61% differ
+DIFF deleted.split.dark: 0.67% differ
+DIFF wrap.split.light: 4.05% differ
+DIFF wrap.split.dark: 5.09% differ
+DIFF collapsed.light: 0.98% differ
+DIFF collapsed.dark: 1.21% differ
+FIDELITY Diff body: 18 cases, mean differing 2.42%
+composer-menu chips.rest.dark 11.83%
+composer-menu chips.rest.light 11.44%
+composer-menu slash.rest.dark 2.01%
+composer-menu slash.rest.light 1.99%
+composer-menu skill.rest.dark 1.62%
+composer-menu skill.rest.light 1.60%
+composer-menu pull-request.rest.light 1.00%
+composer-menu pull-request.rest.dark 0.96%
+composer-menu mention.rest.dark 0.80%
+composer-menu mention.rest.light 0.76%
+composer-menu empty.rest.light 0.63%
+composer-menu empty.rest.dark 0.59%
+FIDELITY composer-menu: 12 cases, mean differing 2.94%
+usage task-schedule.rest.dark 6.03%
+usage task-schedule.rest.light 5.78%
+usage header.rest.light 4.32%
+usage header.rest.dark 4.16%
+usage limits-banner.rest.light 3.99%
+usage limits-banner.rest.dark 3.99%
+usage scheduled-tasks.rest.light 2.79%
+usage scheduled-tasks.rest.dark 2.57%
+usage chart.rest.light 1.38%
+usage chart.rest.dark 1.09%
+FIDELITY usage: 10 cases, mean differing 3.61%
+sidebar-leftovers hover-card.rest.dark 4.53%
+sidebar-leftovers rename.focus-visible.dark 3.79%
+sidebar-leftovers rename.rest.dark 3.71%
+sidebar-leftovers ghost.rest.dark 3.69%
+sidebar-leftovers ghost.many.rest.dark 3.57%
+sidebar-leftovers hover-card.rest.light 3.57%
+sidebar-leftovers rename.focus-visible.light 3.02%
+sidebar-leftovers rename.rest.light 2.95%
+sidebar-leftovers ghost.many.rest.light 2.90%
+sidebar-leftovers ghost.rest.light 2.33%
+sidebar-leftovers pill.warning.rest.light 2.15%
+sidebar-leftovers pill.warning.rest.dark 2.12%
+sidebar-leftovers pill.error.rest.light 1.65%
+sidebar-leftovers pill.error.rest.dark 1.39%
+sidebar-leftovers no-projects.hover.dark 1.07%
+sidebar-leftovers no-projects.hover.light 1.01%
+sidebar-leftovers no-projects.rest.dark 0.95%
+sidebar-leftovers no-projects.rest.light 0.92%
+FIDELITY sidebar-leftovers: 18 cases, mean differing 2.52%
+pickers 13-model-picker.light: 1.83% differ, natural size 362.0x298.0 vs 362.0x298.0
+pickers 13-model-picker.dark: 1.80% differ, natural size 362.0x298.0 vs 362.0x298.0
+pickers 41-traits-picker.light: 3.03% differ, natural size 160.0x204.0 vs 160.0x204.0
+pickers 41-traits-picker.dark: 2.94% differ, natural size 160.0x204.0 vs 160.0x204.0
+pickers 42-access-mode-picker.light: 3.23% differ, natural size 371.0x194.0 vs 371.0x194.0
+pickers 42-access-mode-picker.dark: 3.02% differ, natural size 371.0x194.0 vs 371.0x194.0
+pickers 03c-footer-controls.light: 3.42% differ, width 444.3067560195923
+pickers 03c-footer-controls.dark: 3.17% differ, width 444.3067560195923
+panels 05-approval-request.docked.light: 7.47% differ, composer 66.0 tall
+panels 05-approval-request.docked.dark: 1.14% differ, composer 66.0 tall
+panels 06-user-input-request.docked.light: 3.46% differ, composer 148.0 tall
+panels 06-user-input-request.docked.dark: 1.30% differ, composer 148.0 tall
+panels 05-approval-request.light: 1.78% differ
+panels 05-approval-request.dark: 1.76% differ
+panels 06-user-input-request.light: 1.64% differ
+panels 06-user-input-request.dark: 1.58% differ
+composer-footer menu.traits-access.rest.dark 3.57%
+composer-footer menu.traits-access.rest.light 3.41%
+composer-footer menu.access.rest.dark 3.38%
+composer-footer menu.access.rest.light 3.03%
+composer-footer files.question.rest.dark 3.01%
+composer-footer files.question.rest.light 2.86%
+composer-footer cluster.access-icon.rest.light 2.06%
+composer-footer cluster.access-icon.rest.dark 1.95%
+composer-footer cluster.both-icon.rest.light 0.69%
+composer-footer cluster.both-icon.rest.dark 0.58%
+composer-footer cluster.overflow-access.rest.light 0.57%
+composer-footer cluster.overflow-access.rest.dark 0.42%
+composer-footer cluster.overflow-both.rest.light 0.33%
+composer-footer cluster.overflow-both.rest.dark 0.26%
+FIDELITY composer-footer: 14 cases, mean differing 1.87%
+composer 03a-kitchen-sink-top.light: 9.35% differ
+composer 03a-kitchen-sink-top.dark: 3.79% differ
+composer 01-running-turn.light: 7.49% differ
+composer 01-running-turn.dark: 2.03% differ
+composer 04-new-thread-draft.light: 2.46% differ
+composer 04-new-thread-draft.dark: 1.33% differ
+composer 04n-new-thread-narrow.light: 3.55% differ
+composer 04n-new-thread-narrow.dark: 2.43% differ
+thread-lineage subagent-bar.completed.dark 4.39%
+thread-lineage subagent-bar.completed.light 4.32%
+thread-lineage secret-request.elsewhere.light 3.20%
+thread-lineage secret-request.elsewhere.dark 3.01%
+thread-lineage thread-lineage.agents.dark 2.86%
+thread-lineage subagent-bar.failed.dark 2.79%
+thread-lineage secret-request.saved.light 2.75%
+thread-lineage subagent-bar.failed.light 2.67%
+thread-lineage thread-lineage.agents.light 2.67%
+thread-lineage secret-request.saved.dark 2.60%
+thread-lineage secret-request.pending.light 2.51%
+thread-lineage secret-request.pending.dark 2.37%
+thread-lineage secret-request.no-reason-error.light 2.28%
+thread-lineage secret-request.no-reason-error.dark 2.14%
+thread-lineage thread-lineage.expanded.dark 2.05%
+thread-lineage subagent-bar.starting.dark 1.95%
+thread-lineage thread-lineage.forks.dark 1.94%
+thread-lineage subagent-bar.starting.light 1.92%
+thread-lineage thread-lineage.paged.light 1.85%
+thread-lineage thread-lineage.expanded.light 1.78%
+thread-lineage thread-lineage.paged.dark 1.77%
+thread-lineage thread-lineage.forks.light 1.71%
+FIDELITY thread-lineage: 22 cases, mean differing 2.52%
+run-on strip.remote.rest.light 9.74%
+run-on strip.remote.hover.light 9.74%
+run-on trigger.remote.hover.dark 3.39%
+run-on popup.remote.rest.dark 3.07%
+run-on popup.remote.hover.dark 3.07%
+run-on trigger.local.hover.dark 3.04%
+run-on popup.remote.rest.light 2.48%
+run-on popup.remote.hover.light 2.48%
+run-on trigger.local.hover.light 1.86%
+run-on trigger.remote.rest.light 1.85%
+run-on trigger.remote.hover.light 1.84%
+run-on locked.remote.rest.light 1.79%
+run-on locked.remote.hover.light 1.79%
+run-on trigger.local.rest.light 1.60%
+run-on trigger.remote.rest.dark 1.46%
+run-on locked.remote.rest.dark 1.43%
+run-on locked.remote.hover.dark 1.43%
+run-on trigger.local.rest.dark 1.33%
+run-on strip.remote.rest.dark 0.22%
+run-on strip.remote.hover.dark 0.22%
+FIDELITY run-on: 20 cases, mean differing 2.69%
+notifications quit-hold-overlay.hold.light 2.90%
+notifications thread-toast.approval.light 2.84%
+notifications quit-hold-overlay.double-click.light 2.83%
+notifications thread-toast.approval.dark 2.81%
+notifications thread-toast.failed.light 2.78%
+notifications thread-toast.failed.dark 2.58%
+notifications thread-toast.completed.dark 2.55%
+notifications thread-toast.completed.light 2.54%
+notifications quit-hold-overlay.hold.dark 2.44%
+notifications thread-toast.input.light 2.41%
+notifications thread-toast.input.dark 2.35%
+notifications quit-hold-overlay.double-click.dark 2.10%
+FIDELITY notifications: 12 cases, mean differing 2.59%
+queue 29-queued-messages.light: 4.78% differ
+queue 29-queued-messages.dark: 0.97% differ
+connections nav.rest.dark 4.09%
+connections nav.rest.light 4.01%
+connections add-dialog.route.rest.light 3.45%
+connections add-dialog.error.rest.light 3.10%
+connections create-link-dialog.rest.dark 2.64%
+connections create-link-dialog.rest.light 2.63%
+connections this-machine.permissions.rest.dark 2.31%
+connections environments.rows.rest.light 2.19%
+connections this-machine.permissions.rest.light 2.19%
+connections environments.rows.rest.dark 2.18%
+connections environments.routes.rest.dark 2.10%
+connections authorized-clients.open.rest.dark 2.00%
+connections authorized-clients.rest.dark 2.00%
+connections authorized-clients.open.rest.light 2.00%
+connections authorized-clients.rest.light 1.96%
+connections header.rest.light 1.75%
+connections environments.routes.rest.light 1.74%
+connections header.rest.dark 1.71%
+connections environments.permissions.rest.light 1.69%
+connections environments.permissions.rest.dark 1.67%
+connections add-dialog.route.rest.dark 1.50%
+connections add-dialog.rest.light 1.26%
+connections add-dialog.rest.dark 1.25%
+connections this-machine.full.rest.light 1.23%
+connections add-dialog.error.rest.dark 1.22%
+connections this-machine.full.rest.dark 1.21%
+connections this-machine.rest.light 0.94%
+connections this-machine.rest.dark 0.90%
+connections environments.empty.rest.dark 0.88%
+connections environments.empty.rest.light 0.84%
+connections nav.back.rest.dark 0.28%
+connections nav.back.rest.light 0.28%
+FIDELITY connections: 32 cases, mean differing 1.85%
+✔ Test questionKeysAndAutoAdvance() passed after 81.019 seconds.
+pull-requests detail-header.rest.light 4.47%
+pull-requests detail-header.rest.dark 4.42%
+pull-requests rows.rest.dark 3.51%
+pull-requests rows.rest.light 3.45%
+pull-requests link-dialog.rest.light 1.48%
+pull-requests link-dialog.rest.dark 1.43%
+FIDELITY pull-requests: 6 cases, mean differing 3.13%
+thread-whole 03a-kitchen-sink-top.light: 2.92% differ; header 3.64%, timeline 2.85%
+thread-whole 03a-kitchen-sink-top.dark: 2.64% differ; header 3.77%, timeline 2.53%
+thread-whole 03b-kitchen-sink-middle.light: 2.92% differ; header 3.64%, timeline 2.85%
+thread-whole 03b-kitchen-sink-middle.dark: 2.03% differ; header 3.77%, timeline 1.86%
+thread-whole 03c-kitchen-sink-bottom.light: 1.65% differ; header 3.64%, timeline 1.46%
+thread-whole 03c-kitchen-sink-bottom.dark: 1.80% differ; header 3.77%, timeline 1.62%
+thread-whole 03d-kitchen-sink-commands.light: 2.87% differ; header 3.92%, timeline 2.77%
+thread-whole 03d-kitchen-sink-commands.dark: 3.22% differ; header 4.09%, timeline 3.14%
+✔ Test recoveryAndSourceDetails() passed after 92.443 seconds.
+✔ Test behaviour() passed after 92.443 seconds.
+✔ Test markdown() passed after 92.443 seconds.
+✔ Test settingsPages2() passed after 92.443 seconds.
+✔ Test gallery() passed after 92.443 seconds.
+✔ Test settingsPages() passed after 92.443 seconds.
+✔ Test body() passed after 92.443 seconds.
+✔ Test usage() passed after 92.443 seconds.
+✔ Test gallerySections() passed after 92.443 seconds.
+✔ Test composerMenu() passed after 92.443 seconds.
+✔ Test sidebarLeftovers() passed after 92.443 seconds.
+✔ Test popupsAgainstReferences() passed after 92.443 seconds.
+✔ Test git() passed after 92.443 seconds.
+✔ Test approvalActionsSendTheRecordedPayloads() passed after 92.443 seconds.
+✔ Test dockedInPanel() passed after 92.443 seconds.
+✔ Test panels() passed after 92.443 seconds.
+✔ Test pullRequestWrites() passed after 92.443 seconds.
+✔ Test composerFooter() passed after 92.443 seconds.
+✔ Test lineageBarAndSecret() passed after 92.443 seconds.
+✔ Test runOn() passed after 92.443 seconds.
+✔ Test behaviour() passed after 92.443 seconds.
+✔ Test notifications() passed after 92.443 seconds.
+✔ Test queuedMessages() passed after 92.443 seconds.
+✔ Test panel(_:) with 2 test cases passed after 92.443 seconds.
+✔ Test expandedRowsRender() passed after 92.443 seconds.
+✔ Test pullRequests() passed after 92.443 seconds.
+✔ Test wholePanel() passed after 92.443 seconds.
+✔ Test wholeSidebar() passed after 92.443 seconds.
+✔ Test sidebarSearch() passed after 92.443 seconds.
+✔ Test copyAndWizardStates() passed after 92.443 seconds.
+✔ Test connections() passed after 92.443 seconds.
+✔ Suite OnboardingSnapShotFidelityTests passed after 92.444 seconds.
+✔ Test interactions() passed after 92.443 seconds.
+✔ Suite GitFidelityTests passed after 92.444 seconds.
+✔ Suite SettingsPages2FidelityTests passed after 92.444 seconds.
+✔ Suite UsageFidelityTests passed after 92.444 seconds.
+✔ Suite DiffFidelityTests passed after 92.444 seconds.
+✔ Suite ComposerMenuFidelityTests passed after 92.444 seconds.
+✔ Suite PullRequestWritesFidelityTests passed after 92.444 seconds.
+✔ Suite ThreadLineageFidelityTests passed after 92.444 seconds.
+✔ Suite PanelsFidelityTests passed after 92.444 seconds.
+✔ Suite SettingsPagesFidelityTests passed after 92.444 seconds.
+✔ Suite RunOnFidelityTests passed after 92.444 seconds.
+✔ Suite PullRequestsFidelityTests passed after 92.444 seconds.
+✔ Suite QueueFidelityTests passed after 92.444 seconds.
+✔ Suite NotificationsFidelityTests passed after 92.444 seconds.
+✔ Suite ThreadFidelityTests passed after 92.444 seconds.
+✔ Suite SidebarFidelityTests passed after 92.444 seconds.
+✔ Suite DesktopLeftoversFidelityTests passed after 92.444 seconds.
+✔ Suite ConnectionsFidelityTests passed after 92.444 seconds.
+✔ Suite PickersFidelityTests passed after 92.444 seconds.
+✔ Suite SidebarLeftoversFidelityTests passed after 92.444 seconds.
+✔ Test overflowMenuBehaviour() passed after 92.443 seconds.
+✔ Suite ComposerFooterFidelityTests passed after 92.444 seconds.
+✔ Test composer() passed after 92.443 seconds.
+✔ Suite ComposerFidelityTests passed after 92.444 seconds.
+✔ Test folderState() passed after 92.443 seconds.
+✔ Suite SidebarSearchFidelityTests passed after 92.444 seconds.
+✔ Suite MarkdownFidelityTests passed after 92.444 seconds.
+changed-files 48-diff-turn-file.chat.light: 4.17% differ
+changed-files 48-diff-turn-file.panel.light: 0.31% differ
+changed-files 47-changed-files-card.main.dark: 2.87% differ
+changed-files 48-diff-turn-file.chat.dark: 4.59% differ
+changed-files 48-diff-turn-file.panel.dark: 0.32% differ
+✔ Test cardAndDiff() passed after 100.871 seconds.
+✔ Suite ChangedFilesFidelityTests passed after 100.872 seconds.
+composer-attachments shelf.rest.dark 4.04%
+composer-attachments shelf.rest.light 3.92%
+composer-attachments stash-menu.rest.dark 2.05%
+composer-attachments preview.rest.light 2.05%
+composer-attachments stash-menu.rest.light 2.04%
+composer-attachments stash-empty.rest.light 1.76%
+composer-attachments stash-badge.rest.light 1.69%
+composer-attachments stash-empty.rest.dark 1.67%
+composer-attachments stash-badge.rest.dark 1.56%
+composer-attachments preview.rest.dark 0.89%
+FIDELITY composer-attachments: 10 cases, mean differing 2.17%
+✔ Test composerAttachments() passed after 104.215 seconds.
+✔ Suite ComposerAttachmentsFidelityTests passed after 104.215 seconds.
+✔ Test run with 42 tests in 30 suites passed after 104.215 seconds.
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite LayoutFidelityTests started.
+◇ Suite TogglesFidelityTests started.
+◇ Suite SidebarBehaviourTests started.
+◇ Suite CommandPaletteFidelityTests started.
+◇ Suite ToastBehaviourTests started.
+◇ Suite OverlaysFidelityTests started.
+◇ Suite SidebarFidelityTests started.
+◇ Test discoveryList() started.
+◇ Test settings() started.
+◇ Test standalonePage() started.
+◇ Test table() started.
+◇ Test wizardSteps() started.
+◇ Test middleTruncateSplit() started.
+◇ Test panelTabClose() started.
+◇ Test numberField() started.
+◇ Test qrCode() started.
+◇ Test group() started.
+◇ Test scrollArea() started.
+◇ Test toggleGroup() started.
+◇ Test checkbox() started.
+◇ Test alert() started.
+◇ Test switchControl() started.
+◇ Test toggle() started.
+◇ Test radio() started.
+◇ Test collapsibleSectionHeader() started.
+◇ Test empty() started.
+◇ Test collapseHidesContainerAndRail() started.
+◇ Suite FidelityTests started.
+◇ Test widthRules() started.
+◇ Test titlebarInsets() started.
+◇ Test dragPersistsAndResets() started.
+◇ Suite FormsFidelityTests started.
+◇ Test collapsedStackPeeks() started.
+◇ Test viewportSchedulesOneTimerOnlyWhileToastsRun() started.
+◇ Test expandedStackIsAList() started.
+◇ Test middleTruncate() started.
+◇ Test timeoutPauseAndResume() started.
+◇ Test commandPalette() started.
+◇ Test backdropBlurDifference() started.
+◇ Test textBlock() started.
+◇ Test toast() started.
+◇ Test sidebarMenuSub() started.
+◇ Test persistentAndLoadingNeverExpire() started.
+◇ Test newestInFrontAndLimit() started.
+◇ Test selectedRowFillAgainstCapture() started.
+◇ Test sidebarMenuButton() started.
+◇ Suite ModalFocusTests started.
+◇ Test sidebarGrainAgainstCapture() started.
+◇ Test textBlockLineCountsMatchChromium() started.
+◇ Test dialogs() started.
+◇ Test commandItem() started.
+◇ Test hueSlider() started.
+◇ Test button() started.
+◇ Suite PopupsFidelityTests started.
+◇ Test badge() started.
+◇ Test kbd() started.
+◇ Test label() started.
+◇ Test separator() started.
+◇ Test skeleton() started.
+◇ Test inputGroup() started.
+◇ Test alertDialogIgnoresOutsideClicks() started.
+◇ Test focusIsTrappedAndReturned() started.
+◇ Test popover() started.
+◇ Test selectPopup() started.
+◇ Test comboboxPopup() started.
+◇ Test tooltip() started.
+◇ Test selectTrigger() started.
+◇ Test spinner() started.
+◇ Test menu() started.
+◇ Test autocompletePopup() started.
+◇ Test input() started.
+◇ Test textarea() started.
+pairing.rest.light                            2.38   216   1.09   720.00x420 720.00x420
+error.rest.light                              2.35   215   1.04   720.00x420 720.00x420
+brand.rest.light                              1.52   216   0.77   720.00x420 720.00x420
+pairing.rest.dark                             0.53   229   0.85   720.00x420 720.00x420
+error.rest.dark                               0.49   229   0.76   720.00x420 720.00x420
+brand.rest.dark                               0.39   228   0.41   720.00x420 720.00x420
+FIDELITY StandalonePage: 6 cases, mean differing 1.28%
+two-rows.focus-visible.dark                   2.36   222   0.86   320.00x123 320.00x123
+two-rows.focus-visible.light                  2.34   208   0.84   320.00x123 320.00x123
+two-rows.rest.dark                            2.30   112   0.81   320.00x123 320.00x123
+two-rows.hover.dark                           2.28   110   0.83   320.00x123 320.00x123
+two-rows.hover.light                          2.28    84   1.04   320.00x123 320.00x123
+two-rows.rest.light                           2.27    84   0.79   320.00x123 320.00x123
+FIDELITY DiscoveryList: 8 cases, mean differing 2.25%
+section.three-rows.rest.dark                  1.19   199   0.51   640.00x226 640.00x226
+section.three-rows.rest.light                 1.14   168   0.42   640.00x226 640.00x226
+section.one-row.rest.dark                     1.01   199   0.41   640.00x106 640.00x106
+section.one-row.rest.light                    0.98   168   0.36   640.00x106 640.00x106
+FIDELITY Settings: 4 cases, mean differing 1.08%
+selected.rest.dark                            2.21   216   1.65   360.00x138 360.00x138
+rows.rest.dark                                2.21   216   1.44   360.00x138 360.00x138
+selected.hover.dark                           2.21   216   1.67   360.00x138 360.00x138
+rows.hover.dark                               2.21   216   1.45   360.00x138 360.00x138
+rows.hover.light                              1.90   167   1.11   360.00x138 360.00x138
+selected.hover.light                          1.90   166   1.10   360.00x138 360.00x138
+FIDELITY Table: 8 cases, mean differing 2.05%
+current-1.focus-visible.dark                  1.57   123   0.47   520.00x44 520.00x44
+current-1.focus-visible.light                 1.53   108   0.48   520.00x44 520.00x44
+current-1.hover.dark                          1.46   123   0.46   520.00x44 520.00x44
+current-1.rest.dark                           1.46   123   0.45   520.00x44 520.00x44
+current-0.focus-visible.light                 1.44   105   0.45   520.00x44 520.00x44
+current-1.hover.light                         1.43   108   0.47   520.00x44 520.00x44
+FIDELITY WizardSteps: 12 cases, mean differing 1.40%
+disabled.focus-visible.dark                  18.40   134   5.29   160.00x32 160.00x32
+disabled.focus-visible.light                 18.37   123   6.10   160.00x32 160.00x32
+default.increment.focus-visible.light         5.71   228   3.20   160.00x32 160.00x32
+default.increment.focus-visible.dark          5.70   225   3.15   160.00x32 160.00x32
+lg.input.focus-visible.dark                   1.32   104   1.15   160.00x36 160.00x36
+lg.input.focus-visible.light                  1.26    63   0.49   160.00x36 160.00x36
+FIDELITY NumberField: 30 cases, mean differing 2.30%
+default.separated.focus-visible.dark          5.32   138   1.40   123.36x28 123.50x28
+default.separated.focus-visible.light         4.99   155   1.65   123.36x28 123.50x28
+default.separated.rest.light                  4.67   155   1.64   123.36x28 123.50x28
+default.separated.hover.light                 4.60   150   1.55   123.36x28 123.50x28
+default.separated.hover.dark                  4.57   140   1.47   123.36x28 123.50x28
+default.separated.rest.dark                   4.56   138   1.37   123.36x28 123.50x28
+FIDELITY Group: 12 cases, mean differing 4.33%
+plain.bottom.hover.light                      0.83    61   0.50   240.00x160 240.00x160
+faded.middle.hover.light                      0.83    61   0.50   240.00x160 240.00x160
+faded.top.hover.light                         0.83    61   0.50   240.00x160 240.00x160
+faded.top.rest.light                          0.83    35   0.28   240.00x160 240.00x160
+faded.top.hover.dark                          0.83    30   0.25   240.00x160 240.00x160
+faded.middle.rest.light                       0.83    35   0.28   240.00x160 240.00x160
+FIDELITY ScrollArea: 16 cases, mean differing 0.62%
+sidebar.wrap.rest.dark                        5.28   227   2.44   360.00x80 360.00x80
+sidebar.wrap.rest.light                       5.23   205   2.23   360.00x80 360.00x80
+error.wrap.rest.dark                          4.49   207   1.19   360.00x148 360.00x148
+error.firstline.rest.dark                     4.49   207   1.19   360.00x148 360.00x148
+default.wrap.rest.light                       4.17   213   1.71   360.00x148 360.00x148
+default.firstline.rest.light                  4.17   213   1.71   360.00x148 360.00x148
+error.wrap.rest.light                         4.10   235   1.52   360.00x148 360.00x148
+error.firstline.rest.light                    4.10   235   1.52   360.00x148 360.00x148
+FIDELITY alert: 22 cases, mean differing 2.96%
+on.focus-visible.dark                         3.52    57   0.50   16.00x16 16.00x16
+on.focus-visible.light                        3.39    60   0.59   16.00x16 16.00x16
+mixed.focus-visible.light                     3.25    60   0.60   16.00x16 16.00x16
+off.focus-visible.light                       3.15    60   0.57   16.00x16 16.00x16
+off.invalid.focus-visible.light               2.76    30   0.41   16.00x16 16.00x16
+mixed.focus-visible.dark                      2.59    57   0.46   16.00x16 16.00x16
+off.focus-visible.dark                        2.49    57   0.43   16.00x16 16.00x16
+off.invalid.focus-visible.dark                1.49    31   0.31   16.00x16 16.00x16
+FIDELITY checkbox: 22 cases, mean differing 1.21%
+sm.on.focus-visible.dark                      4.99    60   0.71   26.00x16 26.00x16
+sm.on.focus-visible.light                     4.65    58   0.79   26.00x16 26.00x16
+default.on.focus-visible.dark                 4.36    50   0.54   30.00x18 30.00x18
+default.on.focus-visible.light                4.19    44   0.61   30.00x18 30.00x18
+sm.mixed.focus-visible.light                  3.70    43   0.69   26.00x16 26.00x16
+sm.off.focus-visible.light                    3.68    43   0.67   26.00x16 26.00x16
+default.off.focus-visible.light               3.40    44   0.56   30.00x18 30.00x18
+default.mixed.focus-visible.light             3.40    44   0.57   30.00x18 30.00x18
+FIDELITY switch: 44 cases, mean differing 1.46%
+segmented.on.focus-visible.dark               5.86   231   2.57   116.13x24 116.50x24
+segmented.off.focus-visible.light             5.04   225   1.89   116.13x24 116.50x24
+segmented.on.focus-visible.light              5.00   225   2.21   116.13x24 116.50x24
+pill.on.focus-visible.dark                    4.95   125   1.72   64.48x32 64.50x32
+ghost.on.focus-visible.light                  4.77   119   1.61   73.59x32 73.50x32
+pill.off.focus-visible.light                  4.65    85   1.04   64.48x32 64.50x32
+segmented.off.focus-visible.dark              4.56   231   1.60   116.13x24 116.50x24
+ghost.off.focus-visible.light                 4.44   116   1.53   73.59x32 73.50x32
+FIDELITY toggle: 140 cases, mean differing 2.34%
+emphasized.closed.focus-visible.dark          1.06    94   0.37   240.00x32 240.00x32
+emphasized.open.focus-visible.dark            1.06    94   0.37   240.00x32 240.00x32
+info.closed.focus-visible.dark                1.01    83   0.23   240.00x32 240.00x32
+info.open.focus-visible.dark                  1.00    83   0.23   240.00x32 240.00x32
+info.closed.focus-visible.light               0.94    88   0.26   240.00x32 240.00x32
+info.open.focus-visible.light                 0.94    88   0.26   240.00x32 240.00x32
+accent.open.focus-visible.dark                0.94    88   0.19   240.00x32 240.00x32
+accent.closed.focus-visible.dark              0.92    88   0.19   240.00x32 240.00x32
+FIDELITY collapsible-section-header: 32 cases, mean differing 0.72%
+default.wrap.rest.dark                        2.31   235   1.26   400.00x276 400.00x276
+default.wrap.rest.light                       2.25   213   1.17   400.00x276 400.00x276
+compact.wrap.rest.light                       1.15   213   0.48   400.00x256 400.00x256
+compact.wrap.rest.dark                        1.12   235   0.47   400.00x256 400.00x256
+default.rest.dark                             0.80   224   0.43   400.00x208 400.00x208
+default.rest.light                            0.75   208   0.39   400.00x208 400.00x208
+compact.rest.dark                             0.56   227   0.29   400.00x256 400.00x256
+compact.rest.light                            0.56   212   0.27   400.00x256 400.00x256
+FIDELITY empty: 8 cases, mean differing 1.19%
+tab.focus-visible.light                      11.70   112   8.33   24.00x24 24.00x24
+tab.focus-visible.dark                       11.69   119   7.58   24.00x24 24.00x24
+button-hover.focus-visible.dark               7.89   119   4.64   24.00x24 24.00x24
+button-hover.focus-visible.light              7.84   113   5.09   24.00x24 24.00x24
+button-hover.hover.light                      2.53   211   2.85   24.00x24 24.00x24
+button-hover.hover.dark                       2.53   228   3.04   24.00x24 24.00x24
+FIDELITY PanelTabCloseButton: 12 cases, mean differing 3.69%
+segmented.rest.light                          2.66    71   0.99   178.66x28 179.00x28
+default.rest.dark                             2.61   163   1.37   135.35x32 135.50x32
+segmented.rest.dark                           2.57   103   0.80   178.66x28 179.00x28
+default.rest.light                            2.46   127   1.05   135.35x32 135.50x32
+FIDELITY toggle-group: 4 cases, mean differing 2.57%
+on.focus-visible.dark                         6.25    56   0.83   16.00x16 16.00x16
+on.focus-visible.light                        5.64    45   0.88   16.00x16 16.00x16
+off.focus-visible.light                       4.74    43   0.82   16.00x16 16.00x16
+off.invalid.focus-visible.light               4.13    32   0.62   16.00x16 16.00x16
+off.focus-visible.dark                        4.03    45   0.62   16.00x16 16.00x16
+off.invalid.focus-visible.dark                2.39    24   0.47   16.00x16 16.00x16
+on.rest.dark                                  1.88    33   0.21   16.00x16 16.00x16
+on.rest.light                                 1.86    36   0.25   16.00x16 16.00x16
+FIDELITY radio: 16 cases, mean differing 2.07%
+BACKDROP light: tint-only vs blurred, 17.08% pixels differ, mean 5.41
+BACKDROP dark: tint-only vs blurred, 29.14% pixels differ, mean 7.36
+xl.300.rest.dark                             10.70   235  11.59   300.00x112 300.00x112
+xl.300.rest.light                            10.41   213  10.32   300.00x112 300.00x112
+sm.260.rest.dark                              9.06   158   4.15   260.00x120 260.00x120
+center.260.rest.dark                          9.03   158   4.40   260.00x120 260.00x120
+sm.420.rest.dark                              8.21   156   4.07   420.00x80 420.00x80
+sm.343.rest.dark                              8.10   160   3.70   343.00x100 343.00x100
+FIDELITY TextBlock: 16 cases, mean differing 7.53%
+✔ Test discoveryList() passed after 21.624 seconds.
+✔ Test settings() passed after 21.624 seconds.
+✔ Test standalonePage() passed after 21.624 seconds.
+✔ Test table() passed after 21.625 seconds.
+✔ Test wizardSteps() passed after 21.625 seconds.
+✔ Test middleTruncateSplit() passed after 21.634 seconds.
+ROW light: capture mean 255.00 | ours mean 255.00
+ROW dark: capture mean 29.86 | ours mean 29.50
+selected.focus-visible.dark                   1.30   107   0.44
+selected.focus-visible.light                  1.28    92   0.36
+outline.hover.dark                            1.19   152   0.50
+outline.active.dark                           1.18   147   0.49
+selected.rest.dark                            1.10   107   0.42
+selected.hover.dark                           1.10   107   0.42
+FIDELITY sidebar-menu-button: 60 cases, mean differing 0.72%
+GRAIN light: capture mean 248.78 sd 0.63 | ours mean 248.80 sd 0.62 | no grain mean 250.00
+GRAIN dark: capture mean 3.29 sd 0.93 | ours mean 3.26 sd 0.93 | no grain mean 0.00
+branch.rest.dark                              6.62   160   3.46   180.00x20 180.00x20
+sha-long.rest.dark                            6.29   154   3.26   180.00x20 180.00x20
+path.rest.dark                                5.87   148   2.58   180.00x20 180.00x20
+sha-long.rest.light                           5.48   114   2.45   180.00x20 180.00x20
+branch.rest.light                             4.98   123   2.57   180.00x20 180.00x20
+short.rest.dark                               4.45   107   1.52   30.94x20 30.94x20
+FIDELITY MiddleTruncate: 8 cases, mean differing 5.00%
+pairing-m2-132.rest.light                     0.00     0   0.00   132.00x132 132.00x132
+pairing-m2-132.rest.dark                      0.00     0   0.00   132.00x132 132.00x132
+nightly-m1-128.rest.light                     0.00     0   0.00   128.00x128 128.00x128
+nightly-m1-128.rest.dark                      0.00     0   0.00   128.00x128 128.00x128
+numeric-l0-128.rest.light                     0.00     0   0.00   128.00x128 128.00x128
+numeric-l0-128.rest.dark                      0.00     0   0.00   128.00x128 128.00x128
+FIDELITY QRCode: 8 cases, mean differing 0.00%
+bare.panel.rest.light                         5.72   213   1.98   512.00x218 512.00x218
+default.rest.light                            5.46   213   1.74   512.00x183 512.00x183
+bare.panel.rest.dark                          3.20   235   1.70   512.00x218 512.00x218
+default.panel.rest.dark                       2.93   235   1.54   512.00x239 512.00x239
+default.panel.rest.light                      2.57   213   1.45   512.00x239 512.00x239
+default.rest.dark                             1.99   235   1.15   512.00x183 512.00x183
+FIDELITY dialog: 6 cases, mean differing 3.64%
+bare.rest.light                               5.70   213   1.81   512.00x174 512.00x174
+bare.rest.dark                                2.08   235   1.19   512.00x174 512.00x174
+default.rest.light                            2.01   213   1.25   512.00x183 512.00x183
+default.rest.dark                             1.98   235   1.10   512.00x183 512.00x183
+FIDELITY alert-dialog: 4 cases, mean differing 2.94%
+right.rest.light                              0.65   216   0.40   448.00x360 448.00x360
+right.inset.rest.light                        0.65   216   0.41   448.00x360 448.00x360
+right.rest.dark                               0.63   228   0.37   448.00x360 448.00x360
+right.inset.rest.dark                         0.63   228   0.37   448.00x360 448.00x360
+left.rest.light                               0.62   216   0.38   448.00x360 448.00x360
+left.rest.dark                                0.60   228   0.35   448.00x360 448.00x360
+FIDELITY sheet: 6 cases, mean differing 0.63%
+✔ Test numberField() passed after 29.067 seconds.
+✔ Test group() passed after 29.067 seconds.
+✔ Test scrollArea() passed after 29.068 seconds.
+✔ Test alert() passed after 29.068 seconds.
+✔ Test checkbox() passed after 29.068 seconds.
+✔ Test switchControl() passed after 29.068 seconds.
+✔ Test toggle() passed after 29.069 seconds.
+✔ Test collapsibleSectionHeader() passed after 29.069 seconds.
+✔ Test empty() passed after 29.071 seconds.
+✔ Test titlebarInsets() passed after 29.071 seconds.
+✔ Test panelTabClose() passed after 29.072 seconds.
+✔ Test viewportSchedulesOneTimerOnlyWhileToastsRun() passed after 29.071 seconds.
+✔ Test collapseHidesContainerAndRail() passed after 29.071 seconds.
+✔ Test dragPersistsAndResets() passed after 29.071 seconds.
+h210.focus-visible.light                      2.11   103   1.42
+h210.focus-visible.dark                       2.00   103   2.58
+h0.focus-visible.dark                         1.54    67   2.43
+h0.focus-visible.light                        1.49    68   1.26
+h210.rest.light                               0.85   103   0.27
+h210.rest.dark                                0.78   103   0.26
+FIDELITY hue-slider: 8 cases, mean differing 1.17%
+✔ Test toggleGroup() passed after 29.262 seconds.
+✔ Test radio() passed after 29.275 seconds.
+✔ Suite TogglesFidelityTests passed after 29.276 seconds.
+✔ Test collapsedStackPeeks() passed after 29.275 seconds.
+✔ Test timeoutPauseAndResume() passed after 29.275 seconds.
+✔ Test backdropBlurDifference() passed after 29.276 seconds.
+✔ Test widthRules() passed after 29.276 seconds.
+✔ Test expandedStackIsAList() passed after 29.276 seconds.
+✔ Test textBlock() passed after 29.276 seconds.
+✔ Suite SidebarBehaviourTests passed after 29.277 seconds.
+active.shortcut.rest.light                    1.54   122   0.44
+active.rest.light                             1.27   122   0.36
+idle.shortcut.rest.dark                       1.06   153   0.41
+active.shortcut.rest.dark                     1.04   147   0.39
+idle.shortcut.rest.light                      0.86   114   0.35
+idle.rest.dark                                0.79   153   0.33
+FIDELITY command-item: 8 cases, mean differing 0.99%
+------------------------------------------------------------------------------------------------
+case                                             diff%   max   mean   ref css      ours
+warning-outline.sm.active.light                   9.32   137   1.73   142.08x28    142.50x28
+destructive.sm.active.dark                        9.23   203   1.92   112.67x28    113.00x28
+media-close.sm.active.light                       8.72   167   3.66   119.70x28    120.00x28
+warning-outline.sm.active.dark                    8.40   131   1.69   142.08x28    142.50x28
+destructive.sm.active.light                       8.30   175   2.06   112.67x28    113.00x28
+destructive-outline.sm.active.light               7.19   140   1.76   164.12x28    164.50x28
+destructive-outline.sm.active.dark                7.16   154   1.47   164.12x28    164.50x28
+default.sm.active.dark                            7.06   104   1.36   84.26x28     84.50x28
+default.sm.active.light                           7.02   103   1.62   84.26x28     84.50x28
+overlay.sm.active.light                           7.00   103   3.14   85.53x28     85.50x28
+media-close.sm.active.dark                        6.84   183   2.39   119.70x28    120.00x28
+outline.compact.active.light                      6.74    72   1.36   89.80x28     90.00x28
+media-navigation.sm.active.dark                   6.54   160   2.39   152.98x28    153.50x28
+outline.micro.active.light                        6.47   111   2.10   54.09x20     54.00x20
+outline.sm.active.light                           6.11    64   1.44   82.95x28     83.00x28
+warning-outline.sm.focus-visible.dark             5.98   231   1.92   142.08x28    142.50x28
+warning-outline.sm.focus-visible.light            5.87   225   2.17   142.08x28    142.50x28
+outline.default.active.light                      5.72    65   1.17   90.26x32     90.50x32
+destructive.sm.focus-visible.light                5.70   225   2.32   112.67x28    113.00x28
+destructive.sm.focus-visible.dark                 5.63   241   2.04   112.67x28    113.00x28
+outline.icon-tiny.focus-visible.light             5.57    43   0.94   16.00x16     16.00x16
+destructive-outline.sm.focus-visible.dark         5.47   231   1.58   164.12x28    164.50x28
+media-navigation.sm.focus-visible.dark            5.40   245   3.33   152.98x28    153.50x28
+destructive-outline.sm.focus-visible.light        5.27   225   1.89   164.12x28    164.50x28
+media-close.sm.focus-visible.dark                 5.09   245   2.99   119.70x28    120.00x28
+glass.sm.focus-visible.light                      5.07   117   1.32   72.51x28     72.50x28
+outline.xs.active.light                           4.90    69   0.96   42.82x24     43.00x24
+glass.sm.focus-visible.dark                       4.88   166   1.50   72.51x28     72.50x28
+outline.icon-tiny.focus-visible.dark              4.86    45   0.72   16.00x16     16.00x16
+ghost-destructive.sm.focus-visible.light          4.83   225   1.81   156.55x28    157.00x28
+warning-outline.sm.hover.dark                     4.79   134   1.30   142.08x28    142.50x28
+warning-outline.sm.rest.dark                      4.76   116   1.33   142.08x28    142.50x28
+ghost-muted.sm.focus-visible.light                4.73   225   1.82   124.11x28    124.50x28
+outline.micro.focus-visible.dark                  4.72   162   2.01   54.09x20     54.00x20
+outline.lg.active.light                           4.70    63   1.19   60.14x36     60.00x36
+warning-outline.sm.hover.light                    4.66   121   1.39   142.08x28    142.50x28
+warning-outline.sm.rest.light                     4.65   111   1.42   142.08x28    142.50x28
+destructive.sm.hover.dark                         4.63   220   1.41   112.67x28    113.00x28
+outline.micro.focus-visible.light                 4.61   118   1.83   54.09x20     54.00x20
+media-navigation.sm.hover.dark                    4.56   150   2.37   152.98x28    153.50x28
+destructive-outline.sm.hover.dark                 4.53   103   1.12   164.12x28    164.50x28
+outline.icon-xs.active.light                      4.47    17   0.74   24.00x24     24.00x24
+ghost-destructive.sm.focus-visible.dark           4.45   231   1.53   156.55x28    157.00x28
+destructive.sm.rest.dark                          4.41   221   1.31   112.67x28    113.00x28
+destructive.sm.hover.light                        4.40   189   1.40   112.67x28    113.00x28
+ghost-destructive.sm.active.light                 4.39   137   1.45   156.55x28    157.00x28
+outline.icon-sm.active.light                      4.38    14   0.78   28.00x28     28.00x28
+warning-outline.sm.disabled.dark                  4.34    74   0.98   142.08x28    142.50x28
+destructive-outline.sm.rest.dark                  4.34   105   1.09   164.12x28    164.50x28
+media-navigation.sm.rest.dark                     4.31   150   2.18   152.98x28    153.50x28
+destructive.sm.rest.light                         4.29   190   1.45   112.67x28    113.00x28
+warning-outline.sm.disabled.light                 4.26    71   1.21   142.08x28    142.50x28
+ghost-muted.sm.focus-visible.dark                 4.24   231   1.54   124.11x28    124.50x28
+ghost-destructive.sm.hover.light                  4.24   136   1.18   156.55x28    157.00x28
+outline.compact.focus-visible.dark                4.24   123   1.36   89.80x28     90.00x28
+ghost.sm.focus-visible.light                      4.20   116   1.52   75.59x28     75.50x28
+destructive-outline.sm.hover.light                4.20    84   1.22   164.12x28    164.50x28
+ghost.sm.focus-visible.dark                       4.18   166   1.78   75.59x28     75.50x28
+media-close.sm.rest.dark                          4.17   121   1.83   119.70x28    120.00x28
+media-close.sm.hover.dark                         4.17   122   1.84   119.70x28    120.00x28
+secondary.sm.focus-visible.dark                   4.15   102   1.83   107.26x28    107.50x28
+ghost-destructive.sm.active.dark                  4.14   152   1.06   156.55x28    157.00x28
+destructive-outline.sm.rest.light                 4.14    87   1.24   164.12x28    164.50x28
+default.sm.focus-visible.dark                     4.10   110   0.81   84.26x28     84.50x28
+ghost-destructive.sm.hover.dark                   4.08   151   0.90   156.55x28    157.00x28
+default.sm.focus-visible.light                    4.05   123   0.96   84.26x28     84.50x28
+overlay.sm.focus-visible.dark                     4.04   111   1.36   85.53x28     85.50x28
+outline.micro.active.dark                         4.02   157   2.10   54.09x20     54.00x20
+media-navigation.sm.disabled.dark                 4.00    97   1.40   152.98x28    153.50x28
+outline.sm.focus-visible.light                    3.98   117   1.36   82.95x28     83.00x28
+link.sm.active.dark                               3.93   150   2.61   61.03x28     61.00x28
+outline.micro.rest.dark                           3.91   162   2.00   54.09x20     54.00x20
+outline.micro.hover.dark                          3.91   158   1.92   54.09x20     54.00x20
+overlay.sm.focus-visible.light                    3.84    80   1.04   85.53x28     85.50x28
+outline.sm.focus-visible.dark                     3.83   155   1.65   82.95x28     83.00x28
+media-close.sm.hover.light                        3.83   193   2.16   119.70x28    120.00x28
+outline.compact.focus-visible.light               3.81    73   1.02   89.80x28     90.00x28
+ghost-muted.sm.active.dark                        3.80   159   1.70   124.11x28    124.50x28
+media-close.sm.disabled.dark                      3.75    77   1.69   119.70x28    120.00x28
+destructive.sm.disabled.light                     3.73   133   1.19   112.67x28    113.00x28
+link.sm.focus-visible.dark                        3.73   124   1.29   61.03x28     61.00x28
+outline.micro.disabled.dark                       3.65   104   1.21   54.09x20     54.00x20
+media-close.sm.rest.light                         3.64   155   1.40   119.70x28    120.00x28
+link.sm.active.light                              3.64   121   2.29   61.03x28     61.00x28
+media-close.sm.focus-visible.light                3.63   164   1.38   119.70x28    120.00x28
+link.sm.focus-visible.light                       3.62    84   1.01   61.03x28     61.00x28
+outline.icon.active.light                         3.60    17   0.81   32.00x32     32.00x32
+ghost-muted.sm.hover.dark                         3.59   154   1.71   124.11x28    124.50x28
+outline.icon-micro.active.light                   3.59    17   0.70   20.00x20     20.00x20
+destructive-outline.sm.disabled.dark              3.57    68   0.66   164.12x28    164.50x28
+destructive.sm.disabled.dark                      3.56   154   0.95   112.67x28    113.00x28
+outline.xs.focus-visible.light                    3.56    64   0.70   42.82x24     43.00x24
+outline.icon-xs.focus-visible.light               3.55    43   0.59   24.00x24     24.00x24
+ghost-destructive.sm.rest.light                   3.52    92   1.08   156.55x28    157.00x28
+secondary.sm.focus-visible.light                  3.52    96   0.98   107.26x28    107.50x28
+outline.icon-lg.active.light                      3.50    17   0.84   36.00x36     36.00x36
+outline.xs.focus-visible.dark                     3.48   108   0.85   42.82x24     43.00x24
+outline.micro.rest.light                          3.46   118   1.69   54.09x20     54.00x20
+overlay.sm.hover.light                            3.46   101   1.20   85.53x28     85.50x28
+destructive-outline.sm.disabled.light             3.42    55   1.25   164.12x28    164.50x28
+secondary.sm.rest.dark                            3.39   102   1.73   107.26x28    107.50x28
+outline.micro.hover.light                         3.38   114   1.63   54.09x20     54.00x20
+secondary.sm.hover.dark                           3.36   101   1.26   107.26x28    107.50x28
+outline.compact.rest.dark                         3.34   123   1.33   89.80x28     90.00x28
+outline.xl.active.light                           3.32    60   0.79   66.34x40     66.50x40
+ghost-muted.sm.active.light                       3.29   120   1.39   124.11x28    124.50x28
+default.sm.rest.dark                              3.28   110   0.74   84.26x28     84.50x28
+default.sm.hover.dark                             3.27   112   0.80   84.26x28     84.50x28
+outline.compact.hover.dark                        3.25   121   1.27   89.80x28     90.00x28
+default.sm.rest.light                             3.24   123   0.88   84.26x28     84.50x28
+ghost-muted.sm.hover.light                        3.24   119   1.25   124.11x28    124.50x28
+default.sm.hover.light                            3.22   111   0.81   84.26x28     84.50x28
+ghost.sm.rest.light                               3.22   116   1.37   75.59x28     75.50x28
+ghost.sm.hover.light                              3.20   111   1.32   75.59x28     75.50x28
+link.sm.hover.dark                                3.19   235   2.71   61.03x28     61.00x28
+outline.icon-micro.focus-visible.light            3.18    40   0.51   20.00x20     20.00x20
+overlay.sm.rest.dark                              3.17   111   1.23   85.53x28     85.50x28
+overlay.sm.hover.dark                             3.16   112   1.24   85.53x28     85.50x28
+link.sm.hover.light                               3.15   213   2.27   61.03x28     61.00x28
+ghost.sm.rest.dark                                3.13   166   1.64   75.59x28     75.50x28
+ghost.sm.active.light                             3.13   110   1.38   75.59x28     75.50x28
+outline.micro.disabled.light                      3.12    75   1.42   54.09x20     54.00x20
+ghost-muted.sm.rest.light                         3.12    89   0.91   124.11x28    124.50x28
+ghost-destructive.sm.rest.dark                    3.12    75   0.90   156.55x28    157.00x28
+overlay.sm.rest.light                             3.11    80   0.93   85.53x28     85.50x28
+outline.default.focus-visible.dark                3.10   123   0.94   90.26x32     90.50x32
+ghost.sm.hover.dark                               3.07   159   1.57   75.59x28     75.50x28
+secondary.sm.disabled.dark                        3.06    66   1.32   107.26x28    107.50x28
+outline.compact.active.dark                       3.05   115   1.29   89.80x28     90.00x28
+ghost.sm.active.dark                              3.03   153   1.49   75.59x28     75.50x28
+outline.icon-xs.focus-visible.dark                3.02    45   0.48   24.00x24     24.00x24
+secondary.sm.active.dark                          2.98   106   1.03   107.26x28    107.50x28
+default.sm.disabled.light                         2.95    80   0.99   84.26x28     84.50x28
+media-close.sm.disabled.light                     2.94   100   0.97   119.70x28    120.00x28
+outline.icon-sm.focus-visible.light               2.93    43   0.49   28.00x28     28.00x28
+outline.lg.focus-visible.light                    2.90    85   0.80   60.14x36     60.00x36
+default.sm.disabled.dark                          2.89    71   0.75   84.26x28     84.50x28
+outline.default.focus-visible.light               2.88    73   0.69   90.26x32     90.50x32
+outline.sm.rest.dark                              2.87   155   1.61   82.95x28     83.00x28
+outline.sm.rest.light                             2.86   117   1.20   82.95x28     83.00x28
+ghost-destructive.sm.disabled.light               2.84    59   0.73   156.55x28    157.00x28
+overlay.sm.active.dark                            2.84   109   1.08   85.53x28     85.50x28
+outline.sm.hover.dark                             2.81   152   1.54   82.95x28     83.00x28
+outline.sm.active.dark                            2.79   109   1.28   82.95x28     83.00x28
+outline.sm.hover.light                            2.78   113   1.17   82.95x28     83.00x28
+glass.sm.rest.light                               2.78   117   1.02   72.51x28     72.50x28
+glass.sm.hover.light                              2.78   117   1.02   72.51x28     72.50x28
+outline.compact.rest.light                        2.77    73   0.88   89.80x28     90.00x28
+outline.compact.hover.light                       2.74    70   0.85   89.80x28     90.00x28
+ghost.sm.disabled.light                           2.73    74   0.90   75.59x28     75.50x28
+glass.sm.rest.dark                                2.70   166   1.23   72.51x28     72.50x28
+glass.sm.hover.dark                               2.70   166   1.24   72.51x28     72.50x28
+outline.xs.active.dark                            2.69   115   0.89   42.82x24     43.00x24
+overlay.sm.disabled.dark                          2.66    72   1.24   85.53x28     85.50x28
+glass.sm.active.dark                              2.64   159   1.24   72.51x28     72.50x28
+secondary.sm.rest.light                           2.63    96   0.84   107.26x28    107.50x28
+secondary.sm.hover.light                          2.63    96   0.84   107.26x28    107.50x28
+ghost.sm.disabled.dark                            2.62   107   1.07   75.59x28     75.50x28
+ghost-muted.sm.rest.dark                          2.61    73   0.77   124.11x28    124.50x28
+outline.compact.disabled.dark                     2.60    80   0.81   89.80x28     90.00x28
+outline.default.active.dark                       2.58   112   1.04   90.26x32     90.50x32
+outline.icon-sm.focus-visible.dark                2.57    45   0.41   28.00x28     28.00x28
+link.sm.rest.dark                                 2.49   124   1.11   61.03x28     61.00x28
+overlay.sm.disabled.light                         2.49    51   1.05   85.53x28     85.50x28
+outline.lg.focus-visible.dark                     2.48   120   0.90   60.14x36     60.00x36
+glass.sm.active.light                             2.46   116   1.22   72.51x28     72.50x28
+link.sm.rest.light                                2.46    84   0.83   61.03x28     61.00x28
+ghost-muted.sm.disabled.light                     2.43    56   0.62   124.11x28    124.50x28
+secondary.sm.active.light                         2.36    73   0.65   107.26x28    107.50x28
+outline.sm.disabled.dark                          2.34    99   0.98   82.95x28     83.00x28
+outline.icon.focus-visible.light                  2.32    43   0.41   32.00x32     32.00x32
+outline.default.rest.dark                         2.28   123   0.91   90.26x32     90.50x32
+outline.default.hover.dark                        2.28   121   0.86   90.26x32     90.50x32
+outline.icon-micro.focus-visible.dark             2.24    45   0.39   20.00x20     20.00x20
+glass.sm.disabled.light                           2.23    74   0.73   72.51x28     72.50x28
+link.sm.disabled.dark                             2.17    79   0.74   61.03x28     61.00x28
+ghost-destructive.sm.disabled.dark                2.15    48   0.58   156.55x28    157.00x28
+secondary.sm.disabled.light                       2.14    61   1.03   107.26x28    107.50x28
+outline.icon-lg.focus-visible.light               2.10    43   0.35   36.00x36     36.00x36
+glass.sm.disabled.dark                            2.09   107   0.85   72.51x28     72.50x28
+link.sm.disabled.light                            2.01    53   0.55   61.03x28     61.00x28
+outline.icon.focus-visible.dark                   1.99    45   0.34   32.00x32     32.00x32
+outline.icon-xl.active.light                      1.96    22   0.60   40.00x40     40.00x40
+outline.xl.focus-visible.light                    1.94    46   0.40   66.34x40     66.50x40
+outline.sm.disabled.light                         1.94    74   1.23   82.95x28     83.00x28
+outline.default.rest.light                        1.94    73   0.56   90.26x32     90.50x32
+outline.default.hover.light                       1.91    70   0.54   90.26x32     90.50x32
+ghost-muted.sm.disabled.dark                      1.91    47   0.49   124.11x28    124.50x28
+outline.icon-lg.focus-visible.dark                1.84    45   0.30   36.00x36     36.00x36
+outline.xs.rest.dark                              1.83   108   0.71   42.82x24     43.00x24
+outline.compact.disabled.light                    1.83    46   1.02   89.80x28     90.00x28
+outline.default.disabled.dark                     1.83    80   0.53   90.26x32     90.50x32
+outline.xs.hover.dark                             1.81   106   0.67   42.82x24     43.00x24
+outline.xl.focus-visible.dark                     1.74    53   0.42   66.34x40     66.50x40
+outline.lg.hover.light                            1.68    82   0.60   60.14x36     60.00x36
+outline.lg.rest.light                             1.68    85   0.62   60.14x36     60.00x36
+outline.icon-xl.focus-visible.light               1.57    43   0.28   40.00x40     40.00x40
+outline.xs.rest.light                             1.53    64   0.40   42.82x24     43.00x24
+outline.xs.hover.light                            1.52    62   0.39   42.82x24     43.00x24
+outline.icon-xs.active.dark                       1.48    13   0.44   24.00x24     24.00x24
+outline.icon-tiny.active.light                    1.46    13   0.48   16.00x16     16.00x16
+outline.lg.rest.dark                              1.43   120   0.84   60.14x36     60.00x36
+outline.lg.hover.dark                             1.43   118   0.79   60.14x36     60.00x36
+outline.icon-micro.active.dark                    1.41    11   0.41   20.00x20     20.00x20
+outline.lg.disabled.light                         1.39    53   0.89   60.14x36     60.00x36
+outline.default.disabled.light                    1.35    46   0.85   90.26x32     90.50x32
+outline.icon-xl.focus-visible.dark                1.33    45   0.24   40.00x40     40.00x40
+outline.xs.disabled.dark                          1.29    70   0.39   42.82x24     43.00x24
+outline.lg.active.dark                            1.28   101   0.85   60.14x36     60.00x36
+outline.xs.disabled.light                         1.23    40   0.62   42.82x24     43.00x24
+outline.lg.disabled.dark                          1.18    78   0.47   60.14x36     60.00x36
+outline.xl.active.dark                            1.01    88   0.45   66.34x40     66.50x40
+outline.icon-micro.rest.light                     0.95    16   0.20   20.00x20     20.00x20
+outline.xl.rest.light                             0.89    46   0.25   66.34x40     66.50x40
+outline.xl.hover.light                            0.87    45   0.24   66.34x40     66.50x40
+outline.xl.rest.dark                              0.84    53   0.37   66.34x40     66.50x40
+outline.xl.hover.dark                             0.83    51   0.34   66.34x40     66.50x40
+outline.icon-tiny.rest.light                      0.83    16   0.22   16.00x16     16.00x16
+outline.icon-tiny.rest.dark                       0.83    13   0.26   16.00x16     16.00x16
+outline.icon-tiny.hover.light                     0.83    15   0.20   16.00x16     16.00x16
+outline.icon-tiny.hover.dark                      0.83    13   0.25   16.00x16     16.00x16
+outline.icon-micro.hover.light                    0.81    15   0.20   20.00x20     20.00x20
+outline.xl.disabled.light                         0.72    28   0.69   66.34x40     66.50x40
+outline.icon-micro.rest.dark                      0.66    13   0.27   20.00x20     20.00x20
+outline.icon-micro.hover.dark                     0.66    13   0.23   20.00x20     20.00x20
+outline.icon-xs.rest.light                        0.53    12   0.13   24.00x24     24.00x24
+outline.xl.disabled.dark                          0.53    33   0.17   66.34x40     66.50x40
+outline.icon-xs.hover.light                       0.50    11   0.13   24.00x24     24.00x24
+outline.icon-sm.rest.light                        0.44    16   0.12   28.00x28     28.00x28
+outline.icon-sm.rest.dark                         0.44    13   0.21   28.00x28     28.00x28
+outline.icon-sm.hover.light                       0.44    15   0.11   28.00x28     28.00x28
+outline.icon-sm.hover.dark                        0.44    13   0.18   28.00x28     28.00x28
+outline.icon-xs.rest.dark                         0.44    10   0.21   24.00x24     24.00x24
+outline.icon-xs.hover.dark                        0.41     9   0.19   24.00x24     24.00x24
+outline.icon.rest.light                           0.39    16   0.11   32.00x32     32.00x32
+outline.icon.hover.light                          0.39    15   0.11   32.00x32     32.00x32
+outline.icon-xs.disabled.light                    0.38     9   0.37   24.00x24     24.00x24
+outline.icon.rest.dark                            0.37    13   0.19   32.00x32     32.00x32
+outline.icon.hover.dark                           0.37    13   0.16   32.00x32     32.00x32
+outline.icon-lg.rest.light                        0.31    16   0.09   36.00x36     36.00x36
+outline.icon-lg.rest.dark                         0.31    13   0.18   36.00x36     36.00x36
+outline.icon-lg.hover.light                       0.31    15   0.09   36.00x36     36.00x36
+outline.icon-lg.hover.dark                        0.31    13   0.15   36.00x36     36.00x36
+outline.icon.active.dark                          0.27    12   0.43   32.00x32     32.00x32
+outline.icon-sm.active.dark                       0.21    10   0.43   28.00x28     28.00x28
+outline.icon-lg.active.dark                       0.07    11   0.41   36.00x36     36.00x36
+outline.icon-xl.active.dark                       0.07    16   0.17   40.00x40     40.00x40
+outline.icon-tiny.disabled.light                  0.05    11   0.25   16.00x16     16.00x16
+outline.icon-micro.disabled.light                 0.04    11   0.35   20.00x20     20.00x20
+outline.icon-xl.rest.light                        0.03    10   0.05   40.00x40     40.00x40
+outline.icon-xl.hover.light                       0.03    10   0.05   40.00x40     40.00x40
+outline.icon-sm.disabled.light                    0.03    11   0.41   28.00x28     28.00x28
+outline.icon-tiny.active.dark                     0.02     9   0.33   16.00x16     16.00x16
+outline.icon.disabled.light                       0.02    11   0.45   32.00x32     32.00x32
+outline.icon-lg.disabled.light                    0.02    11   0.48   36.00x36     36.00x36
+outline.icon-xl.rest.dark                         0.02     9   0.14   40.00x40     40.00x40
+media-navigation.sm.rest.light                    0.00     2   0.03   152.98x28    153.50x28
+media-navigation.sm.hover.light                   0.00     3   0.03   152.98x28    153.50x28
+media-navigation.sm.active.light                  0.00     3   0.03   152.98x28    153.50x28
+media-navigation.sm.focus-visible.light           0.00     3   0.04   152.98x28    153.50x28
+media-navigation.sm.disabled.light                0.00     2   0.02   152.98x28    153.50x28
+outline.icon.disabled.dark                        0.00     8   0.05   32.00x32     32.00x32
+outline.icon-lg.disabled.dark                     0.00     8   0.04   36.00x36     36.00x36
+outline.icon-micro.disabled.dark                  0.00     8   0.10   20.00x20     20.00x20
+outline.icon-tiny.disabled.dark                   0.00     8   0.11   16.00x16     16.00x16
+outline.icon-sm.disabled.dark                     0.00     8   0.06   28.00x28     28.00x28
+outline.icon-xl.hover.dark                        0.00     8   0.12   40.00x40     40.00x40
+outline.icon-xl.disabled.light                    0.00     6   0.50   40.00x40     40.00x40
+outline.icon-xl.disabled.dark                     0.00     6   0.02   40.00x40     40.00x40
+outline.icon-xs.disabled.dark                     0.00     6   0.06   24.00x24     24.00x24
+270 cases, mean differing 2.86%, report: /tmp/candywrapper-fidelity/report-button.html
+destructive.default.rest.light                6.03   149   1.67   73.42x18 73.50x18
+destructive.default.rest.dark                 6.01   134   1.50   73.42x18 73.50x18
+default.default.rest.dark                     5.78   144   1.56   48.55x18 48.50x18
+default.default.rest.light                    5.76   161   1.90   48.55x18 48.50x18
+secondary.default.rest.dark                   5.37   164   3.28   68.52x18 68.50x18
+outline.default.rest.dark                     4.95   157   2.83   47.42x18 47.50x18
+FIDELITY Badge: 24 cases, mean differing 3.89%
+enter.rest.light                              2.67    52   0.58   38.68x20 38.76x20
+cmd.rest.light                                2.64    80   1.09   20.00x20 20.00x20
+group.rest.light                              2.62    80   1.15   44.00x20 44.00x20
+cmd.rest.dark                                 2.57    64   1.15   20.00x20 20.00x20
+shortcut.rest.light                           2.54    52   0.59   39.12x20 39.17x20
+group.rest.dark                               2.52    64   1.26   44.00x20 44.00x20
+FIDELITY Kbd: 12 cases, mean differing 1.94%
+text.rest.dark                                6.40   113   2.75   91.98x16 93.00x16
+text.rest.light                               5.83    72   1.99   91.98x16 93.00x16
+short.rest.dark                               5.35   107   2.18   38.42x16 39.00x16
+short.rest.light                              4.70    64   1.40   38.42x16 39.00x16
+FIDELITY Label: 4 cases, mean differing 5.57%
+horizontal.rest.light                         0.00     0   0.00   120.00x1 120.00x1
+horizontal.rest.dark                          0.00     1   0.05   120.00x1 120.00x1
+vertical.rest.light                           0.00     0   0.00   1.00x24 1.00x24
+vertical.rest.dark                            0.00     1   0.04   1.00x24 1.00x24
+FIDELITY Separator: 4 cases, mean differing 0.00%
+block.rest.light                              0.00     4   0.15   120.00x16 120.00x16
+block.rest.dark                               0.00     3   0.44   120.00x16 120.00x16
+card.rest.light                               0.00     5   0.23   160.00x48 160.00x48
+card.rest.dark                                0.00     4   0.68   160.00x48 160.00x48
+pill.rest.light                               0.00     5   0.15   80.00x20 80.00x20
+pill.rest.dark                                0.00     4   0.45   80.00x20 80.00x20
+FIDELITY Skeleton: 6 cases, mean differing 0.00%
+default.search-kbd.focus-visible.light        1.34    78   0.54   240.00x32 240.00x32
+default.search-kbd.focus-visible.dark         1.33    64   1.03   240.00x32 240.00x32
+default.search-kbd.rest.light                 1.23    78   0.42   240.00x32 240.00x32
+default.search-kbd.rest.dark                  1.14    64   0.45   240.00x32 240.00x32
+default.search-kbd.disabled.light             1.03    49   0.34   240.00x32 240.00x32
+ghost.search.focus-visible.light              0.99    72   0.40   240.00x32 240.00x32
+FIDELITY InputGroup: 24 cases, mean differing 0.87%
+default.search.hover.light                    0.84    72   0.27   240.00x32 240.00x32
+ghost.search.hover.light                      0.84    72   0.24   240.00x32 240.00x32
+ghost.search.hover.dark                       0.79    67   0.21   240.00x32 240.00x32
+default.search.hover.dark                     0.78    64   0.33   240.00x32 240.00x32
+FIDELITY InputGroup hover: 4 cases, mean differing 0.81%
+compact.auto.rest.dark                        4.12   192   2.27   112.99x32.00 113.00x32.00
+compact.auto.rest.light                       3.41   164   1.94   112.99x32.00 113.00x32.00
+default.auto.rest.dark                        2.91   192   1.61   120.99x48.00 121.00x48.00
+default.auto.rest.light                       2.41   164   1.49   120.99x48.00 121.00x48.00
+default.md.rest.dark                          1.18   192   0.66   320.00x48.00 320.00x48.00
+default.md.rest.light                         0.97   164   0.73   320.00x48.00 320.00x48.00
+FIDELITY popover: 6 cases, mean differing 2.50%
+s1.h-1.rest.dark                              2.68   148   1.32   200.00x122.00 200.00x122.00
+s1.h1.rest.dark                               2.68   148   1.32   200.00x122.00 200.00x122.00
+s1.h2.rest.dark                               2.67   142   1.47   200.00x122.00 200.00x122.00
+s1.h1.rest.light                              1.60   124   0.99   200.00x122.00 200.00x122.00
+s1.h2.rest.light                              1.60   125   0.98   200.00x122.00 200.00x122.00
+s1.h-1.rest.light                             1.59   124   0.97   200.00x122.00 200.00x122.00
+FIDELITY select-popup: 6 cases, mean differing 2.14%
+s-1.h0.rest.dark                              2.69   149   1.34   200.00x122.00 200.00x122.00
+s1.h1.rest.dark                               2.68   148   1.33   200.00x122.00 200.00x122.00
+s1.h2.rest.dark                               2.67   142   1.47   200.00x122.00 200.00x122.00
+s-1.h0.rest.light                             1.61   124   1.00   200.00x122.00 200.00x122.00
+s1.h1.rest.light                              1.61   124   1.03   200.00x122.00 200.00x122.00
+s1.h2.rest.light                              1.60   125   1.01   200.00x122.00 200.00x122.00
+FIDELITY combobox-popup: 6 cases, mean differing 2.14%
+ghost.default.value.hover.dark                2.97   128   1.24   125.53x32.00 125.53x32.00
+ghost.default.value.focus-visible.light       2.86    78   0.75   125.53x32.00 125.53x32.00
+ghost.default.value.focus-visible.dark        2.64    64   0.63   125.53x32.00 125.53x32.00
+default.sm.value.focus-visible.dark           2.35   130   1.56   200.00x28.00 200.00x28.00
+default.default.placeholder.focus-visible.li  2.21    85   0.77   200.00x32.00 200.00x32.00
+default.default.value.focus-visible.dark      2.16   130   1.51   200.00x32.00 200.00x32.00
+FIDELITY select-trigger: 36 cases, mean differing 1.74%
+empty.rest.light                              4.34   114   1.21   576.00x190 576.00x190
+match.rest.light                              4.23   168   1.35   576.00x262 576.00x262
+submenu.rest.light                            3.85   190   1.18   576.00x230 576.00x230
+browse.rest.light                             3.82   216   1.38   576.00x234 576.00x234
+search.rest.light                             3.42   124   1.06   576.00x312 576.00x312
+match.rest.dark                               1.57   204   0.70   576.00x262 576.00x262
+FIDELITY Command palette: 12 cases, mean differing 2.35%
+FIDELITY command-palette: mean differing 2.35%
+second-active.rest.dark                       1.20   159   0.47
+second-active.rest.light                      0.66   122   0.30
+FIDELITY sidebar-menu-sub: 2 cases, mean differing 0.93%
+sm.current.rest.dark                          1.92    61   0.45   14.00x14 14.00x14
+lg.current.rest.dark                          1.85    67   0.46   20.00x20 20.00x20
+sm.current.rest.light                         1.81    56   0.41   14.00x14 14.00x14
+lg.current.rest.light                         1.79    60   0.42   20.00x20 20.00x20
+xs.current.rest.dark                          1.63    53   0.39   12.00x12 12.00x12
+md.current.rest.dark                          1.61    42   0.35   16.00x16 16.00x16
+FIDELITY Spinner: 16 cases, mean differing 1.34%
+actions.h-1.rest.dark                         2.54   152   1.00   160.00x196.00 160.00x196.00
+actions.h7.rest.dark                          2.53   152   1.10   160.00x196.00 160.00x196.00
+actions.h1.rest.dark                          2.53   149   1.09   160.00x196.00 160.00x196.00
+actions.h4.rest.dark                          2.51   152   1.10   160.00x196.00 160.00x196.00
+actions.h-1.rest.light                        1.94   136   1.20   160.00x196.00 160.00x196.00
+actions.h7.rest.light                         1.94   130   1.27   160.00x196.00 160.00x196.00
+FIDELITY menu: 12 cases, mean differing 2.05%
+code.rest.dark                                4.61   160   2.13   137.21x27.88 137.21x27.88
+glass.rest.dark                               4.03   144   1.76   98.28x26.50 98.28x26.50
+default.rest.dark                             3.67   152   2.20   76.03x26.50 76.03x26.50
+code.rest.light                               3.10   116   1.92   137.21x27.88 137.21x27.88
+default.rest.light                            2.91   113   1.54   76.03x26.50 76.03x26.50
+glass.rest.light                              2.65   114   1.49   98.28x26.50 98.28x26.50
+FIDELITY tooltip: 6 cases, mean differing 3.50%
+s-1.h0.rest.dark                              2.68   148   1.45   200.00x122.00 200.00x122.00
+s1.h1.rest.dark                               2.68   148   1.44   200.00x122.00 200.00x122.00
+s1.h2.rest.dark                               2.68   145   1.44   200.00x122.00 200.00x122.00
+s1.h2.rest.light                              1.61   125   0.95   200.00x122.00 200.00x122.00
+s-1.h0.rest.light                             1.61   124   0.91   200.00x122.00 200.00x122.00
+s1.h1.rest.light                              1.61   124   0.91   200.00x122.00 200.00x122.00
+FIDELITY autocomplete-popup: 6 cases, mean differing 2.14%
+warning.wrap.rest.dark                        4.45   229   2.43   360.00x66 360.00x66
+warning.wrap.rest.light                       4.18   215   2.19   360.00x66 360.00x66
+plain.wrap.rest.light                         3.26   142   1.12   360.00x88 360.00x88
+plain.wrap.rest.dark                          3.05   112   0.92   360.00x88 360.00x88
+success.rest.dark                             2.57   212   1.26   360.00x46 360.00x46
+info.action.rest.light                        2.48   164   0.91   360.00x88 360.00x88
+FIDELITY toast: 10 cases, mean differing 2.88%
+mono.value.focus-visible.dark                 4.32   229   4.79   240.00x32 240.00x32
+mono.value.focus-visible.light                4.29   213   3.61   240.00x32 240.00x32
+mono.value.rest.dark                          4.09   228   4.24   240.00x32 240.00x32
+mono.value.rest.light                         4.01   213   3.47   240.00x32 240.00x32
+mono.value.disabled.dark                      3.87   147   2.66   240.00x32 240.00x32
+mono.value.disabled.light                     3.82   137   2.26   240.00x32 240.00x32
+FIDELITY Input: 42 cases, mean differing 1.87%
+default.value.focus-visible.dark              2.44   154   1.93   240.00x92 240.00x92
+default.value.rest.dark                       2.34   154   1.19   240.00x92 240.00x92
+default.value.disabled.dark                   2.08    98   0.74   240.00x92 240.00x92
+invalid.value.focus-visible.light             1.96   151   0.43   240.00x72 240.00x72
+default.value.focus-visible.light             1.71   151   0.94   240.00x92 240.00x92
+default.value.rest.light                      1.58   151   0.86   240.00x92 240.00x92
+FIDELITY Textarea: 30 cases, mean differing 1.25%
+✔ Test newestInFrontAndLimit() passed after 45.092 seconds.
+✔ Test selectedRowFillAgainstCapture() passed after 45.092 seconds.
+✔ Test sidebarMenuButton() passed after 45.092 seconds.
+✔ Test textBlockLineCountsMatchChromium() passed after 45.092 seconds.
+✔ Test sidebarGrainAgainstCapture() passed after 45.092 seconds.
+✔ Test middleTruncate() passed after 45.093 seconds.
+✔ Test qrCode() passed after 45.093 seconds.
+✔ Suite LayoutFidelityTests passed after 45.094 seconds.
+✔ Test dialogs() passed after 45.093 seconds.
+✔ Test hueSlider() passed after 45.093 seconds.
+✔ Test commandItem() passed after 45.093 seconds.
+✔ Test button() passed after 45.093 seconds.
+✔ Test badge() passed after 45.093 seconds.
+✔ Suite FidelityTests passed after 45.094 seconds.
+✔ Test kbd() passed after 45.094 seconds.
+✔ Test label() passed after 45.095 seconds.
+✔ Test separator() passed after 45.095 seconds.
+✔ Test skeleton() passed after 45.096 seconds.
+✔ Test inputGroup() passed after 45.096 seconds.
+✔ Test focusIsTrappedAndReturned() passed after 45.096 seconds.
+✔ Test alertDialogIgnoresOutsideClicks() passed after 45.096 seconds.
+✔ Test popover() passed after 45.096 seconds.
+✔ Test persistentAndLoadingNeverExpire() passed after 45.096 seconds.
+✔ Suite ModalFocusTests passed after 45.097 seconds.
+✔ Suite ToastBehaviourTests passed after 45.097 seconds.
+✔ Test selectPopup() passed after 45.096 seconds.
+✔ Test comboboxPopup() passed after 45.096 seconds.
+✔ Test commandPalette() passed after 45.097 seconds.
+✔ Test selectTrigger() passed after 45.096 seconds.
+✔ Suite CommandPaletteFidelityTests passed after 45.098 seconds.
+✔ Test sidebarMenuSub() passed after 45.097 seconds.
+✔ Test spinner() passed after 45.097 seconds.
+✔ Suite SidebarFidelityTests passed after 45.098 seconds.
+✔ Test menu() passed after 45.096 seconds.
+✔ Test tooltip() passed after 45.097 seconds.
+✔ Test autocompletePopup() passed after 45.097 seconds.
+✔ Suite PopupsFidelityTests passed after 45.098 seconds.
+✔ Test toast() passed after 45.098 seconds.
+✔ Test input() passed after 45.097 seconds.
+✔ Suite OverlaysFidelityTests passed after 45.098 seconds.
+✔ Test textarea() passed after 45.097 seconds.
+✔ Suite FormsFidelityTests passed after 45.098 seconds.
+✔ Test run with 61 tests in 11 suites passed after 45.099 seconds.

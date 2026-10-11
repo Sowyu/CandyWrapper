@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Store
 
 /// T3's `ChatMarkdown` for one message: all text, rules and boxes drawn into one layer, plus the
 /// code block and table buttons as real controls. Height follows the width: `height(forWidth:)`
@@ -208,15 +209,18 @@ public final class MarkdownView: DSView {
 
     /// T3's native file menu (ChatMarkdown.tsx `showFileContextMenu`). Open, browser and reveal items
     /// appear only once the app supplies those actions.
-    // ponytail: copy items only, and no "copied" toast; add Open in editor and Reveal in Finder with the shell actions
     fileprivate func chipMenu(_ chip: FileChip, event: NSEvent, view: NSView) {
-        let menu = NSMenu()
         let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) } ?? chip.meta.targetPath
-        for (title, value) in [("Copy relative path", relative), ("Copy full path", chip.meta.targetPath)] {
-            let item = NSMenuItem(title: title, action: #selector(FileChipHitView.copyPath(_:)), keyEquivalent: "")
-            item.target = view
-            item.representedObject = value
-            menu.addItem(item)
+        var items = [ThreadMenuItem("relative", "Copy relative path"), ThreadMenuItem("full", "Copy full path")]
+        if onOpenFile != nil {
+            items.append(ThreadMenuItem("viewer", "Open in file viewer"))
+            items.append(ThreadMenuItem("editor", "Open in editor"))
+        }
+        let menu = NativeItemContextMenu.make(items) { [weak self, weak view] action in
+            if action == "viewer" || action == "editor" { self?.onOpenFile?(chip.meta, action == "editor"); return }
+            NSPasteboard.general.clearContents()
+            let copied = NSPasteboard.general.setString(action == "relative" ? relative : chip.meta.targetPath, forType: .string)
+            if let view { AnchoredCopyToast.show(from: view, success: copied) }
         }
         NSMenu.popUpContextMenu(menu, with: event, for: view)
     }

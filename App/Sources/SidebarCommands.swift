@@ -680,21 +680,7 @@ final class SidebarCommands {
     /// Electron's context menu template (apps/desktop/src/electron/ElectronMenu.ts:142-190): a separator
     /// before `separatorBefore` items, checkbox items for `checked`, submenus for children.
     static func nativeMenu(_ items: [ThreadMenuItem], choose: @escaping @MainActor (String) -> Void) -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        for item in items {
-            if item.separatorBefore, menu.items.last.map({ !$0.isSeparatorItem }) == true { menu.addItem(.separator()) }
-            let native = ClosureMenuItem(title: item.label, action: nil, keyEquivalent: "")
-            native.isEnabled = !item.disabled
-            if let checked = item.checked { native.state = checked ? .on : .off }
-            if item.children.isEmpty {
-                native.handler = { choose(item.id) }
-            } else {
-                native.submenu = nativeMenu(item.children, choose: choose)
-            }
-            menu.addItem(native)
-        }
-        return menu
+        NativeItemContextMenu.make(items, choose: choose)
     }
 
     // MARK: Add project (CommandPalette.tsx:2370-2516, 3228-3330)
@@ -767,13 +753,4 @@ final class SidebarCommands {
         layout.needsLayout = true
         onRouteChange?()
     }
-}
-
-/// An NSMenuItem that runs a closure.
-@MainActor
-final class ClosureMenuItem: NSMenuItem {
-    var handler: (@MainActor () -> Void)? {
-        didSet { target = self; action = #selector(run) }
-    }
-    @objc private func run() { handler?() }
 }
