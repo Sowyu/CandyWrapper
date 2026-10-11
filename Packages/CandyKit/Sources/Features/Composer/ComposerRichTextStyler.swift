@@ -15,12 +15,14 @@ enum ComposerRichTextStyler {
 
     static func attributes(_ marks: [ComposerRichText.Mark], base: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
         var result = base
-        result[.composerMarks] = marks.map(\.rawValue)
+        // Plain text carries no mark keys, so it equals what the editor types and a keystroke
+        // doesn't restyle the whole document (ComposerEditor.styleRichText).
+        result[.composerMarks] = marks.isEmpty ? nil : marks.map(\.rawValue)
         var font = marks.contains(.code) ? DSFont.mono(14 * 0.92) : ComposerEditor.font
         if marks.contains(.bold) { font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask) }
         if marks.contains(.italic) { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
         result[.font] = font
-        result[.strikethroughStyle] = marks.contains(.strike) ? NSUnderlineStyle.single.rawValue : 0
+        result[.strikethroughStyle] = marks.contains(.strike) ? NSUnderlineStyle.single.rawValue : nil
         result[.backgroundColor] = marks.contains(.code) ? Themed.color(\.mutedForeground, 0.12) : nil
         return result
     }

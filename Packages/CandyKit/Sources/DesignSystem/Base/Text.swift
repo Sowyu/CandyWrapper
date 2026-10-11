@@ -68,6 +68,7 @@ public final class LabelView: DSView {
     private var fontRecipe = FontRuntime.recipe(for: DSFont.ui(14))
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
+        measuredWidth = nil
         if let recipe = fontRecipe { font = recipe.resolve() }
     }
     // Setters skip unchanged values: rows reconfigure on every streamed delta, and each redraw costs a frame.
@@ -122,9 +123,14 @@ public final class LabelView: DSView {
     }
 
     private func invalidate() {
+        measuredWidth = nil
         invalidateIntrinsicContentSize()
         needsDisplay = true
     }
+
+    /// Layouts ask for the width on every pass (the composer footer measures its pickers each
+    /// time), so it is measured once per change of what sets it: text, font, tracking and runs.
+    private var measuredWidth: CGFloat?
 
     private var resolvedLineHeight: CGFloat {
         lineHeight ?? ceil(font.ascender - font.descender + font.leading)
@@ -156,7 +162,12 @@ public final class LabelView: DSView {
     }
 
     /// The unrounded advance width, for layouts that place text at fractional x like CSS.
-    public var textWidth: CGFloat { TextLine(attributed()).width }
+    public var textWidth: CGFloat {
+        if let measuredWidth { return measuredWidth }
+        let width = TextLine(attributed()).width
+        measuredWidth = width
+        return width
+    }
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty || emphasizedSuffix != nil else { return }
