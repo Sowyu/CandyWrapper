@@ -21,6 +21,9 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     case browser(tabId: String?)
     /// `terminal:<first terminal id>`: one split group of terminals in a tab.
     case terminal(TerminalPanelSurface)
+    /// `attachment:<id>`: a sent file shown with `AttachmentFilePreview` (rightPanelStore.ts:237-244, a `file`
+    /// surface carrying the attachment).
+    case attachment(SentAttachmentSurface)
 
     public var id: String {
         switch self {
@@ -33,6 +36,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .pullRequests: "pull-requests"
         case .browser(let tabId): "browser:" + (tabId ?? "new")
         case .terminal(let t): "terminal:" + t.resourceId
+        case .attachment(let a): "attachment:" + a.id
         }
     }
 
@@ -42,7 +46,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .device, .deviceTarget: .device
         case .diff: .diff
         case .files: .files
-        case .file: .file
+        case .file, .attachment: .file
         case .pullRequest: .pullRequest
         case .pullRequests: .pullRequests
         case .browser: .browser
@@ -66,6 +70,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .browser: return "Browser"
         // The app shows the server's label for the active terminal when it knows one.
         case .terminal(let t): return TerminalLabels.label(t.activeTerminalId)
+        case .attachment(let a): return a.name
         }
     }
 
@@ -82,6 +87,11 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         return nil
     }
 
+    public var attachment: SentAttachmentSurface? {
+        if case .attachment(let a) = self { return a }
+        return nil
+    }
+
     public var pullRequest: PullRequestSurfaceTarget? {
         if case .pullRequest(let target) = self { return target }
         return nil
@@ -90,6 +100,18 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     public var terminal: TerminalPanelSurface? {
         if case .terminal(let t) = self { return t }
         return nil
+    }
+}
+
+/// A sent `ChatFileAttachment` (`{id, name, mimeType, sizeBytes, htmlRender}`) in a panel tab.
+public struct SentAttachmentSurface: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var mimeType: String
+    public var sizeBytes: Int
+    public var htmlRender: Bool
+    public init(id: String, name: String, mimeType: String, sizeBytes: Int, htmlRender: Bool = false) {
+        self.id = id; self.name = name; self.mimeType = mimeType; self.sizeBytes = sizeBytes; self.htmlRender = htmlRender
     }
 }
 
@@ -251,6 +273,12 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         surfaces = kept.contains(where: { $0.id == id }) ? kept.map { $0.id == id ? surface : $0 } : kept + [surface]
         isOpen = true
         activeSurfaceId = id
+    }
+
+    /// `openAttachment` (rightPanelStore.ts:725-736): the standalone explorer goes, the attachment's tab opens.
+    public mutating func openAttachment(_ attachment: SentAttachmentSurface) {
+        surfaces.removeAll { $0.kind == .files }
+        upsert(.attachment(attachment))
     }
 
     /// `openTerminal` (rightPanelStore.ts:737-742): a new tab with one terminal.
@@ -428,6 +456,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .file(let path, let line, _): state.openFile(path, line: line)
         case .pullRequest(let target): state.openPullRequest(target)
         case .deviceTarget: state.upsert(surface)
+        case .attachment(let a): state.openAttachment(a)
         case .terminal: break
         }
     }

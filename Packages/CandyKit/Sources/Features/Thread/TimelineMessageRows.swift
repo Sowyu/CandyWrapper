@@ -372,8 +372,8 @@ final class AssistantMessageRowView: TimelineRowView {
         // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
         markdown.diagramsEnabled = !m.streaming
         markdown.citationSourceID = m.id.rawValue
-        markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection in
-            model?.onCiteSelection?(m.id.rawValue, selection)
+        markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
+            model?.onCiteSelection?(m.id.rawValue, selection, anchor)
         }
         markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text))
         meta.isHidden = !showMeta
@@ -513,7 +513,7 @@ final class PlanRowView: TimelineRowView {
     private let card = FillView()
     private let badge = BadgeView("Plan", variant: .secondary)
     private let title = LabelView("", font: TL.font(14, .medium), color: TL.c(\.foreground))
-    private let actionsButton = ButtonView(icon: .ellipsis, variant: .outline, size: .iconXs)
+    private let actionsButton = ButtonView(icon: .ellipsis, variant: .outline, size: .iconXs).menuTrigger()
     private let markdown = MarkdownView(frame: .zero)
     private let fade = CAGradientLayer()
     private let fadeView = DSView()
@@ -529,7 +529,7 @@ final class PlanRowView: TimelineRowView {
         title.lineHeight = 20
         actionsButton.iconSize = 16
         actionsButton.setAccessibilityLabel("Plan actions")
-        // ponytail: the menu (copy, download, save to workspace) is not built; it arrives with file writes
+        actionsButton.action = { [weak self] in self?.showActions() }
         for view in [badge, title, actionsButton, markdown, fadeView, toggle] as [NSView] { card.addSubview(view) }
         markdown.bodyColor = TL.c(\.foreground)
         fadeView.layer?.addSublayer(fade)
@@ -541,16 +541,38 @@ final class PlanRowView: TimelineRowView {
 
     /// `proposedPlanTitle` and `stripDisplayedPlanMarkdown` (packages/shared/src/proposedPlanText.ts).
     static func split(_ markdown: String) -> (title: String, body: String) {
-        let heading = /(?m)^\s{0,3}#{1,6}\s+(.+)$/
-        let title = markdown.firstMatch(of: heading).map { String($0.1).trimmingCharacters(in: .whitespaces) } ?? ""
-        var lines = markdown.replacing(/\s+$/, with: "").components(separatedBy: .newlines)
-        if let first = lines.first, first.contains(/^\s{0,3}#{1,6}\s+/) { lines.removeFirst() }
-        while lines.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeFirst() }
-        if let first = lines.first, let m = first.firstMatch(of: /^\s{0,3}#{1,6}\s+(.+)$/), m.1.trimmingCharacters(in: .whitespaces).lowercased() == "summary" {
-            lines.removeFirst()
-            while lines.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeFirst() }
+        (ProposedPlanText.title(markdown) ?? "Proposed plan", ProposedPlanText.displayed(markdown))
+    }
+
+    /// The Plan actions menu (ProposedPlanCard.tsx:181-198): copy, download and save the export text
+    /// (`normalizePlanMarkdownForExport`). Save needs the thread's workspace path.
+    private func showActions() {
+        guard case .proposedPlan(let plan)? = item?.row.kind else { return }
+        let markdown = plan.planMarkdown
+        let contents = ProposedPlanText.export(markdown)
+        let filename = ProposedPlanText.filename(markdown)
+        let copy = MenuItem("Copy to clipboard") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(contents, forType: .string)
         }
-        return (title.isEmpty ? "Proposed plan" : title, lines.joined(separator: "\n"))
+        let download = MenuItem("Download as markdown") { [weak self] in self?.download(contents, filename: filename) }
+        let model = context.model
+        // ponytail: enabled whenever there is a workspace; T3 also needs the session's `filesystem:write` scope (the server refuses without it). Check the scope when sessions carry it to the thread
+        var save = MenuItem("Save to workspace") { model?.onSavePlanToWorkspace?(contents, filename) }
+        save.isDisabled = model?.onSavePlanToWorkspace == nil || model?.workspaceRoot == nil
+        MenuPopupView.show([copy, download, save], from: actionsButton,
+                           placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    /// `downloadPlanAsTextFile`: Electron's main window asks where to save a download.
+    private func download(_ contents: String, filename: String) {
+        guard let window else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = filename
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? contents.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     override func configure(_ item: TimelineItem) {
@@ -560,8 +582,7 @@ final class PlanRowView: TimelineRowView {
         title.text = parts.title
         collapsible = plan.planMarkdown.count > 900 || plan.planMarkdown.split(separator: "\n", omittingEmptySubsequences: false).count > 20
         let collapsed = collapsible && !item.ui.planExpanded
-        // ponytail: the collapsed preview is the first 10 body lines; T3's buildCollapsedProposedPlanPreviewMarkdown also closes open fences
-        let body = collapsed ? parts.body.components(separatedBy: "\n").prefix(10).joined(separator: "\n") : parts.body
+        let body = collapsed ? ProposedPlanText.collapsedPreview(plan.planMarkdown) : parts.body
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile

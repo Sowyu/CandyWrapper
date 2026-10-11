@@ -20,6 +20,9 @@ public final class PopoverView: DSView, PopupContent {
     public let width: Width
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
+    /// Keys for the content first (an editor's Enter and Escape); true when used.
+    public var onKey: (@MainActor (PopupKey) -> Bool)?
+    public func popupHandleKey(_ key: PopupKey) -> Bool { onKey?(key) ?? false }
 
     /// `beforeLine` false is `before:hidden` (the model picker, Select popups).
     public init(content: NSView, padding: Padding = .default, width: Width = .auto, beforeLine: Bool = true) {

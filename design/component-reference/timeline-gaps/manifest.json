@@ -1,0 +1,50 @@
+{
+  "attachment.draft" : {
+    "height" : 40,
+    "width" : 560
+  },
+  "attachment.sent" : {
+    "height" : 40,
+    "width" : 560
+  },
+  "citation.comment" : {
+    "height" : 114,
+    "width" : 320
+  },
+  "citation.empty" : {
+    "height" : 114,
+    "width" : 320
+  },
+  "inspector.checkpoint" : {
+    "height" : 24,
+    "width" : 420
+  },
+  "inspector.dynamic-tool" : {
+    "height" : 69.375,
+    "width" : 420
+  },
+  "inspector.file-change" : {
+    "height" : 84,
+    "width" : 420
+  },
+  "inspector.fork" : {
+    "height" : 24,
+    "width" : 420
+  },
+  "inspector.web-search" : {
+    "height" : 83.125,
+    "width" : 420
+  },
+  "plan.implement-split" : {
+    "height" : 32,
+    "width" : 132.9921875
+  },
+  "plan.refine" : {
+    "height" : 32,
+    "width" : 73.796875
+  },
+  "plan.save-dialog" : {
+    "height" : 229,
+    "width" : 576
+  }
+}

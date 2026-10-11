@@ -35,7 +35,7 @@ struct ThreadSweepTests {
         #expect(ThreadGoalPresentation.title(goal, working: false).contains("1h 1m 1s"))
     }
     @Test func longToolOutputGetsScrollableDocument() {
-        var detail = WorkDetail(); detail.blocks = [(String(repeating: "Output line\n", count: 60), .output)]
+        let detail = WorkDetail([(String(repeating: "Output line\n", count: 60), .output)])
         let view = WorkDetailView(frame: NSRect(x: 0, y: 0, width: 400, height: 320)); view.detail = detail
         view.layoutSubtreeIfNeeded()
         let scroller = view.subviews.compactMap { $0 as? NSScrollView }.first

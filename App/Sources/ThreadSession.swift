@@ -407,6 +407,10 @@ final class ThreadController {
         devices = DevicePanelController(panel: panel, environments: environments, files: files)
         files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged(); self?.devices.sync() }
         files.onTerminalTabsClosed = { [weak self] tabs in self?.terminal.panelTerminalsClosed(tabs) }
+        files.onSaveAttachment = { [weak self] a in
+            self?.panel.model.onOpenAttachment?(.object(["type": .string("file"), "id": .string(a.id), "name": .string(a.name),
+                                                         "mimeType": .string(a.mimeType), "sizeBytes": .number(Double(a.sizeBytes))]), true)
+        }
         scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
         scripts.readFile = { [weak environments] env, cwd, path in
@@ -455,12 +459,48 @@ final class ThreadController {
                 self.pullRequests.openCurrentPullRequest()
             }
         }
-        panel.model.onCiteSelection = { [weak self] messageId, selection in
-            guard let self, let id = self.openThreadId, let env = id.environmentId, let window = self.panel.window else { return }
+        // Cite inserts the chip, then opens its comment under the selection (ChatComposer.tsx:6435-6440,
+        // AssistantCitationChip.tsx:167-240). Save rewrites the chip, Save and send also submits, Cancel removes it.
+        panel.model.onCiteSelection = { [weak self] messageId, selection, anchor in
+            guard let self, let id = self.openThreadId, let env = id.environmentId else { return }
             let citation = ThreadAssistantCitation.selection(environmentId: env, threadId: id.localId.rawValue, messageId: messageId, selection: selection)
-            ThreadAssistantCitationEditor.present(citation, in: window) { [weak self] edited in
-                self?.panel.composer.insertAtCaret(edited.markdown + " ")
+            let composer = self.panel.composer
+            composer.insertAtCaret(citation.markdown + " ")
+            var current = citation.markdown
+            func replace(_ with: String) {
+                var text = composer.text
+                guard let range = text.range(of: current + " ") ?? text.range(of: current) else { return }
+                text.replaceSubrange(range, with: with.isEmpty ? "" : with + " ")
+                composer.text = text
+                current = with
             }
+            AssistantCitationCommentPopup.present(citation, anchor: anchor, save: { edited, send in
+                replace(edited.markdown)
+                if send { composer.submit() }
+            }, remove: { replace("") }, restoreFocus: { composer.focus() })
+        }
+        // Save to workspace (ProposedPlanCard.tsx:105-163): `projects.writeFile` under the thread's workspace root.
+        panel.model.onSavePlanToWorkspace = { [weak self] contents, filename in
+            guard let self, let window = self.panel.window, let id = self.openThreadId, let env = id.environmentId else { return }
+            guard let root = self.panel.model.workspaceRoot else {
+                self.panel.toasts.show(ToastView(title: "Workspace path is unavailable",
+                                                 message: "This thread does not have a workspace path to save into.", kind: .error))
+                return
+            }
+            ProposedPlanSaveDialog.present(in: window, workspaceRoot: root, filename: filename, save: { [weak self] path in
+                guard let self, let shell = self.environments.session(env) else { return false }
+                do {
+                    let reply = try await shell.supervisor.request("projects.writeFile", payload: .object(
+                        ["cwd": .string(root), "relativePath": .string(path), "contents": .string(contents)]))
+                    self.panel.toasts.show(ToastView(title: "Plan saved to workspace", message: reply["relativePath"]?.stringValue ?? path, kind: .success))
+                    return true
+                } catch {
+                    self.panel.toasts.show(ToastView(title: "Could not save plan", message: "\(error)", kind: .error))
+                    return false
+                }
+            }, emptyPath: { [weak self] in
+                self?.panel.toasts.show(ToastView(title: "Enter a workspace path", kind: .warning))
+            })
         }
         // The file chip menu's shell items: only on this Mac's environment (`canUseMarkdownFileShellActions`,
         // ChatMarkdown.tsx:255-261, the "local-exec" open mode).

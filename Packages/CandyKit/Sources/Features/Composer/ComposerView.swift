@@ -13,6 +13,9 @@ public final class ComposerView: DSView {
     public let contextWindowMeter = ThreadContextWindowMeterView()
     public var planFollowUp = false { didSet { if planFollowUp != oldValue { refresh(); needsLayout = true } } }
     private let planPill = MessageActionPill()
+    /// The Implement split's chevron and its one item (ComposerPrimaryActions.tsx:233-258).
+    private let implementMenu = MessageActionPill().menuTrigger()
+    public var onImplementInNewThread: (() -> Void)?
 
 
     /// `rounded-3xl`: `calc(var(--radius) + 12px)`.
@@ -313,6 +316,11 @@ public final class ComposerView: DSView {
         addSubview(planPill)
         planPill.isHidden = true
         planPill.action = { [weak self] in self?.send(.auto) }
+        addSubview(implementMenu)
+        implementMenu.isHidden = true
+        implementMenu.half = .trailing
+        implementMenu.setAccessibilityLabel("Implementation actions")
+        implementMenu.action = { [weak self] in self?.showImplementMenu() }
         addSubview(contextWindowMeter)
         contextWindowMeter.isHidden = true
         primary.action = { [weak self] in self?.primaryPressed() }
@@ -408,9 +416,11 @@ public final class ComposerView: DSView {
     }
 
     func refresh() {
-        placeholder.text = planFollowUp ? "Refine the plan or implement it" : ComposerLogic.placeholder(placeholderInput)
+        // ChatComposer.tsx:7489-7490.
+        placeholder.text = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
         planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
         planPill.isEnabled = !isBusy && sendDisabledReason == nil
+        implementMenu.isEnabled = planPill.isEnabled
         if planFollowUp { needsLayout = true }
         if editor.isEditable == editorDisabled { editor.isEditable = !editorDisabled }
         if let footer = questionFooter {
@@ -550,6 +560,15 @@ public final class ComposerView: DSView {
             send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: held, steerByDefault: steerByDefault))
         }
     }
+
+    /// `MenuPopup align="end" side="top"` with "Implement in a new thread".
+    private func showImplementMenu() {
+        let item = MenuItem("Implement in a new thread", disabled: !planPill.isEnabled) { [weak self] in self?.onImplementInNewThread?() }
+        MenuPopupView.show([item], from: implementMenu, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    /// Sends the prompt as the primary button would without a modifier (`submitCitationAndSend`, ChatComposer.tsx:4305-4314).
+    public func submit() { send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: false, steerByDefault: steerByDefault)) }
 
     private func send(_ mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent || planFollowUp,
@@ -727,10 +746,22 @@ public final class ComposerView: DSView {
             actionsLeft = primary.frame.minX
         }
         planPill.isHidden = !planFollowUp || !footerShown || questionFooter != nil
+        let implementing = !planPill.isHidden && planPill.title == "Implement"
+        implementMenu.isHidden = !implementing
         if !planPill.isHidden {
             primary.isHidden = true
+            // `h-9 sm:h-8`: Refine is `px-3` compact, else `px-4`; Implement is `px-4 rounded-r-none` beside the chevron.
+            planPill.compact = compactActions
+            planPill.widePadding = implementing
+            planPill.half = implementing ? .leading : .whole
+            var x = right
+            if implementing {
+                let cw = implementMenu.intrinsicContentSize.width
+                implementMenu.frame = NSRect(x: right - cw, y: midY - 16, width: cw, height: 32)
+                x = implementMenu.frame.minX
+            }
             let w = planPill.intrinsicContentSize.width
-            planPill.frame = NSRect(x: right - w, y: midY - 14, width: w, height: 28)
+            planPill.frame = NSRect(x: x - w, y: midY - 16, width: w, height: 32)
             actionsLeft = planPill.frame.minX
         }
         contextWindowMeter.isHidden = contextWindowMeter.usage == nil || !footerShown || questionFooter != nil

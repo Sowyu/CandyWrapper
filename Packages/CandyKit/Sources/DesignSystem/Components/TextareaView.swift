@@ -20,6 +20,16 @@ public final class TextareaView: FieldView {
     static let maxHeight: CGFloat = 256  // `max-h-64` on the textarea
 
     public var size: Size = .default { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// A plain `<textarea>` without the field frame: `block min-h-16 max-h-40 bg-transparent px-1 py-1.5
+    /// text-sm outline-none placeholder:text-muted-foreground` (AssistantCitationCommentEditor.tsx:51).
+    public var bare = false { didSet { restyle(); invalidateIntrinsicContentSize(); needsLayout = true } }
+
+    /// Padding block, padding inline, min and max height (border included).
+    private var box: (paddingY: CGFloat, paddingX: CGFloat, minHeight: CGFloat, maxHeight: CGFloat, border: CGFloat) {
+        if bare { return (6, 4, 64, 160, 0) }
+        let m = size.metrics
+        return (m.paddingY, m.paddingX, m.minHeight + 2, Self.maxHeight + 2, 1)
+    }
 
     public convenience init(placeholder: String = "", text: String = "", size: Size = .default) {
         self.init(multiline: true)
@@ -40,27 +50,32 @@ public final class TextareaView: FieldView {
         NSSize(width: NSView.noIntrinsicMetric, height: height(forWidth: bounds.width))
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat {
-        let m = size.metrics
+    public func height(forWidth width: CGFloat) -> CGFloat {
+        let m = box
         if width > 0, let container = editor.textContainer {
-            container.size = NSSize(width: max(1, width - 2 - 2 * m.paddingX), height: .greatestFiniteMagnitude)
+            container.size = NSSize(width: max(1, width - 2 * m.border - 2 * m.paddingX), height: .greatestFiniteMagnitude)
         }
         // TextKit adds the line spacing above every line but the first.
         let spacing = FieldEditor.lineMetrics(font: font, lineHeight: lineHeight).lineSpacing
         let content = max(lineHeight, editor.usedHeight + spacing)
-        return min(Self.maxHeight, max(m.minHeight, content + 2 * m.paddingY)) + 2
+        return min(m.maxHeight, max(m.minHeight, content + 2 * m.paddingY + 2 * m.border))
     }
 
     public override func layout() {
         super.layout()
-        let m = size.metrics
-        let content = NSRect(x: 1 + m.paddingX, y: 1 + m.paddingY,
-                             width: max(0, bounds.width - 2 - 2 * m.paddingX),
-                             height: max(0, bounds.height - 2 - 2 * m.paddingY))
+        let m = box
+        let content = NSRect(x: m.border + m.paddingX, y: m.border + m.paddingY,
+                             width: max(0, bounds.width - 2 * m.border - 2 * m.paddingX),
+                             height: max(0, bounds.height - 2 * m.border - 2 * m.paddingY))
         placeEditor(in: content)
     }
 
     override func restyle() {
+        if bare {
+            decoration.boxStyle = BoxStyle()
+            placeholderLabel.color = Themed.color(\.mutedForeground)
+            return
+        }
         decoration.boxStyle = FieldStyles.frame(state: state, radius: 10)
         // No placeholder class: preflight's `currentcolor` at 50%.
         placeholderLabel.color = Themed.color(\.contrastForeground, 0.5)

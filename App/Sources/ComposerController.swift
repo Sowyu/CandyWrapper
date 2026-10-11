@@ -195,6 +195,7 @@ final class ComposerController {
             self.composer.text = saved; self.remember(saved)
         }
         composer.onStop = { [weak self] in self?.stop() }
+        composer.onImplementInNewThread = { [weak self] in self?.implementPlanInNewThread() }
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
@@ -229,6 +230,7 @@ final class ComposerController {
         question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
         composer.onAttach = { [weak self] in self?.attachPressed() }
         composer.fileList.onRemove = { [weak self] id in self?.removeQuestionFile(id) }
+        composer.fileList.onOpen = { [weak self] id in self?.expandQuestionFile(id) }
         composer.fileList.onRetry = { [weak self] id in self?.retryQuestionFile(id) }
         question.onDismiss = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.dismissQuestion) }
         question.onDisplacedAnswer = { [weak self] text in self?.carryDisplaced(text) }
@@ -1392,6 +1394,95 @@ final class ComposerController {
         }
     }
 
+    private var implementInFlight = false
+
+    /// The inspector's Roll back (`onRollbackCheckpoint`, ChatView.tsx:8543-8590): refused while a turn runs,
+    /// confirmed through `requestConfirmDialog`, then `checkpoint.rollback` for that checkpoint.
+    private func rollBack(checkpointId: String, scopeId: String) {
+        guard case .thread(let id) = target, !threadRewindBusy, let window = panel.window, let key = draftKey else { return }
+        if composer.runState.running || composer.isBusy {
+            threadErrors.set(key, "Interrupt the current turn before reverting checkpoints.")
+            refresh()
+            return
+        }
+        let dialog = DialogView(kind: .alertDialog, title: "Roll back this thread to the selected checkpoint?", message: "This action cannot be undone.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Confirm", variant: .destructive)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak self, weak host] in
+            host?.close()
+            guard let self, self.openThreadId == id, let supervisor = self.shell?.supervisor else { return }
+            self.threadRewindBusy = true
+            self.threadErrors.set(key, nil)
+            self.refresh()
+            Task { [weak self] in
+                do {
+                    _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
+                        "type": .string("checkpoint.rollback"), "commandId": .string(UUID().uuidString.lowercased()),
+                        "threadId": .string(id.localId.rawValue), "scopeId": .string(scopeId), "checkpointId": .string(checkpointId)]))
+                } catch {
+                    self?.threadErrors.set(key, "\(error)")
+                }
+                self?.threadRewindBusy = false
+                self?.refresh()
+            }
+        }
+    }
+
+    /// "Implement in a new thread" (`onImplementPlanInNewThread`, ChatView.tsx:10522-10668): `thread.create` in the
+    /// same project, branch and worktree with the default access mode, then the plan prompt with `sourcePlanRef`
+    /// pointing at the plan. A failure deletes the new thread and toasts; success opens it.
+    private func implementPlanInNewThread() {
+        guard !implementInFlight, pendingMessageId == nil, !composer.isBusy, case .thread(let sourceId) = target,
+              let shell, let thread = shellThread, let env = sourceId.environmentId,
+              let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown else { return }
+        guard let selection = pickers.current.modelSelection else { report(.noModel, key: draftKey); return }
+        implementInFlight = true
+        let supervisor = shell.supervisor
+        let newLocal = UUID().uuidString.lowercased()
+        let title = ProposedPlanText.implementationThreadTitle(markdown)
+        let runtime = pickers.context.projectDefaultRuntimeMode ?? pickers.context.serverDefaults.defaultRuntimeMode
+        let selectionJSON = ThreadSession.encode(selection)
+        var create: [String: JSONValue] = [
+            "type": .string("thread.create"), "commandId": .string(UUID().uuidString.lowercased()), "createdBy": .string("user"),
+            "creationSource": .string("web"), "threadId": .string(newLocal),
+            "projectId": .string(EnvironmentScope.localId(of: thread.projectId.rawValue)), "title": .string(title),
+            "modelSelection": selectionJSON, "runtimeMode": .string(runtime.rawValue), "interactionMode": .string("default"),
+        ]
+        create["branch"] = thread.branch.map(JSONValue.string) ?? .null
+        create["worktreePath"] = thread.worktreePath.map(JSONValue.string) ?? .null
+        let (dispatchMode, deliveryIntent) = ComposerLogic.dispatch(.auto)
+        var message: [String: JSONValue] = [
+            "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()), "createdBy": .string("user"),
+            "creationSource": .string("web"), "threadId": .string(newLocal), "messageId": .string(UUID().uuidString.lowercased()),
+            "text": .string(ProposedPlanText.implementationPrompt(markdown)), "attachments": .array([]), "titleSeed": .string(title),
+            "modelSelection": selectionJSON, "dispatchMode": dispatchMode,
+            "sourcePlanRef": .object(["threadId": .string(sourceId.localId.rawValue), "planId": .string(plan.id.rawValue)]),
+        ]
+        if let deliveryIntent { message["deliveryIntent"] = .string(deliveryIntent) }
+        Task { [weak self] in
+            var created = false
+            do {
+                _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(create))
+                created = true
+                _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(message))
+                guard let self else { return }
+                self.implementInFlight = false
+                self.openThread?(ThreadId(newLocal).scoped(to: env))
+            } catch {
+                if created {
+                    _ = try? await supervisor.request("orchestration.dispatchCommand", payload: .object([
+                        "type": .string("thread.delete"), "commandId": .string(UUID().uuidString.lowercased()), "threadId": .string(newLocal)]))
+                }
+                guard let self else { return }
+                self.implementInFlight = false
+                self.toast(.error, "Could not start implementation thread", "\(error)")
+            }
+        }
+    }
+
     /// The multi-model send: every selection gets `orchestration.launchThread` with its own thread id
     /// and a `worktree` strategy on the draft's base branch, as `startThreadTurn` builds it from
     /// `bootstrap.prepareWorktree` (client-runtime commands.ts:626-680). The draft keeps the
@@ -2389,6 +2480,7 @@ extension ComposerController {
         }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
         panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
+        panel.model.onRollbackCheckpoint = { [weak self] checkpoint, scope in self?.rollBack(checkpointId: checkpoint, scopeId: scope) }
         panel.model.attachmentMediaURL = { [weak self] id in
             await self?.mediaAttachmentURL(id)
         }
@@ -2824,74 +2916,72 @@ extension ComposerController {
 
     // MARK: Previews
 
-    /// MessagesTimeline.tsx:2453-2490, AttachmentFilePreview.tsx:58-158.
+    /// MessagesTimeline.tsx:2453-2490: Preview opens the file in the right panel as an attachment tab
+    /// (`openAttachment`, rightPanelStore.ts:725-736); Download asks where to save it.
     private func openSentAttachment(_ file: JSONValue, download: Bool) {
         guard let id = file["id"]?.stringValue, file["downloadable"]?.boolValue != false, let window = panel.window else { return }
         let name = file["name"]?.stringValue ?? "Attachment"
+        if !download {
+            let surface = SentAttachmentSurface(id: id, name: name, mimeType: file["mimeType"]?.stringValue ?? "",
+                                                sizeBytes: file["sizeBytes"]?.intValue ?? 0, htmlRender: file["htmlRender"]?.boolValue == true)
+            panel.mutatePanel { $0.openAttachment(surface); return [] }
+            return
+        }
         let target = self.target
         Task { [weak self, weak window] in
             guard let self, let source = await attachmentSource(id), self.target == target, let window else { return }
-            let save: @MainActor @Sendable () -> Void = {
-                let panel = NSSavePanel(); panel.nameFieldStringValue = name
-                panel.beginSheetModal(for: window) { response in
-                    guard response == .OK, let url = panel.url else { return }
-                    Task {
-                        do {
-                            try await Task.detached(priority: .userInitiated) {
-                                let data = try Data(contentsOf: source)
-                                try data.write(to: url, options: .atomic)
-                            }.value
-                        } catch { self.toast(.error, "Could not download attachment", error.localizedDescription) }
-                    }
-                }
-            }
-            if download { save(); return }
-            let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            let preview = ComposerAttachmentPreview(name: name, file: source, sizeBytes: size)
-            let dialog = DialogView(title: name, message: ComposerFileRow.formatSize(size))
-            dialog.maxWidth = 800; dialog.panelContent = [preview]
-            let button = ButtonView("Download", icon: .download, variant: .outline)
-            button.action = save; dialog.footerButtons = [button]
-            let host = ModalHost.present(dialog, in: window)
-            host.onDismiss = { [weak dialog, weak preview] in preview?.close(); dialog?.panelContent = [] }
+            self.saveCopy(of: source, name: name, in: window)
         }
     }
 
-    private func expandDraftFile(_ attachment: ComposerAttachment) {
-        guard let window = panel.window else { return }
-        let preview = ComposerAttachmentPreview(name: attachment.name, file: attachment.fileURL, sizeBytes: attachment.sizeBytes)
-        let dialog = DialogView(title: attachment.name, message: ComposerFileRow.formatSize(attachment.sizeBytes))
-        dialog.maxWidth = 800
-        dialog.panelContent = [preview]
-        let download = ButtonView("Download", icon: .download, variant: .outline)
-        let remove = ButtonView("Remove", icon: .trash2, variant: .destructiveOutline)
-        let copy = ButtonView("Copy", icon: .copy, variant: .outline)
-        copy.action = { [weak preview] in preview?.copyContents() }
-        dialog.footerButtons = [remove, copy, download]
-        dialog.footerLeadingCount = 1
-        let host = ModalHost.present(dialog, in: window)
-        host.onDismiss = { [weak dialog, weak preview] in preview?.close(); dialog?.panelContent = [] }
-        remove.action = { [weak self, weak host] in
-            guard let self else { return }
-            self.composer.text = Self.removingReferences(to: attachment.contextId, in: self.composer.text)
-            host?.close()
-        }
-        download.action = { [weak window] in
-            guard let window else { return }
-            let save = NSSavePanel()
-            save.nameFieldStringValue = attachment.name
-            save.beginSheetModal(for: window) { response in
-                guard response == .OK, let destination = save.url else { return }
-                Task.detached(priority: .userInitiated) {
-                    do {
-                        let data = try Data(contentsOf: attachment.fileURL)
-                        try data.write(to: destination, options: .atomic)
-                    } catch {
-                        await MainActor.run { window.presentError(error) }
-                    }
-                }
+    /// Saves a local copy where the user picks (the browser's download of the attachment).
+    private func saveCopy(of source: URL, name: String, in window: NSWindow) {
+        let panel = NSSavePanel(); panel.nameFieldStringValue = name
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        let data = try Data(contentsOf: source)
+                        try data.write(to: url, options: .atomic)
+                    }.value
+                } catch { self?.toast(.error, "Could not save file", error.localizedDescription) }
             }
         }
+    }
+
+    /// The draft file preview dialog (ChatComposer.tsx:7399-7434): `Draft › name`, Remove drops the file.
+    private func expandDraftFile(_ attachment: ComposerAttachment) {
+        guard let window = panel.window else { return }
+        var host: ModalHost?
+        let preview = ComposerAttachmentPreview(
+            name: attachment.name, file: attachment.fileURL, sizeBytes: attachment.sizeBytes,
+            onSave: { [weak self, weak window] in
+                guard let window else { return }
+                self?.saveCopy(of: attachment.fileURL, name: attachment.name, in: window)
+            },
+            onRemove: { [weak self] in
+                guard let self else { return }
+                self.composer.text = Self.removingReferences(to: attachment.contextId, in: self.composer.text)
+                host?.close()
+            },
+            onClose: { host?.close() })
+        host = ComposerAttachmentPreview.present(preview, in: window)
+    }
+
+    /// A question answer's file opens the same dialog (its draft is the question's, ChatComposer.tsx:1829-1848).
+    fileprivate func expandQuestionFile(_ id: String) {
+        guard let window = panel.window, let key = fileKey(id), let file = questionFiles[key]?.first(where: { $0.id == id }) else { return }
+        var host: ModalHost?
+        let preview = ComposerAttachmentPreview(
+            name: file.name, file: file.url, sizeBytes: file.sizeBytes,
+            onSave: { [weak self, weak window] in
+                guard let window else { return }
+                self?.saveCopy(of: file.url, name: file.name, in: window)
+            },
+            onRemove: { [weak self] in self?.removeQuestionFile(id); host?.close() },
+            onClose: { host?.close() })
+        host = ComposerAttachmentPreview.present(preview, in: window)
     }
 
     private func expandDraftImage(_ id: String) {

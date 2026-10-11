@@ -1,37 +1,32 @@
 import AppKit
 import DesignSystem
 
-/// AttachmentFilePreview.tsx:58-158. Reuses the file renderer, reads the captured
-/// attachment independently of workspace paths, and releases it when dismissed.
-// ponytail: draft attachments only; add sent/question sources and Copy with attachment preview parity.
+/// `AttachmentFilePreview` (AttachmentFilePreview.tsx:58-363) for a file on this Mac: a draft attachment or a
+/// question answer's file. Its header holds `Draft › name size` and the icon actions; the body reuses the file
+/// renderer. The captured bytes are read independently of workspace paths, at most the first 1 MB, and
+/// released when the preview closes.
 public final class ComposerAttachmentPreview: DSView {
-    private let surface = FileSurfaceView()
+    public let surface = FileSurfaceView()
     private var load: Task<Void, Never>?
-    private var loadedText: String?
-    public var canCopy: Bool { loadedText != nil }
-    public func copyContents() {
-        guard let loadedText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(loadedText, forType: .string)
-    }
     private let file: URL
     private let sizeBytes: Int
-    public init(name: String, file: URL, sizeBytes: Int) {
+
+    public init(name: String, file: URL, sizeBytes: Int, origin: String = "Draft",
+                onSave: (@MainActor () -> Void)? = nil, onRemove: (@MainActor () -> Void)? = nil, onClose: (@MainActor () -> Void)? = nil) {
         self.file = file; self.sizeBytes = sizeBytes
         super.init(frame: .zero)
         addSubview(surface)
-        surface.attachmentMode = true
-        surface.projectName = "Attachments"
+        surface.attachment = .init(origin: origin, name: name, sizeBytes: sizeBytes, inline: false,
+                                   onSave: onSave, onRemove: onRemove, onClose: onClose)
         surface.show(path: name, revealLine: nil)
         surface.fetchData = { url in await Task.detached(priority: .userInitiated) { try? Data(contentsOf: url) }.value }
         surface.onNeedsReload = { [weak self] in self?.reload() }
         reload()
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: 720, height: 480) }
     public override func layout() { super.layout(); surface.frame = bounds }
-    public func close() { loadedText = nil; load?.cancel(); load = nil; surface.setContent(.loading) }
+    public func close() { load?.cancel(); load = nil; surface.setContent(.loading) }
     private func reload() {
-        load?.cancel(); loadedText = nil
+        load?.cancel()
         if surface.wantsAsset { surface.setContent(.asset(file)); return }
         let file = file, sizeBytes = sizeBytes
         surface.setContent(.loading)
@@ -39,14 +34,43 @@ public final class ComposerAttachmentPreview: DSView {
             let data = await Task.detached(priority: .userInitiated) { () -> Data? in
                 guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
                 defer { try? handle.close() }
-                return try? handle.read(upToCount: 1024 * 1024)
+                return try? handle.read(upToCount: AttachmentPreviewText.maxBytes)
             }.value
             guard !Task.isCancelled, let self else { return }
-            guard let data, let text = String(data: data, encoding: .utf8) else {
-                self.surface.setContent(.failure("The attachment is unavailable or is not UTF-8 text.", attemptedPath: nil, cwd: nil)); return
-            }
-            self.loadedText = text
-            self.surface.setContent(.text(text, truncated: sizeBytes > data.count, byteLength: sizeBytes, editable: false))
+            self.surface.setContent(AttachmentPreviewText.content(data, sizeBytes: sizeBytes))
         }
+    }
+
+    /// The dialog around it (ChatComposer.tsx:7399-7434): `max-w-4xl`, `h-[min(85vh,52rem)]`, no close button,
+    /// nothing but the preview.
+    @discardableResult
+    public static func present(_ preview: ComposerAttachmentPreview, in window: NSWindow) -> ModalHost {
+        let dialog = DialogView(title: "")
+        dialog.maxWidth = 896
+        dialog.showsCloseButton = false
+        dialog.fillHeight = min(((window.contentView?.bounds.height ?? 800) * 0.85).rounded(.down), 832)
+        dialog.fillContent = preview
+        let host = ModalHost.present(dialog, in: window)
+        host.onDismiss = { [weak preview, weak dialog] in preview?.close(); dialog?.fillContent = nil }
+        return host
+    }
+}
+
+/// `readFilePreviewResponse` (client-runtime file-preview): the first 1 MB as UTF-8 text, flagged when cut.
+public enum AttachmentPreviewText {
+    public static let maxBytes = 1024 * 1024
+
+    public static func content(_ data: Data?, sizeBytes: Int) -> FileSurfaceView.Content {
+        guard let data else { return .failure("The attachment is unavailable.", attemptedPath: nil, cwd: nil) }
+        let truncated = data.count >= maxBytes && (sizeBytes == 0 || sizeBytes > maxBytes)
+        var bytes = data.prefix(maxBytes)
+        // A cut can split a UTF-8 sequence; drop the partial tail.
+        var text = String(data: bytes, encoding: .utf8)
+        while text == nil, truncated, !bytes.isEmpty, data.count - bytes.count < 4 {
+            bytes = bytes.dropLast()
+            text = String(data: bytes, encoding: .utf8)
+        }
+        guard let text else { return .failure("Could not load this file.", attemptedPath: nil, cwd: nil) }
+        return .text(text, truncated: truncated, byteLength: sizeBytes > 0 ? sizeBytes : data.count, editable: false)
     }
 }

@@ -179,6 +179,7 @@ final class RightPanelView: DSView {
         case .diff: IconView(name: .fileDiff, size: 12, strokeColor: Themed.color(\.foreground))
         case .files: IconView(name: .files, size: 12, strokeColor: Themed.color(\.foreground))
         case .file(let path, _, _): FileTypeIcon.view(for: path, size: 12)
+        case .attachment(let a): FileTypeIcon.view(for: a.name, size: 12)
         case .pullRequest: IconView(name: .gitPullRequestArrow, size: 12, strokeColor: Themed.color(\.mutedForeground))
         case .pullRequests: IconView(name: .link2, size: 12, strokeColor: Themed.color(\.foreground))
         case .browser: IconView(name: .globe2, size: 12, strokeColor: Themed.color(\.foreground))
