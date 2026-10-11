@@ -42,6 +42,10 @@ public enum ThreadCommands {
         command("thread.pin", threadId, commandId, orderKey.map { ["orderKey": .string($0)] } ?? [:])
     }
 
+    public static func reorder(_ threadId: ThreadId, pinned: Bool, orderKey: String, commandId: String = newCommandId()) -> JSONValue {
+        command(pinned ? "thread.pin.reorder" : "thread.active.reorder", threadId, commandId, ["orderKey": .string(orderKey)])
+    }
+
     public static func unpin(_ threadId: ThreadId, commandId: String = newCommandId()) -> JSONValue {
         command("thread.unpin", threadId, commandId)
     }
@@ -125,6 +129,7 @@ public enum OptimisticThreadUpdate: Sendable, Equatable {
     case snooze(until: T3Timestamp)
     case pin(orderKey: String?)
     case setAutoSettle(Bool)
+    case reorder(pinned: Bool, orderKey: String)
 
     static let settleBlocking: Set<ThreadStatus> = [.preparing, .queued, .starting, .running, .waiting]
     static let snoozeBlocking: Set<ThreadStatus> = [.preparing, .queued, .starting]
@@ -170,6 +175,8 @@ public enum OptimisticThreadUpdate: Sendable, Equatable {
             }
             t.snoozedUntil = nil
             t.snoozedAt = nil
+        case .reorder(let pinned, let key):
+            if pinned { t.pinOrderKey = key } else { t.activeOrderKey = key }
         case .unpin:
             t.pinnedAt = nil
             t.pinOrderKey = nil
@@ -272,6 +279,31 @@ public enum PinOrderKey {
         if !b.isEmpty && !isValid(b) { return nil }
         if !b.isEmpty && a >= b { return nil }
         return String(midpoint(Array(a), Array(b)))
+    }
+
+    /// threadSort.ts:233-310. Materialize keyless sections, preserving keys reserved by hidden rows.
+    public static func assignments(order: [ThreadId], keys: [ThreadId: String], moved: ThreadId) -> [(id: ThreadId, key: String)] {
+        guard let index = order.firstIndex(of: moved) else { return [] }
+        let visible = Set(order), reserved = Set(keys.filter { !visible.contains($0.key) }.map(\.value))
+        let before = index > 0 ? keys[order[index - 1]] : nil
+        let after = index + 1 < order.count ? keys[order[index + 1]] : nil
+        if (index == 0 || before != nil) && (index + 1 == order.count || after != nil) {
+            var key = between(before, after)
+            while let current = key, reserved.contains(current) { key = between(current, after) }
+            if let key { return [(moved, key)] }
+        }
+        let count = order.count + reserved.count
+        var width = 2, space = 676
+        while space <= (count + 1) * 2 { width += 1; space *= 26 }
+        let step = Double(space) / Double(count + 1)
+        let spread: [String] = (0..<count).map { i in
+            var value = Int((step * Double(i + 1)).rounded())
+            if value % 26 == 0 { value += 1 }
+            var key = ""
+            for _ in 0..<width { key.insert(digits[value % 26], at: key.startIndex); value /= 26 }
+            return key
+        }.filter { !reserved.contains($0) }
+        return zip(order, spread).compactMap { id, key in keys[id] == key ? nil : (id, key) }
     }
 
     /// `topOfPinnedRunOrderKey` (useThreadActions.ts:113-123): before every keyed pinned thread,

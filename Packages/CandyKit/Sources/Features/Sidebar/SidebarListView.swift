@@ -323,17 +323,54 @@ public final class SidebarListView: DSView {
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
+    public var onReorderDrop: ((ThreadId, SidebarSection, ThreadId?, Bool) -> Void)?
+    public var canReorderDrop: ((ThreadId, SidebarSection) -> Bool)?
+    // ponytail: single-row targets only; add empty-section targets and motion with the full drag planner
+    private var reorderBadge: SidebarReorderDropBadge?
+
+    private func reorderTarget(_ sender: any NSDraggingInfo) -> (ThreadId, SidebarSection, ThreadId?, Bool, CGFloat)? {
+        guard let ids = SidebarThreadDrag.threads(sender.draggingPasteboard), ids.count == 1,
+              let id = ids.first, onReorderDrop != nil else { return nil }
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let i = items.indices.min(by: { abs(tops[$0] + items[$0].height / 2 - point.y) < abs(tops[$1] + items[$1].height / 2 - point.y) }) else { return nil }
+        let section: SidebarSection
+        var target: ThreadId?
+        let after = point.y > tops[i] + items[i].height / 2
+        switch items[i] {
+        case .row(let row): section = row.section; target = row.id
+        case .shelfHeader(let shelf, _, _):
+            guard shelf == .settled else { return nil }; section = .settled
+        default: return nil
+        }
+        guard section != .working, section != .snoozed, target != id, canReorderDrop?(id, section) != false else { return nil }
+        return (id, section, target, after, tops[i] + (after ? items[i].height : 0))
+    }
+    private func clearReorderBadge() { reorderBadge?.removeFromSuperview(); reorderBadge = nil }
+
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if let target = reorderTarget(sender) {
+            let source = items.compactMap { if case .row(let r) = $0, r.id == target.0 { r.section } else { nil } }.first
+            let badge = reorderBadge ?? SidebarReorderDropBadge()
+            if badge.superview == nil { addSubview(badge); reorderBadge = badge }
+            badge.title = SidebarReorderDropBadge.verb(from: source, to: target.1) ?? ""
+            badge.frame = NSRect(x: 8, y: max(0, target.4 - 12), width: max(0, bounds.width - 16), height: 24)
+            return .move
+        }
+        clearReorderBadge()
         let row = fileDropRow(sender)
         setFileDragRow(row)
         return row == nil ? [] : .copy
     }
 
-    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil) }
-    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil) }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil); clearReorderBadge() }
+    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil); clearReorderBadge() }
 
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { setFileDragRow(nil) }
+        defer { setFileDragRow(nil); clearReorderBadge() }
+        if let target = reorderTarget(sender) {
+            onReorderDrop?(target.0, target.1, target.2, target.3)
+            return true
+        }
         guard let row = fileDropRow(sender), case .row(let r)? = row.item,
               let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }

@@ -135,7 +135,7 @@ public final class SidebarContentView: DSView {
             addSubview(v)
         }
         providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
-        list.registerForDraggedTypes([.fileURL])
+        list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
         list.onToggleShelf = { [weak self] shelf in
             guard let self else { return }

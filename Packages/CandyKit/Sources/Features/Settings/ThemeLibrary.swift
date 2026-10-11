@@ -35,6 +35,8 @@ public final class ThemeLibrary {
     static let halvesKey = "theme.halves.v1"
     static let customThemesKey = "theme.customThemes.v1"
 
+    public private(set) var environmentThemes: [ThemeDefinition] = []
+    private var publishedRaw: [JSONValue] = []
     private let defaults: UserDefaults
     private var observers: [(id: Int, block: @MainActor () -> Void)] = []
     private var nextObserver = 0
@@ -102,7 +104,38 @@ public final class ThemeLibrary {
     /// `getThemeDefinition`: built-ins first, then saved themes.
     public func definition(_ id: String) -> ThemeDefinition? {
         let id = ThemePalette.normalizedId(id)
-        return ThemeDefinition.builtIns.first { $0.id == id } ?? customThemes.first { $0.id == id }
+        return ThemeDefinition.builtIns.first { $0.id == id } ?? customThemes.first { $0.id == id } ?? environmentThemes.first { $0.id == id }
+    }
+
+    /// useEnvironmentTheme.ts:24-96. Published themes are transient and cannot replace reserved ids.
+    public func setEnvironmentThemes(_ values: [JSONValue]) {
+        guard values != publishedRaw else { return }
+        publishedRaw = values
+        environmentThemes = values.compactMap { value in
+            guard let id = value["id"]?.stringValue, ThemePalette.isThemeId(id), !ThemePalette.reservedIds.contains(id),
+                  let name = value["name"]?.stringValue, let raw = value["appearance"]?.stringValue,
+                  let appearance = ThemeAppearance(rawValue: raw) else { return nil }
+            func overrides(_ v: JSONValue?) -> [ThemeColorRole: String] {
+                var result: [ThemeColorRole: String] = [:]
+                for (key, value) in v?.objectValue ?? [:] {
+                    if let role = ThemeColorRole(rawValue: key), let text = value.stringValue, let color = ThemePalette.canonical(text) { result[role] = color }
+                }
+                return result
+            }
+            let canvas = value["canvas"]?.stringValue, accent = value["accent"]?.stringValue
+            let seeded = canvas.flatMap(ThemePalette.canonical) != nil && accent.flatMap(ThemePalette.canonical) != nil
+            let own = overrides(value["colors"]), other = overrides(value["variants"]?[appearance.other.rawValue])
+            guard seeded || !own.isEmpty || !other.isEmpty else { return nil }
+            var colors = seeded ? ThemePalette.vividColors(appearance, background: canvas!, accent: accent!) : ThemePalette.defaultColors(appearance)
+            colors.merge(own) { _, new in new }
+            var variants: [ThemeAppearance: [ThemeColorRole: String]] = [:]
+            if value["variants"]?[appearance.other.rawValue] != nil {
+                var base = ThemePalette.defaultColors(appearance.other); base.merge(other) { _, new in new }; variants[appearance.other] = base
+            }
+            return ThemeDefinition(id: id, label: name, appearance: appearance, colors: colors, variants: variants,
+                                   managed: seeded && value["colors"] == nil && value["variants"] == nil)
+        }
+        changed()
     }
 
     // MARK: Writes (useTheme.ts setters)

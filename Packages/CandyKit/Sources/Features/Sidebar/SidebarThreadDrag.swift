@@ -80,7 +80,7 @@ extension SidebarListView: NSDraggingSource {
     static let dragDistance: CGFloat = 6
 
     public func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .withinApplication ? .copy : []
+        context == .withinApplication ? [.copy, .move] : []
     }
 
     /// A row left its press: drag it (or the whole selection it belongs to) as thread context.

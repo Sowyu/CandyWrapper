@@ -65,7 +65,53 @@ final class SidebarCommands {
         sidebar.actions.back = { [weak self] in self?.closeUtilityPage() }
         sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
         sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
+        sidebar.list.canReorderDrop = { [weak self] id, section in
+            guard let self, let env = id.environmentId, let config = self.threads.composer.config(env) else { return false }
+            if section == .settled { return config.capabilities.contains("threadSettlement") }
+            return config.capabilities.contains(section == .pinned ? "threadPinReorder" : "threadActiveReorder")
+        }
+        sidebar.list.onReorderDrop = { [weak self] id, section, target, after in
+            self?.reorderDrop(id, section: section, target: target, after: after)
+        }
         ledger.onChange = { [weak self] in self?.undoNoticeChanged() }
+    }
+
+    /// Sidebar.tsx:3999-4160. A drag expresses unpin intent without the menu's confirmation.
+    private func reorderDrop(_ id: ThreadId, section: SidebarSection, target: ThreadId?, after: Bool) {
+        guard let thread = shell(id), let sidebar else { return }
+        if section == .settled { settle(id); return }
+        let pinned = section == .pinned
+        var order = sidebar.list.items.compactMap { item -> ThreadId? in
+            if case .row(let row) = item, row.section == section, row.id != id { return row.id }
+            return nil
+        }
+        let index = target.flatMap { order.firstIndex(of: $0) }.map { $0 + (after ? 1 : 0) } ?? order.count
+        order.insert(id, at: index)
+        func key(_ id: ThreadId) -> String? { pinned ? shell(id)?.pinOrderKey : shell(id)?.activeOrderKey }
+        let timeOrdered = !pinned && sidebar.state.workingShelfEnabled
+        let keys = Dictionary(uniqueKeysWithValues: (snapshot?.threads ?? []).compactMap { t in key(t.id).map { (t.id, $0) } })
+        let assignments = timeOrdered ? [] : PinOrderKey.assignments(order: order, keys: keys, moved: id)
+        guard timeOrdered || !assignments.isEmpty,
+              assignments.allSatisfy({ sidebar.list.canReorderDrop?($0.id, section) == true }) else { return }
+        let orderKey = assignments.first { $0.id == id }?.key
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                if pinned {
+                    if thread.pinnedAt == nil || thread.snoozedUntil != nil || thread.settledOverride == .settled {
+                        try await environments.dispatch(id, ThreadCommands.pin(id.localId, orderKey: orderKey), optimistic: .pin(orderKey: orderKey))
+                    }
+                } else {
+                    if thread.pinnedAt != nil { try await environments.dispatch(id, ThreadCommands.unpin(id.localId), optimistic: .unpin) }
+                    if thread.settledOverride == .settled { try await environments.dispatch(id, ThreadCommands.unsettle(id.localId), optimistic: .unsettle) }
+                    if thread.snoozedUntil != nil { try await environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) }
+
+                }
+                for assignment in assignments where !(pinned && thread.pinnedAt == nil && assignment.id == id) {
+                    try await environments.dispatch(assignment.id, ThreadCommands.reorder(assignment.id.localId, pinned: pinned, orderKey: assignment.key), optimistic: .reorder(pinned: pinned, orderKey: assignment.key))
+                }
+            } catch { fail("Failed to reorder threads", error) }
+        }
     }
 
     /// Thread lifecycle keybindings for the open thread (_chat.tsx:84-93, ChatView.tsx:8000-8063).

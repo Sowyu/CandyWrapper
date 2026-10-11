@@ -310,7 +310,15 @@ final class PaletteCommands {
                                         shortcutCommand: "chat.newWithoutProject",
                                         action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)))
         }
-        // ponytail: no "Find in current thread", PR, theme and project settings entries; each lands with its work package
+        if let id = threads.openThreadId, let env = id.environmentId,
+           threads.composer.config(env)?.capabilities.contains("threadFind") == true {
+            actions.append(PaletteEntry(value: "find-current-thread", searchTerms: ["find", "search", "messages", "plans"],
+                                        title: "Find in current thread", icon: .textSearch, shortcutCommand: "chat.find",
+                                        action: .run({ [weak self] in
+                                            self?.showThreadView()
+                                            self?.threads.composer.openThreadFind()
+                                        }, keepOpen: false)))
+        }
         if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread id", "reference"],
                                         title: target.title.hasPrefix("PR") ? "Copy PR link" : "Copy thread ID", description: target.value,

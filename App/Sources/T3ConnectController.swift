@@ -31,6 +31,7 @@ final class T3ConnectController {
 
     private var modal: ModalHost?
     var onOnboardingReturn: (() -> Void)?
+    private weak var onboardingDevices: ConnectOnboardingDevicesView?
     private var flow: T3ConnectSignInFlow?
     private var accountPage: (page: T3ConnectAccountView, model: T3ConnectAccountModel)?
     private weak var accountIdentity: AccountIdentityView?
@@ -52,6 +53,7 @@ final class T3ConnectController {
 
     private func changed() {
         updateIdentity()
+        onboardingDevices?.set(cloudModel(primaryId: environments.primaryId))
         for o in observers.values { o() }
     }
 
@@ -181,7 +183,7 @@ final class T3ConnectController {
             case .code(let sentTo): step = .code(sentTo: sentTo)
             case .password: step = .password
             case .signedIn(let account):
-                self.didSignIn(account)
+                self.didSignIn(account, window: window)
                 return
             }
             form.set(T3ConnectSignInModel(step: step, email: flow.email, busy: flow.isBusy, resending: flow.busy == .resending,
@@ -197,7 +199,7 @@ final class T3ConnectController {
         window.makeFirstResponder(form.emailField)
     }
 
-    private func didSignIn(_ clerkAccount: ClerkAccount) {
+    private func didSignIn(_ clerkAccount: ClerkAccount, window: NSWindow?) {
         modal?.close()
         signedIn = clerkAccount
         machines = nil
@@ -215,9 +217,34 @@ final class T3ConnectController {
                 await environments.appliedRelayRemoval(removed: result.removed, updated: result.updated)
             }
         }
-        // ponytail: T3 opens "Set up T3 Connect" (publish this machine, connect devices) here; CandyWrapper
-        // hosts no server to publish, so it goes straight to the account's machines
         refreshMachines()
+        if let window { presentConnectOnboarding(in: window) }
+    }
+
+    // ponytail: devices step only; publish toggles need the scoped host-link controller shared with Connections
+    private func presentConnectOnboarding(in window: NSWindow) {
+        guard let user = signedIn?.userId, !(UserDefaults.standard.stringArray(forKey: "connect.onboarding.optOutAccounts") ?? []).contains(user) else { return }
+        let dialog = DialogView(title: "Set up T3 Connect", message: "Mesh your devices together: publish this environment and connect the rest, all in one place.")
+        dialog.maxWidth = 512
+        let devices = ConnectOnboardingDevicesView()
+        devices.onAdd = { [weak self] id in self?.add(id) }
+        devices.onRetry = { [weak self] in self?.refreshMachines() }
+        devices.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
+        devices.set(cloudModel(primaryId: environments.primaryId))
+        let optOut = ToggleView("Don't show this again", variant: .ghost, size: .sm)
+        let done = ButtonView("Done", size: .sm)
+        dialog.panelContent = [devices]; dialog.footerButtons = [optOut, done]
+        let host = ModalHost.present(dialog, in: window)
+        done.action = { [weak host] in host?.close() }
+        host.onDismiss = { [weak self, weak optOut] in
+            if optOut?.isPressed == true {
+                var users = UserDefaults.standard.stringArray(forKey: "connect.onboarding.optOutAccounts") ?? []
+                if !users.contains(user) { users.append(user) }
+                UserDefaults.standard.set(users, forKey: "connect.onboarding.optOutAccounts")
+            }
+            self?.onboardingDevices = nil; self?.modal = nil
+        }
+        onboardingDevices = devices; modal = host
     }
 
     // MARK: Account menu

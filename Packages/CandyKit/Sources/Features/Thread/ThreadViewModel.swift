@@ -148,6 +148,8 @@ public final class ThreadViewModel {
     }
 
     /// "Fork from this response" on an assistant message: its source thread (local id) and run.
+    public var inlineSkills: [ServerProviderSkill] = []
+    public var onCiteSelection: ((String, AssistantSelectionText) -> Void)?
     public var onForkFromRun: (@MainActor (ThreadId, RunId) -> Void)?
 
     /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,

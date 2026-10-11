@@ -51,7 +51,7 @@ enum MarkdownStyle {
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
     /// on the character before it and on its own last character; the ranges come back for the chips.
     /// With `files`, path-shaped inline code and file links become file chips (`FileChipStyle`).
-    static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
+    @MainActor static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
                        alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
                        files: FileChipResolver? = nil, maxChipWidth: CGFloat = .greatestFiniteMagnitude) -> Inline {
         let out = NSMutableAttributedString()
@@ -97,6 +97,11 @@ enum MarkdownStyle {
                 run.code = true
             }
             i += 1
+            if let label = run.skillLabel {
+                let attachment = ComposerChipAttachment(look: ComposerChipLook(kind: .skill, label: label), source: run.text, maxWidth: maxChipWidth)
+                out.append(NSAttributedString(attachment: attachment))
+                continue
+            }
             let start = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]
             if run.code {

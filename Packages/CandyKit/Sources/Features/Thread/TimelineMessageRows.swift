@@ -191,6 +191,7 @@ final class UserMessageRowView: TimelineRowView {
         attribution.isHidden = !presentation.isAutomation && m.createdBy != "agent"
         if !attribution.isHidden { attribution.configure(presentation, senderThreadId: m.senderThreadId) }
         editButton.isHidden = m.inputIntent != .turnStart && m.inputIntent != .queuedTurn
+        markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id, text, lineBreaks: true)
@@ -310,10 +311,15 @@ final class AssistantMessageRowView: TimelineRowView {
         let isEmpty = m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !m.streaming
         empty.isHidden = !isEmpty
         markdown.isHidden = isEmpty
+        markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
         markdown.diagramsEnabled = !m.streaming
+        markdown.citationSourceID = m.id.rawValue
+        markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection in
+            model?.onCiteSelection?(m.id.rawValue, selection)
+        }
         markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text))
         meta.isHidden = !showMeta
         meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected))
@@ -500,6 +506,7 @@ final class PlanRowView: TimelineRowView {
         let collapsed = collapsible && !item.ui.planExpanded
         // ponytail: the collapsed preview is the first 10 body lines; T3's buildCollapsedProposedPlanPreviewMarkdown also closes open fences
         let body = collapsed ? parts.body.components(separatedBy: "\n").prefix(10).joined(separator: "\n") : parts.body
+        markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id + (collapsed ? ":preview" : ""), body, lineBreaks: false)

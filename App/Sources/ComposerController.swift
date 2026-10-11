@@ -288,7 +288,7 @@ final class ComposerController {
         let env = shell.environmentId
         // `usageLimitSources` streams the hubs' quota; `usageLimitsCommand` says this client answers `/usage-limits`.
         let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: {
-            .object(["usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
+            .object(["environmentThemes": .bool(true), "usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
         }, handler: { [weak self] event in
             guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
             await MainActor.run { self?.configChanged(change, environmentId: env) }
@@ -303,12 +303,15 @@ final class ComposerController {
         switch event {
         case .snapshot(let snapshot):
             // Hub snapshots never ride in a config snapshot; keep the last ones.
+            let themes = config.environmentThemes
             let sources = config.usageLimitSources
             config = snapshot
             config.usageLimitSources = sources
             if let issue = config.keybindingIssues.first(where: { $0["kind"]?.stringValue?.hasPrefix("keybindings.") == true }) {
                 showKeybindingsWarning(config, message: issue["message"]?.stringValue ?? "Invalid keybindings configuration", environmentId: environmentId)
             }
+            config.environmentThemes = themes
+        case .environmentThemesUpdated(let themes): config.environmentThemes = themes
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
         case .providerStatuses(let providers): config.providers = providers
         case .settingsUpdated(let settings): config.settings = settings
@@ -324,7 +327,10 @@ final class ComposerController {
         }
         serverConfigs[environmentId] = config
         // App shortcuts follow the primary environment's keybindings (`primaryServerKeybindingsAtom`).
-        if environmentId == environments.primaryId { ActiveKeymap.setServerRules(config.keybindings) }
+        if environmentId == environments.primaryId {
+            ActiveKeymap.setServerRules(config.keybindings)
+            ThemeLibrary.shared.setEnvironmentThemes(config.environmentThemes)
+        }
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         if environmentId == targetEnvironmentId { refresh() }
         onConfigChange?(environmentId)
@@ -910,6 +916,7 @@ final class ComposerController {
     }
 
     private func refresh() {
+        panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
         panel.diffPanel.reviewComments = contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") }
         if threadFindTarget != openThreadId { closeThreadFind() }
 

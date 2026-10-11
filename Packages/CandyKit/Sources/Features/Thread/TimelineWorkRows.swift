@@ -216,9 +216,10 @@ final class WorkDetailView: DSView {
             case .error: TL.c(\.destructive)
             }
             let font = tone == .note ? Self.italic : Self.font
+            let text = tone == .command ? MarkdownShellCommand.visible(text) : text
             let attributed = NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
-            if tone == .json {
-                for token in CodeHighlighter.tokens(text, language: "json") { attributed.addAttribute(.foregroundColor, value: token.kind.color, range: token.range) }
+            if tone == .json || tone == .command {
+                for token in CodeHighlighter.tokens(text, language: tone == .json ? "json" : "bash") { attributed.addAttribute(.foregroundColor, value: token.kind.color, range: token.range) }
             }
             return TextBlockLayout(attributed, width: width, lineHeight: Self.lineHeight)
         }

@@ -363,6 +363,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var keybindingsConfigPath: String?
     /// `usageLimitSources`: never in a snapshot; `usageLimitSourcesUpdated` fills it and it survives snapshots.
     public var usageLimitSources: [UsageLimitSourceSnapshot] = []
+    public var environmentThemes: [JSONValue] = []
     /// `environment.platform.os` (`darwin`, `linux`, `win32`).
     public var platformOS: String?
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
@@ -424,9 +425,10 @@ public enum ServerConfigEvent: Decodable, Sendable {
     case keybindingsInvalid([ResolvedKeybindingRule], String)
     /// `usageLimitSourcesUpdated` (server.ts:830-843), sent to subscribers that pass `usageLimitSources: true`.
     case usageLimitSourcesUpdated([UsageLimitSourceSnapshot])
+    case environmentThemesUpdated([JSONValue])
     case other(String)
 
-    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings, sources, issues }
+    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings, sources, issues, themes }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -447,6 +449,9 @@ public enum ServerConfigEvent: Decodable, Sendable {
             if let issue = issues.first(where: { $0["kind"]?.stringValue?.hasPrefix("keybindings.") == true }) {
                 self = .keybindingsInvalid(rules, issue["message"]?.stringValue ?? "Invalid keybindings configuration")
             } else { self = .keybindingsUpdated(rules) }
+        case "environmentThemesUpdated":
+            let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
+            self = .environmentThemesUpdated(try payload.decode([JSONValue].self, forKey: .themes))
         case "usageLimitSourcesUpdated":
             let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
             self = .usageLimitSourcesUpdated(UsageLimitSourceSnapshot.list(try payload.decodeIfPresent(JSONValue.self, forKey: .sources)))
