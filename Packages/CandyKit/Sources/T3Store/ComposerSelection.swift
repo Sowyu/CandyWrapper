@@ -91,6 +91,29 @@ public struct ResolvedComposerSelection: Sendable {
     }
 }
 
+/// A new thread's models when the user shift-clicks several (`draftFanoutStateAtom`, ChatView.tsx:1990-2010):
+/// each send starts one thread and worktree per model (docs/user/thread-sidebar.md "Start in the background").
+public enum ModelFanout {
+    /// `onToggleModel` (ChatComposer.tsx:5508-5533): a shift-click adds or removes the model. Two or
+    /// more stay a fan-out; one left goes back to a single pick (`single`).
+    public static func toggle(_ current: [ModelSelection]?, base: ModelSelection, instance: ProviderInstanceId, model: String)
+        -> (selections: [ModelSelection]?, single: ModelSelection?) {
+        let list = current ?? [base]
+        let matches = { (s: ModelSelection) in s.instanceId == instance && s.model == model }
+        let next = list.contains(where: matches) ? list.filter { !matches($0) } : list + [ModelSelection(instanceId: instance, model: model)]
+        if next.count > 1 { return (next, nil) }
+        return (nil, next.first ?? base)
+    }
+
+    /// `multipleLabel` (ProviderModelPicker.tsx:179-186): two names, then "N more"; "Choose models" when empty.
+    public static func triggerLabel(_ names: [String]) -> String {
+        guard !names.isEmpty else { return "Choose models" }
+        return names.prefix(2).joined(separator: ", ") + (names.count > 2 ? ", \(names.count - 2) more" : "")
+    }
+
+    public static func key(_ s: ModelSelection) -> String { "\(s.instanceId.rawValue):\(s.model)" }
+}
+
 /// Per-thread drafts, sticky state and favorites, persisted in UserDefaults (T3 keeps the same data
 /// in localStorage: `t3code:composer-drafts:v1` and the client setting `favorites`).
 @MainActor

@@ -24,6 +24,10 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private(set) var railFocus: Int? { didSet { railButtons.forEach { $0.restyle() } } }
 
     var onSelect: (@MainActor (ProviderInstanceId, String) -> Void)?
+    /// Shift-click or Shift-Return on a model while the draft can fan out (`onToggleModel`).
+    var onToggle: (@MainActor (ProviderInstanceId, String) -> Void)?
+    /// The fan-out's models (`instance:slug`), each drawn selected.
+    var selectedKeys: Set<String>? { didSet { if selectedKeys != oldValue { reload() } } }
     var onToggleFavorite: (@MainActor (ProviderInstanceId, String) -> Void)?
 
     let search = InputView(placeholder: "Search models...", size: .sm)
@@ -93,7 +97,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
             }
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: query, expandedLegacy: expandedLegacy)
+                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys)
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // ponytail: every row is a view, rebuilt on each change (about 15 here); recycle rows like the timeline past ~100 models
@@ -164,7 +168,12 @@ final class ModelPickerView: DSView, PickerPopupBody {
         guard i < sections.rows.count else { return }
         switch sections.rows[i] {
         case .legacy(let id, _, _): toggleLegacy(id)
-        case .model(let item): onSelect?(item.entry.id, item.model.slug)
+        case .model(let item):
+            if let onToggle, NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+                onToggle(item.entry.id, item.model.slug)
+            } else {
+                onSelect?(item.entry.id, item.model.slug)
+            }
         }
     }
 

@@ -5,16 +5,19 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// The open thread's terminal drawer (ChatView.tsx `PersistentThreadTerminalDrawer`,
-/// ThreadTerminalDrawer.tsx) and the sidebar's terminal indicator.
+/// The open thread's terminals: the drawer under the chat (ChatView.tsx `PersistentThreadTerminalDrawer`,
+/// ThreadTerminalDrawer.tsx), terminal tabs in the right panel (`PersistentThreadTerminalPanel`,
+/// ChatView.tsx:1365-1530) and the sidebar's terminal indicator.
 ///
-/// The drawer keeps T3's per-thread state (open, height, terminals) and talks to the thread's
-/// environment: `terminal.open` for a new terminal, `terminal.attach` while it shows (a snapshot
-/// with the server's retained history, then live output), `terminal.write` and `terminal.resize`
-/// from the view, `terminal.close` when the user closes it or the shell exits. Closing the drawer
-/// or leaving the thread ends the attach stream and releases the view: the server keeps the PTY
-/// and up to 5,000 lines, and the next open replays them. So a hidden drawer costs no memory,
-/// drawing, timers or socket traffic.
+/// The drawer keeps T3's per-thread state (open, height, terminals and split groups); a terminal
+/// tab keeps its terminals in its `RightPanelSurface`. Both talk to the thread's environment:
+/// `terminal.open` for a new terminal, `terminal.attach` while it shows (a snapshot with the
+/// server's retained history, then live output), `terminal.write` and `terminal.resize` from the
+/// view, `terminal.close` when the user closes it or the shell exits. Every pane on screen is its
+/// own SwiftTerm view with its own attach stream. A pane that leaves the screen (another group, a
+/// hidden drawer, another tab, another thread) ends its stream and releases its view: the server
+/// keeps the PTY and up to 5,000 lines, and the next attach replays them. So hidden terminals cost
+/// no memory, drawing, timers or socket traffic.
 ///
 /// The indicator comes from `subscribeTerminalMetadata`, one stream per connected environment.
 @MainActor
@@ -24,9 +27,12 @@ final class TerminalController {
     private let environments: Environments
     private var states: [String: TerminalDrawerState]
     private var threadId: ThreadId?
-    private var attachment: Attachment?
+    private let drawerHost: Host
+    private let panelHost: Host
     private var metadata: [String: (session: ShellSession, task: Task<Void, Never>, activity: TerminalActivity)] = [:]
     private var modal: ModalHost?
+    /// "Add to chat" from a terminal: the composer inserts the excerpt chip.
+    var onAddToChat: ((ComposerContext.TerminalSelection) -> Void)?
 
     /// One attached terminal: its view, the attach stream and an ordered outbox for writes and resizes.
     @MainActor
@@ -54,15 +60,43 @@ final class TerminalController {
         }
     }
 
+    /// Where terminals show: the drawer or the active terminal tab. Each owns the panes it shows.
+    @MainActor
+    private final class Host {
+        let view: TerminalDrawerView
+        var attachments: [String: Attachment] = [:]
+        init(view: TerminalDrawerView) { self.view = view }
+
+        var focused: Attachment? { attachments.values.first { $0.surface.isFocused } }
+
+        func detachAll() {
+            for a in attachments.values { a.end() }
+            attachments = [:]
+        }
+    }
+
     init(panel: ThreadPanelView, sidebar: SidebarContentView?, environments: Environments) {
         self.panel = panel
         self.sidebar = sidebar
         self.environments = environments
+        drawerHost = Host(view: panel.terminalDrawer)
+        panelHost = Host(view: panel.terminalPanel)
         states = Self.loadStates()
         panel.onTerminalToggle = { [weak self] in self?.toggle() }
-        panel.terminalDrawer.actions.onAction = { [weak self] action in self?.perform(action) }
-        panel.terminalDrawer.emptyButton.action = { [weak self] in self?.newTerminal() }
-        panel.terminalDrawer.onDrag = { [weak self] start, delta, ended in self?.drag(start: start, delta: delta, ended: ended) }
+        let drawer = panel.terminalDrawer
+        drawer.actions.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
+        drawer.list.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
+        drawer.list.onActivate = { [weak self] id in self?.activate(id) }
+        drawer.list.onClose = { [weak self] id in self?.confirmClose([id]) { self?.close(id) } }
+        drawer.emptyButton.action = { [weak self] in self?.newTerminal() }
+        drawer.onDrag = { [weak self] start, delta, ended in self?.drag(start: start, delta: delta, ended: ended) }
+        let tab = panel.terminalPanel
+        tab.actions.onAction = { [weak self] action in self?.perform(action, inPanel: true) }
+        tab.list.onAction = { [weak self] action in self?.perform(action, inPanel: true) }
+        tab.list.onActivate = { [weak self] id in self?.activatePanelTerminal(id) }
+        tab.list.onClose = { [weak self] id in self?.confirmClose([id]) { self?.closePanelTerminal(id) } }
+        tab.emptyButton.action = { [weak self] in self?.addTerminalSurface() }
+        panel.onAddTerminal = { [weak self] in self?.addTerminalSurface() }
         NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
@@ -78,7 +112,8 @@ final class TerminalController {
     // ponytail: no drawer on draft threads; T3 opens one against the draft's project. Add when drafts can run scripts
     func show(_ id: ThreadId?) {
         guard id != threadId else { return }
-        detach()
+        drawerHost.detachAll()
+        panelHost.detachAll()
         threadId = id
         refresh()
     }
@@ -92,8 +127,26 @@ final class TerminalController {
             if let session { subscribeMetadata(environmentId, session) }
             publishActivity()
         }
-        if let attachment, attachment.threadId.environmentId == environmentId { detach() }
+        if threadId?.environmentId == environmentId {
+            drawerHost.detachAll()
+            panelHost.detachAll()
+        }
         refresh()
+    }
+
+    /// The right panel's state changed (tab picked, opened or closed): the terminal tab follows.
+    func panelChanged() { refresh() }
+
+    /// Terminal tabs closed from the tab strip: their terminals stop on the server
+    /// (`cleanupRightPanelSurfaces`, ChatView.tsx:6069-6105).
+    func panelTerminalsClosed(_ surfaces: [TerminalPanelSurface]) {
+        for surface in surfaces { for id in surface.terminalIds { stopOnServer(id) } }
+    }
+
+    /// Asks before a terminal tab closes from its tab (`closeRightPanelSurface`, ChatView.tsx:6150-6180).
+    func confirmCloseSurface(_ surface: TerminalPanelSurface, then close: @escaping () -> Void) {
+        let ordered = [surface.activeTerminalId] + surface.terminalIds.filter { $0 != surface.activeTerminalId }
+        confirmClose(ordered, then: close)
     }
 
     // MARK: Shortcuts
@@ -104,27 +157,33 @@ final class TerminalController {
             if !call.isRepeat { self.toggle() }
             return true
         }
-        shortcuts.on("terminal.close") { [weak self] call in
-            guard let self, self.isFocused, let id = self.attachment?.terminalId else { return false }
-            if !call.isRepeat { self.confirmClose(id) }
-            return true
-        }
-        shortcuts.on("terminal.new") { [weak self] call in
+        // ChatView.tsx:8103-8165: the focused terminal's owner takes the command.
+        shortcuts.on(["terminal.split", "terminal.splitVertical", "terminal.new", "terminal.close"]) { [weak self] call in
             guard let self, self.isFocused else { return false }
-            if !call.isRepeat { self.newTerminal() }
+            guard !call.isRepeat else { return true }
+            let inPanel = self.panelHost.focused != nil
+            let action: TerminalActionCluster.Action = switch call.command {
+            case "terminal.split": .split
+            case "terminal.splitVertical": .splitVertical
+            case "terminal.new": .new
+            default: .close
+            }
+            self.perform(action, inPanel: inPanel)
             return true
         }
         // T3's terminal key overrides (keybindings.ts `terminalNavigationShortcutData`,
         // `terminalDeleteShortcutData`, `isTerminalClearShortcut`): sent as input, never typed.
         shortcuts.onKey { [weak self] event in
-            guard let self, self.isFocused, let data = Self.keyData(event) else { return false }
-            self.send(data)
+            guard let self, let focused = self.focusedAttachment, let data = Self.keyData(event) else { return false }
+            self.send(data, to: focused)
             return true
         }
     }
 
+    private var focusedAttachment: Attachment? { drawerHost.focused ?? panelHost.focused }
+
     /// `terminalFocus`.
-    var isFocused: Bool { attachment?.surface.isFocused ?? false }
+    var isFocused: Bool { focusedAttachment != nil }
 
     /// The bytes T3 sends for Cmd/Option+Left/Right, Cmd+Backspace and Ctrl+L/Cmd+K on macOS.
     static func keyData(_ event: NSEvent) -> String? {
@@ -159,19 +218,57 @@ final class TerminalController {
 
     private var windowHeight: CGFloat { panel.window?.contentView?.bounds.height ?? panel.bounds.height }
 
-    /// Puts the panel and the attach stream in line with the open thread's state.
+    /// Puts both hosts and their attach streams in line with the open thread's state.
     private func refresh() {
         let state = state
         let shown = threadId != nil && state.open
         panel.setTerminal(open: shown, height: TerminalDrawerState.clampHeight(state.height, windowHeight: windowHeight))
-        updateLabels()
-        guard shown, let threadId, let terminalId = state.resolvedActiveId else {
-            detach()
-            panel.terminalDrawer.surface = nil
+        panel.terminalAvailable = threadId.flatMap(launch) != nil
+        updateLabels(state)
+        if shown, let threadId, let active = state.resolvedActiveId {
+            let list = state.hasTerminalList ? TerminalListModel.make(state, label: label, closeShortcut: shortcut("terminal.close")) : nil
+            sync(drawerHost, threadId, ids: state.visibleTerminalIds, direction: state.visibleSplitDirection, activeId: active, list: list)
+        } else {
+            sync(drawerHost, nil, ids: [], direction: .horizontal, activeId: "", list: nil)
+        }
+        let surface = panel.panelState.isOpen ? panel.panelState.active?.terminal : nil
+        if let surface, let threadId {
+            var tabState = TerminalDrawerState(open: true, terminalIds: surface.terminalIds, activeTerminalId: surface.activeTerminalId,
+                                               terminalGroups: [TerminalGroup(id: "terminal:" + surface.resourceId, terminalIds: surface.terminalIds,
+                                                                              splitDirection: surface.splitDirection)])
+            tabState = tabState.normalized
+            let list = tabState.hasTerminalList ? TerminalListModel.make(tabState, label: label, closeShortcut: shortcut("terminal.close")) : nil
+            sync(panelHost, threadId, ids: surface.terminalIds, direction: surface.splitDirection, activeId: surface.activeTerminalId, list: list)
+        } else {
+            sync(panelHost, nil, ids: [], direction: .horizontal, activeId: "", list: nil)
+        }
+        updateTabTitles()
+    }
+
+    /// Attaches the panes `ids` in `host` and detaches the rest.
+    private func sync(_ host: Host, _ threadId: ThreadId?, ids: [String], direction: TerminalGroup.Direction, activeId: String, list: TerminalListModel?) {
+        for (id, a) in host.attachments where !ids.contains(id) || a.threadId != threadId {
+            a.end()
+            host.attachments[id] = nil
+        }
+        guard let threadId else {
+            host.view.show([], direction: direction, activeId: "", list: nil)
             return
         }
-        if attachment?.terminalId == terminalId, attachment?.threadId == threadId { return }
-        attach(threadId, terminalId)
+        var panes: [(id: String, surface: TerminalSurfaceView)] = []
+        for id in ids {
+            if host.attachments[id] == nil, let a = attach(threadId, id, host: host) { host.attachments[id] = a }
+            if let a = host.attachments[id] { panes.append((id, a.surface)) }
+        }
+        host.view.show(panes, direction: direction, activeId: activeId, list: list)
+        host.view.actions.setSplitLimitReached(ids.count >= TerminalDrawerState.maxPerGroup)
+        host.view.list.setSplitLimitReached(ids.count >= TerminalDrawerState.maxPerGroup)
+    }
+
+    private func focusActive(_ host: Host, _ id: String?) {
+        guard let id, let a = host.attachments[id] else { return }
+        // A new view enters the window on the next layout pass.
+        DispatchQueue.main.async { a.surface.focus() }
     }
 
     /// `toggleTerminalVisibility` (ChatView.tsx:4781-4830): opening a thread with no terminals
@@ -186,20 +283,18 @@ final class TerminalController {
         state.open.toggle()
         self.state = state
         refresh()
-        if state.open { attachment?.surface.focus() } else { focusComposer() }
+        if state.open { focusActive(drawerHost, state.resolvedActiveId) } else { focusComposer() }
     }
 
-    /// `createNewTerminal`: the lowest free `term-N` (counting the server's terminals for the
-    /// thread), opened on the server, then attached.
-    // ponytail: one terminal shows at a time; T3's split groups and the terminal list (more than
-    // one terminal) are not drawn. New Terminal replaces the shown one; the others keep running.
-    private func newTerminal() {
-        guard let threadId, let launch = launch(threadId), let shell = environments.session(threadId.environmentId) else { return }
+    /// The lowest free `term-N` for the thread: the drawer's, the tabs' and the server's terminals.
+    private func allocateTerminalId(_ threadId: ThreadId) -> String {
         let known = metadata[threadId.environmentId ?? ""]?.activity.terminalIds(threadId: threadId.localId.rawValue) ?? []
-        var state = state
-        let terminalId = TerminalLabels.nextId(state.terminalIds + known)
-        state.ensure(terminalId)
-        self.state = state
+        return TerminalLabels.nextId(state.terminalIds + Array(panel.panelState.panelTerminalIds) + known)
+    }
+
+    /// `terminal.open` for a new terminal at the thread's launch location.
+    private func openOnServer(_ threadId: ThreadId, _ terminalId: String) {
+        guard let launch = launch(threadId), let shell = environments.session(threadId.environmentId) else { return }
         let payload = TerminalRPC.openInput(threadId: threadId.localId.rawValue, terminalId: terminalId, launch: launch)
         Task { [weak self] in
             do {
@@ -208,23 +303,58 @@ final class TerminalController {
                 self?.panel.toasts.show(ToastView(title: "Could not open terminal", message: "\(error)", kind: .error))
             }
         }
-        refresh()
-        attachment?.surface.focus()
     }
 
-    private func perform(_ action: TerminalActionCluster.Action) {
+    /// `createNewTerminal`, `splitTerminal` and `splitTerminalVertical` (ChatView.tsx:1167-1250, 4831-4870).
+    private func newTerminal(split direction: TerminalGroup.Direction? = nil) {
+        guard let threadId, launch(threadId) != nil, environments.session(threadId.environmentId) != nil else { return }
+        var state = state
+        if direction != nil, state.hasReachedSplitLimit { return }
+        let terminalId = allocateTerminalId(threadId)
+        if let direction { state.split(terminalId, direction: direction) } else { state.newTerminal(terminalId) }
+        self.state = state
+        openOnServer(threadId, terminalId)
+        refresh()
+        focusActive(drawerHost, terminalId)
+    }
+
+    private func perform(_ action: TerminalActionCluster.Action, inPanel: Bool) {
+        if inPanel {
+            switch action {
+            case .split: splitPanelTerminal(.horizontal)
+            case .splitVertical: splitPanelTerminal(.vertical)
+            case .new: addTerminalSurface()
+            case .close:
+                if let id = panel.panelState.active?.terminal?.activeTerminalId { confirmClose([id]) { [weak self] in self?.closePanelTerminal(id) } }
+            }
+            return
+        }
         switch action {
-        case .new, .split, .splitVertical: newTerminal()
-        case .close: if let id = attachment?.terminalId { confirmClose(id) }
+        case .split: newTerminal(split: .horizontal)
+        case .splitVertical: newTerminal(split: .vertical)
+        case .new: newTerminal()
+        case .close: if let id = state.resolvedActiveId { confirmClose([id]) { [weak self] in self?.close(id) } }
         }
     }
 
-    /// `confirmTerminalClose`, then `closeTerminal`.
-    private func confirmClose(_ terminalId: String) {
-        guard let window = panel.window, modal == nil else { return }
-        let label = TerminalLabels.label(terminalId, summary: summary(terminalId))
-        let dialog = DialogView(kind: .alertDialog, title: "Close terminal \"\(label)\"?",
-                                message: "This stops the running process and clears its history.")
+    /// `activateTerminal`: a list row, a group header or a click in a pane.
+    private func activate(_ terminalId: String) {
+        var state = state
+        state.activate(terminalId)
+        guard state != self.state else { return }
+        self.state = state
+        refresh()
+        focusActive(drawerHost, terminalId)
+    }
+
+    /// `confirmTerminalClose` (lib/terminalCloseConfirm.ts:16-36): one terminal asks by name, several list them.
+    private func confirmClose(_ terminalIds: [String], then close: @escaping () -> Void) {
+        guard let window = panel.window, modal == nil, !terminalIds.isEmpty else { return }
+        let labels = terminalIds.map(label)
+        let title = labels.count == 1 ? "Close terminal \"\(labels[0])\"?" : "Close \(labels.count) terminals?"
+        let message = labels.count == 1 ? "This stops the running process and clears its history."
+            : "This stops their running processes and clears their histories: \(labels.map { "\"\($0)\"" }.joined(separator: ", "))."
+        let dialog = DialogView(kind: .alertDialog, title: title, message: message)
         let cancel = ButtonView("Cancel", variant: .outline)
         let ok = ButtonView("Confirm", variant: .destructive)
         dialog.footerButtons = [cancel, ok]
@@ -232,15 +362,14 @@ final class TerminalController {
         host.onDismiss = { [weak self] in self?.modal = nil }
         modal = host
         cancel.action = { [weak host] in host?.close() }
-        ok.action = { [weak self, weak host] in
+        ok.action = { [weak host] in
             host?.close()
-            self?.close(terminalId)
+            close()
         }
     }
 
-    /// `closeTerminal` (ChatView.tsx:1265-1295): `terminal.close` with `deleteHistory`, falling back
-    /// to typing `exit` when the close fails; the drawer drops the terminal at once.
-    private func close(_ terminalId: String) {
+    /// `terminal.close` with `deleteHistory`, falling back to typing `exit` when the close fails.
+    private func stopOnServer(_ terminalId: String) {
         guard let threadId, let shell = environments.session(threadId.environmentId) else { return }
         let local = threadId.localId.rawValue
         Task {
@@ -250,15 +379,97 @@ final class TerminalController {
                 _ = try? await shell.supervisor.request(TerminalRPC.write, payload: TerminalRPC.writeInput(threadId: local, terminalId: terminalId, data: "exit\n"))
             }
         }
+    }
+
+    /// `closeTerminal` (ChatView.tsx:1265-1295): the drawer drops the terminal at once.
+    private func close(_ terminalId: String) {
+        guard threadId != nil else { return }
+        stopOnServer(terminalId)
         var state = state
         state.close(terminalId)
         self.state = state
-        if attachment?.terminalId == terminalId { detach() }
         refresh()
-        if state.open { attachment?.surface.focus() } else { focusComposer() }
+        if state.open { focusActive(drawerHost, state.resolvedActiveId) } else { focusComposer() }
     }
 
     private func focusComposer() { panel.composer.focus() }
+
+    // MARK: Project scripts (ChatView.tsx:4956-5100)
+
+    /// `runProjectScript`: the drawer opens on the active terminal, or a new one (120 x 30) when that
+    /// one runs a command; `terminal.open`, then the command and Return.
+    func runScript(_ script: ProjectScript) {
+        guard let threadId, let launch = launch(threadId), let shell = environments.session(threadId.environmentId) else { return }
+        var state = state
+        let known = metadata[threadId.environmentId ?? ""]?.activity.terminalIds(threadId: threadId.localId.rawValue) ?? []
+        let base = state.resolvedActiveId ?? known.first ?? "term-1"
+        let busy = summary(base)?.hasRunningSubprocess == true
+        let terminalId = busy ? allocateTerminalId(threadId) : base
+        if busy || !state.terminalIds.contains(terminalId) { state.newTerminal(terminalId) } else { state.activate(terminalId); state.open = true }
+        self.state = state
+        refresh()
+        focusActive(drawerHost, terminalId)
+        var payload = TerminalRPC.openInput(threadId: threadId.localId.rawValue, terminalId: terminalId, launch: launch)
+        if busy, case .object(var o) = payload {
+            o["cols"] = .number(120)
+            o["rows"] = .number(30)
+            payload = .object(o)
+        }
+        let local = threadId.localId.rawValue
+        Task { [weak self] in
+            do {
+                _ = try await shell.supervisor.request(TerminalRPC.open, payload: payload)
+                _ = try await shell.supervisor.request(TerminalRPC.write, payload: TerminalRPC.writeInput(threadId: local, terminalId: terminalId, data: script.command + "\r"))
+            } catch {
+                self?.panel.toasts.show(ToastView(title: "Failed to run script \"\(script.name)\".", message: (error as? RPCClientError)?.typedError?.message, kind: .error))
+            }
+        }
+    }
+
+    // MARK: Terminal tabs (ChatView.tsx:5895-6010)
+
+    /// `addTerminalSurface`: a new tab with a new terminal.
+    private func addTerminalSurface() {
+        guard let threadId, launch(threadId) != nil, environments.session(threadId.environmentId) != nil else { return }
+        let terminalId = allocateTerminalId(threadId)
+        panel.mutatePanel { $0.openTerminal(terminalId); return [] }
+        openOnServer(threadId, terminalId)
+        focusActive(panelHost, terminalId)
+    }
+
+    /// `splitPanelTerminal`: another terminal in the active tab, at most four.
+    private func splitPanelTerminal(_ direction: TerminalGroup.Direction) {
+        guard let threadId, let surface = panel.panelState.active?.terminal, let surfaceId = panel.panelState.activeSurfaceId,
+              surface.terminalIds.count < TerminalDrawerState.maxPerGroup else { return }
+        let terminalId = allocateTerminalId(threadId)
+        panel.mutatePanel { $0.splitTerminal(surfaceId, terminalId: terminalId, direction: direction); return [] }
+        openOnServer(threadId, terminalId)
+        focusActive(panelHost, terminalId)
+    }
+
+    private func activatePanelTerminal(_ terminalId: String) {
+        guard let surfaceId = panel.panelState.activeSurfaceId, panel.panelState.active?.terminal?.activeTerminalId != terminalId else { return }
+        panel.mutatePanel { $0.activateTerminal(surfaceId, terminalId: terminalId); return [] }
+        focusActive(panelHost, terminalId)
+    }
+
+    /// `closePanelTerminal`: the tab's last terminal closes the tab.
+    private func closePanelTerminal(_ terminalId: String) {
+        guard let surfaceId = panel.panelState.activeSurfaceId else { return }
+        stopOnServer(terminalId)
+        panel.mutatePanel { $0.closeTerminal(surfaceId, terminalId: terminalId); return [] }
+        focusActive(panelHost, panel.panelState.active?.terminal?.activeTerminalId)
+    }
+
+    /// Each terminal tab's title: the server's label for its active terminal.
+    private func updateTabTitles() {
+        var titles: [String: String] = [:]
+        for surface in panel.panelState.surfaces {
+            guard let t = surface.terminal else { continue }
+            titles[surface.id] = label(t.activeTerminalId)
+        }
+        if panel.terminalTitles != titles { panel.terminalTitles = titles }
+    }
 
     // MARK: Height
 
@@ -280,7 +491,7 @@ final class TerminalController {
     // MARK: Attach
 
     /// Where the thread's terminals start: its worktree or its project's root.
-    private func launch(_ threadId: ThreadId) -> TerminalRPC.Launch? {
+    func launch(_ threadId: ThreadId) -> TerminalRPC.Launch? {
         guard let snapshot = sidebar?.snapshot,
               let thread = snapshot.threads.first(where: { $0.id == threadId }) ?? snapshot.archivedThreads.first(where: { $0.id == threadId }),
               let project = snapshot.projects.first(where: { $0.id == thread.projectId }) else { return nil }
@@ -288,23 +499,30 @@ final class TerminalController {
         return TerminalRPC.Launch(projectRoot: project.workspaceRoot, worktreePath: worktree)
     }
 
-    private func attach(_ threadId: ThreadId, _ terminalId: String) {
-        detach()
-        guard let shell = environments.session(threadId.environmentId), let launch = launch(threadId) else {
-            panel.terminalDrawer.surface = nil
-            return
-        }
+    private func attach(_ threadId: ThreadId, _ terminalId: String, host: Host) -> Attachment? {
+        guard let shell = environments.session(threadId.environmentId), let launch = launch(threadId) else { return nil }
         let surface = TerminalSurfaceView()
         let attachment = Attachment(threadId: threadId, terminalId: terminalId, surface: surface)
-        self.attachment = attachment
-        panel.terminalDrawer.surface = surface
         let local = threadId.localId.rawValue
-        surface.onInput = { [weak self] data in self?.send(data) }
-        surface.onResize = { [weak self, weak attachment] cols, rows in
-            guard let self, let attachment, attachment === self.attachment else { return }
+        surface.onInput = { [weak self, weak attachment] data in
+            guard let self, let attachment else { return }
+            self.send(data, to: attachment)
+        }
+        surface.onResize = { [weak self, weak attachment, weak host] cols, rows in
+            guard let self, let attachment, host?.attachments[terminalId] === attachment else { return }
             self.resize(attachment, cols: cols, rows: rows)
         }
         surface.onLink = { [weak self] link in self?.openLink(link, cwd: launch.cwd) }
+        surface.onFocus = { [weak self] in
+            guard let self else { return }
+            if host === self.panelHost { self.activatePanelTerminal(terminalId) } else if self.state.activeTerminalId != terminalId { self.activate(terminalId) }
+        }
+        surface.onAddToChat = { [weak self] text, start, end in
+            guard let self else { return }
+            let selection = ComposerContext.TerminalSelection(terminalId: terminalId, terminalLabel: self.label(terminalId),
+                                                              lineStart: start, lineEnd: end, text: text)
+            if let normalized = selection.normalized { self.onAddToChat?(normalized) }
+        }
         let supervisor = shell.supervisor
         attachment.writer = Task { [ops = attachment.ops] in
             for await (tag, payload) in ops {
@@ -312,34 +530,37 @@ final class TerminalController {
             }
         }
         let payload = TerminalRPC.attachInput(threadId: local, terminalId: terminalId, launch: launch)
-        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { payload }, handler: { [weak self] event in
+        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { payload }, handler: { [weak self, weak host] event in
             guard case .value(let json) = event, let item = TerminalAttachEvent(json: json) else { return }
-            await MainActor.run { self?.apply(item, to: attachment) }
+            await MainActor.run {
+                guard let self, let host else { return }
+                self.apply(item, to: attachment, in: host)
+            }
         })
+        return attachment
     }
 
-    private func detach() {
-        attachment?.end()
-        attachment = nil
-    }
-
-    private func apply(_ event: TerminalAttachEvent, to attachment: Attachment) {
-        guard attachment === self.attachment else { return }
+    private func apply(_ event: TerminalAttachEvent, to attachment: Attachment, in host: Host) {
+        guard host.attachments[attachment.terminalId] === attachment else { return }
         let outcome = attachment.model.apply(event)
         for action in outcome.actions { attachment.surface.apply(action) }
         if outcome.resendSize { attachment.sentGrid = nil; attachment.surface.resendSize() }
         if outcome.sessionEnded {
             // `onSessionExited` runs on the next tick, after the message shows.
             let terminalId = attachment.terminalId
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.attachment === attachment else { return }
-                self.close(terminalId)
+            DispatchQueue.main.async { [weak self, weak host] in
+                guard let self, let host, host.attachments[terminalId] === attachment else { return }
+                if host === self.panelHost {
+                    guard let surfaceId = self.panel.panelState.activeSurfaceId else { return }
+                    self.panel.mutatePanel { $0.closeTerminal(surfaceId, terminalId: terminalId); return [] }
+                } else {
+                    self.close(terminalId)
+                }
             }
         }
     }
 
-    private func send(_ data: String) {
-        guard let attachment else { return }
+    private func send(_ data: String, to attachment: Attachment) {
         let local = attachment.threadId.localId.rawValue
         for chunk in TerminalRPC.writeChunks(data) {
             attachment.outbox.yield((TerminalRPC.write, TerminalRPC.writeInput(threadId: local, terminalId: attachment.terminalId, data: chunk)))
@@ -373,17 +594,29 @@ final class TerminalController {
         return metadata[threadId.environmentId ?? ""]?.activity.summary(threadId: threadId.localId.rawValue, terminalId: terminalId)
     }
 
-    /// The cluster's tooltips with the current shortcut labels (`splitTerminalActionLabel`...).
-    private func updateLabels() {
-        let context = KeybindingContext(["terminalFocus": true, "terminalOpen": true])
+    /// `resolveTerminalSessionLabel`: the server's label, else "Terminal N".
+    private func label(_ terminalId: String) -> String { TerminalLabels.label(terminalId, summary: summary(terminalId)) }
+
+    private func shortcut(_ command: String) -> String? {
+        ActiveKeymap.label(for: command, context: KeybindingContext(["terminalFocus": true, "terminalOpen": true]))
+    }
+
+    /// The tooltips with the current shortcut labels (`splitTerminalActionLabel`...).
+    private func updateLabels(_ state: TerminalDrawerState) {
         let label = { (title: String, command: String) -> String in
-            ActiveKeymap.label(for: command, context: context).map { "\(title) (\($0))" } ?? title
+            self.shortcut(command).map { "\(title) (\($0))" } ?? title
         }
-        let new = label("New Terminal", "terminal.new")
-        panel.terminalDrawer.actions.setLabels(split: label("Split Terminal Horizontally", "terminal.split"),
-                                               splitVertical: label("Split Terminal Vertically", "terminal.splitVertical"),
-                                               new: new, close: label("Close Terminal", "terminal.close"))
-        panel.terminalDrawer.emptyButton.title = new
+        let max = TerminalDrawerState.maxPerGroup
+        let limitDrawer = state.hasReachedSplitLimit
+        let limitPanel = (panel.panelState.active?.terminal?.terminalIds.count ?? 0) >= max
+        let new = label("New Terminal", "terminal.new"), close = label("Close Terminal", "terminal.close")
+        for (view, limit) in [(panel.terminalDrawer, limitDrawer), (panel.terminalPanel, limitPanel)] {
+            let split = limit ? "Split Terminal Horizontally (max \(max) per group)" : label("Split Terminal Horizontally", "terminal.split")
+            let vertical = limit ? "Split Terminal Vertically (max \(max) per group)" : label("Split Terminal Vertically", "terminal.splitVertical")
+            view.actions.setLabels(split: split, splitVertical: vertical, new: new, close: close)
+            view.list.setLabels(split: split, splitVertical: vertical, new: new, close: close)
+            view.emptyButton.title = new
+        }
     }
 
     // MARK: Metadata
@@ -393,10 +626,28 @@ final class TerminalController {
             guard case .value(let json) = event, let item = TerminalMetadataEvent(json: json) else { return }
             await MainActor.run {
                 guard let self, self.metadata[environmentId]?.session === session else { return }
+                let before = self.metadata[environmentId]?.activity
                 if self.metadata[environmentId]?.activity.apply(item) == true { self.publishActivity() }
+                // A label change (the running command) renames list rows and tab titles.
+                if self.threadId?.environmentId == environmentId, self.metadata[environmentId]?.activity != before { self.relabel() }
             }
         })
         metadata[environmentId] = (session, task, TerminalActivity())
+    }
+
+    /// Only the labels changed: the list and tab titles, no attach work.
+    private func relabel() {
+        let state = state
+        if state.open, state.hasTerminalList {
+            panel.terminalDrawer.list.apply(TerminalListModel.make(state, label: label, closeShortcut: shortcut("terminal.close")))
+        }
+        if let surface = panel.panelState.active?.terminal, surface.terminalIds.count > 1 {
+            let tab = TerminalDrawerState(open: true, terminalIds: surface.terminalIds, activeTerminalId: surface.activeTerminalId,
+                                          terminalGroups: [TerminalGroup(id: "terminal:" + surface.resourceId, terminalIds: surface.terminalIds,
+                                                                         splitDirection: surface.splitDirection)]).normalized
+            panel.terminalPanel.list.apply(TerminalListModel.make(tab, label: label, closeShortcut: shortcut("terminal.close")))
+        }
+        updateTabTitles()
     }
 
     private func publishActivity() {

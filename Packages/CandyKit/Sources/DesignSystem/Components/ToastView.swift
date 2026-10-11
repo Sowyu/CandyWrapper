@@ -76,6 +76,15 @@ public final class ToastView: DSView {
 
     private var hasMessage: Bool { !messageText.text.isEmpty }
 
+    /// `toastManager.update` for text only: a progress toast changes in place.
+    public func setText(title: String, message: String?) {
+        guard titleText.text != title || messageText.text != (message ?? "") else { return }
+        titleText.text = title
+        messageText.text = message ?? ""
+        setAccessibilityLabel(title)
+        needsLayout = true
+    }
+
     private struct Frames { var icon = CGRect.zero, title = CGRect.zero, message = CGRect.zero, action = CGRect.zero, height: CGFloat = 0 }
 
     /// Inline content: `py-3 pl-3.5`, `pr-6` with an action or `pr-10` without, `gap-1.5`, items centered.

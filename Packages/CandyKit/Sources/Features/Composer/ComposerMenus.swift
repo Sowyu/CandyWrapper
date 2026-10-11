@@ -631,6 +631,49 @@ public enum ComposerContext {
                         "label": .string(label), "environmentId": .string(environmentId), "threadId": .string(threadId), "title": .string(label)])
     }
 
+    /// A terminal selection (`TerminalContextSelection`, lib/terminalContext.ts:5-11).
+    public struct TerminalSelection: Equatable, Sendable {
+        public var terminalId: String, terminalLabel: String, lineStart: Int, lineEnd: Int, text: String
+        public init(terminalId: String, terminalLabel: String, lineStart: Int, lineEnd: Int, text: String) {
+            self.terminalId = terminalId; self.terminalLabel = terminalLabel; self.lineStart = lineStart; self.lineEnd = lineEnd; self.text = text
+        }
+
+        /// `normalizeTerminalContextSelection`: CRLF to LF, no leading or trailing blank lines, lines
+        /// from 1 and never backwards; nil without text, id or label.
+        public var normalized: TerminalSelection? {
+            let text = Self.normalizeText(self.text)
+            let id = terminalId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = terminalLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, !id.isEmpty, !label.isEmpty else { return nil }
+            let start = max(1, lineStart)
+            return TerminalSelection(terminalId: id, terminalLabel: label, lineStart: start, lineEnd: max(start, lineEnd), text: text)
+        }
+
+        /// `normalizeTerminalContextText`.
+        public static func normalizeText(_ text: String) -> String {
+            text.replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: #"^\n+|\n+$"#, with: "", options: .regularExpression)
+        }
+
+        /// `formatTerminalContextLabel`: "Terminal 1 line 4" or "Terminal 1 lines 4-9".
+        public var label: String {
+            "\(terminalLabel) " + (lineStart == lineEnd ? "line \(lineStart)" : "lines \(lineStart)-\(lineEnd)")
+        }
+    }
+
+    /// `terminalContextReference` for a context minted with `id`.
+    public static func terminalReference(id: String, _ selection: TerminalSelection) -> Reference {
+        Reference(kind: "terminal", contextId: kindScopedId("terminal", id), label: selection.label)
+    }
+
+    /// `terminalContextRecord` (composerContextRecords.ts:182-195).
+    public static func terminalRecord(id: String, _ selection: TerminalSelection) -> JSONValue {
+        .object(["version": .number(1), "contextId": .string(kindScopedId("terminal", id)), "kind": .string("terminal"),
+                 "label": .string(sanitizeLabel(selection.label, kind: "terminal")), "terminalId": .string(selection.terminalId),
+                 "terminalLabel": .string(selection.terminalLabel), "lineStart": .number(Double(selection.lineStart)),
+                 "lineEnd": .number(Double(selection.lineEnd)), "text": .string(TerminalSelection.normalizeText(selection.text))])
+    }
+
     /// A pull request picked from `#`: `buildPullRequestReferenceContext` under the
     /// `pr-reference:<n>` id, labeled `#<n>`.
     public static func pullRequestReference(_ pr: PullRequestReference) -> Reference {

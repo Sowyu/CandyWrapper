@@ -16,6 +16,8 @@ public struct ComposerChipLook: Equatable, Sendable {
         /// A draft attachment (`ImageChipButton`, `FileChip`): label middle-truncated to 36, then the size.
         case image
         case file(name: String)
+        /// A terminal excerpt (`TerminalContextInlineChip`).
+        case terminal
         case unresolved
     }
     public var kind: Kind
@@ -46,6 +48,8 @@ public struct ComposerChipLook: Equatable, Sendable {
             switch kind {
             case "thread":
                 return ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label)
+            case "terminal":
+                return ComposerChipLook(kind: .terminal, label: r["label"]?.stringValue ?? label)
             case "review-comment":
                 if let pr = ComposerContext.pullRequest(in: r) { return ComposerChipLook(kind: .pullRequest(state: pr.displayState), label: "#\(pr.number)") }
                 return ComposerChipLook(kind: .unresolved, label: label)
@@ -64,6 +68,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .image: OKLab.oklch(0.62, 0.16, 16)
         case .file: OKLab.oklch(0.62, 0.136, 237)
         case .thread: OKLab.oklch(0.62, 0.12, 190)
+        case .terminal: OKLab.oklch(0.62, 0.134, 163)
         case .pullRequest(let state):
             switch state {
             case "open": OKLab.oklch(0.62, 0.134, 163)
@@ -89,6 +94,7 @@ public struct ComposerChipLook: Equatable, Sendable {
             let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
             return FileChipStyle.icon(for: meta)
         case .thread: return (IconName.messagesSquare.definition, nil)
+        case .terminal: return (IconName.terminal.definition, nil)
         case .pullRequest(let state):
             let name: IconName = switch state {
             case "draft": .gitPullRequestDraft

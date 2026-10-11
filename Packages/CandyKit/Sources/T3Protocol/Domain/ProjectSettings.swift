@@ -235,6 +235,26 @@ public enum ProjectScripts {
         return String("\(base)-\(Int(Date().timeIntervalSince1970 * 1000))".prefix(maxIdLength))
     }
 
+    /// `projectScriptIdFromCommand`: the id in `script.<id>.run`, nil for any other command.
+    public static func scriptId(fromCommand command: String) -> String? {
+        let c = command.trimmingCharacters(in: .whitespaces)
+        guard c.hasPrefix("script."), c.hasSuffix(".run") else { return nil }
+        let id = String(c.dropFirst("script.".count).dropLast(".run".count))
+        return Self.command(id) == c ? id : nil
+    }
+
+    /// `primaryProjectScript` (web projectScripts.ts:108-111): the first action with no role, else
+    /// the first that does not run on settle.
+    public static func primary(_ scripts: [ProjectScript]) -> ProjectScript? {
+        scripts.first { !$0.runOnWorktreeCreate && $0.runOnSettle != true } ?? scripts.first { $0.runOnSettle != true }
+    }
+
+    /// `projectScriptMenuLabel` (shared projectScripts.ts:78-84): the name with its roles.
+    public static func menuLabel(_ script: ProjectScript) -> String {
+        let roles = (script.runOnWorktreeCreate ? ["setup"] : []) + (script.runOnSettle == true ? ["on settle"] : [])
+        return roles.isEmpty ? script.name : "\(script.name) (\(roles.joined(separator: ", ")))"
+    }
+
     /// `commandForProjectScript`: `script.<id>.run`, or nil for a legacy id the pattern rejects.
     public static func command(_ id: String) -> String? {
         guard !id.isEmpty, id.count <= maxIdLength, id.range(of: "^[a-z0-9][a-z0-9-]*$", options: .regularExpression) != nil else { return nil }

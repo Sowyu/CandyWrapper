@@ -1,9 +1,11 @@
 import AppKit
 import Testing
 import DesignSystem
+import T3Protocol
+import T3Store
 @testable import Features
 
-/// The terminal drawer's chrome (with one terminal, and empty) against T3's markup in Chromium
+/// The terminal drawer's chrome (with one terminal, empty, and two side by side with the list) against T3's markup in Chromium
 /// (spec from scripts/gen-terminal-drawer-spec.py, references in design/component-reference/
 /// terminal-drawer). Writes ref, ours and diff PNGs plus report-terminal-drawer.html to
 /// /tmp/candywrapper-fidelity.
@@ -20,6 +22,18 @@ struct TerminalDrawerFidelityTests {
             // are compared; SwiftTerm's cells paint white in offscreen snapshots.
             surface.terminal.isHidden = true
             drawer.surface = surface
+        }
+        if name == "split" {
+            let panes = ["term-1", "term-2"].map { id -> (id: String, surface: TerminalSurfaceView) in
+                let surface = TerminalSurfaceView()
+                surface.terminal.isHidden = true
+                return (id, surface)
+            }
+            var state = TerminalDrawerState()
+            state.newTerminal("term-1")
+            state.split("term-2", direction: .horizontal)
+            drawer.show(panes, direction: .horizontal, activeId: "term-2",
+                        list: TerminalListModel.make(state, label: { TerminalLabels.label($0) }, closeShortcut: nil))
         }
         return drawer
     }

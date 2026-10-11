@@ -1,6 +1,7 @@
 """Writes design/component-reference/terminal-drawer.json for scripts/component-reference: the
 terminal drawer's chrome (ThreadTerminalDrawer.tsx:1494-1700) with one terminal (the floating
-action cluster over an empty terminal) and the empty state.
+action cluster over an empty terminal), the empty state, and two terminals side by side with the
+terminal list.
 
 Class strings are copied from that file at the tag in T3_VERSION. The terminal's canvas is left
 empty: its text comes from libghostty in T3 and SwiftTerm here, which no screenshot compares.
@@ -43,7 +44,31 @@ empty = (f'<aside class="{ASIDE}" style="height:{H}px;width:{W}px">{HANDLE}'
          f'<p>No terminal sessions for this thread yet.</p><button data-slot="button" class="{button}">New Terminal (⌘N)</button>'
          '</div></aside>')
 
+# Two terminals side by side with the list aside (ThreadTerminalDrawer.tsx:1600-1830); the second is active.
+VIEWPORT = '<div class="h-full"><div class="relative h-full w-full overflow-hidden bg-(--terminal-background)"></div></div>'
+cell = lambda first, active: (f'<div class="min-h-0 min-w-0 {"" if first else "border-l"} {"border-border" if active else "border-border/70"}">{VIEWPORT}</div>')
+ABTN = "inline-flex h-full items-center px-1 text-foreground/90 transition-colors hover:bg-accent/70"
+abtns = "".join(f'<button type="button" class="{ABTN}{"" if i == 0 else " border-l border-border/70"}">{lucide(icon, "size-3.25")}</button>'
+                for i, icon in enumerate(["square-split-horizontal", "square-split-vertical", "plus", "trash-2"]))
+def row(label, active):
+    cls = "bg-accent text-foreground" if active else "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+    return (f'<div class="group/tab flex h-6 w-full items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs {cls}">'
+            f'<span class="inline-flex size-4 items-center justify-center">{lucide("square-terminal", "size-3 shrink-0")}</span>'
+            f'<button type="button" class="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"><span class="truncate">{label}</span></button></div>')
+aside = ('<aside class="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">'
+         f'<div class="flex h-[22px] items-stretch justify-end border-b border-border/70"><div class="inline-flex h-full items-stretch">{abtns}</div></div>'
+         '<div class="min-h-0 flex-1 overflow-y-auto px-1 py-1"><div class="pb-0.5">'
+         '<button type="button" class="flex h-[22px] w-full cursor-pointer items-center gap-1 rounded px-1.5 text-2xs bg-accent/50 text-foreground">'
+         f'{lucide("square-split-horizontal", "size-3 shrink-0")}<span class="min-w-0 flex-1 truncate text-left">Side by side</span>'
+         '<span class="text-muted-foreground/70 text-3xs tabular-nums">2</span></button>'
+         f'<div class="flex flex-col gap-0.5">{row("Terminal 1", False)}{row("Terminal 2", True)}</div></div></div></aside>')
+split = (f'<aside class="{ASIDE}" style="height:{H}px;width:{W}px">{HANDLE}'
+         '<div class="min-h-0 w-full flex-1"><div class="flex h-full min-h-0 bg-(--terminal-background) gap-1.5">'
+         '<div class="min-w-0 flex-1"><div class="grid h-full w-full min-w-0 gap-0 overflow-hidden" style="grid-template-columns:repeat(2,minmax(0,1fr))">'
+         f'{cell(True, False)}{cell(False, True)}</div></div>{aside}</div></div></aside>')
+
 cases = [
+    {"name": "split", "html": split, "native": {"case": "split"}, "wrapperStyle": f"display:block;width:{W}px"},
     {"name": "drawer", "html": drawer, "native": {"case": "drawer"}, "wrapperStyle": f"display:block;width:{W}px"},
     {"name": "empty", "html": empty, "native": {"case": "empty"}, "wrapperStyle": f"display:block;width:{W}px"},
 ]

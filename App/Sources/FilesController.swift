@@ -23,6 +23,8 @@ final class FilesController {
     var browserURL: ((String) -> String?)?
     var onBrowserTabsClosed: (([String]) -> Void)?
     var onReopenBrowser: ((ThreadId, String?) -> Void)?
+    /// Terminal tabs closed: their terminals stop on the server.
+    var onTerminalTabsClosed: (([TerminalPanelSurface]) -> Void)?
 
     /// The thread the panel follows (nil on a draft).
     var currentThreadId: ThreadId? { threadId }
@@ -152,6 +154,7 @@ final class FilesController {
     private func panelChanged(_ state: RightPanelState, closed removed: [RightPanelSurface]) {
         guard let key = threadId?.rawValue else { return }
         var browserTabs: [String] = []
+        let terminalTabs = removed.compactMap(\.terminal)
         for surface in removed {
             if let tabId = surface.browserTabId {
                 // A server tab is remembered with its page (`{kind: "browser", snapshot}`).
@@ -164,6 +167,7 @@ final class FilesController {
         }
         store(state, for: key)
         if !browserTabs.isEmpty { onBrowserTabsClosed?(browserTabs) }
+        if !terminalTabs.isEmpty { onTerminalTabsClosed?(terminalTabs) }
         syncSurfaces()
     }
 
@@ -178,7 +182,7 @@ final class FilesController {
         case .file:
             showActiveFile(force: false)
             ensureTree()
-        case .diff, .pullRequest, .pullRequests, .browser:
+        case .diff, .pullRequest, .pullRequests, .browser, .terminal:
             break
         }
     }

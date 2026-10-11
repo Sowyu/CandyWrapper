@@ -2,32 +2,54 @@ import AppKit
 import DesignSystem
 import T3Store
 
-/// The thread's terminal drawer under the chat column (ThreadTerminalDrawer.tsx:1494-1700): an
+/// The thread's terminal drawer under the chat column (ThreadTerminalDrawer.tsx:1494-1830): an
 /// `aside` with `border-t border-border/80 bg-background`, a 6pt drag handle along its top edge,
-/// the terminal filling it, and the action cluster floating at its top right. Without terminals it
-/// shows T3's empty state instead.
+/// the active group's terminals filling it, and the action cluster floating at its top right. With
+/// two or more terminals the list aside sits at the right (`gap-1.5`) and carries the actions
+/// instead. Without terminals it shows T3's empty state. In a right panel tab (`mode="panel"`) it
+/// has no top border and no handle.
 @MainActor
 public final class TerminalDrawerView: DSView {
     /// The drag handle (`h-1.5`).
     static let handleHeight: CGFloat = 6
 
     public let actions = TerminalActionCluster()
+    public let grid = TerminalSplitGroupView()
+    public let list = TerminalListAsideView()
     private let border = CALayer()
     private let handle = ResizeHandle()
     private let emptyLabel = LabelView("No terminal sessions for this thread yet.", font: DSFont.ui(14))
     public let emptyButton = ButtonView("New Terminal", variant: .outline, size: .xs)
 
-    /// The live terminal, owned by the controller; nil shows the empty state.
+    /// A right panel tab's terminal: no top border, no height handle.
+    public var isPanel = false {
+        didSet { handle.isHidden = isPanel; border.isHidden = isPanel; needsLayout = true }
+    }
+
+    /// The panes on screen; empty shows the empty state.
+    public private(set) var panes: [(id: String, surface: TerminalSurfaceView)] = []
+    private var listShown = false
+
+    /// One terminal and no list (the drawer before splits existed, and the fidelity test).
     public var surface: TerminalSurfaceView? {
-        didSet {
-            guard surface !== oldValue else { return }
-            oldValue?.removeFromSuperview()
-            if let surface { addSubview(surface, positioned: .below, relativeTo: actions) }
-            emptyLabel.isHidden = surface != nil
-            emptyButton.isHidden = surface != nil
-            actions.isHidden = surface == nil
-            needsLayout = true
-        }
+        get { panes.first?.surface }
+        set { show(newValue.map { [(id: "", surface: $0)] } ?? [], direction: .horizontal, activeId: "", list: nil) }
+    }
+
+    /// Shows the active group's `panes` and, with two or more terminals, the list.
+    public func show(_ panes: [(id: String, surface: TerminalSurfaceView)], direction: TerminalGroup.Direction, activeId: String,
+                     list model: TerminalListModel?) {
+        self.panes = panes
+        grid.show(panes, direction: direction, activeId: activeId)
+        let empty = panes.isEmpty
+        grid.isHidden = empty
+        emptyLabel.isHidden = !empty
+        emptyButton.isHidden = !empty
+        listShown = !empty && model != nil
+        if let model { list.apply(model) }
+        list.isHidden = !listShown
+        actions.isHidden = empty || listShown
+        needsLayout = true
     }
 
     /// Height drag: the start height plus how far the pointer moved up. `ended` once on release.
@@ -41,6 +63,10 @@ public final class TerminalDrawerView: DSView {
         emptyLabel.lineHeight = 20
         addSubview(emptyLabel)
         addSubview(emptyButton)
+        grid.isHidden = true
+        addSubview(grid)
+        list.isHidden = true
+        addSubview(list)
         actions.isHidden = true
         addSubview(actions)
         addSubview(handle)
@@ -58,23 +84,31 @@ public final class TerminalDrawerView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
+        let top: CGFloat = isPanel ? 0 : 1
         border.frame = CGRect(x: 0, y: 0, width: w, height: 1)
         handle.frame = NSRect(x: 0, y: 0, width: w, height: Self.handleHeight)
-        let content = NSRect(x: 0, y: 1, width: w, height: max(0, h - 1))
-        surface?.frame = content
+        let content = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
+        if listShown {
+            let listWidth = TerminalListAsideView.width
+            list.frame = NSRect(x: content.maxX - listWidth, y: content.minY, width: listWidth, height: content.height)
+            grid.frame = NSRect(x: 0, y: content.minY, width: max(0, content.width - listWidth - 6), height: content.height)
+        } else {
+            grid.frame = content
+        }
         let size = actions.intrinsicContentSize
         // `absolute right-2 top-2`, from the aside's border box.
         actions.frame = NSRect(x: w - 8 - size.width, y: 8, width: size.width, height: size.height)
         // Empty state: `flex-col items-center justify-center gap-3 px-4 py-6 text-sm`.
         let labelHeight: CGFloat = 20, buttonHeight = emptyButton.intrinsicContentSize.height
         let block = labelHeight + 12 + buttonHeight
-        let top = (1 + (h - 1 - block) / 2).rounded()
-        emptyLabel.frame = NSRect(x: 16, y: top, width: max(0, w - 32), height: labelHeight)
+        let emptyTop = (top + (h - top - block) / 2).rounded()
+        emptyLabel.frame = NSRect(x: 16, y: emptyTop, width: max(0, w - 32), height: labelHeight)
         let bw = emptyButton.intrinsicContentSize.width
-        emptyButton.frame = NSRect(x: ((w - bw) / 2).rounded(), y: top + labelHeight + 12, width: bw, height: buttonHeight)
+        emptyButton.frame = NSRect(x: ((w - bw) / 2).rounded(), y: emptyTop + labelHeight + 12, width: bw, height: buttonHeight)
     }
 
     public override func updateLayer() {
+        // The split container is `bg-(--terminal-background)`, the app's background.
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self)
         emptyLabel.color = Themed.color(\.mutedForeground)

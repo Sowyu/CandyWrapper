@@ -430,16 +430,7 @@ final class ProjectActionRowView: DSView, SettingsGroupRow {
     }
 
     /// `ScriptIcon`.
-    static func icon(_ id: String) -> IconName {
-        switch id {
-        case "test": .flaskConical
-        case "lint": .listChecks
-        case "configure": .wrench
-        case "build": .hammer
-        case "debug": .bug
-        default: .play
-        }
-    }
+    static func icon(_ id: String) -> IconName { ProjectScriptIcon.name(id) }
 
     // `py-2`: 8 + 20 + 4 + 18 + 8.
     func height(forWidth width: CGFloat) -> CGFloat { 58 }
@@ -492,5 +483,19 @@ final class ProjectActionRowView: DSView, SettingsGroupRow {
         }
         override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1 + 12 + 2, height: 18) }
         override func layout() { super.layout(); label.frame = NSRect(x: 7, y: 2, width: bounds.width - 14, height: 14) }
+    }
+}
+
+/// `ScriptIcon` (ProjectScriptsControl.tsx): a project action's glyph by its icon id.
+public enum ProjectScriptIcon {
+    public static func name(_ id: String) -> IconName {
+        switch id {
+        case "test": .flaskConical
+        case "lint": .listChecks
+        case "configure": .wrench
+        case "build": .hammer
+        case "debug": .bug
+        default: .play
+        }
     }
 }

@@ -203,8 +203,10 @@ public struct ModelPickerSections: Sendable {
     /// The rail hides while searching (`showSidebar`).
     public let showsRail: Bool
 
+    /// `selectedKeys` (`instance:slug`): the models a multi-model draft picked, each shown selected
+    /// (`selectedModelKeySet`, ModelPickerContent.tsx:219-235); nil marks only the active model.
     public init(catalog: ProviderCatalog, active: ProviderInstanceId, activeModel: String, favorites: [ModelFavorite],
-                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>) {
+                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil) {
         let favoriteKeys = Set(favorites.map { "\($0.provider.rawValue):\($0.model)" })
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
         let visible = catalog.entries.filter(\.isVisibleInPicker)
@@ -220,7 +222,8 @@ public struct ModelPickerSections: Sendable {
             for m in e.models {
                 let key = "\(e.id.rawValue):\(m.slug)"
                 flat.append(ModelPickerItem(model: m, entry: e, isFavorite: favoriteKeys.contains(key),
-                                            isSelected: e.id == active && (m.slug == activeModel || m.aliases?.contains(activeModel) == true)))
+                                            isSelected: selectedKeys.map { $0.contains(key) }
+                                                ?? (e.id == active && (m.slug == activeModel || m.aliases?.contains(activeModel) == true))))
             }
         }
 

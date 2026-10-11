@@ -40,6 +40,15 @@ public final class ToastViewport: DSView {
         return id
     }
 
+    /// Changes a shown toast's text in place; false when it already left.
+    @discardableResult
+    public func update(_ id: Int, title: String, message: String?) -> Bool {
+        guard let view = views[id] else { return false }
+        view.setText(title: title, message: message)
+        relayout(animated: false)
+        return true
+    }
+
     public func dismiss(_ id: Int, swipe: CGPoint? = nil) {
         guard let view = views.removeValue(forKey: id) else { return }
         let slotY = view.layer?.sublayerTransform.m42 ?? 0

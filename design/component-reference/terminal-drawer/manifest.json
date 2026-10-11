@@ -6,5 +6,9 @@
   "empty" : {
     "height" : 200,
     "width" : 640
+  },
+  "split" : {
+    "height" : 200,
+    "width" : 640
   }
 }

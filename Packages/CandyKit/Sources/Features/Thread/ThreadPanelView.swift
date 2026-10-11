@@ -105,6 +105,10 @@ public final class ThreadPanelView: DSView {
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
+    /// A notice from the banner stack (the project clone's progress or failure), docked over the
+    /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
+    public let noticeBanner = ComposerNoticeBannerView()
+    public var showsNoticeBanner = false { didSet { if showsNoticeBanner != oldValue { needsLayout = true } } }
     /// The `/usage-limits` result, a notice in the banner stack above the environment banner.
     public var usageLimitsBanner: UsageLimitsBannerView? {
         didSet {
@@ -132,6 +136,9 @@ public final class ThreadPanelView: DSView {
     public var showsContextStrip = false { didSet { if showsContextStrip != oldValue { needsLayout = true } } }
     /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
     public let errorBanner = ThreadErrorBannerView()
+    /// The composer provider's status (ProviderStatusBanner.tsx), above the error banner in the
+    /// same top column (ChatView.tsx:11356-11362).
+    public let providerBanner = ThreadErrorBannerView()
     /// T3's top-right toast stack (`ToastProvider`), placed against the window, above everything.
     public let toasts = ToastViewport()
     /// Showing the new-thread draft page instead of a thread.
@@ -187,6 +194,8 @@ public final class ThreadPanelView: DSView {
         addSubview(queue)
         environmentBanner.isHidden = true
         addSubview(environmentBanner)
+        noticeBanner.isHidden = true
+        addSubview(noticeBanner, positioned: .below, relativeTo: environmentBanner)
         activityRow.isHidden = true
         addSubview(activityRow)
         stashBadge.isHidden = true
@@ -213,6 +222,7 @@ public final class ThreadPanelView: DSView {
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
+        addSubview(providerBanner)
         terminalDrawer.isHidden = true
         addSubview(terminalDrawer)
         rightPanel.isHidden = true
@@ -241,13 +251,14 @@ public final class ThreadPanelView: DSView {
             onTerminalToggle?()
         }
         rightPanel.onActivate = { [weak self] id in self?.mutatePanel { $0.activate(id); return [] } }
-        rightPanel.onClose = { [weak self] id in self?.mutatePanel { $0.close(id) } }
+        rightPanel.onClose = { [weak self] id in self?.closeSurface(id) }
         rightPanel.onCloseOthers = { [weak self] id in self?.mutatePanel { $0.closeOthers(id) } }
         rightPanel.onCloseToRight = { [weak self] id in self?.mutatePanel { $0.closeToRight(id) } }
         rightPanel.onCloseAll = { [weak self] in self?.mutatePanel { $0.closeAll() } }
         rightPanel.onAdd = { [weak self] kind in
             if kind == .pullRequest { self?.onAddPullRequest?(); return }
             if kind == .browser, let add = self?.onAddBrowser { add(); return }
+            if kind == .terminal { self?.onAddTerminal?(); return }
             self?.mutatePanel { $0.open(kind); return [] }
         }
         rightPanel.onCopyPath = { path in
@@ -310,6 +321,34 @@ public final class ThreadPanelView: DSView {
     }
     /// "Pull request" from the + menu or launcher: the app opens the thread's current one.
     public var onAddPullRequest: (@MainActor () -> Void)?
+
+    // MARK: Terminal tabs
+
+    /// A terminal tab's view, for the terminal controller to fill.
+    public var terminalPanel: TerminalDrawerView { rightPanel.terminal }
+    /// Whether the + menu and launcher offer "Terminal" (`terminalAvailable`).
+    public var terminalAvailable: Bool {
+        get { rightPanel.terminalAvailable }
+        set { rightPanel.terminalAvailable = newValue }
+    }
+    /// Terminal tab titles by surface id.
+    public var terminalTitles: [String: String] {
+        get { rightPanel.terminalTitles }
+        set { rightPanel.terminalTitles = newValue }
+    }
+    /// "Terminal" from the + menu or launcher (`addTerminalSurface`).
+    public var onAddTerminal: (@MainActor () -> Void)?
+    /// A terminal tab asks before it closes (`confirmTerminalClose`); `close` finishes it.
+    public var confirmCloseTerminalTab: (@MainActor (TerminalPanelSurface, _ close: @escaping @MainActor () -> Void) -> Void)?
+
+    /// Closes one tab, asking first for a terminal tab (`closeRightPanelSurface`).
+    private func closeSurface(_ id: String) {
+        if let terminal = panelState.surfaces.first(where: { $0.id == id })?.terminal, let confirm = confirmCloseTerminalTab {
+            confirm(terminal) { [weak self] in self?.mutatePanel { $0.close(id) } }
+            return
+        }
+        mutatePanel { $0.close(id) }
+    }
 
     // MARK: Browser
 
@@ -415,7 +454,7 @@ public final class ThreadPanelView: DSView {
     @discardableResult
     public func closeRightPanel() -> Bool {
         guard panelState.isOpen, let id = panelState.activeSurfaceId else { return false }
-        mutatePanel { $0.close(id) }
+        closeSurface(id)
         return true
     }
 
@@ -505,7 +544,9 @@ public final class ThreadPanelView: DSView {
             let block = height + 32 + 20
             let top = ThreadHeaderView.height + (chatHeight - ThreadHeaderView.height - block) / 2
             y = top.rounded()
-            hero.frame = NSRect(x: x, y: y - 16 - DraftHeroView.height, width: width, height: DraftHeroView.height)
+            // A docked notice sits between the hero and the composer.
+            let notice = showsNoticeBanner && composerShown ? ComposerNoticeBannerView.height - ComposerBannerView.overlap : 0
+            hero.frame = NSRect(x: x, y: y - 16 - notice - DraftHeroView.height, width: width, height: DraftHeroView.height)
         } else {
             y = chatHeight - 20 - height
         }
@@ -576,6 +617,13 @@ public final class ThreadPanelView: DSView {
             environmentBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = environmentBanner.frame.minY
         }
+        let noticeShown = showsNoticeBanner && !composer.isHidden
+        noticeBanner.isHidden = !noticeShown
+        if noticeShown {
+            let h = ComposerNoticeBannerView.height
+            noticeBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = noticeBanner.frame.minY
+        }
         if let usage = usageLimitsBanner {
             usage.isHidden = !docked
             if docked {
@@ -588,11 +636,12 @@ public final class ThreadPanelView: DSView {
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
-        environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil) || noticeShown
+        noticeBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
         usageLimitsBanner?.joinsAbove = queueHeight > 0
-        activityRow.joinsAbove = queueHeight > 0 || bannerShown
-        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown
-        questionPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown
+        activityRow.joinsAbove = queueHeight > 0 || bannerShown || noticeShown
+        approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
+        questionPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
         let above = max(y - top, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
@@ -655,10 +704,13 @@ public final class ThreadPanelView: DSView {
             miniPlayer.layer?.zPosition = 2
         }
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
-        if !errorBanner.isHidden {
-            let w = errorBanner.fittingWidth(max: max(0, min(768, chat - 32)))
-            let h = errorBanner.height(forWidth: w)
-            errorBanner.frame = NSRect(x: ((chat - w) / 2).rounded(), y: ThreadHeaderView.height + 12, width: w, height: h)
+        // Each banner has its own `pt-3` in a `flex-col`.
+        var bannerTop = ThreadHeaderView.height + 12
+        for banner in [providerBanner, errorBanner] where !banner.isHidden {
+            let w = banner.fittingWidth(max: max(0, min(768, chat - 32)))
+            let h = banner.height(forWidth: w)
+            banner.frame = NSRect(x: ((chat - w) / 2).rounded(), y: bannerTop, width: w, height: h)
+            bannerTop = banner.frame.maxY + 12
         }
         if let content = window?.contentView {
             toasts.frame = convert(ToastViewport.frame(in: content.bounds), from: content)
@@ -669,8 +721,9 @@ public final class ThreadPanelView: DSView {
         // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
         fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
-        fade.isHidden = !errorBanner.isHidden
+        fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden
         errorBanner.layer?.zPosition = 2
+        providerBanner.layer?.zPosition = 2
         detailsCard.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
         CATransaction.commit()

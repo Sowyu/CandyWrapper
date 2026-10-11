@@ -33,6 +33,23 @@ public final class ComposerPickers {
     /// A started thread refused the model change; show the text as a toast.
     public final var onBlocked: (@MainActor (String) -> Void)?
 
+    /// Whether the draft may fan out to several models (a new thread on a server with
+    /// `requiredWorktreeBootstrap`); the app sets it per draft.
+    public var supportsMultipleModels = false
+    /// The fan-out's models per draft key; nil is a single model.
+    public private(set) var multipleSelections: [String: [ModelSelection]] = [:]
+    /// The open draft's fan-out.
+    public var currentMultiple: [ModelSelection]? { supportsMultipleModels ? multipleSelections[draftKey] : nil }
+    /// The fan-out changed (models added, removed or cleared).
+    public final var onMultipleChange: (@MainActor () -> Void)?
+
+    /// Drops the draft's fan-out (after a send, or keeping only the failed models).
+    public func setMultiple(_ selections: [ModelSelection]?, for key: String) {
+        multipleSelections[key] = selections.flatMap { $0.count > 1 ? $0 : nil }
+        refresh(notify: false)
+        onMultipleChange?()
+    }
+
     private weak var modelPicker: ModelPickerView?
     private var openPopup: OpenPopup?
 
@@ -65,6 +82,11 @@ public final class ComposerPickers {
     private func refresh(notify: Bool) {
         current = store.resolve(draftKey, context)
         modelButton.title = current.triggerLabel
+        if let multiple = currentMultiple {
+            modelButton.title = ModelFanout.triggerLabel(multiple.map { s in
+                context.catalog.entry(s.instanceId)?.model(s.model).map(ModelNames.trigger) ?? s.model
+            })
+        }
         let glyph = current.entry.map { ProviderIcon.make(driver: $0.driver, displayName: $0.displayName, size: 16, color: Themed.color(\.contrastMutedForeground)) }
         modelButton.icon = glyph
         modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
@@ -89,7 +111,28 @@ public final class ComposerPickers {
         guard let host = modelButton.popupHost, let instance = current.instanceId else { return }
         let view = ModelPickerView(catalog: context.catalog, favorites: store.favorites, active: instance,
                                    activeModel: current.model?.slug ?? current.modelSlug ?? "")
-        view.onSelect = { [weak self] id, slug in self?.pickModel(id, slug) }
+        view.onSelect = { [weak self] id, slug in
+            guard let self else { return }
+            if self.currentMultiple != nil { self.setMultiple(nil, for: self.draftKey) }
+            self.pickModel(id, slug)
+        }
+        if supportsMultipleModels {
+            view.selectedKeys = currentMultiple.map { Set($0.map(ModelFanout.key)) }
+            view.onToggle = { [weak self, weak view] id, slug in
+                guard let self, let base = self.current.modelSelection else { return }
+                let (multiple, single) = ModelFanout.toggle(self.currentMultiple, base: base, instance: id, model: slug)
+                if let multiple {
+                    self.setMultiple(multiple, for: self.draftKey)
+                } else if let single {
+                    self.setMultiple(nil, for: self.draftKey)
+                    if let reason = self.store.pickModel(self.draftKey, instance: single.instanceId, model: single.model, self.context) {
+                        self.onBlocked?(reason)
+                    }
+                    self.refresh(notify: true)
+                }
+                view?.selectedKeys = self.currentMultiple.map { Set($0.map(ModelFanout.key)) }
+            }
+        }
         view.onToggleFavorite = { [weak self, weak view] id, slug in
             guard let self else { return }
             self.store.toggleFavorite(id, slug)

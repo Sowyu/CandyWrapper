@@ -163,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
         settings.composer = threads.composer
+        threads.composer.openProviderSetup = { [weak self, weak settings] in
+            self?.sidebarCommands?.closeUtilityPage()
+            settings?.open(.providers)
+        }
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)

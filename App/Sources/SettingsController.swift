@@ -124,6 +124,12 @@ final class SettingsController {
 
     // MARK: Open and close
 
+    /// Opens on `target` (the provider banner's "Open provider setup" lands on Providers).
+    func open(_ target: SettingsSection) {
+        section = target
+        if isOpen { show(target) } else { open() }
+    }
+
     func open() {
         guard !isOpen, let layout else { return }
         buildViews()

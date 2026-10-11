@@ -1,10 +1,10 @@
 import Foundation
+import T3Protocol
 
 /// One surface in a thread's right panel (`RightPanelSurface`, apps/web/src/rightPanelStore.ts:43-87).
 /// Only the kinds this app draws: the diff and files singletons, one tab per workspace file, one
-/// per pull request, the thread's linked pull requests and browser tabs.
-// ponytail: terminal and device surfaces are not modeled; add cases when the terminal tab and the
-// device panel are built (their ids are `terminal:*`, `device`)
+/// per pull request, the thread's linked pull requests, browser tabs and terminal tabs.
+// ponytail: device surfaces are not modeled; add a case when the device panel is built (id `device`)
 public enum RightPanelSurface: Codable, Sendable, Equatable {
     case diff
     case files
@@ -18,6 +18,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     /// `browser:<tabId>`: a server browser tab; nil is the `browser:new` placeholder that shows the
     /// empty state until a tab exists.
     case browser(tabId: String?)
+    /// `terminal:<first terminal id>`: one split group of terminals in a tab.
+    case terminal(TerminalPanelSurface)
 
     public var id: String {
         switch self {
@@ -27,10 +29,11 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .pullRequest(let target): target.surfaceId
         case .pullRequests: "pull-requests"
         case .browser(let tabId): "browser:" + (tabId ?? "new")
+        case .terminal(let t): "terminal:" + t.resourceId
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser, terminal }
     public var kind: Kind {
         switch self {
         case .diff: .diff
@@ -39,6 +42,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .pullRequest: .pullRequest
         case .pullRequests: .pullRequests
         case .browser: .browser
+        case .terminal: .terminal
         }
     }
 
@@ -54,6 +58,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .pullRequest(let target): return "#\(target.number)"
         case .pullRequests: return "Pull requests"
         case .browser: return "Browser"
+        // The app shows the server's label for the active terminal when it knows one.
+        case .terminal(let t): return TerminalLabels.label(t.activeTerminalId)
         }
     }
 
@@ -72,6 +78,28 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         if case .pullRequest(let target) = self { return target }
         return nil
     }
+
+    public var terminal: TerminalPanelSurface? {
+        if case .terminal(let t) = self { return t }
+        return nil
+    }
+}
+
+/// A terminal tab (rightPanelStore.ts:47-54): the terminals it shows side by side or stacked, at
+/// most `TerminalDrawerState.maxPerGroup`, and the one with the keyboard.
+public struct TerminalPanelSurface: Codable, Sendable, Equatable {
+    /// The first terminal's id; the tab keeps it as its id after that terminal closes.
+    public var resourceId: String
+    public var terminalIds: [String]
+    public var activeTerminalId: String
+    public var splitDirection: TerminalGroup.Direction
+
+    public init(resourceId: String, terminalIds: [String], activeTerminalId: String, splitDirection: TerminalGroup.Direction = .horizontal) {
+        self.resourceId = resourceId; self.terminalIds = terminalIds; self.activeTerminalId = activeTerminalId; self.splitDirection = splitDirection
+    }
+
+    /// `terminalSurface`.
+    public init(terminalId: String) { self.init(resourceId: terminalId, terminalIds: [terminalId], activeTerminalId: terminalId) }
 }
 
 /// The pull request a `pull-request` surface shows (rightPanelStore.ts:68-86). The environment is
@@ -131,7 +159,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
         case .browser: upsert(surfaces.first { $0.kind == .browser } ?? .browser(tabId: nil))
-        case .file, .pullRequest: break
+        case .file, .pullRequest, .terminal: break
         }
     }
 
@@ -184,6 +212,53 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         isOpen = true
         activeSurfaceId = id
     }
+
+    /// `openTerminal` (rightPanelStore.ts:737-742): a new tab with one terminal.
+    public mutating func openTerminal(_ terminalId: String) {
+        upsert(.terminal(TerminalPanelSurface(terminalId: terminalId)))
+    }
+
+    /// `splitTerminal` (rightPanelStore.ts:743-762): the terminal joins the tab at the end and
+    /// becomes active; the tab takes `direction`.
+    public mutating func splitTerminal(_ surfaceId: String, terminalId: String, direction: TerminalGroup.Direction) {
+        isOpen = true
+        activeSurfaceId = surfaceId
+        surfaces = surfaces.map { surface in
+            guard surface.id == surfaceId, var t = surface.terminal else { return surface }
+            if !t.terminalIds.contains(terminalId) { t.terminalIds.append(terminalId) }
+            t.activeTerminalId = terminalId
+            t.splitDirection = direction
+            return .terminal(t)
+        }
+    }
+
+    /// `activateTerminal` (rightPanelStore.ts:763-776).
+    public mutating func activateTerminal(_ surfaceId: String, terminalId: String) {
+        activeSurfaceId = surfaceId
+        surfaces = surfaces.map { surface in
+            guard surface.id == surfaceId, var t = surface.terminal, t.terminalIds.contains(terminalId) else { return surface }
+            t.activeTerminalId = terminalId
+            return .terminal(t)
+        }
+    }
+
+    /// `closeTerminal` (rightPanelStore.ts:777-815): the tab's last terminal closes the tab; else
+    /// the last remaining terminal takes over when the active one closed.
+    public mutating func closeTerminal(_ surfaceId: String, terminalId: String) {
+        guard let index = surfaces.firstIndex(where: { $0.id == surfaceId }), var t = surfaces[index].terminal else { return }
+        t.terminalIds.removeAll { $0 == terminalId }
+        if t.terminalIds.isEmpty {
+            surfaces.remove(at: index)
+            isOpen = !surfaces.isEmpty && isOpen
+            if activeSurfaceId == surfaceId { activeSurfaceId = surfaces.isEmpty ? nil : surfaces[min(index, surfaces.count - 1)].id }
+            return
+        }
+        if t.activeTerminalId == terminalId { t.activeTerminalId = t.terminalIds.last ?? t.terminalIds[0] }
+        surfaces[index] = .terminal(t)
+    }
+
+    /// Every terminal id the panel's tabs show (the drawer leaves them out, ChatView.tsx:1013-1022).
+    public var panelTerminalIds: Set<String> { Set(surfaces.flatMap { $0.terminal?.terminalIds ?? [] }) }
 
     /// `activateSurface`.
     public mutating func activate(_ id: String) {
@@ -283,6 +358,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
 
     /// `remember`.
     public mutating func remember(_ surface: RightPanelSurface, threadKey: String, browserURL: String? = nil) {
+        if surface.kind == .terminal { return }
         let entry = Entry(threadKey: threadKey, surface: surface, browserURL: browserURL)
         entries.removeAll { $0.threadKey == threadKey && $0.surface.id == surface.id }
         entries.insert(entry, at: 0)
@@ -311,6 +387,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .browser(let tabId): if tabId == nil { state.openBrowser(nil) }
         case .file(let path, let line, _): state.openFile(path, line: line)
         case .pullRequest(let target): state.openPullRequest(target)
+        case .terminal: break
         }
     }
 

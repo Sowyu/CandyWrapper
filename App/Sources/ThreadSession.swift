@@ -226,6 +226,8 @@ final class ThreadController {
     private(set) var terminal: TerminalController!
     private(set) var composer: ComposerController!
     private(set) var git: GitController!
+    private(set) var clones: ProjectCloneController!
+    private(set) var scripts: ProjectScriptsController!
     private(set) var files: FilesController!
     private(set) var pullRequests: ThreadPullRequestsController!
     private(set) var browser: BrowserController!
@@ -267,7 +269,8 @@ final class ThreadController {
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
-        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync(); self?.onRouteChange?() }
+        clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
+        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.onRouteChange?() }
         // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
         // instance's name when instances need telling apart (`shouldShowInstanceBadge`), and earlier providers.
         sidebar.actions.hoverProvider = { [weak self] thread in
@@ -342,7 +345,16 @@ final class ThreadController {
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
         browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
-        files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync() }
+        files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged() }
+        files.onTerminalTabsClosed = { [weak self] tabs in self?.terminal.panelTerminalsClosed(tabs) }
+        scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
+        scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
+        panel.confirmCloseTerminalTab = { [weak self] surface, close in self?.terminal.confirmCloseSurface(surface, then: close) }
+        terminal.onAddToChat = { [weak self] selection in self?.composer.addTerminalContext(selection) }
+        clones.openProject = { [weak self, weak sidebar] id in
+            guard let self, let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return }
+            self.newThread(in: project)
+        }
         // A row's pull request badge: one link opens it beside the thread, a stack or several open
         // the thread's pull requests tab (`ThreadPullRequestBadgeControl`).
         sidebar.actions.openPullRequest = { [weak self, weak sidebar] id in
@@ -358,6 +370,7 @@ final class ThreadController {
         // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
         panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
         composer.openThread = { [weak self] id in self?.open(id) }
+        composer.onNewThread = { [weak self] in self?.newThread() }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
         // Files dropped on a row open its thread and attach there (`handleThreadFileDrop`, Sidebar.tsx:3163-3187).
         sidebar.actions.dropFiles = { [weak self] id, urls in
@@ -372,6 +385,7 @@ final class ThreadController {
             session = nil
             lineage.update(threadId: nil, projection: nil)
             terminal.show(nil)
+            scripts.show(nil)
             files.show(nil)
         }
         sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
@@ -400,6 +414,7 @@ final class ThreadController {
     func registerShortcuts(_ shortcuts: Shortcuts) {
         composer.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
+        scripts.registerShortcuts(shortcuts)
         git.registerShortcuts(shortcuts)
         files.registerShortcuts(shortcuts)
         pullRequests.registerShortcuts(shortcuts)
@@ -443,6 +458,7 @@ final class ThreadController {
         migrationToast.sessionChanged(environmentId)
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
+        clones.sessionChanged(environmentId)
         git.sessionChanged(environmentId)
         browser.sessionChanged(environmentId)
         guard let session, session.environmentId == environmentId else { return }
@@ -470,6 +486,7 @@ final class ThreadController {
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
         terminal.show(id)
+        scripts.show(id)
         updateEnvironmentBanner()
         if openDiff {
             openDiff = false
@@ -513,6 +530,7 @@ final class ThreadController {
         session = nil
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
+        scripts.show(nil)
         files.show(nil)
         keepAlive?.update()
     }
@@ -525,6 +543,7 @@ final class ThreadController {
         session = nil
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
+        scripts.show(nil)
         files.show(nil)
         keepAlive?.update()
     }
@@ -587,6 +606,7 @@ final class ThreadController {
         session = nil
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
+        scripts.show(nil)
         files.show(nil)
         updateEnvironmentBanner()
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
@@ -604,6 +624,7 @@ final class ThreadController {
         keepAlive?.drop(environmentId: environmentId)
         composer.environmentRemoved(environmentId)
         terminal.environmentRemoved(environmentId)
+        clones.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
         files.environmentRemoved(environmentId)
         browser.environmentRemoved(environmentId)
@@ -654,6 +675,7 @@ final class ThreadController {
         composer.projectsChanged()
         git.refresh()
         files.shellChanged()
+        scripts.refresh()
         pullRequests.sync()
         lineage.sync()
         if let perf = perfOpen {
