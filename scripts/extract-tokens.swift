@@ -167,7 +167,54 @@ for (const [dark, host] of contexts) {
   for (const n of NAMES) result[n].push(resolve(host, n));
 }
 root.classList.remove('dark');
-return { result, float: canvases.srgb.float, p3float: canvases['display-p3'].float };
+
+// Theme expressions: every token with T3's theme variables (themePalette.ts APP_THEME_VARIABLES) and the
+// contrast variables (appearanceContrast.ts) set to marker words. Chromium substitutes var() in custom
+// properties at computed-value time, so each token comes back as the CSS expression of those inputs, which
+// ThemeRuntime evaluates natively. Ids: none, a user theme, and the built-ins with their own CSS blocks.
+const THEME_VARS = __THEME_VARS__;
+const CONTRAST_VARS = ['--appearance-contrast-base', '--appearance-contrast-boost', '--appearance-contrast-border-boost'];
+const rawOf = (host, name) => { const p = document.createElement('div'); host.appendChild(p); const v = getComputedStyle(p).getPropertyValue(name).trim(); p.remove(); return v; };
+const unmark = (s) => s.replace(/zzmark(-[a-z0-9-]+)/g, 'var($1)');
+const themeExpr = {};
+for (const id of ['', 'custom', 't3-chat', 'grove', 'ocean', 'ember', 'iris']) {
+  if (id) root.dataset.themeId = id; else delete root.dataset.themeId;
+  for (const v of THEME_VARS) { if (id) root.style.setProperty(v, 'zzmark' + v); else root.style.removeProperty(v); }
+  for (const v of CONTRAST_VARS) root.style.setProperty(v, 'zzmark' + v);
+  const byName = {};
+  for (const n of NAMES) byName[n] = [];
+  for (const [dark, host] of contexts) {
+    root.classList.toggle('dark', dark);
+    for (const n of NAMES) byName[n].push(unmark(rawOf(host, n)));
+  }
+  themeExpr[id || 'standard'] = byName;
+}
+// Resolved colors for ThemeRuntime's tests: a user theme with made-up role colors at contrast 150, and the
+// standard palette at contrast 60.
+const themeFixture = {};
+const fixtureRole = (i) => `oklch(${(0.25 + (i * 7 % 60) / 100).toFixed(3)} ${(0.02 + (i * 13 % 20) / 100).toFixed(3)} ${(i * 37) % 360}${i % 9 === 4 ? ' / 0.8' : ''})`;
+const setContrast = (c) => {
+  root.style.setProperty('--appearance-contrast-base', `${Math.min(c, 100)}%`);
+  root.style.setProperty('--appearance-contrast-boost', `${Math.max(c - 100, 0)}%`);
+  root.style.setProperty('--appearance-contrast-border-boost', `${Math.max(c - 100, 0) / 4}%`);
+};
+for (const [key, id, contrast] of [['custom150', 'custom', 150], ['standard60', '', 60]]) {
+  if (id) root.dataset.themeId = id; else delete root.dataset.themeId;
+  const roles = {};
+  THEME_VARS.forEach((v, i) => { if (id) { roles[v] = fixtureRole(i); root.style.setProperty(v, roles[v]); } else root.style.removeProperty(v); });
+  setContrast(contrast);
+  const colors = {};
+  for (const n of NAMES) colors[n] = [];
+  for (const [dark, host] of contexts) {
+    root.classList.toggle('dark', dark);
+    for (const n of NAMES) { const r = resolve(host, n); colors[n].push(r && r.kind === 'color' ? { srgb: r.srgb, p3: r.p3 } : null); }
+  }
+  themeFixture[key] = { roles, contrast, colors };
+}
+delete root.dataset.themeId;
+root.removeAttribute('style');
+root.classList.remove('dark');
+return { result, float: canvases.srgb.float, p3float: canvases['display-p3'].float, themeExpr, themeFixture };
 })()
 """#
 
@@ -182,7 +229,10 @@ actor CDP {
 
 func sleep(_ s: Double) async { try? await Task.sleep(nanoseconds: UInt64(s * 1e9)) }
 
-struct Resolved { var tokens: [String: [[String: Any]?]]; var chrome: String; var float: Bool }
+struct Resolved {
+    var tokens: [String: [[String: Any]?]]; var chrome: String; var float: Bool
+    var themeExpr: [String: Any] = [:]; var themeFixture: [String: Any] = [:]
+}
 
 func resolveInBrowser(names: [String]) async throws -> Resolved {
     let base = NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"
@@ -249,12 +299,17 @@ func resolveInBrowser(names: [String]) async throws -> Resolved {
     _ = try await evaluate("(() => { const s = document.createElement('style'); s.textContent = \(cssLiteral)[0]; document.head.appendChild(s); return true; })()")
 
     let namesJSON = String(decoding: try JSONSerialization.data(withJSONObject: names), as: UTF8.self)
+    // The theme variables are only read (`var(--app-theme-*)`), never declared: T3 sets them at runtime.
+    let themeVars = Array(Set(css.matches(of: #/var\((--app-theme-[a-z0-9-]+)/#).map { String($0.1) })).sorted()
+    let themeVarsJSON = String(decoding: try JSONSerialization.data(withJSONObject: themeVars), as: UTF8.self)
     let script = pageScript.replacingOccurrences(of: "__NAMES__", with: namesJSON)
+        .replacingOccurrences(of: "__THEME_VARS__", with: themeVarsJSON)
     guard let out = try await evaluate(script) as? [String: Any],
           let result = out["result"] as? [String: [Any]] else { fail("page script returned nothing") }
     var tokens: [String: [[String: Any]?]] = [:]
     for (k, v) in result { tokens[k] = v.map { $0 as? [String: Any] } }
-    return Resolved(tokens: tokens, chrome: version, float: (out["float"] as? Bool) ?? false)
+    return Resolved(tokens: tokens, chrome: version, float: (out["float"] as? Bool) ?? false,
+                    themeExpr: out["themeExpr"] as? [String: Any] ?? [:], themeFixture: out["themeFixture"] as? [String: Any] ?? [:])
 }
 
 // MARK: - Resolve
@@ -264,7 +319,8 @@ var resolved: Resolved
 if let loadPath {
     let d = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: loadPath))) as! [String: Any]
     resolved = Resolved(tokens: (d["tokens"] as! [String: [Any]]).mapValues { $0.map { $0 as? [String: Any] } },
-                        chrome: d["chrome"] as! String, float: d["float"] as! Bool)
+                        chrome: d["chrome"] as! String, float: d["float"] as! Bool,
+                        themeExpr: d["themeExpr"] as? [String: Any] ?? [:], themeFixture: d["themeFixture"] as? [String: Any] ?? [:])
 } else {
     resolved = try await resolveInBrowser(names: names)
 }
@@ -478,6 +534,70 @@ out += "    }\n}\n"
 try FileManager.default.createDirectory(at: swiftOut.deletingLastPathComponent(), withIntermediateDirectories: true)
 try out.write(to: swiftOut, atomically: true, encoding: .utf8)
 
+// MARK: - Theme expressions
+
+/// Each palette member as a CSS expression of the theme and contrast variables, for ThemeRuntime.
+func themeExpressions(_ id: String) -> [[String]] {
+    guard let byName = resolved.themeExpr[id] as? [String: [String]] else { fail("no theme expressions for \(id); rerun without --load") }
+    return colors.map { byName[$0.css] ?? ["", "", "", ""] }
+}
+func literal(_ rows: [[String]]) -> String {
+    rows.map { "        [" + $0.map { "\"\($0)\"" }.joined(separator: ", ") + "]" }.joined(separator: ",\n")
+}
+let standardExpr = themeExpressions("standard"), themedExpr = themeExpressions("custom")
+var themeOut = """
+// Generated by scripts/extract-tokens from design/t3-source/main.css (T3 \(t3Version)). Do not edit.
+// Each palette member as Chromium substitutes it with T3's theme variables (`--app-theme-*`, set by
+// themePalette.ts applyThemePalette) and contrast variables (appearanceContrast.ts) left as var() references.
+
+extension Palette {
+    /// Builds a palette from one color per member, in declaration order.
+    init(members value: (Int) -> TokenColor) {
+        self.init(
+\(colors.enumerated().map { "            \($0.element.swift): value(\($0.offset))" }.joined(separator: ",\n"))
+        )
+    }
+
+    /// The members in declaration order.
+    var members: [TokenColor] {
+        [\(colors.map(\.swift).joined(separator: ", "))]
+    }
+
+    /// The members' CSS names in declaration order.
+    static let memberNames: [String] = [\(colors.map { "\"\($0.css)\"" }.joined(separator: ", "))]
+}
+
+/// Palette members as CSS expressions, `[member][context]` with contexts light, dark, sidebar light, sidebar dark.
+enum ThemeExpressions {
+    /// No theme (`html` without `data-theme-id`): only the contrast variables vary.
+    static let standard: [[String]] = [
+\(literal(standardExpr))
+    ]
+
+    /// A theme is applied (`html[data-theme-id]`).
+    static let themed: [[String]] = [
+\(literal(themedExpr))
+    ]
+
+    /// Members a built-in theme's own CSS blocks change, by theme id and member index.
+    static let builtIn: [String: [Int: [String]]] = [
+
+"""
+for id in ["t3-chat", "grove", "ocean", "ember", "iris"] {
+    let rows = themeExpressions(id)
+    let changed = rows.indices.filter { rows[$0] != themedExpr[$0] }
+    themeOut += "        \"\(id)\": [\n" + changed.map { i in
+        "            \(i): [" + rows[i].map { "\"\($0)\"" }.joined(separator: ", ") + "]"
+    }.joined(separator: ",\n") + "\n        ],\n"
+}
+themeOut += "    ]\n}\n"
+let themeSwiftOut = root.appendingPathComponent("Packages/CandyKit/Sources/DesignSystem/Theme/ThemeExpressions.generated.swift")
+try themeOut.write(to: themeSwiftOut, atomically: true, encoding: .utf8)
+let themeFixtureOut = root.appendingPathComponent("fixtures/theme/theme-runtime-chromium.json")
+try FileManager.default.createDirectory(at: themeFixtureOut.deletingLastPathComponent(), withIntermediateDirectories: true)
+try JSONSerialization.data(withJSONObject: ["chrome": resolved.chrome, "names": colors.map(\.css), "cases": resolved.themeFixture],
+                           options: [.prettyPrinted, .sortedKeys]).write(to: themeFixtureOut)
+
 // MARK: - Token sheet
 
 func cell(_ c: Ctx?) -> String { kind(c) == "color" ? "`\(hex(vec(c!["srgb"])))`" : "-" }
@@ -534,7 +654,8 @@ try md.write(to: docOut, atomically: true, encoding: .utf8)
 // MARK: - Main
 
 if let dumpPath {
-    let obj: [String: Any] = ["tokens": resolved.tokens.mapValues { $0.map { ($0 as Any?) ?? NSNull() } }, "chrome": resolved.chrome, "float": resolved.float]
+    let obj: [String: Any] = ["tokens": resolved.tokens.mapValues { $0.map { ($0 as Any?) ?? NSNull() } }, "chrome": resolved.chrome, "float": resolved.float,
+                              "themeExpr": resolved.themeExpr, "themeFixture": resolved.themeFixture]
     try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: dumpPath))
 }
 print("semantic colors \(colors.count), base colors \(baseColors.count), radius \(radii.count), text \(textSizes.count), shadow \(shadows.count), easing \(easings.count), duration \(durations.count), rem \(remLengths.count), px \(pxLengths.count), numbers \(numbers.count), raw \(raws.count), unresolved \(unresolved.count)")

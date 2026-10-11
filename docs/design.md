@@ -32,6 +32,7 @@ Text is drawn with Core Text with font smoothing on. Measured against Chromium, 
 - `PopupHost`: popups (menus, select, combobox, popover, tooltip) live inside the window, as they do in T3's web viewport. They use base-ui's positioning: flip, 5px collision padding, transform origin at the trigger.
 - `ModalHost`: dialogs and sheets with backdrop, Escape, outside click, focus trap and focus return.
 - `ThemeColors`, `Themed`: token colors as dynamic `NSColor`s that follow the window's appearance. Light and dark need no redraw code. Colors use Display P3 components, as Chromium renders T3's `oklch` colors.
+- `ThemeRuntime`: T3's themes and the contrast setting. Each palette token is stored as the CSS expression Chromium substitutes for it (`ThemeExpressions.generated.swift`, from `scripts/extract-tokens`); a theme change evaluates them once into new palettes and tells views as an appearance change does. With no theme at 100% contrast the palettes are the extracted tokens unchanged.
 - Motion: Core Animation on transform and opacity with T3's durations and curves (default 150ms `cubic-bezier(.4,0,.2,1)`). Respects Reduce Motion. Looping animations (spinner, skeleton) run in the render server only while visible.
 
 ## Component inventory and fidelity

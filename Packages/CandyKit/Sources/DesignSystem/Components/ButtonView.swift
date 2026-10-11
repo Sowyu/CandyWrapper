@@ -284,7 +284,7 @@ enum ButtonStyles {
         case .glass:
             // ponytail: solid 80% background instead of a live backdrop blur (docs/design.md substitutions)
             box.radius = 9999
-            box.fill = Themed.color(\.background, 0.8)
+            box.fill = Themed.color(\.background, Double(ThemeRuntime.glassOpacity))
             box.border = Themed.color(\.border, hover ? 1 : 0.6)
             look.icon = muted
             box.shadows.append(BoxShadow(y: 1, blur: 3, color: Themed.black(0.1)))

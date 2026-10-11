@@ -188,7 +188,7 @@ public final class InputGroupView: DSView {
             // ponytail: dropdown-glass as a flat 83.6% popover fill without backdrop blur, same as Button glass
             box = BoxStyle()
             box.radius = 18
-            box.fill = Themed.color(\.popover, 0.836)
+            box.fill = Themed.color(\.popover, Double(PopupSurface.dropdownGlassAlpha))
             box.border = s.focused ? Themed.color(\.contrastForeground, 0.18) : Themed.color(\.contrastForeground, 0.10)
         }
         decoration.boxStyle = box

@@ -42,9 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--appearance"), i + 1 < args.count {
             NSApp.appearance = NSAppearance(named: args[i + 1] == "dark" ? .darkAqua : .aqua)
-        } else {
-            AppearanceMode.applySaved()
+            ThemeLibrary.shared.controlsAppearance = false
         }
+        ThemeLibrary.shared.start()
         quitOnSIGTERM()
         showMainWindow()
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
@@ -305,6 +305,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             values["previewFocus"] = threads?.browser.isFocused ?? false
             values["usagePageOpen"] = commands?.isUsagePageOpen ?? false
             return KeybindingContext(values)
+        }
+        // The theme editor floats above every page (ThemeEditorHost above the router).
+        let editor = ThemeEditorController.shared
+        editor.host = layout
+        editor.toast = { [weak settings, weak threads] title, message, kind in
+            if settings?.isOpen == true { settings?.toast(title, message, kind) } else {
+                threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
+            }
+        }
+        // `themeEditor.toggle` (CommandPalette.tsx:557-565).
+        shortcuts.on("themeEditor.toggle") { _ in
+            editor.toggle(initialAppearance: ThemeLibrary.shared.resolvedAppearance)
+            return true
         }
         // `sidebar.toggle` (AppSidebarLayout.tsx:96-135).
         shortcuts.on("sidebar.toggle") { [weak layout] _ in

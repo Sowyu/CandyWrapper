@@ -113,6 +113,8 @@ final class PullRequestDetailBinding {
 
     /// `pullRequestMergeMethod` in T3's UI state store.
     static let mergeMethodKey = "pullRequests.mergeMethod"
+    /// An environment's server settings, for the project's default merge method.
+    nonisolated(unsafe) static var serverSettings: ((String) -> ServerSettingsValues?)?
 
     private var shell: ShellSession? { environments.session(environmentId) }
 
@@ -133,6 +135,11 @@ final class PullRequestDetailBinding {
         overlay = [:]
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
         view.tab = .summary
+        view.currentMergeMethod = nil
+        // `usePullRequestDefaultMergeMethodResolver`: the project's override over the environment's setting.
+        view.projectDefaultMergeMethod = Self.serverSettings?(environmentId).flatMap {
+            ProjectSettings.resolve($0, projectId: target.projectId).settings["pullRequestMergeMethod"].stringValue
+        }
         view.showLoading(number: target.number)
         reload(invalidate: false)
     }

@@ -35,16 +35,13 @@ func dynamicColor(light: TokenColor, dark: TokenColor) -> NSColor {
 
 /// Semantic colors for the main surface and the sidebar subtree (`[data-app-sidebar]` in T3).
 public struct ThemeColors: Sendable {
-    let light: Palette
-    let dark: Palette
+    let sidebar: Bool
 
     /// Builds a dynamic color for a palette member, for example `colors.color(\.background)`.
-    public func color(_ key: KeyPath<Palette, TokenColor>) -> NSColor {
-        dynamicColor(light: light[keyPath: key], dark: dark[keyPath: key])
-    }
+    public func color(_ key: KeyPath<Palette, TokenColor>) -> NSColor { Themed.color(key, sidebar: sidebar) }
 
-    public static let main = ThemeColors(light: Tokens.light, dark: Tokens.dark)
-    public static let sidebar = ThemeColors(light: Tokens.sidebarLight, dark: Tokens.sidebarDark)
+    public static let main = ThemeColors(sidebar: false)
+    public static let sidebar = ThemeColors(sidebar: true)
 }
 
 /// Interface scale. T3 sets `<html>` font-size from the `fontSizeInterface` setting

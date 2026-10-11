@@ -243,6 +243,10 @@ struct PullRequestDetailLogicTests {
         #expect(p(canMerge: false) == nil)
         #expect(D.mergeMethodLabel("squash") == "Squash and merge")
         #expect(D.selectedMergeMethod(["squash", "rebase"], preferred: "merge") == "squash")
+        // The pick on this pull request, then the project's default merge method, then the last pick.
+        #expect(D.selectedMergeMethod(["merge", "squash", "rebase"], projectDefault: "rebase", preferred: "squash") == "rebase")
+        #expect(D.selectedMergeMethod(["merge", "squash", "rebase"], current: "merge", projectDefault: "rebase", preferred: "squash") == "merge")
+        #expect(D.selectedMergeMethod(["merge", "squash"], projectDefault: "rebase", preferred: "squash") == "squash")
         #expect(D.checkoutCommand(provider: "github", number: 12) == "gh pr checkout 12")
         #expect(D.openOnHostLabel("github") == "Open on GitHub")
     }

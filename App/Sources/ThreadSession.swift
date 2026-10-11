@@ -267,6 +267,7 @@ final class ThreadController {
         if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
+        PullRequestDetailBinding.serverSettings = { [weak composer] env in composer?.config(env).map { ServerSettingsValues($0.settings.raw) } }
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
