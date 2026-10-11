@@ -1,0 +1,18 @@
+{
+  "agents" : {
+    "height" : 183,
+    "width" : 262
+  },
+  "expanded" : {
+    "height" : 151,
+    "width" : 262
+  },
+  "forks" : {
+    "height" : 119,
+    "width" : 262
+  },
+  "paged" : {
+    "height" : 279,
+    "width" : 262
+  }
+}

@@ -81,6 +81,8 @@ final class ComposerController {
     private var serverConfig: ServerProviderConfig {
         targetEnvironmentId.flatMap { serverConfigs[$0] } ?? ServerProviderConfig(providers: [])
     }
+    /// An environment's providers as its server config last reported them.
+    func providers(_ environmentId: String) -> [ServerProvider] { serverConfigs[environmentId]?.providers ?? [] }
 
     /// A queued message open in the composer (`beginEditingQueuedRun`, ChatView.tsx:4673-4699).
     /// Its text lives here, not in the thread's prompt, which comes back on save or cancel.

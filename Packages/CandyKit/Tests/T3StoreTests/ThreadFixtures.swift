@@ -78,6 +78,8 @@ func describe(_ row: TimelineRow) -> String {
     case .contextCompaction: "context-compaction"
     case .event(let p, _, _): "event(\(p.item.type.rawValue))"
     case .proposedPlan: "proposed-plan"
+    case .htmlRender: "html-render"
+    case .mcpApp: "mcp-app"
     }
     return kind
 }

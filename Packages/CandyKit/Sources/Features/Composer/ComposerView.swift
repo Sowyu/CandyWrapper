@@ -144,13 +144,31 @@ public final class ComposerView: DSView {
         set { editor.setText(newValue) }
     }
 
+    /// Content that stands in for the editor and footer inside the same surface (`ProviderSubagentBar` on a
+    /// provider-native subagent thread, ChatView.tsx:11559-11577, where `ChatComposer` is not mounted).
+    public var replacement: NSView? {
+        didSet {
+            guard replacement !== oldValue else { return }
+            oldValue?.removeFromSuperview()
+            if let replacement { addSubview(replacement, positioned: .below, relativeTo: outline) }
+            let replaced = replacement != nil
+            for v in [scroll, placeholder, attach, primary] as [NSView] { v.isHidden = replaced }
+            imageShelf.isHidden = replaced || imageShelf.tiles.isEmpty
+            fileList.isHidden = replaced || fileList.rows.isEmpty
+            refresh()
+            needsLayout = true
+            onHeightChange?()
+        }
+    }
+
     /// Composer box height for the current text: 144 to 274, 66 up with an approval, +8 with a question.
     public var preferredHeight: CGFloat {
+        if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
-        case .approval: Self.inset * 2 + Self.pad + editorHeight + Self.pad
+        case .approval: return Self.inset * 2 + Self.pad + editorHeight + Self.pad
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
-        case .question: Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
-        case .none: Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
+        case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
+        case .none: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
         }
     }
 
@@ -561,6 +579,13 @@ public final class ComposerView: DSView {
             outline.layer?.mask = nil
         }
 
+        if let replacement {
+            replacement.frame = box.insetBy(dx: Self.inset, dy: Self.inset)
+            for v in [validation, questionPill, previousFull, previousCompact] as [NSView] { v.isHidden = true }
+            footerControls.forEach { $0.isHidden = true }
+            separators.forEach { $0.isHidden = true }
+            return
+        }
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
         CATransaction.begin(); CATransaction.setDisableActions(true)

@@ -230,6 +230,9 @@ final class ThreadController {
     private(set) var pullRequests: ThreadPullRequestsController!
     private(set) var browser: BrowserController!
     private(set) var automations: ThreadAutomationsController!
+    private(set) var lineage: ThreadLineageController!
+    /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
+    private var webAssets: [String: (url: URL, expires: Date)] = [:]
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -283,6 +286,54 @@ final class ThreadController {
             let root = config.scratchWorkspaceRoot.map(SidebarModel.normalizeProjectPath)
             if sidebar.state.scratchRoots[env] != root { sidebar.state.scratchRoots[env] = root }
         }
+        lineage = ThreadLineageController(panel: panel)
+        lineage.shells = { [weak sidebar] in (sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? []) }
+        lineage.dispatch = { [weak environments] id, payload in
+            guard let environments else { throw Environments.CommandError.notConnected }
+            return try await environments.dispatch(id, payload)
+        }
+        lineage.openThread = { [weak self] id in self?.open(id) }
+        // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
+        // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
+        panel.model.webAssetURL = { [weak self] id, name in
+            guard let self, let env = self.openThreadId?.environmentId, let shell = self.environments.session(env) else { return nil }
+            if let hit = self.webAssets[id], hit.expires.timeIntervalSinceNow > 300 { return hit.url }
+            let resource: JSONValue = .object(["_tag": .string("attachment"), "attachmentId": .string(id), "fileName": .string(name),
+                                               "mimeType": .string("text/html"), "disposition": .string("inline")])
+            guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+                  let relative = reply["relativeUrl"]?.stringValue,
+                  let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { return nil }
+            let expires = reply["expiresAt"]?.doubleValue.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date().addingTimeInterval(3600)
+            self.webAssets[id] = (url, expires)
+            return url
+        }
+        panel.model.onOpenHtmlRender = { [weak self] url, _ in self?.browser.openURL(url.absoluteString) }
+        panel.model.mcpApp = McpAppActions(
+            request: { [weak self] method, payload in
+                guard let self, let env = self.openThreadId?.environmentId else { throw Environments.CommandError.notConnected }
+                return try await self.environments.request(env, method, payload)
+            },
+            turnItem: { [weak self] thread, item in
+                guard let self, let env = self.openThreadId?.environmentId else { return nil }
+                let payload: JSONValue = .object(["threadId": .string(thread.rawValue), "itemId": .string(item.rawValue)])
+                return try? await self.environments.request(env, "orchestration.getTurnItem", payload)["item"]
+            },
+            // ponytail: apps cannot send chat messages yet (T3's `onSendAppMessage`); wire it to the composer's send
+            sendMessage: nil)
+        // `secrets.answerRequest` (SecretRequestCard.tsx:65-97): only the server's own secret and
+        // authorization errors reach the card, so the typed value never shows.
+        panel.model.answerSecret = { [weak self] input in
+            guard let env = self?.openThreadId?.environmentId, let environments = self?.environments else { return SecretRequests.genericFailure }
+            do {
+                _ = try await environments.request(env, "secrets.answerRequest", input)
+                return nil
+            } catch let error as RPCClientError {
+                return SecretRequests.failureMessage(tag: error.typedError?.tag, message: error.typedError?.message)
+            } catch {
+                return SecretRequests.genericFailure
+            }
+        }
+        lineage.providers = { [weak composer] env in composer?.providers(env) ?? [] }
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
         let prCapabilities = PullRequestCapabilities(environments: environments)
@@ -319,6 +370,7 @@ final class ThreadController {
             guard let self, composer.openDraft(id) else { return }
             session?.end()
             session = nil
+            lineage.update(threadId: nil, projection: nil)
             terminal.show(nil)
             files.show(nil)
         }
@@ -408,8 +460,12 @@ final class ThreadController {
         composer.showThread(id)
         files.show(id)
         let kept = takeRetained(id) ?? keepAlive?.take(id)
+        lineage.update(threadId: id, projection: nil)
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
-        session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
+        session.onProjection = { [weak self] projection in
+            self?.composer.projectionChanged(projection, threadId: id)
+            self?.lineage.update(threadId: id, projection: projection)
+        }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
@@ -455,6 +511,7 @@ final class ThreadController {
         guard composer.newThread(in: project) else { return }
         previous?.end()
         session = nil
+        lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         files.show(nil)
         keepAlive?.update()
@@ -466,6 +523,7 @@ final class ThreadController {
     func close() {
         session?.end()
         session = nil
+        lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         files.show(nil)
         keepAlive?.update()
@@ -527,6 +585,7 @@ final class ThreadController {
     private func landOnIndex() {
         session?.end()
         session = nil
+        lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         files.show(nil)
         updateEnvironmentBanner()
@@ -596,6 +655,7 @@ final class ThreadController {
         git.refresh()
         files.shellChanged()
         pullRequests.sync()
+        lineage.sync()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

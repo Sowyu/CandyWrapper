@@ -159,14 +159,27 @@ public final class MarkdownLayout {
         /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
         case clip(CGRect)
         case endClip
+        /// A rendered Mermaid diagram's bitmap.
+        case image(CGImage, CGRect)
     }
 
     struct Control {
-        enum Action { case copy(String), toggleWrap(Int), toggleTable }
+        enum Action { case copy(String), toggleWrap(Int), toggleTable, toggleDiagram(Int), retryDiagram(String) }
         var frame: CGRect
-        var icon: IconName
+        var icon: IconName?
         var variant: ButtonView.Variant
         var action: Action
+        /// A text button (Retry) in place of an icon.
+        var title: String? = nil
+    }
+
+    /// Mermaid fences (ChatMarkdown.tsx:1013-1080): drawn as diagrams once the response settles (`enabled`),
+    /// in the app's theme, except the blocks whose "Show code" toggle is on.
+    public struct Diagrams: Equatable, Sendable {
+        public var enabled: Bool
+        public var dark: Bool
+        public var showingCode: Set<Int>
+        public init(enabled: Bool, dark: Bool, showingCode: Set<Int> = []) { self.enabled = enabled; self.dark = dark; self.showingCode = showingCode }
     }
 
     private(set) var items: [Item] = []
@@ -179,10 +192,12 @@ public final class MarkdownLayout {
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
-    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil) {
+    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
+                diagrams: Diagrams? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files)
+        builder.diagrams = diagrams
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
         items = flow.items
         controls = flow.controls
@@ -221,6 +236,7 @@ private struct Builder {
     let unwrapped: Set<Int>
     let files: FileChipResolver?
     var codeIndex = 0
+    var diagrams: MarkdownLayout.Diagrams?
 
     init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
 
@@ -278,7 +294,17 @@ private struct Builder {
         case .code(let language, let title, let code):
             let index = codeIndex
             codeIndex += 1
-            return codeBlock(language: language, title: title, code: code, width: width, wraps: !unwrapped.contains(index))
+            let mermaid = language.lowercased() == "mermaid" && diagrams?.enabled == true
+            if mermaid, let diagrams, !diagrams.showingCode.contains(index), !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return diagramBlock(code: code, index: index, dark: diagrams.dark, width: width)
+            }
+            var box = codeBlock(language: language, title: title, code: code, width: width, wraps: !unwrapped.contains(index))
+            if mermaid {
+                // "Show diagram" leads the header's actions, before wrap and copy (`gap-0.5`).
+                box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24 - 2 - 24 - 2 - 24, y: 1 + 6, width: 24, height: 24),
+                                          icon: .workflow, variant: .ghostMuted, action: .toggleDiagram(index)))
+            }
+            return box
         case .table(let table):
             return self.table(table, width: width, context: context)
         case .rule:
@@ -516,6 +542,48 @@ private struct Builder {
         return box
     }
 
+    /// The diagram face of `MarkdownCodeBlock` (ChatMarkdown.tsx:928-938): `my-[0.65rem]`, the diagram centered at
+    /// most the message's width (`max-w-full h-auto`), then a `mt-0.5` row with "Show code" and copy. While it renders,
+    /// "Rendering diagram" holds a 144pt box; a failure shows the parser message above the source.
+    @MainActor
+    func diagramBlock(code: String, index: Int, dark: Bool, width: CGFloat) -> Box {
+        var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
+        var y: CGFloat = 0
+        switch MermaidDiagrams.shared.result(code, dark: dark) {
+        case .rendered(let image, let size)?:
+            let w = min(size.width, width), h = size.width > 0 ? (size.height * w / size.width).rounded() : 0
+            box.items.append(.image(image, CGRect(x: ((width - w) / 2).rounded(), y: 0, width: w, height: h)))
+            y = h
+        case .failed(let message, let retryable)?:
+            let font = DSFont.ui(12)
+            let line = NSAttributedString(string: "Unable to render diagram: \(message)", attributes: [.font: font, .foregroundColor: Themed.color(\.destructive)])
+            let error = MarkdownTextBox(line, width: width - (retryable ? 64 : 0), lineHeight: 16, strut: font)
+            box.items.append(.text(error, .zero))
+            if retryable {
+                box.controls.append(.init(frame: CGRect(x: width - 56, y: 0, width: 56, height: 24), icon: nil, variant: .ghost,
+                                          action: .retryDiagram(code), title: "Retry"))
+            }
+            let mono = DSFont.mono(12)
+            let source = MarkdownTextBox(NSAttributedString(string: code, attributes: [.font: mono, .foregroundColor: MarkdownStyle.body]),
+                                         width: width, lineHeight: 16, strut: mono)
+            let top = max(error.height, retryable ? 24 : 0) + 8
+            box.items.append(.text(source, CGPoint(x: 0, y: top)))
+            y = top + source.height
+        case nil:
+            let font = DSFont.ui(12)
+            let label = MarkdownTextBox(NSAttributedString(string: "Rendering diagram", attributes: [.font: font, .foregroundColor: MarkdownStyle.muted]),
+                                        width: width, lineHeight: 16, strut: font, wraps: false)
+            let lw = ceil(TextLine(NSAttributedString(string: "Rendering diagram", attributes: [.font: font])).width)
+            box.items.append(.text(label, CGPoint(x: ((width - lw) / 2).rounded(), y: 64)))
+            y = 144
+        }
+        y += 2
+        box.controls.append(.init(frame: CGRect(x: 0, y: y, width: 24, height: 24), icon: .code, variant: .ghostMuted, action: .toggleDiagram(index)))
+        box.controls.append(.init(frame: CGRect(x: width - 24, y: y, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
+        box.height = y + 24
+        return box
+    }
+
     // MARK: Tables
 
     /// `MarkdownTable`: 12px cells with `0.45rem 0.75rem` padding (header `0.55rem` block padding, weight 600),
@@ -620,6 +688,7 @@ private extension MarkdownLayout.Item {
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
+        case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
         }
     }
 }

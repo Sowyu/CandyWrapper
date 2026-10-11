@@ -1,0 +1,25 @@
+#!/bin/sh
+# Rebuilds Packages/CandyKit/Sources/Features/Resources/mermaid.min.js.lzma (and its MIT license) from the npm
+# package at the version T3 pins in apps/web/package.json. T3 bundles mermaid and loads it only when a diagram
+# shows (MermaidDiagram.tsx); the app does the same from this LZMA copy (3.5 MB of script, 0.75 MB packed).
+# Usage: scripts/fetch-mermaid [version]
+set -eu
+here="$(cd "$(dirname "$0")/.." && pwd)"
+src="$here/.t3code-src"
+[ -d "$src" ] || src="$here/../CandyWrapper-research/t3code"
+version="${1:-$(sed -n 's/.*"mermaid": "\^\{0,1\}\([0-9.]*\)".*/\1/p' "$src/apps/web/package.json")}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+curl -sSf -m 120 -o "$work/mermaid.tgz" "https://registry.npmjs.org/mermaid/-/mermaid-$version.tgz"
+mkdir "$work/x"
+tar -xzf "$work/mermaid.tgz" -C "$work/x" package/dist/mermaid.min.js package/LICENSE
+out="$here/Packages/CandyKit/Sources/Features/Resources"
+cp "$work/x/package/LICENSE" "$out/LICENSE-mermaid.txt"
+cat > "$work/pack.swift" <<'SWIFT'
+import Foundation
+let a = CommandLine.arguments
+let data = try Data(contentsOf: URL(fileURLWithPath: a[1])) as NSData
+try (data.compressed(using: .lzma) as Data).write(to: URL(fileURLWithPath: a[2]))
+SWIFT
+swift "$work/pack.swift" "$work/x/package/dist/mermaid.min.js" "$out/mermaid.min.js.lzma"
+echo "mermaid $version -> $out/mermaid.min.js.lzma ($(wc -c < "$out/mermaid.min.js.lzma") bytes)"

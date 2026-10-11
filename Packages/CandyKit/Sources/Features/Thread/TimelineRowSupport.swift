@@ -79,6 +79,19 @@ final class TimelineContext {
     }
 
     func forgetDocuments() { documents.removeAll() }
+
+    /// Fork from an assistant message when `canForkProjectedAssistantItem` allows it. Capabilities come from
+    /// the thread's provider session for its own rows; inherited rows have none, which allows the fork.
+    // ponytail: T3 reads the source row's own session (`useV2ItemSupport`); use it if inherited rows fork wrongly
+    func forkAction(_ projected: ProjectedTurnItem?) -> (() -> Void)? {
+        guard let projected, let model, let onFork = model.onForkFromRun, let run = projected.item.runId,
+              let projection = model.projection else { return nil }
+        let own = projected.sourceThreadId == projection.thread.id
+        let capabilities = own ? ThreadRelationships.providerSession(projection)?["capabilities"] : nil
+        guard ThreadRelationships.canFork(projected, capabilities: capabilities) else { return nil }
+        let source = projected.sourceThreadId
+        return { onFork(source, run) }
+    }
 }
 
 /// Base of every timeline row. A row view is configured from a `TimelineItem` and measures itself

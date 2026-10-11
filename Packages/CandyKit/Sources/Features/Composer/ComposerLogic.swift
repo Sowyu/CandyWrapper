@@ -265,16 +265,7 @@ public enum ComposerLogic {
         }
 
         /// `resolveThreadProviderSession` (threadWorkflows.ts:64-88).
-        static func providerSession(_ p: ThreadProjection) -> JSONValue? {
-            let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
-            let providerThreadId = p.runs.last { active.contains($0.status) }?.providerThreadId ?? p.thread.activeProviderThreadId
-            let attached = providerThreadId.flatMap { id in p.providerThreads.first { $0["id"]?.stringValue == id } }
-                ?? p.providerThreads.first { $0["appThreadId"]?.stringValue == p.thread.id.rawValue && $0["providerSessionId"]?.stringValue != nil }
-            if let sessionId = attached?["providerSessionId"]?.stringValue {
-                return p.providerSessions.first { $0["id"]?.stringValue == sessionId }
-            }
-            return p.providerSessions.last { !["stopped", "error"].contains($0["status"]?.stringValue ?? "") }
-        }
+        static func providerSession(_ p: ThreadProjection) -> JSONValue? { ThreadRelationships.providerSession(p) }
 
         /// `threadSupportsProviderHandoff` (threadWorkflows.ts:90-108).
         public static func supportsProviderHandoff(_ p: ThreadProjection?) -> Bool {
