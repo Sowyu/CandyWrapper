@@ -112,13 +112,17 @@ public final class ScrollAreaView: DSView {
         let x = clip.minX
         let next = (top: min(fadeSize, max(0, y)), bottom: min(fadeSize, max(0, maxY - y)),
                     left: min(fadeSize, max(0, x)), right: min(fadeSize, max(0, maxX - x)))
-        // Only the 0...fadeSize band near each edge changes anything; past it the mask is constant.
-        guard force || next != fades else { return }
-        fades = next
+        // AppKit scrolls a layer-backed clip view by moving its layer's bounds origin, so the mask, which
+        // lives in that layer's space, has to follow the origin on every scroll or the rows past the
+        // first screen draw blank.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        fadeMask.frame = clip
+        // Only the 0...fadeSize band near each edge changes the gradient; past it the stops are constant.
+        guard force || next != fades else { return }
+        fades = next
         let h = max(1, clip.height), w = max(1, clip.width)
-        fadeMask.frame = CGRect(origin: .zero, size: clip.size)
         fadeMask.colors = [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)]
         // Layer space of a flipped clip view is y-down.
         fadeMask.startPoint = CGPoint(x: 0.5, y: 0)
@@ -136,7 +140,6 @@ public final class ScrollAreaView: DSView {
             horizontalFadeMask.removeFromSuperlayer()
         }
         scrollView.contentView.layer?.mask = fadeMask
-        CATransaction.commit()
     }
 }
 

@@ -245,6 +245,8 @@ public final class ToggleGroupView: DSView {
     }
 
     private var inset: CGFloat { variant == .segmented ? 2 : 0 }
+    /// `*:flex-1`: the items share the group's width equally instead of hugging their labels.
+    public var fillsWidth = false { didSet { needsLayout = true } }
 
     public override var intrinsicContentSize: NSSize {
         let width = items.map(\.exactWidth).reduce(0, +) + 2 * CGFloat(max(0, items.count - 1)) + 2 * inset
@@ -256,9 +258,10 @@ public final class ToggleGroupView: DSView {
         super.layout()
         track.layout(boxSize: bounds.size)
         var x = inset
+        let shared = (bounds.width - 2 * inset - 2 * CGFloat(max(0, items.count - 1))) / CGFloat(max(1, items.count))
         for item in items {
             // Chromium keeps fractional positions and snaps each edge to device pixels.
-            let w = item.exactWidth
+            let w = fillsWidth ? shared : item.exactWidth
             item.frame = NSRect(x: Self.snap(x), y: inset, width: Self.snap(x + w) - Self.snap(x),
                                 height: item.intrinsicContentSize.height)
             x += w + 2 // gap-0.5

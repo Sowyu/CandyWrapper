@@ -82,6 +82,7 @@ public struct ClientSettings: Equatable, Sendable {
         "legacySidebarEnabled": SettingSpec(.bool, .bool(false)),
         "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(false)),
         "sidebarProjectGroupingMode": SettingSpec(.literals(["repository", "repository_path", "separate"]), .string("repository")),
+        "sidebarProjectGroupingOverrides": SettingSpec(.any, .object([:])),
         "sidebarProjectSortOrder": SettingSpec(.literals(["updated_at", "created_at", "manual"]), .string("updated_at")),
         "sidebarThreadSortOrder": SettingSpec(.literals(["updated_at", "created_at"]), .string("updated_at")),
         "sidebarThreadPreviewCount": SettingSpec(.int(1...15), .number(6)),

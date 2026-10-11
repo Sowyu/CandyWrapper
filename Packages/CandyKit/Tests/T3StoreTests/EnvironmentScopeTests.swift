@@ -90,7 +90,7 @@ struct EnvironmentScopeTests {
         b[0].repositoryIdentity = identity("github.com/x/a")
         for (projects, primary) in [(a, "local"), (a, "local"), (b, "local"), (b, "remote"), (a, "remote")] {
             #expect(SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: primary)
-                == SidebarModel.computeProjectGroups(projects, mode: .repository, preferredEnvironmentId: primary))
+                == SidebarModel.computeProjectGroups(projects, grouping: .init(mode: .repository), preferredEnvironmentId: primary))
         }
     }
 

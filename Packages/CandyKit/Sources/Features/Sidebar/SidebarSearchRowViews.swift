@@ -116,6 +116,78 @@ final class SidebarEmptyTextRowView: SidebarRowBase {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
 }
 
+/// "No projects yet" and the Add project button under it (Sidebar.tsx:5554-5569): `text-xs
+/// text-muted-foreground/60`, then `rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium
+/// text-sidebar-muted-foreground`, hover `bg-sidebar-row-hover text-sidebar-foreground`, a `size-3` plus.
+final class SidebarNoProjectsRowView: SidebarRowBase {
+    private let label = LabelView("No projects yet")
+    let button = SidebarNoProjectsButton()
+    var onAddProject: (@MainActor () -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        label.font = SB.font(12); label.lineHeight = 16
+        label.alignment = .center
+        addSubview(label)
+        addSubview(button)
+        button.action = { [weak self] in self?.onAddProject?() }
+    }
+
+    override func refresh() {
+        label.color = SB.c(\.mutedForeground, 0.6)
+        button.isKeyboardFocused = isKeyboardFocused
+    }
+
+    override func performAction() { onAddProject?() }
+
+    override func layout() {
+        super.layout()
+        label.frame = NSRect(x: 8, y: 24, width: max(0, bounds.width - 16), height: 16)
+        let w = button.preferredWidth
+        button.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: 48, width: w, height: 26)
+    }
+
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
+}
+
+final class SidebarNoProjectsButton: ControlView {
+    private let icon = IconView(name: .plus, size: 12)
+    private let title = LabelView("Add project")
+    var isKeyboardFocused = false { didSet { needsDisplay = true } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        title.font = SB.font(11, .medium); title.lineHeight = 16
+        addSubview(icon)
+        addSubview(title)
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 1
+        setAccessibilityLabel("Add project")
+    }
+
+    /// `px-2.5`, the icon (`-mx-0.5`), `gap-1.5`, the label.
+    var preferredWidth: CGFloat { 2 * (10 + 1) + 12 - 4 + 6 + ceil(title.textWidth) }
+
+    override var acceptsFirstResponder: Bool { false }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 11 - 2, y: (bounds.height - 12) / 2, width: 12, height: 12)
+        title.frame = NSRect(x: 11 + 12 - 4 + 6, y: (bounds.height - 16) / 2, width: ceil(title.textWidth) + 1, height: 16)
+    }
+
+    override func updateLayer() {
+        let hot = state.hovered || isKeyboardFocused
+        layer?.backgroundColor = hot ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        layer?.borderColor = SB.c(\.sidebarBorder).cgColor(in: self)
+        let color = hot ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
+        title.color = color
+        icon.strokeColor = color
+    }
+}
+
 /// `SidebarSearchResultRow` (Sidebar.tsx:2229-2380): `min-h-9 gap-2.5 rounded-md px-2.5 py-1 text-sm`,
 /// the favicon, then a column with the title and its time (`text-xs text-muted-foreground/55
 /// tabular-nums`) and, for message matches, the excerpt. Highlighted or open: `bg-sidebar-row-active

@@ -1,0 +1,30 @@
+{
+  "ghost" : {
+    "height" : 38,
+    "width" : 241.4296875
+  },
+  "ghost.many" : {
+    "height" : 38,
+    "width" : 272.5703125
+  },
+  "hover-card" : {
+    "height" : 131,
+    "width" : 212.0625
+  },
+  "no-projects" : {
+    "height" : 114,
+    "width" : 240
+  },
+  "pill.error" : {
+    "height" : 44,
+    "width" : 240
+  },
+  "pill.warning" : {
+    "height" : 44,
+    "width" : 240
+  },
+  "rename" : {
+    "height" : 38,
+    "width" : 240
+  }
+}

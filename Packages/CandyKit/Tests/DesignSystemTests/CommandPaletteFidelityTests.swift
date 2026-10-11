@@ -37,6 +37,32 @@ struct CommandPaletteFidelityTests {
             ]))
             v.input.text = "demo"
             v.highlightedIndex = 0
+        case "match":
+            var a = CommandPaletteItem("Write a story", icon: .messageSquare, description: "demo-repo · Local", timestamp: "2m ago",
+                                       match: "Agent: The lighthouse keeper climbed")
+            a.matchIsUser = false
+            a.matchHighlights = Array(11..<21)
+            var b = CommandPaletteItem("Plan a migration", icon: .messageSquare, description: "demo-repo · Local", timestamp: "16m ago",
+                                       match: "You: move the lighthouse policies")
+            b.matchIsUser = true
+            b.matchHighlights = Array(14..<24)
+            v = CommandPaletteView(content: .results([CommandPaletteGroup("Threads", [a, b])]))
+            v.input.text = "lighthouse"
+            v.highlightedIndex = 0
+        case "browse":
+            v = CommandPaletteView(content: .results([CommandPaletteGroup("Directories", [
+                CommandPaletteItem("..", icon: .cornerLeftUp), CommandPaletteItem("demo-repo", icon: .folder),
+                CommandPaletteItem("git-demo", icon: .folder),
+            ])]))
+            v.input.placeholder = "Enter project path (e.g. ~/projects/my-app)"
+            v.input.text = "~/sandbox/"
+            v.startIcon = .folderPlus
+            let add = ButtonView("Add", variant: .outline, size: .xs)
+            add.accessory = KbdGroupView(keys: ["Enter"])
+            v.inputAccessory = add
+            v.footerTrailing = ButtonView("Open in Finder", variant: .ghostMuted, size: .xs)
+            v.footerActionLabel = nil
+            return v
         default:
             v = CommandPaletteView(content: .empty(message: nil, actionsOnly: false))
             v.input.text = "zzzz"

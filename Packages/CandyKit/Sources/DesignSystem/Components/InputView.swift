@@ -5,6 +5,8 @@ import AppKit
 public final class InputView: FieldView {
     public enum Size: String, CaseIterable, Sendable {
         case sm, compact, `default`, lg
+        /// An in-place editor the size of a line of text (`rounded-sm border px-1 text-sm`): the sidebar's rename field.
+        case inline
 
         /// Height with border, inline padding, font px, radius.
         var metrics: (height: CGFloat, padding: CGFloat, font: CGFloat, radius: CGFloat) {
@@ -13,11 +15,14 @@ public final class InputView: FieldView {
             case .compact: (30, 9, 12, 8)
             case .default: (32, 11, 14, 10)
             case .lg: (36, 11, 14, 10)
+            case .inline: (22, 4, 14, 4)
             }
         }
     }
 
     public enum Font: String, Sendable { case `default`, mono }
+    /// `font-medium` and friends; regular by default.
+    public var fontWeight: NSFont.Weight = .regular { didSet { configure() } }
 
     public var size: Size = .default { didSet { configure() } }
     public var fontStyle: Font = .default { didSet { configure() } }
@@ -45,7 +50,7 @@ public final class InputView: FieldView {
 
     private func configure() {
         let m = size.metrics
-        font = fontStyle == .mono ? DSFont.mono(m.font) : DSFont.ui(m.font)
+        font = fontStyle == .mono ? DSFont.mono(m.font, weight: fontWeight) : DSFont.ui(m.font, weight: fontWeight)
         lineHeight = m.height - 2
         restyle()
         invalidateIntrinsicContentSize()

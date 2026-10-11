@@ -55,6 +55,12 @@ public final class EmptyView: DSView {
 
     private var hasMessage: Bool { !descriptionLabel.text.isEmpty }
 
+    /// The description under the title.
+    public var message: String? {
+        get { hasMessage ? descriptionLabel.text : nil }
+        set { descriptionLabel.text = newValue ?? ""; invalidateIntrinsicContentSize(); needsLayout = true }
+    }
+
     /// Header text width: `max-w-sm` inside the padding. Before the first frame, unbounded.
     private func textWidth(_ width: CGFloat) -> CGFloat {
         width > 0 ? min(384, width - 2 * size.metrics.padding) : .greatestFiniteMagnitude

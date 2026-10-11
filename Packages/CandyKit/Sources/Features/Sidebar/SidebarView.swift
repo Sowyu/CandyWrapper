@@ -35,6 +35,14 @@ public struct SidebarActions {
     public var openSettings: () -> Void = {}
     public var openPullRequests: () -> Void = {}
     public var openUsage: () -> Void = {}
+    /// Files dropped on a thread row (`handleThreadFileDrop`): open the thread and attach them there.
+    public var dropFiles: (ThreadId, [URL]) -> Void = { _, _ in }
+    /// The inline rename committed: thread, typed title, title before (`commitThreadRename`).
+    public var rename: (ThreadId, String, String) -> Void = { _, _, _ in }
+    /// The hover card's provider row and handoff line, from the environment's provider list: the glyph's
+    /// driver, the model label (with the instance name when instances need telling apart) and the names of
+    /// earlier providers. Nil when the provider is unknown.
+    public var hoverProvider: (ThreadShell) -> (driver: String, label: String, handedOffFrom: [String])? = { _ in nil }
     public init() {}
 }
 
@@ -56,6 +64,8 @@ public final class SidebarContentView: DSView {
     let usageButton = SidebarContentView.footerButton(.chartNoAxesColumn, "Usage")
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
     let undoNotice = SidebarUndoNoticeView()
+    /// `SidebarProviderUpdatePill` between the undo notice and the utility buttons.
+    public let providerUpdatePill = SidebarProviderUpdatePillView()
 
     public var actions = SidebarActions() { didSet { wireActions() } }
     public private(set) var snapshot: ShellSnapshot?
@@ -116,15 +126,18 @@ public final class SidebarContentView: DSView {
         undoNotice.shortcut = undoShortcut
         backButton.isHidden = true
         for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton,
-                  backButton, undoNotice] as [NSView] {
+                  backButton, undoNotice, providerUpdatePill] as [NSView] {
             addSubview(v)
         }
+        providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
+        list.registerForDraggedTypes([.fileURL])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
         list.onToggleShelf = { [weak self] shelf in
             guard let self else { return }
             switch shelf {
             case .settled: self.state.settledExpanded.toggle(); self.state.settledVisibleCount = SidebarListBuilder.settledInitialCount
             case .snoozed: self.state.snoozedExpanded.toggle()
+            case .working: self.state.workingExpanded.toggle()
             }
         }
         list.onShowMore = { [weak self] in self?.state.settledVisibleCount += SidebarListBuilder.settledPageCount }
@@ -138,6 +151,36 @@ public final class SidebarContentView: DSView {
         setAccessibilityLabel("Threads")
         applyStage()
         wireActions()
+        // Project grouping follows the client settings everywhere projects are grouped.
+        applyClientSettings(ClientSettingsStore.shared.current)
+        clientSettingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            guard keys.contains("sidebarProjectGroupingMode") || keys.contains("sidebarProjectGroupingOverrides")
+                    || keys.contains("sidebarWorkingShelfEnabled") else { return }
+            self?.applyClientSettings(ClientSettingsStore.shared.current)
+        }
+    }
+
+    private var clientSettingsObserver: Int?
+
+    /// `selectProjectGroupingSettings`.
+    static func projectGrouping(_ c: ClientSettings) -> SidebarModel.ProjectGrouping {
+        let overrides = (c["sidebarProjectGroupingOverrides"].objectValue ?? [:]).compactMapValues {
+            $0.stringValue.flatMap(SidebarModel.ProjectGroupingMode.init(rawValue:))
+        }
+        return SidebarModel.ProjectGrouping(mode: SidebarModel.ProjectGroupingMode(rawValue: c.string("sidebarProjectGroupingMode")) ?? .repository,
+                                            overrides: overrides)
+    }
+
+    private func applyClientSettings(_ c: ClientSettings) {
+        let grouping = Self.projectGrouping(c)
+        SidebarModel.ProjectGrouping.current = grouping
+        if state.grouping != grouping { state.grouping = grouping }
+        let working = c.bool("sidebarWorkingShelfEnabled")
+        if state.workingShelfEnabled != working {
+            // Off resets the tracker; on starts from a fresh baseline (`inboxReturns.observe(null)`).
+            state.inboxReturns = working ? SidebarInboxReturnTracker() : nil
+            state.workingShelfEnabled = working
+        }
     }
 
     static func headerButton(_ icon: IconName, _ label: String) -> SidebarMenuButtonView {
@@ -156,11 +199,13 @@ public final class SidebarContentView: DSView {
     }
 
     private func wireActions() {
-        list.onOpen = { [weak self] id in
+        list.onOpen = { [weak self] id in self?.rowClicked(id) }
+        list.renameField.onCommit = { [weak self] id, title, original in
             guard let self else { return }
-            self.state.activeThreadId = id
-            self.actions.openThread(id)
+            self.endRename()
+            self.actions.rename(id, title, original)
         }
+        list.renameField.onCancel = { [weak self] in self?.endRename() }
         // Rows keep these closures across reuse, so they read `actions` when they fire.
         list.rowActions = SidebarRowActions(
             settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },
@@ -170,6 +215,9 @@ public final class SidebarContentView: DSView {
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
         list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }
+        list.onAddProject = { [weak self] in self?.actions.addProject() }
+        list.onFileDrop = { [weak self] id, urls in self?.actions.dropFiles(id, urls) }
+        list.hoverCard = { [weak self] id in self?.hoverCardModel(id) }
         list.onDiscardDraft = { [weak self] id in self?.actions.discardDraft(id) }
         trigger.action = { [weak self] in self?.actions.toggleSidebar() }
         filterButton.action = { [weak self] in self?.toggleScopePopup() }
@@ -212,6 +260,10 @@ public final class SidebarContentView: DSView {
     private func rebuild(animated: Bool) {
         let ms = nowMs
         list.nowMs = ms
+        // `inboxReturns.observe(workingShelfEnabled ? threads : null)` on every list rebuild.
+        if let tracker = state.inboxReturns, let snapshot {
+            tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(SidebarThread.init), nowMs: ms)
+        }
         if isSearching {
             var items = searchItems(nowMs: ms)
             // A new result order puts the highlight back on the first result (Sidebar.tsx:2924-2930).
@@ -307,6 +359,107 @@ public final class SidebarContentView: DSView {
         return true
     }
 
+    // MARK: Selection and rename (Sidebar.tsx:3255-3320, threadSelectionStore.ts)
+
+    /// The Shift-click range anchor (`anchorThreadKey`).
+    public private(set) var selectionAnchor: ThreadId?
+    public var selectedThreadIds: Set<ThreadId> { state.selectedThreadIds }
+
+    /// `handleThreadClick`: Cmd toggles the row in the selection, Shift selects the range from the anchor,
+    /// the second click of a double click renames, a plain click clears the selection and opens the thread.
+    func rowClicked(_ id: ThreadId) {
+        let event = NSApp.currentEvent
+        let mouse = event.map { $0.type == .leftMouseUp || $0.type == .leftMouseDown } ?? false
+        let flags = mouse ? event?.modifierFlags ?? [] : []
+        if flags.contains(.command) { toggleSelection(id); return }
+        if flags.contains(.shift) { selectRange(to: id); return }
+        if mouse, (event?.clickCount ?? 1) >= 2 { startRename(id); return }
+        clearSelection()
+        selectionAnchor = id
+        state.activeThreadId = id
+        actions.openThread(id)
+    }
+
+    func toggleSelection(_ id: ThreadId) {
+        var next = state.selectedThreadIds
+        if next.remove(id) == nil { next.insert(id); selectionAnchor = id }
+        state.selectedThreadIds = next
+    }
+
+    /// `rangeSelectTo`: every row between the anchor and `id` in list order; without an anchor in the
+    /// list, `id` alone, which becomes the anchor.
+    func selectRange(to id: ThreadId) {
+        let ordered = list.items.compactMap { if case .row(let r) = $0 { r.id } else { nil } }
+        var next = state.selectedThreadIds
+        if let anchor = selectionAnchor, let a = ordered.firstIndex(of: anchor), let b = ordered.firstIndex(of: id) {
+            next.formUnion(ordered[min(a, b)...max(a, b)])
+        } else {
+            next.insert(id)
+            selectionAnchor = id
+        }
+        state.selectedThreadIds = next
+    }
+
+    public func clearSelection() {
+        guard !state.selectedThreadIds.isEmpty || selectionAnchor != nil else { return }
+        state.selectedThreadIds = []
+        selectionAnchor = nil
+    }
+
+    /// Deselects threads (deleted ones, `removeFromSelection`).
+    public func deselect(_ ids: [ThreadId]) {
+        state.selectedThreadIds.subtract(ids)
+        if let anchor = selectionAnchor, ids.contains(anchor) { selectionAnchor = nil }
+    }
+
+    /// `startThreadRename`: the row's title turns into a field holding the title, selected.
+    public func startRename(_ id: ThreadId) {
+        guard let thread = snapshot?.threads.first(where: { $0.id == id }) else { return }
+        list.renameField.begin(id, title: thread.title)
+        state.renamingThreadId = id
+        if let frame = list.rowFrame(id) { list.scrollToVisible(frame) }
+        list.needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.state.renamingThreadId == id else { return }
+            self.list.layoutSubtreeIfNeeded()
+            self.list.renameField.focus()
+        }
+    }
+
+    public var renamingThreadId: ThreadId? { state.renamingThreadId }
+
+    private func endRename() {
+        state.renamingThreadId = nil
+    }
+
+    // MARK: Hover card
+
+    /// `SidebarThreadTooltip`'s props for a thread.
+    func hoverCardModel(_ id: ThreadId) -> SidebarThreadHoverCardModel? {
+        guard let snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) else { return nil }
+        var m = SidebarThreadHoverCardModel(title: thread.title)
+        let project = snapshot.projects.first { $0.id == thread.projectId }
+        let group = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId)
+            .first { $0.memberProjectIds.contains(thread.projectId) }
+        m.projectLabel = group?.label ?? project?.title
+        m.projectIcon = project.map(ProjectIconSource.init)
+        if let env = id.environmentId {
+            m.environmentLabel = state.environments.labels[env]
+            m.environmentMachine = state.environments.machine(env)
+        }
+        m.branch = thread.branch
+        if let provider = actions.hoverProvider(thread) {
+            m.provider = (provider.driver, provider.label)
+            m.handedOffFrom = provider.handedOffFrom
+        }
+        m.terminalProcessCount = state.terminalProcesses[id] ?? 0
+        if let runtime = SidebarModel.shellRuntime(thread), runtime.lastError != nil {
+            m.errorIsUsageLimit = runtime.lastErrorClass == .usageLimit
+        }
+        if !(thread.pullRequests ?? []).isEmpty { m.pullRequests = SidebarPullRequestBadge(thread) }
+        return m
+    }
+
     // MARK: Drafts
 
     /// The composer's drafts with a prompt, and the open one. The open draft's row keeps the content it had
@@ -328,6 +481,8 @@ public final class SidebarContentView: DSView {
     // MARK: Project scope
 
     public func setProjectScope(_ key: String?) {
+        // Scope flips drop the selection: rows selected under the old scope may be hidden now (Sidebar.tsx:2710-2714).
+        clearSelection()
         state.projectScopeKey = key
         if let key { scopeDefaults?.set(key, forKey: Self.scopeDefaultsKey) } else { scopeDefaults?.removeObject(forKey: Self.scopeDefaultsKey) }
     }
@@ -455,9 +610,15 @@ public final class SidebarContentView: DSView {
         // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
         let menuTop = h - 36
         var footerTop = h - 40
+        var stackTop = menuTop
+        if !providerUpdatePill.isHidden {
+            providerUpdatePill.frame = NSRect(x: 8, y: stackTop - 8 - 28, width: w - 16, height: 28)
+            stackTop = providerUpdatePill.frame.minY
+            footerTop = stackTop - 4
+        }
         if !undoNotice.isHidden {
             let nh = undoNotice.height(forWidth: w - 16)
-            undoNotice.frame = NSRect(x: 8, y: menuTop - 8 - nh, width: w - 16, height: nh)
+            undoNotice.frame = NSRect(x: 8, y: stackTop - 8 - nh, width: w - 16, height: nh)
             footerTop = undoNotice.frame.minY - 4
         }
         var fx: CGFloat = 8

@@ -9,13 +9,17 @@ import T3Store
 /// `Features` controller renders and routes keys; this class knows what the app can do.
 @MainActor
 final class PaletteCommands {
-    private weak var window: NSWindow?
+    private(set) weak var window: NSWindow?
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private let threads: ThreadController
     private let commands: SidebarCommands
     private let settings: SettingsController
     private var overlay: CommandPaletteOverlay?
+    /// The add-project flows (environment, sources, browse, clone, New project).
+    private lazy var addProjectFlow = PaletteAddProjectFlow(palette: self, environments: environments, threads: threads, commands: commands)
+    /// The open palette's controller.
+    var controller: CommandPaletteController? { overlay?.controller }
     /// Thread message search (`useThreadSearch`, state/queries.ts:75-101): 2+ characters, 200 ms debounce.
     private var search: (query: String, matches: [ThreadId: ThreadSearchMatch])?
     private var searchTask: Task<Void, Never>?
@@ -56,6 +60,12 @@ final class PaletteCommands {
             if call.command == "chat.new", self.projectGroups().count > 1 { self.open(newThreadIn: true) } else { self.newThreadFromContext() }
             return true
         }
+        // `chat.newWithoutProject`: a draft in the scratch project of the machine in use (_chat.tsx:116-125).
+        shortcuts.on("chat.newWithoutProject") { [weak self] _ in
+            guard let self, let env = self.scratchTargetEnvironmentId else { return false }
+            self.startScratchThread(env)
+            return true
+        }
         // `filePicker.toggle` (`ToggleMode "files"`, CommandPalette.tsx:440-450, 574-580).
         shortcuts.on("filePicker.toggle") { [weak self] call in
             guard let self, !call.isRepeat else { return true }
@@ -90,6 +100,8 @@ final class PaletteCommands {
             if controller?.mode?.name == "files" { self?.searchFiles(query) } else { self?.searchMessages(query) }
         }
         overlay.onDismiss = { [weak self, weak overlay] in if self?.overlay === overlay { self?.overlay = nil } }
+        // A path typed anywhere browses folders on the add-project machine (`isBrowsing`).
+        controller.browse = { [weak self] query in self?.addProjectFlow.browseMode(query) }
         self.overlay = overlay
         if newThreadIn, let page = newThreadInPage() { controller.push(page) }
         overlay.present(in: window)
@@ -213,6 +225,7 @@ final class PaletteCommands {
     }
 
     func close() {
+        addProjectFlow.reset()
         pickerTask?.cancel()
         contentTask?.cancel()
         searchTask?.cancel()
@@ -230,10 +243,11 @@ final class PaletteCommands {
             rootGroups: { [weak self] in self?.rootGroups() ?? [] },
             projectItems: { [weak self] in self?.projectSearchItems() ?? [] },
             threadItems: { [weak self] query in self?.threadItems(query: query) ?? [] },
-            threadSearchPending: { [weak self] query in self?.pendingQuery == query.trimmingCharacters(in: .whitespaces) })
+            threadSearchPending: { [weak self] query in self?.pendingQuery == query.trimmingCharacters(in: .whitespaces) },
+            settingsItems: { [weak self] query in self?.settingsItems(query) ?? [] })
     }
 
-    private var snapshot: ShellSnapshot? { sidebar?.snapshot }
+    var snapshot: ShellSnapshot? { sidebar?.snapshot }
     private var nowMs: Int64 { TimestampFormat.nowMs() }
     private var envs: SidebarEnvironments { sidebar?.state.environments ?? SidebarEnvironments() }
 
@@ -284,6 +298,13 @@ final class PaletteCommands {
                                             title: "New thread in...", icon: .squarePen, action: .submenu(page)))
             }
         }
+        if let env = scratchTargetEnvironmentId {
+            actions.append(PaletteEntry(value: "action:new-thread-without-project",
+                                        searchTerms: ["new thread", "no project", "without project", "none", "chat"],
+                                        title: "New thread without a project", icon: .messageSquareDashed,
+                                        shortcutCommand: "chat.newWithoutProject",
+                                        action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)))
+        }
         // ponytail: no "New thread without a project", "Find in current thread", PR, restart session,
         // project search, New project, theme and project settings entries; each lands with its work package
         if let target = commands.threadReferenceTarget {
@@ -310,6 +331,13 @@ final class PaletteCommands {
                 }
             }
         }
+        // "Restart agent session" (CommandPalette.tsx:1993-2036).
+        if let id = threads.openThreadId, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) {
+            actions.append(PaletteEntry(value: "action:restart-agent-session",
+                                        searchTerms: ["restart", "reset", "reload", "agent", "session", "skills", "plugins", "mcp"],
+                                        title: "Restart agent session", icon: .rotateCcw,
+                                        action: .run({ [weak self] in self?.restartAgentSession(thread) }, keepOpen: false)))
+        }
         actions.append(PaletteEntry(value: "action:open-file-picker", searchTerms: ["go to file", "open file", "file picker", "find file", "quick open"],
                                     title: "Go to file", icon: .fileSearch, shortcutCommand: "filePicker.toggle",
                                     action: .run({ [weak self] in self?.openFilePicker() }, keepOpen: true)))
@@ -317,11 +345,16 @@ final class PaletteCommands {
                                     searchTerms: ["search project", "find in files", "grep", "content search", "text search"],
                                     title: "Search project contents", icon: .textSearch, shortcutCommand: "projectSearch.toggle",
                                     action: .run({ [weak self] in self?.openContentSearch() }, keepOpen: true)))
+        if !addProjectFlow.newProjectOptions.isEmpty {
+            actions.append(PaletteEntry(value: "action:new-project", searchTerms: ["new project", "create project", "empty", "repository", "repo", "git init"],
+                                        title: "New project", icon: .folderGit2,
+                                        action: .run({ [weak self] in self?.addProjectFlow.startNewProjectFromRoot() }, keepOpen: true)))
+        }
         actions.append(PaletteEntry(value: "action:add-project", searchTerms: ["add project", "folder", "directory", "browse", "clone", "remote",
                                                                                 "repository", "repo", "git", "github", "gitlab", "forgejo", "bitbucket",
                                                                                 "azure", "devops", "url", "environment"],
                                     title: "Add project", icon: .folderPlus,
-                                    action: .run({ [weak self] in self?.commands.addProject() }, keepOpen: false)))
+                                    action: .run({ [weak self] in self?.addProjectFlow.open() }, keepOpen: true)))
         actions.append(PaletteEntry(value: "action:change-appearance", searchTerms: ["change appearance", "light", "dark", "system", "mode", "toggle"],
                                     title: "Change appearance", icon: .monitor, shortcutCommand: "appearance.cycle",
                                     action: .submenu(appearancePage())))
@@ -336,6 +369,14 @@ final class PaletteCommands {
         actions.append(PaletteEntry(value: "action:settings", searchTerms: ["settings", "preferences", "configuration", "keybindings"],
                                     title: "Open settings", icon: .settings,
                                     action: .run({ [weak self] in self?.commands.closeUtilityPage(); self?.settings.open() }, keepOpen: false)))
+        // "Project settings" for the open thread's or draft's group, else the first (CommandPalette.tsx:2264-2300).
+        if let group = contextualProjectGroup() {
+            actions.append(PaletteEntry(value: "action:project-settings",
+                                        searchTerms: ["project", "settings", "name", "icon", "scripts", "model", "workspace", "grouping",
+                                                      "checkout", "remove", "t3.json"],
+                                        title: "Project settings", description: group.label, icon: .folder,
+                                        action: .run({ [weak self] in self?.openProjectSettings(group.key) }, keepOpen: false)))
+        }
         var result = [PaletteGroup(value: "actions", label: "Actions", items: actions)]
         let recent = Array(threadItems(query: nil).prefix(PaletteSearch.recentThreadLimit))
         if !recent.isEmpty { result.append(PaletteGroup(value: "recent-threads", label: "Recent Threads", items: recent)) }
@@ -344,10 +385,12 @@ final class PaletteCommands {
 
     /// "New thread in..." (`projectThreadItems`): one entry per project group, `thread.jump.N` on the first nine.
     private func newThreadInPage() -> PalettePage? {
-        let groups = projectGroups()
-        guard !groups.isEmpty else { return nil }
+        let all = projectGroups()
+        guard !all.isEmpty else { return nil }
+        // The no-project home shows once, as the "No project" item.
+        let groups = all.filter { !isScratch($0.representative) }
         let current = threads.composer.activeProjectId
-        let items = groups.map { group in
+        var items = groups.map { group in
             PaletteEntry(value: "new-thread-in:\(group.key)", searchTerms: [group.label, group.representative.title, group.representative.workspaceRoot]
                             + group.members.flatMap { [$0.title, $0.workspaceRoot] } + [locationLabel(group.representative.id.environmentId)],
                          title: group.label, description: projectDescription(group), icon: .folder,
@@ -357,7 +400,65 @@ final class PaletteCommands {
                              self?.newThread(in: member)
                          }, keepOpen: false))
         }
-        return PalettePage(addonIcon: .squarePen, groups: [PaletteGroup(value: "projects", label: "Projects", items: PaletteSearch.enumerate(items))])
+        items = PaletteSearch.enumerate(items)
+        if let env = scratchTargetEnvironmentId {
+            // "No project" right after the current project, first when the current thread has none; it keeps
+            // its own shortcut so the projects' mod+1..9 hold (CommandPalette.tsx:1388-1408).
+            let index = all.first.map(\.representative).map(isScratch) == true ? 0 : min(1, items.count)
+            items.insert(PaletteEntry(value: "new-thread-in:no-project", searchTerms: ["no project", "without project", "none"],
+                                      title: "No project", icon: .messageSquareDashed, shortcutCommand: "chat.newWithoutProject",
+                                      action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)), at: index)
+        }
+        return PalettePage(addonIcon: .squarePen, groups: [PaletteGroup(value: "projects", label: "Projects", items: items)])
+    }
+
+    // MARK: Threads without a project (useScratchProject.ts)
+
+    /// The environment's scratch folder while it is connected (`availableScratchWorkspaceRoot`).
+    private func scratchRoot(_ env: String) -> String? {
+        guard environments.state(env)?.status == .connected else { return nil }
+        return threads.composer.config(env)?.scratchWorkspaceRoot
+    }
+
+    /// `scratchEnvironmentId`: the current machine if it offers a scratch folder, else with no current
+    /// machine the one machine that does.
+    func scratchEnvironmentId(_ current: String?) -> String? {
+        if let current { return scratchRoot(current) != nil ? current : nil }
+        let offering = environments.environmentIds.filter { scratchRoot($0) != nil }
+        return offering.count == 1 ? offering[0] : nil
+    }
+
+    /// The open thread's or draft's machine, else the primary (`scratchTargetEnvironmentId`).
+    var scratchTargetEnvironmentId: String? {
+        scratchEnvironmentId(threads.composer.targetEnvironmentId ?? environments.primaryId)
+    }
+
+    private func isScratch(_ project: ProjectShell) -> Bool {
+        guard let env = project.id.environmentId, let root = threads.composer.config(env)?.scratchWorkspaceRoot else { return false }
+        return SidebarModel.normalizeProjectPath(root) == SidebarModel.normalizeProjectPath(project.workspaceRoot)
+    }
+
+    /// `startScratchThread`: `projects.ensureScratch`, wait for the project in the shell (10 s), then a draft in it.
+    func startScratchThread(_ env: String) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let reply = try await self.environments.request(env, "projects.ensureScratch", .object([:]))
+                guard let localId = reply["projectId"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "An error occurred.") }
+                let id = ProjectId(EnvironmentScope.key(env, localId))
+                var project: ProjectShell?
+                for _ in 0..<100 {
+                    project = self.sidebar?.snapshot?.projects.first { $0.id == id }
+                    if project != nil { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                guard let project else { throw SidebarCommands.CommandMessage(errorDescription: "The scratch project did not load.") }
+                self.newThread(in: project)
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+                self.threads.panel.toasts.show(ToastView(title: "Could not start without a project", message: message ?? "An error occurred.", kind: .error))
+            }
+        }
     }
 
     /// `projectSearchItems`: opens the group's latest thread, else a draft (`openProjectFromSearch`).
@@ -386,13 +487,58 @@ final class PaletteCommands {
                 let match = matches[thread.id].map { ($0.source == "user" ? "You: " : "Agent: ") + $0.snippet }
                 let stamp = (thread.latestUserMessageAt ?? thread.updatedAt).raw
                 let id = thread.id
-                return PaletteEntry(value: "thread:\(thread.id.rawValue)",
+                var entry = PaletteEntry(value: "thread:\(thread.id.rawValue)",
                                     searchTerms: [thread.title, projectTitle ?? "", thread.branch ?? "", matches[thread.id]?.snippet ?? "", thread.id.localId.rawValue],
                                     title: thread.title, description: parts.joined(separator: " \u{00B7} "), match: match,
                                     timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms),
                                     searchRecency: Int64(SidebarModel.getThreadSortTimestamp(thread, .updatedAt)), icon: .messageSquare,
                                     action: .run({ [weak self] in self?.openThread(id) }, keepOpen: false))
+                if let m = matches[thread.id] { entry.matchIsUser = m.source == "user"; entry.matchQuery = query }
+                return entry
             }
+    }
+
+    /// `settingsSearchItems` (CommandPalette.tsx:2310-2331): "Settings · <section>", opening the page at the row.
+    private func settingsItems(_ query: String) -> [PaletteEntry] {
+        SettingsSearch.search(query, in: SettingsSearch.available(settings.searchAvailability())).map { item in
+            var entry = PaletteEntry(value: "setting:\(item.id)", searchTerms: [item.title, item.to.label] + item.searchTerms,
+                                     title: item.title, description: "Settings \u{00B7} \(item.to.label)", icon: .settings,
+                                     action: .run({ [weak self] in
+                                         self?.commands.closeUtilityPage()
+                                         self?.settings.open()
+                                         self?.settings.jump(to: item)
+                                     }, keepOpen: false))
+            entry.secondary = item.flags.contains(.secondary)
+            return entry
+        }
+    }
+
+    /// The open thread's or draft's project group, else the first group (`contextualProjectGroup`).
+    private func contextualProjectGroup() -> SidebarModel.ProjectGroup? {
+        let groups = snapshot.map { SidebarModel.buildProjectGroups($0.projects, preferredEnvironmentId: envs.primaryId) } ?? []
+        if let current = threads.composer.activeProjectId, let group = groups.first(where: { $0.memberProjectIds.contains(current) }) { return group }
+        return groups.first
+    }
+
+    /// `/projects/$projectKey`: the Project settings page scoped to the group.
+    func openProjectSettings(_ key: String) {
+        commands.closeUtilityPage()
+        settings.openProject(key)
+    }
+
+    /// Stops the thread's provider sessions so the next message starts a fresh one, then refreshes the
+    /// provider for the thread's cwd (CommandPalette.tsx:1999-2033). Failures toast "Unable to run command".
+    private func restartAgentSession(_ thread: ThreadShell) {
+        let project = snapshot?.projects.first { $0.id == thread.projectId }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.threads.composer.restartAgentSession(thread, cwd: thread.worktreePath ?? project?.workspaceRoot)
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+                self.threads.panel.toasts.show(ToastView(title: "Unable to run command", message: message ?? "An unexpected error occurred.", kind: .error))
+            }
+        }
     }
 
     // MARK: Message search
@@ -417,8 +563,24 @@ final class PaletteCommands {
 
     // MARK: Actions
 
+    /// `openCommandPalette({open: "add-project"})`: the palette straight into Add project (the sidebar's
+    /// button, the empty list's button, the no-projects hero).
+    func openAddProject() {
+        if overlay == nil { open() }
+        guard let controller else { return }
+        controller.setMode(nil)
+        addProjectFlow.open()
+    }
+
+    /// Settings > Connections, where a machine gets added (`/settings/connections`).
+    func openConnections() {
+        commands.closeUtilityPage()
+        settings.open()
+        settings.show(.connections)
+    }
+
     /// Leaves Settings or a utility page so the thread view shows.
-    private func showThreadView() {
+    func showThreadView() {
         settings.close()
         commands.closeUtilityPage()
     }
@@ -431,6 +593,14 @@ final class PaletteCommands {
     private func newThread(in project: ProjectShell) {
         showThreadView()
         threads.newThread(in: project)
+    }
+
+    /// The sidebar's new-thread button (`handleNewThreadClick`): one project or Shift creates at once,
+    /// several open "New thread in..." (`openCommandPalette({open: "new-thread-in"})`).
+    func newThreadFromSidebar(shift: Bool) {
+        if shift || projectGroups().count <= 1 { newThreadFromContext(); return }
+        if let controller = overlay?.controller, let page = newThreadInPage() { controller.setMode(nil); controller.push(page); return }
+        open(newThreadIn: true)
     }
 
     /// `startNewThreadFromContext`: the open thread's or draft's project, else the first.

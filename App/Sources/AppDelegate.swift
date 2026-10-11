@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var t3Connect: T3ConnectController?
     private var shortcuts: Shortcuts?
     private var palette: PaletteCommands?
+    private var routeHistory: RouteHistory?
     private var terminationSignal: DispatchSourceSignal?
     private var notifications: ThreadNotificationCoordinator?
     private var quitHold: QuitHoldController?
@@ -266,6 +267,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `sidebar.toggle` (AppSidebarLayout.tsx:96-135).
         shortcuts.on("sidebar.toggle") { [weak layout] _ in
             layout?.toggle()
+            return true
+        }
+        // The scope popup's settings button, the thread menu's Project settings (`/projects/$projectKey`).
+        sidebar.actions.openProjectSettings = { [weak palette] key in palette?.openProjectSettings(key) }
+        commands.openProjectSettings = { [weak palette] key in palette?.openProjectSettings(key) }
+        // The header's new-thread button: with several projects the palette's "New thread in..." (Sidebar.tsx:4944-4962).
+        sidebar.actions.newThread = { [weak palette] in palette?.newThreadFromSidebar(shift: NSEvent.modifierFlags.contains(.shift)) }
+        commands.openAddProject = { [weak palette] in palette?.openAddProject() }
+        // The no-projects hero (NoProjectsHero.tsx).
+        threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
+        threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
+        threads.noProjectsHero.startWithoutProject.action = { [weak palette, weak environments] in
+            guard let palette, let env = palette.scratchEnvironmentId(environments?.primaryId) else { return }
+            palette.startScratchThread(env)
+        }
+        // The provider update pill follows the primary environment's providers (`primaryServerProvidersAtom`).
+        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments] env in
+            guard env == environments?.primaryId, let providers = threads?.composer.config(env)?.providers else { return }
+            sidebar?.providerUpdatePill.update(providers)
+        }
+        sidebar.providerUpdatePill.onOpenSettings = { [weak settings, weak commands] in
+            commands?.closeUtilityPage()
+            settings?.open()
+            settings?.show(.providers)
+        }
+        // Route history for `navigation.back` and `navigation.forward` (AppSidebarLayout.tsx:168-213).
+        let history = RouteHistory()
+        let currentRoute: () -> RouteHistory.Route? = { [weak settings, weak commands, weak threads] in
+            if let settings, settings.isOpen { return .settings(settings.section) }
+            if let page = commands?.openUtilityKind { return page == .pullRequests ? .pullRequests : .usage }
+            switch threads?.composer.target {
+            case .thread(let id)?: return .thread(id)
+            case .draft(let s)?: return .draft(s.draftId)
+            case nil: return nil
+            }
+        }
+        let record: () -> Void = { [weak history] in history?.record(currentRoute()) }
+        threads.onRouteChange = record
+        settings.onRouteChange = record
+        commands.onRouteChange = record
+        history.apply = { [weak settings, weak commands, weak threads, weak sidebar] route in
+            guard let settings, let commands, let threads, let sidebar else { return false }
+            switch route {
+            case .thread(let id):
+                guard sidebar.snapshot?.threads.contains(where: { $0.id == id && $0.archivedAt == nil }) == true else { return false }
+                settings.close(); commands.closeUtilityPage(); threads.open(id)
+            case .draft(let draftId):
+                guard threads.composer.hasDraft(draftId) else { return false }
+                settings.close(); commands.closeUtilityPage(); sidebar.actions.openDraft(draftId)
+            case .settings(let section):
+                commands.closeUtilityPage(); settings.open(); settings.show(section)
+            case .pullRequests:
+                settings.close(); commands.openUtilityPage(.pullRequests)
+            case .usage:
+                settings.close(); commands.openUtilityPage(.usage)
+            }
+            return true
+        }
+        shortcuts.on(["navigation.back", "navigation.forward"]) { [weak history] call in
+            guard let history else { return false }
+            if call.command == "navigation.back" { history.back() } else { history.forward() }
+            return true
+        }
+        self.routeHistory = history
+        // Escape drops a multi-selection (_chat.tsx:98-102).
+        shortcuts.onKey { [weak sidebar] event in
+            guard event.keyCode == 53, let sidebar, !sidebar.selectedThreadIds.isEmpty else { return false }
+            sidebar.clearSelection()
             return true
         }
         threads.registerShortcuts(shortcuts)

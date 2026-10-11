@@ -24,7 +24,7 @@ enum FormsGallery {
 
     static func inputs() -> NSView {
         let states = [state(), state(focused: true), state(invalid: true), state(enabled: false)]
-        let rows: [[NSView]] = InputView.Size.allCases.map { size in
+        let rows: [[NSView]] = InputView.Size.allCases.filter { $0 != .inline }.map { size in
             states.map { s in
                 let v = InputView(placeholder: size.rawValue, size: size)
                 v.previewState(s)

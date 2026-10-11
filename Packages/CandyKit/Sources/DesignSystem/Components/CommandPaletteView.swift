@@ -9,6 +9,10 @@ public struct CommandPaletteItem: Sendable {
     public var description: String?
     /// A thread search match line above the description (`ThreadSearchMatchExcerpt`).
     public var match: String?
+    /// The match's author: true for "You:", false for "Agent:"; nil draws the line plain.
+    public var matchIsUser: Bool?
+    /// UTF-16 offsets in `match` of the query's hits, drawn semibold in the foreground.
+    public var matchHighlights: [Int]?
     public var shortcut: String?
     public var timestamp: String?
     /// `titleTrailingContent` text such as "Current" (`text-xs text-muted-foreground/70`).
@@ -20,6 +24,14 @@ public struct CommandPaletteItem: Sendable {
     /// Fuzzy match positions (UTF-16): set, the text is muted with these characters semibold.
     public var titleHighlights: [Int]?
     public var descriptionHighlights: [Int]?
+    /// A context row (`flex min-h-8 items-center gap-2 rounded-sm px-2 py-1.5`): no hover, no click, full opacity.
+    public var isStatic = false
+    /// `titleTrailingContent`: a muted 16px glyph at the end (`CheckIcon ms-auto size-4 text-muted-foreground/70`).
+    public var trailingIcon: IconName?
+    /// `titleTrailingContent`: a checkbox at the end (`<Checkbox checked>`).
+    public var trailingCheckbox: Bool?
+    /// The note drawn as the warning-outline micro button ("Setup Required").
+    public var noteIsWarning = false
 
     public init(_ title: String, icon: IconName? = nil, description: String? = nil, shortcut: String? = nil,
                 timestamp: String? = nil, isSubmenu: Bool = false, isDisabled: Bool = false,
@@ -68,7 +80,11 @@ public final class CommandPaletteView: DSView {
     public var highlightedIndex: Int? {
         didSet { rows.enumerated().forEach { $1.isHighlighted = $0 == highlightedIndex } }
     }
-    public var footerActionLabel: String? { didSet { rebuildFooter() } }
+    public var footerActionLabel: String? { didSet { if footerActionLabel != oldValue { rebuildFooter() } } }
+    /// `footerTrailing`: a footer action at the end ("Open in Finder", `CommandFooterAction`).
+    public var footerTrailing: NSView? {
+        didSet { oldValue?.removeFromSuperview(); footerTrailing.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
+    }
     public var showsBackHint = false { didSet { rebuildFooter() } }
     public var escapeLabel = "Close" { didSet { rebuildFooter() } }
     /// A submenu's start addon: the back arrow in place of the search icon (CommandPalette.tsx:3488-3500).
@@ -82,7 +98,22 @@ public final class CommandPaletteView: DSView {
     public let input = InputView(placeholder: CommandPaletteView.rootPlaceholder, size: .lg)
     private let decoration = BoxDecorationLayer()
     private let footerLayer = BoxDecorationLayer()
-    private let searchIcon = IconView(name: .search)
+    private var searchIcon = IconView(name: .search)
+    /// The input's start addon at the root: the search glass, or Add project's folder while a path is typed
+    /// (`isBrowsing ? { startAddon: <FolderPlusIcon /> }`, CommandPalette.tsx:3494-3500).
+    public var startIcon: IconName = .search {
+        didSet {
+            guard startIcon != oldValue else { return }
+            let next = IconView(name: startIcon)
+            next.alphaValue = searchIcon.alphaValue
+            next.isHidden = searchIcon.isHidden
+            next.frame = searchIcon.frame
+            next.strokeColor = Themed.color(\.contrastIconMuted)
+            addSubview(next, positioned: .above, relativeTo: searchIcon)
+            searchIcon.removeFromSuperview()
+            searchIcon = next
+        }
+    }
     private let backIcon = IconView(name: .arrowLeft)
     private let document = DSView()
     private lazy var scroll = ScrollAreaView(documentView: document, scrollFade: true)
@@ -140,11 +171,11 @@ public final class CommandPaletteView: DSView {
                     let row = CommandRowView(item)
                     let i = index
                     row.onHover = { [weak self] in
-                        guard !item.isDisabled, let self, self.highlightedIndex != i else { return }
+                        guard !item.isDisabled, !item.isStatic, let self, self.highlightedIndex != i else { return }
                         self.highlightedIndex = i
                         self.onHighlight?(i)
                     }
-                    row.onClick = { [weak self] in if !item.isDisabled { self?.onExecute?(i) } }
+                    row.onClick = { [weak self] in if !item.isDisabled, !item.isStatic { self?.onExecute?(i) } }
                     rows.append(row)
                     views.append(row)
                     index += 1
@@ -181,6 +212,7 @@ public final class CommandPaletteView: DSView {
 
     private func rebuildFooter() {
         footerGroups.forEach { $0.removeFromSuperview() }
+        invalidateIntrinsicContentSize()
         func hint(_ keys: [KbdView], _ text: String) -> NSView {
             for k in keys {
                 k.fillOverride = Themed.color(\.contrastForeground, 0.08)
@@ -199,7 +231,7 @@ public final class CommandPaletteView: DSView {
         needsLayout = true
     }
 
-    public var enabledIndices: [Int] { rows.indices.filter { !rows[$0].item.isDisabled } }
+    public var enabledIndices: [Int] { rows.indices.filter { !rows[$0].item.isDisabled && !rows[$0].item.isStatic } }
 
     public func moveHighlight(by delta: Int) {
         let enabled = enabledIndices
@@ -227,7 +259,8 @@ public final class CommandPaletteView: DSView {
     // MARK: Layout
 
     private static let inputRow: CGFloat = 6 + 36 + 6
-    private static let footerHeight: CGFloat = 40
+    /// `py-2.5` around the hints (20) or a taller footer action (`Open in Finder` keeps the xs button's 24).
+    private var footerHeight: CGFloat { 20 + max(20, footerTrailing?.intrinsicContentSize.height ?? 0) }
 
     private var panelContentHeight: CGFloat {
         switch content {
@@ -244,7 +277,7 @@ public final class CommandPaletteView: DSView {
     /// `max-h-105` on the popup and `max-h-[min(28rem,70vh)]` on the panel; the panel scrolls past it.
     public override var intrinsicContentSize: NSSize {
         if case .custom = content { return NSSize(width: Self.width, height: Self.maxHeight) }
-        return NSSize(width: Self.width, height: min(Self.maxHeight, 2 + Self.inputRow + min(448, panelContentHeight) + Self.footerHeight))
+        return NSSize(width: Self.width, height: min(Self.maxHeight, 2 + Self.inputRow + min(448, panelContentHeight) + footerHeight))
     }
 
     public override func layout() {
@@ -256,7 +289,7 @@ public final class CommandPaletteView: DSView {
         searchIcon.frame = NSRect(x: inner.minX + 8 + 1 + 9, y: inner.minY + 6 + 10, width: 16, height: 16)
         backIcon.frame = searchIcon.frame
         let panelTop = inner.minY + Self.inputRow
-        let footerTop = inner.maxY - Self.footerHeight
+        let footerTop = inner.maxY - footerHeight
         scroll.frame = NSRect(x: inner.minX, y: panelTop, width: inner.width, height: max(0, footerTop - panelTop))
         let width = scroll.frame.width
         document.frame = NSRect(x: 0, y: 0, width: width, height: max(scroll.frame.height, panelContentHeight))
@@ -290,8 +323,13 @@ public final class CommandPaletteView: DSView {
         var x = inner.minX + 16
         for group in footerGroups {
             let w = group.intrinsicContentSize.width
-            group.frame = NSRect(x: x, y: footerTop + 10, width: w, height: 20)
+            group.frame = NSRect(x: x, y: footerTop + (footerHeight - 20) / 2, width: w, height: 20)
             x += w + 12
+        }
+        if let footerTrailing {
+            // `ms-auto` at the footer's end.
+            let s = footerTrailing.intrinsicContentSize
+            footerTrailing.frame = NSRect(x: inner.maxX - 16 - s.width, y: footerTop + (footerHeight - s.height) / 2, width: s.width, height: s.height)
         }
     }
 
@@ -342,8 +380,8 @@ public final class CommandPaletteView: DSView {
     public override func updateLayer() {
         // The footer layer covers only the footer strip.
         let inner = bounds.insetBy(dx: 1, dy: 1)
-        footerLayer.layout(boxSize: CGSize(width: inner.width, height: Self.footerHeight))
-        footerLayer.frame.origin = CGPoint(x: inner.minX - footerLayer.outset, y: inner.maxY - Self.footerHeight - footerLayer.outset)
+        footerLayer.layout(boxSize: CGSize(width: inner.width, height: footerHeight))
+        footerLayer.frame.origin = CGPoint(x: inner.minX - footerLayer.outset, y: inner.maxY - footerHeight - footerLayer.outset)
     }
 
     /// A group label (`px-2 py-1.5 text-xs font-medium text-muted-foreground`) and its rows.
@@ -407,6 +445,8 @@ final class CommandRowView: DSView {
     private let shortcut = TrackedLabelView("", font: DSFont.ui(12, weight: .medium), tracking: 1.2, color: .clear, lineHeight: 16)
     private var iconView: IconView?
     private var chevron: IconView?
+    private var trailingGlyph: IconView?
+    private var checkbox: CheckboxView?
     private var trackingArea: NSTrackingArea?
 
     init(_ item: CommandPaletteItem) {
@@ -418,6 +458,7 @@ final class CommandRowView: DSView {
         addSubview(title)
         if let m = item.match {
             matchLine.text = m; matchLine.font = DSFont.ui(12); matchLine.lineHeight = 16
+            matchLine.highlightedIndices = item.matchHighlights
             addSubview(matchLine)
         }
         if let d = item.description {
@@ -447,7 +488,21 @@ final class CommandRowView: DSView {
         title.highlightedIndices = item.titleHighlights
         detail.highlightedIndices = item.descriptionHighlights
         if item.isSubmenu { chevron = IconView(name: .chevronRight); addSubview(chevron!) }
-        alphaValue = item.isDisabled ? 0.64 : 1
+        if let name = item.trailingIcon { trailingGlyph = IconView(name: name); addSubview(trailingGlyph!) }
+        if let checked = item.trailingCheckbox {
+            let box = CheckboxView(value: checked ? .on : .off)
+            box.isHidden = false
+            checkbox = box
+            addSubview(box)
+        }
+        if item.noteIsWarning {
+            noteLabel.wantsLayer = true
+            noteLabel.layer?.cornerRadius = 6
+            noteLabel.layer?.borderWidth = 1
+            noteLabel.alignment = .center
+            noteLabel.font = DSFont.ui(11, weight: .medium)
+        }
+        alphaValue = item.isDisabled && !item.isStatic ? 0.64 : 1
         setAccessibilityRole(.button)
         setAccessibilityLabel(item.title + (item.titleEmphasis ?? ""))
         restyle()
@@ -468,6 +523,14 @@ final class CommandRowView: DSView {
             chevron.frame = NSRect(x: right - 16 + 2, y: (bounds.height - 16) / 2, width: 16, height: 16) // `-me-0.5`
             right -= 14 + 8
         }
+        if let trailingGlyph {
+            trailingGlyph.frame = NSRect(x: right - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            right -= 16 + 8
+        }
+        if let checkbox {
+            checkbox.frame = NSRect(x: right - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            right -= 16 + 8
+        }
         if item.shortcut != nil {
             // `ms-auto`; `tracking-widest` (.1em) follows every glyph, the last one included.
             let w = shortcut.intrinsicContentSize.width
@@ -480,8 +543,10 @@ final class CommandRowView: DSView {
             right -= w + 8
         }
         if item.note != nil {
-            let w = ceil(noteLabel.textWidth)
-            noteLabel.frame = NSRect(x: right - w, y: (bounds.height - 16) / 2, width: w, height: 16)
+            // The warning button is `size="micro"`: 20px tall, `px-1.5`, with its border.
+            let w = ceil(noteLabel.textWidth) + (item.noteIsWarning ? 14 : 0)
+            let h: CGFloat = item.noteIsWarning ? 20 : 16
+            noteLabel.frame = NSRect(x: right - w, y: (bounds.height - h) / 2, width: w, height: h)
             right -= w + 8
         }
         title.frame = NSRect(x: x, y: 6, width: max(0, right - x), height: 20)
@@ -494,12 +559,17 @@ final class CommandRowView: DSView {
         let fg = isHighlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
         title.color = item.titleHighlights == nil ? fg : Themed.color(\.contrastMutedForeground)
         title.highlightColor = Themed.color(\.contrastForeground)
-        matchLine.color = Themed.color(\.contrastMutedForeground)
+        // `text-xs text-muted-foreground/85`, the tag in info or success, hits `font-semibold text-foreground`.
+        matchLine.color = Themed.color(\.contrastMutedForeground, item.matchIsUser == nil ? 1 : 0.85)
+        matchLine.highlightColor = Themed.color(\.contrastForeground)
+        matchLine.prefixColor = item.matchIsUser.map { ($0 ? 4 : 6, Themed.color($0 ? \.infoForeground : \.successForeground)) }
         detail.color = item.descriptionHighlights == nil ? Themed.color(\.contrastMutedForeground, 0.7) : Themed.color(\.contrastMutedForeground)
         detail.highlightColor = Themed.color(\.contrastForeground)
         shortcut.color = Themed.color(\.contrastSecondaryLabel)
         trailing.color = Themed.color(\.contrastMutedForeground, 0.7)
-        noteLabel.color = Themed.color(\.contrastMutedForeground, 0.7)
+        noteLabel.color = item.noteIsWarning ? Themed.color(\.warningForeground) : Themed.color(\.contrastMutedForeground, 0.7)
+        noteLabel.layer?.borderColor = item.noteIsWarning ? Themed.color(\.warning, 0.32).cgColor(in: self) : nil
+        trailingGlyph?.strokeColor = Themed.color(\.contrastMutedForeground, 0.7)
         if item.glyph == nil { iconView?.strokeColor = Themed.color(\.contrastIconMuted) } // ITEM_ICON_CLASS `size-4 text-icon-muted`
         chevron?.strokeColor = Themed.color(\.contrastMutedForeground, 0.7)
     }
@@ -525,6 +595,8 @@ final class CommandRowView: DSView {
     override func mouseEntered(with event: NSEvent) { onHover?() }
     override func mouseMoved(with event: NSEvent) { onHover?() }
     override func mouseDown(with event: NSEvent) {} // `onMouseDown preventDefault`: focus stays in the input
+    // The row takes every click, the trailing checkbox's too (it only mirrors the row's state).
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }

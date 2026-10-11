@@ -30,10 +30,20 @@ public final class SidebarListView: DSView {
     var onOpenDraft: (@MainActor (String) -> Void)?
     var onDiscardDraft: (@MainActor (String) -> Void)?
     var onOpenSearchResult: (@MainActor (ThreadId) -> Void)?
+    /// The empty list's Add project button.
+    var onAddProject: (@MainActor () -> Void)?
     /// The pointer moved over a search result (`onMouseMove` highlights it).
     var onHighlightSearchResult: (@MainActor (Int) -> Void)?
     var rowActions = SidebarRowActions()
     var onVisibleRowsChange: (@MainActor () -> Void)?
+    /// The one rename field, lent to the row being renamed.
+    let renameField = SidebarRenameFieldView()
+    /// The hover card's content for a thread, nil for none.
+    var hoverCard: (@MainActor (ThreadId) -> SidebarThreadHoverCardModel?)?
+    private var hoverWork: DispatchWorkItem?
+    private var hoverPopup: (id: ThreadId, popup: OpenPopup)?
+    /// When the last card closed: within `timeout` (400ms) the next one opens at once.
+    private var hoverClosedAt: Date?
 
     /// Counters for tests: how many row views were made and how many configure calls ran.
     public private(set) var createdRowViews = 0
@@ -206,6 +216,14 @@ public final class SidebarListView: DSView {
             result.onHover = { [weak self] index in self?.onHighlightSearchResult?(index) }
             view = result
         case .emptyText: view = SidebarEmptyTextRowView()
+        case .noProjects:
+            let row = SidebarNoProjectsRowView()
+            row.onAddProject = { [weak self] in self?.onAddProject?() }
+            view = row
+        }
+        if kind == .card || kind == .slim {
+            view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
+            view.onBeginDrag = { [weak self] row, id, event in self?.beginThreadDrag(row, id, event: event) }
         }
         view.onOpen = { [weak self, weak view] in
             guard let self, let item = view?.item else { return }
@@ -216,6 +234,8 @@ public final class SidebarListView: DSView {
     }
 
     private func recycle(_ view: SidebarRowBase) {
+        if case .row(let r)? = view.item, hoverPopup?.id == r.id { closeHoverCard() }
+        lendRenameField(to: view, nil)
         view.layer?.removeAllAnimations()
         view.isHidden = true
         view.isKeyboardFocused = false
@@ -226,8 +246,103 @@ public final class SidebarListView: DSView {
         configureCount += 1
         if let card = view as? SidebarCardRowView { card.actions = rowActions; card.nowMs = nowMs }
         if let slim = view as? SidebarSlimRowView { slim.actions = rowActions }
+        if case .row(let r) = item, r.isRenaming { lendRenameField(to: view, item) } else { lendRenameField(to: view, nil) }
         view.configure(item)
         view.isKeyboardFocused = item.key == focusedKey
+    }
+
+    private func lendRenameField(to view: SidebarRowBase, _ item: SidebarItem?) {
+        if item != nil {
+            view.renameField = renameField
+        } else if view.renameField != nil {
+            view.renameField = nil
+            if renameField.superview === view { renameField.removeFromSuperview() }
+        }
+    }
+
+    // MARK: Hover card (`<Tooltip>` around each thread row, Sidebar.tsx:1966-2216)
+
+    /// `TooltipProvider delay={150} closeDelay={0} timeout={400}`, `side="right" align="start" sideOffset={4}`.
+    private func rowHoverChanged(_ row: SidebarRowBase, _ hovered: Bool) {
+        hoverWork?.cancel()
+        guard hovered, case .row(let r)? = row.item, !r.isRenaming else { closeHoverCard(); return }
+        if let open = hoverPopup, open.id == r.id { return }
+        let instant = hoverClosedAt.map { Date().timeIntervalSince($0) < 0.4 } ?? false
+        let work = DispatchWorkItem { [weak self, weak row] in
+            guard let self, let row, row.state.hovered, case .row(let current)? = row.item, current.id == r.id else { return }
+            self.showHoverCard(r.id, over: row)
+        }
+        hoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (instant ? 0 : 0.15), execute: work)
+    }
+
+    private func showHoverCard(_ id: ThreadId, over row: SidebarRowBase) {
+        // The snooze menu's open state disables the card (`disabled={snoozeMenuOpen}`).
+        if let card = row as? SidebarCardRowView, card.snoozeButton.state.popupOpen { return }
+        // Nothing under a dialog or the palette shows a card (their backdrops cover the rows).
+        if window?.contentView?.subviews.contains(where: { $0 is ModalHost || $0 is CommandPaletteOverlay }) == true { return }
+        guard let model = hoverCard?(id), let host = row.popupHost else { return }
+        closeHoverCard()
+        let popup = host.open(SidebarThreadHoverCardView(model), trigger: row,
+                              placement: PopupPlacement(side: .right, align: .start, sideOffset: 4),
+                              motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
+        hoverPopup = (id, popup)
+    }
+
+    func closeHoverCard() {
+        hoverWork?.cancel()
+        guard let open = hoverPopup else { return }
+        hoverPopup = nil
+        hoverClosedAt = Date()
+        if let window { PopupHost.host(for: window).close(open.popup, returnFocus: false) }
+    }
+
+    // MARK: Files dropped on a row (sidebarPendingFileDropStore.ts, `makeWorkspaceFileDropHandlers`)
+
+    /// Files dropped on a thread row: the app opens the thread and attaches them in its composer.
+    var onFileDrop: (@MainActor (ThreadId, [URL]) -> Void)?
+    private weak var fileDragRow: SidebarRowBase?
+
+    private func fileDropRow(_ sender: any NSDraggingInfo) -> SidebarRowBase? {
+        guard onFileDrop != nil, sender.draggingSource == nil || !(sender.draggingSource is SidebarListView),
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return nil }
+        let point = convert(sender.draggingLocation, from: nil)
+        return visible.values.first { row in
+            guard case .row? = row.item, !row.isHidden else { return false }
+            return row.frame.contains(point)
+        }
+    }
+
+    private func setFileDragRow(_ row: SidebarRowBase?) {
+        guard row !== fileDragRow else { return }
+        fileDragRow?.isFileDragOver = false
+        row?.isFileDragOver = true
+        fileDragRow = row
+    }
+
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+
+    public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        let row = fileDropRow(sender)
+        setFileDragRow(row)
+        return row == nil ? [] : .copy
+    }
+
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil) }
+    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil) }
+
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { setFileDragRow(nil) }
+        guard let row = fileDropRow(sender), case .row(let r)? = row.item,
+              let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              !urls.isEmpty else { return false }
+        onFileDrop?(r.id, urls)
+        return true
+    }
+
+    /// The row's frame in the list, nil when the thread has no row.
+    func rowFrame(_ id: ThreadId) -> NSRect? {
+        indexByKey["thread:\(id.rawValue)"].map { frame(at: $0) }
     }
 
     /// Re-applies the clock to on-screen Working rows without rebuilding anything.
@@ -349,6 +464,7 @@ public final class SidebarListView: DSView {
         case .showMore: onShowMore?()
         case .draft(let d): onOpenDraft?(d.id)
         case .searchResult(let r): onOpenSearchResult?(r.id)
+        case .noProjects: onAddProject?()
         case .draftDivider, .emptyText: break
         }
     }

@@ -24,6 +24,8 @@ public final class NumberFieldView: BoxView {
     public var isEnabled = true { didSet { alphaValue = isEnabled ? 1 : 0.64; input.isEnabled = isEnabled; restyle() } }
 
     let input = InputView(placeholder: "", text: "", size: .default)
+    /// The typed text, before Return or blur commits it (empty while the field is cleared).
+    public var text: String { input.text }
     let decrement = NumberStepperView(icon: .minus)
     let increment = NumberStepperView(icon: .plus)
     private var focused = false

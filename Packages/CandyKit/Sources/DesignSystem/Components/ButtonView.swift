@@ -41,6 +41,8 @@ public final class ButtonView: ControlView {
     public var title: String? { didSet { label.text = title ?? ""; invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
+    /// `justify-between`: the label at the start, the trailing icon at the end.
+    public var justifiesBetween = false { didSet { needsLayout = true } }
     /// An explicit icon class such as `size-3`, which beats the size's default icon size.
     public var iconSize: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Replaces the variant's icon color, for icons with their own `text-*` class.
@@ -138,6 +140,10 @@ public final class ButtonView: ControlView {
             x += accessoryWidth + m.gap
         }
         trailingIconView?.frame = NSRect(x: x - 2, y: iconY, width: m.icon, height: m.icon)
+        if justifiesBetween {
+            label.frame.origin.x = m.padding + 1
+            trailingIconView?.frame.origin.x = bounds.width - m.padding - 1 - m.icon + 2
+        }
     }
 
     private func updateIcons() {

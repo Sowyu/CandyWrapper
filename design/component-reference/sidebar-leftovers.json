@@ -1,0 +1,79 @@
+{
+ "component": "sidebar-leftovers",
+ "source": "apps/web/src/components/Sidebar.tsx",
+ "states": [
+  "rest",
+  "hover",
+  "focus-visible"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "no-projects",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60\"><span>No projects yet</span><button type=\"button\" class=\"inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus -mx-0.5 size-3\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path> <path d=\"M12 5v14\"></path></svg>Add project</button></div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "no-projects"
+   },
+   "stateTarget": "button"
+  },
+  {
+   "name": "rename",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><input value=\"Create a file named approval-demo.txt\" aria-label=\"Thread title\" style=\"width:204px;display:block\" class=\"min-w-0 flex-1 rounded-sm border border-input bg-card px-1 text-sm font-medium text-card-foreground outline-none focus:border-foreground\"></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "rename"
+   },
+   "stateTarget": "input"
+  },
+  {
+   "name": "pill.warning",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"group/provider-update relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg text-2xs leading-4 font-medium transform-gpu will-change-transform bg-warning/12 text-warning group-has-[button[data-provider-update-main]:hover]/provider-update:bg-warning/18 translate-y-0 opacity-100\"><div class=\"pointer-events-none absolute inset-0 rounded-lg transition-colors\"></div><button type=\"button\" data-provider-update-main=\"\" class=\"relative z-[1] flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-download size-3.5 shrink-0\" aria-hidden=\"true\"><path d=\"M12 15V3\"></path> <path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"></path> <path d=\"m7 10 5 5 5-5\"></path></svg><span class=\"min-w-0 wrap-break-word\">Codex still needs an update</span></button><button type=\"button\" aria-label=\"Dismiss provider update notice\" class=\"relative z-[1] mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-70 outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x size-3.5 shrink-0\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path> <path d=\"m6 6 12 12\"></path></svg></button></div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "pill",
+    "tone": "warning",
+    "title": "Codex still needs an update"
+   }
+  },
+  {
+   "name": "pill.error",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"group/provider-update relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg text-2xs leading-4 font-medium transform-gpu will-change-transform bg-destructive/12 text-destructive group-has-[button[data-provider-update-main]:hover]/provider-update:bg-destructive/18 translate-y-0 opacity-100\"><div class=\"pointer-events-none absolute inset-0 rounded-lg transition-colors\"></div><button type=\"button\" data-provider-update-main=\"\" class=\"relative z-[1] flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-triangle-alert size-3.5 shrink-0\" aria-hidden=\"true\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"></path> <path d=\"M12 9v4\"></path> <path d=\"M12 17h.01\"></path></svg><span class=\"min-w-0 wrap-break-word\">Claude update failed</span></button><button type=\"button\" aria-label=\"Dismiss provider update notice\" class=\"relative z-[1] mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-70 outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x size-3.5 shrink-0\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path> <path d=\"m6 6 12 12\"></path></svg></button></div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "pill",
+    "tone": "error",
+    "title": "Claude update failed"
+   }
+  },
+  {
+   "name": "hover-card",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] dropdown-glass shadow-xl shadow-black/25 before:hidden max-w-80 wrap-anywhere whitespace-normal leading-snug text-left\"><div class=\"relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)]\"><div class=\"flex min-w-0 max-w-80 flex-col gap-2 px-1 py-2\"><div class=\"min-w-0 truncate text-xs leading-tight font-medium text-foreground\">Ship the sidebar virtualization</div><div class=\"grid gap-1.5 pl-0.5 text-xs text-muted-foreground\"><div class=\"flex min-w-0 items-center gap-2\"><span aria-hidden=\"true\" class=\"inline-flex shrink-0 items-center justify-center size-3\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-gray-600 dark:text-gray-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">CR</text></svg></span><div class=\"min-w-0 truncate text-foreground/75\">candywrapper</div></div><div class=\"flex min-w-0 items-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-server size-3 shrink-0 stroke-muted-foreground\" aria-hidden=\"true\"><rect width=\"20\" height=\"8\" x=\"2\" y=\"2\" rx=\"2\" ry=\"2\"></rect> <rect width=\"20\" height=\"8\" x=\"2\" y=\"14\" rx=\"2\" ry=\"2\"></rect> <line x1=\"6\" x2=\"6.01\" y1=\"6\" y2=\"6\"></line> <line x1=\"6\" x2=\"6.01\" y1=\"18\" y2=\"18\"></line></svg><div class=\"min-w-0 truncate text-foreground/75\">This device</div></div><div class=\"flex min-w-0 items-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-git-branch size-3 shrink-0 stroke-muted-foreground\" aria-hidden=\"true\"><path d=\"M15 6a9 9 0 0 0-9 9V3\"></path> <circle cx=\"18\" cy=\"6\" r=\"3\"></circle> <circle cx=\"6\" cy=\"18\" r=\"3\"></circle></svg><span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap flex\"><span class=\"min-w-0 truncate\">m3-skeleton</span></span></div><div class=\"flex min-w-0 items-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-terminal size-3 shrink-0 text-teal-600 dark:text-teal-300/90\" aria-hidden=\"true\"><path d=\"M12 19h8\"></path> <path d=\"m4 17 6-6-6-6\"></path></svg><div class=\"min-w-0 truncate text-foreground/75\">2 terminal processes running</div></div></div></div></div></div>",
+   "wrapperStyle": "display:inline-block",
+   "native": {
+    "kind": "hover-card"
+   }
+  },
+  {
+   "name": "ghost",
+   "html": "<div aria-hidden=\"true\" class=\"pointer-events-none flex max-w-72 items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-sm\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-messages-square size-4 shrink-0 text-secondary-label\" aria-hidden=\"true\"><path d=\"M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z\"></path> <path d=\"M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1\"></path></svg><span class=\"truncate\">Ship the sidebar virtualization</span></div>",
+   "wrapperStyle": "display:inline-block",
+   "native": {
+    "kind": "ghost",
+    "count": "1"
+   }
+  },
+  {
+   "name": "ghost.many",
+   "html": "<div aria-hidden=\"true\" class=\"pointer-events-none flex max-w-72 items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-sm\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-messages-square size-4 shrink-0 text-secondary-label\" aria-hidden=\"true\"><path d=\"M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z\"></path> <path d=\"M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1\"></path></svg><span class=\"truncate\">Port the timestamp formatter</span><span class=\"shrink-0 rounded-full bg-muted px-1.5 text-xs text-secondary-label\">+2</span></div>",
+   "wrapperStyle": "display:inline-block",
+   "native": {
+    "kind": "ghost",
+    "count": "3"
+   }
+  }
+ ]
+}

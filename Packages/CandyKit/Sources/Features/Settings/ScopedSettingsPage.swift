@@ -133,4 +133,29 @@ public enum ConfirmCopy {
         }
         return ("Confirm action", normalized.isEmpty ? "This action requires your confirmation." : normalized)
     }
+
+    /// `requestConfirmDialog(message, {variant})` as `ConfirmDialogHost` draws it: an alert dialog with
+    /// Cancel and Confirm. `done` gets true on Confirm, false on Cancel or Escape.
+    @MainActor @discardableResult
+    public static func present(_ message: String, destructive: Bool, in window: NSWindow,
+                               done: @escaping @MainActor (Bool) -> Void) -> ModalHost {
+        let copy = resolve(message)
+        let dialog = DialogView(kind: .alertDialog, title: copy.title, message: copy.description)
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Confirm", variant: destructive ? .destructive : .default)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        var answered = false
+        let answer: @MainActor (Bool) -> Void = { [weak host] yes in
+            guard !answered else { return }
+            answered = true
+            host?.close()
+            done(yes)
+        }
+        host.onDismiss = { answer(false) }
+        dialog.onClose = { answer(false) }
+        cancel.action = { answer(false) }
+        ok.action = { answer(true) }
+        return host
+    }
 }

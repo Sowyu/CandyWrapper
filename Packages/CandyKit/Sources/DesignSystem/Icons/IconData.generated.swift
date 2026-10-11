@@ -49,6 +49,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case clock
     case clock3
     case cloud
+    case cloudCog
     case cloudDownload
     case cloudUpload
     case code
@@ -82,6 +83,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case folderOpen
     case folderPlus
     case folderTree
+    case gamepad2
     case gauge
     case gitBranch
     case gitBranchPlus
@@ -135,6 +137,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case moreVertical
     case mousePointer2
     case mousePointerClick
+    case music
     case octagonAlert
     case package
     case packagePlus
@@ -163,6 +166,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case radioTower
     case redo2
     case refreshCw
+    case rocket
     case rotateCcw
     case rotateCw
     case route
@@ -176,6 +180,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case shield
     case shieldCheck
     case shieldQuestion
+    case shoppingBag
     case slidersHorizontal
     case smartphone
     case smilePlus
@@ -288,6 +293,7 @@ extension IconName {
         case .clock: return "clock"
         case .clock3: return "clock-3"
         case .cloud: return "cloud"
+        case .cloudCog: return "cloud-cog"
         case .cloudDownload: return "cloud-download"
         case .cloudUpload: return "cloud-upload"
         case .code: return "code"
@@ -321,6 +327,7 @@ extension IconName {
         case .folderOpen: return "folder-open"
         case .folderPlus: return "folder-plus"
         case .folderTree: return "folder-tree"
+        case .gamepad2: return "gamepad-2"
         case .gauge: return "gauge"
         case .gitBranch: return "git-branch"
         case .gitBranchPlus: return "git-branch-plus"
@@ -374,6 +381,7 @@ extension IconName {
         case .moreVertical: return "more-vertical"
         case .mousePointer2: return "mouse-pointer-2"
         case .mousePointerClick: return "mouse-pointer-click"
+        case .music: return "music"
         case .octagonAlert: return "octagon-alert"
         case .package: return "package"
         case .packagePlus: return "package-plus"
@@ -402,6 +410,7 @@ extension IconName {
         case .radioTower: return "radio-tower"
         case .redo2: return "redo-2"
         case .refreshCw: return "refresh-cw"
+        case .rocket: return "rocket"
         case .rotateCcw: return "rotate-ccw"
         case .rotateCw: return "rotate-cw"
         case .route: return "route"
@@ -415,6 +424,7 @@ extension IconName {
         case .shield: return "shield"
         case .shieldCheck: return "shield-check"
         case .shieldQuestion: return "shield-question"
+        case .shoppingBag: return "shopping-bag"
         case .slidersHorizontal: return "sliders-horizontal"
         case .smartphone: return "smartphone"
         case .smilePlus: return "smile-plus"
@@ -754,6 +764,18 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z")),
             ])
+        case .cloudCog:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "m10.852 19.772-.383.924")),
+                IconElement(.path(d: "m13.148 14.228.383-.923")),
+                IconElement(.path(d: "M13.148 19.772a3 3 0 1 0-2.296-5.544l-.383-.923")),
+                IconElement(.path(d: "m13.53 20.696-.382-.924a3 3 0 1 1-2.296-5.544")),
+                IconElement(.path(d: "m14.772 15.852.923-.383")),
+                IconElement(.path(d: "m14.772 18.148.923.383")),
+                IconElement(.path(d: "M4.2 15.1a7 7 0 1 1 9.93-9.858A7 7 0 0 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.2")),
+                IconElement(.path(d: "m9.228 15.852-.923-.383")),
+                IconElement(.path(d: "m9.228 18.148-.923.383")),
+            ])
         case .cloudDownload:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M12 13v8l-4-4")),
@@ -968,6 +990,14 @@ extension IconName {
                 IconElement(.path(d: "M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z")),
                 IconElement(.path(d: "M3 5a2 2 0 0 0 2 2h3")),
                 IconElement(.path(d: "M3 3v13a2 2 0 0 0 2 2h3")),
+            ])
+        case .gamepad2:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.line(x1: 6, y1: 11, x2: 10, y2: 11)),
+                IconElement(.line(x1: 8, y1: 9, x2: 8, y2: 13)),
+                IconElement(.line(x1: 15, y1: 12, x2: 15.01, y2: 12)),
+                IconElement(.line(x1: 18, y1: 10, x2: 18.01, y2: 10)),
+                IconElement(.path(d: "M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z")),
             ])
         case .gauge:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -1319,6 +1349,12 @@ extension IconName {
                 IconElement(.path(d: "M7.2 2.2 8 5.1")),
                 IconElement(.path(d: "M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z")),
             ])
+        case .music:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M9 18V5l12-2v13")),
+                IconElement(.circle(cx: 6, cy: 18, r: 3)),
+                IconElement(.circle(cx: 18, cy: 16, r: 3)),
+            ])
         case .octagonAlert:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M12 16h.01")),
@@ -1498,6 +1534,13 @@ extension IconName {
                 IconElement(.path(d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16")),
                 IconElement(.path(d: "M8 16H3v5")),
             ])
+        case .rocket:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z")),
+                IconElement(.path(d: "m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z")),
+                IconElement(.path(d: "M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0")),
+                IconElement(.path(d: "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5")),
+            ])
         case .rotateCcw:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8")),
@@ -1571,6 +1614,12 @@ extension IconName {
                 IconElement(.path(d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z")),
                 IconElement(.path(d: "M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3")),
                 IconElement(.path(d: "M12 17h.01")),
+            ])
+        case .shoppingBag:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M16 10a4 4 0 0 1-8 0")),
+                IconElement(.path(d: "M3.103 6.034h17.794")),
+                IconElement(.path(d: "M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z")),
             ])
         case .slidersHorizontal:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

@@ -32,6 +32,10 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var isPinned: Bool
     public var recedes: Bool
     public var isActive: Bool
+    /// In the multi-selection (`bg-sidebar-row-selected`, Sidebar.tsx:1587-1588).
+    public var isSelected = false
+    /// The title is the inline rename field (Sidebar.tsx:1650-1663).
+    public var isRenaming = false
     public var isRegeneratingTitle: Bool
     /// Relative time, or the settled time on the settled shelf.
     public var timeLabel: String
@@ -42,6 +46,11 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var providerIcon: String
     /// `EnvironmentMachineKind` of a thread on another environment, nil on the primary one (Sidebar.tsx:1370-1375, 2196-2205).
     public var environmentMachine: String? = nil
+    /// A scratch-project thread's machine label on line 3, when projects span environments and the
+    /// thread has no branch (`scratchMachineLabelFor`, Sidebar.tsx:1375, 2167-2180).
+    public var scratchMachineLabel: String? = nil
+    /// The machine kind drawn before `scratchMachineLabel`.
+    public var scratchMachine: String? = nil
     /// `canSnooze`: the snooze button shows only where the server would accept it (Sidebar.tsx:1540-1545).
     public var canSnooze = true
     /// Terminals of this thread running a subprocess (`useThreadRunningTerminalIds`); above 0 shows
@@ -69,7 +78,7 @@ public struct SidebarRowModel: Equatable, Sendable {
     }
 }
 
-public enum SidebarShelf: String, Sendable { case snoozed, settled }
+public enum SidebarShelf: String, Sendable { case working, snoozed, settled }
 
 /// The environments the merged shell spans: the primary (this machine), labels and machine kinds
 /// (Sidebar.tsx `primaryEnvironmentId`, `environmentLabelById`, `useEnvironmentMachines`). Thread and
@@ -166,6 +175,8 @@ public enum SidebarItem: Equatable, Sendable {
     /// The centered status line: "No threads found" while searching (Sidebar.tsx:5202-5209), or the
     /// list's empty state (Sidebar.tsx:5548-5575).
     case emptyText(String, search: Bool)
+    /// "No projects yet" with its Add project button (Sidebar.tsx:5556-5569).
+    case noProjects
 
     public var key: String {
         switch self {
@@ -175,7 +186,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .draft(let d): "draft:\(d.id)"
         case .draftDivider: "draft-divider"
         case .searchResult(let r): "search:\(r.id.rawValue)"
-        case .emptyText: "empty"
+        case .emptyText, .noProjects: "empty"
         }
     }
 
@@ -189,10 +200,11 @@ public enum SidebarItem: Equatable, Sendable {
         case .draftDivider: .divider
         case .searchResult: .searchResult
         case .emptyText: .emptyText
+        case .noProjects: .noProjects
         }
     }
 
-    enum Kind: CaseIterable { case card, slim, shelf, showMore, draft, divider, searchResult, emptyText }
+    enum Kind: CaseIterable { case card, slim, shelf, showMore, draft, divider, searchResult, emptyText, noProjects }
 
     /// Rows the keyboard can land on.
     var isFocusable: Bool { kind != .divider && kind != .emptyText }
@@ -208,6 +220,8 @@ public enum SidebarItem: Equatable, Sendable {
         // `min-h-9 py-1`: a 20pt title line, plus a 16pt excerpt line when the server matched a message.
         case .searchResult(let r): r.match == nil ? 36 : 44
         case .emptyText: 64 // `py-6`, one text-xs line
+        // `py-6 gap-2`: the line, then the `py-1 text-2xs` bordered button (16 + 8 + 2).
+        case .noProjects: 24 + 16 + 8 + 26 + 24
         }
     }
 }
@@ -218,6 +232,11 @@ public struct SidebarListState: Equatable, Sendable {
     public var activeThreadId: ThreadId?
     public var snoozedExpanded = false
     public var settledExpanded = false
+    /// The Working beta shelf (`sidebarWorkingShelfEnabled`) and whether it is open (collapsed by default).
+    public var workingShelfEnabled = false
+    public var workingExpanded = false
+    /// When this client saw threads leave the Working shelf; the inbox orders by it. Not compared.
+    public var inboxReturns: SidebarInboxReturnTracker?
     /// `SETTLED_TAIL_INITIAL_COUNT` then `+ SETTLED_TAIL_PAGE_COUNT` per "Show more".
     public var settledVisibleCount = SidebarListBuilder.settledInitialCount
     public var scopedProjectIds: Set<ProjectId>?
@@ -233,6 +252,14 @@ public struct SidebarListState: Equatable, Sendable {
     public var environments = SidebarEnvironments()
     /// Scoped thread id to its terminals running a subprocess, from `subscribeTerminalMetadata`.
     public var terminalProcesses: [ThreadId: Int] = [:]
+    /// `useThreadSelectionStore.selectedThreadKeys`: Cmd-click and Shift-click selection.
+    public var selectedThreadIds: Set<ThreadId> = []
+    /// `renamingThreadKey`.
+    public var renamingThreadId: ThreadId?
+    /// Each environment's scratch folder (`ServerConfig.scratchWorkspaceRoot`), normalized.
+    public var scratchRoots: [String: String] = [:]
+    /// `selectProjectGroupingSettings` (the Project grouping setting and its per-project overrides).
+    public var grouping = SidebarModel.ProjectGrouping.current
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -243,7 +270,9 @@ public struct SidebarListState: Equatable, Sendable {
             && a.projectScopeKey == b.projectScopeKey && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
-            && a.terminalProcesses == b.terminalProcesses
+            && a.terminalProcesses == b.terminalProcesses && a.selectedThreadIds == b.selectedThreadIds
+            && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
+            && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
     }
 }
 
@@ -260,10 +289,13 @@ public enum SidebarListBuilder {
         var scopedGroup: SidebarModel.ProjectGroup?
         var scopedIds: Set<ProjectId>?
         var shelves: SidebarModel.Shelves
+        /// `projectGroupsSpanEnvironments`: scratch rows name their machine only then.
+        var spansEnvironments = false
 
         init(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) {
-            let groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId)
+            let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId)
             self.groups = groups
+            spansEnvironments = SidebarEnvironments.span(groups)
             for group in groups { for id in group.memberProjectIds { groupByProject[id] = group } }
             for p in snapshot.projects { projectById[p.id] = p }
             let scoped = state.projectScopeKey.flatMap { key in groups.first { $0.key == key } }
@@ -271,7 +303,9 @@ public enum SidebarListBuilder {
             let scopedIds = scoped.map { Set($0.memberProjectIds) } ?? state.scopedProjectIds
             self.scopedIds = scopedIds
             let threads = snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(SidebarThread.init)
-            shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs)
+            let returns = state.inboxReturns
+            shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
+                                                workingShelf: state.workingShelfEnabled, returnedAt: { returns?.returnedAt($0) })
         }
     }
 
@@ -293,9 +327,8 @@ public enum SidebarListBuilder {
         var items = threadItems(ctx, state: state, nowMs: nowMs)
         if !drafts.isEmpty { items = drafts.map(SidebarItem.draft) + [.draftDivider] + items }
         if items.isEmpty {
-            let text = snapshot.projects.isEmpty ? "No projects yet"
-                : ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
-            // ponytail: the "No projects yet" state lacks its Add project button; the header's button does the same
+            if snapshot.projects.isEmpty { return [.noProjects] }
+            let text = ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
             items = [.emptyText(text, search: false)]
         }
         return items
@@ -334,7 +367,7 @@ public enum SidebarListBuilder {
         let ctx = Context(snapshot: snapshot, state: state, nowMs: nowMs)
         let s = ctx.shelves
         let matchById = Dictionary(matches.map { ($0.threadId, $0) }, uniquingKeysWith: { first, _ in first })
-        let found = SidebarModel.searchSidebarThreads(s.pinned + s.active + s.snoozed + s.settled, query: query,
+        let found = SidebarModel.searchSidebarThreads(s.pinned + s.active + s.working + s.snoozed + s.settled, query: query,
                                                       contentMatchIds: Set(matchById.keys))
         guard !found.isEmpty else {
             return [.emptyText(pending ? "Searching thread messages\u{2026}" : "No threads found", search: true)]
@@ -351,12 +384,24 @@ public enum SidebarListBuilder {
     static func threadItems(_ ctx: Context, state: SidebarListState, nowMs: Int64) -> [SidebarItem] {
         let shelves = ctx.shelves
         func row(_ t: SidebarThread, _ section: SidebarSection) -> SidebarItem {
-            .row(rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
-                          group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs))
+            var model = rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
+                                 group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs)
+            if ctx.spansEnvironments, t.shell.branch == nil, let env = t.id.environmentId,
+               let project = ctx.projectById[t.shell.projectId], isScratch(project, state: state) {
+                model.scratchMachineLabel = state.environments.labels[env]
+                model.scratchMachine = state.environments.machine(env)
+            }
+            return .row(model)
         }
         var items: [SidebarItem] = []
         items += shelves.pinned.map { row($0, .pinned) }
         items += shelves.active.map { row($0, .active) }
+        if !shelves.working.isEmpty {
+            let expanded = state.workingExpanded
+            items.append(.shelfHeader(.working, label: expanded ? "Working" : "Working (\(shelves.working.count))", expanded: expanded))
+            // Sending folds the open thread into the shelf; its row stays (Sidebar.tsx:3040-3055).
+            items += shelves.working.filter { expanded || $0.id == state.activeThreadId }.map { row($0, .working) }
+        }
         if !shelves.snoozed.isEmpty {
             let expanded = state.snoozedExpanded
             items.append(.shelfHeader(.snoozed, label: expanded ? "Snoozed" : "Snoozed (\(shelves.snoozed.count))", expanded: expanded))
@@ -382,11 +427,18 @@ public enum SidebarListBuilder {
         return items
     }
 
+    /// `isScratchProject`: the project sits at its environment's scratch folder.
+    public static func isScratch(_ project: ProjectShell, state: SidebarListState) -> Bool {
+        guard let env = project.id.environmentId, let root = state.scratchRoots[env] else { return false }
+        return SidebarModel.normalizeProjectPath(project.workspaceRoot) == root
+    }
+
     static func rowModel(_ t: SidebarThread, section: SidebarSection, project: ProjectShell?,
                          group: SidebarModel.ProjectGroup?, state: SidebarListState, nowMs: Int64) -> SidebarRowModel {
         let shell = t.shell
         let lastVisited = SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt, local: state.localVisits[shell.id])
         let isActive = shell.id == state.activeThreadId
+        let isSelected = state.selectedThreadIds.contains(shell.id)
         let isUnread = !isActive && SidebarModel.hasUnseenCompletion(latestRun: t.latestRun, lastVisitedAt: lastVisited)
         let isWoke = !isActive && SidebarModel.isWoke(t, lastVisitedAt: lastVisited, nowMs: nowMs)
         let status = SidebarModel.resolveSidebarThreadStatus(t)
@@ -406,13 +458,13 @@ public enum SidebarListBuilder {
             isGoal: shell.goal?.status == .active,
             isUnread: isUnread, isWoke: isWoke, isPinned: shell.pinnedAt != nil,
             recedes: SidebarModel.shouldRecedeSidebarThread(status: status, isUnread: isUnread, isWoke: isWoke,
-                                                            isActive: isActive, isSelected: false),
-            isActive: isActive, isRegeneratingTitle: shell.titleRegeneration != nil,
+                                                            isActive: isActive, isSelected: isSelected),
+            isActive: isActive, isSelected: isSelected, isRenaming: state.renamingThreadId == shell.id,
+            isRegeneratingTitle: shell.titleRegeneration != nil,
             timeLabel: SidebarModel.threadTimeLabel(t, section: section, nowMs: nowMs),
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
             providerIcon: providerDriver(shell.runtimeInstanceId),
-            // ponytail: no scratch-project machine label on line 3 (Sidebar.tsx:1375); add with scratch projects
             environmentMachine: state.environments.rowMachine(shell.id),
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
