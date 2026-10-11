@@ -80,9 +80,9 @@ Bundle size: 366 MB, of which `Frameworks` (Electron) is 239 MB and `Resources` 
 | Energy Impact idle | ~0 | 2.40 app processes; server 1.63, resource monitor 1.28 | 0.00 app; server 3.03 |
 | Energy Impact streaming | < 1/5 of official | 103.5 and 66.7 app processes (mean 85.1); server 72.9 and 29.6; Claude provider 154 and 93 | 16.9 and 13.2 app (mean 15.1, 0.18 of official); server 57.6 and 47.7; Claude provider 139 and 124 |
 | RAM fresh launch | < 80 MB | 469 MB app processes, idle on a thread; server 140 MB | 41.3 MB app, idle on a thread; server 195 MB |
-| RAM, 50 threads + 2,000-message thread | < 200 MB | 500 MB app processes as opened (last 20 messages); 461 MB with all 2,000 loaded | 71 MB as opened; 153 MB right after paging in all 2,000, 90 MB 30 s later; lifetime peak 246 MB during the paging scroll |
+| RAM, 50 threads + 2,000-message thread | < 200 MB | 500 MB app processes as opened (last 20 messages); 461 MB with all 2,000 loaded | 71 MB as opened; 153 MB right after paging in all 2,000, 90 MB 30 s later; lifetime peak 246 MB during the paging scroll; 148 MB at v0.1.2 (scrollpeak, same scenario) |
 | Scrolling 2,000 messages | 120 fps, no frame > 16 ms | 60 Hz: 1 of 912 frame gaps over 16.7 ms (one 50 ms gap) | 60 Hz: 0 of 1,095 frame gaps over 16.7 ms, longest 16.7 ms |
-| Keypress to glyph | < 16 ms | 37.8 ms median, end to end on screen | 37.8 and 38.4 ms median end to end; a bare `NSTextView` measures 29 to 30 ms the same way |
+| Keypress to glyph | < 16 ms | 37.8 ms median, end to end on screen | 37.8 and 38.4 ms median end to end; a bare `NSTextView` measures 29 to 30 ms the same way; at v0.1.2 keyDown to commit is 2.1 ms against 2.5 ms for a bare `NSTextView` (keystroke task) |
 | Bundle size (no server runtime, no fonts) | < 25 MB | 365 MB total; Electron 239 MB, server bundle 59 MB | 21.9 MB (24.3 MB shipped with the 2.4 MB Nerd Font TTF; stripped binary 19.6 MB) |
 
 Numbers from 2026-10-11 ("Milestone 8 side by side" below): the same seeded home (50 threads, one 2,000-message thread) for both clients, the official app at 0.0.46-nightly.20261009.2861 and CandyWrapper at 0209d52 in Release (-Osize), screen at 2x and 60 Hz.
