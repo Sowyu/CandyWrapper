@@ -242,9 +242,11 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.isHidden = isEmpty
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
+        // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
+        markdown.diagramsEnabled = !m.streaming
         markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text))
         meta.isHidden = !showMeta
-        meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now())
+        meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected))
         needsLayout = true
     }
 
@@ -275,11 +277,14 @@ final class AssistantMessageRowView: TimelineRowView {
     override func hoverChanged() { Self.reveal([meta], hovered) }
 }
 
-/// `AssistantMessageMeta` (:2860-2912): status pill, copy button, time; `gap-2`, `text-xs`.
+/// `AssistantMessageMeta` (:2860-2912): status pill, copy button, fork button, time; `gap-2`, `text-xs`.
 final class AssistantMetaContent: DSView {
     private let pill = FillView()
     private let pillLabel = LabelView("", font: DSFont.mono(10), color: TL.c(\.mutedForeground))
     private let copyButton = Features.copyButton()
+    /// `AssistantForkButton` (:2795-2838): `xs ghost`, a 12pt git-fork, "Fork from this response".
+    private let forkButton = ButtonView(nil, icon: .gitFork, variant: .ghost, size: .xs)
+    private var fork: (() -> Void)?
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private var text = ""
 
@@ -291,6 +296,17 @@ final class AssistantMetaContent: DSView {
         pillLabel.lineHeight = 14
         pill.addSubview(pillLabel)
         addSubview(copyButton)
+        forkButton.iconSize = 12
+        forkButton.setAccessibilityLabel("Fork from this response")
+        _ = TooltipController.attach(to: forkButton, text: "Fork from this response", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        forkButton.action = { [weak self] in
+            guard let self, let fork = self.fork else { return }
+            // `disabled={busy}` until the fork settles; the row is rebuilt after it.
+            self.forkButton.isEnabled = false
+            fork()
+        }
+        forkButton.isHidden = true
+        addSubview(forkButton)
         time.lineHeight = 16
         addSubview(time)
         copyButton.action = { [weak self] in
@@ -299,7 +315,10 @@ final class AssistantMetaContent: DSView {
         }
     }
 
-    func configure(_ m: ChatMessage, projected: ProjectedTurnItem?, showCopy: Bool, streaming: Bool, now: Date) {
+    func configure(_ m: ChatMessage, projected: ProjectedTurnItem?, showCopy: Bool, streaming: Bool, now: Date, fork: (() -> Void)? = nil) {
+        self.fork = fork
+        forkButton.isHidden = fork == nil
+        forkButton.isEnabled = true
         text = m.text
         let status = projected?.item.status.rawValue
         pill.isHidden = status == nil || status == "completed"
@@ -324,6 +343,11 @@ final class AssistantMetaContent: DSView {
             copyButton.frame = NSRect(x: x, y: 0, width: size.width, height: 24)
             x += size.width + 8
         }
+        if !forkButton.isHidden {
+            let size = forkButton.intrinsicContentSize
+            forkButton.frame = NSRect(x: x, y: 0, width: size.width, height: 24)
+            x += size.width + 8
+        }
         time.frame = NSRect(x: x, y: 4, width: ceil(time.textWidth) + 1, height: 16)
     }
 }
@@ -340,7 +364,7 @@ final class AssistantMetaRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .assistantMeta(let m, let projected, let showCopy, let streaming) = item.row.kind else { return }
-        meta.configure(m, projected: projected, showCopy: showCopy, streaming: streaming, now: context.now())
+        meta.configure(m, projected: projected, showCopy: showCopy, streaming: streaming, now: context.now(), fork: context.forkAction(projected))
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 2 + 24 + 16 }

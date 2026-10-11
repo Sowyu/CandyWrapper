@@ -425,6 +425,8 @@ public final class ThreadDetailsCardView: DSView {
     /// Tasks bound to the thread (`ThreadAutomationsPanel`), separated by `border-t border-border/65`.
     public let automations = ThreadAutomationsView()
     private let automationsDivider = CALayer()
+    /// Related threads and subagents (`ThreadRelationshipsPanel`), the last section; it draws its own rule.
+    public let lineage = ThreadLineageSectionView()
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -435,6 +437,8 @@ public final class ThreadDetailsCardView: DSView {
         automationsDivider.actions = divider.actions
         layer?.addSublayer(automationsDivider)
         addSubview(automations)
+        addSubview(lineage)
+        lineage.onResize = { [weak self] in self?.relayout() }
         runContext.setAccessibilityLabel("Run context")
         branch.icons = [IconName.gitBranch.definition]
         branch.middleTruncates = true
@@ -474,6 +478,7 @@ public final class ThreadDetailsCardView: DSView {
             h += 1 + 8 + 10 + rows.reduce(0) { $0 + ($1 === gitActions ? gitActions.preferredHeight : 32) }
         }
         if !automations.isEmpty { h += 1 + automations.preferredHeight }
+        h += lineage.preferredHeight
         return h
     }
 
@@ -500,7 +505,10 @@ public final class ThreadDetailsCardView: DSView {
             row.frame = NSRect(x: 9, y: y, width: inner, height: h)
             y += h
         }
-        y = automations.isEmpty ? y : preferredHeight - 1 - automations.preferredHeight
+        let lineageHeight = lineage.preferredHeight
+        lineage.isHidden = lineage.isEmpty
+        lineage.frame = NSRect(x: 1, y: preferredHeight - lineageHeight, width: bounds.width - 2, height: lineageHeight)
+        y = automations.isEmpty ? y : preferredHeight - lineageHeight - 1 - automations.preferredHeight
         automations.isHidden = automations.isEmpty
         automationsDivider.isHidden = automations.isEmpty
         automationsDivider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)

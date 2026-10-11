@@ -49,6 +49,10 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         /// fork, handoff, interrupt result, secret request, subagent (grouped), created-thread summary.
         case event(ProjectedTurnItem, subagents: [ProjectedTurnItem]?, resourceSummary: Bool)
         case proposedPlan(ProposedPlan)
+        /// An agent's HTML page (`html-render`).
+        case htmlRender(HtmlRenderReference)
+        /// An MCP App (`mcp-app`).
+        case mcpApp(McpAppEntry)
     }
 
     public struct WorkToggle: Sendable, Hashable {
@@ -230,6 +234,7 @@ public enum TimelineRows {
         case .proposedPlan(let p): p.runId
         case .work(let w): w.runId
         case .event: nil
+        case .htmlRender(_, let run), .mcpApp(_, let run): run
         }
     }
 
@@ -285,7 +290,7 @@ public enum TimelineRows {
         case .message(let m, _): return m.role == .assistant ? (m.runId ?? runlessKey) : nil
         case .event(let row):
             return entry.isPersistentResourceCard || row.item.type == .subagent ? (row.item.runId ?? runlessKey) : nil
-        case .proposedPlan: return nil
+        case .proposedPlan, .htmlRender, .mcpApp: return nil
         }
     }
 
@@ -355,7 +360,7 @@ public enum TimelineRows {
         var byAttempt: [RunAttemptId: [TimelineEntry]] = [:]
         for entry in entries {
             guard let attempt = entry.attempt, attempt.status == "superseded", !unfoldedRunIds.contains(attempt.runId),
-                entry.message?.role != .user, !entry.isPersistentResourceCard, !liveSubagentEntryIds.contains(entry.id),
+                entry.message?.role != .user, !entry.isPersistentResourceCard, !entry.isWebContent, !liveSubagentEntryIds.contains(entry.id),
                 entry.work?.itemType != .systemNotice
             else { continue }
             if byAttempt[attempt.id] == nil { order.append(attempt.id) }
@@ -672,6 +677,12 @@ public enum TimelineRows {
 
             case .proposedPlan(let plan):
                 rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .proposedPlan(plan)))
+
+            case .htmlRender(let page, _):
+                rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .htmlRender(page)))
+
+            case .mcpApp(let app, _):
+                rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .mcpApp(app)))
 
             case .event(let row):
                 // Adjacent subagent cards from one run and provider turn merge into one row.

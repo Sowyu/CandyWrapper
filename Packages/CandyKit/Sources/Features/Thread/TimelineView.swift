@@ -28,7 +28,7 @@ public final class TimelineView: DSView {
     /// Distance from the top that asks for older history.
     static let nearTop: CGFloat = 600
 
-    enum Kind: Hashable { case user, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event }
+    enum Kind: Hashable { case user, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, secret, htmlRender, mcpApp }
 
     let context = TimelineContext()
     let scrollView = NSScrollView()
@@ -50,8 +50,43 @@ public final class TimelineView: DSView {
     private var tiling = false
     private var retile = false
 
-    /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem).
+    /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem), under the header view if any.
     public var topInset: CGFloat = 24 { didSet { if topInset != oldValue { relayout() } } }
+    /// A view above the rows in the lane (the list header's "Subagent of" divider, MessagesTimeline.tsx:1409-1437),
+    /// `headerHeight` tall, before the 24pt spacer.
+    public func setHeader(_ view: NSView?, height: CGFloat) {
+        if header !== view {
+            header?.removeFromSuperview()
+            header = view
+            if let view { document.addSubview(view) }
+        }
+        headerHeight = view == nil ? 0 : height
+        topInset = 24 + headerHeight
+        layoutHeader()
+    }
+    private var header: NSView?
+    private var headerHeight: CGFloat = 0
+    /// A view after the last row (the list footer: `ThreadStatusLine`, ChatView.tsx:7613-7646, 11410).
+    public func setFooter(_ view: NSView?, height: CGFloat) {
+        if footerView !== view {
+            footerView?.removeFromSuperview()
+            footerView = view
+            if let view { document.addSubview(view) }
+        }
+        let h = view == nil ? 0 : height
+        guard h != footerHeight else { return }
+        footerHeight = h
+        let anchor = captureAnchor()
+        recomputeTops()
+        restore(anchor)
+        tile()
+    }
+    private var footerView: NSView?
+    private var footerHeight: CGFloat = 0
+    private func layoutHeader() {
+        let lane = laneFrame
+        header?.frame = NSRect(x: TL.snap(lane.x), y: 0, width: lane.width, height: headerHeight)
+    }
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
     public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
     /// True while the viewport is at the end; new content then keeps it there.
@@ -88,6 +123,25 @@ public final class TimelineView: DSView {
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("timestampFormat") { self?.reconfigureVisible() }
         }
+        // A Mermaid diagram finished or toggled: the messages with diagrams measure again (their Markdown views
+        // drop their own layouts first, so this waits a turn of the run loop).
+        diagramObserver = NotificationCenter.default.addObserver(forName: MermaidDiagrams.didRender, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasureDiagrams() } }
+        }
+    }
+
+    private var diagramObserver: NSObjectProtocol?
+
+    private func remeasureDiagrams() {
+        var changed = false
+        for item in items {
+            guard let text = item.row.message?.text, text.contains("mermaid"), measured.removeValue(forKey: item.id) != nil else { continue }
+            changed = true
+        }
+        guard changed else { return }
+        for view in visible.values { if let item = view.item, item.row.message?.text.contains("mermaid") == true { view.configure(item); view.needsLayout = true } }
+        heights = items.map { height(of: $0) }
+        relayout()
     }
 
     /// Configures the visible rows again with the same items.
@@ -208,6 +262,8 @@ public final class TimelineView: DSView {
         case .attemptFold: return 42
         case .contextCompaction: return 40
         case .event: return 48
+        case .htmlRender(let page): return CGFloat(page.frameHeight(width: Double(max(0, width - 8)), contentHeight: item.ui.webContentHeight)) + 8
+        case .mcpApp: return CGFloat(item.ui.webContentHeight ?? McpAppReference.defaultHeight) + 8
         }
     }
 
@@ -221,7 +277,8 @@ public final class TimelineView: DSView {
             tops.append(y)
             y += h
         }
-        let height = y + Self.footer + bottomInset
+        footerView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y, width: laneFrame.width, height: footerHeight)
+        let height = y + footerHeight + Self.footer + bottomInset
         if document.frame.height != height || document.frame.width != scrollView.contentSize.width {
             adjusting = true
             document.setFrameSize(NSSize(width: scrollView.contentSize.width, height: height))
@@ -302,6 +359,7 @@ public final class TimelineView: DSView {
         }
         tile(relayoutAll: true)
         layoutPill()
+        layoutHeader()
     }
 
     private func relayout() {
@@ -417,7 +475,9 @@ public final class TimelineView: DSView {
         case .turnFold: .turnFold
         case .attemptFold: .attemptFold
         case .contextCompaction: .compaction
-        case .event: .event
+        case .event(let p, _, _): p.item.type == .secretRequest ? .secret : .event
+        case .htmlRender: .htmlRender
+        case .mcpApp: .mcpApp
         }
     }
 
@@ -442,6 +502,9 @@ public final class TimelineView: DSView {
         case .attemptFold: AttemptFoldRowView()
         case .compaction: CompactionRowView()
         case .event: EventRowView()
+        case .secret: SecretRequestRowView()
+        case .htmlRender: HtmlRenderRowView()
+        case .mcpApp: McpAppRowView()
         }
         view.context = context
         view.kind = kind
@@ -533,7 +596,7 @@ public final class TimelineView: DSView {
         var problems: [String] = []
         let lane = laneFrame
         if Set(items.map(\.id)).count != items.count { problems.append("duplicate row ids") }
-        let expectedHeight = topInset + heights.reduce(0, +) + Self.footer + bottomInset
+        let expectedHeight = topInset + heights.reduce(0, +) + footerHeight + Self.footer + bottomInset
         if abs(document.frame.height - expectedHeight) > 0.01 { problems.append("document height \(document.frame.height), rows say \(expectedHeight)") }
         let pooled = Set(pools.values.flatMap { $0 }.map(ObjectIdentifier.init))
         var placed: [(String, NSRect)] = []

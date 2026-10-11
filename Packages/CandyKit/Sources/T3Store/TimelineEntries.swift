@@ -71,9 +71,6 @@ public struct TimelineAttempt: Sendable, Hashable {
 }
 
 /// `TimelineEntry` (session-logic.ts:123-169), the output of pass 1.
-///
-/// Skipped: the `html-render` and `mcp-app` kinds. They need a web view, so their completed
-/// `dynamic_tool` calls stay ordinary work entries until that milestone.
 public struct TimelineEntry: Sendable, Hashable, Identifiable {
     public enum Kind: Sendable, Hashable {
         case message(ChatMessage, projectedItem: ProjectedTurnItem?)
@@ -81,6 +78,10 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
         case work(WorkLogEntry)
         /// fork, handoff, run interrupt request and result, secret request, subagent.
         case event(ProjectedTurnItem)
+        /// A completed `html_render` call: the page shows in the thread (session-logic.ts:717-731).
+        case htmlRender(HtmlRenderReference, runId: RunId?)
+        /// A completed tool call that carries an MCP App (session-logic.ts:733-749).
+        case mcpApp(McpAppEntry, runId: RunId?)
     }
 
     public var id: String
@@ -106,6 +107,13 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
     public var message: ChatMessage? { if case .message(let m, _) = kind { return m }; return nil }
     public var work: WorkLogEntry? { if case .work(let e) = kind { return e }; return nil }
     public var eventItem: ProjectedTurnItem? { if case .event(let p) = kind { return p }; return nil }
+    /// A published page or app: it stays visible when its turn or attempt folds.
+    public var isWebContent: Bool {
+        switch kind {
+        case .htmlRender, .mcpApp: true
+        default: false
+        }
+    }
 
     /// `timelineEntryIsPersistentResourceCard` (session-logic.ts:338-349): fork, created thread
     /// and secret request events never fold.
@@ -227,6 +235,12 @@ public enum TimelineEntries {
                 id: planId, runId: item.runId, planMarkdown: item.string("markdown") ?? "",
                 status: plan?.kind == "proposed_plan" ? plan!.status : "active", createdAt: createdAt, updatedAt: item.updatedAt)
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .proposedPlan(proposed), attempt: attempt)
+        case .dynamicTool where ThreadWebContent.htmlRender(item) != nil:
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .htmlRender(ThreadWebContent.htmlRender(item)!, runId: item.runId), attempt: attempt)
+        case .dynamicTool where ThreadWebContent.mcpApp(item) != nil:
+            let app = McpAppEntry(app: ThreadWebContent.mcpApp(item)!, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId,
+                                  revision: TurnItemDetail.revision(item))
+            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .mcpApp(app, runId: item.runId), attempt: attempt)
         case _ where standaloneEventTypes.contains(item.type):
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .event(row), attempt: attempt)
         default:

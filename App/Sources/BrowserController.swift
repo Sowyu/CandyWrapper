@@ -597,6 +597,9 @@ final class BrowserController {
     /// `createBrowserSurface`: a new server tab, then the panel shows it.
     private func createTab() { openTab(url: nil) }
 
+    /// A new server tab at `url` (an HTML render's "Open in panel").
+    func openURL(_ url: String) { openTab(url: url) }
+
     private func openTab(url: String?) {
         guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
         Task { [weak self] in

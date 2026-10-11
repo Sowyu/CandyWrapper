@@ -17,6 +17,28 @@ struct TimelineRowUI: Hashable {
     var folderOverrides: [String: Bool] = [:]
     /// Fetched output of this row's open entries whose output the stream left out.
     var outputs: [String: ToolOutputState] = [:]
+    /// A secret request's answer in flight, and the error of the last one.
+    var secretSubmitting = false
+    var secretError: String?
+    /// The height an HTML render or MCP App reported for itself, in points.
+    var webContentHeight: Double?
+    /// An MCP App asked to be closed; the row shows "Show app".
+    var appClosed = false
+}
+
+/// What MCP App rows ask of the environment (McpAppFrame.tsx: `mcpAppEnvironment`, `useTurnItemDetail`).
+public struct McpAppActions {
+    /// One RPC on the thread's environment (`mcpApps.callTool`, `toolInfo`, `readResource`, `updateModelContext`).
+    public var request: @MainActor (String, JSONValue) async throws -> JSONValue
+    /// The stored tool item (`orchestration.getTurnItem`): the wire timeline omits its input and output.
+    public var turnItem: @MainActor (ThreadId, TurnItemId) async -> JSONValue?
+    /// Sends a chat message from the app, or nil when messages are not available here.
+    public var sendMessage: (@MainActor (String) async throws -> Void)?
+    public init(request: @escaping @MainActor (String, JSONValue) async throws -> JSONValue,
+                turnItem: @escaping @MainActor (ThreadId, TurnItemId) async -> JSONValue?,
+                sendMessage: (@MainActor (String) async throws -> Void)?) {
+        self.request = request; self.turnItem = turnItem; self.sendMessage = sendMessage
+    }
 }
 
 /// An omitted tool output while its row is open (V2ItemInspector.tsx:149-175).
@@ -69,6 +91,52 @@ public final class ThreadViewModel {
     var onChange: (@MainActor (TimelineChange) -> Void)?
     /// The changed files card asks for a run's diff, at a file (`onOpenTurnDiff`).
     public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
+    /// A signed URL for an attachment shown inline as HTML (`assets.createUrl`, `disposition: inline`).
+    public var webAssetURL: (@MainActor (_ attachmentId: String, _ fileName: String) async -> URL?)?
+    /// "Open in panel" on an HTML render: its URL and file name.
+    public var onOpenHtmlRender: (@MainActor (URL, String) -> Void)?
+    public var mcpApp: McpAppActions?
+    private var webContentHeights: [String: Double] = [:]
+    private var closedApps: Set<String> = []
+
+    /// A framed page or app reported its height; the row re-measures when it changed.
+    func setWebContentHeight(_ rowId: String, _ height: Double) {
+        guard webContentHeights[rowId] != height else { return }
+        webContentHeights[rowId] = height
+        refreshRow(rowId)
+    }
+
+    func setAppClosed(_ rowId: String, _ closed: Bool) {
+        guard closedApps.contains(rowId) != closed else { return }
+        if closed { closedApps.insert(rowId) } else { closedApps.remove(rowId) }
+        refreshRow(rowId)
+    }
+
+    /// `secrets.answerRequest` with the input; nil on success, else the message the card shows.
+    public var answerSecret: (@MainActor (JSONValue) async -> String?)?
+    private var secretStates: [String: (submitting: Bool, error: String?)] = [:]
+
+    /// Sends a secret request's answer; the row shows the progress and any error.
+    func answerSecretRequest(_ rowId: String, _ input: JSONValue) {
+        guard let answerSecret, secretStates[rowId]?.submitting != true else { return }
+        secretStates[rowId] = (true, nil)
+        refreshRow(rowId)
+        Task { [weak self] in
+            let failure = await answerSecret(input)
+            guard let self else { return }
+            self.secretStates[rowId] = failure.map { (false, $0) }
+            self.refreshRow(rowId)
+        }
+    }
+
+    private func refreshRow(_ id: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        items[i] = item(items[i].row)
+        onChange?(.rows([i]))
+    }
+
+    /// "Fork from this response" on an assistant message: its source thread (local id) and run.
+    public var onForkFromRun: (@MainActor (ThreadId, RunId) -> Void)?
 
     /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,
     /// tests) leaves omitted output unfetched.
@@ -228,6 +296,13 @@ public final class ThreadViewModel {
                 ui.folderOverrides = folderOverrides[run] ?? [:]
             }
         case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
+        case .event(let p, _, _) where p.item.type == .secretRequest:
+            if let state = secretStates[row.id] { ui.secretSubmitting = state.submitting; ui.secretError = state.error }
+        case .htmlRender:
+            ui.webContentHeight = webContentHeights[row.id]
+        case .mcpApp:
+            ui.webContentHeight = webContentHeights[row.id]
+            ui.appClosed = closedApps.contains(row.id)
         default: break
         }
         return TimelineItem(row: row, ui: ui)

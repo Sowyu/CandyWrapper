@@ -8,7 +8,7 @@ import DesignSystem
 // ponytail: one backing layer per message; a very long message gets a large layer. Switch to tiled drawing if memory shows it.
 public final class MarkdownView: DSView {
     public var document = MarkdownDocument(blocks: []) {
-        didSet { if document != oldValue { unwrappedCode = []; invalidate() } }
+        didSet { if document != oldValue { unwrappedCode = []; diagramCode = []; invalidate(); observeDiagrams() } }
     }
 
     /// Body text color; nil is T3's 80% foreground. Headings, links and code keep their own colors.
@@ -27,6 +27,14 @@ public final class MarkdownView: DSView {
     /// preview when one is available) and Cmd-click opens it in the preferred editor. Without a
     /// handler a click shows the chip's menu, as T3 does when no open action is available.
     public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
+
+    /// Mermaid fences render as diagrams once the response settles (false while it streams).
+    public var diagramsEnabled = true {
+        didSet { if diagramsEnabled != oldValue { invalidate() } }
+    }
+    private var diagramCode: Set<Int> = []
+    private var diagramObserver: NSObjectProtocol?
+    private var hasDiagrams: Bool { document.blocks.contains { if case .code(let l, _, _) = $0 { l.lowercased() == "mermaid" } else { false } } }
 
     /// Parses and shows `markdown`. User messages pass `preservesLineBreaks`.
     public func setMarkdown(_ markdown: String, preservesLineBreaks: Bool = false) {
@@ -62,10 +70,28 @@ public final class MarkdownView: DSView {
         needsDisplay = true
     }
 
+    /// Re-lays out when a diagram this message shows finished rendering.
+    private func observeDiagrams() {
+        guard hasDiagrams else {
+            if let diagramObserver { NotificationCenter.default.removeObserver(diagramObserver); self.diagramObserver = nil }
+            return
+        }
+        guard diagramObserver == nil else { return }
+        diagramObserver = NotificationCenter.default.addObserver(forName: MermaidDiagrams.didRender, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.invalidate() }
+        }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if hasDiagrams { invalidate() }
+    }
+
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
-        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd)
+        let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
+        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams)
         cache[width] = made
         return made
     }
@@ -102,6 +128,7 @@ public final class MarkdownView: DSView {
             let control = controls[i]
             button.isHidden = false
             button.frame = control.frame
+            if button.title != control.title { button.title = control.title }
             if copiedResets[i] == nil, button.icon != control.icon { button.icon = control.icon }
             if button.variant != control.variant { button.variant = control.variant }
             switch control.action {
@@ -111,6 +138,17 @@ public final class MarkdownView: DSView {
             case .toggleWrap(let index):
                 button.setAccessibilityLabel(unwrappedCode.contains(index) ? "Wrap lines" : "Disable line wrap")
                 button.action = { [weak self] in self?.toggleWrap(index) }
+            case .toggleDiagram(let index):
+                let label = diagramCode.contains(index) ? "Show diagram" : "Show code"
+                button.setAccessibilityLabel(label)
+                button.toolTip = label
+                button.action = { [weak self] in self?.toggleDiagram(index) }
+            case .retryDiagram(let code):
+                button.setAccessibilityLabel("Retry")
+                button.action = { [weak self] in
+                    guard let self else { return }
+                    MermaidDiagrams.shared.retry(code, dark: self.effectiveAppearance.isDark)
+                }
             case .toggleTable:
                 button.setAccessibilityLabel("Collapse table cells")
                 // ponytail: cells never truncate yet, so the toggle has nothing to collapse; wire it with cell truncation
@@ -195,6 +233,12 @@ public final class MarkdownView: DSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: reset)
     }
 
+    private func toggleDiagram(_ index: Int) {
+        if diagramCode.contains(index) { diagramCode.remove(index) } else { diagramCode.insert(index) }
+        invalidate()
+        NotificationCenter.default.post(name: MermaidDiagrams.didRender, object: nil)
+    }
+
     private func toggleWrap(_ index: Int) {
         if unwrappedCode.contains(index) { unwrappedCode.remove(index) } else { unwrappedCode.insert(index) }
         invalidate()
@@ -251,6 +295,14 @@ public final class MarkdownView: DSView {
                 ctx.saveGState()
                 ctx.clip(to: rect)
             case .endClip:
+                ctx.restoreGState()
+            case .image(let image, let rect):
+                // The view is flipped; CGImage draws bottom up.
+                ctx.saveGState()
+                ctx.translateBy(x: rect.minX, y: rect.maxY)
+                ctx.scaleBy(x: 1, y: -1)
+                ctx.interpolationQuality = .high
+                ctx.draw(image, in: CGRect(origin: .zero, size: rect.size))
                 ctx.restoreGState()
             }
         }

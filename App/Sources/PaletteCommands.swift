@@ -305,8 +305,7 @@ final class PaletteCommands {
                                         shortcutCommand: "chat.newWithoutProject",
                                         action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)))
         }
-        // ponytail: no "New thread without a project", "Find in current thread", PR, restart session,
-        // project search, New project, theme and project settings entries; each lands with its work package
+        // ponytail: no "Find in current thread", PR, theme and project settings entries; each lands with its work package
         if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread id", "reference"],
                                         title: target.title.hasPrefix("PR") ? "Copy PR link" : "Copy thread ID", description: target.value,

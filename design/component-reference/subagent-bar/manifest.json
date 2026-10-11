@@ -1,0 +1,14 @@
+{
+  "completed" : {
+    "height" : 48,
+    "width" : 640
+  },
+  "failed" : {
+    "height" : 48,
+    "width" : 640
+  },
+  "starting" : {
+    "height" : 48,
+    "width" : 640
+  }
+}
