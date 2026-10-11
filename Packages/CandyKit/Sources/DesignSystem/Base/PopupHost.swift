@@ -208,7 +208,7 @@ public final class OpenPopup {
     /// Tooltips never take keys and never close other popups.
     var isPassive = false
     /// Combobox: pressing the trigger (its input) leaves the popup open.
-    var keepsOpenOnTriggerPress = false
+    public var keepsOpenOnTriggerPress = false
     /// Child popups (submenus) close with their parent.
     weak var parent: OpenPopup?
     public internal(set) var result: PopupPositioner.Result?

@@ -22,7 +22,7 @@ public enum PopupSurface {
     /// `--popover-foreground` through the contrast layer.
     static var text: NSColor { Themed.color(\.contrastPopoverForeground) }
 
-    func box(radius: CGFloat = 10, beforeLine: Bool = false) -> BoxStyle {
+    public func box(radius: CGFloat = 10, beforeLine: Bool = false) -> BoxStyle {
         var box = BoxStyle()
         box.radius = radius
         switch self {

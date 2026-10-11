@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
     private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
+    private var updates: UpdateUI?
     private let codexAuth = CodexAuthCallbackReceiver()
     /// URLs that arrived before the window existed (a cold launch from a link).
     private var pendingURLs: [URL]? = []
@@ -159,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sidebar = SidebarContentView()
         // Development: `--fake-t3-connect` swaps T3 Connect's Clerk and relay for in-process fakes and keeps
         // saved environments in a temporary catalog (FakeT3Connect).
-        let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect")
+        let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect") || (Self.isTestBuild && UserDefaults.standard.bool(forKey: "CandyDevFakeConnect"))
         let environments = fakeConnect ? Environments(sidebar: sidebar, catalog: FakeT3Connect.catalog()) : Environments(sidebar: sidebar)
         self.environments = environments
         desktopManaged = DesktopManagedController(window: window, environments: environments)
@@ -197,6 +198,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             commands?.showThreadMenu(id, event: event, view: view, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
+        let updater = UpdateController()
+        updates = UpdateUI(updater: updater, window: window, pill: sidebar.updatePill, settings: settings,
+                           toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
+                           showWindow: { [weak window] in window?.makeKeyAndOrderFront(nil) })
+        if !Self.isPreview { updater.start() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)
         installNotifications(window: window, environments: environments, threads: threads, commands: commands, settings: settings)
@@ -483,7 +489,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         // A preview never connects, so it never starts or joins a server.
         if args.contains("--thread-preview") { return }
-        let servers = Self.developmentServers(args)
+        var servers = Self.developmentServers(args)
+        // A test build relaunched by its updater gets no arguments; its own defaults can name the server
+        // (`defaults write <test bundle id> CandyDevServer <url>`, and `CandyDevTokenFile <path>`).
+        if servers.isEmpty, Self.isTestBuild, let url = UserDefaults.standard.string(forKey: "CandyDevServer"),
+           let file = UserDefaults.standard.string(forKey: "CandyDevTokenFile") {
+            servers = Self.developmentServers(["--server", url, "--token-file", file])
+        }
         guard servers.isEmpty else {
             for (i, server) in servers.enumerated() { environments.addDevelopment(baseURL: server.url, token: server.token, primary: i == 0) }
             // Saved environments connect at launch whatever the primary is, as in T3.
@@ -533,6 +545,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc func checkForUpdates(_ sender: Any?) { updates?.menuCheck() }
+
+    /// Test builds carry their own bundle id (`dev.candywrapper.test.<task>`). Only they read the development
+    /// defaults that stand in for launch arguments, so a stray default can never redirect the shipped app.
+    static let isTestBuild = Bundle.main.bundleIdentifier?.hasPrefix("dev.candywrapper.test.") == true
+
     @objc func showGallery(_ sender: Any?) {
         if galleryWindow == nil {
             let window = NSWindow(
@@ -555,9 +573,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(appItem)
         // T3's menu template (apps/desktop/src/window/DesktopApplicationMenu.ts:166-245), the parts that
         // exist here.
-        // ponytail: no Check for Updates (app menu and Help); add them with packaging and updates (M9)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About CandyWrapper", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        // "Check for Updates..." after About (DesktopApplicationMenu.ts:169-172).
+        appMenu.addItem(withTitle: "Check for Updates...", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         // `Settings...` with CmdOrCtrl+, sends `open-settings` (DesktopApplicationMenu.ts:176-180).
         appMenu.addItem(withTitle: "Settings...", action: #selector(openSettings(_:)), keyEquivalent: ",")
@@ -621,6 +640,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         main.addItem(withTitle: "Window", action: nil, keyEquivalent: "").submenu = window
         NSApp.windowsMenu = window
+        // Help holds only "Check for Updates..." (DesktopApplicationMenu.ts:272-279).
+        let help = NSMenu(title: "Help")
+        help.addItem(withTitle: "Check for Updates...", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        main.addItem(withTitle: "Help", action: nil, keyEquivalent: "").submenu = help
+        NSApp.helpMenu = help
         return main
     }
 

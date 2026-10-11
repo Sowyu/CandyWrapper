@@ -17,6 +17,15 @@ public final class SettingsPageContext {
     public var serverKeybindings: [ResolvedKeybindingRule] = []
     public var keybindingsConfigPath: String?
     public var appVersion = ""
+    /// The app updater's state (`useDesktopUpdateState`) for the Version and Update track rows.
+    public var update: DesktopUpdateState?
+    /// `isUpdateActionPending` and `isChangingUpdateChannel` (SettingsPanels.tsx:282-283).
+    public var updateActionPending = false
+    public var changingUpdateTrack = false
+    /// The Version row's button: download, install (after the confirm) or check (SettingsPanels.tsx:323-391).
+    public var updateButton: (() -> Void)?
+    /// `bridge.setUpdateChannel` from the Update track select.
+    public var setUpdateTrack: ((DesktopUpdateState.Channel) -> Void)?
 
     public var setupSnapShot: (() -> Void)?
     public var snapShotReady: (() -> Bool)?

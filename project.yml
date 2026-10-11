@@ -18,6 +18,11 @@ settings:
 packages:
   CandyKit:
     path: Packages/CandyKit
+  # The updater (docs/research/m9-updater-2026-10-11.md). The app is not sandboxed, so the build drops
+  # Sparkle's XPC services below.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   CandyWrapper:
     type: application
@@ -38,18 +43,43 @@ targets:
         product: T3Store
       - package: CandyKit
         product: Features
+      - package: Sparkle
+    postBuildScripts:
+      # Sparkle's Installer and Downloader XPC services are for sandboxed apps only (B8), and the headers
+      # are build-time files. The embed phase already signed the framework, so it is signed again after
+      # the trim; the app's own signing comes after this phase. scripts/release re-signs all of it anyway.
+      - name: Trim Sparkle
+        basedOnDependencyAnalysis: false
+        script: |
+          f="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Sparkle.framework"
+          [ -d "$f" ] || exit 0
+          rm -rf "$f/Versions/B/XPCServices" "$f/XPCServices" "$f/Versions/B/Headers" "$f/Headers" \
+            "$f/Versions/B/PrivateHeaders" "$f/PrivateHeaders" "$f/Versions/B/Modules" "$f/Modules"
+          /usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --options runtime "$f/Versions/B"
     info:
       path: App/Resources/Info.plist
       properties:
         CFBundleDisplayName: CandyWrapper
-        CFBundleShortVersionString: "0.1.2"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSSupportsAutomaticGraphicsSwitching: true
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
         NSQuitAlwaysKeepsWindows: true
+        # Sparkle (B6, B7): one signed feed on the `appcast` release of Sowyu/CandyWrapper, checked hourly,
+        # nothing downloads until the user asks (T3's autoDownload false, DesktopUpdates.ts:933-934). An empty
+        # feed URL turns the updater off, as T3 does for development builds (DesktopUpdates.ts:258-273).
+        SUFeedURL: $(CANDY_UPDATE_FEED_URL)
+        SUPublicEDKey: $(CANDY_UPDATE_PUBLIC_KEY)
+        SURequireSignedFeed: true
+        SUVerifyUpdateBeforeExtraction: true
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 3600
+        SUAllowsAutomaticUpdates: false
+        SUAutomaticallyUpdate: false
+        SUEnableSystemProfiling: false
         # T3 registers `t3code` (ElectronProtocol.ts:15-24). Debug builds use their own scheme so a
         # development build never takes the user's real T3 links from LaunchServices.
         CFBundleURLTypes:
@@ -64,10 +94,18 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
+        CANDY_UPDATE_PUBLIC_KEY: "3lPqUDTLuxLA+rq4R0InFIoN6hun/6vy1ElXcGaTnqA="
       configs:
         Debug:
           ONLY_ACTIVE_ARCH: YES
           CANDY_URL_SCHEME: candywrapper-dev
+          # Off in development builds; a test build passes a local feed and a test key on the command line.
+          CANDY_UPDATE_FEED_URL: ""
         Release:
           ONLY_ACTIVE_ARCH: NO
           CANDY_URL_SCHEME: t3code
+          # Library validation off, or Sparkle.framework does not load under the self-signed identity (scripts/release).
+          CODE_SIGN_ENTITLEMENTS: App/Resources/CandyWrapper.entitlements
+          CANDY_UPDATE_FEED_URL: https://github.com/Sowyu/CandyWrapper/releases/download/appcast/appcast.xml
