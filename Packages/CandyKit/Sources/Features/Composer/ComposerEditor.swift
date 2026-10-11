@@ -154,7 +154,6 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     private func highlightCodeBlocks() {
         codeHighlightTask?.cancel()
         guard richTextEnabled, let storage = textStorage else { return }
-        let snapshot = expandedText
         var blocks: [(range: NSRange, text: String, language: String)] = []
         var start: Int?, language = ""
         storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
@@ -178,6 +177,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             blocks.append((range, storage.attributedSubstring(from: range).string, language))
         }
         guard !blocks.isEmpty else { return }
+        let snapshot = expandedText
         let requests = blocks
         codeHighlightTask = Task { [weak self] in
             let worker = Task.detached(priority: .userInitiated) {
@@ -764,6 +764,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             guard attrs[.composerCodeBlock] == nil else { return }
             var marks = ComposerRichTextStyler.marks(attrs[.composerMarks]).filter { $0 != mark }
             if !remove { marks.append(mark) }
+            // Unmarked text has no mark keys at all, so the old ones go first.
+            for key in [NSAttributedString.Key.composerMarks, .strikethroughStyle, .backgroundColor] { updated.removeAttribute(key, range: sub) }
             updated.addAttributes(ComposerRichTextStyler.attributes(marks, base: baseAttributes), range: sub)
         }
         breakUndoCoalescing()

@@ -150,6 +150,7 @@ final class ComposerController {
     private var prompts: [String: String]
     private var sessions: [String: DraftSession]
     private var saveWork: DispatchWorkItem?
+    private var refreshQueued = false
 
     init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments) {
         self.panel = panel
@@ -879,7 +880,19 @@ final class ComposerController {
         if panel.stashMenuOpen { setStashMenu(false) }
         prompts[key] = text.isEmpty ? nil : text
         scheduleSave()
-        refresh()
+        // The composer already updated its own send state; the thread-wide refresh (meter, tasks,
+        // queue, banners) does not change the typed glyph, so it runs after that frame.
+        refreshAfterCommit()
+    }
+
+    /// One `refresh()` after the frame now being built, however many edits ask for it.
+    private func refreshAfterCommit() {
+        guard !refreshQueued else { return }
+        refreshQueued = true
+        AfterCommit.run { [weak self] in
+            guard let self, self.refreshQueued else { return }
+            self.refresh()
+        }
     }
 
     private func flushPrompt() {
@@ -972,6 +985,7 @@ final class ComposerController {
     }
 
     private func refresh() {
+        refreshQueued = false
         panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
         panel.lazyDiffPanel.set(\.reviewComments, contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") })
         if threadFindTarget != openThreadId { closeThreadFind() }

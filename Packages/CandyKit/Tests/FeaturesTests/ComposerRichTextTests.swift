@@ -19,6 +19,13 @@ struct ComposerRichTextTests {
             #expect(ComposerRichText.serialize(ComposerRichText.parse(input)) == expected, "\(input)")
         }
     }
+    /// Typed plain text already looks rendered, so a keystroke doesn't replace the whole document
+    /// and run the text change handlers a second time.
+    @MainActor @Test func plainTypedTextRendersToItself() {
+        let base: [NSAttributedString.Key: Any] = [.font: ComposerEditor.font, .foregroundColor: NSColor.white]
+        let typed = NSAttributedString(string: "hello world", attributes: base)
+        #expect(ComposerRichTextStyler.render(typed, base: base, typing: true).isEqual(to: typed))
+    }
     @Test func sharedMarksAndWhitespace() {
         #expect(ComposerRichText.serialize([.init(text: " a ", marks: [.bold])]) == " **a** ")
         #expect(ComposerRichText.serialize([.init(text: " a ", marks: [.bold]), .init(text: "b", marks: [.bold, .italic])]) == " **a *b***")

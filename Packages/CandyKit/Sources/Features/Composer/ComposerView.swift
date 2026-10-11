@@ -455,6 +455,7 @@ public final class ComposerView: DSView {
         if validation.text != (validationMessage ?? "") || validation.isHidden != (validationMessage == nil) {
             validation.text = validationMessage ?? ""
             validation.isHidden = validationMessage == nil
+            needsLayout = true
             relayoutHeight()
         }
     }
@@ -510,9 +511,11 @@ public final class ComposerView: DSView {
     private func relayoutHeight() {
         let minimum = pending == .approval ? 32 : Self.editorMin
         let height = min(Self.editorMax, max(minimum, editor.contentHeight))
-        needsLayout = true
+        // Most keystrokes keep the height; the text view grows itself, so only a new height
+        // needs the composer (and its footer measuring) laid out again.
         guard height != editorHeight else { return }
         editorHeight = height
+        needsLayout = true
         onHeightChange?()
     }
 
