@@ -199,6 +199,17 @@ The updater, as the user asked on 2026-10-11 ("add this update stuff like the ma
 - `scripts/release` builds, strips, signs, zips, writes the appcast entry, signs it and publishes the GitHub release through the API (the v0.1.0 steps in the Log, automated).
 Also in M9: a stable code signing identity instead of ad-hoc, so the Keychain stops asking after each update (a self-signed certificate on the build Mac works without an Apple account; Developer ID plus notarization needs the user's Apple Developer account, so ask), and the remaining "M9" rows of docs/parity-checklist.md.
 
+## M9 checklist
+
+Milestone 9 started on 2026-10-11 after the M8 demo (v0.1.2). The user chose a self-signed code signing identity for updates. Release signing is set up on the build Mac (docs/release.md).
+
+- [ ] Updater (task updater): Sparkle 2.10.0 behind T3's update pill, release notes popover, status icon, toasts, Settings rows and menu items; `scripts/release` with appcast, DMG and dry run. Plan and T3 citations in docs/research/m9-updater-2026-10-11.md.
+- [ ] Composer banner stack and compact mode (task banners): motion inventory items 37 to 39.
+- [ ] Motion and hover leftovers (task polish): inventory items 30, 31, 32, 43, 48, 49, the hovers CandyWrapper does not draw yet, the device panel's JPEG decode.
+- [ ] Partly built features (task partials, research): sort the 92 partly built rows of docs/parity-checklist.md into skipped by design, blocked, and gaps to build, with state restoration and T3 Connect's cloud state included.
+- [ ] First release through `scripts/release` (main session), then the `appcast` feed tag.
+- [ ] Off-machine backup of the signing identity and EdDSA seed (ask the user).
+
 ## M8 checklist
 
 - [x] perf-review 38bbb98 against 965ca01 (docs/perf/2026-10-11-38bbb98-w1.md), no regressions: idle footprint 35.8 to 33.7 MB, big thread 37.6 to 34.9 MB, after the scroll 50.5 to 43.3 MB (peak 109.1 to 97.9), big thread reopen first frame 54.6 to 31.4 ms, huge thread row derive 31.8 to 16.7 ms, a streaming rows patch 0.66 to 0.04 ms. Idle package wakeups read 0.13 a second against 0.03, inside the noise band.
