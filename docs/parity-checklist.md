@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-11 (after the MCP follow-ups): 326 🟡, 92 ➖, 2 ⏳, 13 M9, 13 n/a.
+Status 2026-10-11 (M7 demo): 326 🟡, 92 ➖, 1 ⏳, 13 M9, 14 n/a.
 
 Status legend:
 
@@ -64,7 +64,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ✅ | Opens the Pull Requests page (WP7.5b) |
 | Settled/auto-settle rules (merged PR, 3 days inactive, closed PR) | docs/thread-sidebar.md | 🟡 | Server-owned; client only displays and configures; Built (audit 2026-10-11): Server-owned. The Settled shelf and sections display it (`SidebarListModel`); auto-settle settings in `GeneralSettingsView`. |
 | Limited-thread recovery in sidebar (Resume at reset, Snooze until reset, Wake now) | comp/Sidebar.tsx, comp/chat/UsageLimitRecoveryBanner.tsx | 🟡 | WP7.9: in this T3 build the sidebar's part is the Limited status and the snoozed row's Wake now (both built); Resume at reset and Snooze until reset live in the composer's recovery banner (row 127) |
-| Legacy sidebar (opt-in setting) | comp/LegacySidebar.tsx | ⏳ | Low priority; setting "Sidebar (legacy)" |
+| Legacy sidebar (opt-in setting) | comp/LegacySidebar.tsx | n/a | Skipped by the user on 2026-10-11 at the M7 demo: an opt-in second sidebar (3,915 lines in T3), off by default. |
 | Empty states: no projects hero, no active thread | comp/NoProjectsHero.tsx, comp/NoActiveThreadState.tsx | 🟡 | WP7.9: the empty list shows "No projects yet" with its Add project button; the main area shows `NoProjectsHero` ("What should we work on?", Add project, Start without a project). Was missing: `NoActiveThreadState` (a route whose thread is gone; this client always lands in a draft) Small areas sweep 2026-10-11: `NoActiveThreadStateView` (header "No active thread" 12px muted/50 over `border-b`, "Pick a thread to continue" and its description). Shown when the open thread leaves its environment's shell and that environment has no threads left; with threads left the app lands on the index (ThreadRouteView.tsx:144-158, threadRoutes.ts:23-39, `MissingThreadRoute`). Fidelity 0.47/0.47%. Not triggered on screen (needs a thread deleted elsewhere). |
 | Legacy thread migration toast | comp/LegacyThreadMigrationToast.tsx, docs/thread-migration.md | 🟡 | WP7.9: `LegacyThreadMigrationToast` follows the primary environment's `subscribeServerLifecycle` `legacyThreadMigration` events: a loading toast while running, closed on complete. Not seen live (the sandbox has no legacy threads) |
 
