@@ -15,7 +15,39 @@ public final class MarkdownView: DSView {
     public var threadFindQuery = "" { didSet { if threadFindQuery != oldValue { needsDisplay = true } } }
 
     public var document = MarkdownDocument(blocks: []) {
-        didSet { if document != oldValue { clearAssistantSelection(); unwrappedCode = []; diagramCode = []; invalidate(); observeDiagrams() } }
+        didSet {
+            guard document != oldValue else { return }
+            // A reset wrap or diagram toggle changes a block in place; only plain growth redraws in part.
+            let toggled = !unwrappedCode.isEmpty || !diagramCode.isEmpty
+            clearAssistantSelection(); unwrappedCode = []; diagramCode = []
+            let previous = toggled ? nil : cache[bounds.width]
+            invalidate(redraw: previous == nil)
+            if let previous { redrawChanges(from: previous, oldBlocks: oldValue.blocks) }
+            observeDiagrams()
+        }
+    }
+
+    /// A streaming answer grows at its end: redraw from the first top-level block that changed
+    /// down to the lower of the old and new bottoms, not the whole message.
+    private func redrawChanges(from previous: MarkdownLayout, oldBlocks: [MarkdownBlock]) {
+        let width = bounds.width
+        guard width > 0, let rect = Self.changedRect(previous: previous, oldBlocks: oldBlocks,
+                                                      current: layout(forWidth: width), blocks: document.blocks)
+        else { needsDisplay = true; return }
+        setNeedsDisplay(rect)
+    }
+
+    /// Nil when the change moved earlier content (diagrams, wrap toggles, images, a new width), so all of it redraws.
+    static func changedRect(previous: MarkdownLayout, oldBlocks: [MarkdownBlock], current: MarkdownLayout, blocks: [MarkdownBlock]) -> NSRect? {
+        let first = zip(oldBlocks, blocks).enumerated().first { $1.0 != $1.1 }?.offset ?? min(oldBlocks.count, blocks.count)
+        guard previous.width == current.width, previous.blockTops.count == oldBlocks.count, current.blockTops.count == blocks.count,
+              previous.blockTops.prefix(first) == current.blockTops.prefix(first)
+        else { return nil }
+        let top = min(first < oldBlocks.count ? previous.blockTops[first] : previous.height,
+                      first < blocks.count ? current.blockTops[first] : current.height)
+        // Glyphs and box borders reach a little past a block's top; 8 pt covers descenders and focus rings.
+        let y = max(0, top - 8)
+        return NSRect(x: 0, y: y, width: current.width, height: max(previous.height, current.height) - y + 8)
     }
 
     /// Body text color; nil is T3's 80% foreground. Headings, links and code keep their own colors.
@@ -86,12 +118,15 @@ public final class MarkdownView: DSView {
         invalidate()
     }
 
-    private func invalidate() {
+    private func invalidate(redraw: Bool = true) {
         cache.removeAll()
         invalidateIntrinsicContentSize()
         needsLayout = true
-        needsDisplay = true
+        if redraw { needsDisplay = true }
     }
+
+    /// Height changes follow the document, which redraws what moved; a new width redraws everything.
+    public override var redrawsOnResize: Bool { false }
 
     /// Re-lays out when a diagram this message shows finished rendering.
     private func observeDiagrams() {
@@ -128,9 +163,11 @@ public final class MarkdownView: DSView {
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
-        let widthChanged = newSize.width != frame.width
+        let widthChanged = newSize.width != frame.width, oldHeight = frame.height
         super.setFrameSize(newSize)
         if widthChanged { invalidateIntrinsicContentSize(); needsDisplay = true }
+        // The strip a taller frame uncovers; the document change already marked what moved.
+        else if newSize.height > oldHeight { setNeedsDisplay(NSRect(x: 0, y: oldHeight, width: newSize.width, height: newSize.height - oldHeight)) }
     }
 
     // MARK: Controls
@@ -340,9 +377,10 @@ public final class MarkdownView: DSView {
         return hit.offset + hit.box.character(at: CGPoint(x: point.x - hit.origin.x, y: point.y - hit.origin.y))
     }
     public func clearAssistantSelection() {
+        let hadSelection = assistantRange != nil
         selectionAnchor = nil; assistantRange = nil
         citeButton?.removeFromSuperview(); citeButton = nil
-        needsDisplay = true
+        if hadSelection { needsDisplay = true }
     }
     public override func mouseDown(with event: NSEvent) {
         guard onCiteSelection != nil else { super.mouseDown(with: event); return }

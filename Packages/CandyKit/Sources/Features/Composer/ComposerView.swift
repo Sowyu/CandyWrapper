@@ -412,7 +412,7 @@ public final class ComposerView: DSView {
         planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
         planPill.isEnabled = !isBusy && sendDisabledReason == nil
         if planFollowUp { needsLayout = true }
-        editor.isEditable = !editorDisabled
+        if editor.isEditable == editorDisabled { editor.isEditable = !editorDisabled }
         if let footer = questionFooter {
             questionPill.title = compactActions ? footer.compactLabel : footer.label
             questionPill.compact = compactActions
@@ -457,6 +457,15 @@ public final class ComposerView: DSView {
             validation.isHidden = validationMessage == nil
             relayoutHeight()
         }
+    }
+
+    /// Sets only what changed: the text view redraws on every inset or size assignment, and the
+    /// composer lays out on each streamed update.
+    private func setEditorGeometry(minSize: NSSize, width: CGFloat) {
+        let inset = NSSize(width: 4, height: 4 + editor.lineTop)
+        if editor.textContainerInset != inset { editor.textContainerInset = inset }
+        if editor.minSize != minSize { editor.minSize = minSize }
+        if editor.frame.size.width != width { editor.frame.size.width = width }
     }
 
     /// Inserts prompt text at the caret, with a space before it unless the caret follows whitespace
@@ -641,9 +650,7 @@ public final class ComposerView: DSView {
         if isResting {
             let textWidth = max(0, w - 110)
             scroll.frame = NSRect(x: 13, y: 9, width: textWidth, height: 32)
-            editor.textContainerInset = NSSize(width: 4, height: 4 + editor.lineTop)
-            editor.minSize = NSSize(width: textWidth, height: 32)
-            editor.frame.size.width = textWidth
+            setEditorGeometry(minSize: NSSize(width: textWidth, height: 32), width: textWidth)
             placeholder.frame = NSRect(x: 17, y: 13, width: textWidth - 8, height: ComposerEditor.lineHeight)
             placeholder.isHidden = !editor.string.isEmpty
             primary.frame = NSRect(x: w - 49, y: 9, width: 32, height: 32)
@@ -668,9 +675,7 @@ public final class ComposerView: DSView {
                                 height: max(0, fileList.preferredHeight - ComposerFileListView.marginBottom))
         let textTop = Self.inset + Self.pad + shelf + fileList.preferredHeight
         scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
-        editor.textContainerInset = NSSize(width: 4, height: 4 + editor.lineTop)
-        editor.minSize = NSSize(width: textWidth + 8, height: editorHeight + 8)
-        editor.frame.size.width = textWidth + 8
+        setEditorGeometry(minSize: NSSize(width: textWidth + 8, height: editorHeight + 8), width: textWidth + 8)
         placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth, height: ComposerEditor.lineHeight)
         placeholder.isHidden = !editor.string.isEmpty
 

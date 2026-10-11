@@ -22,8 +22,12 @@ open class DSView: NSView {
         needsLayout = true
         // Drawn content depends on the size (truncation, centering), and the redraw policy is
         // onSetNeedsDisplay: without this a label that grew kept its old truncated image.
-        if !wantsUpdateLayer { needsDisplay = true }
+        if !wantsUpdateLayer, redrawsOnResize { needsDisplay = true }
     }
+
+    /// False for views that redraw the parts a resize changes themselves (a streaming message grows
+    /// at its bottom; redrawing all of it per delta is what the spec forbids).
+    open var redrawsOnResize: Bool { true }
 
     /// Subclasses that only set layer properties override `updateLayer` and keep this true.
     /// Subclasses that draw text or paths return false and override `draw(_:)`.

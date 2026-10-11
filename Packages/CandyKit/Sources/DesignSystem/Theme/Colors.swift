@@ -18,9 +18,19 @@ public enum Themed {
     /// costs what a fixed color costs.
     private static func runtime(light: KeyPath<Palette, TokenColor>, _ lightAlpha: Double, dark: KeyPath<Palette, TokenColor>,
                                 _ darkAlpha: Double, sidebar: Bool) -> NSColor {
-        let cache = ThemedColorCache(light: light, lightAlpha: lightAlpha, dark: dark, darkAlpha: darkAlpha, sidebar: sidebar)
-        return NSColor(name: nil) { cache.color(dark: $0.isDark) }
+        // One instance per token and alpha, so views that skip unchanged colors see equal values
+        // (an unnamed dynamic NSColor equals only itself) and don't redraw on every reconfigure.
+        let key = ThemedColorKey(light: light, lightAlpha: lightAlpha, dark: dark, darkAlpha: darkAlpha, sidebar: sidebar)
+        return instancesLock.withLock {
+            if let color = instances[key] { return color }
+            let cache = ThemedColorCache(light: light, lightAlpha: lightAlpha, dark: dark, darkAlpha: darkAlpha, sidebar: sidebar)
+            let color = NSColor(name: nil) { cache.color(dark: $0.isDark) }
+            instances[key] = color
+            return color
+        }
     }
+    nonisolated(unsafe) private static var instances: [ThemedColorKey: NSColor] = [:]
+    private static let instancesLock = NSLock()
 
     static func color(light: TokenColor, _ lightAlpha: Double, dark: TokenColor, _ darkAlpha: Double) -> NSColor {
         let l = light.nsColor.multiplyingAlpha(lightAlpha)
@@ -46,6 +56,12 @@ public enum Themed {
     }
 }
 
+private struct ThemedColorKey: Hashable, @unchecked Sendable {
+    let light: KeyPath<Palette, TokenColor>, lightAlpha: Double
+    let dark: KeyPath<Palette, TokenColor>, darkAlpha: Double
+    let sidebar: Bool
+}
+
 /// One `Themed` color's resolved values for the current `ThemeRuntime.generation`. Color providers run
 /// on the main thread while drawing, which is also where the theme changes.
 private final class ThemedColorCache: @unchecked Sendable {
@@ -54,12 +70,15 @@ private final class ThemedColorCache: @unchecked Sendable {
     let lightAlpha: Double, darkAlpha: Double, sidebar: Bool
     private var generation = -1
     private var lightColor: NSColor?, darkColor: NSColor?
+    /// One instance serves every view using the token, and AppKit may resolve a color off the main thread.
+    private let lock = NSLock()
 
     init(light: KeyPath<Palette, TokenColor>, lightAlpha: Double, dark: KeyPath<Palette, TokenColor>, darkAlpha: Double, sidebar: Bool) {
         self.light = light; self.lightAlpha = lightAlpha; self.dark = dark; self.darkAlpha = darkAlpha; self.sidebar = sidebar
     }
 
     func color(dark isDark: Bool) -> NSColor {
+        lock.lock(); defer { lock.unlock() }
         let current = ThemeRuntime.generation
         if generation != current { generation = current; lightColor = nil; darkColor = nil }
         if let c = isDark ? darkColor : lightColor { return c }
