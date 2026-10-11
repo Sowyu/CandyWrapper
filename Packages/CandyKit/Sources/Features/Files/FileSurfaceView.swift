@@ -23,6 +23,7 @@ public final class FileSurfaceView: DSView {
         case directory
     }
 
+    public var attachmentMode = false { didSet { updateActions() } }
     public private(set) var path = ""
     public var projectName = "" { didSet { rebuildCrumbs() } }
     public var cwd: String?
@@ -271,7 +272,7 @@ public final class FileSurfaceView: DSView {
         let wrapLabel = wrap ? "Disable word wrap" : "Enable word wrap"
         wrapToggle.setAccessibilityLabel(wrapLabel)
         wrapToggle.toolTip = wrapLabel
-        explorerToggle.isHidden = path.hasPrefix("/") || isDirectory
+        explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
         let explorerLabel = explorerOpen ? "Hide file explorer" : "Show file explorer"
         explorerToggle.setAccessibilityLabel(explorerLabel)
         explorerToggle.toolTip = explorerLabel
@@ -281,7 +282,7 @@ public final class FileSurfaceView: DSView {
     private var isDirectory: Bool { if case .directory = content { true } else { false } }
 
     /// Whether the explorer aside shows (`shouldShowFileExplorer`); a folder lets it fill the surface.
-    public var showsExplorer: Bool { !path.hasPrefix("/") && (explorerOpen || isDirectory) }
+    public var showsExplorer: Bool { !attachmentMode && !path.hasPrefix("/") && (explorerOpen || isDirectory) }
 
     // MARK: Layout
 

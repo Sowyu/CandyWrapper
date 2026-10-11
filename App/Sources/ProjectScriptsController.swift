@@ -18,6 +18,8 @@ final class ProjectScriptsController {
     private var threadId: ThreadId?
     private var scripts: [ProjectScript] = []
     /// Settings, Project: where actions are added and edited.
+    var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
+    private var editor: ProjectActionEditor?
     var openProjectSettings: ((String) -> Void)?
 
     init(panel: ThreadPanelView, sidebar: SidebarContentView, composer: ComposerController, terminal: TerminalController) {
@@ -31,7 +33,7 @@ final class ProjectScriptsController {
             self.terminal.runScript(primary)
         }
         card.scripts.secondary.action = { [weak self] in self?.openMenu() }
-        card.addScript.action = { [weak self] in self?.openSettings() }
+        card.addScript.action = { [weak self] in self?.openEditor(nil) }
         composer.configObservers.append { [weak self] _ in self?.refresh() }
     }
 
@@ -69,8 +71,6 @@ final class ProjectScriptsController {
     }
 
     /// The chevron's menu: every action with its roles and shortcut, then "Add project script".
-    // ponytail: the gear on each row and "Add project script" open Settings, Project, where T3 opens the
-    // action editor in place, and t3.json imports are not listed; port ProjectScriptEditorDialog here if that matters
     private func openMenu() {
         let split = panel.detailsCard.scripts
         let context = KeybindingContext([:])
@@ -78,18 +78,67 @@ final class ProjectScriptsController {
             var item = MenuItem(ProjectScripts.menuLabel(script), icon: ProjectScriptIcon.name(script.icon),
                                 shortcut: ProjectScripts.command(script.id).flatMap { ActiveKeymap.label(for: $0, context: context) })
             item.action = { [weak self] in self?.terminal.runScript(script) }
+            item.accessoryWidth = 24
+            item.accessory = { [weak self] in
+                let button = ButtonView(nil, icon: .settings, variant: .ghost, size: .iconXs)
+                button.action = { [weak self] in self?.openEditor(script) }
+                button.toolTip = "Edit action"
+                return button
+            }
             return item
         }
         var add = MenuItem("Add project script", icon: .plus)
-        add.action = { [weak self] in self?.openSettings() }
+        add.action = { [weak self] in self?.openEditor(nil) }
         items.append(add)
         MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
     }
 
-    private func openSettings() {
-        guard let threadId, let project = project(threadId), let projects = sidebar?.snapshot?.projects,
-              let group = SidebarModel.buildProjectGroups(projects).first(where: { $0.memberProjectIds.contains(project.id) }) else { return }
-        openProjectSettings?(group.key)
+    private func openEditor(_ script: ProjectScript?) {
+        guard let threadId, let project = project(threadId), let env = threadId.environmentId,
+              let config = composer?.config(env), let window = panel.window else { return }
+        let editor = ProjectActionEditor(script: script, keybinding: script.flatMap {
+            ProjectActionsLogic.keybindingValue(config.keybindings, command: ProjectScripts.command($0.id))
+        })
+        self.editor = editor
+        let host = ModalHost.present(editor.dialog, in: window)
+        editor.dialog.onClose = { [weak host] in host?.close() }
+        host.onDismiss = { [weak self] in self?.editor = nil }
+        editor.onCancel = { [weak host] in host?.close() }
+        let target = ProjectActionsLogic.Target(environmentId: env, settings: ServerSettingsValues(config.settings.raw),
+            keybindings: config.keybindings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)),
+            otherProjects: (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != project.id }
+                .map { ($0.id.localId.rawValue, ProjectScript.list(.array($0.scripts))) })
+        editor.onSubmit = { [weak self, weak editor, weak host] input in
+            guard let self, let editor, let saveActions = self.saveActions else { return }
+            let id = script?.id ?? ProjectActionsLogic.newId(input.name, targets: [target])
+            let writes = ProjectActionsLogic.plan([target], transform: { ProjectScripts.applySubmit($0, id: id, isNew: script == nil, input: input) },
+                scriptId: id, keybinding: input.keybinding)
+            editor.isSaving = true
+            Task { [weak self, weak editor, weak host] in
+                let error = await saveActions(writes)
+                editor?.isSaving = false
+                if let error { editor?.error = error } else { host?.close(); self?.refresh() }
+            }
+        }
+        editor.onDelete = { [weak self, weak editor, weak host] in
+            guard let self, let script, let saveActions = self.saveActions, let window = self.panel.window else { return }
+            let confirm = DialogView(kind: .alertDialog, title: "Delete action \"\(script.name)\"?", message: "This action cannot be undone.")
+            let cancel = ButtonView("Cancel", variant: .outline)
+            let delete = ButtonView("Delete", variant: .destructive)
+            confirm.footerButtons = [cancel, delete]
+            let confirmation = ModalHost.present(confirm, in: window)
+            cancel.action = { [weak confirmation] in confirmation?.close() }
+            delete.action = { [weak self, weak editor, weak host, weak confirmation] in
+                confirmation?.close()
+                let writes = ProjectActionsLogic.plan([target], transform: { $0.filter { $0.id != script.id } }, scriptId: script.id, keybinding: "")
+                editor?.isSaving = true
+                Task { [weak self, weak editor, weak host] in
+                    let error = await saveActions(writes)
+                    editor?.isSaving = false
+                    if let error { editor?.error = error } else { host?.close(); self?.refresh() }
+                }
+            }
+        }
     }
 }

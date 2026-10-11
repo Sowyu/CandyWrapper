@@ -38,6 +38,7 @@ public final class SettingsPageContext {
     /// Drops the keys' project overrides at a project scope (`useClearScopedSettings`).
     public var clearServer: (([String]) -> Void)?
     /// One RPC on an environment's socket (environment id, method, payload).
+    public var subscribeProviderAuth: ((String, String, @escaping @MainActor @Sendable (JSONValue) -> Void) -> Task<Void, Never>?)?
     public var request: ((String, String, JSONValue) async throws -> JSONValue)?
     /// Applies the settings a `server.updateSettings` reply returned to that environment's config.
     public var applySettings: ((String, JSONValue) -> Void)?

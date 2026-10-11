@@ -171,6 +171,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
         settings.composer = threads.composer
+        threads.scripts.saveActions = { [weak settings] writes in
+            guard let settings else { return "Settings are unavailable." }
+            return await settings.saveActions(writes)
+        }
         threads.composer.openProviderSetup = { [weak self, weak settings] in
             self?.sidebarCommands?.closeUtilityPage()
             settings?.open(.providers)

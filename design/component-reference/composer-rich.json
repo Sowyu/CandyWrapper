@@ -1,0 +1,36 @@
+{
+  "component": "composer-rich",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "marks",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p><strong>Bold</strong> and <em>italic</em> and <s>strike</s></p></div>",
+      "native": {
+        "text": "**Bold** and *italic* and ~~strike~~"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "nested",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p><em>Outer <strong>inner</strong> end</em></p></div>",
+      "native": {
+        "text": "*Outer **inner** end*"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "code",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p>Use <code>let x = 1</code> here</p></div>",
+      "native": {
+        "text": "Use `let x = 1` here"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    }
+  ]
+}

@@ -62,6 +62,12 @@ extension SettingsController {
         c.threadCount = { [weak self] env, projectId in
             self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0
         }
+        c.subscribeProviderAuth = { [weak self] env, instance, receive in
+            guard let supervisor = self?.environments.session(env)?.supervisor else { return nil }
+            return supervisor.subscribe("provider.auth.subscribe", payload: { .object(["instanceId": .string(instance)]) }) { event in
+                if case .value(let state) = event { await receive(state) }
+            }
+        }
         c.saveActions = { [weak self] writes in await self?.saveActions(writes) }
         c.watchScheduledTasks = { [weak self] _ in self?.updateScheduledTaskWatch() }
         c.httpBaseURL = { [weak self] env in self?.environments.routeInUse(env) }
@@ -317,7 +323,7 @@ extension SettingsController {
     }
 
     /// `persist`: each environment's settings write, then its shortcut changes. The first failure stops the rest.
-    private func saveActions(_ writes: [ProjectActionsLogic.Write]) async -> String? {
+    func saveActions(_ writes: [ProjectActionsLogic.Write]) async -> String? {
         for w in writes {
             do {
                 let result = try await environments.request(w.environmentId, "server.updateSettings", .object(["patch": .object(w.patch)]))

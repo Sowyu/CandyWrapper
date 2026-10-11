@@ -33,6 +33,34 @@ public final class ComposerView: DSView {
     /// Sending is blocked (disconnected, no provider, no project); the reason is the tooltip.
     public var sendDisabledReason: String? { didSet { if sendDisabledReason != oldValue { refresh() } } }
     public var placeholderInput = ComposerLogic.PlaceholderInput() { didSet { if placeholderInput != oldValue { refresh() } } }
+    public var collapseOnScroll = false { didSet { if !collapseOnScroll { expandFromScroll() } } }
+    private var scrollGesture = ComposerScrollGesture()
+    private var scrollCollapsed = false
+    public var isResting: Bool {
+        scrollCollapsed && !isDraftRoute && pending == .none && replacement == nil && !prompt.contains("\n")
+            && attachmentCount == 0 && sendDisabledReason == nil && !editingQueued
+    }
+    public func recordTimelineScroll(delta: CGFloat, canScroll: Bool, towardEnd: Bool) {
+        if scrollGesture.record(now: ProcessInfo.processInfo.systemUptime, delta: delta,
+            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting,
+            canScroll: canScroll, towardEnd: towardEnd) {
+            scrollCollapsed = true
+            if isResting { window?.makeFirstResponder(nil); needsLayout = true; onHeightChange?() }
+        }
+    }
+    public func expandFromScroll() {
+        scrollGesture.suppress(now: ProcessInfo.processInfo.systemUptime)
+        guard scrollCollapsed else { return }
+        scrollCollapsed = false; needsLayout = true; onHeightChange?()
+    }
+    public var onOpenChip: ((String) -> Bool)? {
+        get { editor.onOpenChip }
+        set { editor.onOpenChip = newValue }
+    }
+    public var richTextEnabled: Bool {
+        get { editor.richTextEnabled }
+        set { editor.richTextEnabled = newValue }
+    }
     public var sendShortcut = ComposerLogic.SendShortcut.enter
     /// The composer edits a queued message: the button is the check and a send saves the edit.
     public var editingQueued = false { didSet { if editingQueued != oldValue { refresh() } } }
@@ -124,6 +152,8 @@ public final class ComposerView: DSView {
         set { editor.onPasteText = newValue }
     }
     /// The selection's length in prompt characters, for the paste limit check.
+    public func handleFormattingKey(_ event: NSEvent) -> Bool { editor.handleFormattingKey(event) }
+
     public var selectedPromptLength: Int { editor.expanded(editor.selectedRange()).utf16.count }
     /// Where pasted image data is written before it uploads.
     public var pasteDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperPaste", isDirectory: true)
@@ -170,6 +200,7 @@ public final class ComposerView: DSView {
 
     /// Composer box height for the current text: 144 to 274, 66 up with an approval, +8 with a question.
     public var preferredHeight: CGFloat {
+        if isResting { return 50 }
         if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
         case .approval: return Self.inset * 2 + Self.pad + editorHeight + Self.pad
@@ -299,6 +330,7 @@ public final class ComposerView: DSView {
         outline.layer?.borderWidth = 1
         addSubview(outline)
 
+        editor.onInteract = { [weak self] in self?.expandFromScroll() }
         editor.onTextChange = { [weak self] in self?.textChanged() }
         editor.onSelectionChange = { [weak self] in self?.onCaretChange?() }
         editor.chipLook = chipLook
@@ -314,7 +346,7 @@ public final class ComposerView: DSView {
 
     // MARK: Focus
 
-    public func focus() { window?.makeFirstResponder(editor) }
+    public func focus() { expandFromScroll(); window?.makeFirstResponder(editor) }
     public var isEditorFocused: Bool { window?.firstResponder === editor }
     /// `isCaretAtStart`: a collapsed selection at offset 0.
     public var isCaretAtStart: Bool { editor.selectedRange() == NSRange(location: 0, length: 0) }
@@ -331,6 +363,7 @@ public final class ComposerView: DSView {
     /// The prompt with chips as their source text.
     private var prompt: String { editor.expandedText }
     /// The editor's text with each chip as one U+FFFC: what menu triggers and their ranges read.
+    var allowsSuggestionsAtCaret: Bool { editor.codeFenceAtCaret == nil }
     public var displayText: String { editor.string }
 
     /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
@@ -600,6 +633,22 @@ public final class ComposerView: DSView {
             separators.forEach { $0.isHidden = true }
             return
         }
+        if isResting {
+            let textWidth = max(0, w - 110)
+            scroll.frame = NSRect(x: 13, y: 9, width: textWidth, height: 32)
+            editor.textContainerInset = NSSize(width: 4, height: 4 + editor.lineTop)
+            editor.minSize = NSSize(width: textWidth, height: 32)
+            editor.frame.size.width = textWidth
+            placeholder.frame = NSRect(x: 17, y: 13, width: textWidth - 8, height: ComposerEditor.lineHeight)
+            placeholder.isHidden = !editor.string.isEmpty
+            primary.frame = NSRect(x: w - 49, y: 9, width: 32, height: 32)
+            attach.frame = NSRect(x: w - 85, y: 11, width: 28, height: 28)
+            for view in footerControls + separators { view.isHidden = true }
+            [validation, imageShelf, fileList, questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
+            return
+        }
+        imageShelf.isHidden = imageShelf.tiles.isEmpty
+        fileList.isHidden = fileList.rows.isEmpty
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
         CATransaction.begin(); CATransaction.setDisableActions(true)

@@ -531,6 +531,20 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }
             actions.append(delete)
         }
+        let signIn = ButtonView("Sign in", variant: .outline, size: .xs)
+        signIn.isEnabled = !readOnly && row.enabled && provider?.installed == true
+        signIn.action = { [weak self] in
+            guard let self else { return }
+            let terminal = ComposerProviderAuthTerminal(context: self.context, environment: env.id, instance: row.instanceId)
+            let dialog = DialogView(title: "Sign in to " + displayName)
+            dialog.maxWidth = 680
+            dialog.panelContent = [terminal]
+            if let host = self.context.presentDialog?(dialog) {
+                let previous = host.onDismiss
+                host.onDismiss = { [weak dialog, weak terminal] in previous?(); terminal?.close(); dialog?.panelContent = [] }
+            }
+        }
+        actions.append(signIn)
         header.headerAction = actions.isEmpty ? nil : SettingsControlGroup(actions, gap: 6)
         let name = InputView(placeholder: ProvidersLogic.label(row.driver) ?? "Instance label", text: row.instance["displayName"]?.stringValue ?? "", size: .sm)
         name.frame.size = NSSize(width: 224, height: 28)
@@ -654,6 +668,14 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             config["customModels"] = .array(custom.map(\.raw) + [.string(slug)])
             o["config"] = .object(config)
             self?.expandedModelAdd.remove(row.instanceId)
+            self?.upsert(row, .object(o), env: env.id)
+        }
+        modelsView.customDefinitions = Dictionary(uniqueKeysWithValues: custom.map { ($0.slug, $0.raw) })
+        modelsView.onEdit = { [weak self] definition in
+            var o = row.instance.objectValue ?? [:]
+            var config = o["config"]?.objectValue ?? [:]
+            config["customModels"] = .array(custom.map { $0.slug == definition["slug"]?.stringValue ? definition : $0.raw })
+            o["config"] = .object(config)
             self?.upsert(row, .object(o), env: env.id)
         }
         modelsView.onRemove = { [weak self] slug in
@@ -999,6 +1021,9 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     var onHidden: (([String]) -> Void)?
     var onOrder: (([String]) -> Void)?
     var onAdd: ((String) -> Void)?
+    var onEdit: ((JSONValue) -> Void)?
+    var customDefinitions: [String: JSONValue] = [:]
+    private var editedSlug: String?
     var onRemove: ((String) -> Void)?
     var onAddOpen: ((Bool) -> Void)?
     var onHeightChange: (() -> Void)?
@@ -1123,7 +1148,15 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
                 self.onOrder?(order)
             }
             row.onRemove = { [weak self] in self?.onRemove?(m.slug) }
+            row.onEdit = { [weak self] in self?.editedSlug = m.slug; self?.rebuild(); self?.onHeightChange?() }
             rows.append(row)
+            if editedSlug == m.slug {
+                let editor = ComposerCustomModelEditor(entry: customDefinitions[m.slug] ?? .string(m.slug))
+                editor.onHeightChange = { [weak self] in self?.needsLayout = true; self?.onHeightChange?() }
+                editor.onCancel = { [weak self] in self?.editedSlug = nil; self?.rebuild(); self?.onHeightChange?() }
+                editor.onSave = { [weak self] definition in self?.editedSlug = nil; self?.onEdit?(definition) }
+                rows.append(editor)
+            }
         }
         rows.forEach(addSubview)
         needsLayout = true
@@ -1151,8 +1184,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         for r in rows {
             let isLabel = r is LabelView
             let top: CGFloat = isLabel ? (r.identifier?.rawValue == "first-group" ? 4 : 20) : 0
-            let h: CGFloat = isLabel ? 16 + 6 : 28
-            if place { r.frame = NSRect(x: 16 + (isLabel ? 8 : 0) - (isLabel ? 0 : 8), y: y + top, width: width - 32 + (isLabel ? -8 : 16), height: isLabel ? 16 : 28) }
+            let h: CGFloat = r is ComposerCustomModelEditor ? r.intrinsicContentSize.height + 12 : isLabel ? 16 + 6 : 28
+            if place { r.frame = NSRect(x: 16 + (isLabel ? 8 : 0) - (isLabel ? 0 : 8), y: y + top, width: width - 32 + (isLabel ? -8 : 16), height: r is ComposerCustomModelEditor ? h - 12 : isLabel ? 16 : 28) }
             y += top + h
         }
         if addOpen && canManage {
@@ -1187,6 +1220,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         private let up = ButtonView(nil, icon: .arrowUp, variant: .ghostMuted, size: .iconMicro)
         private let down = ButtonView(nil, icon: .arrowDown, variant: .ghostMuted, size: .iconMicro)
         private let remove = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
+        private let edit = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconMicro)
         private let toggle = SwitchView(isOn: true, size: .sm)
         private let showMoves: Bool
         private let isCustom: Bool
@@ -1194,6 +1228,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         var onHidden: ((Bool) -> Void)?
         var onMove: ((Int) -> Void)?
         var onRemove: (() -> Void)?
+        var onEdit: (() -> Void)?
 
         init(model: ProvidersLogic.DisplayModel, favorite: Bool, hidden: Bool, canUp: Bool, canDown: Bool, showMoves: Bool, canManage: Bool) {
             self.showMoves = showMoves
@@ -1230,13 +1265,16 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             remove.isHidden = !model.isCustom
             remove.isEnabled = canManage
             remove.action = { [weak self] in self?.onRemove?() }
-            // ponytail: custom models have no inline name and options editor (CustomModelEditor); remove and add them again
+            edit.isHidden = !model.isCustom
+            edit.isEnabled = canManage
+            edit.setAccessibilityLabel("Edit custom model")
+            edit.action = { [weak self] in self?.onEdit?() }
             toggle.isOn = !hidden
             toggle.isEnabled = !model.isCustom
             toggle.setAccessibilityLabel("Show \(model.name) in the model picker")
             _ = TooltipController.attach(to: toggle, text: model.isCustom ? "Custom models are always shown in the picker" : hidden ? "Hidden from picker" : "Shown in picker")
             toggle.onChange = { [weak self] on in self?.onHidden?(!on) }
-            for v in [star, name, slug, custom, caps, up, down, remove, toggle] as [NSView] { addSubview(v) }
+            for v in [star, name, slug, custom, caps, up, down, remove, edit, toggle] as [NSView] { addSubview(v) }
         }
 
         override func layout() {
@@ -1247,7 +1285,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             toggle.frame = NSRect(x: bounds.width - 8 - ts.width, y: (h - ts.height) / 2, width: ts.width, height: ts.height)
             // Actions column: at least 88 wide, buttons right-aligned.
             var ax = toggle.frame.minX - 8
-            for b in [remove, down, up] where !b.isHidden { ax -= 20; b.frame = NSRect(x: ax, y: (h - 20) / 2, width: 20, height: 20); ax -= 2 }
+            for b in [remove, edit, down, up] where !b.isHidden { ax -= 20; b.frame = NSRect(x: ax, y: (h - 20) / 2, width: 20, height: 20); ax -= 2 }
             let actionsLeft = min(ax, toggle.frame.minX - 8 - 88)
             let cw = ceil(caps.textWidth) + (caps.text.isEmpty ? 0 : 1)
             caps.frame = NSRect(x: actionsLeft - 8 - cw, y: (h - 14) / 2, width: cw, height: 14)

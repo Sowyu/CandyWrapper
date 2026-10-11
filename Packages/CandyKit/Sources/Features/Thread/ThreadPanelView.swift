@@ -166,6 +166,19 @@ public final class ThreadPanelView: DSView {
     public var showsPlanFollowUp = false { didSet { if showsPlanFollowUp != oldValue { needsLayout = true } } }
     private let threadFileDrop = ComposerFileDrop()
 
+    private let serverUpdateBanner = ComposerNoticeBannerView()
+    /// Fed by the server updater. Hidden views hold no update task or subscription.
+    // ponytail: the M9 updater has no operation state yet; connect its per-environment state here when it lands
+    public var serverUpdateNotice: ComposerServerUpdateNotice? {
+        didSet {
+            guard serverUpdateNotice != oldValue else { return }
+            if let notice = serverUpdateNotice {
+                serverUpdateBanner.apply(notice.content)
+                serverUpdateBanner.toolTip = notice.title + ": " + notice.detail
+            }
+            needsLayout = true
+        }
+    }
     public var showsNoticeBanner = false { didSet { if showsNoticeBanner != oldValue { needsLayout = true } } }
     /// The `/usage-limits` result, a notice in the banner stack above the environment banner.
     public var usageLimitsBanner: UsageLimitsBannerView? {
@@ -253,6 +266,8 @@ public final class ThreadPanelView: DSView {
         addSubview(queue)
         environmentBanner.isHidden = true
         addSubview(environmentBanner)
+        serverUpdateBanner.isHidden = true
+        addSubview(serverUpdateBanner, positioned: .below, relativeTo: environmentBanner)
         noticeBanner.isHidden = true
         addSubview(noticeBanner, positioned: .below, relativeTo: environmentBanner)
         activityRow.isHidden = true
@@ -722,6 +737,13 @@ public final class ThreadPanelView: DSView {
             noticeBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = noticeBanner.frame.minY
         }
+        let updateShown = serverUpdateNotice != nil && !composer.isHidden
+        serverUpdateBanner.isHidden = !updateShown
+        if updateShown {
+            let h = ComposerNoticeBannerView.height
+            serverUpdateBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = serverUpdateBanner.frame.minY
+        }
         if let usage = usageLimitsBanner {
             usage.isHidden = !docked
             if docked {
@@ -743,7 +765,8 @@ public final class ThreadPanelView: DSView {
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
         environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil) || noticeShown
-        noticeBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        noticeBanner.joinsAbove = updateShown || queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        serverUpdateBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
         usageLimitsBanner?.joinsAbove = queueHeight > 0
         activityRow.joinsAbove = queueHeight > 0 || bannerShown || noticeShown
         approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
