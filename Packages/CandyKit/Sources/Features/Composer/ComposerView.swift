@@ -347,7 +347,11 @@ public final class ComposerView: DSView {
 
     // MARK: Focus
 
-    public func focus() { expandFromScroll(); window?.makeFirstResponder(editor) }
+    public func focus() {
+        // Typing must stay in an open dialog (an SSH password prompt can open while a thread loads).
+        guard !ModalHost.isPresented(in: window) else { return }
+        expandFromScroll(); window?.makeFirstResponder(editor)
+    }
     public var isEditorFocused: Bool { window?.firstResponder === editor }
     /// `isCaretAtStart`: a collapsed selection at offset 0.
     public var isCaretAtStart: Bool { editor.selectedRange() == NSRange(location: 0, length: 0) }

@@ -21,6 +21,14 @@ public enum AddEnvironmentDialog {
 /// The dialog's panel: `space-y-4` of the mode cards and the Remote link body.
 public final class AddEnvironmentFormView: DSView {
     public let host = InputView(placeholder: "backend.example.com")
+    public let sshHosts = ComboboxView(.autocomplete, options: [], placeholder: "Search hosts or type devbox")
+    public var onSSHMode: (() -> Void)?
+    public let sshUsername = InputView(placeholder: "root")
+    public let sshPort = InputView(placeholder: "22")
+    private let usernameLabel = LabelView("Username", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
+    private let portLabel = LabelView("Port", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
+    public private(set) var sshMode = false
+    public var onSubmitSSH: ((String, String, String) -> Void)?
     public let code = InputView(placeholder: "PAIRCODE")
     public let submit: ButtonView
     private let remoteCard = ModeCard(title: "Remote link", detail: "Enter a backend host and pairing code.", icon: .chevronsLeftRightEllipsis)
@@ -29,6 +37,8 @@ public final class AddEnvironmentFormView: DSView {
     private let codeLabel = LabelView("Pairing code", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
     private let hint = TextBlockView()
     private let errorText = TextBlockView()
+    /// SSH mode shows its error in an `Alert variant="error"` (ConnectionsSettings.tsx:3120-3124).
+    private let sshAlert = AlertView(nil, variant: .error)
     private let addsRoute: Bool
 
     /// Add pressed (or Return in a field), with the two fields' text.
@@ -37,7 +47,11 @@ public final class AddEnvironmentFormView: DSView {
     public var onHeightChange: (() -> Void)?
 
     public var error: String? {
-        didSet { errorText.text = error ?? ""; errorText.isHidden = error == nil; needsLayout = true; onHeightChange?() }
+        didSet {
+            errorText.text = error ?? ""; sshAlert.message = error
+            errorText.isHidden = error == nil || sshMode; sshAlert.isHidden = error == nil || !sshMode
+            needsLayout = true; onHeightChange?()
+        }
     }
 
     public var isAdding = false {
@@ -47,6 +61,9 @@ public final class AddEnvironmentFormView: DSView {
             host.isEnabled = !isAdding
             code.isEnabled = !isAdding
             remoteCard.isEnabled = !isAdding
+            sshCard.isEnabled = !isAdding
+            sshHosts.input.isEnabled = !isAdding
+            sshUsername.isEnabled = !isAdding; sshPort.isEnabled = !isAdding
         }
     }
 
@@ -58,11 +75,9 @@ public final class AddEnvironmentFormView: DSView {
         hostLabel.lineHeight = 16
         codeLabel.lineHeight = 16
         remoteCard.isSelected = true
-        // ponytail: SSH mode is out of scope for M6 (K 3.1); the card shows like T3 desktop's and is disabled
-        // T3 draws a disabled card (while adding) at full strength.
-        sshCard.disabledOpacity = 1
-        remoteCard.disabledOpacity = 1
-        sshCard.isEnabled = false
+        sshCard.disabledOpacity = 1; remoteCard.disabledOpacity = 1
+        remoteCard.action = { [weak self] in self?.setSSHMode(false) }
+        sshCard.action = { [weak self] in self?.setSSHMode(true) }
         hint.text = "Paste a full pairing URL here to fill both fields automatically."
         hint.font = DSFont.ui(11)
         hint.lineHeight = 16
@@ -71,14 +86,27 @@ public final class AddEnvironmentFormView: DSView {
         errorText.lineHeight = 16
         errorText.color = Themed.color(\.destructive)
         errorText.isHidden = true
-        for v in [remoteCard, sshCard, hostLabel, host, codeLabel, code, hint, errorText, submit] as [NSView] { addSubview(v) }
+        for v in [remoteCard, sshCard, hostLabel, host, codeLabel, code, sshHosts, sshUsername, sshPort, usernameLabel, portLabel, hint, errorText, sshAlert, submit] as [NSView] { addSubview(v) }
+        sshAlert.isHidden = true
         // `handleSavedBackendHostChange`: a pasted pairing URL fills both fields.
         host.onChange = { [weak self] text in
             guard let self, let split = self.splitPairingURL?(text) else { return }
             self.host.text = split.host
             self.code.text = split.code
         }
+        [sshHosts, sshUsername, sshPort, usernameLabel, portLabel].forEach { $0.isHidden = true }
         submit.action = { [weak self] in self?.submitNow() }
+    }
+
+    public func setSSHMode(_ ssh: Bool) {
+        guard !isAdding else { return }
+        sshMode = ssh; sshCard.isSelected = ssh; remoteCard.isSelected = !ssh
+        hostLabel.text = ssh ? "SSH host or alias" : "Host"
+        host.placeholder = ssh ? "Search hosts or type devbox" : "backend.example.com"
+        [host, codeLabel, code, hint].forEach { $0.isHidden = ssh }
+        [sshHosts, sshUsername, sshPort, usernameLabel, portLabel].forEach { $0.isHidden = !ssh }
+        error = nil; needsLayout = true; onHeightChange?()
+        if ssh { onSSHMode?(); window?.makeFirstResponder(sshHosts.input) }
     }
 
     /// Fills both fields, as pasting the pairing URL would.
@@ -92,7 +120,7 @@ public final class AddEnvironmentFormView: DSView {
 
     func submitNow() {
         guard !isAdding else { return }
-        onSubmit?(host.text, code.text)
+        if sshMode { onSubmitSSH?(sshHosts.input.text, sshUsername.text, sshPort.text) } else { onSubmit?(host.text, code.text) }
     }
 
     public override func keyDown(with event: NSEvent) {
@@ -109,14 +137,16 @@ public final class AddEnvironmentFormView: DSView {
         // The hint span's `mt-1` collapses into its wrapper's `space-y-3` margin, so 12 in all.
         y += 16 + 6 + 32 + 12
         let hintY = y
-        y = hintY + hint.height(forWidth: width)
+        // SSH mode (`renderSshFields`): host, the Username and Port row, the alert and the button sit in one `space-y-3`.
+        y = sshMode ? fields + 54 + 12 + 54 : hintY + hint.height(forWidth: width)
+        let gap: CGFloat = sshMode ? 12 : 16
         var errorY: CGFloat?
         if error != nil {
-            y += 16
+            y += gap
             errorY = y
-            y += errorText.height(forWidth: width)
+            y += sshMode ? sshAlert.height(forWidth: width) : errorText.height(forWidth: width)
         }
-        y += 16
+        y += gap
         let button = y
         y += 32
         return (cardH, fields, hintY, errorY, button, y)
@@ -134,13 +164,21 @@ public final class AddEnvironmentFormView: DSView {
         remoteCard.frame = NSRect(x: 0, y: 0, width: cardW, height: f.cards)
         sshCard.frame = NSRect(x: cardW + 12, y: 0, width: cardW, height: f.cards)
         let codeW: CGFloat = 160
-        let hostW = w - codeW - 12
+        let hostW = sshMode ? w : w - codeW - 12
         hostLabel.frame = NSRect(x: 0, y: f.fields, width: hostW, height: 16)
         host.frame = NSRect(x: 0, y: f.fields + 22, width: hostW, height: 32)
         codeLabel.frame = NSRect(x: hostW + 12, y: f.fields, width: codeW, height: 16)
         code.frame = NSRect(x: hostW + 12, y: f.fields + 22, width: codeW, height: 32)
+        sshHosts.frame = NSRect(x: 0, y: f.fields + 22, width: w, height: 32)
+        usernameLabel.frame = NSRect(x: 0, y: f.fields + 66, width: w - 124, height: 16)
+        sshUsername.frame = NSRect(x: 0, y: f.fields + 88, width: w - 124, height: 32)
+        portLabel.frame = NSRect(x: w - 112, y: f.fields + 66, width: 112, height: 16)
+        sshPort.frame = NSRect(x: w - 112, y: f.fields + 88, width: 112, height: 32)
         hint.frame = NSRect(x: 0, y: f.hint, width: w, height: hint.height(forWidth: w))
-        if let ey = f.error { errorText.frame = NSRect(x: 0, y: ey, width: w, height: errorText.height(forWidth: w)) }
+        if let ey = f.error {
+            errorText.frame = NSRect(x: 0, y: ey, width: w, height: errorText.height(forWidth: w))
+            sshAlert.frame = NSRect(x: 0, y: ey, width: w, height: sshAlert.height(forWidth: w))
+        }
         submit.frame = NSRect(x: 0, y: f.button, width: w, height: 32)
     }
 

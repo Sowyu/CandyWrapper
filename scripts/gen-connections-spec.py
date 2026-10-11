@@ -194,7 +194,20 @@ def field(label, placeholder):
     return f'<label class="block"><span class="mb-1.5 block text-xs font-medium text-foreground">{label}</span>{form_ns["input_html"]("default", placeholder)}</label>'
 
 
-def add_dialog(route_label=None, error=None):
+def ssh_fields(error=None):
+    # renderSshFields (ConnectionsSettings.tsx:3020-3134): AutocompleteInput renders an Input in a `relative w-full` box.
+    host = (f'<div class="block"><label class="mb-1.5 block text-xs font-medium text-foreground">SSH host or alias</label>'
+            f'<div class="relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-64">{form_ns["input_html"]("default", "Search hosts or type devbox")}</div></div>')
+    grid = f'<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">{field("Username", "root")}{field("Port", "22")}</div>'
+    alert = ('<div class="relative rounded-xl border px-3.5 py-3 text-card-foreground text-sm border-error/32 bg-error-surface text-error-foreground '
+             '[&_[data-slot=alert-description]]:text-error-foreground/80 [&_svg]:text-error" data-slot="alert" data-variant="error" role="alert">'
+             '<div class="flex gap-2 items-center"><div class="flex min-w-0 flex-1 flex-col gap-0.5">'
+             f'<div class="flex flex-col gap-2.5 text-muted-foreground" data-slot="alert-description">{error}</div></div></div></div>') if error else ""
+    submit = button("outline", "default", lucide("plus", "size-3.5") + "Add environment", "w-full")
+    return f'<div class="space-y-4"><div class="space-y-3">{host}{grid}{alert}{submit}</div></div>'
+
+
+def add_dialog(route_label=None, error=None, ssh=False):
     title = f"Add a route to {route_label}" if route_label else "Add Environment"
     desc = ("Pair this machine again over another address, such as its Tailscale name. It joins the existing routes instead of adding a second machine."
             if route_label else "Pair another environment to this client.")
@@ -203,9 +216,9 @@ def add_dialog(route_label=None, error=None):
     err = f'<p class="text-xs text-destructive">{error}</p>' if error else ""
     submit = button("outline", "default", lucide("plus", "size-3.5") + ("Add route" if route_label else "Add environment"), "w-full")
     body = (f'<div class="space-y-4"><div class="grid gap-3 sm:grid-cols-2">'
-            f'{card("Remote link", "Enter a backend host and pairing code.", "chevrons-left-right-ellipsis", True)}'
-            f'{card("SSH", "Use local SSH config, agent, and tunnels for the backend.", "terminal", False)}</div>'
-            f'<div><div class="space-y-4">{fields}{err}{submit}</div></div></div>')
+            f'{card("Remote link", "Enter a backend host and pairing code.", "chevrons-left-right-ellipsis", not ssh)}'
+            f'{card("SSH", "Use local SSH config, agent, and tunnels for the backend.", "terminal", ssh)}</div>'
+            + (f'<div>{ssh_fields(error)}</div></div>' if ssh else f'<div><div class="space-y-4">{fields}{err}{submit}</div></div></div>'))
     return (f'<div role="dialog" data-slot="dialog-popup" class="{POPUP}">'
             f'<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
             f'<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">{title}</h2>'
@@ -385,6 +398,9 @@ cases = [
     {"name": "add-dialog", "html": add_dialog(), "wrapperStyle": "display:grid;width:768px", "native": {"kind": "dialog"}},
     {"name": "add-dialog.error", "html": add_dialog(error="Enter a backend host."), "wrapperStyle": "display:grid;width:768px",
      "native": {"kind": "dialog", "error": "Enter a backend host."}},
+    {"name": "add-dialog.ssh", "html": add_dialog(ssh=True), "wrapperStyle": "display:grid;width:768px", "native": {"kind": "dialog", "ssh": "1"}},
+    {"name": "add-dialog.ssh-error", "html": add_dialog(ssh=True, error="SSH port must be between 1 and 65535."), "wrapperStyle": "display:grid;width:768px",
+     "native": {"kind": "dialog", "ssh": "1", "error": "SSH port must be between 1 and 65535."}},
     {"name": "add-dialog.route", "html": add_dialog(route_label="Studio"), "wrapperStyle": "display:grid;width:768px",
      "native": {"kind": "dialog", "route": "Studio"}},
 ]

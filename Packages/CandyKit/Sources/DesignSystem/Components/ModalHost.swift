@@ -8,6 +8,7 @@ import QuartzCore
 /// `AlertDialog` is not dismissible from outside). Tab stays inside the popup, and focus goes back
 /// to the previous first responder on close.
 public final class ModalHost: DSView {
+    public var allowsUserDismissal = true
     public let panel: DialogView
     /// Called once the exit transition has finished and the host is gone.
     public var onDismiss: (@MainActor () -> Void)?
@@ -33,6 +34,12 @@ public final class ModalHost: DSView {
         return host
     }
 
+    /// True while a modal covers `window`. base-ui makes everything outside an open dialog inert, so views that
+    /// focus themselves (the composer after a shell loads) check this instead of taking keys from the dialog.
+    public static func isPresented(in window: NSWindow?) -> Bool {
+        window?.contentView?.subviews.contains { ($0 as? ModalHost)?.isClosing == false } ?? false
+    }
+
     /// For the gallery and tests: the host statically open, without a window or motion.
     public init(panel: DialogView) {
         self.panel = panel
@@ -42,7 +49,7 @@ public final class ModalHost: DSView {
         for l in [tint, blurred] { l.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()] }
         blurred.contentsGravity = .resize
         addSubview(panel)
-        panel.onClose = { [weak self] in self?.close() }
+        panel.onClose = { [weak self] in if self?.allowsUserDismissal == true { self?.close() } }
         setAccessibilityRole(.group)
     }
 
@@ -101,15 +108,15 @@ public final class ModalHost: DSView {
         }
     }
 
-    public override func cancelOperation(_ sender: Any?) { close() }
+    public override func cancelOperation(_ sender: Any?) { if allowsUserDismissal { close() } }
 
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { close() } else { super.keyDown(with: event) }
+        if event.keyCode == 53 { if allowsUserDismissal { close() } } else { super.keyDown(with: event) }
     }
 
     public override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if !panel.frame.contains(point), panel.kind != .alertDialog { close() }
+        if allowsUserDismissal, !panel.frame.contains(point), panel.kind != .alertDialog { close() }
     }
 
     /// Swallows clicks and scrolls everywhere so nothing under the backdrop reacts.

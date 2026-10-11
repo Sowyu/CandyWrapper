@@ -28,9 +28,9 @@ final class ShellSession {
 
     /// `environmentId` is the descriptor's id. The connector refuses a server that answers with another
     /// id (T3 does the same before it spends a pairing code, onboarding.ts:112-123).
-    convenience init(environmentId: String, baseURL: URL, token: String, cached: ShellSnapshot? = nil) {
+    convenience init(environmentId: String, baseURL: URL, token: String, cached: ShellSnapshot? = nil, connectionMethod: String = "direct") {
         let http = EnvironmentHTTP(baseURL: baseURL)
-        let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
+        let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0", connectionMethod: connectionMethod)
         self.init(environmentId: environmentId, http: http, token: token, cached: cached,
                   supervisor: ConnectionSupervisor(dependencies: .init(
                     connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity,

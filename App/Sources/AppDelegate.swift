@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private let quitOverlay = QuitHoldOverlayView()
+    private var desktopManaged: DesktopManagedController?
     private let codexAuth = CodexAuthCallbackReceiver()
     /// URLs that arrived before the window existed (a cold launch from a link).
     private var pendingURLs: [URL]? = []
@@ -49,11 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showMainWindow()
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
         NSApp.activate()
+        if let i = args.firstIndex(of: "--desktop-managed-preview"), args.indices.contains(i + 1) { desktopManaged?.preview(args[i + 1]) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    func applicationWillTerminate(_ notification: Notification) { notifications?.willTerminate() }
+    func applicationWillTerminate(_ notification: Notification) { notifications?.willTerminate(); desktopManaged?.shutdown() }
 
     /// T3 holds a single-instance lock (DesktopClerk.ts:122-131): a second launch focuses the first window
     /// (`second-instance`, :186-196) and quits. Development launches (any `--` flag) may run side by side.
@@ -157,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect")
         let environments = fakeConnect ? Environments(sidebar: sidebar, catalog: FakeT3Connect.catalog()) : Environments(sidebar: sidebar)
         self.environments = environments
+        desktopManaged = DesktopManagedController(window: window, environments: environments)
         ScheduledTasksStore.shared.environments = environments
         _ = environments.observe { ScheduledTasksStore.shared.environmentsChanged() }
         let t3Connect = T3ConnectController(environments: environments, fake: fakeConnect)
@@ -180,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings?.open(.providers)
         }
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
+        environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands

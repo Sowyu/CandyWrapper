@@ -8,6 +8,7 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
     public var environmentId: String
     /// The descriptor's `label`, shown in hover text and badges.
     public var sshAlias: String?
+    public var sshTarget: SshEnvironmentTarget?
     public var label: String
     /// The preferred route: the server's HTTP origin.
     public var httpBaseURL: URL
@@ -36,7 +37,11 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
     public var isRelayOnly: Bool { relay != nil && routes.allSatisfy(isRelayRoute) }
 
     /// `connectionRouteLabel`: "T3 Connect" for the relay route, else the direct route's label.
-    public func routeLabel(_ url: URL) -> String { isRelayRoute(url) ? "T3 Connect" : EnvironmentRoute.label(url) }
+    /// An SSH environment's tunnel route reads `SSH user@hostname` (routes.ts:180-185).
+    public func routeLabel(_ url: URL) -> String {
+        if let sshTarget, url == httpBaseURL { return sshTarget.routeLabel }
+        return isRelayRoute(url) ? "T3 Connect" : EnvironmentRoute.label(url)
+    }
 
     /// Every route, preferred first (`connectionRoutes`).
     public var routes: [URL] {
@@ -59,11 +64,12 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
         self.createdAt = createdAt
     }
 
-    enum CodingKeys: String, CodingKey { case environmentId, sshAlias, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt, relay }
+    enum CodingKeys: String, CodingKey { case environmentId, sshAlias, sshTarget, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt, relay }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         environmentId = try c.decode(String.self, forKey: .environmentId)
+        sshTarget = try c.decodeIfPresent(SshEnvironmentTarget.self, forKey: .sshTarget)
         sshAlias = try c.decodeIfPresent(String.self, forKey: .sshAlias)
         label = try c.decode(String.self, forKey: .label)
         httpBaseURL = try c.decode(URL.self, forKey: .httpBaseURL)
@@ -162,6 +168,13 @@ public struct EnvironmentCatalog: Sendable {
             var saved = registration
             if let i = all.firstIndex(where: { $0.environmentId == registration.environmentId }) {
                 saved = all[i]
+                if let target = registration.sshTarget {
+                    // Each SSH connect forwards a new loopback port: the new tunnel replaces the old one and its token.
+                    let old = saved.httpBaseURL, dropOld = saved.sshTarget != nil && old != route
+                    if dropOld { try? credentials.delete(environmentId: EnvironmentRoute.connectionId(environmentId: saved.environmentId, old)) }
+                    saved.routes = [route] + saved.routes.filter { $0 != route && !(dropOld && $0 == old) }
+                    saved.sshTarget = target; saved.sshAlias = target.alias
+                }
                 saved.label = registration.label
                 saved.machine = registration.machine ?? saved.machine
                 saved.routes = EnvironmentRoute.upsert(route, into: saved.routes)
