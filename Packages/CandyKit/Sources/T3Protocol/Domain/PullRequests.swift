@@ -323,12 +323,18 @@ public struct PullRequestStackDetail: Codable, Hashable, Sendable {
         public var headSha: String?
         public var headBranch: String
         public var state: String
+        public init(number: Int, title: String? = nil, isDraft: Bool? = nil, headSha: String? = nil, headBranch: String, state: String) {
+            self.number = number; self.title = title; self.isDraft = isDraft; self.headSha = headSha; self.headBranch = headBranch; self.state = state
+        }
     }
     public var id: String
     public var number: Int
     public var url: String
     public var base: String
     public var layers: [Layer]
+    public init(id: String, number: Int, url: String, base: String, layers: [Layer]) {
+        self.id = id; self.number = number; self.url = url; self.base = base; self.layers = layers
+    }
 }
 
 /// `PullRequestDetail` composed with `PullRequestActivity` (`PullRequestDetailView`,

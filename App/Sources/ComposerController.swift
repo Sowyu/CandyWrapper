@@ -324,9 +324,6 @@ final class ComposerController {
             let sources = config.usageLimitSources
             config = snapshot
             config.usageLimitSources = sources
-            if let issue = config.keybindingIssues.first(where: { $0["kind"]?.stringValue?.hasPrefix("keybindings.") == true }) {
-                showKeybindingsWarning(config, message: issue["message"]?.stringValue ?? "Invalid keybindings configuration", environmentId: environmentId)
-            }
             config.environmentThemes = themes
         case .environmentThemesUpdated(let themes): config.environmentThemes = themes
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
@@ -339,7 +336,7 @@ final class ComposerController {
             }
         case .keybindingsInvalid(let rules, let message):
             config.keybindings = rules
-            showKeybindingsWarning(config, message: message, environmentId: environmentId)
+            if environmentId == environments.primaryId { showKeybindingsWarning(message, config: config) }
         case .other: return
         }
         serverConfigs[environmentId] = config
@@ -355,21 +352,6 @@ final class ComposerController {
     }
 
     /// `sendShortcut` and `followUpBehavior` (client settings) drive the composer's Enter and follow-up rules.
-    private func showKeybindingsWarning(_ config: ServerProviderConfig, message: String, environmentId: String) {
-        if environmentId == environments.primaryId {
-                let warning = ToastView(title: "Invalid keybindings configuration", message: message, kind: .warning,
-                                        actionTitle: config.keybindingsConfigPath == nil || config.availableEditors.isEmpty ? nil : "Open keybindings.json", action: { [weak self] in
-                    guard let self, let path = config.keybindingsConfigPath,
-                          let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey)) else { return }
-                    Task { [weak self] in
-                        do { _ = try await self?.environments.request(environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor)) }
-                        catch { self?.toast(.error, "Unable to open keybindings file", "\(error)") }
-                    }
-                })
-                panel.toasts.show(warning)
-            }
-    }
-
     private func applyClientSettings() {
         let c = ClientSettingsStore.shared.current
         composer.stageArt = (sidebar?.stage ?? .none) != .none && c.string("environmentIdentificationMode") == "artwork"
@@ -688,6 +670,19 @@ final class ComposerController {
     }
     private var lastRunOnInputs: RunOnInputs?
     private var loadBalanceTask: Task<Void, Never>?
+    /// The draft the last SnapShot went to and its reserved thread, which it becomes once sent.
+    private var snapShotTarget: (draftId: String, threadId: String)?
+
+    /// Drafts whose automatic sample ran and found no machine (`loadBalancing.failed`), so they do not poll.
+    private var loadBalanceFailed: Set<String> = []
+
+    /// `automaticEnvironment` for the open draft.
+    private func isAutomatic(_ session: DraftSession, machines: Int) -> Bool {
+        ProviderLoadBalanceLogic.isAutomatic(enabled: ClientSettingsStore.shared.current.bool("loadBalancingEnabled"), canBalance: machines > 1,
+                                             locked: pendingMessageId != nil, selection: session.environmentSelection,
+                                             resolved: session.loadBalancedEnvironmentId, hasAttachments: !currentAttachments.isEmpty,
+                                             branch: session.branch, worktreePath: session.worktreePath)
+    }
 
     /// Points a draft at another member: same draft and local thread id, the member's environment.
     static func retarget(_ session: inout DraftSession, to project: ProjectShell) {
@@ -735,7 +730,15 @@ final class ComposerController {
         let runOn = panel.contextStrip.runOn
         runOn.options = targets.map(\.option)
         runOn.offersAutoBalance = targets.count > 1 && ClientSettingsStore.shared.current.bool("loadBalancingEnabled")
-        runOn.autoBalanceLabel = runOn.offersAutoBalance && session.environmentSelection == "auto" ? (loadBalanceTask != nil ? "Checking machines…" : session.loadBalancedEnvironmentId == nil ? "Auto balance unavailable" : "Auto balance") : nil
+        // `autoEnvironmentLabel` (ChatView.tsx:4429-4437).
+        let automatic = isAutomatic(session, machines: targets.count)
+        runOn.autoBalanceLabel = !automatic ? nil : session.loadBalancedEnvironmentId != nil ? "Auto balance"
+            : loadBalanceTask != nil ? "Checking machines…" : loadBalanceFailed.contains(session.draftId) ? "Auto balance unavailable" : "Auto balance"
+        // An unresolved automatic draft samples the machines once (`useLoadBalancedEnvironment` is mounted only then).
+        // ponytail: one sample per draft; T3 re-reads when candidates or weights change. Re-sample on provider or weight changes if drafts stay unresolved
+        if automatic, session.loadBalancedEnvironmentId == nil, loadBalanceTask == nil, !loadBalanceFailed.contains(session.draftId) {
+            DispatchQueue.main.async { [weak self] in self?.sampleLoadBalance() }
+        }
         runOn.selectedId = env
         runOn.locked = targets.count < 2 || pendingMessageId != nil
         // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
@@ -743,27 +746,36 @@ final class ComposerController {
         panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
     }
 
-    /// ChatView.tsx:4344-4437. A choice samples each eligible host once; resolved drafts do no idle work.
-    // ponytail: explicit Auto balance only, enable the default automatic choice after shared-project coverage on two sandbox hosts.
+    /// "Auto balance" picked (`onAutoEnvironment`, ChatView.tsx:4398-4428): the draft drops its machine, branch and
+    /// worktree and samples again.
     private func chooseAutomaticEnvironment() {
-        guard case .draft(var session) = target, pendingMessageId == nil, let group = group(of: ProjectId(session.projectId)),
-              let selection = pickers.current.modelSelection else { return }
+        guard case .draft(var session) = target, pendingMessageId == nil, let group = group(of: ProjectId(session.projectId)) else { return }
         guard currentAttachments.isEmpty else {
             toast(.warning, "Keep attachments on this machine", "Remove attachments before choosing automatic routing, then attach them on the selected machine.")
             return
         }
-        loadBalanceTask?.cancel()
+        loadBalanceTask?.cancel(); loadBalanceTask = nil
+        loadBalanceFailed.remove(session.draftId)
         session.environmentSelection = "auto"; session.loadBalancedEnvironmentId = nil; session.branch = nil; session.worktreePath = nil
         let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
         sessions[key] = session; target = .draft(session)
+        sampleLoadBalance()
+    }
+
+    /// ChatView.tsx:4344-4397: samples each eligible host once and moves the draft to the best one; resolved drafts do
+    /// no idle work.
+    private func sampleLoadBalance() {
+        guard case .draft(let session) = target, pendingMessageId == nil, loadBalanceTask == nil, session.loadBalancedEnvironmentId == nil,
+              let group = group(of: ProjectId(session.projectId)), let selection = pickers.current.modelSelection else { return }
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
         let candidates = runOnTargets(group).filter { candidate in
-            guard environments.session(candidate.option.environmentId) != nil else { return false }
+            guard environments.session(candidate.option.environmentId) != nil, (weights[candidate.option.environmentId] ?? 50) > 0 else { return false }
             return providers(candidate.option.environmentId).contains { p in
                 p.instanceId == selection.instanceId && p.enabled && p.installed && p.status != .error
                     && p.auth?["status"]?.stringValue != "unauthenticated" && p.availability != "unavailable"
             }
         }
-        let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
         let draftID = session.draftId
         loadBalanceTask = Task { [weak self] in
             guard let self else { return }
@@ -777,11 +789,14 @@ final class ComposerController {
             }
             guard !Task.isCancelled else { return }
             self.loadBalanceTask = nil
-            guard case .draft(var current) = self.target, current.draftId == draftID, current.environmentSelection == "auto" else { return }
+            guard case .draft(var current) = self.target, current.draftId == draftID, current.environmentSelection != "manual" else { return }
             if let chosen = ProviderLoadBalanceLogic.choose(snapshots, now: Date().timeIntervalSince1970 * 1000),
                let project = candidates.first(where: { $0.option.environmentId == chosen })?.project {
-                self.flushPrompt(); Self.retarget(&current, to: project); current.loadBalancedEnvironmentId = chosen
+                self.flushPrompt(); Self.retarget(&current, to: project)
+                current.environmentSelection = "auto"; current.loadBalancedEnvironmentId = chosen
                 self.sessions[key] = current; self.target = .draft(current); self.syncSidebarDrafts(); self.onTargetChange?()
+            } else {
+                self.loadBalanceFailed.insert(draftID)
             }
             self.scheduleSave(); self.refresh()
         }
@@ -1169,8 +1184,14 @@ final class ComposerController {
             }
             return
         }
-        if case .draft(let draft) = target, ClientSettingsStore.shared.current.bool("loadBalancingEnabled"), draft.environmentSelection == "auto", draft.loadBalancedEnvironmentId == nil {
-            toast(.warning, "Auto balance unavailable", "Choose a machine before sending.")
+        // `needsLoadBalancing` (ChatView.tsx:8785-8796).
+        if case .draft(let draft) = target, draft.loadBalancedEnvironmentId == nil,
+           let group = group(of: ProjectId(draft.projectId)), isAutomatic(draft, machines: runOnTargets(group).count) {
+            if loadBalanceTask != nil {
+                toast(.warning, "Checking machine resources", "Resource checks are still running. You can choose a machine in the composer.")
+            } else {
+                toast(.warning, "Choose a machine to continue", "No eligible machine has available resources. Choose a machine in the composer to override.")
+            }
             return
         }
         var text = text
@@ -2440,10 +2461,27 @@ extension ComposerController {
     /// Files dropped on the open thread's sidebar row (`consumePendingFileDrop`, ChatView.tsx:10930-10950).
     func attachDroppedFiles(_ urls: [URL]) { addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
 
+    /// `resolveTarget` (SnapShotCoordinator.tsx:39-58, 221-242): the last capture's draft while it exists, or the
+    /// thread it was sent as, else the open project's draft (`handleNewThread`, which opens it). Nil without a project.
     var snapShotDestination: (key: String, environment: String)? {
-        if target == nil { _ = newThread() }
-        guard questionRequestId == nil, let draftKey, let targetEnvironmentId else { return nil }
-        return (draftKey, targetEnvironmentId)
+        if let last = snapShotTarget {
+            if let s = sessions.values.first(where: { $0.draftId == last.draftId }), let env = ThreadId(s.threadId).environmentId {
+                return (last.draftId, env)
+            }
+            if sidebar?.snapshot?.threads.contains(where: { $0.id.rawValue == last.threadId }) == true, let env = ThreadId(last.threadId).environmentId {
+                return (last.threadId, env)
+            }
+            snapShotTarget = nil
+        }
+        guard newThread(), questionRequestId == nil, case .draft(let session) = target, let env = targetEnvironmentId else { return nil }
+        snapShotTarget = (session.draftId, session.threadId)
+        return (session.draftId, env)
+    }
+
+    /// The capture's draft or thread comes forward after delivery, so its tile is on screen.
+    func showSnapShotTarget(_ key: String) {
+        guard draftKey != key else { return }
+        if sessions.values.contains(where: { $0.draftId == key }) { sidebar?.actions.openDraft(key) } else { openThread?(ThreadId(key)) }
     }
 
     func snapShotFrame(id: String, key: String) -> CGRect? {
@@ -3032,6 +3070,28 @@ extension ComposerController {
     }
 
     func toastPublic(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) { toast(kind, title, message) }
+
+    /// "Invalid keybindings configuration" with `KeybindingsConfigWarning` (KeybindingsConfigWarning.tsx:13-54): the
+    /// server's message and "Open keybindings.json" in the preferred editor, disabled without a path or editors.
+    private func showKeybindingsWarning(_ message: String, config: ServerProviderConfig) {
+        let toast = ToastView(title: "Invalid keybindings configuration", message: message, kind: .warning)
+        let open = ButtonView("Open keybindings.json", variant: .outline, size: .xs)
+        let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
+        open.isEnabled = config.keybindingsConfigPath != nil && editor != nil
+        open.action = { [weak self] in
+            guard let self, let path = config.keybindingsConfigPath, let editor, let env = self.environments.primaryId else { return }
+            Task { [weak self] in
+                do {
+                    _ = try await self?.environments.request(env, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor))
+                } catch {
+                    let detail = (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "Unknown error opening file."
+                    self?.toast(.error, "Unable to open keybindings file", detail)
+                }
+            }
+        }
+        toast.descriptionButton = open
+        _ = panel.toasts.show(toast)
+    }
 
     private func toast(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) {
         _ = panel.toasts.show(ToastView(title: title, message: message, kind: kind))

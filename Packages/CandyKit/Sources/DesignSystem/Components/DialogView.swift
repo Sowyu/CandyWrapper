@@ -24,6 +24,14 @@ open class DialogView: DSView {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; footerButtons.forEach(addSubview); changed() }
     }
     public var footerVariant: FooterVariant = .default { didSet { changed() } }
+    /// `WizardHeader` children under the description (`WizardSteps`), 8px below it (`gap-2`).
+    public var headerContent: NSView? {
+        didSet { oldValue?.removeFromSuperview(); headerContent.map(addSubview); changed() }
+    }
+    /// `WizardPanel` (ui/wizard.tsx:141-159): the panel runs the dialog's full width on a tint
+    /// (`bg-zinc-25/80 ring-1 ring-black/5`, dark `white/2` and `white/5`) with `px-6 py-5`.
+    public var isWizardPanel = false { didSet { restyle(); changed() } }
+    private let wizardTint = BoxDecorationLayer()
     /// The first this many footer buttons sit at the start of the row (`sm:mr-auto` on the last of them).
     public var footerLeadingCount = 0 { didSet { changed() } }
     public var showsCloseButton: Bool { didSet { closeButton.isHidden = !showsCloseButton } }
@@ -57,6 +65,8 @@ open class DialogView: DSView {
         footerLayer.host = self
         layer?.addSublayer(decoration)
         layer?.addSublayer(footerLayer)
+        wizardTint.host = self
+        layer?.addSublayer(wizardTint)
         titleText.text = title
         messageText.text = message ?? ""
         titleText.font = DSFont.ui(20, weight: .semibold)
@@ -105,7 +115,8 @@ open class DialogView: DSView {
     }
 
     private struct Frames {
-        var title = CGRect.zero, message = CGRect.zero, panel: [CGRect] = [], footer = CGRect.zero, buttons: [CGRect] = []
+        var title = CGRect.zero, message = CGRect.zero, header = CGRect.zero, panelArea = CGRect.zero
+        var panel: [CGRect] = [], footer = CGRect.zero, buttons: [CGRect] = []
         var height: CGFloat = 0
     }
 
@@ -124,17 +135,26 @@ open class DialogView: DSView {
             f.message = CGRect(x: b.left + 24, y: y + 8, width: textWidth, height: h)
             y += 8 + h
         }
+        if let headerContent {
+            headerContent.setFrameSize(NSSize(width: textWidth, height: headerContent.frame.height))
+            let h = headerContent.intrinsicContentSize.height
+            f.header = CGRect(x: b.left + 24, y: y + 8, width: textWidth, height: h)
+            y += 8 + h
+        }
         y += panelContent.isEmpty ? 24 : 12
         if !panelContent.isEmpty {
-            // Panel: `space-y-4 p-6`, top padding 4 under a header, bottom 4 above a bare footer.
-            y += 4
+            // Panel: `space-y-4 p-6`, top padding 4 under a header, bottom 4 above a bare footer; a wizard's
+            // panel is `py-5` on its tint.
+            let panelTop = y
+            y += isWizardPanel ? 20 : 4
             for (i, view) in panelContent.enumerated() {
                 view.setFrameSize(NSSize(width: textWidth, height: view.frame.height))
                 let h = view.intrinsicContentSize.height
                 f.panel.append(CGRect(x: b.left + 24, y: y, width: textWidth, height: h))
                 y += h + (i == panelContent.count - 1 ? 0 : 16)
             }
-            y += hasFooter && footerVariant == .bare ? 4 : 24
+            y += isWizardPanel ? 20 : hasFooter && footerVariant == .bare ? 4 : 24
+            f.panelArea = CGRect(x: b.left, y: panelTop, width: inner, height: y - panelTop)
         }
         if hasFooter {
             // Footer: `px-6 py-4` row aligned to the end with an 8px gap; alert dialog's bare footer is `pb-6` only.
@@ -178,6 +198,12 @@ open class DialogView: DSView {
         var f = frames(width: bounds.width)
         titleText.frame = f.title
         messageText.frame = f.message
+        headerContent?.frame = f.header
+        wizardTint.isHidden = !isWizardPanel || panelContent.isEmpty
+        if !wizardTint.isHidden {
+            wizardTint.layout(boxSize: f.panelArea.size)
+            wizardTint.frame.origin = CGPoint(x: f.panelArea.minX - wizardTint.outset, y: f.panelArea.minY - wizardTint.outset)
+        }
         messageText.isHidden = !hasMessage
         // `DialogPanel` is a ScrollArea: when the host caps the dialog below its natural height, the panel scrolls
         // between the fixed header and footer.
@@ -217,6 +243,7 @@ open class DialogView: DSView {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         footerLayer.setNeedsDisplay()
+        wizardTint.setNeedsDisplay()
     }
 
     private func restyle() {
@@ -260,6 +287,11 @@ open class DialogView: DSView {
             footer.borderEdges = .init(top: 1)
         }
         footerLayer.boxStyle = footer
+        var tint = BoxStyle()
+        tint.fill = Themed.pick(light: Tokens.baseColors["zinc-25"]!.nsColor.withAlphaComponent(0.8), dark: Themed.white(0.02))
+        tint.border = Themed.pick(light: Themed.black(0.05), dark: Themed.white(0.05))
+        tint.borderEdges = .init(top: 1, bottom: 1)
+        wizardTint.boxStyle = tint
         titleText.color = Themed.color(\.contrastPopoverForeground)
         messageText.color = Themed.color(\.contrastMutedForeground)
     }

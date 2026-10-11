@@ -409,6 +409,9 @@ final class TerminalController {
 
     /// `runProjectScript`: the drawer opens on the active terminal, or a new one (120 x 30) when that
     /// one runs a command; `terminal.open`, then the command and Return.
+    /// A script's command reached its terminal (the preview URL opens then).
+    var onScriptStarted: ((ProjectScript) -> Void)?
+
     func runScript(_ script: ProjectScript) {
         guard let threadId, let launch = launch(threadId), let shell = environments.session(threadId.environmentId) else { return }
         var state = state
@@ -431,6 +434,7 @@ final class TerminalController {
             do {
                 _ = try await shell.supervisor.request(TerminalRPC.open, payload: payload)
                 _ = try await shell.supervisor.request(TerminalRPC.write, payload: TerminalRPC.writeInput(threadId: local, terminalId: terminalId, data: script.command + "\r"))
+                self?.onScriptStarted?(script)
             } catch {
                 self?.panel.toasts.show(ToastView(title: "Failed to run script \"\(script.name)\".", message: (error as? RPCClientError)?.typedError?.message, kind: .error))
             }

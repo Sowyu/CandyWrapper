@@ -205,8 +205,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installQuitHold(window: window, layout: layout)
         openIn = OpenInController(card: threads.panel.detailsCard, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
-        threads.panel.model.revealFileLabel = { [weak openIn] in openIn?.revealFileLabel }
-        threads.panel.model.revealFile = { [weak openIn] meta in openIn?.openFile(meta, reveal: true) }
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) }
         }
@@ -298,6 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installShortcuts(window: NSWindow, layout: SidebarLayoutView, sidebar: SidebarContentView, environments: Environments,
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
         threads.permissionNotice.openConnections = { [weak settings] in settings?.open(); settings?.show(.connections) }
+        threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
         let shortcuts = Shortcuts(window: window)
         let palette = PaletteCommands(window: window, sidebar: sidebar, environments: environments, threads: threads,
                                       commands: commands, settings: settings)
@@ -332,6 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The scope popup's settings button, the thread menu's Project settings (`/projects/$projectKey`).
         sidebar.actions.openProjectSettings = { [weak palette] key in palette?.openProjectSettings(key) }
+        settings.chooseIconFile = { [weak palette] env, cwd, name, external, onSelect in
+            palette?.openProjectFaviconPicker(environmentId: env, cwd: cwd, projectName: name, external: external, onSelect: onSelect)
+        }
         commands.openProjectSettings = { [weak palette] key in palette?.openProjectSettings(key) }
         // The header's new-thread button: with several projects the palette's "New thread in..." (Sidebar.tsx:4944-4962).
         sidebar.actions.newThread = { [weak palette] in palette?.newThreadFromSidebar(shift: NSEvent.modifierFlags.contains(.shift)) }
@@ -630,15 +632,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let viewport = slowRPCViewport ?? settings?.visibleToasts ?? threads?.panel.toasts else { return }
         let seconds = Int(requests.map(\.threshold).min() ?? 15)
         let message = "\(requests.count) request\(requests.count == 1 ? "" : "s") waiting longer than \(seconds)s."
-        if let slowRPCToast { viewport.update(slowRPCToast, title: "Some requests are slow", message: message) }
-        else {
+        // `SlowRequestDetails` behind the description (SlowRpcRequestToastCoordinator.tsx:19-62).
+        let details = (expand: "Show requests", collapse: "Hide requests",
+                       items: requests.map { ToastDetailListView.Item(title: $0.method, detail: "Started \($0.startedAt.formatted(date: .omitted, time: .standard))") })
+        if let slowRPCToast {
+            viewport.update(slowRPCToast, title: "Some requests are slow", message: message)
+            viewport.toast(slowRPCToast)?.details = details
+        } else {
             slowRPCViewport = viewport
-            slowRPCToast = viewport.show(ToastView(title: "Some requests are slow", message: message, kind: .warning,
-                                                  actionTitle: "Show requests", action: { [weak self] in
-                guard let window = self?.mainWindow else { return }
-                let dialog = DialogView(title: "Some requests are slow", message: SlowRPCRequestTracker.shared.slow.map { "\($0.method) · Started \($0.startedAt.formatted(date: .omitted, time: .standard))" }.joined(separator: "\n"))
-                _ = ModalHost.present(dialog, in: window)
-            }), timeout: 0)
+            let toast = ToastView(title: "Some requests are slow", message: message, kind: .warning)
+            toast.details = details
+            slowRPCToast = viewport.show(toast, timeout: 0)
         }
     }
 

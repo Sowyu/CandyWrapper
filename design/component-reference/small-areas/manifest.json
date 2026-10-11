@@ -1,0 +1,22 @@
+{
+  "hover-card.mismatch" : {
+    "height" : 133,
+    "width" : 320
+  },
+  "no-active-thread" : {
+    "height" : 420,
+    "width" : 720
+  },
+  "publish.azure-devops" : {
+    "height" : 46,
+    "width" : 258
+  },
+  "publish.bitbucket" : {
+    "height" : 46,
+    "width" : 258
+  },
+  "slow-requests.open" : {
+    "height" : 161,
+    "width" : 360
+  }
+}

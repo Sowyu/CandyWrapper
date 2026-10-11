@@ -6,8 +6,6 @@ import T3Protocol
 /// command-line tool is installed and signed in (others read "Setup Required"); Repository takes `owner/name`
 /// under the host, the visibility, and in Advanced the remote name and protocol; Summary shows the result.
 /// `onPublish` gets the `sourceControl.publishRepository` payload minus `cwd`; call `finish` or `fail` after.
-// ponytail: the steps sit in the panel, not in the header, and the panel has no zinc tint (`WizardPanel`);
-// no fidelity spec yet. Move them into DialogView's header when the wizard gets one.
 @MainActor
 public final class PublishRepositoryDialog {
     public let dialog: DialogView
@@ -34,7 +32,10 @@ public final class PublishRepositoryDialog {
         self.canWrite = canWrite
         dialog = DialogView(kind: .dialog, title: "Publish repository", message: "Pick where to host it, then point us at a repo to push to.")
         dialog.maxWidth = 576
-        dialog.panelContent = [steps, body]
+        // `WizardHeader` holds the steps; `WizardPanel` the step's body (GitActionsControl.tsx:717-737).
+        dialog.headerContent = steps
+        dialog.isWizardPanel = true
+        dialog.panelContent = [body]
         dialog.footerVariant = .bare
         dialog.footerButtons = [back, next]
         steps.onStepChange = { [weak self] i in
@@ -157,7 +158,7 @@ final class PublishBodyView: DSView {
         didSet {
             guard providerKind != oldValue else { return }
             hostIcon.removeFromSuperview()
-            hostIcon = IconView(definition: Self.icon(providerKind), size: 14)
+            hostIcon = SourceControlBrandGlyph.view(providerKind, size: 14)
             repoBox.addSubview(hostIcon)
             needsLayout = true
             needsDisplay = true
@@ -179,7 +180,7 @@ final class PublishBodyView: DSView {
     var protocolChoice: String { protocolGroup.selectedIndex == 1 ? "https" : "ssh" }
     private var advancedOpen = false
     private let hostLabel = LabelView("", font: DSFont.mono(12))
-    private var hostIcon = IconView(name: .brandGitHub, size: 14)
+    private var hostIcon: NSView = IconView(name: .brandGitHub, size: 14)
     private let repoBox = BoxView()
     private let advanced = ButtonView("Advanced", icon: .chevronRight, variant: .ghostMuted, size: .xs)
     private var items: [(NSView, CGFloat)] = []
@@ -190,7 +191,7 @@ final class PublishBodyView: DSView {
         case "github": IconName.brandGitHub.definition
         case "gitlab": IconName.brandGitLab.definition
         case "forgejo": IconName.brandForgejo.definition
-        // ponytail: Bitbucket and Azure DevOps glyphs use gradients scripts/extract-icons skips; a generic cloud stands in
+        // Bitbucket and Azure DevOps draw from their SVG (`SourceControlBrandGlyph`).
         default: IconName.cloud.definition
         }
     }
@@ -221,7 +222,7 @@ final class PublishBodyView: DSView {
         case 0:
             add(label("Provider"), 16)
             let grid = PublishCardGrid(cards: providers.map { p in
-                let card = PublishChoiceCard(icon: Self.icon(p.kind), title: p.label, description: nil, selected: p.selected, ready: p.ready, hint: p.hint)
+                let card = PublishChoiceCard(icon: SourceControlBrandGlyph.view(p.kind, size: 20), title: p.label, description: nil, selected: p.selected, ready: p.ready, hint: p.hint)
                 card.action = { [weak self] in self?.onProvider?(p.kind) }
                 card.onSetup = { [weak self] in self?.onSetup?() }
                 return card
@@ -233,7 +234,7 @@ final class PublishBodyView: DSView {
             add(Spacer(), 12)
             add(label("Visibility"), 16)
             let cards = [("private", "Private", "Only invited people", IconName.lock), ("public", "Public", "Anyone on the web", IconName.globe)].map { v in
-                let card = PublishChoiceCard(icon: v.3.definition, title: v.1, description: v.2, selected: visibility == v.0, ready: true, hint: nil)
+                let card = PublishChoiceCard(icon: IconView(definition: v.3.definition, size: 16), title: v.1, description: v.2, selected: visibility == v.0, ready: true, hint: nil)
                 card.action = { [weak self] in self?.onVisibility?(v.0) }
                 return card
             }
@@ -305,7 +306,7 @@ final class PublishBodyView: DSView {
         box.fill = Themed.color(\.background)
         repoBox.boxStyle = box
         hostLabel.color = Themed.color(\.contrastMutedForeground)
-        hostIcon.strokeColor = Themed.color(\.contrastMutedForeground)
+        (hostIcon as? IconView)?.strokeColor = Themed.color(\.contrastMutedForeground)
     }
 
     private final class Spacer: NSView {}
@@ -354,17 +355,17 @@ final class PublishCardGrid: DSView {
 final class PublishChoiceCard: ControlView {
     var onSetup: (@MainActor () -> Void)?
     private let decoration = BoxDecorationLayer()
-    private let iconView: IconView
+    private let iconView: NSView
     private let title = LabelView()
     private let detail = LabelView()
     private let selected: Bool
     private let ready: Bool
     private let setup = ButtonView("Setup Required", variant: .warningOutline, size: .micro)
 
-    init(icon: IconDefinition, title text: String, description: String?, selected: Bool, ready: Bool, hint: String?) {
+    init(icon: NSView, title text: String, description: String?, selected: Bool, ready: Bool, hint: String?) {
         self.selected = selected
         self.ready = ready
-        iconView = IconView(definition: icon, size: description == nil ? 20 : 16)
+        iconView = icon
         super.init(frame: .zero)
         scalesWhenPressed = false
         decoration.host = self
@@ -435,7 +436,7 @@ final class PublishChoiceCard: ControlView {
         decoration.boxStyle = box
         title.color = Themed.color(\.contrastForeground)
         detail.color = Themed.color(\.contrastMutedForeground)
-        iconView.strokeColor = ready && detail.isHidden ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
+        (iconView as? IconView)?.strokeColor = ready && detail.isHidden ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
     }
 }
 

@@ -95,7 +95,7 @@ final class FilesController {
         var items: [ThreadMenuItem] = []
         if config.availableEditors.contains("file-manager") {
             items.append(ThreadMenuItem("open", "Open"))
-            if config.revealsInFileManager { items.append(ThreadMenuItem("reveal", config.platformOS == "darwin" ? "Reveal in Finder" : "Reveal in File Explorer")) }
+            if let reveal = OpenInEditors.revealLabel(config) { items.append(ThreadMenuItem("reveal", reveal)) }
         }
         let editors = OpenInEditors.options(available: config.availableEditors).filter { $0.id != "file-manager" }
         if !editors.isEmpty { items.append(ThreadMenuItem("editors", "Open with", children: editors.map { ThreadMenuItem($0.id, $0.label) })) }

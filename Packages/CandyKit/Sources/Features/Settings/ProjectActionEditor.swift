@@ -28,11 +28,12 @@ public final class ProjectActionEditor {
 
     public var error: String? { get { form.error } set { form.error = newValue } }
 
-    public init(script: ProjectScript?, keybinding: String?) {
+    /// `prefill` reopens the add form with an import that failed (`importFileScript`, ProjectScriptsControl.tsx:157-166).
+    public init(script: ProjectScript?, keybinding: String?, prefill: ProjectScriptInput? = nil) {
         isEditing = script != nil
         dialog = DialogView(title: script == nil ? "Add Action" : "Edit Action",
                             message: "Actions are project-scoped commands you can run from the top bar or keybindings.")
-        let initial = ProjectScriptInput(name: script?.name ?? "", command: script?.command ?? "", icon: script?.icon ?? "play",
+        let initial = prefill ?? ProjectScriptInput(name: script?.name ?? "", command: script?.command ?? "", icon: script?.icon ?? "play",
                                          runOnWorktreeCreate: script?.runOnWorktreeCreate ?? false,
                                          waitForSetup: (script?.runOnWorktreeCreate ?? false) && script?.async == false,
                                          runOnSettle: script?.runOnSettle ?? false, keybinding: keybinding, previewUrl: script?.previewUrl,

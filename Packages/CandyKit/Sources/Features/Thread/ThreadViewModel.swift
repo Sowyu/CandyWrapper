@@ -68,9 +68,6 @@ public final class ThreadViewModel {
     /// Makes read paths workspace relative in labels and details.
     public var workspaceRoot: String?
     /// File chip clicks in messages (`MarkdownView.onOpenFile`); nil shows the chip's copy menu.
-    // ponytail: unwired; the app sets it once the files panel and open-in-editor exist
-    public var revealFileLabel: (() -> String?)?
-    public var revealFile: ((FileLinkMeta) -> Void)?
     public var openFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
     /// A sent image at a pixel side (`assets.createUrl` for the attachment, decoded at that size).
     public var onOpenAttachment: ((JSONValue, _ download: Bool) -> Void)?

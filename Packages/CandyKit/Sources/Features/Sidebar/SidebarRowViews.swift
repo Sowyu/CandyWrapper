@@ -393,6 +393,8 @@ struct SidebarRowActions {
     var unpin: (ThreadId) -> Void = { _ in }
     /// The pull request badge: one link opens it, a stack or several open the thread's list.
     var pullRequest: (ThreadId) -> Void = { _ in }
+    /// A row of the badge's hover mini list: that pull request, beside the thread.
+    var pullRequestURL: (ThreadId, String) -> Void = { _, _ in }
     var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
 }
 
@@ -429,6 +431,7 @@ final class SidebarCardRowView: SidebarRowBase {
         layer?.addSublayer(surface)
         for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
+        prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
         project.font = SB.font(12, .medium); project.lineHeight = 16
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
@@ -633,6 +636,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         layer?.addSublayer(surface)
         for v in [monogram, title, pin, terminal, prBadge, time] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
+        prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
         title.lineHeight = 20
         time.font = SB.tabular(12); time.lineHeight = 16
         pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }

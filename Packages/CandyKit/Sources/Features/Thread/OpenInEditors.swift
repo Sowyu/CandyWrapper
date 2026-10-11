@@ -26,6 +26,23 @@ public enum OpenInEditors {
         return editors.filter { set.contains($0.id) }.map { ($0.id, label($0.id)) }
     }
 
+    /// `openInEditorMenuLabel` (editorLabels.ts:15-19): "Open in Cursor", or "Open in editor" for none or the file manager.
+    public static func menuLabel(_ id: String?) -> String {
+        guard let id, id != "file-manager" else { return "Open in editor" }
+        return "Open in \(editors.first { $0.id == id }?.label ?? "Editor")"
+    }
+
+    /// The reveal item's label (ChatMarkdown.tsx:2390-2397, preview/fileExplorerLabel.ts:12-23): only when the server
+    /// reveals in its file manager and has one; the server's own wording first, else by its OS. Nil hides the item.
+    public static func revealLabel(_ config: ServerProviderConfig) -> String? {
+        guard config.revealsInFileManager, config.availableEditors.contains("file-manager") else { return nil }
+        switch config.revealKind ?? (config.platformOS == "darwin" ? "finder" : config.platformOS == "windows" ? "file-explorer" : "files") {
+        case "finder": return "Reveal in Finder"
+        case "file-explorer": return "Reveal in File Explorer"
+        default: return "Reveal in Files"
+        }
+    }
+
     /// `t3code:last-editor` in T3's localStorage.
     public static let lastEditorKey = "t3code:last-editor"
 

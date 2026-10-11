@@ -32,6 +32,7 @@ public final class ToastViewport: DSView {
         toast.id = id
         toast.onDismiss = { [weak self] in self?.dismiss(id) }
         toast.onSwipe = { [weak self] delta, ended in self?.swipe(id, delta: delta, ended: ended) }
+        toast.onHeightChange = { [weak self] in self?.relayout(animated: false) }
         views[id] = toast
         addSubview(toast)
         toast.frame = CGRect(x: 0, y: 0, width: bounds.width, height: toast.height(forWidth: bounds.width))
@@ -48,6 +49,9 @@ public final class ToastViewport: DSView {
         relayout(animated: false)
         return true
     }
+
+    /// The shown toast with this id, for changes beyond its text (its details list).
+    public func toast(_ id: Int) -> ToastView? { views[id] }
 
     public func dismiss(_ id: Int, swipe: CGPoint? = nil) {
         guard let view = views.removeValue(forKey: id) else { return }

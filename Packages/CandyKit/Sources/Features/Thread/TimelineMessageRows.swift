@@ -194,8 +194,6 @@ final class UserMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        markdown.revealFileLabel = context.model?.revealFileLabel
-        markdown.onRevealFile = context.model?.revealFile
         markdown.document = context.document(item.id, text, lineBreaks: true)
         attachments.configure(m, model: context.model)
         collapsible = shouldCollapseUserMessage(text)
@@ -316,8 +314,6 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        markdown.revealFileLabel = context.model?.revealFileLabel
-        markdown.onRevealFile = context.model?.revealFile
         // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
         markdown.diagramsEnabled = !m.streaming
         markdown.citationSourceID = m.id.rawValue
@@ -513,8 +509,6 @@ final class PlanRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        markdown.revealFileLabel = context.model?.revealFileLabel
-        markdown.onRevealFile = context.model?.revealFile
         markdown.document = context.document(item.id + (collapsed ? ":preview" : ""), body, lineBreaks: false)
         toggle.title = item.ui.planExpanded ? "Collapse plan" : "Expand plan"
         toggle.isHidden = !collapsible

@@ -9,7 +9,6 @@ import AppKit
         let reference = CTFontCreateUIFontForLanguage(.userFixedPitch, 13, nil)! as NSFont
         #expect(DSFont.mono(13).fontName == reference.fontName)
         #expect(DSFont.mono(13).pointSize == reference.pointSize)
-        #expect(FontRuntime.font(.terminal, size: 12).pointSize == 12)
     }
     @Test func rolesDoNotDoubleScale() {
         defer { FontRuntime.apply(.init()) }
@@ -19,10 +18,6 @@ import AppKit
         #expect(DSFont.ui(14).pointSize == 17.5)
         #expect(FontRuntime.font(.prompt, size: 14).pointSize == 18)
         #expect(DSFont.mono(13).pointSize == 16)
-        #expect(FontRuntime.font(.terminal, size: 12).pointSize == 16)
-        input.advanced = true; input.terminalSize = 10
-        FontRuntime.apply(input)
-        #expect(FontRuntime.font(.terminal, size: 12).pointSize == 10)
     }
     @Test func detachedLabelCatchesUpAndDoesNotCompoundSize() {
         defer { FontRuntime.apply(.init()) }

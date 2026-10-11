@@ -237,6 +237,7 @@ final class ThreadController {
     private(set) var browser: BrowserController!
     private var devices: DevicePanelController!
     private(set) var automations: ThreadAutomationsController!
+    private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
@@ -271,12 +272,16 @@ final class ThreadController {
         if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
+        PullRequestDetailBinding.savedLinks = { [weak sidebar] env in
+            ((sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? []))
+                .filter { $0.id.environmentId == env }.flatMap { $0.pullRequests ?? [] }
+        }
         PullRequestDetailBinding.serverSettings = { [weak composer] env in composer?.config(env).map { ServerSettingsValues($0.settings.raw) } }
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
         clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
-        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.onRouteChange?() }
+        composer.onTargetChange = { [weak self] in self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.onRouteChange?() }
         // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
         // instance's name when instances need telling apart (`shouldShowInstanceBadge`), and earlier providers.
         sidebar.actions.hoverProvider = { [weak self] thread in
@@ -289,6 +294,8 @@ final class ThreadController {
             let badge = entry.provider.accentColor != nil || catalog.entries.filter { $0.driver == entry.driver }.count > 1
             return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history)
         }
+        checkoutStatus = SidebarCheckoutStatus(environments: environments) { [weak sidebar] in sidebar?.checkoutBranchChanged() }
+        sidebar.actions.checkoutBranch = { [weak self] env, cwd in self?.checkoutStatus.branch(environmentId: env, cwd: cwd) }
         // Scratch rows name their machine; the sidebar learns each environment's scratch folder from its config.
         composer.configObservers.append { [weak self, weak sidebar] env in
             guard let sidebar, let config = self?.composer.config(env) else { return }
@@ -387,6 +394,21 @@ final class ThreadController {
         files.onTerminalTabsClosed = { [weak self] tabs in self?.terminal.panelTerminalsClosed(tabs) }
         scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
+        scripts.readFile = { [weak environments] env, cwd, path in
+            guard let reply = try? await environments?.request(env, "projects.readFile", .object(["cwd": .string(cwd), "relativePath": .string(path)])),
+                  let contents = reply["contents"]?.stringValue else { return nil }
+            return (contents, reply["truncated"] == .bool(true))
+        }
+        // `runProjectScript` (ChatView.tsx:5059-5075): a script with `autoOpenPreview` opens its URL in the browser panel
+        // once its command is written.
+        terminal.onScriptStarted = { [weak self] script in
+            guard let self, script.autoOpenPreview == true, let raw = script.previewUrl, self.panel.browserAvailable else { return }
+            guard let url = PreviewURL.normalize(raw) else {
+                self.panel.toasts.show(ToastView(title: "Could not open preview", message: "An unexpected error occurred.", kind: .error))
+                return
+            }
+            self.browser.openURL(url)
+        }
         panel.confirmCloseTerminalTab = { [weak self] surface, close in self?.terminal.confirmCloseSurface(surface, then: close) }
         panel.diffPanel.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
         panel.fileSurface.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
@@ -407,15 +429,40 @@ final class ThreadController {
                 self.pullRequests.openCurrentPullRequest()
             }
         }
-        // A chat file chip opens the file tab at its line (ChatMarkdown.tsx `fileLinkChip`).
-        // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
-        panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
+        sidebar.actions.openPullRequestURL = { [weak self, weak sidebar] id, url in
+            guard let self, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { return }
+            self.open(id)
+            if let link = (thread.pullRequests ?? []).first(where: { $0.url == url }) {
+                self.pullRequests.open(link)
+            } else {
+                self.pullRequests.openCurrentPullRequest()
+            }
+        }
         panel.model.onCiteSelection = { [weak self] messageId, selection in
             guard let self, let id = self.openThreadId, let env = id.environmentId, let window = self.panel.window else { return }
             let citation = ThreadAssistantCitation.selection(environmentId: env, threadId: id.localId.rawValue, messageId: messageId, selection: selection)
             ThreadAssistantCitationEditor.present(citation, in: window) { [weak self] edited in
                 self?.panel.composer.insertAtCaret(edited.markdown + " ")
             }
+        }
+        // The file chip menu's shell items: only on this Mac's environment (`canUseMarkdownFileShellActions`,
+        // ChatMarkdown.tsx:255-261, the "local-exec" open mode).
+        MarkdownView.fileChipShell = { [weak self] in
+            guard let self, let env = self.openThreadId?.environmentId, env == self.environments.primaryId,
+                  let config = self.composer.config(env) else { return (nil, nil) }
+            let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
+            return (OpenInEditors.menuLabel(editor), OpenInEditors.revealLabel(config))
+        }
+        MarkdownView.onOpenFileInEditor = { [weak self] meta in
+            guard let self, let env = self.openThreadId?.environmentId, let config = self.composer.config(env),
+                  let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
+            else { return }
+            self.shellOpen(env, OpenInEditors.launchInput(cwd: meta.targetPath, editor: editor), failure: "Unable to open file")
+        }
+        // ponytail: reveals `filePath` as written; T3 first resolves a bare basename against the workspace. Add the lookup if bare names miss
+        MarkdownView.onRevealFile = { [weak self] meta in
+            guard let self, let env = self.openThreadId?.environmentId else { return }
+            self.shellOpen(env, OpenInEditors.launchInput(cwd: meta.filePath, editor: "file-manager", reveal: true), failure: "Unable to reveal file")
         }
         MarkdownView.onOpenCitation = { [weak self] citation in
             self?.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
@@ -527,8 +574,9 @@ final class ThreadController {
     func open(_ id: ThreadId, force: Bool = false) {
         sidebar?.state.activeThreadId = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
-        guard force || id != session?.threadId || panel.isDraft else { return }
+        guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
         OpenTiming.begin(id.rawValue)
+        hideNoActiveThread()
         session?.end()
         panel.setDraft(projectTitle: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
@@ -561,6 +609,18 @@ final class ThreadController {
         }
         // The thread left behind may still run: it streams on in the background.
         keepAlive?.update()
+    }
+
+    /// `shell.openInEditor` with T3's error toast (ChatMarkdown.tsx:1950-1990, 2038-2075).
+    private func shellOpen(_ environmentId: String, _ input: JSONValue, failure title: String) {
+        Task { [weak self] in
+            do {
+                _ = try await self?.environments.request(environmentId, "shell.openInEditor", input)
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "An error occurred."
+                self?.panel.toasts.show(ToastView(title: title, message: message, kind: .error))
+            }
+        }
     }
 
     /// Running threads' streams while they are not open (`RunningThreadKeepAlive`).
@@ -690,6 +750,7 @@ final class ThreadController {
         retained.removeAll { $0.id.environmentId == environmentId }
         keepAlive?.drop(environmentId: environmentId)
         composer.environmentRemoved(environmentId)
+        checkoutStatus.environmentRemoved(environmentId)
         terminal.environmentRemoved(environmentId)
         clones.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard
@@ -738,8 +799,56 @@ final class ThreadController {
         }
     }
 
+    /// `NoActiveThreadState` over the thread panel: the chat surface with no thread (ChatView.tsx:10958-10961).
+    private(set) lazy var noActiveThread: NoActiveThreadStateView = {
+        let view = NoActiveThreadStateView()
+        view.autoresizingMask = [.width, .height]
+        return view
+    }()
+    /// The open thread once a shell listed it, so a thread launched a moment ago is not taken for a deleted one.
+    private var seenOpenThread: ThreadId?
+
+    private func hideNoActiveThread() {
+        guard noActiveThread.superview != nil else { return }
+        noActiveThread.removeFromSuperview()
+    }
+
+    /// The open thread left its environment's shell (deleted from another client). T3 reads the route as
+    /// "missing" and goes to "/" while the environment still has threads (ThreadRouteView.tsx:144-158,
+    /// threadRoutes.ts:23-39); with none left the chat surface has no thread and shows `NoActiveThreadState`.
+    private func dropMissingThread(_ snapshot: ShellSnapshot) {
+        guard let id = session?.threadId, let env = id.environmentId else { return }
+        let listed = snapshot.threads.contains { $0.id == id } || snapshot.archivedThreads.contains { $0.id == id }
+        if listed { seenOpenThread = id }
+        let outcome = MissingThreadRoute.resolve(shellLoaded: environments.hasShell(env), listed: listed, seenBefore: seenOpenThread == id,
+                                                 environmentHasThreads: snapshot.threads.contains { $0.id.environmentId == env })
+        guard outcome != .keep else { return }
+        seenOpenThread = nil
+        if UserDefaults.standard.string(forKey: Self.lastThreadKey) == id.rawValue { UserDefaults.standard.removeObject(forKey: Self.lastThreadKey) }
+        if outcome == .landOnIndex {
+            landOnIndex()
+            return
+        }
+        session?.end()
+        session = nil
+        lineage.update(threadId: nil, projection: nil)
+        terminal.show(nil)
+        scripts.show(nil)
+        files.show(nil)
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        sidebar?.state.activeThreadId = nil
+        noActiveThread.frame = panel.bounds
+        // Under `NoProjectsHero` when that shows too.
+        if noProjectsHero.superview === panel {
+            panel.addSubview(noActiveThread, positioned: .below, relativeTo: noProjectsHero)
+        } else {
+            panel.addSubview(noActiveThread)
+        }
+    }
+
     private func shellChanged(_ snapshot: ShellSnapshot) {
         updateNoProjectsHero(snapshot)
+        dropMissingThread(snapshot)
         composer.projectsChanged()
         git.refresh()
         files.shellChanged()

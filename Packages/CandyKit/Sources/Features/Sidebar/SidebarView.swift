@@ -14,6 +14,9 @@ public struct SidebarActions {
     public var unpin: (ThreadId) -> Void = { _ in }
     /// A row's pull request badge was clicked.
     public var openPullRequest: (ThreadId) -> Void = { _ in }
+    /// A pull request row in the badge's hover list: open the thread and that pull request in its panel
+    /// (`handlePrClick` with a target URL, Sidebar.tsx:1557-1567).
+    public var openPullRequestURL: (ThreadId, String) -> Void = { _, _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// The undo notice's button (`undoLatestThreadAction`).
@@ -43,6 +46,9 @@ public struct SidebarActions {
     /// driver, the model label (with the instance name when instances need telling apart) and the names of
     /// earlier providers. Nil when the provider is unknown.
     public var hoverProvider: (ThreadShell) -> (driver: String, label: String, handedOffFrom: [String])? = { _ in nil }
+    /// The branch a checkout (environment, cwd) is on now, from its VCS status; nil until known. The app starts
+    /// watching the checkout on the first ask and calls `checkoutBranchChanged()` when it learns more.
+    public var checkoutBranch: (_ environmentId: String, _ cwd: String) -> String? = { _, _ in nil }
     public init() {}
 }
 
@@ -221,6 +227,7 @@ public final class SidebarContentView: DSView {
             settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },
             snooze: { [weak self] in self?.actions.snooze($0, $1) }, unsnooze: { [weak self] in self?.actions.unsnooze($0) },
             unpin: { [weak self] in self?.actions.unpin($0) }, pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
+            pullRequestURL: { [weak self] in self?.actions.openPullRequestURL($0, $1) },
             contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
@@ -444,9 +451,13 @@ public final class SidebarContentView: DSView {
 
     // MARK: Hover card
 
+    /// A checkout's branch arrived or changed: the open card shows or hides its mismatch line.
+    public func checkoutBranchChanged() { list.refreshHoverCard() }
+
     /// `SidebarThreadTooltip`'s props for a thread.
     func hoverCardModel(_ id: ThreadId) -> SidebarThreadHoverCardModel? {
-        guard let snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) else { return nil }
+        guard let snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id })
+        else { return nil }
         var m = SidebarThreadHoverCardModel(title: thread.title)
         let project = snapshot.projects.first { $0.id == thread.projectId }
         let group = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId)
@@ -458,6 +469,12 @@ public final class SidebarContentView: DSView {
             m.environmentMachine = state.environments.machine(env)
         }
         m.branch = thread.branch
+        // Sidebar.tsx:1243-1255, 1350-1355: the checkout's status when the thread has a branch; only a
+        // Current checkout thread (no worktree) can be on another branch.
+        if thread.branch != nil, thread.worktreePath == nil, let env = id.environmentId, let root = project?.workspaceRoot {
+            m.branchMismatch = BranchToolbarLogic.localCheckoutBranchMismatch(
+                envMode: .local, worktreePath: nil, threadBranch: thread.branch, currentBranch: actions.checkoutBranch(env, root)) != nil
+        }
         if let provider = actions.hoverProvider(thread) {
             m.provider = (provider.driver, provider.label)
             m.handedOffFrom = provider.handedOffFrom

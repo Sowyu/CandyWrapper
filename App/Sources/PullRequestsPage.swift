@@ -472,15 +472,33 @@ final class PullRequestsPageController {
         }
     }
 
-    /// A row's stack menu (`PullRequestStackPopover`): "Loading stack…", then the layers; a pick opens it.
+    /// A row's stack menu (`PullRequestStackPopover`): "Loading stack…", or the saved stack from linked threads
+    /// while the read runs or after it fails (`usePullRequestStack`), then the layers; a pick opens it.
     private func showStack(_ entry: PullRequestListEntry, from anchor: NSView) {
         guard let membership = entry.stack, let env = entry.environmentId else { return }
+        let ref = PullRequestRef(projectId: entry.projectId, host: entry.host, repository: entry.repository, number: entry.number)
+        let saved = PullRequestWriteLogic.savedStack(PullRequestDetailBinding.savedLinks?(env) ?? [], reference: ref)
         let menu = MenuPopupView(items: PullRequestStackMenu.placeholder(number: membership.number, text: "Loading stack…"))
         guard let host = anchor.popupHost else { return }
         let popup = host.open(menu, trigger: anchor, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
                               swallowsOutsideClick: true)
         menu.hostPopup = popup
-        let ref = PullRequestRef(projectId: entry.projectId, host: entry.host, repository: entry.repository, number: entry.number)
+        let show = { [weak self, weak menu] (stack: PullRequestStackDetail, notice: String?, stale: Bool) in
+            guard let menu else { return }
+            let items = PullRequestStackMenu.header(number: stack.number, notice: notice, stale: stale, onRetry: nil)
+                + PullRequestStackMenu.layers(stack, current: entry.number, pending: false) { [weak self] number in
+                    host.close(popup)
+                    var e = entry
+                    e.number = number
+                    e.url = ChangeRequestURL.url(kind: e.provider, host: e.host, repository: e.repository, number: number) ?? e.url
+                    self?.select(e)
+                }
+            menu.setItems(items)
+            host.reposition(popup)
+        }
+        if let saved {
+            show(saved, PullRequestWriteLogic.stackNotice(hasData: true, isSuccess: false, isPending: true, error: false), false)
+        }
         Task { [weak self, weak menu] in
             guard let self, let menu else { return }
             do {
@@ -490,17 +508,12 @@ final class PullRequestsPageController {
                     host.reposition(popup)
                     return
                 }
-                let items = PullRequestStackMenu.header(number: stack.number, notice: nil, stale: false, onRetry: nil)
-                    + PullRequestStackMenu.layers(stack, current: entry.number, pending: false) { [weak self] number in
-                        host.close(popup)
-                        var e = entry
-                        e.number = number
-                        e.url = ChangeRequestURL.url(kind: e.provider, host: e.host, repository: e.repository, number: number) ?? e.url
-                        self?.select(e)
-                    }
-                menu.setItems(items)
-                host.reposition(popup)
+                show(stack, nil, false)
             } catch {
+                if let saved {
+                    show(saved, PullRequestWriteLogic.stackNotice(hasData: true, isSuccess: false, isPending: false, error: true), true)
+                    return
+                }
                 menu.setItems(PullRequestStackMenu.placeholder(number: membership.number, text: PullRequestDetailBinding.failure(error, number: entry.number).1))
                 host.reposition(popup)
             }

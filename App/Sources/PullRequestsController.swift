@@ -115,6 +115,8 @@ final class PullRequestDetailBinding {
     static let mergeMethodKey = "pullRequests.mergeMethod"
     /// An environment's server settings, for the project's default merge method.
     nonisolated(unsafe) static var serverSettings: ((String) -> ServerSettingsValues?)?
+    /// Every thread's pull request links on an environment, for the saved stack (`usePullRequestStack`).
+    nonisolated(unsafe) static var savedLinks: ((String) -> [ThreadPullRequestLink])?
 
     private var shell: ShellSession? { environments.session(environmentId) }
 
@@ -493,6 +495,13 @@ final class PullRequestDetailBinding {
         stackGeneration += 1
         let gen = stackGeneration
         view.stackFailed = false
+        // `pullRequestStackView`: saved membership stands in while the read is pending or fails; it has no head
+        // SHAs, so the stack actions wait for the live read (usePullRequestStack.ts:12-33).
+        if view.stack == nil, let saved = PullRequestWriteLogic.savedStack(environmentId.flatMap { Self.savedLinks?($0) } ?? [], reference: ref) {
+            view.stackCanMerge = false
+            view.stackCanRebase = false
+            view.stack = saved
+        }
         view.stackNotice = view.stack == nil ? nil : PullRequestWriteLogic.stackNotice(hasData: true, isSuccess: false, isPending: true, error: false)
         view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: view.stack != nil, stackPending: true, stackError: false)
         Task { [weak self] in
