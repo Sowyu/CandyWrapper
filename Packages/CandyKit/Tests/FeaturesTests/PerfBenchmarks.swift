@@ -462,4 +462,90 @@ struct PerfBenchmarks {
         }
         #expect(count > 0)
     }
+
+    /// The side-by-side's 2,000-message thread and the huge thread, paged in to their start.
+    @Test func historyPaging() async throws {
+        let (frame, threadId) = try syntheticThreadFrame(copies: 300, window: 300)
+        guard case .chunk(_, let values)? = try RPCFrame.decodeServer(frame).first else { throw CancellationError() }
+        var reducer = ThreadReducer(threadId: ThreadId(threadId))
+        reducer.apply([try values[0].decode(as: ThreadStreamItem.self)])
+        let huge = try #require(reducer.projection)
+        var seeded = huge
+        seeded.visibleTurnItems = try seededMessages(pairs: 1000, threadId: threadId)
+        seeded.runs = []
+        seeded.attempts = []
+        seeded.nodes = []
+        seeded.checkpoints = []
+        try await measurePaging("paging_seeded2000", seeded, window: 20, page: 40)
+        try await measurePaging("paging_huge", huge, window: 75, page: 75)
+    }
+}
+
+// MARK: History paging
+
+/// The side-by-side's seeded thread: `pairs` question and reply pairs, message items only, no runs.
+private func seededMessages(pairs: Int, threadId: String) throws -> [ProjectedTurnItem] {
+    let words = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa".split(separator: " ")
+    var rows: [ProjectedTurnItem] = []
+    for i in 0..<pairs {
+        for user in [true, false] {
+            let n = rows.count
+            let at = "2026-10-03T\(String(format: "%02d", 9 + n / 3600)):\(String(format: "%02d", (n / 60) % 60)):\(String(format: "%02d", n % 60)).000Z"
+            let text = user ? "Question \(i + 1): say something about \(words[i % words.count])."
+                : "Reply \(i + 1). " + (0..<(20 + (i * 7) % 60)).map { String(words[($0 + i) % words.count]) }.joined(separator: " ")
+                    + (i % 5 == 0 ? "\n\n- first point\n- second point\n- third point" : "")
+            let item = try TurnItem(json: .object([
+                "id": .string("seed-item-\(n)"), "threadId": .string(threadId), "type": .string(user ? "user_message" : "assistant_message"),
+                "messageId": .string("seed-message-\(n)"), "text": .string(text), "ordinal": .number(Double(n)),
+                "status": .string("completed"), "startedAt": .string(at), "updatedAt": .string(at), "streaming": .bool(false),
+            ]))
+            rows.append(ProjectedTurnItem(local: item, position: n))
+        }
+    }
+    return rows
+}
+
+/// Pages a thread's history in like the client: the newest `window` rows first, then older pages
+/// of `page` rows through `mergeOlderHistory`, each laid out in the panel before the next. `main`
+/// counts main-thread milliseconds (setProjection, applying rows derived off the main thread,
+/// layout); `total` also counts the row passes off the main thread.
+@MainActor
+private func measurePaging(_ name: String, _ full: ThreadProjection, window: Int, page: Int) async throws {
+    let all = full.visibleTurnItems
+    var p = full
+    p.visibleTurnItems = all.suffix(window).enumerated().map { i, row in var row = row; row.position = i; return row }
+    // The merge skips page rows whose item the projection already holds, so only the window's are held.
+    let windowIds = Set(p.visibleTurnItems.map(\.sourceItemId))
+    p.turnItems = p.turnItems.filter { windowIds.contains($0.id) }
+    let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+    panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+    await panel.model.rowsSettled()
+    panel.layoutSubtreeIfNeeded()
+    var loaded = window
+    var mains: [Double] = [], totals: [Double] = []
+    while loaded < all.count {
+        let older = Array(all[max(0, all.count - loaded - page)..<(all.count - loaded)])
+        loaded += older.count
+        p = ThreadReduction.mergeOlderHistory(p, older)
+        let start = ContinuousClock.now
+        panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+        var main = milliseconds(ContinuousClock.now - start)
+        main += await panel.model.rowsSettled()
+        let layout = ContinuousClock.now
+        panel.layoutSubtreeIfNeeded()
+        let end = ContinuousClock.now
+        main += milliseconds(end - layout)
+        mains.append(main)
+        totals.append(milliseconds(end - start))
+    }
+    func report(_ suffix: String, _ times: [Double]) {
+        let sorted = times.sorted()
+        let line: [String: Any] = ["name": "\(name)_\(suffix)", "median_ms": sorted[sorted.count / 2], "min_ms": sorted[0],
+                                   "max_ms": sorted[sorted.count - 1], "runs": sorted.count, "sum_ms": times.reduce(0, +),
+                                   "last_ms": times.last ?? 0, "timeline_rows": panel.model.items.count]
+        let data = try! JSONSerialization.data(withJSONObject: line, options: [.sortedKeys])
+        print("PERF " + String(decoding: data, as: UTF8.self))
+    }
+    report("main", mains)
+    report("total", totals)
 }

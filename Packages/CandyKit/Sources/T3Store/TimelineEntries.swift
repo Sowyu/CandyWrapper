@@ -204,6 +204,11 @@ public enum TimelineEntries {
 
     /// The entry of one row, or nil for a row the timeline leaves out.
     static func entry(_ row: ProjectedTurnItem, attempt: TimelineAttempt?, planById: [PlanId: PlanArtifact], folded: Set<String>) -> TimelineEntry? {
+        // `position` is the row's index in `visibleTurnItems`, which every older history page
+        // renumbers (threadHistoryMerge.ts:59). Nothing in the timeline reads it, so entries carry 0
+        // and a page leaves the entries and rows after it equal.
+        var row = row
+        row.position = 0
         let item = row.item
         if isWorkspacePreparation(item) { return nil }
         // Task progress belongs in the composer; checkpoints become diff summaries.
@@ -273,8 +278,16 @@ public enum TimelineEntries {
         var nodesSource: [ExecutionNode] = []
         var plansSource: [PlanArtifact] = []
         var lookup: AttemptLookup?
+        /// After the last derive: the entries are the previous ones with this many new entries in
+        /// front (an older history page), every previous entry reused as it was. Nil otherwise.
+        public internal(set) var prepended: Int?
 
         public init() {}
+    }
+
+    /// Rows equal but for `position`, which a history page renumbers.
+    static func samePayload(_ a: ProjectedTurnItem, _ b: ProjectedTurnItem) -> Bool {
+        a.sourceItemId == b.sourceItemId && a.sourceThreadId == b.sourceThreadId && a.visibility == b.visibility && a.item == b.item
     }
 
     /// `derive` against the previous result in `memo`. Returns the entries and, when entries only
@@ -307,9 +320,18 @@ public enum TimelineEntries {
         var oldIndexById: [TurnItemId: Int]?
         var sameShape = !fresh && rows.count == old.rows.count
         var changed: [Int] = []
+        // An older page: the old rows follow the new ones in order, so they line up by offset.
+        let front = !fresh && rows.count > old.rows.count
+            && zip(rows[(rows.count - old.rows.count)...], old.rows).allSatisfy({ $0.sourceItemId == $1.sourceItemId })
+            ? rows.count - old.rows.count : 0
+        var frontEntries: Int?
+        var reusedAll = front > 0
         for (i, row) in rows.enumerated() {
             var previous: Int?
-            if !fresh {
+            if i == front, front > 0 { frontEntries = next.entries.count }
+            if front > 0 {
+                previous = i < front ? nil : i - front
+            } else if !fresh {
                 if i < old.rows.count, old.rows[i].sourceItemId == row.sourceItemId {
                     previous = i
                 } else {
@@ -320,7 +342,7 @@ public enum TimelineEntries {
                     previous = oldIndexById![row.sourceItemId]
                 }
             }
-            let unchangedRow = previous.map { old.rows[$0] == row } ?? false
+            let unchangedRow = previous.map { samePayload(old.rows[$0], row) } ?? false
             let attempt = unchangedRow && !lookupChanged ? old.attempts[previous!] : lookup.attempt(row.item)
             next.attempts.append(attempt)
             let entry: TimelineEntry?
@@ -328,6 +350,7 @@ public enum TimelineEntries {
                 let index = old.entryIndex[p]
                 entry = index < 0 ? nil : old.entries[index]
             } else {
+                if i >= front { reusedAll = false }
                 entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded)
                 if sameShape, let p = previous {
                     let index = old.entryIndex[p]
@@ -341,6 +364,7 @@ public enum TimelineEntries {
                 next.entryIndex.append(-1)
             }
         }
+        next.prepended = reusedAll ? frontEntries : nil
         memo = next
         return (next.entries, sameShape ? changed : nil)
     }

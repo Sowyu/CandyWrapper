@@ -35,12 +35,15 @@ final class TimelinePipeline: @unchecked Sendable {
     private var shownPending: [ChatMessage] = []
     /// Entries of `base` replaced in place since `shown`; nil once the list changed shape.
     private var changedSinceShown: Set<Int>? = []
+    /// Entries an older history page put in front of `shown`'s, with every later entry unchanged.
+    private var prependedSinceShown: Int?
 
     /// The rows for `request`, or nil when nothing changed.
     func run(_ request: Request) -> Result? {
         if request.projectionChanged {
             if let projection = request.projection {
                 let (input, changed) = OpenTiming.measure("timeline entries") { TimelineRowsInput.derive(projection: projection, memo: &memo) }
+                prependedSinceShown = changedSinceShown == [] && shown != nil ? memo.prepended : nil
                 base = input
                 if let changed, let since = changedSinceShown { changedSinceShown = since.union(changed) } else { changedSinceShown = nil }
             } else {
@@ -59,6 +62,8 @@ final class TimelinePipeline: @unchecked Sendable {
         }
         let changed = changedSinceShown
         changedSinceShown = []
+        let prepended = prependedSinceShown
+        prependedSinceShown = nil
         guard let source else {
             shown = nil
             shownPending = []
@@ -70,6 +75,13 @@ final class TimelinePipeline: @unchecked Sendable {
            }) {
             self.shown = patched
             return rows.isEmpty ? nil : Result(rows: patched.rows, change: .rows(rows))
+        }
+        // An older page derives only its own rows and the ones it reaches (`Derived.prepend`).
+        if let prepended, var previous = shown, request.pending == shownPending {
+            shown = nil  // `previous` holds the only reference, so the splice edits in place
+            let splice = OpenTiming.measure("timeline rows", "page of \(prepended)") { previous.prepend(source, count: prepended) }
+            shown = previous
+            if let splice { return Result(rows: previous.rows, change: .head(replaced: splice.replaced, inserted: splice.inserted)) }
         }
         let derived = OpenTiming.measure("timeline rows", "\(source.entries.count) entries") { TimelineRows.Derived(source) }
         let previous = shown?.rows

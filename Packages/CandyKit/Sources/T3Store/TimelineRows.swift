@@ -150,6 +150,10 @@ public struct TimelineRowsInput: Sendable {
         var summaries: [TurnDiffSummary] = []
 
         public init() {}
+
+        /// After the last derive: how many entries an older history page put in front of the
+        /// previous ones, which all stayed as they were. Nil for any other change.
+        public var prepended: Int? { entries.prepended }
     }
 
     /// `init(projection:)` against the previous update: only changed rows are rebuilt. `changed`
@@ -487,9 +491,9 @@ public enum TimelineRows {
     ///
     /// Skipped: `withoutSubagentDelegationRows`, which hides `delegate_task` tool rows whose child
     /// card exists. It needs `compactDynamicToolOutput`; add it when delegate threads matter.
-    static func rowEntries(_ entries: [TimelineEntry]) -> [TimelineEntry] {
+    static func rowEntries(_ entries: [TimelineEntry], settleLast: Bool = false) -> [TimelineEntry] {
         entries.enumerated().map { index, entry in
-            guard index < entries.count - 1, var work = entry.work, work.itemType == .reasoning, work.toolLifecycleStatus == .inProgress
+            guard index < entries.count - 1 || settleLast, var work = entry.work, work.itemType == .reasoning, work.toolLifecycleStatus == .inProgress
             else { return entry }
             work.toolLifecycleStatus = .completed
             var settled = entry
@@ -502,7 +506,15 @@ public enum TimelineRows {
 
     /// Port of `deriveMessagesTimelineRows`.
     public static func derive(_ input: TimelineRowsInput) -> [TimelineRow] {
-        let entries = rowEntries(input.entries)
+        derive(input.entries, input, head: false)
+    }
+
+    /// The row pass over `entries`. `head` derives the front part of a thread whose later entries
+    /// start with a prompt and share no run or attempt with this part (see `prepend`): the live
+    /// tail (working header, live activity, thinking row) and the latest response belong to the
+    /// later part, and no entry here is the thread's last.
+    static func derive(_ entries: [TimelineEntry], _ input: TimelineRowsInput, head: Bool) -> [TimelineRow] {
+        let entries = rowEntries(entries, settleLast: head)
         var summaryByMessageId: [MessageId: TurnDiffSummary] = [:]
         for summary in input.turnDiffSummaries { if let id = summary.assistantMessageId { summaryByMessageId[id] = summary } }
         let terminalIds = terminalAssistantMessageIds(entries)
@@ -510,11 +522,14 @@ public enum TimelineRows {
         let failed = failedRunIds(entries, latestRun: input.latestRun)
         let liveSubagents = liveSubagentCardEntryIds(entries)
         let attemptFolds = supersededAttemptFolds(entries, unfoldedRunIds: failed, liveSubagentEntryIds: liveSubagents)
-        let activeResponseRunIds = activeVisualResponseRunIds(entries, unsettledRunId: unsettled, isWorking: input.isWorking)
+        // The runs after the last prompt are in the later part, so only the unsettled run can be here.
+        let activeResponseRunIds = head ? Set(unsettled.map { [$0] } ?? [])
+            : activeVisualResponseRunIds(entries, unsettledRunId: unsettled, isWorking: input.isWorking)
         let runlessWorkActive = input.isWorking && input.runlessWorkActive
+        // Live runless work keeps only the last prompt's runless turn open, and that prompt is later.
         let folds = turnFolds(
             entries, terminalIds: terminalIds, latestRun: input.latestRun, unfoldedRunIds: activeResponseRunIds.union(failed),
-            runlessWorkActive: runlessWorkActive, liveSubagentEntryIds: liveSubagents)
+            runlessWorkActive: runlessWorkActive && !head, liveSubagentEntryIds: liveSubagents)
         var collapsed = Set<String>()
         for fold in folds.values where !input.expandedRunIds.contains(fold.runId) { collapsed.formUnion(fold.hiddenEntryIds) }
         var collapsedSuperseded = Set<String>()
@@ -530,12 +545,12 @@ public enum TimelineRows {
         }
 
         // A steer continues the current turn: the elapsed header stays under the initiating prompt.
-        let activeTurnHeaderIndex = input.isWorking ? lastResponseBoundaryIndex(entries) + 1 : entries.count
+        let activeTurnHeaderIndex = input.isWorking && !head ? lastResponseBoundaryIndex(entries) + 1 : entries.count
 
         // Contiguous trailing work of the active run collapses into one live row that survives
         // between actions (#8984).
         var activeToolEntries: [TimelineEntry] = []
-        if input.isWorking, unsettled != nil || runlessWorkActive {
+        if input.isWorking, !head, unsettled != nil || runlessWorkActive {
             var tailAttemptId: RunAttemptId??
             var index = entries.count - 1
             while index >= activeTurnHeaderIndex {
@@ -707,10 +722,10 @@ public enum TimelineRows {
             }
         }
 
-        if input.isWorking, !rows.contains(where: { $0.id == workingRowId }), activeTurnHeaderIndex == entries.count {
+        if input.isWorking, !head, !rows.contains(where: { $0.id == workingRowId }), activeTurnHeaderIndex == entries.count {
             appendWorkingRow()
         }
-        if input.isWorking, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
+        if input.isWorking, !head, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
                 let groupId = workGroupId(anchor.id)
@@ -736,17 +751,95 @@ public enum TimelineRows {
     public struct Derived: Sendable {
         public var input: TimelineRowsInput
         public var rows: [TimelineRow]
-        /// Message id to the indices of its `message` and `assistantMeta` rows.
-        var messageRows: [String: [Int]]
+        /// Message id to its `message` and `assistantMeta` rows, counted back from the last row, so
+        /// rows put in front by a history page leave them valid.
+        var messageRowsFromEnd: [String: [Int]]
+        /// Run and attempt to its last entry, counted back from the last entry. Built on the first
+        /// history page, then kept up to date by each page.
+        var lastScopeUseFromEnd: [ScopeKey: Int]?
 
         public init(_ input: TimelineRowsInput) {
             self.input = input
             rows = TimelineRows.derive(input)
-            messageRows = [:]
-            for (index, row) in rows.enumerated() {
-                if let m = row.message { messageRows[m.id.rawValue, default: []].append(index) }
+            messageRowsFromEnd = [:]
+            addMessageRows(0..<rows.count)
+        }
+
+        /// The indices of a message's rows.
+        func messageRows(_ id: String) -> [Int] {
+            (messageRowsFromEnd[id] ?? []).map { rows.count - 1 - $0 }
+        }
+
+        private mutating func addMessageRows(_ range: Range<Int>) {
+            for index in range {
+                if let m = rows[index].message { messageRowsFromEnd[m.id.rawValue, default: []].append(rows.count - 1 - index) }
             }
         }
+
+        /// An older history page put `count` entries in front of the previous ones (`input` holds
+        /// all of them; every later entry and the context stayed). Derives only the page and the
+        /// old rows up to the first prompt that no run or attempt before it reaches past, and
+        /// keeps every row after that prompt. Returns how many leading rows gave way to how many
+        /// new ones, or nil, leaving `self` as it was, when the page needs a full pass.
+        ///
+        /// Cutting there is exact: everything the row pass shares across entries is keyed by run
+        /// or attempt (turn and attempt folds, failures, interrupts, final answers, created-chat
+        /// summaries), runless turns and work groups end at a prompt, the footer search and
+        /// subagent merging stop at a message row, and the live tail sits after the last prompt.
+        public mutating func prepend(_ input: TimelineRowsInput, count: Int) -> (replaced: Int, inserted: Int)? {
+            let entries = input.entries, old = self.input.entries, n = entries.count
+            guard count > 0, n == old.count + count, !rows.isEmpty, input.sameContext(self.input) else { return nil }
+            var lastUse = lastScopeUseFromEnd ?? TimelineRows.lastScopeUse(old)
+            // Where the last use of any run or attempt seen so far lies.
+            var reach = -1
+            var cut: Int?
+            for i in 0..<n {
+                let entry = entries[i]
+                if i >= count, i > reach, entry.message?.role == .user, TimelineRows.startsResponse(entry) { cut = i; break }
+                TimelineRows.forEachScope(entry) { key in reach = max(reach, lastUse[key].map { n - 1 - $0 } ?? i) }
+            }
+            guard let cut, let first = messageRows(entries[cut].id).first, rows[first].id == entries[cut].id else { return nil }
+            for i in stride(from: count - 1, through: 0, by: -1) {
+                TimelineRows.forEachScope(entries[i]) { key in if lastUse[key] == nil { lastUse[key] = n - 1 - i } }
+            }
+            let head = TimelineRows.derive(Array(entries[..<cut]), input, head: true)
+            for row in rows[..<first] { if let m = row.message { messageRowsFromEnd[m.id.rawValue] = nil } }
+            rows.replaceSubrange(0..<first, with: head)
+            addMessageRows(0..<head.count)
+            lastScopeUseFromEnd = lastUse
+            self.input = input
+            return (first, head.count)
+        }
+    }
+
+    /// A run or an attempt, the scopes the row pass groups entries by.
+    enum ScopeKey: Hashable, Sendable {
+        case run(RunId)
+        case attempt(RunAttemptId)
+    }
+
+    /// Every run and attempt an entry belongs to or names.
+    static func forEachScope(_ entry: TimelineEntry, _ body: (ScopeKey) -> Void) {
+        if let attempt = entry.attempt {
+            body(.attempt(attempt.id))
+            body(.run(attempt.runId))
+        }
+        if let id = runId(entry) { body(.run(id)) }
+        if let id = entry.message?.runId { body(.run(id)) }
+        if let work = entry.work {
+            if let id = work.runId { body(.run(id)) }
+            if let id = work.projectedItem?.item.runId { body(.run(id)) }
+        }
+        if let id = entry.eventItem?.item.runId { body(.run(id)) }
+    }
+
+    /// Each scope's last entry, counted back from the last entry.
+    static func lastScopeUse(_ entries: [TimelineEntry]) -> [ScopeKey: Int] {
+        var last: [ScopeKey: Int] = [:]
+        for (i, entry) in entries.enumerated().reversed() {
+            forEachScope(entry) { key in if last[key] == nil { last[key] = entries.count - 1 - i } }
+        }
+        return last
     }
 
     /// Port of `replaceStreamingMessageRows`: when the only change since `previous` is the text of
@@ -768,7 +861,7 @@ public enum TimelineRows {
             }
             if message == oldMessage, projected == oldProjected { continue }
             guard isStreamingTextUpdate(oldMessage, message) else { return nil }
-            for rowIndex in previous.messageRows[message.id.rawValue] ?? [] {
+            for rowIndex in previous.messageRows(message.id.rawValue) {
                 switch next.rows[rowIndex].kind {
                 case .message(_, _, let meta, let copy, let copyStreaming, let summary):
                     next.rows[rowIndex].kind = .message(
