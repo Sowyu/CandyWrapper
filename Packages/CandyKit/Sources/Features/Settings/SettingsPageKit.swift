@@ -57,6 +57,12 @@ public final class SettingsPageContext {
     public var threadCount: ((String, String) -> Int)?
     /// Runs project action writes in order; returns the first error message, or nil.
     public var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
+    /// Each environment's live scheduled task list (`scheduledTasks.subscribe`), filled by the app while watched.
+    public var scheduledTasks: [String: ScheduledTaskListLoad] = [:]
+    /// Starts (true) or stops following the scope's task lists.
+    public var watchScheduledTasks: ((Bool) -> Void)?
+    /// The address this client reaches an environment at, for webhook URLs without T3 Connect.
+    public var httpBaseURL: ((String) -> URL?)?
 
     public init() {}
 

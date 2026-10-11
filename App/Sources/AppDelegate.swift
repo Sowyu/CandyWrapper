@@ -62,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect")
         let environments = fakeConnect ? Environments(sidebar: sidebar, catalog: FakeT3Connect.catalog()) : Environments(sidebar: sidebar)
         self.environments = environments
+        ScheduledTasksStore.shared.environments = environments
+        _ = environments.observe { ScheduledTasksStore.shared.environmentsChanged() }
         let t3Connect = T3ConnectController(environments: environments, fake: fakeConnect)
         self.t3Connect = t3Connect
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
@@ -73,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
         settings.composer = threads.composer
+        threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands

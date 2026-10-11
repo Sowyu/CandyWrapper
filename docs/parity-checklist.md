@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-11: 188 🟡, 92 ➖, 133 ⏳, 12 M9, 13 n/a.
+Status 2026-10-11: 211 🟡, 92 ➖, 115 ⏳, 12 M9, 13 n/a.
 
 Status legend:
 
@@ -57,7 +57,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Undo notice at bottom of sidebar (5 s, `thread.undo`) | comp/sidebar/SidebarThreadUndoNotice.tsx | 🟡 | Built (audit 2026-10-11): `SidebarUndoNoticeView`, `SidebarCommands.showUndo`, `thread.undo` shortcut. Stale mark. |
 | Thread search results inside sidebar (message search, 2+ chars) | comp/Sidebar.tsx, comp/ThreadSearchMatch.tsx | 🟡 | Also in command palette |
 | Thread relationships (fork, subagent, handoff) icons and navigation | comp/chat/ThreadRelationshipIcon.tsx, comp/chat/ThreadRelationshipsControl.tsx | ⏳ | |
-| Sidebar footer: settings entry, usage entry, connection status | comp/Sidebar.tsx, comp/ConnectionStatusDot.tsx | 🟡 | Missing: Usage button does nothing, no connection status; Built (audit 2026-10-11): Settings, Pull Requests and Usage buttons in `SidebarContentView`. The official Sidebar.tsx does not draw a connection status dot. The Usage page behind the button is in progress. |
+| Sidebar footer: settings entry, usage entry, connection status | comp/Sidebar.tsx, comp/ConnectionStatusDot.tsx | 🟡 | Built (audit 2026-10-11): Settings, Pull Requests and Usage buttons in `SidebarContentView`; the Usage button opens the Usage page (WP7.7c). The official Sidebar.tsx does not draw a connection status dot. |
 | Desktop update pill and release notes in sidebar | comp/sidebar/SidebarUpdatePill.tsx, comp/sidebar/SidebarUpdateReleaseNotes.tsx, comp/sidebar/DesktopUpdateStatusIcon.tsx | M9 | Milestone 9: Update pill needs the auto-updater. |
 | Provider update pill in sidebar | comp/sidebar/SidebarProviderUpdatePill.tsx, comp/ProviderUpdatesAction.tsx | ⏳ | |
 | T3 Connect sign-in in sidebar | comp/clerk/T3ConnectSidebarSignIn.tsx | 🟡 | Clerk sign-in UI; needs webview: ask user; Built (audit 2026-10-11): T3 puts it in the settings sidebar footer. Built in `T3ConnectSignInView` and `T3ConnectController` (native Clerk, email code and password). Stale mark. |
@@ -135,7 +135,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Restart agent session | comp/CommandPalette.tsx (line ~2000) | ⏳ | Palette action |
 | Activity log | docs/activity-log.md | 🟡 | Check what UI it describes before building; Built (audit 2026-10-11): Fold summaries ("Ran 2 commands...") in `T3Store/WorkLog.swift`, `WorkLogText.swift`, `T3McpTools.swift`. The doc describes exactly this. Open diff belongs to row 88. |
 | Context window meter | comp/chat/ContextWindowMeter.tsx | ⏳ | Click offers compact |
-| Thread automations panel (scheduled tasks, PR watch) | comp/chat/ThreadAutomationsPanel.tsx | ⏳ | |
+| Thread automations panel (scheduled tasks, PR watch) | comp/chat/ThreadAutomationsPanel.tsx | 🟡 | WP7.7c: an Automations section in the thread details card (`ThreadAutomationsView`): bound tasks from the live list with status dot, schedule and next run, Edit, Run now, pause switch, Manage. PR watch rows are WP7.5b's |
 | Thread-linked pull requests panel | comp/pullRequest/ThreadPullRequestsPanel.tsx | 🟡 | WP7.5b: the `pull-requests` tab, rows stepped by stack depth newest chain first, unsynced rows muted, footer counts and Link, row menu (Copy link, Open, Watch, Unlink or Dismiss), empty state. Missing: Shift quick actions on rows, hover menu button |
 | Agent browser cursor overlay (agent clicking in a preview) | comp/preview/AgentBrowserCursor.tsx | 🟡 | WP7.6b: `pointer` messages from the stream place `AgentCursorView` over the letterboxed frame (`placeAgentCursor`): mouse-pointer-2 in primary, a ping on clicks, full opacity for 700 ms, then 35%. Seen on screen while a haiku turn drove a tab |
 | Drag files onto thread to attach | comp/chat/workspaceFileDrop.ts, comp/chat/folderDrop.ts | ⏳ | |
@@ -167,12 +167,12 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Environment/host selector for new thread | comp/BranchToolbarEnvironmentSelector.tsx | 🟡 | `mod+shift+h`, cycle host unbound. In a Git project the "Run on" group sits in the run context menu |
 | Workspace mode selector (current checkout / new worktree / previous worktree) | comp/BranchToolbarEnvModeSelector.tsx, comp/BranchToolbar.tsx (RunContextSelector) | 🟡 | `mod+shift+x`, `mod+shift+l`. The composer is never wider than `@3xl`, so T3 shows RunContextSelector there; the draft sends `worktree`, `existing_worktree` or `root` strategies (sent a real worktree turn on the sandbox). Start from origin does not read the project setting yet (WP7.7) |
 | Branch toolbar and branch picker | comp/BranchToolbar.tsx, comp/BranchPicker.tsx, comp/BranchToolbarBranchSelector.tsx | 🟡 | `mod+shift+g`. Search with the sanitized query, paging, create and switch refs, worktree reuse, start from origin. Fidelity: scripts/gen-git-spec.py. Missing: checkout PR row and the composer PR badge (needs `projects.preparePullRequestThread`), the context menu "Copy branch name", label collapse at narrow widths |
-| Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ➖ | T3 uses it only in Scheduled Tasks settings (WP7.7); `BranchPickerView` with the origin switch is ready for it |
+| Worktree base branch picker | comp/WorktreeBaseBranchPicker.tsx | ➖ | T3 uses it only in the Scheduled Tasks editor; WP7.7c has a text field and the origin switch there. Missing: the picker with ref search |
 | Previous worktree item | comp/PreviousWorktreeItemContent.tsx | 🟡 | History glyph, title and the branch as a muted second line |
 | Draft hero headline (new thread empty state) | comp/chat/DraftHeroHeadline.tsx, comp/chat/draftHeroTransition.ts | 🟡 | |
 | Composer banners stack (clone progress, server update, provider issues) | comp/chat/ComposerBannerStack.tsx, comp/chat/ComposerBanner.tsx, comp/chat/ComposerServerUpdateStatus.tsx | ➖ | Missing: only the environment reconnecting banner exists; Audit 2026-10-11: Only the environment reconnecting banner (`EnvironmentBannerView`). No clone progress, server update or provider issue banners. |
 | Composer activity status | comp/chat/ComposerActivityStatus.tsx | 🟡 | "Loading messages..." / "Syncing messages..." with the spinner from the thread store's status, shown after 400 ms and kept 400 ms (`useDelayedStatus`) |
-| Composer usage limits chip | comp/chat/ComposerUsageLimits.tsx | ⏳ | The `/usage-limits` banner renders the Limits windows (`LimitWindows`, `ResetCredits` from the usage page); build it with the usage page (WP7.7) |
+| Composer usage limits chip | comp/chat/ComposerUsageLimits.tsx | 🟡 | WP7.7c: `UsageLimitsBannerView`, the `/usage-limits` notice (see Usage and limits) |
 | Prompt stash (save, restore, menu, badge) `composer.stash` | comp/chat/ComposerStashMenu.tsx, comp/chat/ComposerStashBadge.tsx, web/promptStashStore.ts | 🟡 | Cmd+S stashes (files must be uploaded and keep their reference; images saved under the 1.3 M / 2.7 M char budgets as files), empty composer restores one entry or opens the menu, 20 entries newest first in Application Support, restore checks file uploads first (24 h expiry) and only in their environment, badge pulse, menu keys. Fidelity `composer-attachments`. Missing: expired files as "Attach again" rows |
 | Prompt history recall (arrow up/down) | comp/chat/composerPromptHistory.ts | 🟡 | |
 | Prompt length validation | comp/chat/ComposerPromptLengthValidation.tsx | 🟡 | |
@@ -284,7 +284,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | Agent browser access override | comp/settings/ProjectDefaultsSettings.tsx | 🟡 | WP7.7b: Integrations; server-side |
 | Actions (scripts): add, edit, run on settle, keybinding | comp/settings/ProjectActionsSettings.tsx, comp/settings/ProjectActionsList.tsx, comp/projectScriptEditor.tsx | ➖ | WP7.7b: list, Add/Edit Action dialog (icon, shortcut recorder, command, preview URL, roles), delete with confirm, reset to the environment list, shortcuts upserted and removed. Stored only: running them (`script.<id>.run`). Missing: t3.json import, invalid t3.json row. Keeps a shortcut on an edit that leaves it alone (T3 drops it); Audit 2026-10-11: Action list, editor and shortcuts (`ProjectActionEditor`, `ProjectActionsLogic`). Running is missing, t3.json import missing. |
 | Worktree location and branch naming | comp/settings/BranchNamingSettings.tsx, docs/project-settings.md | 🟡 | WP7.7b: Storage > Worktree location, Source Control > Worktree branch naming (static prefix, semantic, custom instructions) |
-| Webhook automations | docs/project-settings.md | ⏳ | Scheduled Tasks, WP7.7c |
+| Webhook automations | docs/project-settings.md | 🟡 | WP7.7c: Scheduled Tasks webhook schedule, URL with Copy and Rotate, signature, age limit, Deliveries |
 | Project removal | comp/settings/ProjectSettingsPanel.tsx | 🟡 | WP7.7b: T3's confirm lines, `project.delete {force}` per member, back to the thread view; Checkouts section for groups |
 
 ### Settings > General
@@ -358,7 +358,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | Models list, custom models, accent color | comp/settings/ProviderModelsSection.tsx, comp/settings/ProviderAccentColorPicker.tsx | ➖ | WP7.7b: grouped list, favorites (wired to the model picker), filter, move, hide, Disable all, add and remove custom models with T3's validation. Stored only: hidden models and order (the picker doesn't read them). Missing: custom model editor, accent color; Audit 2026-10-11: Grouped list, favorites, custom models. Hidden models and order stored only; no custom model editor, accent color. |
 | Codex setup, add Codex account, ChatGPT account/sharing/usage | comp/settings/CodexSetupSection.tsx, comp/settings/AddCodexAccountDialog.tsx, comp/settings/ChatGptConnectionButton.tsx, comp/settings/ChatGptAccountPicker.tsx | ⏳ | |
 | ACP session management section | comp/settings/AcpSessionManagementSection.tsx | ⏳ | |
-| Usage providers (incl. Cursor account usage via Keychain) | comp/settings/UsageProviderSettings.tsx | ⏳ | |
+| Usage providers (incl. Cursor account usage via Keychain) | comp/settings/UsageProviderSettings.tsx | 🟡 | WP7.7c: Providers > Usage providers: Cursor Keychain switch on darwin servers, hub rows with Remove (confirmed), Add hub dialog (`cliproxy-<host>` ids). Not tried on screen with a real hub or Keychain |
 | Health check interval | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7b: Providers > Advanced, written to that environment |
 | Provider update notifications (launch and primary) | comp/ProviderUpdateLaunchNotification.tsx, comp/ProviderUpdatePrimaryNotification.tsx | ⏳ | |
 
@@ -483,7 +483,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | commandPalette.toggle | mod+k | !terminalFocus | 🟡 |
 | filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a |
 | projectSearch.toggle | mod+shift+f | !terminalFocus | 🟡 WP7.6b: the palette's content mode |
-| usage.open | mod+u | !terminalFocus | ➖ placeholder page |
+| usage.open | mod+u | 🟡 | Usage page |
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
 | appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |
 | themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ WP7.7 |
@@ -518,10 +518,10 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | thread.undo | mod+z | !terminalFocus && !editableFocus | 🟡 |
 | thread.jump.1 to thread.jump.9 (`THREAD_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | isDesktop | 🟡 |
 | modelPicker.jump.1 to .9 (`MODEL_PICKER_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | modelPickerOpen && isDesktop | ➖ no hint labels on the rows |
-| usage.cost | c | usagePageOpen | ⏳ usage page |
-| usage.tokens | t | usagePageOpen | ⏳ usage page |
-| usage.limits | l | usagePageOpen | ⏳ usage page |
-| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | usagePageOpen | ⏳ usage page |
+| usage.cost | c | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
+| usage.tokens | t | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
+| usage.limits | l | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
+| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
 | thread.stop | (no default) | (none) | 🟡 |
 | composer.cycleHost | (no default) | (none) | ⏳ |
 | script.<id>.run | (no default, user-assigned) | (none) | ⏳ project scripts, WP7.4 |
@@ -585,25 +585,25 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Usage page route and shell, environment dropdown, refresh | web/routes/usage.tsx, comp/usage/UsagePage.tsx | ⏳ | `mod+u` |
-| Tabs: Cost, Tokens, Limits (keys c, t, l) and period (day, week, month, quarter) | comp/usage/UsagePage.tsx, comp/usage/usagePagePreferences.ts, comp/usage/usageShortcuts.ts | ⏳ | |
-| Charts by provider/model, token-type split, cache savings, premium/other cost | comp/usage/UsageProviderChart.tsx, comp/usage/UsageShareBar.tsx, comp/usage/usageBreakdown.ts | ⏳ | Needs native chart drawing (Swift Charts or custom) |
-| Model breakdown detail dialog | comp/usage/UsageModelDialog.tsx | ⏳ | |
-| Custom model prices and aliases | comp/usage/UsagePriceOverrides.tsx, comp/usage/usagePriceTable.ts | ⏳ | |
-| Limits: pooled subscription windows per provider, per-account segments, reset times, Use reset | comp/usage/UsageLimitsPooled.tsx, comp/usage/UsageLimits.tsx | ⏳ | |
-| Limit sources: add CLIProxyAPI hub | comp/settings/AddUsageLimitSourceDialog.tsx | ⏳ | |
-| Subscription usage widget (composer / header) | comp/chat/ComposerUsageLimits.tsx, docs/usage.md | ⏳ | |
-| `/usage-limits` slash command result above composer | docs/usage.md | ⏳ | |
-| Enable Cursor usage (Keychain) | comp/settings/UsageProviderSettings.tsx | ⏳ | |
+| Usage page route and shell, environment dropdown, refresh | web/routes/usage.tsx, comp/usage/UsagePage.tsx | 🟡 | WP7.7c (`UsagePageView`, `App/Sources/UsageController.swift`): breadcrumb with environment filter (status per environment, coverage notes, Model prices) and provider filter, window label at 2xl, segmented metric and period at xl, compact selects below, refresh (rates, then `awaitRefresh`), Escape back, skeleton, kept window while loading. Preferences in defaults `usagePage.preferences.v1`. Missing: refresh icon spin, ChatGPT shared usage row |
+| Tabs: Cost, Tokens, Limits (keys c, t, l) and period (day, week, month, quarter) | comp/usage/UsagePage.tsx, comp/usage/usagePagePreferences.ts, comp/usage/usageShortcuts.ts | 🟡 | WP7.7c: tabs and periods with shortcut tooltips; Limits first visit |
+| Charts by provider/model, token-type split, cache savings, premium/other cost | comp/usage/UsageProviderChart.tsx, comp/usage/UsageShareBar.tsx, comp/usage/usageBreakdown.ts | 🟡 | WP7.7c: `UsageChartView` in Core Graphics (monotone curves, 1/2/5 scale, hover line and readout), `UsageShareBarView` (type, speed, premium), totals, breakdown by model or day/hour. Fidelity `usage` chart 1.1 to 1.4% |
+| Model breakdown detail dialog | comp/usage/UsageModelDialog.tsx | 🟡 | WP7.7c: stats, trend (tokens when unpriced), type and speed bars, Set price. Missing: the provider icon by the title |
+| Custom model prices and aliases | comp/usage/UsagePriceOverrides.tsx, comp/usage/usagePriceTable.ts | 🟡 | WP7.7c: `UsagePriceTableView` with T3's cell, change and error rules, Apply to, reset with undo, per-destination results and retry. Missing: model ID suggestions (datalist), line-through on reset rows. Not saved on screen |
+| Limits: pooled subscription windows per provider, per-account segments, reset times, Use reset | comp/usage/UsageLimitsPooled.tsx, comp/usage/UsageLimits.tsx | 🟡 | WP7.7c: pools per driver ordered by session reset, cards with remaining, pace, refill, segment bars (labelled from 672pt, numbered strip with legend rows below), account popover on click, Use reset with confirm (`provider.consumeResetCredit`), Cursor prompt, external links, notices; refresh through `server.refreshProviders` (automatic at most every 5 minutes). Missing: hover-open popovers |
+| Limit sources: add CLIProxyAPI hub | comp/settings/AddUsageLimitSourceDialog.tsx | 🟡 | WP7.7c: Providers > Usage providers > Add hub; hubs arrive through `usageLimitSourcesUpdated`. No real hub added |
+| Subscription usage widget (composer / header) | comp/chat/ComposerUsageLimits.tsx, docs/usage.md | 🟡 | WP7.7c: in this T3 build it is the `/usage-limits` composer notice (the mobile home screen widget is out of scope) |
+| `/usage-limits` slash command result above composer | docs/usage.md | 🟡 | WP7.7c: subscribes with `usageLimitsCommand`, picked or typed `/usage-limits` opens `UsageLimitsBannerView` from the snapshot (compact window rows, Manage usage, reset credits); drops on send, thread change and provider change; toast when unavailable. Fidelity `usage` limits-banner 4.0% |
+| Enable Cursor usage (Keychain) | comp/settings/UsageProviderSettings.tsx | 🟡 | WP7.7c: Enable rows on Cost and Tokens, the Cursor box on Limits, the Providers switch. Never switched on here (it reads the Keychain) |
 
 ## Scheduled tasks
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Settings page: per-environment task list with enable switch, Run now, Delete | comp/settings/ScheduledTasksSettings.tsx, web/routes/settings.scheduled-tasks.tsx | ⏳ | |
-| Task editor (title, prompt, project, model, schedule: cron/interval/once, mode) | comp/settings/ScheduledTasksSettings.tsx, comp/settings/scheduledTasksSettings.logic.ts | ⏳ | |
-| Webhook triggers: URL, rotate token, delivery history (headers, query, body) | comp/settings/ScheduledTasksSettings.tsx, docs/project-settings.md | ⏳ | |
-| Thread automations panel (tasks tied to a thread) | comp/chat/ThreadAutomationsPanel.tsx | ⏳ | |
+| Settings page: per-environment task list with enable switch, Run now, Delete | comp/settings/ScheduledTasksSettings.tsx, web/routes/settings.scheduled-tasks.tsx | 🟡 | WP7.7c (`ScheduledTasksSettingsView`, `App/Sources/ScheduledTasksStore.swift`): `scheduledTasks.subscribe` per scope environment while open, rows with schedule, next run, last run badge, error, enable switch, menu (Edit, Run now or Deliveries, Delete), project scope filter, task links from the automations panel. Fidelity `usage` scheduled-tasks 2.6 to 2.8% |
+| Task editor (title, prompt, project, model, schedule: cron/interval/once, mode) | comp/settings/ScheduledTasksSettings.tsx, comp/settings/scheduledTasksSettings.logic.ts | 🟡 | WP7.7c: T3 has no cron or once schedules; at a time (weekdays), every interval, on webhook. Runs on, name, project, workspace, base branch, checkout path, prompt, model picker, enabled; T3's validation toasts; `scheduledTasks.upsert` with `requireExisting` on edits; the panel scrolls in short windows. Missing: base branch ref search, edge fades on the scroll |
+| Webhook triggers: URL, rotate token, delivery history (headers, query, body) | comp/settings/ScheduledTasksSettings.tsx, docs/project-settings.md | 🟡 | WP7.7c: endpoint address (T3 Connect URL, else this client's route, with T3's notes), Copy, Rotate with confirm, signature fields, Deliveries dialog with list and detail. Not exercised on screen |
+| Thread automations panel (tasks tied to a thread) | comp/chat/ThreadAutomationsPanel.tsx | 🟡 | WP7.7c: see Right panels > Thread automations panel |
 | Pull request watch (agent wakes on PR activity) | contracts/rpc.ts (`pullRequests.watch`), comp/pullRequest/ThreadPullRequestsPanel.tsx | ⏳ | |
 
 ## Devices and SnapShot

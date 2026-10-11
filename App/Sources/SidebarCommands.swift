@@ -29,6 +29,12 @@ final class SidebarCommands {
         return c
     }()
     private var utilityKind: UtilityPage?
+    /// The Usage page, made on first open and kept for the session.
+    private lazy var usage: UsageController = {
+        let c = UsageController(environments: environments, composer: threads.composer, window: window)
+        c.page.onEscape = { [weak self] in self?.closeUtilityPage() }
+        return c
+    }()
     private var pickingFolder = false
 
     /// Thread menu items this client does not have yet.
@@ -89,6 +95,15 @@ final class SidebarCommands {
         shortcuts.on("usage.open") { [weak self] _ in
             self?.openUtilityPage(.usage)
             return true
+        }
+        // The page's own keys, only while it is open (`usagePageOpen`); not while typing or in the model picker.
+        for command in UsagePageOptions.metrics.map(\.command) + UsagePageOptions.windows.map(\.command) {
+            shortcuts.on(command) { [weak self] call in
+                guard let self, self.isUsagePageOpen, !call.isRepeat, !modelPickerOpen(),
+                      !Shortcuts.editableFocused(in: self.window), self.window?.attachedSheet == nil,
+                      (self.window?.firstResponder as? NSView).map({ $0 === self.window?.contentView || $0.isDescendant(of: self.usage.page) }) ?? true else { return false }
+                return self.usage.handle(command)
+            }
         }
     }
 
@@ -477,11 +492,11 @@ final class SidebarCommands {
 
     /// T3 routes to `/pull-requests` and `/usage`: the page replaces the thread panel and the sidebar
     /// footer shows Back.
-    // ponytail: Usage is a placeholder page; build it with WP7.7
     func openUtilityPage(_ page: UtilityPage) {
         guard let layout, let sidebar else { return }
-        let view: NSView = page == .pullRequests ? pullRequestsPage.container : UtilityPlaceholderView("Usage", icon: .chartNoAxesColumn)
+        let view: NSView = page == .pullRequests ? pullRequestsPage.container : usage.page
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
+        if utilityKind == .usage && page != .usage { usage.didHide() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
         layout.main.addSubview(view)
@@ -492,6 +507,9 @@ final class SidebarCommands {
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
+        } else {
+            usage.didShow()
+            window?.makeFirstResponder(usage.page)
         }
     }
 
@@ -499,6 +517,7 @@ final class SidebarCommands {
     func closeUtilityPage() {
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
+        if utilityKind == .usage { usage.didHide() }
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil
@@ -515,27 +534,4 @@ final class ClosureMenuItem: NSMenuItem {
         didSet { target = self; action = #selector(run) }
     }
     @objc private func run() { handler?() }
-}
-
-/// The main area while Pull Requests or Usage is open: the page title and a note that the page is not
-/// built yet. The top strip drags the window like T3's header.
-final class UtilityPlaceholderView: DSView {
-    private let drag = TopbarDragView()
-    private let empty: EmptyView
-
-    init(_ title: String, icon: IconName) {
-        empty = EmptyView(title: title, message: "This page is not in CandyWrapper yet.", icon: icon)
-        super.init(frame: .zero)
-        addSubview(drag)
-        addSubview(empty)
-    }
-
-    override func layout() {
-        super.layout()
-        drag.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 52)
-        let size = empty.intrinsicContentSize
-        let w = min(bounds.width - 32, max(size.width, 320))
-        let h = size.height > 0 ? size.height : 200
-        empty.frame = NSRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
-    }
 }

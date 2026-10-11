@@ -229,6 +229,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var version: String?
     public var auth: JSONValue?
     public var checkedAt: String?
+    /// `usageLimits`: the subscription windows the account reports (Usage > Limits, `/usage-limits`).
+    public var usageLimits: ProviderUsageLimits?
 
     public init(instanceId: ProviderInstanceId, driver: String, displayName: String? = nil, enabled: Bool = true,
                 installed: Bool = true, status: ServerProviderStatus = .ready, models: [ServerProviderModel] = []) {
@@ -239,7 +241,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt
+        case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -272,6 +274,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         version = try? c.decodeIfPresent(String.self, forKey: .version)
         auth = try? c.decodeIfPresent(JSONValue.self, forKey: .auth)
         checkedAt = try? c.decodeIfPresent(String.self, forKey: .checkedAt)
+        usageLimits = ProviderUsageLimits(json: (try? c.decodeIfPresent(JSONValue.self, forKey: .usageLimits)) ?? nil)
     }
 
     /// `resolveProviderSkillsForCwd`: the workspace snapshot's skills, else the provider's.
@@ -324,6 +327,10 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var capabilities: Set<String> = []
     /// `keybindingsConfigPath`: the server's keybindings.json.
     public var keybindingsConfigPath: String?
+    /// `usageLimitSources`: never in a snapshot; `usageLimitSourcesUpdated` fills it and it survives snapshots.
+    public var usageLimitSources: [UsageLimitSourceSnapshot] = []
+    /// `environment.platform.os` (`darwin`, `linux`, `win32`).
+    public var platformOS: String?
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -342,6 +349,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         settings = try c.decodeIfPresent(ServerThreadDefaults.self, forKey: .settings) ?? ServerThreadDefaults()
         keybindings = Keymap.decodeRules(try c.decodeIfPresent(JSONValue.self, forKey: .keybindings))
         let environment = try? c.decodeIfPresent(JSONValue.self, forKey: .environment)
+        platformOS = environment?["platform"]?["os"]?.stringValue
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
     }
@@ -355,9 +363,11 @@ public enum ServerConfigEvent: Decodable, Sendable {
     case settingsUpdated(ServerThreadDefaults)
     /// `keybindingsUpdated` (server.ts:791-796): the whole resolved list after keybindings.json changed.
     case keybindingsUpdated([ResolvedKeybindingRule])
+    /// `usageLimitSourcesUpdated` (server.ts:830-843), sent to subscribers that pass `usageLimitSources: true`.
+    case usageLimitSourcesUpdated([UsageLimitSourceSnapshot])
     case other(String)
 
-    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings }
+    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings, sources }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -374,6 +384,9 @@ public enum ServerConfigEvent: Decodable, Sendable {
         case "keybindingsUpdated":
             let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
             self = .keybindingsUpdated(Keymap.decodeRules(try payload.decodeIfPresent(JSONValue.self, forKey: .keybindings)))
+        case "usageLimitSourcesUpdated":
+            let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
+            self = .usageLimitSourcesUpdated(UsageLimitSourceSnapshot.list(try payload.decodeIfPresent(JSONValue.self, forKey: .sources)))
         default: self = .other(type)
         }
     }

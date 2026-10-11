@@ -44,9 +44,8 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         }
     }
 
-    /// Pages that work. Scheduled Tasks lists like T3's and stays disabled.
-    // ponytail: Scheduled Tasks comes with WP7.7c; enable it when it lands
-    public var isAvailable: Bool { self != .scheduledTasks }
+    /// Pages that work.
+    public var isAvailable: Bool { true }
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
     static let navSections = allCases.filter { $0 != .diagnostics }

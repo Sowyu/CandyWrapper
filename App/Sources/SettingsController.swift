@@ -142,6 +142,7 @@ final class SettingsController {
         modal?.close()
         stopHostAccess()
         isOpen = false
+        updateScheduledTaskWatch()
         layout.sidebar.content = threadSidebar
         page.removeFromSuperview()
         layout.main.addSubview(threadPanel)

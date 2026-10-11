@@ -207,13 +207,20 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private var selected: String?
     private var refreshing = false
     private var expandedModelAdd: Set<String> = []
+    private let usageProviders = SettingsSectionView(title: "Usage providers", rows: [])
+    private let addHub = ButtonView("Add hub", icon: .plus, variant: .outline, size: .xs)
+    private var updatingCursor = false
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
         sentence.singleEnvironment = true
         anchors["providers"] = providers
         healthRow = buildHealth()
-        body = [placeholder, providers, section(nil, "Advanced", [healthRow])]
+        anchors["usage-providers"] = usageProviders
+        addHub.iconSize = 12
+        usageProviders.headerAction = addHub
+        addHub.action = { [weak self] in self?.openAddHub() }
+        body = [placeholder, providers, usageProviders, section(nil, "Advanced", [healthRow])]
         providers.refresh.action = { [weak self] in self?.refreshProviders() }
         binder.add { [weak self] in self?.update() }
     }
@@ -272,6 +279,117 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         if !health.isFirstResponderInside { health.value = seconds }
         (healthRow.accessories.last as? ResetSlot)?.isShown = seconds != preset && env.canWrite
         health.isEnabled = env.canWrite
+        updateUsageProviders(env, settings: s)
+    }
+
+    // MARK: Usage providers (UsageProviderSettings.tsx)
+
+    /// The Cursor Keychain switch on a Mac server, then one row per CLIProxyAPI hub with Remove, or "No hubs configured."
+    private func updateUsageProviders(_ env: SettingsScopeEnvironment, settings: ServerSettingsValues) {
+        addHub.isHidden = !env.canWrite
+        var rows: [any SettingsGroupRow] = []
+        if context.configs[env.id]?.platformOS == "darwin" {
+            let toggle = SwitchView(isOn: settings["cursorKeychainUsageEnabled"].boolValue == true)
+            toggle.setAccessibilityLabel("Cursor account usage")
+            toggle.isEnabled = env.canWrite && !updatingCursor
+            toggle.onChange = { [weak self] on in self?.setCursorUsage(on, env: env.id) }
+            rows.append(row("cursor-keychain-usage", title: "Cursor account usage",
+                            detail: "Read your existing Cursor CLI login from macOS Keychain to show account history and monthly limits. macOS may ask you to allow access.",
+                            control: toggle))
+        }
+        let sources = (settings["usageLimitSources"].objectValue ?? [:]).sorted { $0.key < $1.key }
+        if sources.isEmpty {
+            rows.append(SettingsRowView(title: "No hubs configured."))
+        } else {
+            for (id, source) in sources {
+                let url = source["url"]?.stringValue ?? ""
+                let label = source["label"]?.stringValue.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? url
+                let enabled = source["enabled"]?.boolValue ?? true
+                let remove = ButtonView("Remove", variant: .ghost, size: .xs)
+                remove.isHidden = !env.canWrite
+                remove.action = { [weak self] in self?.confirmRemoveHub(id: id, label: label, env: env.id) }
+                rows.append(SettingsRowView(title: label, detail: "CLI Proxy" + (enabled ? "" : " · Disabled") + (label != url ? " · \(url)" : ""), control: remove))
+            }
+        }
+        usageProviders.group.rows = rows
+    }
+
+    private func setCursorUsage(_ on: Bool, env: String) {
+        guard let request = context.request else { return }
+        updatingCursor = true
+        Task { [weak self] in
+            do {
+                let result = try await request(env, "server.updateSettings", .object(["patch": .object(["cursorKeychainUsageEnabled": .bool(on)])]))
+                self?.context.applySettings?(env, result)
+                _ = try? await request(env, "server.refreshProviders", .object([:]))
+            } catch {
+                self?.context.toast?("Could not update Cursor account usage", "\(error)", .error)
+            }
+            self?.updatingCursor = false
+            self?.refresh()
+        }
+    }
+
+    /// Removing a hub deletes its stored management key, so it asks first.
+    private func confirmRemoveHub(id: String, label: String, env: String) {
+        guard let window else { return }
+        let d = DialogView(kind: .alertDialog, title: "Remove \(label)?",
+                           message: "The hub's management key is deleted from this server. Its accounts leave the Limits view; the hub itself is untouched. Add it again with the URL and key to bring them back.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Remove hub", variant: .destructive)
+        d.footerButtons = [cancel, ok]
+        let host = ModalHost.present(d, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak self, weak host] in
+            host?.close()
+            self?.writeHubPatch(env, .object([id: .null]))
+        }
+    }
+
+    private func writeHubPatch(_ env: String, _ sources: JSONValue) {
+        guard let request = context.request else { return }
+        Task { [weak self] in
+            do {
+                let result = try await request(env, "server.updateSettings", .object(["patch": .object(["usageLimitSources": sources])]))
+                self?.context.applySettings?(env, result)
+            } catch {
+                self?.context.toast?("Could not update usage providers", "\(error)", .error)
+            }
+        }
+    }
+
+    /// `AddUsageLimitSourceDialog`: Hub URL, Management key and an optional Label; the key goes to that server only.
+    private func openAddHub() {
+        guard let env = environment, let window else { return }
+        let d = DialogView(title: "Add a CLIProxyAPI hub",
+                           message: "Show the quota of every account the hub pools, next to the providers on \(env.label). The key stays on that server.")
+        d.maxWidth = 448
+        let url = InputView(placeholder: "https://hub.example.ts.net:8318")
+        let key = SecureInputView()
+        let label = InputView(placeholder: "Defaults to the hub's host name")
+        d.panelContent = [UsageHubFormView([("Hub URL", url), ("Management key", key), ("Label (optional)", label)])]
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let add = ButtonView("Add hub")
+        add.isEnabled = false
+        d.footerVariant = .bare
+        d.footerButtons = [cancel, add]
+        let host = ModalHost.present(d, in: window)
+        let validate: @MainActor (String) -> Void = { _ in
+            add.isEnabled = !url.text.trimmingCharacters(in: .whitespaces).isEmpty && !key.text.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        url.onChange = validate
+        key.onChange = validate
+        cancel.action = { [weak host] in host?.close() }
+        add.action = { [weak self, weak host] in
+            let u = url.text.trimmingCharacters(in: .whitespaces)
+            var entry: [String: JSONValue] = ["kind": .string("cliproxy"), "url": .string(u),
+                                              "managementKey": .string(key.text.trimmingCharacters(in: .whitespaces)), "enabled": .bool(true)]
+            let l = label.text.trimmingCharacters(in: .whitespaces)
+            if !l.isEmpty { entry["label"] = .string(l) }
+            host?.close()
+            self?.writeHubPatch(env.id, .object([UsageHubLogic.sourceId(u): .object(entry)]))
+        }
+        DispatchQueue.main.async { window.makeFirstResponder(url) }
     }
 
     // MARK: Writes
@@ -1010,6 +1128,36 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
                 x += sw + 8
             }
             if !custom.isHidden { custom.frame = NSRect(x: x, y: (h - 14) / 2 + 1, width: min(ceil(custom.textWidth) + 1, max(0, textRight - x)), height: 14) }
+        }
+    }
+}
+
+public enum UsageHubLogic {
+    /// `sourceIdFromUrl`: `cliproxy-<host>`, dots and dashes kept, anything else (a port's colon) folded to a dash.
+    public static func sourceId(_ url: String) -> String {
+        let host = URL(string: url).flatMap { u in u.host.map { h in u.port.map { "\(h):\($0)" } ?? h } } ?? url
+        var slug = host.lowercased().replacingOccurrences(of: "[^a-z0-9.-]+", with: "-", options: .regularExpression)
+        slug = slug.replacingOccurrences(of: "^-+|-+$", with: "", options: .regularExpression)
+        return "cliproxy-\(slug.isEmpty ? "hub" : slug)"
+    }
+}
+
+/// The add hub form: labels over inputs, `grid gap-4` with `gap-1.5` inside each field.
+final class UsageHubFormView: DSView {
+    private let fields: [(LabelView, NSView)]
+    init(_ fields: [(String, NSView)]) {
+        self.fields = fields.map { (FormLabel.make($0.0), $0.1) }
+        super.init(frame: .zero)
+        for (l, v) in self.fields { addSubview(l); addSubview(v) }
+    }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: CGFloat(fields.count) * 70 - 16) }
+    override func layout() {
+        super.layout()
+        var y: CGFloat = 0
+        for (l, v) in fields {
+            l.frame = NSRect(x: 0, y: y, width: bounds.width, height: 16)
+            v.frame = NSRect(x: 0, y: y + 22, width: bounds.width, height: 32)
+            y += 70
         }
     }
 }
