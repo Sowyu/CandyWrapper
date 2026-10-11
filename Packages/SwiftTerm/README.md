@@ -24,6 +24,10 @@ CandyWrapper only uses the CoreText renderer, so neither is needed.
   the plugin's generated file.
 - `AppleTerminalView.queuePendingDisplay` captures the view weakly so a queued redraw does not
   retain a closed pane and its buffer (2026-10-11 bug sweep).
+- `AppleTerminalView` gives Private Use Area characters the base font lacks (Nerd Font icons) an
+  isolated cell with the font `CTFontCreateForString` resolves. CoreText's line layout ignores a
+  cascade list on the system UI fonts, so they drew as LastResort boxes (2026-10-11, M8).
+- `Package.swift` builds the target with `-Osize` in release, like CandyKit.
 
 ## Updating
 

@@ -164,6 +164,20 @@ private func resolvedFont(for character: Character, base: TTFont) -> TTFont {
     return font
 }
 
+/// Private Use Area code points: Nerd Font icons, Powerline extras and the like.
+func isPrivateUse(_ character: Character) -> Bool {
+    guard character.unicodeScalars.count == 1, let v = character.unicodeScalars.first?.value else { return false }
+    return (0xE000...0xF8FF).contains(v) || (0xF0000...0x10FFFD).contains(v)
+}
+
+/// The font for a Private Use Area character its base font lacks (CandyWrapper patch). CoreText's line
+/// layout ignores a cascade list on the system UI fonts (the default monospaced font included) and draws
+/// LastResort boxes, while `CTFontCreateForString` still honors it. Nil when the base font covers it.
+func privateUseFallbackFont(for character: Character, base: TTFont) -> TTFont? {
+    let resolved = resolvedFont(for: character, base: base)
+    return CTFontCopyPostScriptName(resolved as CTFont) == CTFontCopyPostScriptName(base as CTFont) ? nil : resolved
+}
+
 /// CTLines keyed by their attributed string. Scrolling redraws recreate the
 /// same shaped rows dozens of times a second (one row higher each frame), so
 /// value-keyed reuse hits almost always; hashing a short attributed string is
@@ -1169,6 +1183,9 @@ extension TerminalView {
             let character: Character = displayOverride ?? (ch.code == 0 ? " " : terminal.getCharacter(for: ch))
             let renderCodePoint = character.unicodeScalars.count == 1
                 ? character.unicodeScalars.first!.value : UInt32(ch.code)
+            // Symbols the base font lacks take an isolated cell with their fallback font, like the BiDi cells below.
+            let symbolFont: TTFont? = blinkHidden || !isPrivateUse(character) ? nil
+                : privateUseFallbackFont(for: character, base: (currentAttributes[.font] as? TTFont) ?? fontSet.normal)
 
             // Render Powerline separators independently of the font so their
             // joining edge shares the background's exact pixel boundary.
@@ -1225,7 +1242,7 @@ extension TerminalView {
                 builder?.append(text: " ", attributes: currentAttributes, cellUTF16Lengths: [1])
                 previousPlaceholder = placeholder
                 previousPlaceholderAttribute = attr
-            } else if !blinkHidden && bidiLayout != nil && TerminalBidi.needsCellIsolation(character) {
+            } else if !blinkHidden && (symbolFont != nil || (bidiLayout != nil && TerminalBidi.needsCellIsolation(character))) {
                 // In BiDi rows, Arabic-script cells and cells holding combining
                 // sequences or emoji are isolated into their own column-anchored
                 // segment so that font-side ligation or extra mark glyphs cannot
@@ -1240,7 +1257,7 @@ extension TerminalView {
                 // font cascade to discover the same Arabic-capable font.
                 var isolatedAttributes = currentAttributes
                 let baseFont = (currentAttributes[.font] as? TTFont) ?? fontSet.normal
-                isolatedAttributes[.font] = resolvedFont(for: character, base: baseFont)
+                isolatedAttributes[.font] = symbolFont ?? resolvedFont(for: character, base: baseFont)
                 builder?.append(text: String(character), attributes: isolatedAttributes,
                                 cellUTF16Lengths: [character.utf16.count])
                 if let finished = builder?.buildIfNeeded() {
