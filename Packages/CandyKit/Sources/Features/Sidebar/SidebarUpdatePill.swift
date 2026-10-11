@@ -256,6 +256,7 @@ public final class SidebarUpdatePillView: ControlView {
             spin.toValue = -2 * Double.pi // layer space is y up: negative turns clockwise
             spin.duration = 1
             spin.repeatCount = .infinity
+            spin.preferredFrameRateRange = Motion.loopFrameRate
             l.add(spin, forKey: "spin")
         }
     }
