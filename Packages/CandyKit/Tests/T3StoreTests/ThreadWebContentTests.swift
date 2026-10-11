@@ -189,4 +189,11 @@ import Testing
         #expect(ref.title == "Report")
         #expect(entry?.isWebContent == true)
     }
+
+    /// A page can post any JSON number as a request id; a huge one must not trap converting to Int.
+    @Test func hugeNumericIdsDoNotCrash() {
+        #expect(McpAppHostBridge.key(.number(7)) == "7")
+        #expect(McpAppHostBridge.key(.number(1e300)) == String(1e300))
+        #expect(McpAppHostBridge.key(.number(-1e300)) == String(-1e300))
+    }
 }

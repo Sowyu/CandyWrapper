@@ -37,6 +37,7 @@ public final class ContentSearchView: DSView {
     public var canOpen = true
     public private(set) var selectedIndex = 0
 
+    private var scrollObserver: NSObjectProtocol?
     private let statusLine = DSView()
     private let statusLabel = LabelView("", font: DSFont.ui(12))
     private let spinner = SpinnerView(size: .sm)
@@ -64,11 +65,13 @@ public final class ContentSearchView: DSView {
             self.onOptionsChange?(options)
         }
         scroll.scrollView.contentView.postsBoundsChangedNotifications = true
-        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.scrollView.contentView, queue: .main) { [weak self] _ in
+        scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.scrollView.contentView, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.growIfNeeded() }
         }
         apply(matches: [], status: .idle, empty: "Type to search across your project.")
     }
+
+    isolated deinit { if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) } }
 
     /// Shows a search state. Matches reset the selection to the first row (`setSelectedIndex(0)`).
     public func apply(matches: [ProjectContentMatch], status: Status, empty message: String) {

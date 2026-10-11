@@ -28,7 +28,7 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
     public init?(json: JSONValue) {
         guard let projectId = json["projectId"]?.stringValue, let destination = json["destinationPath"]?.stringValue,
               let phase = json["phase"]?.stringValue.flatMap(Phase.init(rawValue:)) else { return nil }
-        let percent: Int? = if case .number(let n)? = json["percent"] { Int(n) } else { nil }
+        let percent: Int? = if case .number(let n)? = json["percent"], n.isFinite { Int(min(max(n, 0), 100)) } else { nil }
         self.init(projectId: projectId, remoteUrl: json["remoteUrl"]?.stringValue ?? "", destinationPath: destination,
                   nameWithOwner: json["repository"]?["nameWithOwner"]?.stringValue, phase: phase,
                   stage: json["stage"]?.stringValue ?? "connecting", percent: percent,

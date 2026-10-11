@@ -207,7 +207,7 @@ public class SettingsPageBase: SettingsStackView {
             }
         case .bool(let b): return b ? "On" : "Off"
         case .number(let n):
-            let i = Int(n)
+            let i = abs(n) < 9e15 ? Int(n) : 0
             return key == "sidebarAutoSettleAfterDays" ? "\(i) \(i == 1 ? "day" : "days")" : "\(i)"
         case .string(let s):
             if key == "defaultThreadEnvMode" { return s == "worktree" ? "New worktree" : "Current checkout" }

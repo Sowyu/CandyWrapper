@@ -107,7 +107,7 @@ final class PullRequestsPageController {
             NSPasteboard.general.setString(url, forType: .string)
             self?.toast("Link copied", url, .success)
         }
-        page.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        page.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
     }
 
     private func savePrefs() {
@@ -117,6 +117,8 @@ final class PullRequestsPageController {
     // MARK: Visibility
 
     func didShow() {
+        // Opening the page while it is already in front calls this again; drop the old monitors first.
+        if visible { didHide() }
         visible = true
         reload()
         // `useLiveRefresh`: once a minute while the page is in front, and on the way back to the window.
@@ -456,7 +458,7 @@ final class PullRequestsPageController {
     private func showChecks(_ entry: PullRequestListEntry, from anchor: NSView) {
         guard let state = entry.checksState, let env = entry.environmentId else { return }
         let view = PullRequestChecksPopoverView(checksState: state, summary: nil, body: .loading)
-        view.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         view.present(from: anchor)
         let ref = PullRequestRef(projectId: entry.projectId, host: capabilities.has(env, "threadPullRequests") ? entry.host : nil,
                                  repository: entry.repository, number: entry.number)

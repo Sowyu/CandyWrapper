@@ -54,6 +54,9 @@ final class PullRequestScrollWatcher {
         }
     }
 
+    // The block holds the clip view, so the center would keep the whole tab alive.
+    isolated deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
     var top: CGFloat { scroll?.scrollView.contentView.bounds.minY ?? 0 }
 
     /// Moves the content by `delta` without the header's change pulling it out from under the reader.

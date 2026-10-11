@@ -172,6 +172,8 @@ Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside mil
 
 ## Known bugs to fix before the M7 demo
 
+- Workspace HTML file previews load unsandboxed at the server's address with no limit on navigation (FileSurfaceView.swift, M7 code review); T3 puts them in a sandboxed iframe. Move them to the ThreadWebFrameView host-page approach.
+- M8: the 3.5 MB Mermaid script is decompressed on the main thread each time its web view starts (M7 code review).
 - Closing terminal panes did not lower the footprint (62.8 to 67.6 MB open, 65.2 to 67.3 MB after closing; WP7.11). Check for a retained SwiftTerm view or stream.
   - 2026-10-11 astra-bugs1: no permanent terminal retention reproduced. Fixed a queued redraw retaining SwiftTerm until the next frame and weakened attach/focus captures; immediate deallocation regression passes. Heap after closing all three panes has zero terminal views, buffers or controller attachments. Footprint remains above its pre-dialog level, so the total-footprint concern stays open for allocator/rendering-cache profiling. `leaks` reports only small macOS linkd NSXPC cycles. Measurements and citations: `docs/research/bugs1-2026-10-11.md`.
 - The Lineage section vanished once after a fork's first send and came back on relaunch (WP7.10, not reproduced). 2026-10-11 bug agent: not reproduced either (fork from a response, first send, Lineage stayed). Not caused by the draft bug below: an overwrite resets lineage on the server for good, it would not come back on relaunch.

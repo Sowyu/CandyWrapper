@@ -95,7 +95,7 @@ final class HtmlRenderRowView: TimelineRowView {
             context.model?.setWebContentHeight(item.id, h)
         } else if let link = HtmlRenderTheme.linkRequest(data) {
             // Opens only while the frame has focus and the reader just used it, as T3 checks user activation.
-            guard frameView.userIsActive, let url = URL(string: link.url) else { return }
+            guard frameView.userIsActive, let url = SafeExternalURL.parse(link.url) else { return }
             NSWorkspace.shared.open(url)
             frameView.post(HtmlRenderTheme.result(link.id))
         }
@@ -241,7 +241,8 @@ final class McpAppRowView: TimelineRowView {
                 return try await Self.unwrap { try await actions.request("mcpApps.readResource", .object(input)) }
             },
             openLink: { [weak frame] url in
-                guard frame?.userIsActive == true, let u = URL(string: url) else { throw McpAppHostBridge.Refusal("Links open only from a click in the app.") }
+                guard frame?.userIsActive == true else { throw McpAppHostBridge.Refusal("Links open only from a click in the app.") }
+                guard let u = SafeExternalURL.parse(url) else { throw McpAppHostBridge.Refusal("Only http and https links open.") }
                 NSWorkspace.shared.open(u)
             },
             sendMessage: { [weak self] text in

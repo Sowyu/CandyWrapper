@@ -131,7 +131,8 @@ public final class McpAppHostBridge {
     static func key(_ id: JSONValue) -> String? {
         switch id {
         case .string(let s): s
-        case .number(let n): n == n.rounded() ? String(Int(n)) : String(n)
+        // The id comes from the app's page: `Int(1e300)` would trap, so only safe integers convert.
+        case .number(let n): n == n.rounded() && abs(n) < 1e15 ? String(Int(n)) : String(n)
         default: nil
         }
     }
