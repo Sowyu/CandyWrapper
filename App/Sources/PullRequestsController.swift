@@ -678,7 +678,7 @@ final class ThreadPullRequestsController {
             if let link, canWatch, link.watch != nil, (state ?? .open) == .open {
                 let eye = PullRequestWatchToggle(number: number)
                 eye.action = { [weak self] in self?.watch(link, false) }
-                r.trailing = eye
+                r.secondary = eye
             }
             let tone = state.map { PullRequestStateTone(state: $0.rawValue, isDraft: isDraft) }
             r.icons = [(tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow).definition]

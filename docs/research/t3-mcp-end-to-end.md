@@ -24,7 +24,7 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 | Tool | T3 shows | CandyWrapper before | After |
 |---|---|---|---|
 | `orchestrator_capabilities` | Row | Row (wrench) | Row, seen |
-| `delegate_task` | The delegate row hides once the subagent card exists (web/components/chat/MessagesTimeline.logic.ts:1250-1275). The card opens the child thread (web/components/chat/V2LifecycleRow.tsx:211-231, 420-530). The child shows "Subagent of" and the prompt with "Sent by another agent" (MessagesTimeline.tsx:1409-1437, 2359-2395). Lineage lists it. | Card, Lineage and "Subagent of" right. The card did not open the child, and the child's prompt had no attribution. | Card opens the child with a chevron and `hover:bg-accent/20`. Attribution shown. Seen. |
+| `delegate_task` | The delegate row hides once the subagent card exists (web/components/chat/MessagesTimeline.logic.ts:1250-1275). The card is an avatar with the provider glyph and status dot, title, status beside a detail, elapsed time and a chevron, with the subagent hover card (web/components/chat/V2LifecycleRow.tsx:243-327, 420-530, SubagentTooltipContent.tsx:141-191). The child's completion notification draws as the same card with "Finished" and the time (V2LifecycleRow.tsx:335-398, MessagesTimeline.tsx:5362-5381). The child shows "Subagent of" and the prompt with "Sent by another agent" (MessagesTimeline.tsx:1409-1437, 2359-2395). Lineage lists it. | Card, Lineage and "Subagent of" right. The card did not open the child, and the child's prompt had no attribution. | Card opens the child with a chevron and `hover:bg-accent/20`. Attribution shown. Seen. Follow-up: `SubagentCardRowView` draws T3's card and hover card, the notification card replaces the work line, records refresh live. "Pong check" card, hover card and "Finished · 9:29" card seen. |
 | `task_status` | Row | Row | Row, seen |
 | `task_cancel` | Subagent card turns "Stopped", child shows "Run interrupted" | Same | Same, seen |
 | `schedule_task` | Binds to the calling thread by default (server/mcp/OrchestratorMcpService.ts:1491-1545), so the thread details card shows it under Automations (web/components/chat/ThreadAutomationsPanel.tsx:46-72) | Missing. `ThreadSession.open` ran the automations sync before the new session was set, so the card filtered by the previous thread's id and showed another thread's tasks | Fixed: sync after the session is set. "Say hello" shows on the hub only. Seen. |
@@ -38,7 +38,7 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 | `t3_thread_update` | Title changes in header and sidebar | Right | Same, seen |
 | `t3_thread_send` | Message in the target with "Sent by another agent" linking back | No attribution | Seen |
 | `t3_thread_wait` | Row | Row | Row, seen |
-| `t3_thread_interrupt` | Target run interrupted | Called once; the target had already finished, so nothing to see | Not verified |
+| `t3_thread_interrupt` | Target run interrupted: "Run interrupted · Run interrupted by user" divider, then the queue drains | Called once; the target had already finished, so nothing to see | Follow-up 2026-10-11: interrupted a target parked in `t3_thread_wait` on itself. Divider seen, then the queued "Reply EDITED" ran. |
 
 ### HTML (toolkits/html)
 
@@ -53,7 +53,7 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 |---|---|---|---|
 | `preview_open` | Server-hosted tab streamed to the client, floating mini player by default, "Agent has control" with Take control and the agent cursor (web/browser/ServerBrowserSurface.tsx:748) | Right (WP7.6b): mini player, agent cursor, Take control | Seen |
 | `preview_snapshot`, `preview_hover`, `preview_click`, `preview_navigate`, `preview_scroll`, `preview_set_appearance`, `preview_evaluate`, `preview_wait_for`, `preview_type`, `preview_press`, `preview_resize`, `preview_recording_start`, `preview_recording_stop` | The streamed tab follows; rows wear the browser glyph | Stream right, rows had a wrench (groups a globe) | Browser glyph. Seen in one turn each (wait_for timed out on the agent's side). |
-| `preview_status`, `preview_dialog`, `preview_select`, `preview_drag`, `preview_upload` | Same stream | Not called | Not verified (same code path) |
+| `preview_status`, `preview_dialog`, `preview_select`, `preview_drag`, `preview_upload` | Same stream; a pending page dialog shows its message with "Take control to respond." over the tab (web/browser/ServerBrowserSurface.tsx:833-875) | Not called | Follow-up: one turn added a select, a drag pair and a file input to example.com; the mini player showed "b", the dropped box and "README.md". A pending `alert` showed "Candy dialog / Take control to respond."; `preview_dialog` accepted it. Rows wear the browser glyph. Seen. |
 | `t3_preview_list` | Row | Row | Seen |
 | `t3_preview_close` | Tab and mini player close | Right | Seen |
 
@@ -75,7 +75,7 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 | Tool | T3 shows | Before | After |
 |---|---|---|---|
 | `t3_environment_read` | Row | Row | Seen |
-| `t3_environment_preferences_update` | Settings change | The sandbox server answered "internal server error" both times | Not verified (server side) |
+| `t3_environment_preferences_update` | Settings change | The sandbox server answered "internal server error" both times | Follow-up: fails on the server, not in the client. The sandbox trace logs "Service not found: t3/orchestration-v2/ThreadCommandExecutor" for the call; the handler needs that service for thread callers (server/mcp/toolkits/environment/handlers.ts:57-73). T3 shows the same failed row. |
 
 ### Projects (toolkits/project)
 
@@ -91,17 +91,17 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 | Tool | T3 shows | Before | After |
 |---|---|---|---|
 | `link_pull_request` | Sidebar PR chip, details card row "#1" (web/components/chat/ThreadDetailsPrRows.tsx) | Right | Seen |
-| `watch_pull_request` | "Waiting" in the sidebar, and an eye on the PR row that turns into eye-off on hover and stops the watch (web/components/chat/ThreadDetailsPrRow.tsx:347-382, ThreadDetailsPrRows.tsx:77-93). The server wakes the agent on PR activity | Sidebar right, wake-up notification right ("#1: stopped watching, could not read it"), no eye | Eye added; clicking it stopped the watch and "Waiting" went away. Seen. |
-| `unwatch_pull_request` | Eye goes away | Not called by the agent | Same command as the eye, seen through the eye |
+| `watch_pull_request` | "Waiting" in the sidebar, and an eye on the PR row that turns into eye-off on hover and stops the watch, in the split group's 32pt cell after a 16pt rule (web/components/chat/ThreadDetailsPrRow.tsx:347-382, 452-458, threadDetailsPanelStyles.ts:34-40, ThreadDetailsPrRows.tsx:77-93). The server wakes the agent on PR activity | Sidebar right, wake-up notification right ("#1: stopped watching, could not read it"), no eye | Eye added; clicking it stopped the watch and "Waiting" went away. Seen. Follow-up: the eye sits in T3's split cell (`DetailsRowControl.secondary`): rule, 32pt cell with its own hover fill, eye in `foreground/80`. Seen. |
+| `unwatch_pull_request` | Eye goes away, "Waiting" leaves the sidebar | Not called by the agent | Follow-up: called by the agent; the eye and "Waiting" went away. Seen. |
 | `list_thread_pull_requests` | Row | Row | Seen |
-| `unlink_pull_request` | Row and chip go away | Not called | Not verified |
+| `unlink_pull_request` | Row and chip go away | Not called | Follow-up: called by the agent (`wasLinked: true`); the details card row and the sidebar chip went away. Seen. |
 
 ### Threads (toolkits/thread)
 
 | Tool | T3 shows | Before | After |
 |---|---|---|---|
 | `t3_thread_organize` | Pin, snooze, settle, archive, unread show in the sidebar | Right | Seen |
-| `t3_queue_list`, `t3_queue_read`, `t3_queue_edit`, `t3_queue_cancel`, `t3_queue_reorder`, `t3_queue_promote_to_steer` | The target's queue strip and "Queued"/"Steer" markers change | Called once; haiku drained the queue before the calls, so nothing changed | Not verified |
+| `t3_queue_list`, `t3_queue_read`, `t3_queue_edit`, `t3_queue_cancel`, `t3_queue_reorder`, `t3_queue_promote_to_steer` | The target's queue strip and "Queued"/"Steer" markers change (web/components/chat/MessagesTimeline.tsx:2560-2605) | Called once; haiku drained the queue before the calls, so nothing changed | Follow-up: the target sat in `t3_thread_wait` on itself (Claude's harness blocks a foreground `sleep`) with three queued messages. After list, read, edit, reorder and cancel the strip read "Reply Q-INDIA", "Reply EDITED" (2). Promote put "Steer" with the redo arrow on Q-INDIA in the timeline. Seen. |
 | `t3_pending_request_list`, `t3_pending_request_read`, `t3_pending_request_respond` | The target's question resolves and its run continues | Right ("You picked red") | Seen |
 | `t3_thread_configuration` | Row | Row | Seen |
 | `t3_thread_configure` | The target's composer model changes | Right (Haiku 4.5) | Seen |
@@ -119,11 +119,12 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 
 ## Counts
 
-80 tools (79 named in `tools.ts` plus `html_render`). The sandbox agent called 70 of them.
+80 tools (79 named in `tools.ts` plus `html_render`). The sandbox agent called 70 of them in WP7.15 and 77 after the follow-up.
 
 - Before: 49 of the 70 showed their effect as T3 does, apart from the icon. 12 did not: delegate_task, schedule_task, update_scheduled_task, delete_scheduled_task, create_threads, t3_thread_read, t3_thread_send, t3_thread_launch, t3_thread_send_attachments, run_scheduled_task_now, t3_thread_fork, watch_pull_request. Every T3 tool row had the wrong icon.
-- After: those 61 show as T3 does, icons included. `delete_scheduled_task` rides the same live list as the two tasks rows that were seen.
-- Not verified: 19. Called without a visible effect: `device_list` (device access off, no runtimes), six queue tools (the queue had drained), `t3_thread_interrupt` (the target had finished) and `t3_environment_preferences_update` (server error). Not called: `device_open`, `device_screenshot`, `device_close`, `preview_status`, `preview_dialog`, `preview_select`, `preview_drag`, `preview_upload`, `unlink_pull_request`, and `unwatch_pull_request` (its command was sent through the new eye instead).
+- After WP7.15: those 61 showed as T3 does, icons included.
+- After the follow-up (2026-10-11): 75 show as T3 does. Added: the six queue tools, `t3_thread_interrupt`, `preview_status`, `preview_dialog`, `preview_select`, `preview_drag`, `preview_upload`, `unlink_pull_request` and `unwatch_pull_request`. `t3_environment_preferences_update` fails inside the server, so the client can only show the failed row.
+- Not verified: the four device tools. This Mac has no simulator runtimes, no Node.js for T3's device helper, and agent device access is off.
 
 ## Outside agent
 
@@ -131,6 +132,11 @@ Agents that a T3 server runs get that server's `t3-code` MCP tools. This file li
 
 ## Left as is
 
-- The subagent card keeps the generic event card look (bot glyph in a tinted card). T3 draws an avatar, the status dot, elapsed time and a hover card (V2LifecycleRow.tsx:420-530). Row 95.
-- The PR row's eye sits in the row's trailing slot; T3 splits the row with a separator and a 32pt cell.
+- The subagent hover card shows the raw model id and skips the workspace, branch, effort and speed lines (`resolveSubagentMetadata`, SubagentTooltipContent.tsx:62-140).
 - Favicons and themed app logos on provider tool rows (`ToolActivityIcon`) still fall back to lucide glyphs.
+
+## Follow-up turns (2026-10-11)
+
+1. Ten prompted claude-haiku-5-5 turns, one child turn and seven queued one-word replies, typed into `dev.candywrapper.test.cmcp` against the sandbox in the threads "MCP queue target" and "MCP followups".
+2. Two turns failed to start a long run: Claude's harness blocks a foreground `sleep`, and `time.sleep` too. A self-wait (`t3_thread_wait` on its own thread, `timeoutMs` 170000) held the turn instead. A queued-message wake later left that thread "Thinking" for 10 minutes; I stopped it with the composer's stop button.
+3. Sandbox side effects: example.com tab opened and closed, PR #1 unwatched and unlinked from "MCP followups", a "Pong check" child thread from `delegate_task`. No files written.

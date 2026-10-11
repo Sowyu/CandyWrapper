@@ -20,6 +20,9 @@ public final class DetailsRowControl: ControlView {
     public var middleTruncates = false { didSet { label.isHidden = middleTruncates; middle.isHidden = !middleTruncates; let t = text; text = t } }
     /// A tone for the icons in place of the muted one (a pull request row wears its state's).
     public var iconColor: NSColor? { didSet { restyle() } }
+    /// The split group's 32pt secondary cell after a 16pt rule (`THREAD_DETAILS_PANEL_SPLIT_*`): the row is
+    /// then the group, which fills on hover, and the primary part fills again under the mouse.
+    public var secondary: ControlView? { didSet { oldValue?.removeFromSuperview(); secondary.map(addSubview); update() } }
     /// A view right of the label (`flex-1` label, then this at its natural size).
     public var trailing: NSView? { didSet { oldValue?.removeFromSuperview(); trailing.map(addSubview); needsLayout = true } }
     /// The hover tooltip (attached on first use; T3 shows the workspace path on the run context).
@@ -36,6 +39,7 @@ public final class DetailsRowControl: ControlView {
     private let chevron = IconView(name: .chevronDown, size: 16)
     private let rule = CALayer()
     private let fill = CALayer()
+    private let primaryFill = BoxDecorationLayer()
     private var tooltip: TooltipController?
 
     public init(kind: Kind = .row) {
@@ -44,6 +48,8 @@ public final class DetailsRowControl: ControlView {
         for l in [fill, rule] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
         fill.cornerRadius = 10
         layer?.addSublayer(fill)
+        primaryFill.host = self
+        layer?.addSublayer(primaryFill)
         layer?.addSublayer(rule)
         label.font = DSFont.ui(13, weight: .medium)
         label.lineHeight = 20
@@ -66,8 +72,8 @@ public final class DetailsRowControl: ControlView {
 
     private func update() {
         chevron.isHidden = kind != .select
-        rule.isHidden = kind != .select
-        scalesWhenPressed = kind == .row
+        rule.isHidden = kind != .select && secondary == nil
+        scalesWhenPressed = kind == .row && secondary == nil
         setAccessibilityRole(kind == .locked ? .staticText : kind == .select ? .popUpButton : .button)
         restyle()
         needsLayout = true
@@ -88,6 +94,13 @@ public final class DetailsRowControl: ControlView {
             chevron.frame = NSRect(x: bounds.width + 1 - 32 + 8, y: midY - 8, width: 16, height: 16)
             rule.frame = CGRect(x: bounds.width + 1 - 32 - 1, y: midY - 8, width: 1, height: 16)
             right = bounds.width + 1 - 32 - 10
+        }
+        if let secondary {
+            secondary.frame = NSRect(x: bounds.width - 32, y: 0, width: 32, height: bounds.height)
+            rule.frame = CGRect(x: bounds.width - 33, y: midY - 8, width: 1, height: 16)
+            right = bounds.width - 33 - 10
+            primaryFill.frame = CGRect(x: 0, y: 0, width: bounds.width - 33, height: bounds.height)
+            primaryFill.layout(boxSize: primaryFill.frame.size)
         }
         if let trailing {
             let w = trailing.intrinsicContentSize.width
@@ -110,7 +123,13 @@ public final class DetailsRowControl: ControlView {
     }
 
     public override func updateLayer() {
-        fill.backgroundColor = kind != .locked && state.enabled && state.hoverOrPressed ? detailsHoverFill().cgColor(in: self) : nil
+        let lit = kind != .locked && state.enabled && state.hoverOrPressed
+        fill.backgroundColor = lit ? detailsHoverFill().cgColor(in: self) : nil
+        var part = BoxStyle()
+        part.radius = 10
+        part.corners = .leading
+        part.fill = lit && secondary.map { !$0.state.hoverOrPressed } == true ? detailsHoverFill() : nil
+        primaryFill.boxStyle = part
         rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
     }
 

@@ -68,6 +68,8 @@ public final class TooltipController: NSResponder {
     public var placement: PopupPlacement
     public var delay: TimeInterval
     public var closeDelay: TimeInterval
+    /// Built only when shown; custom cards share the tooltip lifetime and placement.
+    public var content: (() -> (NSView & PopupContent))?
     public static var providerTimeout: TimeInterval = 0.4
 
     private weak var view: NSView?
@@ -112,8 +114,8 @@ public final class TooltipController: NSResponder {
     }
 
     public func show(instant: Bool = false) {
-        guard popup == nil, !text.isEmpty, let view, let host = view.popupHost else { return }
-        let tip = TooltipView(text, variant: variant)
+        guard popup == nil, (!text.isEmpty || content != nil), let view, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
+        let tip = content?() ?? TooltipView(text, variant: variant)
         popup = host.open(tip, trigger: view, placement: placement, motion: instant ? .none : .tooltip,
                           pressesTrigger: false, returnsFocus: false, passive: true)
         popup?.onClose = { [weak self] in
@@ -123,6 +125,8 @@ public final class TooltipController: NSResponder {
     }
 
     public func hide() {
+        pending?.cancel()
+        pending = nil
         guard let popup, let host = popup.container.superview as? PopupHost else { return }
         host.close(popup, returnFocus: false)
     }

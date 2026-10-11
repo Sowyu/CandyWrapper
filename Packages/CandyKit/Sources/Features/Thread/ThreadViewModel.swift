@@ -24,6 +24,7 @@ struct TimelineRowUI: Hashable {
     var webContentHeight: Double?
     /// An MCP App asked to be closed; the row shows "Show app".
     var appClosed = false
+    var subagentRecords: [JSONValue] = []
 }
 
 /// What MCP App rows ask of the environment (McpAppFrame.tsx: `mcpAppEnvironment`, `useTurnItemDetail`).
@@ -185,6 +186,7 @@ public final class ThreadViewModel {
     /// Replaces the projection (nil clears the view) and re-derives the rows that changed.
     public func setProjection(_ projection: ThreadProjection?) {
         if projection == nil, self.projection == nil { return }
+        let subagentsChanged = projection?.subagents != self.projection?.subagents
         let threadChanged = projection?.thread.id != self.projection?.thread.id
         self.projection = projection
         if threadChanged {
@@ -200,6 +202,19 @@ public final class ThreadViewModel {
         }
         projectionDirty = true
         derive()
+        if subagentsChanged && !threadChanged {
+            var changed: [Int] = []
+            for i in items.indices {
+                switch items[i].row.kind {
+                case .event(let p, _, _) where p.item.type == .subagent: break
+                case .work(let entries, _, _) where entries.contains(where: { SubagentCardPresentation.notificationChild($0) != nil }): break
+                default: continue
+                }
+                let next = item(items[i].row)
+                if next != items[i] { items[i] = next; changed.append(i) }
+            }
+            if !changed.isEmpty { onChange?(.rows(changed)) }
+        }
     }
 
     /// Waits for a row request running off the main thread. Returns the main-thread milliseconds
@@ -319,10 +334,14 @@ public final class ThreadViewModel {
     private func item(_ row: TimelineRow) -> TimelineItem {
         var ui = TimelineRowUI()
         switch row.kind {
-        case .work(let entries, _, _) where !expandedEntries.isEmpty:
-            for e in entries where expandedEntries.contains(e.id) {
+        case .work(let entries, _, _):
+            for e in entries where !expandedEntries.isEmpty && expandedEntries.contains(e.id) {
                 ui.expandedEntries.insert(e.id)
                 if let state = output(for: e) { ui.outputs[e.id] = state }
+            }
+            let children = Set(entries.compactMap(SubagentCardPresentation.notificationChild))
+            if !children.isEmpty {
+                ui.subagentRecords = projection?.subagents.filter { children.contains($0["childThreadId"]?.stringValue ?? "") } ?? []
             }
         case .workLive(_, _, _, _, _, let thought?) where expandedEntries.contains(thought.id):
             ui.expandedEntries = [thought.id]
@@ -335,6 +354,9 @@ public final class ThreadViewModel {
         case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
         case .event(let p, _, _) where p.item.type == .secretRequest:
             if let state = secretStates[row.id] { ui.secretSubmitting = state.submitting; ui.secretError = state.error }
+        case .event(let p, let group, _) where p.item.type == .subagent:
+            let ids = Set((group ?? [p]).compactMap { $0.string("subagentId") })
+            ui.subagentRecords = projection?.subagents.filter { ids.contains($0["id"]?.stringValue ?? "") } ?? []
         case .htmlRender:
             ui.webContentHeight = webContentHeights[row.id]
         case .mcpApp:
