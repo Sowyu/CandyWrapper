@@ -125,6 +125,20 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 - `cached sidebar` is empty on the `--server` path: nothing writes the sandbox environment's shell cache there.
 - The machine has no display; the GUI session draws a virtual 1920x1080 screen at 2x (3840x2160 backing). Window buffers are four times a 1x screen's.
 
+## Milestone 7 wrap-up (2026-10-11)
+
+`2026-10-11-8739e4f-w1` (with `--stream`) against 35e734e, 36 commits apart. Real changes, which M8 picks up:
+
+- Idle footprint 32.9 to 39.5 MB, `Malloc Small` +5 MB at launch (a probe gave 36 to 41 MB before a turn). It grew across the feature commits; no single commit stands out yet.
+- Shipped bundle 18.8 to 25.8 MB: the stripped binary 17.3 to 22.4 MB, the rest resources (the Symbols Nerd Font is 1.2 MB, Mermaid 0.75 MB).
+- `-Osize` on the same commit (`/tmp/cw-perf/osize/2026-10-11-8739e4f-osize-w1`) cuts the stripped binary to 18.9 MB and the shipped bundle to 22.3 MB, with no regression verdict: benchmarks moved +2 to +8%, idle and scroll stayed the same.
+- Against the spec's 25 MB bundle limit, which excludes bundled fonts: 24.6 MB at -O and 21.1 MB at -Osize. Every other spec target holds: live sidebar 226 ms, idle CPU 0.035%, 0.37 wakeups/s, 1.9% CPU while streaming, 39.5 MB at launch.
+
+Not regressions:
+
+- `stream.peak_footprint_mb` 34.1 to 95.6 MB is the two-mode noise below. A probe that samples `footprint` through one turn with the window drawing gave 93 MB at 35e734e and 99 MB at 8739e4f, both with 48 MB of `Owned physical footprint (unmapped) (graphics)`; 35e734e's run must have been the not-drawing mode. `stream.settled_footprint_mb` (+11.6 MB) is the same mode difference plus the idle growth: the probe read 43 and 49 MB 8 s after the turn.
+- The open first-frame times move 40 to 70 ms between runs of one build (59, 64 and 60 ms at -O; 70, 54 and 44 ms at -Osize), so their deltas need an A/B before they count.
+
 ## Noise found 2026-10-10
 
 The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_idle_wakeups_per_s` (+67%). An A/B of the streaming scenario, three rounds alternating ef84b1d and 903e0a2, showed both builds landing on either about 36-56 MB or about 86 MB one second after the turn (ef84b1d: 87.4, 86.9, 36.2; 903e0a2: 85.9, 51.4, 86.3), with the same peak (86.5 to 88.2 MB), and package idle wakeups overlapping (0.97 to 1.27 against 1.07 to 1.46). Both metrics are now informational; the stream peak and CPU still gate.
