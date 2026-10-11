@@ -27,6 +27,10 @@ final class Environments {
     }
 
     private weak var sidebar: SidebarContentView?
+    /// Desktop-managed SSH environments; the host runs the T3 release this app speaks (desktop main.ts:117).
+    let ssh = SshEnvironmentLauncher(version: ServerVersionSkewLogic.clientVersion)
+    /// A toast for an SSH environment that could not connect or lost its tunnel: title and detail.
+    var onSshFailure: ((String, String) -> Void)?
     let catalog: EnvironmentCatalog
     let cache: ShellCache
     /// Settled thread snapshots on disk (nil with `CANDY_THREAD_CACHE=off`).
@@ -68,6 +72,13 @@ final class Environments {
         self.sidebar = sidebar
         self.catalog = catalog
         self.cache = cache
+        ssh.onTunnelExit = { [weak self] target in
+            guard let self, let saved = self.saved.first(where: { $0.sshTarget?.stateKey == target.stateKey }) else { return }
+            self.drop(saved.environmentId)
+            // ponytail: T3's supervisor prepares the SSH route again on its retry ladder; this drops the session and the
+            // row's switch reconnects. Re-run `connectSaved` on the retry ladder if tunnels drop often.
+            self.onSshFailure?("SSH connection closed", "The tunnel to \(target.display) closed. Turn the environment off and on in Settings → Connections to reconnect.")
+        }
         let routes = iconRoutes
         ProjectIconStore.shared.loader = { env, cwd, path in
             guard let route = routes.get(env) else { throw CancellationError() }
@@ -173,6 +184,18 @@ final class Environments {
         // while the session is nil), and none while the environment is being removed.
         guard id != primaryId, !connecting.contains(id), !removing.contains(id) else { return }
         connecting.insert(id)
+        if let target = registration.sshTarget {
+            Task {
+                defer { connecting.remove(id) }
+                do {
+                    let bootstrap = try await ssh.ensure(target)
+                    guard saved.contains(where: { $0.environmentId == id && $0.enabled }), !removing.contains(id) else { ssh.disconnect(target); return }
+                    _ = try await pairSSH(bootstrap, routeTarget: id)
+                } catch is CancellationError {
+                } catch { onSshFailure?("Could not prepare the SSH environment", String(describing: error)) }
+            }
+            return
+        }
         let catalog = self.catalog, cache = self.cache
         Task {
             let (route, token, cached) = await Task.detached { () -> (URL, String?, ShellSnapshot?) in
@@ -235,6 +258,23 @@ final class Environments {
                       baseURL: result.baseURL, token: token, cached: cache.load(environmentId: stored.environmentId)?.snapshot)
         }
         changed()
+        return d.label
+    }
+
+    /// `provisionDesktopSshEnvironment` (platform.ts:184-223): pairs over the tunnel with the credential the host
+    /// issued, then saves the target and the route like a pairing link. Connection method `ssh` (resolver.ts:250).
+    func pairSSH(_ bootstrap: SshEnvironmentLauncher.Bootstrap, routeTarget: String?) async throws -> String {
+        let result = try await Pairing.pair(host: bootstrap.baseURL.absoluteString, code: bootstrap.credential, expectedEnvironmentId: routeTarget, identity: ClientIdentity(appVersion: identity.appVersion, connectionMethod: "ssh"))
+        let d = result.descriptor
+        guard d.environmentId != primaryId else { ssh.disconnect(bootstrap.target); return d.label }
+        var registration = EnvironmentRegistration(environmentId: d.environmentId, label: d.label, httpBaseURL: result.baseURL, machine: d.platform?.machine)
+        registration.sshTarget = bootstrap.target; registration.sshAlias = bootstrap.target.alias
+        let catalog = self.catalog, token = result.token, toSave = registration
+        let stored = try await Task.detached { try catalog.add(toSave, token: token) }.value
+        upsertSaved(stored)
+        addRemote(environmentId: d.environmentId, label: d.label, machine: d.platform?.machine, cached: cache.load(environmentId: d.environmentId)?.snapshot) {
+            ShellSession(environmentId: d.environmentId, baseURL: result.baseURL, token: token, cached: $0, connectionMethod: "ssh")
+        }
         return d.label
     }
 
@@ -411,6 +451,7 @@ final class Environments {
 
     /// Stops the session and takes the environment out of the merged shell.
     private func drop(_ id: String) {
+        if let target = saved.first(where: { $0.environmentId == id })?.sshTarget { ssh.disconnect(target) }
         entries[id]?.session?.stop()
         entries[id]?.watch?.cancel()
         entries[id] = nil
@@ -530,6 +571,7 @@ final class Environments {
 
     /// Ends every session (quit).
     func stopAll() {
+        ssh.shutdown()
         for id in order { entries[id]?.session?.stop() }
     }
 

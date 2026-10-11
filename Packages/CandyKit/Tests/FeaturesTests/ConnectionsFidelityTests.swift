@@ -54,6 +54,7 @@ struct ConnectionsFidelityTests {
             return dialog
         case "dialog":
             let (dialog, form) = AddEnvironmentDialog.make(routeTarget: n["route"])
+            if n["ssh"] != nil { form.setSSHMode(true) }
             form.error = n["error"]
             dialog.frame = NSRect(x: 0, y: 0, width: size.width, height: 10)
             dialog.layoutSubtreeIfNeeded()

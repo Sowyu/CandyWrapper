@@ -12,6 +12,9 @@ open class DialogView: DSView {
     public enum SheetSide: String, CaseIterable, Sendable { case right, left, top, bottom }
     public enum FooterVariant: String, Sendable { case `default`, bare }
 
+    public var headerAccessory: NSView? {
+        didSet { oldValue?.removeFromSuperview(); if let headerAccessory { addSubview(headerAccessory) }; changed() }
+    }
     public let kind: Kind
     public var title: String { didSet { titleText.text = title; changed() } }
     public var message: String? { didSet { messageText.text = message ?? ""; changed() } }
@@ -115,7 +118,7 @@ open class DialogView: DSView {
     }
 
     private struct Frames {
-        var title = CGRect.zero, message = CGRect.zero, header = CGRect.zero, panelArea = CGRect.zero
+        var title = CGRect.zero, message = CGRect.zero, header = CGRect.zero, panelArea = CGRect.zero, accessory = CGRect.zero
         var panel: [CGRect] = [], footer = CGRect.zero, buttons: [CGRect] = []
         var height: CGFloat = 0
     }
@@ -127,6 +130,11 @@ open class DialogView: DSView {
         var y = b.top + 24
         // Header: `flex flex-col gap-2 p-6`, bottom padding 12 when a panel follows.
         let textWidth = inner - 48
+        if let headerAccessory {
+            let size = headerAccessory.intrinsicContentSize
+            f.accessory = CGRect(x: b.left + 24, y: y, width: size.width, height: size.height)
+            y += size.height + 8
+        }
         let titleHeight = titleText.height(forWidth: textWidth)
         f.title = CGRect(x: b.left + 24, y: y, width: textWidth, height: titleHeight)
         y += titleHeight
@@ -196,6 +204,7 @@ open class DialogView: DSView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         var f = frames(width: bounds.width)
+        headerAccessory?.frame = f.accessory
         titleText.frame = f.title
         messageText.frame = f.message
         headerContent?.frame = f.header

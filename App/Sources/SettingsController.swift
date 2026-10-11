@@ -21,6 +21,7 @@ final class SettingsController {
     lazy var page = SettingsPageView()
     private lazy var connections = ConnectionsSettingsView()
     private var built = false
+    private var sshAddTask: Task<Void, Never>?
     /// The open page; T3 opens `/settings` at General.
     var section: SettingsSection = .general
     /// `ThreadNotificationCoordinator.choose`, set by the app.
@@ -269,7 +270,11 @@ final class SettingsController {
     /// `environmentTransportLabel` with T3 Connect: `via <route>` or the first route's label with several
     /// routes, `T3 Connect` for a machine reached only through it, else the URL.
     private func transport(_ r: EnvironmentRegistration, inUse: URL?) -> String {
-        guard r.routes.count > 1 else { return r.isRelayOnly ? "T3 Connect" : EnvironmentRowStatus.transport(routes: r.routes, inUse: inUse) }
+        guard r.routes.count > 1 else {
+            if r.isRelayOnly { return "T3 Connect" }
+            if let target = r.sshTarget { return "SSH \(target.display)" }
+            return EnvironmentRowStatus.transport(routes: r.routes, inUse: inUse)
+        }
         if let inUse, let active = r.routes.first(where: { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(inUse) }) {
             return "via \(r.routeLabel(active))"
         }
@@ -303,15 +308,77 @@ final class SettingsController {
             guard let self, let form else { return }
             self.add(host: host, code: code, routeTarget: routeTarget, targetLabel: targetLabel, form: form)
         }
+        // `useDesktopSshHosts`: discovery reads ~/.ssh/config (and its includes) and known_hosts, and connects
+        // nowhere. `--ssh-home <dir>` points it at fixture files for on-screen checks.
+        form.onSSHMode = { [weak form] in
+            let args = CommandLine.arguments
+            let home = args.firstIndex(of: "--ssh-home").flatMap { args.indices.contains($0 + 1) ? URL(fileURLWithPath: args[$0 + 1]) : nil }
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            Task {
+                do { form?.sshHosts.options = try await Task.detached { try SshEnvironmentDiscovery.discover(home: home) }.value }
+                catch { form?.error = "Failed to discover SSH hosts." }
+            }
+        }
+        // `handleSelectSshHostSuggestion` (ConnectionsSettings.tsx:2688-2709): resolve the alias, fill the fields, connect.
+        form.sshHosts.onChange = { [weak self, weak form] index in
+            guard let self, let form, !form.isAdding, form.sshHosts.options.indices.contains(index) else { return }
+            let alias = form.sshHosts.options[index]
+            self.connectSSH(form: form, routeTarget: routeTarget, targetLabel: targetLabel) {
+                let resolved = try await self.environments.ssh.resolve(alias: alias)
+                form.sshUsername.text = resolved.username ?? ""; form.sshPort.text = resolved.port.map(String.init) ?? ""
+                return resolved
+            }
+        }
+        // `handleAddSavedBackend` in SSH mode (ConnectionsSettings.tsx:2582-2597).
+        form.onSubmitSSH = { [weak self, weak form] alias, user, port in
+            guard let self, let form, !form.isAdding else { return }
+            let target: SshEnvironmentTarget
+            do { target = try SshEnvironmentTarget.manual(host: alias, username: user, port: port) }
+            catch { form.error = String(describing: error); return }
+            self.connectSSH(form: form, routeTarget: routeTarget, targetLabel: targetLabel) { target }
+        }
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         let host = ModalHost.present(dialog, in: window)
         host.onDismiss = { [weak self] in
             self?.modal = nil
+            self?.sshAddTask?.cancel(); self?.sshAddTask = nil
             let callback = self?.onOnboardingReturn; self?.onOnboardingReturn = nil; callback?()
         }
         modal = host
         self.form = form
         window.makeFirstResponder(form.host)
+    }
+
+    /// `connectSavedBackendSshTarget` (ConnectionsSettings.tsx:2546-2578): launch or reuse the host's server, pair,
+    /// save, close and toast. A target no saved environment uses is disconnected again when this fails.
+    private func connectSSH(form: AddEnvironmentFormView, routeTarget: String?, targetLabel: String?,
+                            target makeTarget: @escaping @MainActor () async throws -> SshEnvironmentTarget) {
+        form.isAdding = true; form.error = nil
+        sshAddTask = Task { [weak self, weak form] in
+            guard let self else { return }
+            var started: SshEnvironmentTarget?
+            do {
+                let target = try await makeTarget()
+                let bootstrap = try await self.environments.ssh.ensure(target)
+                started = bootstrap.target
+                try Task.checkCancellation()
+                _ = try await self.environments.pairSSH(bootstrap, routeTarget: routeTarget)
+                form?.isAdding = false
+                self.modal?.close()
+                if let targetLabel {
+                    self.toast("Route added", "\(targetLabel) can now be reached over SSH \(target.alias).", .success)
+                } else {
+                    self.toast("Environment connected", "\(target.alias) is ready over an SSH-managed tunnel.", .success)
+                }
+            } catch {
+                if let started, !self.environments.saved.contains(where: { $0.sshTarget?.stateKey == started.stateKey }) {
+                    self.environments.ssh.disconnect(started)
+                }
+                form?.isAdding = false
+                // `formatDesktopSshConnectionError`; an interrupted add (dialog closed) shows nothing.
+                if !(error is CancellationError) { form?.error = String(describing: error) }
+            }
+        }
     }
 
     /// `handleAddSavedBackend` for Remote link.

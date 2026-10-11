@@ -191,7 +191,9 @@ extension SettingsController {
         let publish = linkState?.publishAgentActivity ?? false
         let disabled = !canManageRelay || !signedIn || linkState == nil || linkLoading || linkBusy
         var rows: [ConnectionsPageModel.HostRow] = []
-        // ponytail: linking runs the relay challenge and the server's link proof (`linkPrimaryEnvironmentToCloud`); left to T3 Code's app
+        // ponytail: the switch needs T3's `reconcileCloudState` (useCloudLinkController.ts:85-190: a managed or
+        // publish-only link, unlinked only when neither is wanted) in front of the relay install flow
+        // (`DesktopManagedController.ensureRelayClient`); left to T3 Code's app until it is ported and tried on a real account with the user
         rows.append(.init(id: "t3-connect", title: "T3 Connect",
                           detail: tunnel ? "This environment is available to your other devices through T3 Connect."
                               : "Make this environment available to your other devices through T3 Connect.",

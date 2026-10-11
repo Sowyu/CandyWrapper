@@ -1,0 +1,42 @@
+{
+  "relay-activating": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-checking": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-confirm": {
+    "height": 95.5,
+    "width": 398
+  },
+  "relay-downloading": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-installing": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-validating": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-verifying": {
+    "height": 67.5,
+    "width": 398
+  },
+  "relay-waiting_for_lock": {
+    "height": 67.5,
+    "width": 398
+  },
+  "ssh": {
+    "height": 112,
+    "width": 398
+  },
+  "ssh-expired": {
+    "height": 92,
+    "width": 398
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "component": "desktop-managed",
+  "source": "SshPasswordPromptDialog.tsx:178-220; RelayClientInstallDialog.tsx:87-127",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "ssh",
+      "html": "<div class=\"space-y-3\"><div class=\"space-y-2\"><div class=\"flex items-center justify-between gap-3\"><p class=\"text-sm font-medium text-foreground\">Enter the SSH password for fixture.</p><span class=\"shrink-0 text-xs text-muted-foreground\">3:00</span></div><span class=\"relative inline-flex w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding text-base text-foreground shadow-xs/5 ring-ring/24 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] has-focus-visible:has-aria-invalid:border-destructive/64 has-focus-visible:has-aria-invalid:ring-destructive/16 has-aria-invalid:border-destructive/36 has-focus-visible:border-ring has-autofill:bg-foreground/4 has-disabled:opacity-64 has-[:disabled,:focus-visible,[aria-invalid]]:shadow-none has-focus-visible:ring-[3px] sm:text-sm dark:bg-input/32 dark:has-autofill:bg-foreground/8 dark:has-aria-invalid:ring-destructive/24 dark:not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)]\" data-size=\"default\" data-slot=\"input-control\"><input class=\"h-8.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(3)-1px)] leading-8.5 outline-none placeholder:text-placeholder sm:h-7.5 sm:leading-7.5 [transition:background-color_5000000s_ease-in-out_0s]\" data-slot=\"input\" type=\"password\"></span></div><p class=\"text-sm text-muted-foreground\">Use SSH keys to avoid repeated password prompts on new SSH sessions.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "ssh",
+        "expired": "False"
+      }
+    },
+    {
+      "name": "ssh-expired",
+      "html": "<div class=\"space-y-3\"><div class=\"space-y-2\"><div class=\"flex items-center justify-between gap-3\"><p class=\"text-sm font-medium text-foreground\">Enter the SSH password for fixture.</p><span class=\"shrink-0 text-xs text-destructive\">Expired</span></div><span class=\"relative inline-flex w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding text-base text-foreground shadow-xs/5 ring-ring/24 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] has-focus-visible:has-aria-invalid:border-destructive/64 has-focus-visible:has-aria-invalid:ring-destructive/16 has-aria-invalid:border-destructive/36 has-focus-visible:border-ring has-autofill:bg-foreground/4 has-disabled:opacity-64 has-[:disabled,:focus-visible,[aria-invalid]]:shadow-none has-focus-visible:ring-[3px] sm:text-sm dark:bg-input/32 dark:has-autofill:bg-foreground/8 dark:has-aria-invalid:ring-destructive/24 dark:not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)]\" data-size=\"default\" data-slot=\"input-control\"><input class=\"h-8.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(3)-1px)] leading-8.5 outline-none placeholder:text-placeholder sm:h-7.5 sm:leading-7.5 [transition:background-color_5000000s_ease-in-out_0s]\" data-slot=\"input\" type=\"password\" disabled></span></div><p class=\"text-sm text-destructive\">This SSH password prompt expired. Try connecting again.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "ssh",
+        "expired": "True"
+      }
+    },
+    {
+      "name": "relay-confirm",
+      "html": "<div class=\"rounded-xl border border-border/70 bg-muted/35 p-3\"><p class=\"text-sm font-medium text-foreground\">Managed relay client</p><p class=\"mt-1 text-sm leading-relaxed text-muted-foreground\">T3 Code will download and install version 2026.10.9 locally.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay"
+      }
+    },
+    {
+      "name": "relay-checking",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Checking current installation</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">1 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:14.285714285714285%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "checking"
+      }
+    },
+    {
+      "name": "relay-waiting_for_lock",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Waiting for installer</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">2 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:28.57142857142857%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "waiting_for_lock"
+      }
+    },
+    {
+      "name": "relay-downloading",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Downloading relay client</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">3 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:42.857142857142854%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "downloading"
+      }
+    },
+    {
+      "name": "relay-verifying",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Verifying download</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">4 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:57.14285714285714%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "verifying"
+      }
+    },
+    {
+      "name": "relay-installing",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Installing relay client</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">5 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:71.42857142857143%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "installing"
+      }
+    },
+    {
+      "name": "relay-validating",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Validating executable</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">6 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:85.71428571428571%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "validating"
+      }
+    },
+    {
+      "name": "relay-activating",
+      "html": "<div class=\"space-y-2.5\"><div class=\"flex items-center justify-between gap-3 text-sm\"><p class=\"font-medium text-foreground\">Activating installation</p><p class=\"shrink-0 tabular-nums text-muted-foreground\">7 of 7</p></div><div class=\"h-2 w-full overflow-hidden rounded-full bg-muted\"><div class=\"h-2 rounded-full bg-primary\" style=\"width:100.0%\"></div></div><p class=\"text-xs leading-relaxed text-muted-foreground\">Keep T3 Code open while the relay client is installed.</p></div>",
+      "wrapperStyle": "display:block;width:398px",
+      "native": {
+        "kind": "relay",
+        "stage": "activating"
+      }
+    }
+  ]
+}
