@@ -105,6 +105,14 @@ public final class ThreadPanelView: DSView {
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
+    /// The `/usage-limits` result, a notice in the banner stack above the environment banner.
+    public var usageLimitsBanner: UsageLimitsBannerView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let b = usageLimitsBanner { addSubview(b, positioned: .below, relativeTo: environmentBanner) }
+            needsLayout = true
+        }
+    }
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
     /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero and during approvals.
@@ -568,11 +576,20 @@ public final class ThreadPanelView: DSView {
             environmentBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = environmentBanner.frame.minY
         }
+        if let usage = usageLimitsBanner {
+            usage.isHidden = !docked
+            if docked {
+                let h = usage.height(forWidth: bannerWidth)
+                usage.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+                top = usage.frame.minY
+            }
+        }
         let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
-        environmentBanner.joinsAbove = queueHeight > 0
+        environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        usageLimitsBanner?.joinsAbove = queueHeight > 0
         activityRow.joinsAbove = queueHeight > 0 || bannerShown
         approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown
         questionPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown

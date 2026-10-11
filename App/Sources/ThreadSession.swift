@@ -229,6 +229,7 @@ final class ThreadController {
     private(set) var files: FilesController!
     private(set) var pullRequests: ThreadPullRequestsController!
     private(set) var browser: BrowserController!
+    private(set) var automations: ThreadAutomationsController!
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -262,12 +263,14 @@ final class ThreadController {
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
-        composer.onTargetChange = { [weak self] in self?.git.refresh() }
+        automations = ThreadAutomationsController(panel: panel, environments: environments)
+        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync() }
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
         let prCapabilities = PullRequestCapabilities(environments: environments)
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
+        automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
         browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
         files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync() }

@@ -232,7 +232,10 @@ final class ComposerController {
     /// `subscribeServerConfig`: a snapshot first, then provider and settings updates (protocol.md 1562).
     private func subscribeConfig(_ shell: ShellSession) -> Task<Void, Never> {
         let env = shell.environmentId
-        let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: { .object([:]) }, handler: { [weak self] event in
+        // `usageLimitSources` streams the hubs' quota; `usageLimitsCommand` says this client answers `/usage-limits`.
+        let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: {
+            .object(["usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
+        }, handler: { [weak self] event in
             guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
             await MainActor.run { self?.configChanged(change, environmentId: env) }
         })
@@ -242,7 +245,12 @@ final class ComposerController {
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
         switch event {
-        case .snapshot(let snapshot): config = snapshot
+        case .snapshot(let snapshot):
+            // Hub snapshots never ride in a config snapshot; keep the last ones.
+            let sources = config.usageLimitSources
+            config = snapshot
+            config.usageLimitSources = sources
+        case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
         case .providerStatuses(let providers): config.providers = providers
         case .settingsUpdated(let settings): config.settings = settings
         case .keybindingsUpdated(let rules): config.keybindings = rules
@@ -254,6 +262,7 @@ final class ComposerController {
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         if environmentId == targetEnvironmentId { refresh() }
         onConfigChange?(environmentId)
+        configObservers.forEach { $0(environmentId) }
     }
 
     /// `sendShortcut` and `followUpBehavior` (client settings) drive the composer's Enter and follow-up rules.
@@ -274,6 +283,10 @@ final class ComposerController {
 
     /// Called after an environment's server config changed (the Settings pages follow it).
     var onConfigChange: ((String) -> Void)?
+    /// More listeners for config changes (the Usage page's limits).
+    var configObservers: [(String) -> Void] = []
+    /// Every environment's config, for the Usage page.
+    var allConfigs: [String: ServerProviderConfig] { serverConfigs }
     /// An environment's last `server.getConfig` snapshot with its updates.
     func config(_ environmentId: String) -> ServerProviderConfig? { serverConfigs[environmentId] }
 
@@ -422,6 +435,7 @@ final class ComposerController {
         queuedEdit = nil
         questionRequestId = nil
         target = .thread(id)
+        panel.usageLimitsBanner = nil
         projection = nil
         requests = PendingRequests()
         optimistic = carried
@@ -476,6 +490,7 @@ final class ComposerController {
         queuedEdit = nil
         questionRequestId = nil
         target = .draft(session)
+        panel.usageLimitsBanner = nil
         projection = nil
         requests = PendingRequests()
         optimistic = []
@@ -828,6 +843,7 @@ final class ComposerController {
 
     /// The pickers follow the draft key, the server config and the open thread.
     private func updatePickers() {
+        dropUsageLimitsIfStale(instance: pickers.current.instanceId?.rawValue)
         let snapshot = sidebar?.snapshot
         let thread = shellThread
         let projectId: ProjectId? = switch target {
@@ -859,6 +875,13 @@ final class ComposerController {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
         let attachments = currentAttachments
+        // Typed in full, `/usage-limits` is answered here from the Limits snapshot; the agent never sees it.
+        if attachments.isEmpty, usageLimitsOffered, UsageLimitsLogic.isUsageLimitsCommand(trimmed) {
+            if openUsageLimits() { composer.text = ""; remember("") }
+            return
+        }
+        // The panel closes when the next message goes.
+        if !trimmed.isEmpty || !attachments.isEmpty { panel.usageLimitsBanner = nil }
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
         guard ComposerAttachmentRules.uploadBlockReason(attachments.map(\.status)) == nil else { return }
@@ -1691,7 +1714,8 @@ extension ComposerController {
             // The token goes and the model picker opens (ChatComposer.tsx:4003-4014).
             DispatchQueue.main.async { [weak self] in self?.pickers.toggleModelPicker() }
         case .providerCommand("usage-limits"):
-            DispatchQueue.main.async { [weak self] in self?.sidebar?.actions.openUsage() }
+            // Picking it is the action; the draft keeps nothing of it (ChatComposer.tsx:4026-4033).
+            DispatchQueue.main.async { [weak self] in self?.openUsageLimits() }
         case .builtIn(let mode):
             if let key = draftKey { pickers.store.setInteractionMode(key, mode == "plan" ? .plan : .default) }
             updatePickers()
@@ -2249,6 +2273,50 @@ extension ComposerController {
         if requests.activeApproval != nil || target == nil { return }
         stashCurrentPrompt()
     }
+
+    // MARK: /usage-limits (ChatView.tsx:3475-3570)
+
+    /// T3 owns `/usage-limits` only where Limits has data for the selected provider.
+    private var usageLimitsOffered: Bool {
+        guard let p = menuProvider else { return false }
+        return UsageLimitsLogic.hasLimits(driver: p.driver, providers: serverConfig.providers, sources: serverConfig.usageLimitSources)
+    }
+
+    /// Opens the panel from the last snapshot, or says the provider has none.
+    @discardableResult
+    func openUsageLimits() -> Bool {
+        let nowMs = TimestampFormat.nowMs()
+        guard let env = targetEnvironmentId, let instance = pickers.current.instanceId,
+              let report = UsageLimitsLogic.report(instanceId: instance.rawValue, providers: serverConfig.providers,
+                                                   sources: serverConfig.usageLimitSources, nowMs: nowMs) else {
+            panel.usageLimitsBanner = nil
+            toast(.info, "Usage limits are unavailable for this provider")
+            return false
+        }
+        let banner = UsageLimitsBannerView(report: report)
+        banner.dismiss.action = { [weak self] in self?.panel.usageLimitsBanner = nil }
+        banner.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        for (account, view) in banner.resetViews {
+            guard let target = account.resetCreditTarget ?? account.instanceId.map({ .instance($0) }) else { continue }
+            view.onUse = { [weak self, weak view] in
+                guard let self, let view else { return }
+                UsageResetCredit.confirmAndUse(in: self.panel.window, environments: self.environments, environmentId: env, target: target) { busy, status in
+                    view.busy = busy
+                    if let status { view.statusText = status }
+                }
+            }
+        }
+        panel.usageLimitsBanner = banner
+        return true
+    }
+
+    /// The panel belongs to one thread and model; another thread or provider drops it.
+    func dropUsageLimitsIfStale(instance: String?) {
+        guard let banner = panel.usageLimitsBanner else { return }
+        if banner.report.accounts.allSatisfy({ $0.instanceId != nil && $0.instanceId != instance }) { panel.usageLimitsBanner = nil }
+    }
+
+    func toastPublic(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) { toast(kind, title, message) }
 
     private func toast(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) {
         _ = panel.toasts.show(ToastView(title: title, message: message, kind: kind))

@@ -418,6 +418,9 @@ public final class ThreadDetailsCardView: DSView {
 
     private let decoration = BoxDecorationLayer()
     private let divider = CALayer()
+    /// Tasks bound to the thread (`ThreadAutomationsPanel`), separated by `border-t border-border/65`.
+    public let automations = ThreadAutomationsView()
+    private let automationsDivider = CALayer()
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -425,6 +428,9 @@ public final class ThreadDetailsCardView: DSView {
         layer?.addSublayer(decoration)
         divider.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(divider)
+        automationsDivider.actions = divider.actions
+        layer?.addSublayer(automationsDivider)
+        addSubview(automations)
         runContext.setAccessibilityLabel("Run context")
         branch.icons = [IconName.gitBranch.definition]
         branch.middleTruncates = true
@@ -461,6 +467,7 @@ public final class ThreadDetailsCardView: DSView {
         if showsVersionControl, !rows.isEmpty {
             h += 1 + 8 + 10 + rows.reduce(0) { $0 + ($1 === gitActions ? gitActions.preferredHeight : 32) }
         }
+        if !automations.isEmpty { h += 1 + automations.preferredHeight }
         return h
     }
 
@@ -482,7 +489,15 @@ public final class ThreadDetailsCardView: DSView {
             row.frame = NSRect(x: 9, y: y, width: inner, height: h)
             y += h
         }
+        y = automations.isEmpty ? y : preferredHeight - 1 - automations.preferredHeight
+        automations.isHidden = automations.isEmpty
+        automationsDivider.isHidden = automations.isEmpty
+        automationsDivider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)
+        automations.frame = NSRect(x: 1, y: y + 1, width: bounds.width - 2, height: automations.preferredHeight)
     }
+
+    /// The card grows when the automations change.
+    public func automationsChanged() { relayout() }
 
     public override func updateLayer() {
         var box = BoxStyle()
@@ -491,6 +506,7 @@ public final class ThreadDetailsCardView: DSView {
         box.border = Themed.color(\.contrastForeground, 0.1)
         decoration.boxStyle = box
         divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
+        automationsDivider.backgroundColor = Themed.color(\.border, 0.65).cgColor(in: self)
     }
 
     public override func viewDidChangeEffectiveAppearance() {

@@ -25,13 +25,16 @@
 		7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */ = {isa = PBXBuildFile; productRef = 8A26017E3FA14E25E7143DA8 /* T3Store */; };
 		7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */; };
 		7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */; };
+		844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */; };
 		86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */; };
+		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
 		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
 		D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */; };
+		D050126CAF44FEFD05E6EEF0 /* ThreadAutomationsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */; };
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
 		FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 527913F33E671EBA3009A953 /* Shortcuts.swift */; };
 /* End PBXBuildFile section */
@@ -41,6 +44,7 @@
 		0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsController.swift; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
+		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
@@ -58,9 +62,11 @@
 		A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
 		B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserController.swift; sourceTree = "<group>"; };
 		C28281CD4D81D6A990C1B210 /* ThreadSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSession.swift; sourceTree = "<group>"; };
+		CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTasksStore.swift; sourceTree = "<group>"; };
 		CB23CCA031F2AB693BDD07D9 /* CandyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CandyKit; path = Packages/CandyKit; sourceTree = SOURCE_ROOT; };
 		CDA413FF2F602E6306049C36 /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
 		E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsHostAccess.swift; sourceTree = "<group>"; };
+		EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadAutomationsController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +116,7 @@
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
 				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
 				2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */,
+				CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */,
 				CDA413FF2F602E6306049C36 /* ServerController.swift */,
 				21423E229A8AD862537E9ECA /* SettingsController.swift */,
 				E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */,
@@ -119,7 +126,9 @@
 				5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */,
 				92B1A20A927434B822A78FBE /* T3ConnectController.swift */,
 				7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */,
+				EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */,
 				C28281CD4D81D6A990C1B210 /* ThreadSession.swift */,
+				35F79E1B4BAC92B09DE28732 /* UsageController.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -219,6 +228,7 @@
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
 				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
 				7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */,
+				844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */,
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,
 				50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */,
 				66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */,
@@ -228,7 +238,9 @@
 				357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */,
 				EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */,
 				3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */,
+				D050126CAF44FEFD05E6EEF0 /* ThreadAutomationsController.swift in Sources */,
 				5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */,
+				87959F581610CF381EEC6C11 /* UsageController.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

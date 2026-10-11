@@ -1,0 +1,22 @@
+{
+  "chart" : {
+    "height" : 242,
+    "width" : 600
+  },
+  "header" : {
+    "height" : 52,
+    "width" : 860
+  },
+  "limits-banner" : {
+    "height" : 111,
+    "width" : 692
+  },
+  "scheduled-tasks" : {
+    "height" : 219,
+    "width" : 796
+  },
+  "task-schedule" : {
+    "height" : 72,
+    "width" : 528
+  }
+}

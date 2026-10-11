@@ -62,6 +62,12 @@ extension SettingsController {
             self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0
         }
         c.saveActions = { [weak self] writes in await self?.saveActions(writes) }
+        c.watchScheduledTasks = { [weak self] _ in self?.updateScheduledTaskWatch() }
+        c.httpBaseURL = { [weak self] env in self?.environments.routeInUse(env) }
+        _ = ScheduledTasksStore.shared.observe { [weak self] in
+            guard let self, self.isOpen, self.section == .scheduledTasks else { return }
+            self.refreshPages()
+        }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
         composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
         NotificationCenter.default.addObserver(forName: AppearanceMode.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -85,7 +91,7 @@ extension SettingsController {
         case .general: view = generalPage()
         case .appearance: view = appearancePage()
         case .keybindings: view = keybindingsView()
-        case .connections, .scheduledTasks: view = connectionsPage
+        case .connections: view = connectionsPage
         default: view = extraPage(section)
         }
         if page.page !== view { page.page = view; page.scrollToTop() }
@@ -136,6 +142,7 @@ extension SettingsController {
         case .storage: StorageSettingsView(context: c)
         case .archive: ArchiveSettingsView(context: c)
         case .diagnostics: DiagnosticsSettingsView(context: c)
+        case .scheduledTasks: ScheduledTasksSettingsView(context: c)
         default: SnapShotSettingsView(context: c)
         }
         v.onHeightChange = { [weak self] in self?.page.pageChanged() }
@@ -163,6 +170,7 @@ extension SettingsController {
         default: extraPages[section]?.refresh()
         }
         nav.showsProject = pageContext.scope.selection.project != nil
+        updateScheduledTaskWatch()
         pageContext.didChange()
         page.header.restore.isEnabled = !changedSettingLabels().isEmpty
         page.pageChanged()
@@ -192,6 +200,7 @@ extension SettingsController {
         let primary = environments.primaryId.flatMap { composer?.config($0) }
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath
+        c.scheduledTasks = ScheduledTasksStore.shared.lists
     }
 
     /// `useSettingsProjectGroups`: the sidebar's logical projects over every environment, by display name.
@@ -480,6 +489,24 @@ extension SettingsController {
             if self.window?.firstResponder is ShortcutCaptureResponder { return false }
             self.nav.focusSearch()
             return true
+        }
+    }
+}
+
+extension SettingsController {
+    /// Settings follows the scope's task lists while Scheduled Tasks is open.
+    func updateScheduledTaskWatch() {
+        let ids = isOpen && section == .scheduledTasks ? Set(pageContext.scope.environmentIds) : []
+        ScheduledTasksStore.shared.watch("settings", ids)
+    }
+
+    /// Opens Scheduled Tasks for an environment, and a task's editor once its list arrives (the thread automations panel).
+    func openScheduledTasks(environmentId: String, taskId: String?) {
+        open()
+        show(.scheduledTasks)
+        if let taskId, let page = extraPages[.scheduledTasks] as? ScheduledTasksSettingsView {
+            page.linkedTask = (environmentId, taskId)
+            refreshPages()
         }
     }
 }
