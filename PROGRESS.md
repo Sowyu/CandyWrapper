@@ -221,8 +221,10 @@ Milestone 9 started on 2026-10-11 after the M8 demo (v0.1.2). The user chose a s
   - Fidelity `ThreadViewFidelityTests` (spec scripts/gen-threadview-spec.py, references design/component-reference/threadview): 18 cases, mean 4.4%: card full 3.6/3.5%, compact 3.3/3.2%, essential 2.4/2.4%, PR row 5.3/5.3%, chips thread 3.8/4.1%, terminal 6.6/6.6%, file 4.1/4.2%, image 7.8/7.7%, folder 2.5/3.0%. Most of the chip diff is one device pixel: Blink places some `<button>` chips one pixel higher than `<a>` chips at the same spot, which I could not explain from the CSS.
   - On screen (sandbox, claude-haiku-5-5, three turns): README, folder and thread mentions, a pasted image and a terminal line sent and drawn as chips; thread tooltip and click, image viewer and terminal popover checked; the card inline at 1500 wide and as a popover at 1100. CandyWrapper's window cannot go below 620 tall, so on the sandbox's short cards the card stays full; compact and essential were checked through the tests.
 - [ ] Composer rich text structure (task richtext): lists, blockquote, headings, HTML paste and list splitting (partials item 3).
-- [ ] The weekly gaps, partials items 4 to 30, in waves of up to four agents.
-- [ ] State restoration gaps: draft attachments across relaunch, sidebar shelf expansion, diff scope per thread, display and zoom checks on the saved window frame.
+- [ ] Timeline weekly gaps (task timeline): partials items 4, 5, 17, 18 and 19.
+- [ ] Sidebar drag and restoration gaps (task sidebar): partials items 8, 20 and 21, motion item 32, and the small state restoration gaps.
+- [ ] The other weekly gaps, partials items 6, 7, 9 to 16 and 22 to 30, in later waves.
+- [ ] Draft attachments across relaunch (state restoration), after the richtext task.
 - [ ] Checklist upkeep: the 10 built rows and the 5 stale keybinding lines the research found.
 - [ ] T3 Connect cloud state (reconcileCloudState port): needs half a day on the user's real account, so ask first.
 - [ ] First release through `scripts/release` (main session), then the `appcast` feed tag.
