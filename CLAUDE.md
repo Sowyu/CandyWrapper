@@ -49,6 +49,8 @@ The user runs T3 Code from this machine, and this chat runs inside it.
 
 The sandbox has a demo git repo (`sandbox/demo-repo`) and a project and threads created by the recorder. Real turns use the user's Claude subscription, so keep test prompts tiny and use `claude-haiku-5-5`.
 
+Build every test app with its own bundle id and URL scheme, so it shares no UserDefaults (drafts, prompts, per-thread state) with the user's demo app or other agents' apps: `xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd-<task> PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.<task> CANDY_URL_SCHEME=candywrapper-<task> build`, then launch it with `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app ...`.
+
 ## Reference source
 
 `scripts/fetch-t3-source` clones pingdotgg/t3code at the tag in `T3_VERSION` into `.t3code-src/`, which is gitignored. The research clone at `../CandyWrapper-research/t3code` is the same tag. The T3 repo's own `AGENTS.md` and `docs/internals/` explain its architecture and are worth reading first.
