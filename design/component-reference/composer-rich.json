@@ -10,7 +10,7 @@
   "cases": [
     {
       "name": "marks",
-      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p><strong>Bold</strong> and <em>italic</em> and <s>strike</s></p></div>",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><p><strong>Bold</strong> and <em>italic</em> and <s>strike</s></p></div>",
       "native": {
         "text": "**Bold** and *italic* and ~~strike~~"
       },
@@ -18,7 +18,7 @@
     },
     {
       "name": "nested",
-      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p><em>Outer <strong>inner</strong> end</em></p></div>",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><p><em>Outer <strong>inner</strong> end</em></p></div>",
       "native": {
         "text": "*Outer **inner** end*"
       },
@@ -26,9 +26,49 @@
     },
     {
       "name": "code",
-      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px\"><p>Use <code>let x = 1</code> here</p></div>",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><p>Use <code>let x = 1</code> here</p></div>",
       "native": {
         "text": "Use `let x = 1` here"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "list",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><p>Steps</p><ul><li data-marker=\"-\"><p>First item</p></li><li data-marker=\"-\"><p>Second item</p></li></ul><ol><li data-marker=\"1.\"><p>One</p></li><li data-marker=\"2.\"><p>Two</p></li></ol><p>after</p></div>",
+      "native": {
+        "text": "Steps\n- First item\n- Second item\n1. One\n2. Two\nafter"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "nestedlist",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><ul><li data-marker=\"-\"><p>Parent</p><ul><li data-marker=\"-\"><p>Child</p><ul><li data-marker=\"-\"><p>Grandchild</p></li></ul></li></ul></li><li data-marker=\"-\"><p>Next</p><ol><li data-marker=\"1.\"><p>Numbered</p></li></ol></li></ul></div>",
+      "native": {
+        "text": "- Parent\n  - Child\n    - Grandchild\n- Next\n  1. Numbered"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "quote",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><p>before</p><blockquote><p>Quoted line one</p><p>Quoted line two</p></blockquote><p>after</p></div>",
+      "native": {
+        "text": "before\n> Quoted line one\n> Quoted line two\nafter"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "heading",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><h1>Heading one</h1><p>Body text</p><h2>Heading two</h2><p>More text</p><h3>Heading three</h3></div>",
+      "native": {
+        "text": "# Heading one\nBody text\n## Heading two\nMore text\n### Heading three"
+      },
+      "wrapperStyle": "display:block;width:560px"
+    },
+    {
+      "name": "task",
+      "html": "<div class=\"composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap\" style=\"width:560px;display:flow-root\"><ul data-type=\"taskList\"><li data-checked=\"false\"><label contenteditable=\"false\"><input type=\"checkbox\"><span></span></label><div><p>Open task</p></div></li><li data-checked=\"true\"><label contenteditable=\"false\"><input type=\"checkbox\" checked><span></span></label><div><p>Done task</p></div></li></ul></div>",
+      "native": {
+        "text": "- [ ] Open task\n- [x] Done task"
       },
       "wrapperStyle": "display:block;width:560px"
     }

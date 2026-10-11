@@ -22,8 +22,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     private var lastEditKind = ""
     private var lastEditAt = -Double.infinity
     private var codeHighlightTask: Task<Void, Never>?
-    private var clipboardEdit = false
-    private var applyingListEdit = false
+    var clipboardEdit = false
+    var applyingListEdit = false
 
     static var font: NSFont { FontRuntime.font(.prompt, size: 14) }
     static var lineHeight: CGFloat { FontRuntime.promptSize * 1.625 }
@@ -121,6 +121,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: Self.font, .foregroundColor: Themed.color(\.foreground), .paragraphStyle: paragraph,
         ]
+        bodyParagraph = paragraph
         typingAttributes = attributes
         if let storage = textStorage, storage.length > 0 {
             storage.addAttributes(attributes, range: NSRange(location: 0, length: storage.length))
@@ -201,12 +202,32 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     private var isChipifying = false
+    /// Counts outside edits, so an input rule can be undone only by the very next key.
+    private(set) var editStamp = 0
+    /// Text the keyboard typed (`insertText`), the only edits T3's input rules look at.
+    private var typedInsert = false
+    /// Display range a paste inserted whose lines are read as Markdown blocks.
+    var parseRange: NSRange?
+    /// The input rule the last keystroke applied, for Backspace to undo (`undoInputRule`).
+    var inputRuleUndo: (range: NSRange, literal: NSAttributedString, caret: Int, stamp: Int)?
+    /// The last render's block layout: first-line shift, bottom margin, last line box.
+    private var blockInfo = ComposerRichTextStyler.Info()
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        typedInsert = !clipboardEdit
+        defer { typedInsert = false }
+        super.insertText(string, replacementRange: replacementRange)
+    }
 
     func textDidChange(_ notification: Notification) {
         if undoManager?.isUndoing == true || undoManager?.isRedoing == true { lastEditKind = "other" }
+        if !isChipifying { editStamp += 1 }
         if !isChipifying, !hasMarkedText(), undoManager?.isUndoing != true, undoManager?.isRedoing != true {
             styleRichText(registerUndo: true)
             chipify(registerUndo: true)
+        } else if !isChipifying, richTextEnabled {
+            // Undo and IME composition skip the styler; the layout still follows the text.
+            refreshBlockInfo()
         }
         highlightCodeBlocks()
         onTextChange?()
@@ -217,11 +238,16 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Turns finished tokens in the plain text into chips, keeping the caret where it was.
     private func styleRichText(registerUndo: Bool) {
         guard richTextEnabled, let storage = textStorage else { return }
-        let rendered = ComposerRichTextStyler.render(storage, base: baseAttributes, width: bounds.width, typing: registerUndo && !applyingListEdit)
-        guard !storage.isEqual(to: rendered) else { return }
+        let typing = registerUndo && !applyingListEdit
         let selection = selectedRange()
+        let ruleCaret = typing && typedInsert && selection.length == 0 ? selection.location : nil
+        let (rendered, info) = ComposerRichTextStyler.renderInfo(storage, base: baseAttributes, width: bounds.width, typing: typing,
+                                                                 caret: ruleCaret, parse: parseRange)
+        applyBlockInfo(info)
+        guard !storage.isEqual(to: rendered) else { return }
         let prefix = storage.attributedSubstring(from: NSRange(location: 0, length: min(selection.location, storage.length)))
-        let caret = ComposerRichTextStyler.render(prefix, base: baseAttributes, typing: registerUndo && !applyingListEdit).length
+        let caret = ComposerRichTextStyler.render(prefix, base: baseAttributes, typing: typing, caret: ruleCaret.map { _ in prefix.length },
+                                                  parse: parseRange.map { NSIntersectionRange($0, NSRange(location: 0, length: prefix.length)) }).length
         let was = isChipifying
         isChipifying = true
         defer { isChipifying = was }
@@ -230,7 +256,56 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         storage.setAttributedString(rendered)
         if registerUndo { didChangeText() }
         setSelectedRange(NSRange(location: min(caret, storage.length), length: min(selection.length, max(0, storage.length - caret))))
-        typingAttributes = baseAttributes
+        if let rule = info.rule { inputRuleUndo = (rule.range, rule.literal, selectedRange().location, editStamp) }
+        typingAttributes = caretAttributes([])
+    }
+
+    /// Reads the block layout of the text as it stands, without restyling it (after undo).
+    private func refreshBlockInfo() {
+        guard richTextEnabled, let storage = textStorage else { return }
+        applyBlockInfo(ComposerRichTextStyler.renderInfo(storage, base: baseAttributes, width: bounds.width, typing: true).info)
+    }
+
+    private func applyBlockInfo(_ info: ComposerRichTextStyler.Info) {
+        let shift = blockInfo.topShift
+        blockInfo = info
+        blockInfo.rule = nil
+        if shift != info.topShift { invalidateTextContainerOrigin() }
+    }
+
+    /// TextKit sizes the view to its own line heights; blocks add margins and taller line boxes,
+    /// so the view grows to the CSS height and a scrolled composer reaches its last line.
+    override func setFrameSize(_ newSize: NSSize) {
+        var size = newSize
+        if richTextEnabled, blockInfo.structured, isVerticallyResizable {
+            size.height = max(size.height, contentHeight + 2 * (textContainerInset.height - lineTop))
+        }
+        super.setFrameSize(size)
+    }
+
+    /// The first line moves down by its block's top margin and line box (`ComposerBlockLayout`).
+    override var textContainerOrigin: NSPoint {
+        let origin = super.textContainerOrigin
+        return NSPoint(x: origin.x, y: origin.y + (richTextEnabled ? blockInfo.topShift : 0))
+    }
+
+    /// Typing attributes for the caret's line: its paragraph style, and a heading's font and color.
+    private func caretAttributes(_ marks: [ComposerRichText.Mark]) -> [NSAttributedString.Key: Any] {
+        var base = baseAttributes
+        if richTextEnabled, let storage = textStorage, storage.length > 0 {
+            let caret = min(selectedRange().location, storage.length)
+            let start = lineStart(caret)
+            if start < storage.length, (storage.string as NSString).character(at: start) != 10 {
+                let attrs = storage.attributes(at: start, effectiveRange: nil)
+                base[.paragraphStyle] = attrs[.paragraphStyle] ?? base[.paragraphStyle]
+                base[.composerQuote] = attrs[.composerQuote]
+                if let b = attrs[.attachment] as? ComposerBlockAttachment, case .heading = b.kind {
+                    base[.font] = attrs[.font] ?? base[.font]
+                    base[.foregroundColor] = attrs[.foregroundColor] ?? base[.foregroundColor]
+                }
+            }
+        }
+        return ComposerRichTextStyler.attributes(marks, base: base)
     }
 
     private func chipify(registerUndo: Bool) {
@@ -306,8 +381,13 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         didChangeText()
     }
 
+    /// The plain line's paragraph style; typing attributes carry the caret line's own.
+    private var bodyParagraph: NSParagraphStyle = .default
+
     private var baseAttributes: [NSAttributedString.Key: Any] {
         var attributes = typingAttributes
+        attributes[.paragraphStyle] = bodyParagraph
+        attributes[.composerQuote] = nil
         attributes[.attachment] = nil
         attributes[.composerChipSource] = nil
         attributes[.composerMarks] = nil
@@ -321,19 +401,19 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     // MARK: Blocks and caret stops (composer-rich-text-doc.ts, composer-code-block.ts)
 
-    private func lineStart(_ location: Int) -> Int {
+    func lineStart(_ location: Int) -> Int {
         let text = string as NSString
         let newline = text.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: min(location, text.length)))
         return newline.location == NSNotFound ? 0 : newline.location + 1
     }
 
-    private func lineEnd(_ location: Int) -> Int {
+    func lineEnd(_ location: Int) -> Int {
         let text = string as NSString
         let newline = text.range(of: "\n", range: NSRange(location: location, length: text.length - location))
         return newline.location == NSNotFound ? text.length : newline.location
     }
 
-    private func block(at location: Int) -> ComposerBlockAttachment? {
+    func block(at location: Int) -> ComposerBlockAttachment? {
         guard let storage = textStorage, location >= 0, location < storage.length else { return nil }
         return storage.attribute(.attachment, at: location, effectiveRange: nil) as? ComposerBlockAttachment
     }
@@ -345,7 +425,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     /// One undoable edit that inserts atoms as they are; `replace` takes text the renderer reads.
-    private func replaceAttributed(_ range: NSRange, with text: NSAttributedString, caret: Int) {
+    func replaceAttributed(_ range: NSRange, with text: NSAttributedString, caret: Int) {
         guard let storage = textStorage, shouldChangeText(in: range, replacementString: text.string) else { return }
         storage.replaceCharacters(in: range, with: text)
         didChangeText()
@@ -489,6 +569,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if caret > 0, caret < storage.length, let b = block(at: caret - 1), case .rule = b.kind,
                (storage.string as NSString).character(at: caret) == 10 {
                 ranges = [NSValue(range: NSRange(location: caret < old ? caret - 1 : caret + 1, length: 0))]
+            } else if let b = block(at: caret), b.isLineMarker, caret == lineStart(caret) {
+                // A marker owns no caret position: the line's first stop is its text
+                // (`runOwnsOffset`). Moving left from there goes to the line before.
+                ranges = [NSValue(range: NSRange(location: caret < old && old == caret + 1 && caret > 0 ? caret - 1 : caret + 1, length: 0))]
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
@@ -497,10 +581,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let caret = ranges[0].rangeValue.location, text = storage.string as NSString
         let atLineStart = caret == 0 || text.character(at: caret - 1) == 10 || block(at: caret - 1) != nil
         let source = atLineStart ? caret : caret - 1
-        guard source < text.length, text.character(at: source) != 10, block(at: source) == nil,
-              storage.attribute(.composerCodeBlock, at: source, effectiveRange: nil) == nil else { return }
+        // An empty line or item types plain text in the line's own style.
+        guard source < text.length, text.character(at: source) != 10, block(at: source) == nil else { typingAttributes = caretAttributes([]); return }
+        guard storage.attribute(.composerCodeBlock, at: source, effectiveRange: nil) == nil else { return }
         let marks = ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: source, effectiveRange: nil))
-        typingAttributes = ComposerRichTextStyler.attributes(marks, base: baseAttributes)
+        typingAttributes = caretAttributes(marks)
     }
 
     /// The Markdown copy writes (`serializeSelection`): across lines, the first line keeps its
@@ -554,9 +639,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             let records = ComposerContext.pastedRecords(html: html, pastedText: text)
             if !records.isEmpty { onPasteRecords?(records) }
         }
+        // T3 reads only the plain text flavor (handlePaste): a page's HTML arrives as the text the
+        // browser wrote beside it, and Markdown in it becomes blocks and marks.
         breakUndoCoalescing()
         clipboardEdit = true
-        insertText(text, replacementRange: selectedRange())
+        if pasteBlocks(text) { scrollRangeToVisible(selectedRange()) } else { insertText(text, replacementRange: selectedRange()) }
         clipboardEdit = false
         breakUndoCoalescing()
     }
@@ -638,7 +725,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         applyingListEdit = true
         replace(NSRange(location: start, length: max(0, end - start)), with: edit.replacement)
         applyingListEdit = false
-        if indent { setSelectedRange(NSRange(location: min(selection.location + 2, textStorage?.length ?? 0), length: 0)) }
+        if indent { setCaret(markdown: cursor + 2) }
         breakUndoCoalescing()
         return true
     }
@@ -655,6 +742,16 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             }
         }
         return fence
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        if !hasMarkedText(), blockBackspace() { scrollRangeToVisible(selectedRange()); return }
+        super.deleteBackward(sender)
+    }
+
+    override func deleteForward(_ sender: Any?) {
+        if !hasMarkedText(), blockDeleteForward() { scrollRangeToVisible(selectedRange()); return }
+        super.deleteForward(sender)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -683,7 +780,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             return
         }
         if event.keyCode == 48, event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty,
-           !hasMarkedText(), listEdit(indent: true) { return }
+           !hasMarkedText(), blockIndent() || listEdit(indent: true) { return }
         let returnKeys: Set<UInt16> = [36, 76]
         if returnKeys.contains(event.keyCode) {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -703,6 +800,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
                 }
             }
             if onSubmitKey?(key) == true { return }
+            // A list item splits or leaves its list, a quote or heading continues (Shift+Enter in T3).
+            if !key.composing, blockReturn() { scrollRangeToVisible(selectedRange()); return }
             if !key.composing, listEdit(indent: false) { return }
         }
         let plainKey = event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty && !hasMarkedText()
@@ -846,10 +945,84 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return start ? offset < NSMaxRange(lines[0].characterRange) : offset >= lines[lines.count - 1].characterRange.location
     }
 
+    // MARK: Block decorations
+
+    /// The CSS line box of a text line, in the content's coordinates (the editor's inset padding
+    /// left out): TextKit's line top less how much lower CSS draws the glyphs.
+    private func cssLineTop(_ fragment: NSTextLayoutFragment, _ line: NSTextLineFragment, top: CGFloat) -> CGFloat {
+        lineTop + blockInfo.topShift + fragment.layoutFragmentFrame.minY + line.typographicBounds.minY - top
+    }
+
+    private func lastLine(_ tlm: NSTextLayoutManager) -> (fragment: NSTextLayoutFragment, line: NSTextLineFragment)? {
+        var last: NSTextLayoutFragment?
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { last = $0; return true }
+        guard let last, let line = last.textLineFragments.last else { return nil }
+        return (last, line)
+    }
+
+    private func layoutLine(at index: Int, last: Bool) -> (fragment: NSTextLayoutFragment, line: NSTextLineFragment)? {
+        guard let tlm = textLayoutManager, let content = tlm.textContentManager,
+              let location = content.location(content.documentRange.location, offsetBy: index),
+              let fragment = tlm.textLayoutFragment(for: location),
+              let line = last ? fragment.textLineFragments.last : fragment.textLineFragments.first else { return nil }
+        return (fragment, line)
+    }
+
+    /// Ordered markers in tabular figures (`ol > li::marker`).
+    private static var markerFont: NSFont {
+        let descriptor = font.fontDescriptor.addingAttributes([.featureSettings: [[
+            NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
+            NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector,
+        ]]])
+        return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
+    }
+
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        if richTextEnabled, blockInfo.decorated { drawBlockDecorations(in: rect) }
+    }
+
+    /// What Chromium paints outside a line's text: an ordered item's `::marker`, which ends where
+    /// the item's text starts and may overhang the list's padding, and a quote's 2px left border
+    /// down all of its lines.
+    private func drawBlockDecorations(in rect: NSRect) {
+        guard let storage = textStorage else { return }
+        let origin = textContainerOrigin, pad = origin.y - lineTop - blockInfo.topShift
+        let body = ComposerRichTextStyler.bodyBox
+        let all = NSRange(location: 0, length: storage.length)
+        Themed.color(\.contrastBorder).setFill()
+        storage.enumerateAttribute(.composerQuote, in: all) { value, range, _ in
+            guard value != nil, let first = layoutLine(at: range.location, last: false),
+                  let last = layoutLine(at: NSMaxRange(range) - 1, last: true) else { return }
+            let top = pad + cssLineTop(first.fragment, first.line, top: body.top)
+            let bottom = pad + cssLineTop(last.fragment, last.line, top: body.top) + body.height
+            let rail = NSRect(x: origin.x, y: top, width: ComposerBlockLayout.quoteRail, height: bottom - top)
+            if rail.intersects(rect) { rail.fill() }
+        }
+        storage.enumerateAttribute(.attachment, in: all) { value, range, _ in
+            guard let block = value as? ComposerBlockAttachment, case .ordered = block.kind, let parts = block.listParts,
+                  let line = layoutLine(at: range.location, last: false) else { return }
+            let baseline = origin.y + line.fragment.layoutFragmentFrame.minY + line.line.typographicBounds.minY + line.line.glyphOrigin.y
+            let style = storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+            let marker = NSAttributedString(string: parts.marker + " ", attributes: [.font: Self.markerFont, .foregroundColor: Themed.color(\.foreground)])
+            let width = marker.size().width
+            let box = NSRect(x: origin.x + (style?.headIndent ?? ComposerBlockLayout.listPadding) - width, y: baseline, width: width, height: 0)
+            if box.insetBy(dx: 0, dy: -20).intersects(rect) { marker.draw(with: box, options: []) }
+        }
+    }
+
     /// The laid-out text height (one line box when empty).
     var contentHeight: CGFloat {
         guard let tlm = textLayoutManager else { return Self.lineHeight }
         tlm.ensureLayout(for: tlm.documentRange)
+        if richTextEnabled, blockInfo.structured, let last = lastLine(tlm) {
+            // CSS: the last line box and the margin under it. TextKit lays the empty line after a
+            // final newline out as the last line, already at its CSS place (the spacing after).
+            let extra = last.line.characterRange.length == 0
+            let box = extra ? ComposerRichTextStyler.bodyBox : blockInfo.lastBox
+            let trailing = extra ? 0 : blockInfo.trailingGap.map { $0 + Self.lineHeight } ?? 0
+            return cssLineTop(last.fragment, last.line, top: box.top) + box.height + trailing + blockInfo.bottom
+        }
         var bottom: CGFloat = 0
         tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { f in
             bottom = max(bottom, f.layoutFragmentFrame.maxY)
