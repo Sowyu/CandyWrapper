@@ -259,8 +259,58 @@ class SidebarRowBase: ControlView {
 
     /// The pointer entered or left the row (the hover card's trigger).
     final var onHoverChange: (@MainActor (SidebarRowBase, Bool) -> Void)?
-    /// A press on a thread row moved `dragDistance`: the list starts a thread drag.
-    final var onBeginDrag: (@MainActor (SidebarRowBase, ThreadId, NSEvent) -> Void)?
+    /// A press on a thread row moved `dragDistance`: the list starts a thread drag. The point is the
+    /// press, in window coordinates.
+    final var onBeginDrag: (@MainActor (SidebarRowBase, ThreadId, NSEvent, NSPoint) -> Void)?
+    /// The lifted row of an in-list drag (Sidebar.tsx:1599-1640, 1755-1757), nil at rest.
+    struct Lift: Equatable {
+        /// What dropping here does (`dropVerb`), nil inside the row's own section.
+        var verb: SidebarDropVerb?
+        /// The lifted row is over the pinned block (`dragOverPinned`).
+        var overPinned: Bool
+    }
+    var lift: Lift? {
+        didSet {
+            guard lift != oldValue else { return }
+            // The shadow reaches past the row.
+            clipsToBounds = lift == nil
+            if let verb = lift?.verb {
+                let badge = dropBadge ?? SidebarReorderDropBadge()
+                if badge.superview == nil { addSubview(badge); dropBadge = badge }
+                badge.verb = verb
+            }
+            dropBadge?.isHidden = lift?.verb == nil
+            refresh()
+            needsLayout = true
+        }
+    }
+    /// The verb pill in the status slot while lifted (`dragDestination`).
+    private(set) var dropBadge: SidebarReorderDropBadge?
+
+    /// The pin glyph shows at rest, and on the lifted row only over the pinned block with no verb.
+    func showsPin(_ r: SidebarRowModel) -> Bool {
+        r.isPinned && (lift == nil || (lift?.overPinned == true && lift?.verb == nil))
+    }
+
+    /// The lifted row is an opaque card so the rows beneath never show through: `bg-sidebar` under the
+    /// active row tint, with `shadow-lg`.
+    func applyLift(_ surface: CALayer) {
+        guard lift != nil else { surface.shadowOpacity = 0; return }
+        surface.backgroundColor = SidebarRowBase.composite(SB.c(\.sidebarRowActive), over: SB.c(\.sidebar)).cgColor(in: self)
+        // ponytail: one shadow layer for Tailwind's two (0 10 15 -3, 0 4 6 -4 at 10%); add the second if it reads flat
+        surface.shadowColor = NSColor.black.cgColor
+        surface.shadowOpacity = 0.14
+        surface.shadowRadius = 7
+        surface.shadowOffset = CGSize(width: 0, height: -6)
+    }
+
+    static func composite(_ top: NSColor, over bottom: NSColor) -> NSColor {
+        guard let t = top.usingColorSpace(.sRGB), let b = bottom.usingColorSpace(.sRGB) else { return bottom }
+        let a = t.alphaComponent
+        func mix(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x * a + y * (1 - a) }
+        return NSColor(srgbRed: mix(t.redComponent, b.redComponent), green: mix(t.greenComponent, b.greenComponent),
+                       blue: mix(t.blueComponent, b.blueComponent), alpha: 1)
+    }
     /// Files dragged over the row (`isFileDragOver`: `ring-1 ring-inset ring-primary/70`).
     var isFileDragOver = false { didSet { if isFileDragOver != oldValue { refresh() } } }
     private var pressPoint: NSPoint?
@@ -279,7 +329,7 @@ class SidebarRowBase: ControlView {
             var released = state
             released.active = false
             previewState(released)
-            onBeginDrag(self, r.id, event)
+            onBeginDrag(self, r.id, event, p)
             return
         }
         super.mouseDragged(with: event)
@@ -293,6 +343,7 @@ class SidebarRowBase: ControlView {
     override func prepareForReuse() {
         super.prepareForReuse()
         pressPoint = nil
+        lift = nil
         isFileDragOver = false
         isKeyboardFocused = false
         func reset(_ view: NSView) {
@@ -428,6 +479,7 @@ final class SidebarCardRowView: SidebarRowBase {
     /// The actions hold the status slot (`static`); they keep fading out after this turns false.
     private var showsActions = false
     private var showsSnooze = false
+    private var hidForLift = false
     /// Working duration ticks with the list's timer.
     var nowMs: Int64 = 0
 
@@ -467,6 +519,7 @@ final class SidebarCardRowView: SidebarRowBase {
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
+        applyLift(surface)
         CATransaction.commit()
         // Background work fades as a whole row (`opacity-70 transition-opacity`, full on hover, Sidebar.tsx:1596-1598).
         HoverReveal.fade(self, to: r.recedes && r.status == .working && !hovered ? 0.7 : 1)
@@ -477,7 +530,7 @@ final class SidebarCardRowView: SidebarRowBase {
         project.text = r.projectLabel ?? ""
         project.font = SB.font(12, r.recedes ? .regular : .medium)
         project.color = SB.c(\.secondaryLabel)
-        pin.isHidden = !r.isPinned
+        pin.isHidden = !showsPin(r)
 
         let showActions = hovered
         if let top = r.topStatus {
@@ -504,6 +557,14 @@ final class SidebarCardRowView: SidebarRowBase {
         if !snoozes { HoverReveal.snap([snoozeButton], visible: false, hides: true) }
         HoverReveal.fade(snoozes ? [settleButton, snoozeButton] : [settleButton], visible: showActions, hides: true)
         if showsActions != showActions || showsSnooze != snoozes { showsActions = showActions; showsSnooze = snoozes; needsLayout = true }
+        // The lifted row trades the status slot for the drop verb (Sidebar.tsx:2011-2013).
+        if lift != nil {
+            for v in [statusIcon, statusLabel, duration, settleButton, snoozeButton] as [NSView] { v.isHidden = true }
+            hidForLift = true
+        } else if hidForLift {
+            hidForLift = false
+            for v in [statusIcon, statusLabel, duration] as [NSView] { v.isHidden = false }
+        }
         // Title (Sidebar.tsx:1658-1690), card variant.
         title.text = r.title
         title.font = SB.font(14, r.recedes ? .regular : .medium)
@@ -563,6 +624,11 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         let restWidth = max(32, slotRight - sx) // `min-w-8`
         if !showsActions { slotLeft = slotRight - restWidth }
+        if lift != nil {
+            let bw = lift?.verb == nil ? 0 : dropBadge?.preferredWidth ?? 0
+            slotLeft = right - bw
+            dropBadge?.frame = NSRect(x: slotLeft, y: top, width: bw, height: 20)
+        }
         slotRight = slotLeft
         if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
         project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
@@ -659,6 +725,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         CATransaction.setDisableActions(true)
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
+        applyLift(surface)
         CATransaction.commit()
         let unsettle = r.action == .unsettle
         // Dimmed favicon at rest, restored on hover.
@@ -678,7 +745,7 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
-        pin.isHidden = !r.isPinned
+        pin.isHidden = !showsPin(r)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
         if let snooze = r.snoozeLabel {
@@ -712,6 +779,13 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         // `opacity-0 transition-opacity group-any-hover/sidebar-row:opacity-100` (Sidebar.tsx:1903,1920,1937).
         if let actionButton { HoverReveal.fade([actionButton], visible: hovered, hides: true) }
+        // The lifted row trades the time and action for the drop verb (Sidebar.tsx:1847-1849).
+        if lift != nil {
+            time.isHidden = true
+            actionButton?.isHidden = true
+        } else if time.isHidden {
+            time.isHidden = false
+        }
         setAccessibilityLabel(r.title)
         needsLayout = true
     }
@@ -727,8 +801,9 @@ final class SidebarSlimRowView: SidebarRowBase {
         monogram.frame = NSRect(x: x, y: (h - 16) / 2, width: 16, height: 16)
         x += 16 + 10
         let tw = ceil(time.textWidth)
-        let slot = max(32, tw) // `min-w-8`
+        let slot = lift == nil ? max(32, tw) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
         let slotX = w - 10 - slot
+        if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (h - 20) / 2, width: max(0, slot), height: 20) }
         time.frame = NSRect(x: w - 10 - tw, y: (h - 16) / 2, width: tw + 1, height: 16)
         if let b = actionButton {
             let bw = b.preferredWidth
@@ -752,6 +827,14 @@ final class SidebarSlimRowView: SidebarRowBase {
 final class SidebarShelfRowView: SidebarRowBase {
     let header = CollapsibleSectionHeaderView("")
     var onToggle: (@MainActor (SidebarShelf) -> Void)?
+    /// While a row is dragged the settled header reads at full strength, and takes the accent while
+    /// the lifted row is over it (Sidebar.tsx:800-818).
+    var dragTone: CollapsibleSectionHeaderView.Tone? { didSet { if dragTone != oldValue { refresh() } } }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        dragTone = nil
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -764,7 +847,7 @@ final class SidebarShelfRowView: SidebarRowBase {
     override func refresh() {
         guard case .shelfHeader(let shelf, let label, let expanded)? = item else { return }
         header.title = label
-        header.tone = shelf == .snoozed ? .info : .muted
+        header.tone = dragTone ?? (shelf == .snoozed ? .info : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
     }

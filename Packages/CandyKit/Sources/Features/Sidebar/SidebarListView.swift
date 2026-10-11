@@ -13,9 +13,9 @@ public final class SidebarListView: DSView {
     static let overscan: CGFloat = 160
 
     public private(set) var items: [SidebarItem] = []
-    private var tops: [CGFloat] = []
-    private var indexByKey: [String: Int] = [:]
-    private var visible: [String: SidebarRowBase] = [:]
+    private(set) var tops: [CGFloat] = []
+    private(set) var indexByKey: [String: Int] = [:]
+    private(set) var visible: [String: SidebarRowBase] = [:]
     private var pools: [SidebarItem.Kind: [SidebarRowBase]] = [:]
     /// Rows fading out after removal; they leave the pool until their animation ends.
     private var exiting: Set<ObjectIdentifier> = []
@@ -58,12 +58,16 @@ public final class SidebarListView: DSView {
 
     /// Replaces the items. Rows whose model is unchanged keep their view untouched; moved rows slide.
     public func setItems(_ new: [SidebarItem], animated: Bool) {
-        let oldTops = Dictionary(uniqueKeysWithValues: items.indices.map { (items[$0].key, tops[$0]) })
+        var oldTops = Dictionary(uniqueKeysWithValues: items.indices.map { (items[$0].key, tops[$0]) })
+        // After a drop the rows glide from where the preview left them, not from their old slots.
+        let released = releasedTops
+        releasedTops = nil
+        if let released { oldTops.merge(released) { $1 } }
         let oldVisible = visible
         let oldItems = Dictionary(uniqueKeysWithValues: items.map { ($0.key, $0) })
         items = new
         recomputeGeometry()
-        let shouldAnimate = animated && window != nil && !Motion.reduced && !oldTops.isEmpty
+        let shouldAnimate = (animated || released != nil) && window != nil && !Motion.reduced && !oldTops.isEmpty
         // Rows that left the list fade out where they were.
         var faded = 0
         for (key, view) in oldVisible where indexByKey[key] == nil {
@@ -80,7 +84,12 @@ public final class SidebarListView: DSView {
             guard let i = indexByKey[key] else { continue }
             if oldItems[key] != items[i] || view.item != items[i] { configure(view, items[i]) }
         }
-        tile(oldTops: shouldAnimate ? oldTops : nil)
+        if sort != nil {
+            tile(oldTops: nil)
+            rebuildSortPlan(animated: animated)
+        } else {
+            tile(oldTops: shouldAnimate ? oldTops : nil)
+        }
     }
 
     static let maxFadedRows = 40
@@ -154,13 +163,15 @@ public final class SidebarListView: DSView {
         }
     }
 
-    private func frame(at i: Int) -> NSRect {
+    func frame(at i: Int) -> NSRect {
         NSRect(x: Self.padding, y: tops[i], width: max(0, bounds.width - Self.padding * 2), height: items[i].height)
     }
 
-    private func tile(oldTops: [String: CGFloat]?, relayoutAll: Bool = false) {
+    func tile(oldTops: [String: CGFloat]?, relayoutAll: Bool = false) {
         let range = visibleRange
-        let wanted = Set(range.map { items[$0].key })
+        var wanted = Set(range.map { items[$0].key })
+        // The lifted row stays alive while autoscroll carries its slot out of view.
+        if let sort, sort.sortable, indexByKey[sort.key] != nil { wanted.insert(sort.key) }
         for (key, view) in visible where !wanted.contains(key) {
             visible[key] = nil
             recycle(view)
@@ -171,6 +182,8 @@ public final class SidebarListView: DSView {
             let item = items[i]
             let target = frame(at: i)
             if let view = visible[item.key] {
+                // The drag preview owns the rows' places.
+                if sort?.sortable == true { if relayoutAll { view.frame.size.width = target.width }; continue }
                 let old = view.frame
                 if old != target || relayoutAll { view.frame = target }
                 if let oldTops, let previous = oldTops[item.key], previous != target.minY {
@@ -188,6 +201,7 @@ public final class SidebarListView: DSView {
                 }
             }
         }
+        if changed, sort?.sortable == true { placeSorted(animated: false) }
         if changed || oldTops != nil { onVisibleRowsChange?() }
     }
 
@@ -228,7 +242,7 @@ public final class SidebarListView: DSView {
         }
         if kind == .card || kind == .slim {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
-            view.onBeginDrag = { [weak self] row, id, event in self?.beginThreadDrag(row, id, event: event) }
+            view.onBeginDrag = { [weak self] row, id, event, press in self?.beginThreadDrag(row, id, event: event, press: press) }
         }
         view.onOpen = { [weak self, weak view] in
             guard let self, let item = view?.item else { return }
@@ -347,54 +361,39 @@ public final class SidebarListView: DSView {
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
-    public var onReorderDrop: ((ThreadId, SidebarSection, ThreadId?, Bool) -> Void)?
-    public var canReorderDrop: ((ThreadId, SidebarSection) -> Bool)?
-    // ponytail: single-row targets only; add empty-section targets and motion with the full drag planner
-    private var reorderBadge: SidebarReorderDropBadge?
+    // MARK: Thread drags (SidebarSortSession.swift)
 
-    private func reorderTarget(_ sender: any NSDraggingInfo) -> (ThreadId, SidebarSection, ThreadId?, Bool, CGFloat)? {
-        guard let ids = SidebarThreadDrag.threads(sender.draggingPasteboard), ids.count == 1,
-              let id = ids.first, onReorderDrop != nil else { return nil }
-        let point = convert(sender.draggingLocation, from: nil)
-        guard let i = items.indices.min(by: { abs(tops[$0] + items[$0].height / 2 - point.y) < abs(tops[$1] + items[$1].height / 2 - point.y) }) else { return nil }
-        let section: SidebarSection
-        var target: ThreadId?
-        let after = point.y > tops[i] + items[i].height / 2
-        switch items[i] {
-        case .row(let row): section = row.section; target = row.id
-        case .shelfHeader(let shelf, _, _):
-            guard shelf == .settled else { return nil }; section = .settled
-        default: return nil
-        }
-        guard section != .working, section != .snoozed, target != id, canReorderDrop?(id, section) != false else { return nil }
-        return (id, section, target, after, tops[i] + (after ? items[i].height : 0))
-    }
-    private func clearReorderBadge() { reorderBadge?.removeFromSuperview(); reorderBadge = nil }
+    /// The drag in flight, nil at rest.
+    var sort: SidebarSortSession?
+    /// Where the rows stood when a drop released them, until the new order arrives.
+    var releasedTops: [String: CGFloat]?
+    /// The list state the drag preview reads.
+    var sortContext = SidebarSortPlanner.Context()
+    /// Reads the list state for a drag; called at pickup and when the list changes under it.
+    var sortContextProvider: (() -> SidebarSortPlanner.Context)?
+    /// The row can be picked up: its server stores a pin order (`draggableThreadKeys`, Sidebar.tsx:2808-2810).
+    public var canSortThread: ((ThreadId) -> Bool)?
+    /// `planSidebarThreadDrop(...).kind !== "none"` for the lifted row on this target.
+    public var canSortDrop: ((ThreadId, SidebarSection, SidebarDropTarget) -> Bool)?
+    /// A drop in the list: the thread, the section it left and where it lands.
+    public var onSortDrop: ((ThreadId, SidebarSection, SidebarDropTarget) -> Void)?
 
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        if let target = reorderTarget(sender) {
-            let source = items.compactMap { if case .row(let r) = $0, r.id == target.0 { r.section } else { nil } }.first
-            let badge = reorderBadge ?? SidebarReorderDropBadge()
-            if badge.superview == nil { addSubview(badge); reorderBadge = badge }
-            badge.title = SidebarReorderDropBadge.verb(from: source, to: target.1) ?? ""
-            badge.frame = NSRect(x: 8, y: max(0, target.4 - 12), width: max(0, bounds.width - 16), height: 24)
-            return .move
+        if sender.draggingSource as? SidebarListView === self {
+            return sort.map { $0.sortable && !$0.outside } == true ? .move : []
         }
-        clearReorderBadge()
         let row = fileDropRow(sender)
         setFileDragRow(row)
         return row == nil ? [] : .copy
     }
 
-    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil); clearReorderBadge() }
-    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil); clearReorderBadge() }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil) }
+    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil) }
 
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { setFileDragRow(nil); clearReorderBadge() }
-        if let target = reorderTarget(sender) {
-            onReorderDrop?(target.0, target.1, target.2, target.3)
-            return true
-        }
+        defer { setFileDragRow(nil) }
+        // The session's end commits the sort (`endSort`).
+        if sender.draggingSource as? SidebarListView === self { return sort != nil }
         guard let row = fileDropRow(sender), case .row(let r)? = row.item,
               let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }
@@ -418,7 +417,7 @@ public final class SidebarListView: DSView {
 
     // MARK: Motion (Sidebar.motion.ts: 150ms ease-out, transform and opacity only)
 
-    private func slide(_ view: NSView, from offset: CGFloat) {
+    func slide(_ view: NSView, from offset: CGFloat) {
         guard let layer = view.layer else { return }
         let a = CABasicAnimation(keyPath: "transform.translation.y")
         a.fromValue = offset

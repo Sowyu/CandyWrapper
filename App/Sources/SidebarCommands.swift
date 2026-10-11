@@ -78,52 +78,109 @@ final class SidebarCommands {
         sidebar.actions.openDraft = { [weak self] id in self?.leavingUtilityPage { openDraft(id) } }
         let dropFiles = sidebar.actions.dropFiles
         sidebar.actions.dropFiles = { [weak self] id, urls in self?.leavingUtilityPage { dropFiles(id, urls) } }
-        sidebar.list.canReorderDrop = { [weak self] id, section in
-            guard let self, let env = id.environmentId, let config = self.threads.composer.config(env) else { return false }
-            if section == .settled { return config.capabilities.contains("threadSettlement") }
-            return config.capabilities.contains(section == .pinned ? "threadPinReorder" : "threadActiveReorder")
+        sidebar.list.canSortThread = { [weak self] id in
+            guard let caps = self?.capabilities(id) else { return false }
+            return caps.contains("threadPinning") && caps.contains("threadPinReorder")
         }
-        sidebar.list.onReorderDrop = { [weak self] id, section, target, after in
-            self?.reorderDrop(id, section: section, target: target, after: after)
-        }
+        sidebar.list.canSortDrop = { [weak self] id, from, target in self?.planSortDrop(id, from: from, target) != nil }
+        sidebar.list.onSortDrop = { [weak self] id, from, target in self?.sortDrop(id, from: from, target) }
         ledger.onChange = { [weak self] in self?.undoNoticeChanged() }
     }
 
-    /// Sidebar.tsx:3999-4160. A drag expresses unpin intent without the menu's confirmation.
-    private func reorderDrop(_ id: ThreadId, section: SidebarSection, target: ThreadId?, after: Bool) {
-        guard let thread = shell(id), let sidebar else { return }
-        if section == .settled { settle(id); return }
-        let pinned = section == .pinned
-        var order = sidebar.list.items.compactMap { item -> ThreadId? in
-            if case .row(let row) = item, row.section == section, row.id != id { return row.id }
+    private func capabilities(_ id: ThreadId) -> Set<String>? {
+        id.environmentId.flatMap { threads.composer.config($0)?.capabilities }
+    }
+
+    /// `SidebarThreadDropPlan` (Sidebar.logic.ts:226-255).
+    private enum SortDropPlan {
+        case reorderPinned([(id: ThreadId, key: String)])
+        case pin(orderKey: String?, extra: [(id: ThreadId, key: String)])
+        /// `assignments` is empty when the inbox is time-ordered (Working beta).
+        case moveActive([(id: ThreadId, key: String)])
+        case settle
+    }
+
+    /// `planSidebarThreadDrop` (Sidebar.logic.ts:304-410), nil for `none`.
+    private func planSortDrop(_ id: ThreadId, from source: SidebarSection, _ target: SidebarDropTarget) -> SortDropPlan? {
+        guard let thread = shell(id), let sidebar, let caps = capabilities(id) else { return nil }
+        let activeSettled = thread.settledOverride == .settled
+        if !caps.contains("threadSettlement") && (target.section == .settled || activeSettled) { return nil }
+        func displayed(_ section: SidebarSection) -> [ThreadId] {
+            sidebar.list.items.compactMap { if case .row(let r) = $0, r.section == section { r.id } else { nil } }
+        }
+        // Rows whose server cannot store an order are never written; keyless ones leave the plan, keyed
+        // ones stay as bounds.
+        func arrange(_ order: [ThreadId], pinned: Bool) -> [(id: ThreadId, key: String)]? {
+            let capability = pinned ? "threadPinReorder" : "threadActiveReorder"
+            func writable(_ t: ThreadId) -> Bool { capabilities(t)?.contains(capability) == true }
+            guard writable(id) else { return nil }
+            let keys = Dictionary((snapshot?.threads ?? []).compactMap { t in (pinned ? t.pinOrderKey : t.activeOrderKey).map { (t.id, $0) } },
+                                  uniquingKeysWith: { a, _ in a })
+            let assignments = PinOrderKey.assignments(order: order.filter { writable($0) || keys[$0] != nil }, keys: keys, moved: id)
+            return assignments.allSatisfy { writable($0.id) } ? assignments : nil
+        }
+        switch target.section {
+        case .active:
+            // Threads can enter a time-ordered inbox, but not be arranged inside it.
+            if sidebar.state.workingShelfEnabled { return source == .active ? nil : .moveActive([]) }
+            if source == .active && target.activeOrder == displayed(.active) { return nil }
+            return arrange(target.activeOrder, pinned: false).map { .moveActive($0) }
+        case .settled:
+            return source == .settled ? nil : .settle
+        case .pinned:
+            // Dropped back where it started: nothing to write.
+            if source == .pinned && target.pinnedOrder == displayed(.pinned) { return nil }
+            guard let assignments = arrange(target.pinnedOrder, pinned: true) else { return nil }
+            if source == .pinned { return assignments.isEmpty ? nil : .reorderPinned(assignments) }
+            return .pin(orderKey: assignments.first { $0.id == id }?.key,
+                        extra: thread.pinnedAt != nil ? assignments : assignments.filter { $0.id != id })
+        case .working, .snoozed:
             return nil
         }
-        let index = target.flatMap { order.firstIndex(of: $0) }.map { $0 + (after ? 1 : 0) } ?? order.count
-        order.insert(id, at: index)
-        func key(_ id: ThreadId) -> String? { pinned ? shell(id)?.pinOrderKey : shell(id)?.activeOrderKey }
-        let timeOrdered = !pinned && sidebar.state.workingShelfEnabled
-        let keys = Dictionary(uniqueKeysWithValues: (snapshot?.threads ?? []).compactMap { t in key(t.id).map { (t.id, $0) } })
-        let assignments = timeOrdered ? [] : PinOrderKey.assignments(order: order, keys: keys, moved: id)
-        guard timeOrdered || !assignments.isEmpty,
-              assignments.allSatisfy({ sidebar.list.canReorderDrop?($0.id, section) == true }) else { return }
-        let orderKey = assignments.first { $0.id == id }?.key
+    }
+
+    /// `handleThreadDragEnd` (Sidebar.tsx:3999-4160). A drag expresses unpin intent without the menu's confirmation.
+    private func sortDrop(_ id: ThreadId, from source: SidebarSection, _ target: SidebarDropTarget) {
+        guard let thread = shell(id), let plan = planSortDrop(id, from: source, target) else { return }
+        if case .settle = plan { return settle(id) }
+        // Hold the order the drop showed until the writes finish (T3 holds it until the keys land).
+        // ponytail: released when the last write returns; read the landed keys like T3 if a slow echo reorders rows
+        var hold: (section: SidebarSection, order: [ThreadId])?
+        switch plan {
+        case .moveActive(let a) where !a.isEmpty: hold = (.active, target.activeOrder)
+        case .pin, .reorderPinned: hold = (.pinned, target.pinnedOrder)
+        default: break
+        }
+        sidebar?.state.heldOrder = hold
         Task { [weak self] in
             guard let self else { return }
+            defer { if self.sidebar?.state.heldOrder?.order == hold?.order { self.sidebar?.state.heldOrder = nil } }
+            var writes: [(id: ThreadId, key: String)] = []
+            var pinned = true
             do {
-                if pinned {
-                    if thread.pinnedAt == nil || thread.snoozedUntil != nil || thread.settledOverride == .settled {
-                        try await environments.dispatch(id, ThreadCommands.pin(id.localId, orderKey: orderKey), optimistic: .pin(orderKey: orderKey))
-                    }
-                } else {
+                switch plan {
+                case .settle: return
+                case .moveActive(let assignments):
+                    pinned = false
+                    writes = assignments
                     if thread.pinnedAt != nil { try await environments.dispatch(id, ThreadCommands.unpin(id.localId), optimistic: .unpin) }
                     if thread.settledOverride == .settled { try await environments.dispatch(id, ThreadCommands.unsettle(id.localId), optimistic: .unsettle) }
-                    if thread.snoozedUntil != nil { try await environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) }
-
+                    if source == .snoozed { try await environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) }
+                case .pin(let orderKey, let extra):
+                    writes = extra
+                    let key = orderKey ?? PinOrderKey.topOfPinnedRun(snapshot?.threads ?? [])
+                    try await environments.dispatch(id, ThreadCommands.pin(id.localId, orderKey: key), optimistic: .pin(orderKey: key))
+                case .reorderPinned(let assignments):
+                    writes = assignments
                 }
-                for assignment in assignments where !(pinned && thread.pinnedAt == nil && assignment.id == id) {
-                    try await environments.dispatch(assignment.id, ThreadCommands.reorder(assignment.id.localId, pinned: pinned, orderKey: assignment.key), optimistic: .reorder(pinned: pinned, orderKey: assignment.key))
+                // Stop on failure; each key written is a valid placement.
+                for assignment in writes {
+                    try await environments.dispatch(assignment.id, ThreadCommands.reorder(assignment.id.localId, pinned: pinned, orderKey: assignment.key),
+                                                    optimistic: .reorder(pinned: pinned, orderKey: assignment.key))
                 }
-            } catch { fail("Failed to reorder threads", error) }
+            } catch {
+                fail(pinned ? "Failed to reorder pinned threads" : "Failed to reorder active threads", error)
+            }
         }
     }
 

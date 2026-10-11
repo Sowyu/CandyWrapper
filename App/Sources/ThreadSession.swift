@@ -581,6 +581,12 @@ final class ThreadController {
             if call.command == "diff.toggle" { self.panel.toggleDiff() } else { self.panel.toggleRightPanel() }
             return true
         }
+        // `rightPanel.toggleMaximized` (ChatView.tsx:8079-8084): no default key, ignored on repeat.
+        shortcuts.on("rightPanel.toggleMaximized") { [weak self] call in
+            guard let self, self.panel.window != nil else { return false }
+            if !call.isRepeat { self.panel.toggleMaximized() }
+            return true
+        }
         // `thread.previous`, `thread.next`, `thread.jump.N` walk the sidebar's rows; ignored on repeat.
         shortcuts.on(["thread.previous", "thread.next"] + Keymap.threadJumpCommands) { [weak self] call in
             guard let self, !call.isRepeat, let sidebar = self.sidebar, sidebar.window != nil else { return false }

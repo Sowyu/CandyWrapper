@@ -4,8 +4,9 @@ import T3Protocol
 
 extension NSPasteboard.PasteboardType {
     /// Sidebar threads dragged out of the list (`THREAD_CONTEXT_DROP_EVENT`, threadContextDrag.ts): their
-    /// scoped ids, one per line. The composer turns them into thread context.
-    public static let sidebarThreads = NSPasteboard.PasteboardType("application/x-t3code-sidebar-threads")
+    /// scoped ids, one per line. The composer turns them into thread context. AppKit wants a UTI here:
+    /// T3's MIME type `application/x-t3code-sidebar-threads` is refused, and the drag never started.
+    public static let sidebarThreads = NSPasteboard.PasteboardType("dev.candywrapper.sidebar-threads")
 }
 
 /// Reads the dragged sidebar threads off a pasteboard.
@@ -72,34 +73,5 @@ final class SidebarThreadDragGhostView: DSView {
             image.addRepresentation(rep)
         }
         return image
-    }
-}
-
-extension SidebarListView: NSDraggingSource {
-    /// `SIDEBAR_DRAG_DISTANCE`: the pointer moves this far before a press becomes a drag.
-    static let dragDistance: CGFloat = 6
-
-    public func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .withinApplication ? [.copy, .move] : []
-    }
-
-    /// A row left its press: drag it (or the whole selection it belongs to) as thread context.
-    func beginThreadDrag(_ row: SidebarRowBase, _ id: ThreadId, event: NSEvent) {
-        closeHoverCard()
-        let rows = items.compactMap { if case .row(let r) = $0 { r } else { nil } }
-        let selected = rows.filter(\.isSelected).map(\.id)
-        let ids = selected.contains(id) ? selected : [id]
-        let title = rows.first { $0.id == id }?.title.trimmingCharacters(in: .whitespaces) ?? ""
-        let item = NSPasteboardItem()
-        item.setString(ids.map(\.rawValue).joined(separator: "\n"), forType: .sidebarThreads)
-        let dragging = NSDraggingItem(pasteboardWriter: item)
-        let ghost = SidebarThreadDragGhostView(title: title.isEmpty ? "Thread" : title, count: ids.count)
-        ghost.appearance = effectiveAppearance
-        // `translate(x + 12px, y + 12px)`: the ghost hangs below and right of the pointer.
-        let point = convert(event.locationInWindow, from: nil)
-        dragging.setDraggingFrame(NSRect(x: point.x + 12, y: point.y + 12, width: ghost.frame.width, height: ghost.frame.height),
-                                  contents: ghost.image())
-        let session = beginDraggingSession(with: [dragging], event: event, source: self)
-        session.animatesToStartingPositionsOnCancelOrFail = false
     }
 }
