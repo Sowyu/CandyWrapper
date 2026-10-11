@@ -11,7 +11,7 @@ enum DiffStyle {
 
     nonisolated static let headerHeight: CGFloat = 32
     nonisolated static let separatorHeight: CGFloat = 24
-    nonisolated static let lineHeight: CGFloat = 20
+    nonisolated static var lineHeight: CGFloat { 20 * FontRuntime.codeScale }
     /// `padding-bottom: 8px` under an expanded file's last row (`--diffs-gap-fallback`).
     nonisolated static let fileBottomPadding: CGFloat = 8
     /// The 2px `border-right` in the surface color between the number cell and the code.

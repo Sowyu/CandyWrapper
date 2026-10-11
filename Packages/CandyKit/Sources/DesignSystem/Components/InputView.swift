@@ -48,6 +48,11 @@ public final class InputView: FieldView {
         configure()
     }
 
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        configure()
+    }
+
     private func configure() {
         let m = size.metrics
         font = fontStyle == .mono ? DSFont.mono(m.font, weight: fontWeight) : DSFont.ui(m.font, weight: fontWeight)

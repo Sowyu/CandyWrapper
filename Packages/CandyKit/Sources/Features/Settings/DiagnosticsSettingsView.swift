@@ -75,9 +75,12 @@ public enum DiagnosticsFormat {
 
 /// Settings > Diagnostics (DiagnosticsSettings.tsx), reached from General > Diagnostics: live processes, resource
 /// history and trace diagnostics of one environment.
-// ponytail: the resource telemetry block at the top (ResourceTelemetryDiagnostics, its own stream) and "Open logs
-// folder" are left out; add them when someone needs host-level charts here
 public final class DiagnosticsSettingsView: ScopedSettingsPage {
+    private var telemetry: JSONValue?
+    private var telemetryHistory: JSONValue?
+    private var telemetryTask: Task<Void, Never>?
+    private var loads: [String: Task<Void, Never>] = [:]
+    private var revisions: [String: Int] = [:]
     private var processData: JSONValue?
     private var traceData: JSONValue?
     private var resourceData: JSONValue?
@@ -87,6 +90,7 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     private var windowIndex = 1
     private var signaling: Int?
     private var loadedFor: String?
+    private weak var telemetrySectionView: SettingsSectionView?
     static let windows: [(label: String, windowMs: Double, bucketMs: Double)] = [("5m", 300_000, 30_000), ("15m", 900_000, 60_000),
                                                                                   ("30m", 1_800_000, 120_000), ("1h", 3_600_000, 300_000)]
 
@@ -104,36 +108,75 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         return scope.connected.first { $0.id == scope.primaryId } ?? scope.connected.first
     }
 
-    public override func didShow() { if loadedFor != nil { loadAll() } }
+    public override func didShow() { if loadedFor != nil { loadAll() }; watchTelemetry() }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            telemetryTask?.cancel(); telemetryTask = nil
+            for task in loads.values { task.cancel() }
+            loads.removeAll(); pending.removeAll()
+            telemetry = nil; telemetryHistory = nil
+            processData = nil; traceData = nil; resourceData = nil
+            body = []; telemetrySectionView = nil
+        } else { watchTelemetry(); loadAll() }
+    }
+
+    private func watchTelemetry() {
+        guard window != nil, telemetryTask == nil, let env = environment?.id else { return }
+        telemetryTask = context.subscribeResourceTelemetry?(env) { [weak self] value in
+            guard let self, self.window != nil, self.environment?.id == env else { return }
+            self.telemetry = value
+            if let section = self.telemetrySectionView {
+                let updated = self.telemetrySection()
+                section.group.rows = updated.group.rows
+                section.headerAction = updated.headerAction
+            }
+            self.onHeightChange?()
+        }
+    }
 
     public override func refresh() {
-        if environment?.id != loadedFor { loadedFor = environment?.id; processData = nil; traceData = nil; resourceData = nil; loadAll() }
+        if environment?.id != loadedFor {
+            telemetryTask?.cancel(); telemetryTask = nil
+            for task in loads.values { task.cancel() }
+            loads.removeAll(); pending.removeAll()
+            loadedFor = environment?.id; processData = nil; traceData = nil; resourceData = nil
+            telemetry = nil; telemetryHistory = nil
+            loadAll(); watchTelemetry()
+        }
         super.refresh()
     }
 
-    private func loadAll() { load("process"); load("trace"); load("resource") }
+    private func loadAll() { load("process"); load("trace"); load("resource"); load("telemetry") }
 
     private func load(_ kind: String) {
-        guard let env = environment?.id, let request = context.request, !pending.contains(kind) else { return }
+        guard let env = environment?.id, let request = context.request else { return }
+        loads[kind]?.cancel()
+        let revision = (revisions[kind] ?? 0) + 1
+        revisions[kind] = revision
         pending.insert(kind)
         rebuild()
         let w = Self.windows[windowIndex]
         let (method, payload): (String, JSONValue) = switch kind {
         case "process": ("server.getProcessDiagnostics", .object([:]))
         case "trace": ("server.getTraceDiagnostics", .object([:]))
+        case "telemetry": ("server.getResourceTelemetryHistory", .object(["windowMs": .number(w.windowMs), "bucketMs": .number([15_000.0, 30_000, 60_000, 120_000][windowIndex])]))
         default: ("server.getProcessResourceHistory", .object(["windowMs": .number(w.windowMs), "bucketMs": .number(w.bucketMs)]))
         }
-        Task { [weak self] in
+        loads[kind] = Task { [weak self] in
             do {
                 let result = try await request(env, method, payload)
-                guard let self, self.environment?.id == env else { return }
+                guard let self, !Task.isCancelled, self.environment?.id == env, self.revisions[kind] == revision else { return }
                 switch kind {
                 case "process": self.processData = result
                 case "trace": self.traceData = result
+                case "telemetry": self.telemetryHistory = result
                 default: self.resourceData = result
                 }
                 self.errors[kind] = nil
             } catch {
+                guard !Task.isCancelled, self?.revisions[kind] == revision else { return }
                 self?.errors[kind] = "\(error)"
             }
             self?.pending.remove(kind)
@@ -187,7 +230,7 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
 
         // Resource History.
         let windowSelect = SegmentedWindows(labels: Self.windows.map(\.label), selected: windowIndex)
-        windowSelect.onSelect = { [weak self] i in self?.windowIndex = i; self?.load("resource") }
+        windowSelect.onSelect = { [weak self] i in self?.windowIndex = i; self?.load("resource"); self?.load("telemetry") }
         let resources = SettingsSectionView(title: "Resource History", rows: [
             StatsGridView([("CPU Time", n(r, "totalCpuSecondsApprox").map(DiagnosticsFormat.cpuTime) ?? "...",
                             "Approximate active CPU time for the T3 server root process and its descendants during the selected window. It grows only while sampled processes use CPU and older samples leave as the window moves.", .normal),
@@ -227,7 +270,19 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
                                 ?? "Spans at or above the configured slow-span threshold.", slow > 0 ? .warning : .normal),
                            ("Parse Errors", t == nil ? "..." : DiagnosticsFormat.count(parse), nil, parse > 0 ? .warning : .normal)]),
         ] + errorRows([traceError, errors["trace"]]))
-        trace.headerAction = header("trace", checkedAt: t?["readAt"], label: "Refresh trace diagnostics")
+        let openLogs = ButtonView(nil, icon: .folderOpen, variant: .ghostMuted, size: .iconXs)
+        openLogs.setAccessibilityLabel("Open logs folder")
+        let config = context.configs[env.id]
+        let editor = OpenInEditors.preferred(available: config?.availableEditors ?? [], last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
+        openLogs.isEnabled = config?.logsDirectoryPath != nil && editor != nil
+        openLogs.action = { [weak self] in
+            guard let path = config?.logsDirectoryPath, let editor, let request = self?.context.request else { return }
+            Task { [weak self] in
+                do { _ = try await request(env.id, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor)) }
+                catch { self?.context.toast?("Unable to open logs folder", "\(error)", .error) }
+            }
+        }
+        trace.headerAction = header("trace", checkedAt: t?["readAt"], label: "Refresh trace diagnostics", extra: [openLogs])
         let loading = pending.contains("trace") && t == nil
         func table(_ title: String, _ headers: [String], _ widths: [CGFloat], _ key: String, empty: String, loadingText: String,
                    _ cells: (JSONValue) -> [DiagnosticsTableView.Cell]) -> SettingsSectionView {
@@ -248,13 +303,13 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         let slowest = table("Slowest Spans", ["Span", "Duration", "Ended", "Trace"], [0.44, 0.14, 0.12, 0.30], "slowestSpans",
                             empty: "No spans found.", loadingText: "Loading slow spans...") { s in
             [.init(s["name"]?.stringValue ?? "", strong: true), .init(DiagnosticsFormat.duration(s["durationMs"]?.doubleValue ?? 0), mono: true),
-             .init(DiagnosticsFormat.relative(s["endedAt"]), mono: true, muted: true), .init(DiagnosticsFormat.traceId(s["traceId"]?.stringValue ?? ""), mono: true, muted: true, small: true)]
+             .init(DiagnosticsFormat.relative(s["endedAt"]), mono: true, muted: true), .init(DiagnosticsFormat.traceId(s["traceId"]?.stringValue ?? ""), mono: true, muted: true, small: true, copyValue: s["traceId"]?.stringValue)]
         }
         let logs = table("Span Logs", ["Time", "Level", "Span", "Message", "Trace"], [0.11, 0.09, 0.24, 0.26, 0.30], "latestWarningAndErrorLogs",
                          empty: "No warnings or errors found.", loadingText: "Loading recent logs...") { e in
             [.init(DiagnosticsFormat.relative(e["seenAt"]), mono: true, muted: true), .init((e["level"]?.stringValue ?? "").uppercased(), mono: true, small: true),
              .init(e["spanName"]?.stringValue ?? "", strong: true), .init(e["message"]?.stringValue ?? "", muted: true, lines: 2),
-             .init(DiagnosticsFormat.traceId(e["traceId"]?.stringValue ?? ""), mono: true, muted: true, small: true)]
+             .init(DiagnosticsFormat.traceId(e["traceId"]?.stringValue ?? ""), mono: true, muted: true, small: true, copyValue: e["traceId"]?.stringValue)]
         }
         let top = table("Top Span Names", ["Span", "Count", "Failures", "Average", "Max"], [0.48, 0.13, 0.13, 0.13, 0.13], "topSpansByCount",
                         empty: "No spans found.", loadingText: "Loading span names...") { s in
@@ -263,7 +318,35 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
              .init(DiagnosticsFormat.duration(s["averageDurationMs"]?.doubleValue ?? 0), mono: true),
              .init(DiagnosticsFormat.duration(s["maxDurationMs"]?.doubleValue ?? 0), mono: true)]
         }
-        body = [live, resources, trace, latest, common, slowest, logs, top]
+        let monitor = telemetrySection()
+        telemetrySectionView = monitor
+        body = [monitor, live, resources, trace, latest, common, slowest, logs, top]
+    }
+
+    // ponytail: backend summary and history only; add the remaining telemetry groups with their detail views.
+    private func telemetrySection() -> SettingsSectionView {
+        let snapshot = telemetry
+        let group = snapshot?["groups"]?["backend"]
+        let status = snapshot?["health"]?["native"]?["status"]?.stringValue ?? "Checking"
+        let stats = StatsGridView([
+            ("CPU", group?["currentCpuPercent"]?.doubleValue.map { String(format: "%.1f%%", $0) } ?? "...", nil, .normal),
+            ("Memory", group?["currentRssBytes"]?.doubleValue.map(DiagnosticsFormat.bytes) ?? "...", nil, .normal),
+            ("Processes", group?["processCount"]?.doubleValue.map(DiagnosticsFormat.count) ?? "...", nil, .normal),
+            ("Native", status, nil, .normal),
+        ])
+        let chart = SettingsResourceHistoryChartView(buckets: telemetryHistory?["buckets"]?.arrayValue ?? [])
+        let section = SettingsSectionView(title: "Resource Monitor", rows: [stats] + errorRows([errors["telemetry"]]) + [chart])
+        let retry = ButtonView("Retry", variant: .outline, size: .xs)
+        retry.isHidden = !["degraded", "unavailable", "stopped"].contains(status)
+        retry.action = { [weak self] in
+            guard let self, let env = self.environment?.id, let request = self.context.request else { return }
+            Task { [weak self] in
+                do { _ = try await request(env, "server.retryResourceTelemetry", .object([:])); self?.load("telemetry") }
+                catch { self?.context.toast?("Could not retry resource monitor", "\(error)", .error) }
+            }
+        }
+        section.headerAction = header("telemetry", checkedAt: telemetryHistory?["readAt"], label: "Refresh resource history", extra: [retry])
+        return section
     }
 
     private func errorRows(_ messages: [String?]) -> [any SettingsGroupRow] {
@@ -387,12 +470,14 @@ final class DiagnosticsTableView: DSView, SettingsGroupRow {
         var text: String
         var mono = false, muted = false, strong = false, small = false
         var lines = 1
+        var copyValue: String?
         var dot: NSColor?
         var indent: CGFloat = 0
         var toggle: (expanded: Bool, action: @MainActor () -> Void)?
         var signals: (@MainActor (String) -> Void)?
         init(_ text: String, mono: Bool = false, muted: Bool = false, strong: Bool = false, small: Bool = false, lines: Int = 1, dot: NSColor? = nil,
-             indent: CGFloat = 0) {
+             indent: CGFloat = 0, copyValue: String? = nil) {
+            self.copyValue = copyValue
             self.text = text; self.mono = mono; self.muted = muted; self.strong = strong; self.small = small; self.lines = lines; self.dot = dot
             self.indent = indent
         }
@@ -437,13 +522,33 @@ final class DiagnosticsTableView: DSView, SettingsGroupRow {
                     views.append(g)
                     continue
                 }
+                if let value = c.copyValue {
+                    let copy = ButtonView(c.text, icon: .copy, variant: .ghostMuted, size: .micro)
+                    copy.setAccessibilityLabel("Copy trace ID \(value)")
+                    _ = TooltipController.attach(to: copy, text: value)
+                    copy.action = { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string) }
+                    views.append(copy)
+                    continue
+                }
                 let t = TextBlockView()
                 t.text = c.text
                 t.font = c.mono ? DSFont.mono(c.small ? 11 : 12) : DSFont.ui(c.small ? 11 : 12, weight: c.strong ? .medium : .regular)
                 t.lineHeight = 16
                 t.maxLines = c.lines
                 t.color = c.strong ? Themed.color(\.foreground) : c.muted ? Themed.color(\.mutedForeground) : Themed.color(\.foreground)
-                if c.dot != nil || c.toggle != nil {
+                if c.lines > 1 {
+                    let expandable = SettingsDiagnosticsExpandableCell(text: t, lines: c.lines)
+                    expandable.onExpand = { [weak self] in
+                        var parent: NSView? = self
+                        while let view = parent {
+                            view.needsLayout = true
+                            view.invalidateIntrinsicContentSize()
+                            if let page = view as? SettingsPageBase { page.onHeightChange?() }
+                            parent = view.superview
+                        }
+                    }
+                    views.append(expandable)
+                } else if c.dot != nil || c.toggle != nil {
                     let holder = CellWithMark(text: t, dot: c.dot, indent: c.indent, toggle: c.toggle)
                     views.append(holder)
                 } else {
@@ -473,7 +578,7 @@ final class DiagnosticsTableView: DSView, SettingsGroupRow {
         if cells.isEmpty { return h + 40 }
         for row in cells {
             var rh: CGFloat = 16
-            for (i, v) in row.enumerated() where i < cols.count { if let t = v as? TextBlockView { rh = max(rh, t.height(forWidth: cols[i].w)) } }
+            for (i, v) in row.enumerated() where i < cols.count { if let t = v as? TextBlockView { rh = max(rh, t.height(forWidth: cols[i].w)) } else if let t = v as? SettingsDiagnosticsExpandableCell { rh = max(rh, t.height(forWidth: cols[i].w)) } }
             h += rh + 20 + 1
         }
         return h
@@ -494,12 +599,14 @@ final class DiagnosticsTableView: DSView, SettingsGroupRow {
             lines[r].frame = CGRect(x: 0, y: y, width: bounds.width, height: 1)
             y += 1
             var rh: CGFloat = 16
-            for (i, v) in row.enumerated() where i < cols.count { if let t = v as? TextBlockView { rh = max(rh, t.height(forWidth: cols[i].w)) } }
+            for (i, v) in row.enumerated() where i < cols.count { if let t = v as? TextBlockView { rh = max(rh, t.height(forWidth: cols[i].w)) } else if let t = v as? SettingsDiagnosticsExpandableCell { rh = max(rh, t.height(forWidth: cols[i].w)) } }
             for (i, v) in row.enumerated() where i < cols.count {
                 if let t = v as? TextBlockView {
                     let h = t.height(forWidth: cols[i].w)
                     t.alignment = right.contains(i) ? .right : .left
                     t.frame = NSRect(x: cols[i].x, y: y + 10, width: cols[i].w, height: h)
+                } else if let t = v as? SettingsDiagnosticsExpandableCell {
+                    t.frame = NSRect(x: cols[i].x, y: y + 10, width: cols[i].w, height: t.height(forWidth: cols[i].w))
                 } else {
                     let s = v.intrinsicContentSize
                     let w = s.width == NSView.noIntrinsicMetric ? cols[i].w : min(s.width, cols[i].w)

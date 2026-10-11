@@ -135,6 +135,12 @@ public final class DiffListView: DSView {
     /// Annotation heights changed (a card expanded, a reply box opened): lay out again.
     public func reloadAnnotations() { relayoutKeepingAnchor() }
 
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        relayoutKeepingAnchor()
+        reconfigureAll()
+    }
+
     private func relayout() {
         let width = enclosingScrollView?.contentView.bounds.width ?? bounds.width
         var anchors: [Int: [DiffLayout.Anchor]] = [:]

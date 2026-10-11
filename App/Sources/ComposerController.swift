@@ -168,7 +168,7 @@ final class ComposerController {
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
-            if keys.contains("planModeEnabled") { self.refresh() }
+            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") { self.refresh() }
         }
         panel.timeline.onComposerScrollGesture = { [weak self] delta, canScroll, towardEnd in
             self?.composer.recordTimelineScroll(delta: delta, canScroll: canScroll, towardEnd: towardEnd)
@@ -186,7 +186,7 @@ final class ComposerController {
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
-        composer.stageArt = sidebar.stage != .none
+        composer.stageArt = sidebar.stage != .none && ClientSettingsStore.shared.current.string("environmentIdentificationMode") == "artwork"
         composer.footerControls = [pickers.controlsView]
         pickers.onPromptChange = { [weak self] text in
             guard let self else { return }
@@ -306,6 +306,9 @@ final class ComposerController {
             let sources = config.usageLimitSources
             config = snapshot
             config.usageLimitSources = sources
+            if let issue = config.keybindingIssues.first(where: { $0["kind"]?.stringValue?.hasPrefix("keybindings.") == true }) {
+                showKeybindingsWarning(config, message: issue["message"]?.stringValue ?? "Invalid keybindings configuration", environmentId: environmentId)
+            }
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
         case .providerStatuses(let providers): config.providers = providers
         case .settingsUpdated(let settings): config.settings = settings
@@ -316,7 +319,7 @@ final class ComposerController {
             }
         case .keybindingsInvalid(let rules, let message):
             config.keybindings = rules
-            if environmentId == environments.primaryId { toast(.warning, "Invalid keybindings configuration", message) }
+            showKeybindingsWarning(config, message: message, environmentId: environmentId)
         case .other: return
         }
         serverConfigs[environmentId] = config
@@ -329,8 +332,24 @@ final class ComposerController {
     }
 
     /// `sendShortcut` and `followUpBehavior` (client settings) drive the composer's Enter and follow-up rules.
+    private func showKeybindingsWarning(_ config: ServerProviderConfig, message: String, environmentId: String) {
+        if environmentId == environments.primaryId {
+                let warning = ToastView(title: "Invalid keybindings configuration", message: message, kind: .warning,
+                                        actionTitle: config.keybindingsConfigPath == nil || config.availableEditors.isEmpty ? nil : "Open keybindings.json", action: { [weak self] in
+                    guard let self, let path = config.keybindingsConfigPath,
+                          let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey)) else { return }
+                    Task { [weak self] in
+                        do { _ = try await self?.environments.request(environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor)) }
+                        catch { self?.toast(.error, "Unable to open keybindings file", "\(error)") }
+                    }
+                })
+                panel.toasts.show(warning)
+            }
+    }
+
     private func applyClientSettings() {
         let c = ClientSettingsStore.shared.current
+        composer.stageArt = (sidebar?.stage ?? .none) != .none && c.string("environmentIdentificationMode") == "artwork"
         composer.sendShortcut = ComposerLogic.SendShortcut(rawValue: c.string("sendShortcut")) ?? .enter
         composer.collapseOnScroll = c.bool("composerCollapseOnScroll")
         composer.richTextEnabled = c.bool("composerRichTextEnabled")
@@ -896,7 +915,7 @@ final class ComposerController {
 
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
-        composer.contextWindowMeter.usage = ThreadContextWindowUsage.derive(projection)
+        composer.contextWindowMeter.usage = ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") ? ThreadContextWindowUsage.derive(projection) : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
         var runState = ComposerLogic.RunState(runs: runs)

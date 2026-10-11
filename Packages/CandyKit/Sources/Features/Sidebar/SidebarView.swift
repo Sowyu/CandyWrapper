@@ -54,6 +54,7 @@ public final class SidebarContentView: DSView {
     public let scrollArea: ScrollAreaView
     public let trigger = SidebarTriggerView()
     let backdrop = StageBackdropView()
+    private let environmentPill = BadgeView("Nightly", variant: .secondary, size: .sm)
     let brand = SidebarBrandView()
     let search = SidebarSearchFieldView()
     let filterButton = SidebarContentView.headerButton(.folder, "Filter threads by project")
@@ -119,6 +120,10 @@ public final class SidebarContentView: DSView {
         scrollArea.fadeSize = 12
         scrollArea.hideScrollbars = true
         addSubview(backdrop)
+        addSubview(environmentPill)
+        ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("environmentIdentificationMode") { self?.applyStage() }
+        }
         addSubview(scrollArea)
         addSubview(brand)
         addSubview(trigger)
@@ -193,9 +198,14 @@ public final class SidebarContentView: DSView {
     static func footerButton(_ icon: IconName, _ label: String) -> SidebarMenuButtonView { headerButton(icon, label) }
 
     private func applyStage() {
-        backdrop.isHidden = stage != .nightly
-        brand.onBackdrop = stage == .nightly
-        trigger.mediaTint = stage == .nightly ? StageBackdropView.ink() : nil
+        let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
+        let artwork = mode == "artwork" && stage == .nightly
+        backdrop.isHidden = !artwork
+        brand.onBackdrop = artwork
+        trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
+        environmentPill.title = stage == .dev ? "Dev" : "Nightly"
+        environmentPill.isHidden = mode != "pill" || stage == .none
+        needsLayout = true
     }
 
     private func wireActions() {
@@ -594,6 +604,9 @@ public final class SidebarContentView: DSView {
         trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
         let bs = brand.intrinsicContentSize
         brand.frame = NSRect(x: SidebarMetrics.titlebarContentLeft(windowedMac: windowedMac), y: 12, width: min(bs.width, max(0, w - 12 - 130)), height: 28)
+        let pillSize = environmentPill.intrinsicContentSize
+        environmentPill.frame = NSRect(x: brand.frame.maxX + 12, y: 18, width: pillSize.width, height: pillSize.height)
+        environmentPill.alphaValue = environmentPill.frame.maxX <= w - 12 ? 1 : 0
         // Fixed header group, `p-2`: search, then the 28px icon buttons.
         let rowY: CGFloat = 52 + 8
         var right = w - 8

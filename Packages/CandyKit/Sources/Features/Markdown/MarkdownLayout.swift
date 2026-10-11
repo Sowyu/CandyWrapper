@@ -4,7 +4,7 @@ import DesignSystem
 /// T3's `.chat-markdown` values (`apps/web/src/index.css:1759-2073`, ChatMarkdown.tsx), research note H section 4.
 enum MarkdownStyle {
     static let fontSize: CGFloat = 14
-    static let lineHeight: CGFloat = 14 * 1.625
+    static var lineHeight: CGFloat { 14 * 1.625 * FontRuntime.interfaceScale }
     /// `margin: 0.65rem 0` on p, ul, ol, blockquote, pre and the table container.
     static let blockMargin: CGFloat = 10.4
     static let headingMargin: (top: CGFloat, bottom: CGFloat) = (20, 8)
@@ -18,7 +18,7 @@ enum MarkdownStyle {
     static let chipRadius: CGFloat = 6
     /// Code blocks: 13px mono at `leading-snug`, `padding: 0.8rem 0.9rem`, 30px header.
     static let codeFontSize: CGFloat = 13
-    static let codeLineHeight: CGFloat = 13 * 1.375
+    static var codeLineHeight: CGFloat { 13 * FontRuntime.codeScale * 1.375 }
     static let codePadding = (x: CGFloat(14.4), y: CGFloat(12.8))
     static let codeHeader: CGFloat = 30
     static let tableFontSize: CGFloat = 12
@@ -33,7 +33,7 @@ enum MarkdownStyle {
     static func font(_ size: CGFloat, weight: NSFont.Weight = .regular, italic: Bool = false) -> NSFont {
         let font = DSFont.ui(size, weight: weight)
         guard italic else { return font }
-        return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(font.fontDescriptor.symbolicTraits.union(.italic)), size: size) ?? font
+        return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(font.fontDescriptor.symbolicTraits.union(.italic)), size: font.pointSize) ?? font
     }
 
     /// CSS `font-weight: bolder` from a parent weight.

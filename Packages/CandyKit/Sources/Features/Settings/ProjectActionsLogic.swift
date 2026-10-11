@@ -116,3 +116,37 @@ public enum ProjectActionsLogic {
         return ProjectScripts.nextId(name, existing: ids)
     }
 }
+
+public extension ProjectActionsLogic {
+    /// ProjectActionsSettings.tsx:98-129 and contracts/t3ProjectFile.ts:28-111.
+    /// A broken entry invalidates the entire file; do not import a misleading partial list.
+    static func importableScripts(_ contents: String, existing: [ProjectScript]) -> [ProjectScriptInput] {
+        let decoder = JSONDecoder()
+        decoder.allowsJSON5 = true
+        guard let file = try? decoder.decode(JSONValue.self, from: Data(contents.utf8)), file.objectValue != nil else { return [] }
+        for key in ["$schema", "iconPath"] {
+            if let value = file[key], value.stringValue == nil { return [] }
+        }
+        if let path = file["iconPath"]?.stringValue, path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || path.count > 512 { return [] }
+        if let mode = file["defaultThreadEnvMode"], !["local", "worktree"].contains(mode.stringValue ?? "") { return [] }
+        if let mode = file["worktreeSubmodules"], !["recursive", "top-level", "none"].contains(mode.stringValue ?? "") { return [] }
+        guard let rows = file["scripts"]?.arrayValue, rows.count <= 50 else { return [] }
+        var out: [ProjectScriptInput] = []
+        for row in rows {
+            guard let rawName = row["name"]?.stringValue, let rawCommand = row["command"]?.stringValue else { return [] }
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines), command = rawCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !command.isEmpty else { return [] }
+            for key in ["runOnWorktreeCreate", "runOnSettle", "async", "autoOpenPreview"] {
+                if let value = row[key], value.boolValue == nil { return [] }
+            }
+            if let icon = row["icon"], !ProjectScript.icons.contains(icon.stringValue ?? "") { return [] }
+            if let url = row["previewUrl"], url.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false { return [] }
+            let setup = row["runOnWorktreeCreate"]?.boolValue == true
+            let preview = row["previewUrl"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            out.append(ProjectScriptInput(name: name, command: command, icon: row["icon"]?.stringValue ?? "play", runOnWorktreeCreate: setup,
+                                          waitForSetup: setup && row["async"]?.boolValue == false, runOnSettle: row["runOnSettle"]?.boolValue ?? false,
+                                          previewUrl: preview, autoOpenPreview: preview != nil && row["autoOpenPreview"]?.boolValue == true))
+        }
+        return out.filter { entry in !existing.contains { $0.command == entry.command || $0.name.lowercased() == entry.name.lowercased() } }
+    }
+}

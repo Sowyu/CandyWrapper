@@ -39,6 +39,7 @@ public final class SettingsPageContext {
     public var clearServer: (([String]) -> Void)?
     /// One RPC on an environment's socket (environment id, method, payload).
     public var subscribeProviderAuth: ((String, String, @escaping @MainActor @Sendable (JSONValue) -> Void) -> Task<Void, Never>?)?
+    public var subscribeResourceTelemetry: ((String, @escaping @MainActor @Sendable (JSONValue) -> Void) -> Task<Void, Never>?)?
     public var request: ((String, String, JSONValue) async throws -> JSONValue)?
     /// A visible feature owns and cancels this server push subscription.
     public var subscribe: ((String, String, JSONValue, @escaping @MainActor @Sendable (JSONValue) -> Void) -> Task<Void, Never>?)?

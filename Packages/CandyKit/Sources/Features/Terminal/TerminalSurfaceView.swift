@@ -11,7 +11,7 @@ import T3Store
 @MainActor
 public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDelegate {
     /// `DEFAULT_TERMINAL_FONT_SIZE` and `CONTENT_PADDING` (surface.ts:20, 36).
-    public static let fontSize: CGFloat = 12
+    public static var fontSize: CGFloat { font.pointSize }
     static let padding: CGFloat = 4
     /// `MAX_SCROLLBACK_ROWS` (core.ts:12).
     public static let scrollbackRows = 10_000
@@ -55,7 +55,13 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     }
 
     /// The system monospace face (`"SF Mono"` heads T3's family list) at 12px.
-    static var font: NSFont { NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) }
+    static var font: NSFont { FontRuntime.font(.terminal, size: 12) }
+
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        terminal.font = Self.font
+        terminal.lineSpacing = Self.lineSpacing(for: Self.font)
+    }
 
     /// T3's cell is `round(fontSize * 1.35)` tall (renderer.ts `measureGhosttyCell`), 16pt at 12px;
     /// SwiftTerm's is the font's line height times `lineSpacing`.

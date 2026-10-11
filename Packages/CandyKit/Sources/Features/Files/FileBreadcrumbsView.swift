@@ -157,8 +157,8 @@ final class DelimitedTableView: NSView {
     private var rowHeights: [CGFloat] = []
     private var laidOutWidth: CGFloat = -1
 
-    static let font = DSFont.ui(12)
-    static let headerFont = DSFont.ui(12, weight: .medium)
+    static var font: NSFont { DSFont.ui(12) }
+    static var headerFont: NSFont { DSFont.ui(12, weight: .medium) }
 
     init(text: String, delimiter: Character) {
         let parsed = DelimitedTable.parse(text, delimiter: delimiter)

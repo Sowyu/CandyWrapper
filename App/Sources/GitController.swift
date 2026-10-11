@@ -302,6 +302,7 @@ final class GitController {
     var onRender: (() -> Void)?
 
     private func render() {
+        panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
         guard let target else {

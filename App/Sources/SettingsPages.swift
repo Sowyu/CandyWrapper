@@ -74,6 +74,12 @@ extension SettingsController {
                 if case .value(let state) = event { await receive(state) }
             }
         }
+        c.subscribeResourceTelemetry = { [weak self] env, receive in
+            guard let supervisor = self?.environments.session(env)?.supervisor else { return nil }
+            return supervisor.subscribe("subscribeResourceTelemetry", payload: { .object([:]) }) { event in
+                if case .value(let state) = event { await receive(state) }
+            }
+        }
         c.saveActions = { [weak self] writes in await self?.saveActions(writes) }
         c.watchScheduledTasks = { [weak self] _ in self?.updateScheduledTaskWatch() }
         c.httpBaseURL = { [weak self] env in self?.environments.routeInUse(env) }
@@ -156,6 +162,7 @@ extension SettingsController {
         case .storage: StorageSettingsView(context: c)
         case .archive: ArchiveSettingsView(context: c)
         case .diagnostics: DiagnosticsSettingsView(context: c)
+        case .licenses: SettingsOpenSourceLicensesView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
         default: SnapShotSettingsView(context: c)
         }
@@ -401,14 +408,13 @@ extension SettingsController {
     }
 
     /// "Open keybindings.json" (`openInPreferredEditor`): the file is on the primary environment's machine.
-    // ponytail: opens the path on this Mac, which is right for the local server; a remote primary needs T3's open-in-editor RPC
     private func openKeybindingsFile() {
-        guard let path = pageContext.keybindingsConfigPath else { return }
-        let url = URL(fileURLWithPath: path)
-        if FileManager.default.fileExists(atPath: path) {
-            NSWorkspace.shared.open(url)
-        } else {
-            toast("Unable to open keybindings file", "The keybindings file was not opened.", .error)
+        guard let path = pageContext.keybindingsConfigPath, let env = environments.primaryId,
+              let config = pageContext.configs[env],
+              let editor = OpenInEditors.preferred(available: config.availableEditors, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey)) else { return }
+        Task { [weak self] in
+            do { _ = try await self?.environments.request(env, "shell.openInEditor", OpenInEditors.launchInput(cwd: path, editor: editor)) }
+            catch { self?.toast("Unable to open keybindings file", "\(error)", .error) }
         }
     }
 

@@ -367,6 +367,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var platformOS: String?
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
     public var availableEditors: [String] = []
+    public var logsDirectoryPath: String?
+    public var keybindingIssues: [JSONValue] = []
     public var remoteOpenTargets: [JSONValue] = []
     /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
     public var revealsInFileManager = false
@@ -386,7 +388,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
-             scratchWorkspaceRoot, newProjectsRoot, threadFind, threadFindProgressive
+             scratchWorkspaceRoot, newProjectsRoot, threadFind, threadFindProgressive, observability, issues
     }
 
     public init(from decoder: Decoder) throws {
@@ -401,6 +403,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         if try c.decodeIfPresent(Bool.self, forKey: .threadFind) == true { capabilities.insert("threadFind") }
         if try c.decodeIfPresent(Bool.self, forKey: .threadFindProgressive) == true { capabilities.insert("threadFindProgressive") }
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
+        keybindingIssues = (try? c.decodeIfPresent([JSONValue].self, forKey: .issues)) ?? []
+        logsDirectoryPath = (try? c.decodeIfPresent(JSONValue.self, forKey: .observability))?["logsDirectoryPath"]?.stringValue
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
         remoteOpenTargets = (try? c.decodeIfPresent([JSONValue].self, forKey: .remoteOpenTargets)) ?? []
         revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false

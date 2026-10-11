@@ -218,6 +218,34 @@ public final class ThreadPanelView: DSView {
     public private(set) var isDraft = false
     private var composerShown = false
     public let model = ThreadViewModel()
+    private var applyingProjection = false
+    private var proactivePanels = SettingsProactivePanels()
+    private var panelActionRevision = 0
+    public var proactiveRepositoryIsGit: Bool? { didSet { if proactiveRepositoryIsGit != oldValue { evaluateProactivePanels() } } }
+    public var proactiveLinkedPullRequestKey: String? { didSet { if proactiveLinkedPullRequestKey != oldValue { evaluateProactivePanels() } } }
+    public var onProactivePullRequest: (() -> Void)?
+
+    public func evaluateProactivePanels() {
+        guard !applyingProjection, window != nil, !isDraft, let projection = model.projection else { return }
+        let latest = projection.runs.max { $0.ordinal < $1.ordinal }
+        let running = projection.runs.last { $0.status == .running || $0.status == .waiting }
+        let summary = summaries.first { $0.runId == latest?.id }
+        let action = proactivePanels.update(thread: projection.thread.id.rawValue, running: running?.id.rawValue,
+            settled: latest?.id.rawValue, completed: latest?.status == .completed, linkedTarget: proactiveLinkedPullRequestKey,
+            revision: panelActionRevision, enabled: ClientSettingsStore.shared.current.bool("proactivePanelsEnabled"),
+            checkpointStatus: summary?.status, fileCount: summary?.files.count ?? 0,
+            changedLines: summary?.files.reduce(0) { $0 + ($1.additions ?? 0) + ($1.deletions ?? 0) } ?? 0,
+            isRepository: proactiveRepositoryIsGit, activeSurface: panelState.active?.kind.rawValue)
+        switch action {
+        case .none: break
+        case .pullRequest: onProactivePullRequest?()
+        case .diff:
+            // ponytail: the diff panel has turn scopes only, switch to the branch scope when it supports git scopes.
+            var next = panelState; next.open(.diff)
+            setPanelState(next); onPanelChange?(next, [])
+            if let run = latest?.id { diffPanel.open(runId: run, filePath: nil) }
+        }
+    }
     private let fade = CAGradientLayer()
     private weak var sheetPreviousResponder: NSResponder?
     private var sheetWasOpen = false
@@ -557,6 +585,7 @@ public final class ThreadPanelView: DSView {
         var next = panelState
         let closed = change(&next)
         guard next != panelState || !closed.isEmpty else { return }
+        panelActionRevision += 1
         setPanelState(next)
         onPanelChange?(next, closed)
     }
@@ -645,6 +674,8 @@ public final class ThreadPanelView: DSView {
 
     /// Shows a thread. Pass nil to clear.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?) {
+        applyingProjection = true
+        defer { applyingProjection = false; evaluateProactivePanels() }
         model.projectTitle = projectTitle
         model.workspaceRoot = workspaceRoot
         header.projectTitle = projectTitle
@@ -652,6 +683,9 @@ public final class ThreadPanelView: DSView {
         // With no thread the bar stays, empty, so it still drags the window.
         header.setThreadVisible(projection != nil)
         if projection?.thread.id != model.projection?.thread.id {
+            proactivePanels = SettingsProactivePanels()
+            proactiveLinkedPullRequestKey = nil
+            proactiveRepositoryIsGit = nil
             timeline.context.forgetDocuments()
             header.cancelTitleRename()
             if rightPanelMaximized { toggleMaximized() }
@@ -667,6 +701,7 @@ public final class ThreadPanelView: DSView {
         }
         if rightPanelOpen, panelState.active?.kind == .diff { diffPanel.setSummaries(summaries) }
         model.setProjection(projection)
+        evaluateProactivePanels()
         if projection != nil, isDraft { setDraft(projectTitle: nil) }
         updateComposerShown()
     }

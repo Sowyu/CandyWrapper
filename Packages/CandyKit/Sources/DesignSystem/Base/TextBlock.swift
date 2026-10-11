@@ -81,7 +81,12 @@ public final class TextBlockView: DSView {
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
-    public var font: NSFont = DSFont.ui(14) { didSet { invalidate() } }
+    public var font: NSFont = DSFont.ui(14) { didSet { fontRecipe = FontRuntime.recipe(for: font); invalidate() } }
+    private var fontRecipe = FontRuntime.recipe(for: DSFont.ui(14))
+    public override func fontRuntimeDidChange() {
+        super.fontRuntimeDidChange()
+        if let recipe = fontRecipe { font = recipe.resolve() }
+    }
     public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { needsDisplay = true } }
     /// CSS line-height in points. Defaults to the font's natural height.
     public var lineHeight: CGFloat? { didSet { invalidate() } }
@@ -163,8 +168,8 @@ public final class TextBlockView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty, bounds.width > 0 else { return }
         // Same smoothing as LabelView (closer to Chromium's glyph weight).
-        ctx.setShouldSmoothFonts(smoothsFont)
-        ctx.setAllowsFontSmoothing(smoothsFont)
+        ctx.setShouldSmoothFonts(smoothsFont && FontRuntime.smoothing)
+        ctx.setAllowsFontSmoothing(smoothsFont && FontRuntime.smoothing)
         ctx.setFillColor(color.cgColor(in: self))
         layout(forWidth: bounds.width).draw(in: ctx, origin: .zero, width: bounds.width, alignment: alignment)
     }

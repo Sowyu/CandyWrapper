@@ -140,7 +140,7 @@ final class SidebarBrandView: DSView {
         return SimplePath.parse(d)
     }()
 
-    static let font = DSFont.ui(14, weight: .medium)
+    static var font: NSFont { DSFont.ui(14, weight: .medium) }
     /// `tracking-tight`: -0.025em.
     static let tracking: CGFloat = -0.35
 

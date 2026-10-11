@@ -6,7 +6,7 @@ import DesignSystem
 public enum SettingsSection: String, CaseIterable, Sendable {
     case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
-    case diagnostics
+    case diagnostics, licenses
 
     public var label: String {
         switch self {
@@ -23,6 +23,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Connections"
         case .archive: "Archive"
         case .diagnostics: "Diagnostics"
+        case .licenses: "Open source licenses"
         }
     }
 
@@ -41,6 +42,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .link2
         case .archive: .archive
         case .diagnostics: .activity
+        case .licenses: .fileText
         }
     }
 
@@ -48,7 +50,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     public var isAvailable: Bool { true }
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
-    static let navSections = allCases.filter { $0 != .diagnostics }
+    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses }
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -63,6 +65,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
 public final class SettingsSidebarView: DSView {
     public let trigger = SidebarTriggerView()
     let backdrop = StageBackdropView()
+    private let environmentPill = BadgeView("Nightly", variant: .secondary, size: .sm)
     let brand = SidebarBrandView()
     let search = SidebarSearchFieldView()
     private let searchKbd = KbdView("/")
@@ -111,6 +114,10 @@ public final class SettingsSidebarView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(backdrop)
+        addSubview(environmentPill)
+        ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("environmentIdentificationMode") { self?.applyStage() }
+        }
         addSubview(brand)
         addSubview(trigger)
         search.field.setAccessibilityLabel("Search settings")
@@ -226,9 +233,14 @@ public final class SettingsSidebarView: DSView {
     }
 
     private func applyStage() {
-        backdrop.isHidden = stage != .nightly
-        brand.onBackdrop = stage == .nightly
-        trigger.mediaTint = stage == .nightly ? StageBackdropView.ink() : nil
+        let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
+        let artwork = mode == "artwork" && stage == .nightly
+        backdrop.isHidden = !artwork
+        brand.onBackdrop = artwork
+        trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
+        environmentPill.title = stage == .dev ? "Dev" : "Nightly"
+        environmentPill.isHidden = mode != "pill" || stage == .none
+        needsLayout = true
     }
 
     public override func layout() {
@@ -240,6 +252,9 @@ public final class SettingsSidebarView: DSView {
         trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
         let bs = brand.intrinsicContentSize
         brand.frame = NSRect(x: SidebarMetrics.titlebarContentLeft(windowedMac: windowedMac), y: 12, width: min(bs.width, max(0, w - 12 - 130)), height: 28)
+        let pillSize = environmentPill.intrinsicContentSize
+        environmentPill.frame = NSRect(x: brand.frame.maxX + 12, y: 18, width: pillSize.width, height: pillSize.height)
+        environmentPill.alphaValue = environmentPill.frame.maxX <= w - 12 ? 1 : 0
         // `SidebarGroup` (p-2), `flex-col gap-2`: the h-8 search row, then `SidebarMenu` rows 4px apart.
         search.frame = NSRect(x: 8, y: 60, width: w - 16, height: 32)
         let kbd = searchKbd.intrinsicContentSize

@@ -401,7 +401,6 @@ public final class GeneralSettingsView: SettingsPageBase {
     }
 
     private func diagnosticsSection() -> SettingsSectionView {
-        // ponytail: the Open source licenses page is not built; its button stays disabled. Build it with the About work (M9)
         let diag = ButtonView("View diagnostics", variant: .outline, size: .sm)
         diag.action = { [weak self] in self?.context.openSection?(.diagnostics) }
         let diagnostics = row("diagnostics", detail: "", control: diag)
@@ -411,7 +410,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                 : "Inspect processes, resource use, and logs on one environment at a time."
         }
         let lic = ButtonView("View licenses", variant: .outline, size: .sm)
-        lic.isEnabled = false
+        lic.action = { [weak self] in self?.context.openSection?(.licenses) }
         let licenses = row("open-source-licenses", detail: "Notices for dependencies, assets, and optional tools used by T3 Code.", control: lic)
         return section(nil, "Diagnostics", [diagnostics, licenses])
     }
@@ -498,9 +497,9 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
 
 /// The model picker trigger of the Model and Text generation rows (`ProviderModelPicker` with
 /// `SETTINGS_PICKER_TRIGGER_CLASSNAME`): the composer's trigger look, opening the composer's model picker.
-// ponytail: no traits picker beside it (`TraitsPicker`); a picked model keeps its options. Add it if users ask for effort here
 final class SettingsModelPickerControl: DSView {
     let button = ComposerControlView()
+    private let traits = ComposerControlView(icon: IconView(name: .brain, size: 16))
     private let context: SettingsPageContext
     private let key: String
     private weak var popup: OpenPopup?
@@ -512,6 +511,8 @@ final class SettingsModelPickerControl: DSView {
         button.tintsIcon = false
         button.action = { [weak self] in self?.open() }
         addSubview(button)
+        addSubview(traits)
+        traits.action = { [weak self] in self?.openTraits() }
     }
 
     private var catalog: ProviderCatalog { ProviderCatalog(context.providers) }
@@ -542,12 +543,55 @@ final class SettingsModelPickerControl: DSView {
             button.title = "No providers available"
             button.icon = nil
         }
+        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || context.scope.connected.isEmpty
+        traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: button.intrinsicContentSize.width, height: 28) }
-    override func layout() { super.layout(); button.frame = bounds }
+    private var descriptors: [ProviderOptionDescriptor] {
+        guard let (entry, slug) = selection else { return [] }
+        let raw = context.scope.values[key]
+        let selected = try? raw.decode(as: ModelSelection.self)
+        return ModelTraits.descriptors(entry.model(slug), selections: selected?.options.flatMap { try? $0.decode(as: [ProviderOptionSelection].self) }).map { descriptor in
+            var d = descriptor
+            d.options.removeAll { d.promptInjectedValues?.contains($0.id) == true }
+            return d
+        }
+    }
+
+    private func openTraits() {
+        guard let host = traits.popupHost, let (entry, slug) = selection else { return }
+        let ds = descriptors
+        var rows: [PickerMenuEntry] = []
+        for d in ds {
+            if !rows.isEmpty { rows.append(.separator) }
+            rows.append(.label(d.label))
+            let choices: [(String, ProviderOptionValue)] = d.type == .boolean
+                ? [("On", .bool(true)), ("Off", .bool(false))]
+                : d.options.map { ($0.label, .string($0.id)) }
+            for (label, value) in choices {
+                rows.append(.option(label, checked: ModelTraits.currentValue(d) == value) { [weak self] in
+                    guard let self else { return }
+                    let selection = ModelSelection(instanceId: entry.id, model: slug, options: ModelTraits.pick(ds, id: d.id, value: value).flatMap { try? JSONValue(encoding: $0) })
+                    guard let json = try? JSONValue(encoding: selection) else { return }
+                    self.context.patchServer([self.key: json])
+                    if let popup = self.popup { self.traits.popupHost?.close(popup) }
+                })
+            }
+        }
+        let menu = PickerMenuView(entries: rows, style: .menu, minimumWidth: 158)
+        popup = host.open(PickerPopupView(menu), trigger: traits, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4), motion: .popover)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: button.intrinsicContentSize.width + (traits.isHidden ? 0 : traits.intrinsicContentSize.width + 6), height: 28)
+    }
+    override func layout() {
+        super.layout()
+        button.frame = NSRect(x: 0, y: 0, width: button.intrinsicContentSize.width, height: 28)
+        traits.frame = NSRect(x: button.frame.maxX + 6, y: 0, width: traits.intrinsicContentSize.width, height: 28)
+    }
 
     private func open() {
         guard let host = button.popupHost, let (entry, slug) = selection else { return }

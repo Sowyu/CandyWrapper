@@ -163,7 +163,7 @@ struct WorkDetail: Hashable {
 
 /// Mono detail blocks, `space-y-1.5`, 13px at `leading-relaxed`, each clipped at 320px.
 final class WorkDetailView: DSView {
-    static let font = DSFont.mono(13)
+    static var font: NSFont { DSFont.mono(13) }
     static let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
     static let lineHeight: CGFloat = 13 * 1.625
     static let maxBlock: CGFloat = 320

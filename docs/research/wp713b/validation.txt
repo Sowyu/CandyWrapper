@@ -1,0 +1,25 @@
+WP7.13b validation, 2026-10-11
+
+swift test --package-path Packages/CandyKit
+✔ Test run with 262 tests in 34 suites passed after 2.514 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.337 seconds.
+✔ Test run with 125 tests in 28 suites passed after 33.010 seconds.
+FIDELITY settings-pages: 6 cases, mean differing 1.88%
+FIDELITY settings-pages2: 10 cases, mean differing 1.70%
+FIDELITY settings-runtime: 6 cases, mean differing 4.77%
+FIDELITY settings-pages3: 10 cases, mean differing 3.38%
+✔ Test run with 376 tests in 89 suites passed after 104.734 seconds.
+✔ Test run with 86 tests in 18 suites passed after 52.836 seconds.
+
+xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd-astra713b PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.astra713b CANDY_URL_SCHEME=candywrapper-astra713b build
+** BUILD SUCCEEDED **
+
+swift test --package-path Packages/CandyKit --filter Fidelity
+FIDELITY settings-pages2: 10 cases, mean differing 1.70%
+FIDELITY settings-pages: 6 cases, mean differing 1.88%
+FIDELITY settings-runtime: 6 cases, mean differing 4.77%
+FIDELITY settings-pages3: 10 cases, mean differing 3.38%
+✔ Test run with 48 tests in 36 suites passed after 91.429 seconds.
+✔ Test run with 61 tests in 11 suites passed after 39.186 seconds.
+
+git diff --check: passed

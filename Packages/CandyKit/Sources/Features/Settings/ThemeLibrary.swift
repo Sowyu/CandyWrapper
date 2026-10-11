@@ -49,6 +49,7 @@ public final class ThemeLibrary {
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("appearanceContrast") || keys.contains("glassOpacity") { self?.apply() }
         }
+        SettingsFontRuntime.start()
         apply()
     }
 

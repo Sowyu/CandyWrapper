@@ -370,6 +370,11 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             }
         }
         let customFooter = TextareaFooter(custom)
+        let mixedInstructions = SettingsWritingInstructionsView()
+        mixedInstructions.onApply = { [weak self] text in
+            self?.context.patchServer(["sourceControlWritingStyle": .object(["mode": .string("custom"), "customInstructions": .string(text)])])
+        }
+        mixedInstructions.onHeightChange = { [weak self] in self?.onHeightChange?() }
         styleSelect.onChange = { [weak self, weak custom] i in
             guard let self else { return }
             var patch: [String: JSONValue] = ["mode": .string(styleModes[i].value)]
@@ -386,8 +391,8 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             styleSelect.placeholder = "Mixed"
             styleSelect.selectedIndex = modeMixed ? nil : styleModes.firstIndex { $0.value == mode }
             styleRow.detail = styleModes.first { $0.value == mode }?.description
-            // ponytail: mixed instructions show no "Write custom instructions for all" editor; pick one environment to edit them
-            styleRow.footer = !modeMixed && !self.fieldMixed("customInstructions") && mode == "custom" ? customFooter : nil
+            if modeMixed || self.fieldMixed("customInstructions") { styleRow.footer = mixedInstructions }
+            else { styleRow.footer = mode == "custom" ? customFooter : nil }
             if let custom, !custom.state.focused { custom.text = style["customInstructions"]?.stringValue ?? "" }
         }
 

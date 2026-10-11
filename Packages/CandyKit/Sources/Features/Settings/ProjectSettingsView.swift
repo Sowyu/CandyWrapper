@@ -28,6 +28,11 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     private var openEditor: ProjectActionEditor?
     /// The project the page shows, so a new selection rebuilds the name field.
     private var shownKey: String?
+    private let importAction = ButtonView("Import scripts", icon: .chevronDown, variant: .ghost, size: .xs)
+    private var projectFileContents: String?
+    private var projectFileKey: String?
+    private var projectFileTask: Task<Void, Never>?
+    private var faviconPicker: SettingsProjectFaviconPicker?
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -42,6 +47,14 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         danger = buildDanger()
         body = [notice, info, overview, defaults, actions, checkouts, danger]
         binder.add { [weak self] in self?.update() }
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            faviconPicker?.close(); faviconPicker = nil
+            projectFileTask?.cancel(); projectFileTask = nil; projectFileContents = nil; projectFileKey = nil
+        } else { loadProjectFile() }
     }
 
     private var group: SettingsScopeProject? { context.scope.group }
@@ -83,6 +96,8 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         let members = self.members
         let hasOtherMembers = members.count < group.members.count
         let representative = members.first { m in scope.connected.contains { $0.id == m.environmentId } } ?? members[0]
+
+        loadProjectFile()
 
         // Overview.
         permissionNote.message = members.count > 1 ? "Shared settings require permission to change every checkout in this group."
@@ -163,15 +178,22 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         // `ProjectFavicon className="size-6"`: the 16pt monogram drawn at 24.
         favicon.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
         favicon.bounds = NSRect(x: 0, y: 0, width: 16, height: 16)
-        // ponytail: the image file picker (ProjectFaviconPickerDialog) is not built; Choose file shows disabled. Build it
-        // with the palette-style image search when users ask to pick an icon file from here
         let chooseIcon = ButtonView("Choose icon", variant: .outline, size: .sm)
         chooseIcon.setAccessibilityLabel("Choose a project icon")
         chooseIcon.action = { [weak self] in self?.chooseIcon() }
         self.chooseIconButton = chooseIcon
         let chooseFile = ButtonView("Choose file", variant: .outline, size: .sm)
         chooseFile.setAccessibilityLabel("Choose a project icon file")
-        chooseFile.isEnabled = false
+        chooseFile.action = { [weak self] in
+            guard let self, self.canEditGroup, let member = self.members.first, let window = self.window else { return }
+            let members = self.members
+            let picker = SettingsProjectFaviconPicker(context: self.context, member: member) { [weak self] path in
+                self?.context.updateProject?(members, ["faviconPath": .string(path), "projectIcon": .null], "Failed to update project icon")
+            }
+            self.faviconPicker = picker
+            picker.present(in: window)
+        }
+        binder.add { [weak self, weak chooseFile] in chooseFile?.isEnabled = self?.canEditGroup == true }
         let controls = SettingsControlGroup([FixedSizeBox(favicon, size: NSSize(width: 24, height: 24)), chooseIcon, chooseFile])
         iconRow = SettingsRowView(title: "Project icon", detail: "Automatic", control: controls)
         let reset = ResetSlot(label: "project icon")
@@ -228,10 +250,12 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     // MARK: Actions (ProjectActionsSettings.tsx)
 
     private func buildActions() -> SettingsSectionView {
+        importAction.isHidden = true
+        importAction.action = { [weak self] in self?.showImportScripts() }
         addAction.iconSize = 14
         addAction.action = { [weak self] in self?.openEditor(nil) }
         let header = SettingsRowView(title: "Actions", detail: "Commands that run in this project's checkout or its worktree, with optional shortcuts.",
-                                     control: SettingsControlGroup([addAction], gap: 6))
+                                     control: SettingsControlGroup([importAction, addAction], gap: 6))
         _ = bindServerRow(header, keys: ["defaultProjectScripts"], reset: "Actions")
         // `onResetOverride`: back to the environment's list, with the shortcuts that leaves behind.
         if let slot = header.accessories.last as? ResetSlot {
@@ -278,7 +302,37 @@ public final class ProjectSettingsView: ScopedSettingsPage {
                 rows.append(r)
             }
         }
+        importAction.isHidden = ProjectActionsLogic.importableScripts(projectFileContents ?? "", existing: scripts).isEmpty
+        importAction.isEnabled = !savingActions && context.scope.canWrite && !targets.isEmpty
         actions.group.rows = rows
+    }
+
+    private func loadProjectFile() {
+        guard window != nil, let member = members.first, let request = context.request else { return }
+        let key = member.environmentId + ":" + member.workspaceRoot
+        guard projectFileKey != key else { return }
+        projectFileKey = key; projectFileContents = nil
+        projectFileTask?.cancel()
+        projectFileTask = Task { [weak self] in
+            let reply = try? await request(member.environmentId, "projects.readFile", .object(["cwd": .string(member.workspaceRoot), "relativePath": .string("t3.json")]))
+            guard !Task.isCancelled, let self, self.projectFileKey == key else { return }
+            self.projectFileContents = reply?["truncated"]?.boolValue == true ? nil : reply?["contents"]?.stringValue
+            self.updateActions(); self.onHeightChange?()
+        }
+    }
+
+    private func showImportScripts() {
+        let inputs = ProjectActionsLogic.importableScripts(projectFileContents ?? "", existing: shownScripts)
+        let items = inputs.map { input in
+            var item = MenuItem(input.name, icon: ProjectScriptIcon.name(input.icon))
+            item.action = { [weak self] in
+                guard let self else { return }
+                let id = ProjectActionsLogic.newId(input.name, targets: self.actionTargets)
+                self.persist(transform: { ProjectScripts.applySubmit($0, id: id, isNew: true, input: input) }, scriptId: id, keybinding: nil)
+            }
+            return item
+        }
+        MenuPopupView.show(items, from: importAction, placement: .dropdown)
     }
 
     private func openEditor(_ script: ProjectScript?) {

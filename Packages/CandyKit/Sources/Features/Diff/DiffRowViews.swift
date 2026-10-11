@@ -144,7 +144,7 @@ final class DiffTitleView: DSView {
     var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     override var wantsUpdateLayer: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    private static let font = DSFont.ui(12)
+    private static var font: NSFont { DSFont.ui(12) }
     private static let hoverColor = DiffStyle.mix(DiffStyle.codeForeground, 0.84, Themed.color(\.primary))
 
     override init(frame frameRect: NSRect) {
