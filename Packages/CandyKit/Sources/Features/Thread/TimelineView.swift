@@ -11,6 +11,9 @@ enum TimelineChange: Equatable, Sendable {
     case rows([Int])
     /// Rows before this index stayed; the ones from it on are new.
     case tail(Int)
+    /// The first `replaced` rows gave way to `inserted` new ones; every row after them stayed
+    /// (an older history page).
+    case head(replaced: Int, inserted: Int)
     /// Another thread's rows replace the last thread's in one pass; the view starts at the end.
     case thread
 }
@@ -244,6 +247,13 @@ public final class TimelineView: DSView {
             heights.removeSubrange(first...)
             heights += new[first...].map { height(of: $0) }
             recomputeTops(from: first)
+        } else if case .head(let replaced, let inserted) = change, consistent, replaced <= old.count, inserted <= new.count,
+                  old.count - replaced == new.count - inserted {
+            // Rows after the page keep their heights; the index moves for all of them.
+            indexById = Dictionary(new.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+            if measured.count > new.count * 2 { measured = measured.filter { indexById[$0.key] != nil } }
+            heights.replaceSubrange(0..<replaced, with: new[..<inserted].map { height(of: $0) })
+            recomputeTops()
         } else {
             // Rows that kept their place and content keep their height; the rest are looked up or estimated.
             let sameIds = old.count == new.count && zip(old, new).allSatisfy { $0.id == $1.id }

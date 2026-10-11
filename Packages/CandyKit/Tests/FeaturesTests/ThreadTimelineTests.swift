@@ -118,6 +118,45 @@ struct ThreadTimelineTests {
         #expect(panel.timeline.items.map(\.id) != rowsOfA)
     }
 
+    /// Older pages splice in front (`TimelineChange.head`): the model's rows equal a full pass, the
+    /// view holds the same rows, and the row on screen keeps its place.
+    @Test func olderPagesSpliceInFrontAndKeepTheRowOnScreen() throws {
+        let full = try #require(try ThreadPreview.projections().max { $0.visibleTurnItems.count < $1.visibleTurnItems.count })
+        let all = full.visibleTurnItems
+        let page = 3
+        var p = full
+        p.visibleTurnItems = all.suffix(page).enumerated().map { i, row in var row = row; row.position = i; return row }
+        let windowIds = Set(p.visibleTurnItems.map(\.sourceItemId))
+        p.turnItems = p.turnItems.filter { windowIds.contains($0.id) }
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 844, height: 400))
+        panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+        panel.layoutSubtreeIfNeeded()
+        var seen: [TimelineChange] = []
+        let forward = panel.model.onChange
+        panel.model.onChange = { change in seen.append(change); forward?(change) }
+        var loaded = page
+        while loaded < all.count {
+            let older = Array(all[max(0, all.count - loaded - page)..<(all.count - loaded)])
+            loaded += older.count
+            let t = panel.timeline
+            t.scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(40, max(0, t.scrollView.documentView!.frame.height - 400))))
+            t.scrollView.reflectScrolledClipView(t.scrollView.contentView)
+            panel.layoutSubtreeIfNeeded()
+            let anchor = t.items.last { t.view(forRow: $0.id) != nil }
+            let before = anchor.flatMap { t.view(forRow: $0.id) }.map { $0.frame.minY - t.scrollView.contentView.bounds.minY }
+            p = ThreadReduction.mergeOlderHistory(p, older)
+            panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+            panel.layoutSubtreeIfNeeded()
+            #expect(panel.model.items.map(\.row) == TimelineRows.derive(TimelineRowsInput(projection: p)))
+            #expect(t.items.map(\.id) == panel.model.items.map(\.id))
+            if let anchor, let before, let view = t.view(forRow: anchor.id) {
+                // Rows snap to the backing scale, so the place may differ by less than a point.
+                #expect(abs(view.frame.minY - t.scrollView.contentView.bounds.minY - before) < 1, "row \(anchor.id) moved")
+            }
+        }
+        #expect(seen.contains { if case .head = $0 { true } else { false } })
+    }
+
     @Test func expandStateLivesInTheModel() throws {
         let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
         let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 844, height: 780))

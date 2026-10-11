@@ -229,6 +229,38 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
     }
 
     // LT:596
+    /// A page that ends in reasoning without a completion: the old rows after it settle it, so the
+    /// spliced front must show it settled, open or folded, settled or running.
+    @Test(arguments: [false, true], [false, true])
+    func pageEndingInOpenReasoningSettlesIt(_ expanded: Bool, _ working: Bool) {
+        let reasoning = WorkLogEntry(id: "reason", createdAt: "2026-01-01T00:00:03Z", runId: "turn-1", label: "Thinking", detail: "Planning",
+                                     tone: .thinking, itemType: .reasoning, toolLifecycleStatus: .inProgress)
+        let page = [
+            user("u1", "u1", at: "2026-01-01T00:00:00Z"),
+            work("w1", WorkLogEntry(id: "w1", createdAt: "2026-01-01T00:00:02Z", runId: "turn-1", label: "Ran command", tone: .tool, itemType: .commandExecution, toolLifecycleStatus: .completed)),
+            work("reason", reasoning),
+        ]
+        let old = [
+            user("u2", "u2", at: "2026-01-01T00:00:10Z"),
+            assistant("a2", "a2", run: "turn-2", at: "2026-01-01T00:00:12Z", updated: "2026-01-01T00:00:13Z"),
+        ]
+        func input(_ entries: [TimelineEntry]) -> TimelineRowsInput {
+            var input = TimelineRowsInput(entries: entries)
+            if expanded { input.expandedWorkGroupIds = ["work-group:w1"]; input.expandedRunIds = ["turn-1"] }
+            if working {
+                input.latestRun = TimelineLatestRun(runId: "turn-2", status: .running, startedAt: "2026-01-01T00:00:11Z")
+                input.runningRunId = "turn-2"
+                input.isWorking = true
+                input.activeTurnStartedAt = "2026-01-01T00:00:11Z"
+            }
+            return input
+        }
+        var derived = TimelineRows.Derived(input(old))
+        let splice = derived.prepend(input(page + old), count: page.count)
+        #expect(splice != nil)
+        #expect(derived.rows == TimelineRows.derive(input(page + old)))
+    }
+
     @Test func copyStateNeedsSettledNonEmptyText() {
         #expect(TimelineRows.copyState(text: "Done", showCopyButton: true, streaming: false).visible)
         #expect(!TimelineRows.copyState(text: "Done", showCopyButton: true, streaming: true).visible)

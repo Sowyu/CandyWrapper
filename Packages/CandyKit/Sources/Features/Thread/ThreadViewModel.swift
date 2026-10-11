@@ -331,6 +331,8 @@ public final class ThreadViewModel {
         case .tail(let first) where first <= items.count && first <= rows.count:
             items.removeSubrange(first...)
             items += rows[first...].map(item)
+        case .head(let replaced, let inserted) where replaced <= items.count && items.count - replaced == rows.count - inserted:
+            items.replaceSubrange(0..<replaced, with: rows[..<inserted].map(item))
         default:
             items = rows.map(item)
         }
