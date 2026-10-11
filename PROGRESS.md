@@ -238,6 +238,14 @@ Also in M9: a stable code signing identity instead of ad-hoc, so the Keychain st
   - Checked on screen against the sandbox: sidebar cross-fade and title chevron recorded at 100 frames a second (about 150 ms), work lines one at a time, user meta hidden in the bottom padding.
   - Found, not mine: a timeline row clicked and moved by the relayout keeps its hover look until the pointer enters and leaves it again (fold row and work header). That is the control-feel task.
   - Left: PR row actions and the scripts menu edit button do not exist yet; PR pencils in the timeline tab, detail panel and annotations, and the composer's snap-shot remove button were not checked.
+- [x] Motion gaps 3, 5, 6, 8 and part of 10 from docs/research/motion-inventory-2026-10-11.md (2026-10-11, motion agent, not committed).
+  - `IconView.setRotation` turns a glyph about its center (`.ease(duration)` or `.morph`). T3's `MorphIcon` between chevron-right and chevron-down is a pure turn on the `morphicons` "snappy" spring (stiffness 420, damping 30, read from `t3-client-assets/MorphIcon-*.js`), so `.morph` is a `CASpringAnimation` with those values. Used by the turn and attempt fold rows, the work entry chevron (200ms), the changed-files folders, the diff file headers, settings folds, Connections routes, source control rows and the pull request sections.
+  - Streaming fade: `MarkdownView.fadesNewBlocks` masks each new top-level block with a band whose opacity runs 0 to 1 over 600ms `ease-out`, then drops the mask. Rows set it only while the message streams. Checked on screen with a temporary switch; the sandbox Claude provider delivers whole messages with `streaming` false, so real turns never stream there.
+  - Context window meter arc is a shape layer; `strokeEnd` and color run 500ms `cubic-bezier(0,0,.2,1)`.
+  - Nested dialogs: the dialog under a nested one moves up 20pt, scales to .9 from its top edge and fades to .9; the nested popup enters from 32pt lower.
+  - Connections client dot pings while live; Thinking and compaction use the `live-activity-focus` band; diff bodies fade in 200ms on expand.
+  - Found: Tailwind 4's `ease-in-out` is `cubic-bezier(.4,0,.2,1)` and `ease-out` is `(0,0,.2,1)` (compiled CSS). The inventory's `.42,0,.58,1` holds only for raw CSS keywords (index.css), so dialogs already had the right curve.
+  - Not done: the banner stack has no peek or expanded stack in Swift and no banner sets a dismiss label, so T3's stack motions have nothing to attach to. The context label fade needs the branch toolbar's compact mode, which Swift lacks. Composer collapse motion is mobile only in T3. The model picker's legacy chevron is rebuilt on toggle and still swaps.
 
 ## Known bugs to fix before the M7 demo
 

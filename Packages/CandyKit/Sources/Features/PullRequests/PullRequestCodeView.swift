@@ -23,7 +23,8 @@ public final class PullRequestCodeView: DSView {
     private let orphanRule = CALayer()
     private let orphanScroll: ScrollAreaView
     private let orphanDocument = DSView()
-    private var orphansOpen = false
+    /// `transition-transform`, `rotate-90` when open (PullRequestCodeTab.tsx:1488).
+    private var orphansOpen = false { didSet { orphanChevron.setRotation(orphansOpen ? 90 : 0) } }
     private var commits: [PullRequestCommit] = []
     private var commit: String?
     private var paths: [String] = []
@@ -289,7 +290,6 @@ public final class PullRequestCodeView: DSView {
             let tw = ceil(orphanToggle.textWidth) + 1
             orphanToggle.frame = NSRect(x: 16, y: top + 8, width: tw, height: 16)
             orphanChevron.frame = NSRect(x: 16 + tw + 6, y: top + 9, width: 14, height: 14)
-            orphanChevron.frameCenterRotation = orphansOpen ? -90 : 0
             top += 32
             if orphansOpen {
                 var y: CGFloat = 0

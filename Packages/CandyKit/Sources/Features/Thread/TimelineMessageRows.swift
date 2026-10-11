@@ -301,9 +301,17 @@ final class AssistantMessageRowView: TimelineRowView {
     }
 
     override func configure(_ item: TimelineItem) {
+        let sameRow = self.item?.id == item.id
         super.configure(item)
         guard case .message(let m, let projected, let showMeta, let showCopy, let copyStreaming, let summary) = item.row.kind else { return }
         self.showMeta = showMeta
+        // Blocks fade in only while the message streams. T3's `@starting-style` also fades the blocks a
+        // streaming message mounts with, so a view that starts showing one fades from no blocks.
+        if !sameRow {
+            markdown.cancelBlockFades()
+            if m.streaming { markdown.document = MarkdownDocument(blocks: []) }
+        }
+        markdown.fadesNewBlocks = m.streaming
         if let summary, !summary.files.isEmpty {
             cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
             if card.superview == nil { addSubview(card) }

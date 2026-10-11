@@ -290,7 +290,6 @@ final class WorkLineView: DSView {
     let label = ShineLabelView()
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private let chevron = IconView(name: .chevronRight, size: 12)
-    private let chevronOpen = IconView(name: .chevronDown, size: 12)
     private var expanded = false
     /// "Open chat" after a created thread's label (MessagesTimeline.tsx:5674-5687, `text-sm text-primary`).
     private var trailingAction: ThreadStatusLineAction?
@@ -301,12 +300,12 @@ final class WorkLineView: DSView {
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
     /// The chevron cell is `invisible` (still 16px) when there is nothing to expand.
-    var expandable = false { didSet { updateChevron() } }
+    var expandable = false { didSet { chevron.isHidden = !expandable } }
 
-    // ponytail: the chevron swaps instead of rotating over 200ms; rotate a container layer if it matters
-    private func updateChevron() {
-        chevron.isHidden = !expandable || expanded
-        chevronOpen.isHidden = !expandable || !expanded
+    /// `transition-transform duration-200`, `rotate-90` when open (MessagesTimeline.tsx:5713-5716).
+    private func updateChevron(animated: Bool) {
+        chevron.isHidden = !expandable
+        chevron.setRotation(expanded ? 90 : 0, motion: animated ? .ease(0.2) : .none)
     }
 
     override init(frame frameRect: NSRect) {
@@ -316,10 +315,8 @@ final class WorkLineView: DSView {
         time.lineHeight = 16
         time.alphaValue = 0
         addSubview(time)
-        for c in [chevron, chevronOpen] {
-            c.strokeColor = WorkIcons.muted
-            addSubview(c)
-        }
+        chevron.strokeColor = WorkIcons.muted
+        addSubview(chevron)
     }
 
     /// The row takes clicks (it toggles the entry), except on the line's own buttons.
@@ -370,7 +367,7 @@ final class WorkLineView: DSView {
         needsLayout = true
     }
 
-    func configure(icon: IconName, text: String, style: Style, failed: Bool = false, time timestamp: T3Timestamp?, expanded: Bool, active: Bool = false, now: Date) {
+    func configure(icon: IconName, text: String, style: Style, failed: Bool = false, time timestamp: T3Timestamp?, expanded: Bool, active: Bool = false, now: Date, animated: Bool = false) {
         if icon != iconName {
             iconView.removeFromSuperview()
             iconView = IconView(name: icon, size: 16)
@@ -395,7 +392,7 @@ final class WorkLineView: DSView {
         label.shining = active
         time.text = TL.dayAwareTimestamp(timestamp, now: now)
         self.expanded = expanded
-        updateChevron()
+        updateChevron(animated: animated)
         needsLayout = true
     }
 
@@ -406,7 +403,6 @@ final class WorkLineView: DSView {
         // Trailing slot, right to left: chevron cell (16), timestamp.
         let chevronX = bounds.width - 16
         chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
-        chevronOpen.frame = chevron.frame
         let timeWidth = showsTime ? ceil(time.textWidth) : 0
         time.frame = NSRect(x: chevronX - 6 - timeWidth, y: 4, width: timeWidth, height: 16)
         var right = showsTime ? time.frame.minX - 6 : chevronX - 6
@@ -460,6 +456,8 @@ final class WorkRowView: WorkRowBase {
     private var cards: [SubagentCardLinkView?] = []
 
     override func configure(_ item: TimelineItem) {
+        // The same row reconfigured in place: an entry's chevron turns instead of snapping.
+        let sameRow = self.item?.id == item.id
         super.configure(item)
         guard case .work(let grouped, let isGroup, let displayLabel) = item.row.kind else { return }
         isGroupBody = isGroup
@@ -494,7 +492,7 @@ final class WorkRowView: WorkRowBase {
             let style: WorkLineView.Style = warning ? .warning : severe ? .destructive : toolLike ? .tool : .plain
             let icon: IconName = warning || severe ? .circleAlert : WorkIcons.entry(e)
             let l = line(i)
-            l.configure(icon: icon, text: label, style: style, failed: failed, time: e.createdAt, expanded: open, now: context.now())
+            l.configure(icon: icon, text: label, style: style, failed: failed, time: e.createdAt, expanded: open, now: context.now(), animated: sameRow)
             l.expandable = !detail.isEmpty
             let model = context.model
             let created = e.projectedItem?.item.type == .threadCreated ? e.projectedItem?.string("targetThreadId").map { ThreadId($0) } : nil
@@ -692,6 +690,7 @@ final class ThinkingRowView: WorkRowBase {
         super.configure(item)
         let l = line(0)
         l.configure(icon: .brain, text: "Thinking", style: .tool, time: nil, expanded: false, active: true, now: context.now())
+        l.label.style = .focus // `LiveActivityRow ... shimmer` (MessagesTimeline.tsx:3796)
         l.expandable = false
     }
 

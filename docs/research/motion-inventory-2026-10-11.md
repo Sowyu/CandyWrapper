@@ -5,7 +5,7 @@ T3 source: `/Users/mrm/CandyWrapper-research/t3code/apps/web/src` (paths below a
 ## How T3 decides timings
 
 - Tailwind `transition-*` with no `duration-*` runs 150 ms on `cubic-bezier(.4,0,.2,1)`. `Motion.Durations.default` and `Motion.easeInOut` in `DesignSystem/Base/ControlView.swift:164-184` are exactly that.
-- `ease-in-out` in dialog and sheet classes is the CSS keyword `cubic-bezier(.42,0,.58,1)`, not Tailwind's default curve. `ease-out` is `cubic-bezier(0,0,.58,1)`. `ease-drawer` is `cubic-bezier(.32,.72,0,1)` (`index.css:190`).
+- Correction 2026-10-11: Tailwind 4 compiles `ease-in-out` to `var(--ease-in-out)` = `cubic-bezier(.4,0,.2,1)`, `ease-out` to `(0,0,.2,1)` and `ease-in` to `(.4,0,1,1)` (compiled `main-*.css`). Only raw CSS keywords in index.css mean `(.42,0,.58,1)` and `(0,0,.58,1)`. `ease-drawer` is `cubic-bezier(.32,.72,0,1)` (`index.css:190`).
 - Panel animations (sidebar width, right panel, terminal drawer, grid rows, padding) run only when the user sets `panelAnimationDurationMs`, 0 to 400, and the default is 0 (`packages/contracts/src/settings.ts:121`). They also stop under Reduce Motion. Do not animate them by default.
 - T3 button and sidebar row hover backgrounds are not animated. `button.tsx:11` transitions only `box-shadow` and `scale`, and the hover rules in `Sidebar.tsx:1592-1593` have no transition. Instant hover backgrounds are correct, so do not add a fade there.
 - Most of the "subtle" feel in T3 comes from `transition-colors` (68 uses), `transition-opacity` (56), `transition-transform` (29) and `transition-[...]` or `transition-all` or `transition-shadow` (66) spread over about 100 files.
@@ -14,7 +14,7 @@ T3 source: `/Users/mrm/CandyWrapper-research/t3code/apps/web/src` (paths below a
 
 ## Inventory
 
-Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D, 18 X at research time; 2026-10-11 hoverscope moved items 34 and 47 to M.
+Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D, 18 X at research time on 2026-10-11; 35 M, 6 D, 9 X after the hoverscope and motion passes the same day.
 
 | # | T3 item | Element, property, duration, easing, trigger | T3 source | CandyWrapper | St |
 |---|---|---|---|---|---|
@@ -43,7 +43,7 @@ Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D
 | 23 | Composer send and stop button | hover scale 1.05, 150 ms, `transition-all` | `chat/ComposerPrimaryActions.tsx:141,314` | `ComposerPrimaryButton.swift:140-155` | M |
 | 24 | Sidebar list reorder, enter, exit | 150 ms ease-out, translateY, fade, max 40 faded rows | `Sidebar.motion.ts:1-130` | `SidebarListView.swift:60-120` | M |
 | 25 | Settings search target pulse | box-shadow ring 650 ms ease-in-out, twice | `index.css:887-899` | `SettingsShellViews.swift:461-469` | M |
-| 26 | Dialog, alert dialog, sheet | backdrop 200 ms; popup scale .98, opacity, translate, 200 ms `ease-in-out`; nested dialog translate-y-8; sheet 32 px slide | `ui/dialog-styles.ts:2,8,14`, `ui/sheet.tsx:19,90-98` | `ModalHost.swift:150-185`, `ThreadPanelView.swift:636-650` | D |
+| 26 | Dialog, alert dialog, sheet | backdrop 200 ms; popup scale .98, opacity, translate, 200 ms `ease-in-out`; nested dialog translate-y-8; sheet 32 px slide | `ui/dialog-styles.ts:2,8,14`, `ui/sheet.tsx:19,90-98` | `ModalHost.swift:150-185`, `ThreadPanelView.swift:636-650`; 2026-10-11: curve was already right (Tailwind `ease-in-out` is `.4,0,.2,1`), nested offset added in `ModalHost.nestedDialogsChanged` | M |
 | 27 | Focus ring and border fade | `transition-shadow` 150 ms on input, textarea, checkbox, radio, toggle, badge, number field, input group, scroll area | `ui/input.tsx:68`, `textarea.tsx:20`, `checkbox.tsx:11`, `radio-group.tsx:22`, `toggle.tsx:9`, `badge.tsx:10`, `number-field.tsx:36`, `input-group.tsx:10`, `scroll-area.tsx:60` | ring appears and disappears instantly in `ControlView.stateDidChange` | D |
 | 28 | Panel animations | width, left, right, grid-rows, padding-left, opacity at the user duration, `ease-out`; default 0 | `ui/sidebar.tsx:287,299,493`, `ChatView.tsx:1325,11218,11284`, `preview/PreviewPanelShell.tsx:119` | `SettingsPanelMotion.swift:1-18` translates only (`ponytail` comment) | D |
 | 29 | Slider thumb | transform and box-shadow 120 ms `ease`, hover scale 1.08 | `index.css:970-995` | `SliderView.swift:48` sets the scale with no animation | D |
@@ -52,18 +52,18 @@ Status: M matches, D differs, X missing. T3 count is 50 grouped items: 25 M, 7 D
 | 32 | Sidebar drag and drop | rows 200 ms dnd-kit transition, lifted row 150 ms ease-out, label reveal 200 ms step-end | `Sidebar.tsx:654-706`, `index.css:2207` | not checked, no drag-specific animation found in `SidebarListView.swift` | D |
 | 33 | `transition-colors` on links, rows, tabs, pills, headers | color and background 150 ms | 68 uses, e.g. `chat/MessagesTimeline.tsx:2709,2733`, `chat/ChatHeader.tsx:279`, `RightPanelTabs.tsx:511`, `Sidebar.tsx:1765,5563`, `chat/ComposerPrimaryActions.tsx:373`, `ui/toast.tsx:100,159,227` | `restyle()` snaps colors | X |
 | 34 | `transition-opacity` hover reveals | opacity 150 ms (200 ms on timeline strip and meta); sidebar row actions, labels, unpin, header pencil, attachment remove | 56 uses, e.g. `Sidebar.tsx:933,1827,1858,1903,2094`, `chat/ChatHeader.tsx:341`, `chat/ChatComposer.tsx:7203`, `MessagesTimeline.tsx:1792,1902,1971` | 2026-10-11 hoverscope: fixed through `HoverReveal.fade` for sidebar row actions, labels and favicon, draft discard, header chevron, keybinding menu, minimap, address bar, usage chevrons, diff comment and PR pencils; table in docs/research/hover-reveals-2026-10-11.md | M |
-| 35 | Disclosure chevron rotation | rotate 180 or 90, 150 or 200 ms | `MessagesTimeline.tsx:3155,3388,5715`, `chat/ModelPickerContent.tsx:1012`, `onboarding/WelcomeWizard.tsx:1613`, `settings/ThemeColorPicker.tsx:269` (29 `transition-transform` uses) | timeline fold rows swap two icons (`TimelineFoldRows.swift:10-34`) | X |
-| 36 | Streaming block fade-in | opacity 0 to 1, 600 ms ease-out, new paragraph or code block only while streaming, off under Reduce Motion | `index.css:2009-2020` | none | X |
-| 37 | Composer banner stack | grid rows 150 ms ease-out; opacity and translate 150 ms ease-out in, 220 ms ease-in out | `chat/ComposerBannerStack.tsx:9,179-224` | none in `ComposerBannerView.swift` | X |
-| 38 | Composer collapse and expand | mount scale .95 to 1 and opacity, 300 ms `ease-drawer`; surface bg 200 ms; model strip glass swap | `chat/ChatComposer.tsx:404,6906`, `chat/ComposerSurface.tsx:24,69` | none | X |
-| 39 | Composer context label and stash badge | label opacity 180 ms `ease-drawer`; badge translate-y .5 and opacity 180 ms `ease-out`, replays on count change | `ComposerContextLabel.tsx:28`, `chat/ComposerStashBadge.tsx:28,49` | none | X |
-| 40 | Context window meter | `stroke-dashoffset`, `width`, color 500 ms ease-out | `chat/ContextWindowMeter.tsx:82,126` | none in `ThreadContextWindowMeterView.swift` | X |
+| 35 | Disclosure chevron rotation | rotate 180 or 90, 150 or 200 ms | `MessagesTimeline.tsx:3155,3388,5715`, `chat/ModelPickerContent.tsx:1012`, `onboarding/WelcomeWizard.tsx:1613`, `settings/ThemeColorPicker.tsx:269` (29 `transition-transform` uses) | timeline fold rows swap two icons (`TimelineFoldRows.swift:10-34`); 2026-10-11: `IconView.setRotation`, fold rows use the morph spring | M |
+| 36 | Streaming block fade-in | opacity 0 to 1, 600 ms ease-out, new paragraph or code block only while streaming, off under Reduce Motion | `index.css:2009-2020` | none; 2026-10-11: `MarkdownView.fadesNewBlocks` | M |
+| 37 | Composer banner stack | grid rows 150 ms ease-out; opacity and translate 150 ms ease-out in, 220 ms ease-in out | `chat/ComposerBannerStack.tsx:9,179-224` | none in `ComposerBannerView.swift`; 2026-10-11: no stack, peek or dismissible banner in Swift yet, nothing to animate | X |
+| 38 | Composer collapse and expand | mount scale .95 to 1 and opacity, 300 ms `ease-drawer`; surface bg 200 ms; model strip glass swap | `chat/ChatComposer.tsx:404,6906`, `chat/ComposerSurface.tsx:24,69` | none; 2026-10-11: collapse is mobile only in T3; desktop has no motion to copy | M |
+| 39 | Composer context label and stash badge | label opacity 180 ms `ease-drawer`; badge translate-y .5 and opacity 180 ms `ease-out`, replays on count change | `ComposerContextLabel.tsx:28`, `chat/ComposerStashBadge.tsx:28,49` | none; 2026-10-11: needs the toolbar compact mode first | X |
+| 40 | Context window meter | `stroke-dashoffset`, `width`, color 500 ms ease-out | `chat/ContextWindowMeter.tsx:82,126` | none in `ThreadContextWindowMeterView.swift`; 2026-10-11: arc shape layer, 500ms | M |
 | 41 | Draft hero to thread transition | composer slides with `translate3d`, panel duration, `cubic-bezier(.4,0,.2,1)`; headline exits up 6 px | `ChatView.tsx:660-690`, `chat/draftHeroTransition.ts:2`, `index.css:68-90` | none (depends on item 28 setting) | X |
 | 42 | Select trigger, toggle, number-field button fades | color, shadow, bg 150 ms | `ui/select.tsx:14`, `ui/toggle.tsx:34`, `ui/number-field.tsx:52,70` | snap | X |
 | 43 | Tooltip and popover positioner morph | top, left, transform transition so a popup glides between triggers | `ui/tooltip.tsx:105,126`, `ui/popover.tsx:76,104` | none | X |
-| 44 | Connection status ping | halo scale .75 to 2, opacity .9 to 0, 2 s steps(8) for connecting and reconnecting | `ConnectionStatusDot.tsx:21-42`, `index.css:317` | `ConnectionsHostViews.swift:307` has a `ponytail` note, no ring | X |
-| 45 | Diff expand fade | 200 ms fade on expand | `diffs/StyledDiffCodeView.tsx:232,245` | `docs/design.md` Known gaps | X |
-| 46 | Working activity band | translateX loop 2.2 s linear on the live row | `index.css:556-622` | none | X |
+| 44 | Connection status ping | halo scale .75 to 2, opacity .9 to 0, 2 s steps(8) for connecting and reconnecting | `ConnectionStatusDot.tsx:21-42`, `index.css:317` | `ConnectionsHostViews.swift:307` has a `ponytail` note, no ring; 2026-10-11: `StatusDotView.pings` | M |
+| 45 | Diff expand fade | 200 ms fade on expand | `diffs/StyledDiffCodeView.tsx:232,245` | `docs/design.md` Known gaps; 2026-10-11: `DiffListView.fadingFiles` | M |
+| 46 | Working activity band | translateX loop 2.2 s linear on the live row | `index.css:556-622` | none; 2026-10-11: `ShineLabelView.Style.focus` on Thinking and compaction | M |
 | 47 | Sidebar working row recede | whole row opacity .7 to 1 on hover or focus | `Sidebar.tsx:1598,1668` | 2026-10-11 hoverscope: `SidebarCardRowView.refresh` fades 0.7 to 1 in 150 ms | M |
 | 48 | Pull request panel transitions | 100, 150, 200 ms colors and opacity | `pullRequest/PullRequestDetailPanel.tsx:1687-1690,2250,2602` | none | X |
 | 49 | Menu switch item thumb | same as the switch | `ui/menu.tsx:148,151` | not checked in `MenuView.swift`, treat as missing | X |

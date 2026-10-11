@@ -40,7 +40,7 @@ final class DiffFileHeaderView: DiffRowView {
     private(set) var file = -1
     var onToggle: (@MainActor (Int) -> Void)?
     var onOpenFile: (@MainActor (String) -> Void)?
-    private var path = ""
+    private(set) var path = ""
     /// The pull request Code tab's "Viewed" tick (PullRequestCodeTab.tsx:849-880): a checkbox and
     /// its word, "Changed" when the file moved since it was ticked. Hidden outside that tab.
     let viewedBox = CheckboxView()
@@ -79,8 +79,11 @@ final class DiffFileHeaderView: DiffRowView {
 
     func configure(file index: Int, _ file: UnifiedDiff.File, collapsed: Bool, statStyle: DiffStatStyle) {
         self.file = index
+        // `MorphIcon` chevron-right to chevron-down (DiffPanel.tsx:123-164): a quarter turn on a spring,
+        // only when the same file toggles; a reused header snaps.
+        let sameFile = path == file.path
         path = file.path
-        chevron.icon = collapsed ? .chevronRight : .chevronDown
+        chevron.setIconRotation(collapsed ? 0 : 90, motion: sameFile ? .morph : .none)
         chevron.iconColor = DiffStyle.iconColor(file.change)
         icon.change = file.change
         title.text = file.path

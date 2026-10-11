@@ -17,6 +17,10 @@ public final class ModalHost: DSView {
     private let blurred = CALayer()
     private weak var previousResponder: NSResponder?
     private(set) var isClosing = false
+    /// The dialog that was open under this one: base-ui marks this popup `data-nested`.
+    private weak var parentHost: ModalHost?
+    /// `--nested-dialogs`: how many dialogs are open above this one.
+    private var nestedDialogs = 0
 
     /// Presents `panel` over `window`'s content view and returns the host.
     @discardableResult
@@ -25,12 +29,14 @@ public final class ModalHost: DSView {
         host.previousResponder = window.firstResponder
         if blurBackdrop, let content = window.contentView { host.blurred.contents = Self.blurredSnapshot(of: content) }
         let container = window.contentView!
+        host.parentHost = container.subviews.last { ($0 as? ModalHost)?.isClosing == false } as? ModalHost
         host.frame = container.bounds
         host.autoresizingMask = [.width, .height]
         container.addSubview(host)
         host.layoutSubtreeIfNeeded()
         host.trapFocus()
         host.animate(entering: true)
+        host.parentHost?.nestedDialogsChanged(by: 1)
         return host
     }
 
@@ -65,6 +71,13 @@ public final class ModalHost: DSView {
         blurred.frame = bounds
         CATransaction.commit()
         panel.frame = Self.panelFrame(for: panel, in: bounds.size)
+        // AppKit resets a view layer's transform when it syncs the frame.
+        if nestedDialogs > 0, panel.layer?.animation(forKey: "transform") == nil {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            panel.layer?.transform = nestedTransform()
+            CATransaction.commit()
+        }
     }
 
     /// T3's viewport placement at desktop widths.
@@ -101,6 +114,7 @@ public final class ModalHost: DSView {
     public func close() {
         guard !isClosing else { return }
         isClosing = true
+        parentHost?.nestedDialogsChanged(by: -1)
         if let previousResponder, let window { window.makeFirstResponder(previousResponder) }
         animate(entering: false) { [weak self] in
             self?.removeFromSuperview()
@@ -177,9 +191,11 @@ public final class ModalHost: DSView {
 
     private func hiddenTransform() -> CATransform3D {
         guard case .sheet(let side) = panel.kind else {
-            // Scale about the popup's center: the view layer's anchor is its origin.
+            // Scale about the popup's center: the view layer's anchor is its origin. A nested popup
+            // also starts and ends 32px lower (`data-nested:data-starting-style:translate-y-8`).
             let f = panel.frame
-            var t = CATransform3DMakeTranslation(f.width / 2, f.height / 2, 0)
+            let drop: CGFloat = parentHost == nil ? 0 : 32
+            var t = CATransform3DMakeTranslation(f.width / 2, f.height / 2 + drop, 0)
             t = CATransform3DScale(t, 0.98, 0.98, 1)
             return CATransform3DTranslate(t, -f.width / 2, -f.height / 2, 0)
         }
@@ -189,6 +205,37 @@ public final class ModalHost: DSView {
         case .top: return CATransform3DMakeTranslation(0, -32, 0)
         case .bottom: return CATransform3DMakeTranslation(0, 32, 0)
         }
+    }
+
+    // MARK: Nested dialogs
+
+    /// T3's popup under an open nested dialog moves up 1.25rem, scales by 1 - .1n about its top edge and
+    /// fades to 1 - .1n per nested dialog, over the popup's 200ms transition (`dialog-styles.ts:8`).
+    private func nestedDialogsChanged(by delta: Int) {
+        nestedDialogs = max(0, nestedDialogs + delta)
+        parentHost?.nestedDialogsChanged(by: delta)
+        // Sheets have their own popup classes without the nested offset.
+        if case .sheet = panel.kind { return }
+        guard let panelLayer = panel.layer else { return }
+        let transform = nestedTransform(), opacity = Float(1 - 0.1 * CGFloat(nestedDialogs))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if !Motion.reduced {
+            Motion.animate(panelLayer, keyPath: "transform", to: NSValue(caTransform3D: transform), duration: 0.2)
+            Motion.animate(panelLayer, keyPath: "opacity", to: opacity, duration: 0.2)
+        }
+        panelLayer.transform = transform
+        panelLayer.opacity = opacity
+        CATransaction.commit()
+    }
+
+    private func nestedTransform() -> CATransform3D {
+        guard nestedDialogs > 0 else { return CATransform3DIdentity }
+        let n = CGFloat(nestedDialogs), w = panel.frame.width
+        // `origin-top`: y grows downward here, so the top edge is y = 0.
+        var t = CATransform3DMakeTranslation(w / 2, -20 * n, 0)
+        t = CATransform3DScale(t, 1 - 0.1 * n, 1 - 0.1 * n, 1)
+        return CATransform3DTranslate(t, -w / 2, 0, 0)
     }
 
     // MARK: Backdrop blur

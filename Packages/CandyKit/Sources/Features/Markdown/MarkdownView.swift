@@ -17,6 +17,9 @@ public final class MarkdownView: DSView {
     public var document = MarkdownDocument(blocks: []) {
         didSet {
             guard document != oldValue else { return }
+            if fadesNewBlocks, document.blocks.count > oldValue.blocks.count {
+                fadeIn(blocks: oldValue.blocks.count..<document.blocks.count)
+            }
             // A reset wrap or diagram toggle changes a block in place; only plain growth redraws in part.
             let toggled = !unwrappedCode.isEmpty || !diagramCode.isEmpty
             clearAssistantSelection(); unwrappedCode = []; diagramCode = []
@@ -170,10 +173,87 @@ public final class MarkdownView: DSView {
         else if newSize.height > oldHeight { setNeedsDisplay(NSRect(x: 0, y: oldHeight, width: newSize.width, height: newSize.height - oldHeight)) }
     }
 
+    // MARK: Streaming fade
+
+    /// T3 fades each top-level block a streaming answer adds, opacity 0 to 1 over 600ms `ease-out`
+    /// (`index.css:2007-2020`, gated on `data-streaming` so history never replays it). The owner sets
+    /// this only while the same message streams. The fade is a mask: one opaque band above the new
+    /// blocks and one band per new block whose opacity animates, so chips and buttons fade with it.
+    public var fadesNewBlocks = false
+    private(set) var fadeMask: CALayer?
+    private(set) var fadeBands: [(block: Int, layer: CALayer)] = []
+    private var fadeEnd: CFTimeInterval = 0
+    /// CSS `ease-out`.
+    private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.58, 1)
+
+    private func fadeIn(blocks: Range<Int>) {
+        guard window != nil, !Motion.reduced, let layer else { return }
+        let mask: CALayer
+        if let fadeMask { mask = fadeMask } else {
+            mask = CALayer()
+            mask.addSublayer(CALayer()) // the settled band above the fading blocks
+            fadeMask = mask
+            layer.mask = mask
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for block in blocks {
+            let band = CALayer()
+            band.backgroundColor = CGColor(gray: 0, alpha: 1)
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+            fade.duration = 0.6
+            fade.timingFunction = Self.easeOut
+            band.add(fade, forKey: "opacity")
+            mask.addSublayer(band)
+            fadeBands.append((block, band))
+        }
+        fadeEnd = CACurrentMediaTime() + 0.6
+        CATransaction.commit()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, CACurrentMediaTime() >= self.fadeEnd else { return }
+                self.cancelBlockFades()
+            }
+        }
+        needsLayout = true
+    }
+
+    /// Drops any running fade at once, for a recycled view that now shows another message.
+    public func cancelBlockFades() {
+        guard fadeMask != nil else { return }
+        layer?.mask = nil
+        fadeMask = nil
+        fadeBands = []
+    }
+
+    private func layoutFadeMask() {
+        guard let mask = fadeMask, let first = fadeBands.first else { return }
+        let tops = bounds.width > 0 ? layout(forWidth: bounds.width).blockTops : []
+        guard tops.count == document.blocks.count, first.block < tops.count else { cancelBlockFades(); return }
+        // Wide margins: glyphs, rings and shadows that reach past the bounds stay visible.
+        let margin: CGFloat = 400
+        let x = -margin, w = bounds.width + 2 * margin
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mask.frame = bounds
+        mask.sublayers?.first?.backgroundColor = CGColor(gray: 0, alpha: 1)
+        mask.sublayers?.first?.frame = CGRect(x: x, y: -margin, width: w, height: tops[first.block] + margin)
+        for (i, band) in fadeBands.enumerated() {
+            let top = band.block < tops.count ? tops[band.block] : bounds.height
+            let bottom = i + 1 < fadeBands.count ? min(tops.count > fadeBands[i + 1].block ? tops[fadeBands[i + 1].block] : bounds.height, bounds.height + margin)
+                                                 : bounds.height + margin
+            band.layer.frame = CGRect(x: x, y: top, width: w, height: max(0, bottom - top))
+        }
+        CATransaction.commit()
+    }
+
     // MARK: Controls
 
     public override func layout() {
         super.layout()
+        layoutFadeMask()
         layoutChips()
         layoutLinks()
         layoutImages()
