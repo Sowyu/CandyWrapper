@@ -2,6 +2,7 @@ import AppKit
 import AVKit
 import DesignSystem
 import PDFKit
+import T3Protocol
 import WebKit
 
 /// One file tab (FilePreviewPanel.tsx): the subheader with breadcrumbs and icon actions, the body
@@ -32,6 +33,7 @@ public final class FileSurfaceView: DSView {
     /// The explorer shown beside the file, owned by the right panel.
     public weak var explorer: FilesPanelView? { didSet { needsLayout = true } }
 
+    public var onReviewComment: ((JSONValue) -> Void)?
     public var onEdit: (@MainActor (String) -> Void)?
     public var onOpenFile: (@MainActor (String) -> Void)?
     /// Lists a folder for a breadcrumb menu.
@@ -42,6 +44,7 @@ public final class FileSurfaceView: DSView {
 
     // Chrome
     private let crumbs = FileBreadcrumbsView()
+    private let commentButton = ButtonView(nil, icon: .messageCircle, variant: .ghost, size: .iconSm)
     private let renderToggle = ToggleView(nil, icon: .eye, variant: .ghost, size: .sm)
     private let wrapToggle = ToggleView(nil, icon: .textWrap, variant: .ghost, size: .sm, pressed: true)
     private let explorerToggle = ToggleView(nil, icon: .folderTree, variant: .ghost, size: .sm, pressed: true)
@@ -74,6 +77,9 @@ public final class FileSurfaceView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for t in [renderToggle, wrapToggle, explorerToggle] { t.iconSize = 14 }
+        commentButton.setAccessibilityLabel("Comment on selected lines")
+        commentButton.toolTip = "Comment on selected lines"
+        commentButton.action = { [weak self] in self?.commentOnSelection() }
         renderToggle.onPressedChange = { [weak self] on in self?.setRendered(on) }
         wrapToggle.onPressedChange = { [weak self] on in self?.wrap = on }
         wrapToggle.setAccessibilityLabel("Disable word wrap")
@@ -89,7 +95,7 @@ public final class FileSurfaceView: DSView {
         notice.isHidden = true
         noticeBar.isHidden = true
         for l in [noticeBar, asideBorder] { l.actions = ["frame": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
-        [crumbs, renderToggle, wrapToggle, explorerToggle, notice].forEach(addSubview)
+        [crumbs, renderToggle, wrapToggle, explorerToggle, notice, commentButton].forEach(addSubview)
         explorerToggle.isPressed = explorerOpen
         clipsToBounds = true
     }
@@ -273,10 +279,27 @@ public final class FileSurfaceView: DSView {
         wrapToggle.setAccessibilityLabel(wrapLabel)
         wrapToggle.toolTip = wrapLabel
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
+        commentButton.isHidden = code == nil || onReviewComment == nil || attachmentMode
         let explorerLabel = explorerOpen ? "Hide file explorer" : "Show file explorer"
         explorerToggle.setAccessibilityLabel(explorerLabel)
         explorerToggle.toolTip = explorerLabel
         needsLayout = true
+    }
+
+    // ponytail: file comments use the shared editor in a dialog; inline cards and edit remapping need the source annotation layout
+    private func commentOnSelection() {
+        guard let code, let window else { return }
+        let text = code.textView.string, selection = code.textView.selectedRange(), path = self.path
+        let annotation = DiffReviewAnnotationView()
+        annotation.frame.size = NSSize(width: 400, height: 114)
+        let dialog = DialogView(title: "File comment")
+        dialog.panelContent = [annotation]
+        let host = ModalHost.present(dialog, in: window)
+        annotation.onCancel = { [weak host] in host?.close() }
+        annotation.onSubmit = { [weak self, weak host] comment in
+            guard let record = FileCommentContext.record(path: path, contents: text, selection: selection, text: comment) else { return }
+            self?.onReviewComment?(record); host?.close()
+        }
     }
 
     private var isDirectory: Bool { if case .directory = content { true } else { false } }
@@ -295,6 +318,9 @@ public final class FileSurfaceView: DSView {
         for t in [explorerToggle, wrapToggle, renderToggle] where !t.isHidden {
             t.frame = NSRect(x: right - 28, y: 0, width: 28, height: 28)
             right -= 28 + 8
+        }
+        if !commentButton.isHidden {
+            commentButton.frame = NSRect(x: right - 28, y: 0, width: 28, height: 28); right -= 36
         }
         crumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12 + 8 - 8), height: h)
         var top = h + 12

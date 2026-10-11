@@ -397,7 +397,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)
-        return section("about", "About", [versionRow, trackRow, privacy])
+        let mobile = row("nightly-mobile-beta", title: "Mobile app", detail: "Nightly needs the beta app. The App Store and Google Play versions cannot connect.", control: NightlyMobileBetaView())
+        return section("about", "About", [versionRow, trackRow, mobile, privacy])
     }
 
     private func diagnosticsSection() -> SettingsSectionView {

@@ -374,6 +374,7 @@ final class ThreadController {
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
         panel.confirmCloseTerminalTab = { [weak self] surface, close in self?.terminal.confirmCloseSurface(surface, then: close) }
         panel.diffPanel.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
+        panel.fileSurface.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
         panel.diffPanel.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
         terminal.onAddToChat = { [weak self] selection in self?.composer.addTerminalContext(selection) }
         clones.openProject = { [weak self, weak sidebar] id in
@@ -394,6 +395,13 @@ final class ThreadController {
         // A chat file chip opens the file tab at its line (ChatMarkdown.tsx `fileLinkChip`).
         // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
         panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
+        panel.model.onCiteSelection = { [weak self] messageId, selection in
+            guard let self, let id = self.openThreadId, let env = id.environmentId, let window = self.panel.window else { return }
+            let citation = ThreadAssistantCitation.selection(environmentId: env, threadId: id.localId.rawValue, messageId: messageId, selection: selection)
+            ThreadAssistantCitationEditor.present(citation, in: window) { [weak self] edited in
+                self?.panel.composer.insertAtCaret(edited.markdown + " ")
+            }
+        }
         MarkdownView.onOpenCitation = { [weak self] citation in
             self?.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
             self?.panel.timeline.revealFindEntry(citation.messageId)

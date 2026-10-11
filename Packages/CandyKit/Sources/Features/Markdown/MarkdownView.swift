@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import T3Store
+import T3Protocol
 
 /// T3's `ChatMarkdown` for one message: all text, rules and boxes drawn into one layer, plus the
 /// code block and table buttons as real controls. Height follows the width: `height(forWidth:)`
@@ -13,7 +14,7 @@ public final class MarkdownView: DSView {
     public var threadFindQuery = "" { didSet { if threadFindQuery != oldValue { needsDisplay = true } } }
 
     public var document = MarkdownDocument(blocks: []) {
-        didSet { if document != oldValue { unwrappedCode = []; diagramCode = []; invalidate(); observeDiagrams() } }
+        didSet { if document != oldValue { clearAssistantSelection(); unwrappedCode = []; diagramCode = []; invalidate(); observeDiagrams() } }
     }
 
     /// Body text color; nil is T3's 80% foreground. Headings, links and code keep their own colors.
@@ -46,6 +47,7 @@ public final class MarkdownView: DSView {
         document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
     }
 
+    public var inlineSkills: [ServerProviderSkill] = [] { didSet { if inlineSkills != oldValue { invalidate() } } }
     private var unwrappedCode: Set<Int> = []
     private var cache: [CGFloat: MarkdownLayout] = [:]
     private var buttons: [ButtonView] = []
@@ -102,7 +104,7 @@ public final class MarkdownView: DSView {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
-        let made = MarkdownLayout(document: document, width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams)
+        let made = MarkdownLayout(document: MarkdownInlineSkills.document(document, skills: inlineSkills), width: width, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams)
         cache[width] = made
         return made
     }
@@ -258,6 +260,75 @@ public final class MarkdownView: DSView {
         invalidate()
     }
 
+    // MARK: Assistant selection (AssistantSelectionToolbar.tsx)
+    // ponytail: selection uses layout text and a local toolbar; add chip text mapping and viewport dismissal with full selection parity
+
+    public var citationSourceID: String? { didSet { if citationSourceID != oldValue { clearAssistantSelection() } } }
+    public var onCiteSelection: ((AssistantSelectionText) -> Void)? {
+        didSet { if onCiteSelection == nil { clearAssistantSelection() } }
+    }
+    private var selectionAnchor: Int?
+    private var assistantRange: NSRange?
+    private var citeButton: ButtonView?
+    public override var acceptsFirstResponder: Bool { onCiteSelection != nil }
+
+    private var selectionBoxes: [(box: MarkdownTextBox, origin: CGPoint, offset: Int)] {
+        var offset = 0
+        return layout(forWidth: bounds.width).items.compactMap { item in
+            guard case .text(let box, let origin) = item else { return nil }
+            defer { offset += (box.text as NSString).length + 1 }
+            return (box, origin, offset)
+        }
+    }
+    private var selectionText: String { selectionBoxes.map { $0.box.text }.joined(separator: "\n") }
+    private func selectionIndex(_ point: CGPoint) -> Int? {
+        let boxes = selectionBoxes
+        guard let hit = boxes.min(by: {
+            abs($0.origin.y + $0.box.height / 2 - point.y) < abs($1.origin.y + $1.box.height / 2 - point.y)
+        }) else { return nil }
+        return hit.offset + hit.box.character(at: CGPoint(x: point.x - hit.origin.x, y: point.y - hit.origin.y))
+    }
+    public func clearAssistantSelection() {
+        selectionAnchor = nil; assistantRange = nil
+        citeButton?.removeFromSuperview(); citeButton = nil
+        needsDisplay = true
+    }
+    public override func mouseDown(with event: NSEvent) {
+        guard onCiteSelection != nil else { super.mouseDown(with: event); return }
+        window?.makeFirstResponder(self)
+        clearAssistantSelection()
+        selectionAnchor = selectionIndex(convert(event.locationInWindow, from: nil))
+    }
+    public override func mouseDragged(with event: NSEvent) {
+        guard let anchor = selectionAnchor, let end = selectionIndex(convert(event.locationInWindow, from: nil)) else { return }
+        assistantRange = NSRange(location: min(anchor, end), length: abs(end - anchor))
+        needsDisplay = true
+    }
+    public override func mouseUp(with event: NSEvent) {
+        guard let range = assistantRange, let captured = AssistantSelectionText.capture(selectionText, range: range) else { return }
+        let tooLong = captured.text.utf16.count > 8000
+        let button = AssistantSelectionToolbar.button(tooLong: tooLong)
+        let point = convert(event.locationInWindow, from: nil), size = button.intrinsicContentSize
+        button.frame = NSRect(x: max(0, min(point.x + 8, bounds.width - size.width)),
+                              y: max(0, min(point.y + 8, bounds.height - size.height)), width: size.width, height: size.height)
+        button.action = { [weak self] in self?.onCiteSelection?(captured); self?.clearAssistantSelection() }
+        citeButton?.removeFromSuperview(); citeButton = button; addSubview(button)
+    }
+    public override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { clearAssistantSelection(); return }
+        if event.keyCode == 48, let citeButton, citeButton.isEnabled { window?.makeFirstResponder(citeButton); return }
+        if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "c", let range = assistantRange {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString((selectionText as NSString).substring(with: range), forType: .string)
+            return
+        }
+        super.keyDown(with: event)
+    }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { clearAssistantSelection() }
+    }
+
     // MARK: Drawing
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -267,9 +338,21 @@ public final class MarkdownView: DSView {
         let dark = effectiveAppearance.isDark
         var chipIndex = -1
         var findOccurrence = 0
+        var selectionOffset = 0
         for item in layout(forWidth: bounds.width).items {
             switch item {
             case .text(let box, let origin):
+                if let range = assistantRange {
+                    let overlap = NSIntersectionRange(range, NSRange(location: selectionOffset, length: (box.text as NSString).length))
+                    if overlap.length > 0 {
+                        ctx.setFillColor(NSColor.selectedTextBackgroundColor.withAlphaComponent(0.5).cgColor)
+                        for span in box.spans(NSRange(location: overlap.location - selectionOffset, length: overlap.length)) {
+                            ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                                            width: max(1, span.x1 - span.x0), height: box.lineHeight))
+                        }
+                    }
+                }
+                selectionOffset += (box.text as NSString).length + 1
                 if !threadFindQuery.isEmpty {
                     let text = box.text as NSString
                     var remaining = NSRange(location: 0, length: text.length)

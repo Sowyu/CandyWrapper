@@ -1,0 +1,15 @@
+.wp717-full-tests.log
+✔ Test run with 262 tests in 34 suites passed after 2.320 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.232 seconds.
+✔ Test run with 125 tests in 28 suites passed after 6.926 seconds.
+FIDELITY WP717: 4 cases, mean 3.401499186631174%, worst 4.0561224489795915%
+✔ Test run with 397 tests in 92 suites passed after 93.857 seconds.
+✔ Test run with 82 tests in 17 suites passed after 48.847 seconds.
+
+.wp717-all-fidelity.log
+FIDELITY WP717: 4 cases, mean 3.401499186631174%, worst 4.0561224489795915%
+✔ Test run with 49 tests in 37 suites passed after 92.649 seconds.
+✔ Test run with 61 tests in 11 suites passed after 39.100 seconds.
+
+.wp717-build.log
+** BUILD SUCCEEDED **

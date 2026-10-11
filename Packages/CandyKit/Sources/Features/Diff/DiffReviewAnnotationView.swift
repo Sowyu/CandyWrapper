@@ -71,6 +71,7 @@ final class DiffReviewAnnotationView: DSView, DiffAnnotationContent {
             return false
         }
     }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 114) }
     func height(forWidth width: CGFloat) -> CGFloat { 114 }
     override func layout() {
         super.layout()

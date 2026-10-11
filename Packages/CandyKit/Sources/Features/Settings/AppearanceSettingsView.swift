@@ -62,7 +62,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             }
             tiles?.wireframeColors = (colors[0], colors[1])
             // Rebuilt only when what the cards show changed.
-            let custom = lib.customThemes
+            let custom = lib.customThemes + lib.environmentThemes.filter { theme in !lib.customThemes.contains { $0.id == theme.id } }
             let next = "\(lib.pickedModes(nil))|\(ThemeDefinition.builtIns.map { lib.pickedModes($0.id) })|"
                 + custom.map { "\($0.id):\($0.label):\(lib.pickedModes($0.id)):\(ThemeCardDefinition($0).previews.map(\.colors))" }.joined(separator: ",")
             guard next != signature, let grid else { return }
@@ -91,14 +91,17 @@ public final class AppearanceSettingsView: SettingsPageBase {
                 use: { lib.setTheme(theme.id) }, useMode: { lib.assignHalf($0, theme.id) },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) })))
         }
-        // ponytail: saved themes only; collections (imported VS Code variants) and environment-published themes have no cards, add them with ThemeImportDialog's VS Code and Open VSX paths
         for theme in custom {
-            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
+            var actions = ThemeLibraryCardView.Actions(
                 use: { lib.use(theme) }, useMode: { lib.assignHalf($0, theme.id) },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) },
                 edit: { editor.open(.init(editingThemeId: theme.id, seedThemeId: nil, seedName: nil, initialAppearance: appearance)) },
                 export: { [weak self] in self?.exportTheme(theme) },
-                remove: { [weak self] in self?.confirmRemoveTheme(theme) })))
+                remove: { [weak self] in self?.confirmRemoveTheme(theme) })
+            if !lib.customThemes.contains(where: { $0.id == theme.id }) {
+                actions.edit = nil; actions.export = nil; actions.remove = nil
+            }
+            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: actions))
         }
         return cards
     }
@@ -137,7 +140,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
             do {
                 let data = try Data(contentsOf: url)
                 guard data.count <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
-                let theme = try self.themes.install(ThemePalette.parseFile(JSONSerialization.jsonObject(with: data)))
+                let object = try JSONSerialization.jsonObject(with: data)
+                let theme = try self.themes.install(ThemeVSCodeImport.isTheme(object) ? ThemeVSCodeImport.parse(object) : ThemePalette.parseFile(object))
                 if let single = theme.singleAppearance {
                     self.themes.assignHalf(single, theme.id)
                     self.context.toast?("\(theme.label) added", "It’s now your \(single.rawValue) theme.", .success)

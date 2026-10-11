@@ -570,6 +570,8 @@ final class PullRequestRowView: DSView {
     private let glyph = PullRequestStateGlyphView()
     private let number = LabelView("", font: DSFont.mono(12))
     private let title = LabelView("", font: DSFont.ui(14))
+    private let watch = IconView(name: .eye, size: 14, strokeColor: Themed.color(\.mutedForeground))
+    private var watchTooltip: TooltipController?
     private let checks = CheckStatusGlyph()
     private let review = CheckStatusGlyph()
     private let stack = LabelView("", font: DSFont.ui(12))
@@ -610,7 +612,10 @@ final class PullRequestRowView: DSView {
         title.lineHeight = 20
         for l in [stack, login, repository, time] { l.lineHeight = 16 }
         diffStat.lineHeight = 16
-        [glyph, number, title, checks, review, stackIcon, stack, diffStat, elsewhere, provider, avatar, login, repository, time, branches].forEach(addSubview)
+        [glyph, number, title, watch, checks, review, stackIcon, stack, diffStat, elsewhere, provider, avatar, login, repository, time, branches].forEach(addSubview)
+        watch.isHidden = true
+        watch.setAccessibilityLabel("Watching")
+        watchTooltip = TooltipController.attach(to: watch, text: "Watching: the agent wakes when checks finish, someone comments, or the branch conflicts")
         branches.lineHeight = 16
         branches.truncation = .middle
         connector.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -634,6 +639,7 @@ final class PullRequestRowView: DSView {
         }
         panelDepth = line.depth
         configure(e, selected: false, showProvider: false, matchedElsewhere: false, speedMode: false, nowMs: nowMs)
+        watch.isHidden = link.watch == nil || (snap != nil && snap?.state != .open)
         // Not synced yet: the muted glyph ("Waiting for host state") and `host/repository` in mono.
         authorless = snap == nil || e.author == nil
         repository.font = snap == nil ? DSFont.mono(11) : DSFont.ui(11)
@@ -654,6 +660,7 @@ final class PullRequestRowView: DSView {
     }
 
     func configure(_ e: PullRequestListEntry, selected: Bool, showProvider: Bool, matchedElsewhere: Bool, speedMode: Bool, nowMs: Int64) {
+        watch.isHidden = true
         branches.text = ""
         authorless = false
         repository.font = DSFont.ui(11)
@@ -758,7 +765,7 @@ final class PullRequestRowView: DSView {
         let nw = ceil(number.textWidth)
         number.frame = NSRect(x: lx, y: top, width: nw + 1, height: 20)
         var x = lx + nw - 1 + 6
-        let signals = [checks, review].filter { !$0.isHidden }
+        let signals = ([watch, checks, review] as [NSView]).filter { !$0.isHidden }
         let signalsWidth = signals.isEmpty ? 0 : CGFloat(signals.count) * 14 + CGFloat(signals.count - 1) * 4 + 6
         let tw = min(ceil(title.textWidth) + 1, max(0, r - x - signalsWidth))
         title.frame = NSRect(x: x, y: top, width: tw, height: 20)

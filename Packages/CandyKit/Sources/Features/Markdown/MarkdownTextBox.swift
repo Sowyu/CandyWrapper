@@ -89,6 +89,15 @@ final class MarkdownTextBox {
         return rects
     }
 
+    func character(at point: CGPoint) -> Int {
+        guard !lines.isEmpty else { return 0 }
+        let line = lines[min(lines.count - 1, max(0, Int(point.y / lineHeight)))]
+        let attributed = line.fragment.attributedString.attributedSubstring(from: line.fragment.characterRange)
+        let ct = CTLineCreateWithAttributedString(attributed)
+        let offset = CTLineGetStringIndexForPosition(ct, CGPoint(x: point.x - line.x, y: 0))
+        return min((text as NSString).length, line.start + max(0, offset == kCFNotFound ? line.length : offset))
+    }
+
     /// Horizontal extent and baseline of `range` on each line it touches, relative to the box.
     func spans(_ range: NSRange) -> [(x0: CGFloat, x1: CGFloat, baseline: CGFloat)] {
         lines.compactMap { line in
