@@ -7,13 +7,17 @@ import T3Protocol
 /// Native transport for stream.ts:9-17. No sockets, decoder or HTTP body survive stop().
 @MainActor
 public final class DevicePanelStreamClient {
+    /// Android frames, decoded from H.264.
     public var onFrame: ((CGImage) -> Void)?
+    /// iOS frames: each JPEG decoded off the main thread into an IOSurface-backed buffer, as the browser
+    /// preview does since WP8.5 (docs/perf/README.md, "Heavy surfaces"), so Core Animation shows it as is.
+    public var onSurface: ((CVPixelBuffer) -> Void)?
     public var onOrientation: ((String) -> Void)?
     public var onError: ((String) -> Void)?
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var tasks: [Task<Void, Never>] = []
-    private let jpeg = FrameDecoder(decode: JPEGFrame.image)
+    private let jpeg = FrameDecoder(decode: { [decoder = JPEGSurfaceDecoder()] in decoder.decode($0) })
     private let video = DevicePanelVideoDecoder()
     private let platform: String
     private var stopped = false
@@ -26,7 +30,7 @@ public final class DevicePanelStreamClient {
         config.timeoutIntervalForRequest = 60
         let session = URLSession(configuration: config)
         self.session = session
-        jpeg.deliver = { [weak self] frame in self?.onFrame?(frame) }
+        jpeg.deliver = { [weak self] buffer in self?.onSurface?(buffer) }
         let socket = session.webSocketTask(with: inputURL)
         socket.maximumMessageSize = 16 * 1024 * 1024
         self.socket = socket

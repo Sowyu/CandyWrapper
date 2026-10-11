@@ -215,6 +215,8 @@ public final class OpenPopup {
     /// Called once after the popup closes.
     public var onClose: (@MainActor () -> Void)?
     let container = PopupContainer()
+    /// Scroll observers that keep the popup on a trigger that scrolls; gone when the popup closes.
+    var anchorObservers: [NSObjectProtocol] = []
 
     init(content: PopupContent, trigger: NSView?, anchorRect: CGRect?, placement: PopupPlacement, motion: PopupMotion,
          swallowsOutsideClick: Bool, pressesTrigger: Bool, returnsFocus: Bool, parent: OpenPopup?) {
@@ -292,6 +294,7 @@ public final class PopupHost: DSView {
         popups.append(popup)
         addSubview(popup.container)
         reposition(popup)
+        followTrigger(popup)
         if pressesTrigger { (trigger as? ControlView)?.isPopupOpen = true }
         if let control = trigger as? ControlView, pressDragMenu(in: content) != nil {
             // Backstop for a trigger built without `menuTrigger()`: it opens on press from its second use.
@@ -323,10 +326,40 @@ public final class PopupHost: DSView {
         popup.container.frame = frame
     }
 
+    /// floating-ui's `autoUpdate` keeps an open popup on its trigger when an ancestor scrolls. base-ui's
+    /// tooltip positioner glides there (`transition-[top,left,right,bottom,transform]`, tooltip.tsx:105);
+    /// a popover's positioner transitions only `transform`, which base-ui does not position with
+    /// (popover.tsx:76), so it moves at once, as menus and selects do. Reduce Motion snaps.
+    private func followTrigger(_ popup: OpenPopup) {
+        var clip = popup.trigger?.enclosingScrollView
+        while let scroll = clip {
+            let view = scroll.contentView
+            view.postsBoundsChangedNotifications = true
+            popup.anchorObservers.append(NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: view, queue: .main) {
+                [weak self, weak popup] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let popup, self.popups.contains(where: { $0 === popup }) else { return }
+                    let old = popup.container.layer.map { ($0.presentation() ?? $0).position }
+                    self.reposition(popup)
+                    guard popup.motion == .tooltip, !Motion.reduced, let old, let layer = popup.container.layer, layer.position != old else { return }
+                    let a = CABasicAnimation(keyPath: "position")
+                    a.fromValue = NSValue(point: old)
+                    a.toValue = NSValue(point: layer.position)
+                    a.duration = Motion.Durations.default
+                    a.timingFunction = Motion.easeInOut
+                    layer.add(a, forKey: "position")
+                }
+            })
+            clip = scroll.superview?.enclosingScrollView
+        }
+    }
+
     public func close(_ popup: OpenPopup, returnFocus: Bool = true) {
         guard let index = popups.firstIndex(where: { $0 === popup }) else { return }
         closeChildren(of: popup)
         popups.remove(at: index)
+        popup.anchorObservers.forEach(NotificationCenter.default.removeObserver)
+        popup.anchorObservers.removeAll()
         if popup.pressesTrigger { (popup.trigger as? ControlView)?.isPopupOpen = false }
         if returnFocus, popup.returnsFocus, let trigger = popup.trigger, trigger.acceptsFirstResponder {
             window?.makeFirstResponder(trigger)

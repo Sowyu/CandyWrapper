@@ -447,7 +447,8 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         layer?.addSublayer(rule)
         createLink.iconSize = 12
         for v in [header, revokeOthers, createLink] as [NSView] { addSubview(v) }
-        header.action = { [weak self] in guard let self else { return }; self.isOpen.toggle() }
+        // `FoldedSettingsSection`'s `CollapsiblePanel` (FoldedSettingsSection.tsx:90): rows slide open over 200 ms.
+        header.action = { [weak self] in guard let self else { return }; CollapseMotion.run(in: self) { self.isOpen.toggle() } }
         revokeOthers.action = { [weak self] in self?.actions.revokeOtherClients() }
         createLink.action = { [weak self] in self?.actions.createPairingLink() }
     }

@@ -88,13 +88,20 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
             let key = "\(entry.kind):\(entry.name):\(entry.version ?? "")"
             let toggle = ButtonView(nil, icon: expanded.contains(key) ? .chevronDown : .chevronRight, variant: .ghostMuted, size: .iconXs)
             toggle.setAccessibilityLabel("Show license for \(entry.name)")
-            toggle.action = { [weak self] in
-                guard let self else { return }
-                if !self.expanded.insert(key).inserted { self.expanded.remove(key) }
-                self.rebuild()
-            }
             let row = SettingsRowView(title: entry.name + (entry.version.map { " \($0)" } ?? ""),
                                       detail: "\(entry.license) · \(entry.bundles.joined(separator: ", "))", control: toggle)
+            // `CollapsiblePanel` (OpenSourceLicenses.tsx:76): the notice slides open over 200 ms. It renders only
+            // while open, so closing leaves an empty gap that closes, as in T3.
+            toggle.action = { [weak self, weak row, weak toggle] in
+                guard let self, let row, let toggle else { return }
+                CollapseMotion.run(in: row) {
+                    let open = self.expanded.insert(key).inserted
+                    if !open { self.expanded.remove(key) }
+                    toggle.icon = open ? .chevronDown : .chevronRight
+                    row.footer = open ? SettingsLicenseNoticeView(entry.noticeText) : nil
+                    self.onHeightChange?()
+                }
+            }
             if let url = entry.sourceUrl.flatMap(URL.init(string:)) {
                 let source = ButtonView(nil, icon: .externalLink, variant: .ghostMuted, size: .iconMicro)
                 source.setAccessibilityLabel("View project source for \(entry.name)")

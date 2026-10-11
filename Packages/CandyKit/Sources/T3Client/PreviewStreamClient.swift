@@ -214,13 +214,6 @@ final class FrameDecoder<Frame>: @unchecked Sendable {
 }
 
 enum JPEGFrame {
-    /// An ImageIO image. Core Animation decodes it again on the main thread when a layer shows it
-    /// (`CA::Render::copy_image` asks ImageIO for an IOSurface). Only the device panel uses it.
-    static func image(_ jpeg: Data) -> CGImage? {
-        guard let source = CGImageSourceCreateWithData(jpeg as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
-    }
-
     /// The frame's size from its header, without decoding it.
     static func size(_ jpeg: Data) -> (width: Int, height: Int)? {
         guard let source = CGImageSourceCreateWithData(jpeg as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),

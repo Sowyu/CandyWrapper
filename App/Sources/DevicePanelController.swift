@@ -154,6 +154,7 @@ final class DevicePanelController {
                 self.stream = client
                 client.onOrientation = { [weak self] orientation in self?.view.viewer.orientation = orientation; self?.floatingViewer.orientation = orientation }
                 client.onFrame = { [weak self] frame in guard let self else { return }; (self.floating ? self.floatingViewer : self.view.viewer).present(frame) }
+                client.onSurface = { [weak self] buffer in guard let self else { return }; (self.floating ? self.floatingViewer : self.view.viewer).present(surface: buffer) }
                 client.onError = { [weak self] error in self?.view.showError(error) }
                 client.start(videoURL: video, inputURL: input)
             } catch { if !Task.isCancelled { self?.view.showError("Could not connect to device support.") } }

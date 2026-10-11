@@ -1,4 +1,6 @@
 import AppKit
+import CoreImage
+import CoreVideo
 import DesignSystem
 import T3Protocol
 
@@ -185,7 +187,7 @@ public final class DevicePanelStreamView: DSView {
         if let flag { onKey?(event.keyCode, nil, event.modifierFlags.contains(flag)) }
     }
     public var onFrameAvailability: ((Bool) -> Void)?
-    public var hasFrame: Bool { latestImage != nil }
+    public var hasFrame: Bool { latestImage != nil || latestSurface != nil }
     public private(set) var threeDView: DeviceThreeDView?
     public var showsThreeD: Bool { threeDView != nil }
     public func setThreeD(_ enabled: Bool) {
@@ -195,13 +197,14 @@ public final class DevicePanelStreamView: DSView {
             view.onTouch = { [weak self] in self?.onTouch?($0, $1, $2) }
             view.onKey = { [weak self] in self?.onKey?($0, $1, $2) }
             threeDView = view; addSubview(view)
-            if let image = latestImage { view.present(image) }
+            if let image = latestImage ?? latestSurface.flatMap(Self.image) { view.present(image) }
         } else {
             threeDView?.releaseResources(); threeDView?.removeFromSuperview(); threeDView = nil
         }
         screen.isHidden = enabled
     }
     private var latestImage: CGImage?
+    private var latestSurface: CVPixelBuffer?
     private let screen = CALayer()
     private var size = CGSize(width: 390, height: 844)
     private var touching = false
@@ -213,13 +216,30 @@ public final class DevicePanelStreamView: DSView {
     }
     public func present(_ image: CGImage) {
         size = CGSize(width: image.width, height: image.height)
-        if latestImage == nil { onFrameAvailability?(true) }
+        if !hasFrame { onFrameAvailability?(true) }
         latestImage = image
+        latestSurface = nil
         screen.contents = image
         threeDView?.present(image)
         needsLayout = true
     }
-    public func clear() { setThreeD(false); onFrameAvailability?(false); latestImage = nil; screen.contents = nil; touching = false }
+    /// A decoded JPEG frame in an IOSurface: the layer shows the surface with no decode on the main thread.
+    public func present(surface buffer: CVPixelBuffer) {
+        size = CGSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+        if !hasFrame { onFrameAvailability?(true) }
+        latestSurface = buffer
+        latestImage = nil
+        screen.contents = CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue()
+        // ponytail: the 3D view's SceneKit texture takes a CGImage, copied per frame on the main thread; feed it a Metal texture if 3D streaming shows in a profile
+        if let threeDView, let image = Self.image(buffer) { threeDView.present(image) }
+        needsLayout = true
+    }
+    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    private static func image(_ buffer: CVPixelBuffer) -> CGImage? {
+        let ci = CIImage(cvPixelBuffer: buffer)
+        return imageContext.createCGImage(ci, from: ci.extent)
+    }
+    public func clear() { setThreeD(false); onFrameAvailability?(false); latestImage = nil; latestSurface = nil; screen.contents = nil; touching = false }
     public override func layout() {
         super.layout()
         threeDView?.frame = bounds

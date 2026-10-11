@@ -375,7 +375,9 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
 
 /// One comment of a conversation: author and time, the reactions on the right, then the body (the
 /// pencil beside it on the reader's own) or the editor.
-final class PullRequestThreadCommentView: DSView {
+final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealEdit() }
+    private func revealEdit() { HoverReveal.fade([edit], visible: hover?.hovered == true || focusWithin) }
     private let avatar = PullRequestAvatarView()
     private let login = LabelView("", font: DSFont.ui(12, weight: .medium))
     private let time = LabelView("", font: DSFont.ui(12))
@@ -387,6 +389,10 @@ final class PullRequestThreadCommentView: DSView {
     var onCancel: (() -> Void)?
     var onSave: ((String) -> Void)?
     var onResize: (() -> Void)?
+    /// `PullRequestEditButton` in `article.group` (PullRequestReviewAnnotation.tsx:261,295): the pencil fades
+    /// in while the comment is hovered or holds keyboard focus.
+    private var hover: HoverGroup?
+    private var focusWithin = false
 
     init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool) {
         super.init(frame: .zero)
@@ -402,6 +408,8 @@ final class PullRequestThreadCommentView: DSView {
         edit.setAccessibilityLabel("Edit comment")
         edit.isHidden = !canEdit || editing
         edit.action = { [weak self] in self?.onEdit?() }
+        edit.alphaValue = 0
+        hover = HoverGroup(self) { [weak self] _ in self?.revealEdit() }
         [avatar, login, time, reactions, body, edit].forEach(addSubview)
         if editing {
             let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
