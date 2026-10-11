@@ -53,7 +53,7 @@ final class RightPanelView: DSView {
     var browserFavicons: [String: NSImage] = [:] { didSet { if browserFavicons != oldValue { apply(state) } } }
     /// The state a pull request tab's glyph wears, by surface id (`PullRequestSurfaceIcon`).
     var pullRequestStatus: [String: PullRequestStateTone] = [:] { didSet { if pullRequestStatus != oldValue { apply(state) } } }
-    let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs)
+    let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
     /// panel controls take, and keeps the active tab in view.
@@ -467,7 +467,8 @@ final class LauncherRow: DSView {
     private let icon: IconView
     private let label: LabelView
     private let kbd: KbdView
-    private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
+    // `transition-colors group-hover:bg-accent/60` (RightPanelTabs.tsx:511).
+    private var hovered = false { didSet { if hovered != oldValue { redisplay(transitioning: .colors) } } }
     private var tracking: NSTrackingArea?
     var onClick: (() -> Void)?
 
@@ -496,7 +497,7 @@ final class LauncherRow: DSView {
     }
 
     override func updateLayer() {
-        layer?.backgroundColor = hovered && action.kind != nil ? Themed.color(\.accent, 0.6).cgColor(in: self) : nil
+        Motion.setBackground(layer, hovered && action.kind != nil ? Themed.color(\.accent, 0.6).cgColor(in: self) : nil)
     }
 
     override func updateTrackingAreas() {

@@ -10,7 +10,14 @@ public final class DataTableView: DSView {
     /// `data-state="selected"` rows.
     public var selectedRows: Set<Int> = [] { didSet { needsDisplay = true } }
     /// The hovered body row (`hover:bg-muted/50`); tracked from the pointer, settable for previews.
-    public var hoveredRow: Int? { didSet { if hoveredRow != oldValue { needsDisplay = true } } }
+    public var hoveredRow: Int? {
+        didSet {
+            guard hoveredRow != oldValue else { return }
+            // `transition-colors` (table.tsx:36): the rows are one drawing, so cross-fade it.
+            if window != nil, !Motion.reduced, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
+    }
 
     private var headLabels: [LabelView] = []
     private var cellLabels: [[LabelView]] = []

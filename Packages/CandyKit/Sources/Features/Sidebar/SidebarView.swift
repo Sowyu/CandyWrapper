@@ -76,13 +76,25 @@ public final class SidebarContentView: DSView {
 
     public var actions = SidebarActions() { didSet { wireActions() } }
     public private(set) var snapshot: ShellSnapshot?
-    public var state = SidebarListState() { didSet { if state != oldValue { rebuild(animated: true) } } }
+    public var state = SidebarListState() {
+        didSet {
+            // Inline, so the fix-up does not run this observer again.
+            if isOnUtilityPage { state.activeThreadId = nil; state.activeDraftId = nil }
+            if state != oldValue { rebuild(animated: true) }
+        }
+    }
     /// Traffic lights: the brand and toggle sit after `--workspace-controls-left` (90px) on windowed macOS.
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
     public var showsPullRequests = true { didSet { needsLayout = true } }
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
-    public var isOnUtilityPage = false { didSet { needsLayout = true } }
+    /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
+    public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
+
+    private func clearActiveRows() {
+        if state.activeThreadId != nil { state.activeThreadId = nil }
+        if state.activeDraftId != nil { state.activeDraftId = nil }
+    }
     /// "Settled 2 threads," with its undo button; nil hides the notice.
     public var undoNoticeText: String? {
         didSet {
@@ -493,6 +505,7 @@ public final class SidebarContentView: DSView {
     /// when it opened and never repaints while the user types; a draft opened empty shows no row until
     /// it is left (`SidebarDraftBlock`, Sidebar.tsx:962-1034).
     public func setDrafts(_ drafts: [SidebarDraft], activeDraftId: String?) {
+        let activeDraftId = isOnUtilityPage ? nil : activeDraftId
         if activeDraftId != frozenDraft.id {
             frozenDraft = (activeDraftId, drafts.first { $0.id == activeDraftId && !SidebarListBuilder.draftPreview($0.prompt).isEmpty })
         }

@@ -165,7 +165,7 @@ public final class UsagePriceTableView: DSView {
     private var focusRow: String?
 
     private let applyLabel = UsageStyle.label("Apply to", 14, .medium)
-    private let applyButton = ButtonView("All environments", variant: .outline, size: .sm)
+    private let applyButton = ButtonView("All environments", variant: .outline, size: .sm).menuTrigger()
     private let unit = UsageStyle.label("USD / million tokens", 12, color: Themed.color(\.mutedForeground))
     private let table = DSView()
     private let note = TextBlockView()

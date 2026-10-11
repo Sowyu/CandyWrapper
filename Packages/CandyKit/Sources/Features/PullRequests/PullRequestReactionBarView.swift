@@ -95,7 +95,8 @@ final class PullRequestReactionPill: DSView {
     private let icon: IconView?
     private let reacted: Bool
     private let enabled: Bool
-    private var hovered = false { didSet { needsDisplay = true } }
+    // `transition-colors` (PullRequestReactions.tsx:26): the border, fill and icon fade on hover.
+    private var hovered = false { didSet { if hovered != oldValue { redisplay(transitioning: .colors) } } }
     var action: (() -> Void)?
 
     init(reaction r: PullRequestReaction, enabled: Bool) {
@@ -143,12 +144,12 @@ final class PullRequestReactionPill: DSView {
     override func updateLayer() {
         let primary = Themed.color(\.primary, 0.6)
         if reacted {
-            layer?.borderColor = primary.cgColor(in: self)
-            layer?.backgroundColor = Themed.color(\.primary, 0.1).cgColor(in: self)
+            Motion.setBorderColor(layer, primary.cgColor(in: self))
+            Motion.setBackground(layer, Themed.color(\.primary, 0.1).cgColor(in: self))
             count.color = Themed.color(\.foreground)
         } else {
-            layer?.borderColor = (hovered && enabled ? primary : Themed.color(\.border, 0.7)).cgColor(in: self)
-            layer?.backgroundColor = icon == nil ? Themed.color(\.muted, 0.4).cgColor(in: self) : nil
+            Motion.setBorderColor(layer, (hovered && enabled ? primary : Themed.color(\.border, 0.7)).cgColor(in: self))
+            Motion.setBackground(layer, icon == nil ? Themed.color(\.muted, 0.4).cgColor(in: self) : nil)
             count.color = Themed.color(\.mutedForeground)
         }
         icon?.strokeColor = hovered ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)

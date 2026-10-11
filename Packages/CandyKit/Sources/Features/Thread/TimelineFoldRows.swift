@@ -51,6 +51,8 @@ final class TurnFoldRowView: TimelineRowView {
         rule.frame = NSRect(x: 0, y: TL.snap(4 + TL.relaxed + 8), width: bounds.width, height: 1)
     }
 
+    override var hoverTransitions: Motion.Transition { .colors } // MessagesTimeline.tsx:2709
+
     override func hoverChanged() {
         let color = hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
         label.color = color
@@ -104,8 +106,9 @@ final class AttemptFoldRowView: TimelineRowView {
         note.frame = NSRect(x: 33 + lw + 8, y: 9, width: max(0, bounds.width - 33 - lw - 8 - 11), height: 16)
     }
 
+    override var hoverTransitions: Motion.Transition { .colors } // MessagesTimeline.tsx:2733
+
     override func hoverChanged() {
-        // ponytail: the fill swaps instead of T3's 150ms transition
         box.fill = TL.c(\.muted, hovered ? 0.35 : 0.2)
     }
 }
@@ -331,10 +334,14 @@ final class EventRowView: TimelineRowView {
         needsLayout = true
     }
 
+    // `transition-colors hover:bg-accent/20` on the card, `group-hover/subagent:text-foreground` on its
+    // chevron (V2LifecycleRow.tsx:487,512).
+    override var hoverTransitions: Motion.Transition { .colors }
+
     override func hoverChanged() {
-        // `hover:bg-accent/20` on a subagent card that opens its thread.
         guard look == .card, tone == .muted, onClick != nil else { return }
         card.fill = hovered ? TL.c(\.accent, 0.2) : TL.c(\.card, 0.3)
+        chevron.strokeColor = hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground, 0.6)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

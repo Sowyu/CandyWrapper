@@ -240,7 +240,7 @@ public final class ThreadLineageSectionView: DSView {
     public enum Busy: Equatable, Sendable { case merge, detach, stop(ThreadId) }
 
     private let heading = LabelView("Lineage", font: DSFont.ui(11, weight: .medium))
-    private let more = ButtonView(nil, icon: .ellipsis, variant: .ghost, size: .iconXs)
+    private let more = ButtonView(nil, icon: .ellipsis, variant: .ghost, size: .iconXs).menuTrigger()
     private let divider = CALayer()
     private let previousHeader = CollapsibleSectionHeaderView("Previous agents", tone: .muted, expanded: false)
     private let failedBadge = LabelView("", font: DSFont.ui(10))

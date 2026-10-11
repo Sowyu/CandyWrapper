@@ -356,7 +356,7 @@ public final class UsageInlineMenuButton: ControlView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        scalesWhenPressed = false
+        opensPopupOnPress = true // MenuTrigger (UsagePage.tsx:1277,1398)
         addSubview(label)
         addSubview(chevron)
         addSubview(warning)

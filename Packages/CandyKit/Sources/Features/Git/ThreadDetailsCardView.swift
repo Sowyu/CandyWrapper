@@ -173,6 +173,7 @@ public final class DetailsSplitControl: DSView {
         primary.corners = .leading
         secondary.corners = .trailing
         secondary.isChevron = true
+        secondary.opensPopupOnPress = true // the chevron is a MenuTrigger
         elapsed.font = DSFont.ui(11)
         elapsed.lineHeight = 16
         elapsed.isHidden = true
@@ -418,7 +419,7 @@ public final class DiffTotalsView: DSView {
 public final class ThreadDetailsCardView: DSView {
     public static let width: CGFloat = 264
 
-    public let runContext = DetailsRowControl(kind: .select)
+    public let runContext = DetailsRowControl(kind: .select).menuTrigger()
     /// `OpenInPicker` with `displayMode="panel"` (ThreadDetailsPanel.tsx:121-128): open the workspace in the
     /// preferred editor, the chevron picks another.
     public let openIn = DetailsSplitControl()

@@ -160,7 +160,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private(set) var machineSection: SettingsSectionView?
     private var hostRows: [String: SettingsRowView] = [:]
     private lazy var machineMore: ButtonView = {
-        let b = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs)
+        let b = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs).menuTrigger()
         b.iconSize = 14
         b.setAccessibilityLabel("More actions for this machine")
         b.action = { [weak self, weak b] in
@@ -580,7 +580,7 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     let routesButton = InlineDisclosureButton()
     let permissionsButton = InlineDisclosureButton()
     let toggle = SwitchView(size: .sm)
-    let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs)
+    let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private let routesList = EnvironmentRoutesListView()
     private let permissionsRule = CALayer()
     private let permissions = SessionPermissionsView()

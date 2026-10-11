@@ -374,6 +374,7 @@ final class RailButtonView: ControlView {
         }
         super.init(frame: .zero)
         scalesWhenPressed = false
+        transitions = .colors // ModelPickerSidebar.tsx:126,174
         fill.cornerRadius = 8
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(fill)
@@ -407,7 +408,7 @@ final class RailButtonView: ControlView {
     override func updateLayer() {
         let picker = superview as? ModelPickerView
         let lit = !isDisabled && (state.hovered || picker?.isRailFocused(self) == true)
-        fill.backgroundColor = lit ? Themed.color(\.foreground, 0.1).cgColor(in: self) : nil
+        Motion.setBackground(fill, lit ? Themed.color(\.foreground, 0.1).cgColor(in: self) : nil)
     }
 
     override func viewDidChangeEffectiveAppearance() {

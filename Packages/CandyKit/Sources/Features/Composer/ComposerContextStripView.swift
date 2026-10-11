@@ -23,9 +23,9 @@ public struct RunOnOption: Equatable, Sendable {
 public final class ComposerContextStripView: DSView {
     public static let height: CGFloat = 48, overlap: CGFloat = 16, inset: CGFloat = 22
 
-    public let runOn = RunOnControl()
+    public let runOn = RunOnControl().menuTrigger()
     /// `RunContextSelector` in the composer.
-    public let runContext = ComposerContextControl()
+    public let runContext = ComposerContextControl().menuTrigger()
     /// `BranchToolbarBranchSelector` in the composer.
     public let branch = ComposerContextControl()
     /// `showGitControls`: the run context and the branch replace "Run on".

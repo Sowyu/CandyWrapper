@@ -203,6 +203,7 @@ final class PublishBodyView: DSView {
         repoBox.addSubview(hostLabel)
         repoBox.addSubview(repository)
         advanced.action = { [weak self] in self?.advancedOpen.toggle(); self?.rebuild() }
+        advanced.transitions = [.color] // transition-colors hover:text-foreground (GitActionsControl.tsx:908)
         protocolGroup.onChange = { [weak self] i in if i == nil { self?.protocolGroup.selectedIndex = 0 } }
         rebuild()
     }

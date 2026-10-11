@@ -475,6 +475,7 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
             scalesWhenPressed = false
+            transitions = [.color] // the title's `transition-colors` (SettingsPanels.tsx:2122)
             label.lineHeight = 20
             addSubview(label)
             addSubview(chevron)
@@ -498,7 +499,7 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
 /// `SETTINGS_PICKER_TRIGGER_CLASSNAME`): the composer's trigger look, opening the composer's model picker.
 final class SettingsModelPickerControl: DSView {
     let button = ComposerControlView()
-    private let traits = ComposerControlView(icon: IconView(name: .brain, size: 16))
+    private let traits = ComposerControlView(icon: IconView(name: .brain, size: 16)).menuTrigger()
     private let context: SettingsPageContext
     private let key: String
     private weak var popup: OpenPopup?

@@ -70,7 +70,14 @@ public final class UsageBreakdownTableView: DSView {
     public var showsShare = true { didSet { if showsShare != oldValue { needsDisplay = true } } }
     public var onSelect: ((String) -> Void)?
     var onHeightChange: (() -> Void)?
-    private var hoverRow: Int? { didSet { if hoverRow != oldValue { needsDisplay = true } } }
+    private var hoverRow: Int? {
+        didSet {
+            guard hoverRow != oldValue else { return }
+            // `transition-colors hover:bg-muted/50` (UsagePage.tsx:853,940): the rows are one drawing, so cross-fade it.
+            if window != nil, !Motion.reduced, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
+    }
     private var icons: [UsageProviderKind: NSView] = [:]
     private var tracking: NSTrackingArea?
 

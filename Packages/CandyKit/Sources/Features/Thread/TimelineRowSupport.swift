@@ -130,6 +130,10 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
 
     func hoverChanged() {}
 
+    /// The row's `transition-*` class: what fades when hover or focus restyles it. Recycling snaps.
+    var hoverTransitions: Motion.Transition { [] }
+    private func pointerChanged() { Motion.transitioning(hoverTransitions) { hoverChanged() } }
+
     /// A row whose reveal covers only part of it (T3 puts `group/<name>` on an inner element, or on
     /// each work line) also hears pointer moves and reads `pointer` in `hoverChanged`.
     var tracksPointerMoves: Bool { false }
@@ -139,16 +143,16 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
         return convert(window.mouseLocationOutsideOfEventStream, from: nil)
     }
     override func mouseMoved(with event: NSEvent) {
-        if tracksPointerMoves { hoverChanged() } else { super.mouseMoved(with: event) }
+        if tracksPointerMoves { pointerChanged() } else { super.mouseMoved(with: event) }
     }
-    func hoverPointerMoved() { if tracksPointerMoves, hovered { hoverChanged() } }
+    func hoverPointerMoved() { if tracksPointerMoves, hovered { pointerChanged() } }
 
     /// A control in the row has keyboard focus (`group-focus-within`).
     private(set) var focusWithin = false
     func focusWithinChanged(_ focused: Bool) {
         guard focused != focusWithin else { return }
         focusWithin = focused
-        hoverChanged()
+        pointerChanged()
     }
 
     override func updateTrackingAreas() {
@@ -161,8 +165,8 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
         trackingArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { if !hovered { hovered = true; hoverChanged() } }
-    override func mouseExited(with event: NSEvent) { if hovered { hovered = false; hoverChanged() } }
+    override func mouseEntered(with event: NSEvent) { if !hovered { hovered = true; pointerChanged() } }
+    override func mouseExited(with event: NSEvent) { if hovered { hovered = false; pointerChanged() } }
 
     override func mouseUp(with event: NSEvent) {
         guard let onClick, bounds.contains(convert(event.locationInWindow, from: nil)) else { return super.mouseUp(with: event) }
@@ -179,7 +183,13 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
 
 /// A layer-only rectangle: fills, hairlines and cards without a backing store.
 final class FillView: DSView {
-    var fill: NSColor? { didSet { needsDisplay = true } }
+    var fill: NSColor? {
+        didSet {
+            // Inside `Motion.transitioning` the fill fades now; `updateLayer` then sets the same color.
+            if window != nil, Motion.activeTransitions.contains(.background) { Motion.setBackground(layer, fill?.cgColor(in: self)) }
+            needsDisplay = true
+        }
+    }
     var border: NSColor? { didSet { needsDisplay = true } }
     var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius } }
 

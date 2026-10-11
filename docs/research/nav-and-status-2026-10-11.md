@@ -37,7 +37,5 @@ If the user still sees it on v0.1.1 plus this change, ask which of the two it lo
 
 ## Left
 
-- Tab into the thread list focuses the active row; T3 has no roving focus and Tab lands on the first row in DOM order.
-- Escape with a multi-selection on Usage clears the selection; T3's Usage handles Escape as go-back only (the selection Escape is in `_chat.tsx:98-102`).
-- A draft prompt saved while Usage shows marks the draft row active again (ponytail in `SidebarCommands.openUtilityPage`).
+- Fixed 2026-10-11 (details2): Tab into the thread list lands on the first row (Shift-Tab on the last), not the active one; Escape with a multi-selection on Usage or Settings goes back and keeps the selection; `SidebarContentView` keeps every row and draft inactive while a utility page shows, whoever sets them. Tests `tabIntoTheListStartsAtTheFirstRow`, `utilityPageKeepsRowsInactive`.
 - Mark unread on a server without visit tracking does not rewind the local watermark (existing ponytail in `SidebarCommands.perform`).

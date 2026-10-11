@@ -37,8 +37,11 @@ public final class ComposerStashBadgeView: ComposerBannerView {
 
     private func restyle() {
         let strong = menuOpen || pulsing || row.state.hovered
-        title.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
-        countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
+        // `transition-colors duration-200` on the row (ComposerStashBadge.tsx:49).
+        Motion.transitioning(window == nil ? [] : .colors, duration: 0.2) {
+            title.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
+            countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
+        }
         row.setAccessibilityLabel("Stashed prompts: \(count). Open stash.")
     }
 

@@ -393,6 +393,7 @@ final class ModeTilesView: DSView, SettingsGroupRow {
             wireframe = Wireframe(mode: mode)
             super.init(frame: .zero)
             scalesWhenPressed = false
+            transitions = .colors // ThemeSettings.tsx:729
             decoration.host = self
             layer?.addSublayer(decoration)
             label.text = mode == "system" ? "System" : mode == "light" ? "Light" : "Dark"

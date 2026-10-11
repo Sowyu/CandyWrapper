@@ -11,7 +11,7 @@ import T3Store
 public final class PullRequestCodeView: DSView {
     private let toolbarFill = CALayer()
     private let rule = CALayer()
-    private let scope = ButtonView("All commits", variant: .secondary, size: .xs)
+    private let scope = ButtonView("All commits", variant: .secondary, size: .xs).menuTrigger()
     private let counts = LabelView("", font: DSFont.ui(12))
     private let list = DiffListView()
     private let scroll: ScrollAreaView

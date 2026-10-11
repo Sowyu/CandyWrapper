@@ -147,6 +147,34 @@ struct SidebarListTests {
         window.contentView = nil
     }
 
+    /// T3's rows have no roving focus: Tab into the list lands on the first row, not the active one.
+    @Test func tabIntoTheListStartsAtTheFirstRow() {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        content.setSnapshot(makeSnapshot(count: 5), animated: false)
+        content.state.activeThreadId = ThreadId("n3")
+        #expect(window.makeFirstResponder(content.list))
+        let first = content.list.items.first(where: \.isFocusable)?.key
+        #expect(first != nil && content.list.focusedKey == first)
+        window.contentView = nil
+    }
+
+    /// Usage and Pull Requests have no route thread or draft (Sidebar.tsx:2490-2494): nothing marks a row
+    /// active while they show, a draft save included.
+    @Test func utilityPageKeepsRowsInactive() {
+        let content = SidebarContentView()
+        content.isOnUtilityPage = true
+        content.state.activeThreadId = ThreadId("n1")
+        let draft = SidebarDraft(id: "d1", projectId: ProjectId("p"), prompt: "hello", createdAt: Date())
+        content.setDrafts([draft], activeDraftId: "d1")
+        #expect(content.state.activeThreadId == nil && content.state.activeDraftId == nil)
+        #expect(content.state.drafts.map(\.id) == ["d1"])
+        content.isOnUtilityPage = false
+        content.setDrafts([draft], activeDraftId: "d1")
+        #expect(content.state.activeDraftId == "d1")
+    }
+
     @Test func noTimerWithoutAVisibleWindow() {
         let content = SidebarContentView()
         content.now = { SidebarPreview.referenceNow }

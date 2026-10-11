@@ -278,6 +278,7 @@ public final class TerminalListAsideView: DSView {
             icon = IconView(name: name, size: 13)
             super.init(frame: .zero)
             scalesWhenPressed = false
+            transitions = .colors // transition-colors (ThreadTerminalDrawer.tsx:1706-1738)
             addSubview(icon)
         }
 
@@ -288,7 +289,7 @@ public final class TerminalListAsideView: DSView {
 
         override func updateLayer() {
             icon.strokeColor = Themed.color(\.foreground, 0.9)
-            layer?.backgroundColor = state.hovered && !limited ? Themed.color(\.accent, 0.7).cgColor(in: self) : nil
+            Motion.setBackground(layer, state.hovered && !limited ? Themed.color(\.accent, 0.7).cgColor(in: self) : nil)
         }
     }
 

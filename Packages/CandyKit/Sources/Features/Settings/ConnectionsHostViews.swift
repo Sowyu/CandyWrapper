@@ -957,8 +957,7 @@ public final class CreatePairingLinkFormView: DSView {
             d.font = DSFont.ui(12)
             d.lineHeight = 16.5
             d.color = Themed.color(\.mutedForeground)
-            let hit = ControlView()
-            hit.scalesWhenPressed = false
+            let hit = HoverFillControl(fill: Themed.color(\.muted, 0.4)) // hover:bg-muted/40 (ConnectionsSettings.tsx:1186)
             let scope = option.scope
             hit.action = { [weak self] in self?.toggle(scope) }
             cb.onChange = { [weak self] _ in self?.toggle(scope) }

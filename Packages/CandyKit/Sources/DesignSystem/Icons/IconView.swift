@@ -182,7 +182,7 @@ public final class IconView: NSView {
                     let a = CABasicAnimation(keyPath: key)
                     a.fromValue = from
                     a.toValue = to
-                    a.duration = Motion.Durations.default
+                    a.duration = Motion.activeDuration
                     a.timingFunction = Motion.easeInOut
                     s.layer.add(a, forKey: key)
                 }

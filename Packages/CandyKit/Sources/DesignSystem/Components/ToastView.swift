@@ -296,6 +296,7 @@ final class ToastCloseOrb: ControlView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        transitions = [.color, .background, .shadow] // transition-[color,background-color,box-shadow] (toast.tsx:100)
         decoration.host = self
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false

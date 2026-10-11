@@ -34,7 +34,7 @@ public final class ApprovalPanelView: ComposerBannerView {
     private let detailLine = glassLabel(font: DSFont.mono(12), color: Themed.color(\.foreground), lineHeight: 16)
     private let detailBlock = glassBlock(font: DSFont.mono(12), color: Themed.color(\.foreground), lineHeight: 16)
     private var buttons: [(ApprovalOption, ButtonView)] = []
-    private let more = ButtonView(nil, icon: .ellipsis, variant: .outline, size: .iconXs)
+    private let more = ButtonView(nil, icon: .ellipsis, variant: .outline, size: .iconXs).menuTrigger()
 
     public init() {
         super.init(variant: .warning)
