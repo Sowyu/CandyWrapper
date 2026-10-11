@@ -372,7 +372,9 @@ public final class UsageInlineMenuButton: ControlView {
         let active = state.hoverOrPressed || state.popupOpen
         label.isUnderlined = state.hoverOrPressed
         chevron.strokeColor = Themed.color(\.mutedForeground)
-        chevron.isHidden = alert || !active
+        // `opacity-0 transition-opacity`, shown on hover, keyboard focus or an open menu (UsagePage.tsx:1287,1401).
+        chevron.isHidden = alert
+        HoverReveal.fade([chevron], visible: active || state.focusVisible)
         warning.isHidden = !alert
         warning.strokeColor = Themed.color(\.warningForeground)
     }

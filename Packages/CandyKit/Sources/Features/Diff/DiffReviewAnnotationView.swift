@@ -84,7 +84,7 @@ final class DiffReviewAnnotationView: DSView, DiffAnnotationContent {
 }
 
 /// DiffCommentAnnotation.tsx:68-97. Editing is also available from the card's context menu.
-final class DiffReviewCommentCardView: DSView, DiffAnnotationContent {
+final class DiffReviewCommentCardView: DSView, DiffAnnotationContent, FocusWithinObserver {
     private let message: TextBlockView
     private let icon = IconView(name: .messageCircle, size: 14, strokeColor: Themed.color(\.primary, 0.7))
     private let remove = ButtonView(nil, icon: .trash2, variant: .ghostMuted, size: .iconXs)
@@ -106,8 +106,12 @@ final class DiffReviewCommentCardView: DSView, DiffAnnotationContent {
         let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); hover = area
     }
-    override func mouseEntered(with event: NSEvent) { remove.alphaValue = 1 }
-    override func mouseExited(with event: NSEvent) { remove.alphaValue = 0 }
+    // `opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100` (DiffCommentAnnotation.tsx:70).
+    private var hovered = false { didSet { HoverReveal.fade([remove], visible: hovered || focusWithin) } }
+    private var focusWithin = false { didSet { HoverReveal.fade([remove], visible: hovered || focusWithin) } }
+    func focusWithinChanged(_ focused: Bool) { focusWithin = focused }
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) { if event.clickCount == 2 { onEdit?() } }
     override func rightMouseDown(with event: NSEvent) {
         var edit = MenuItem("Edit comment"); edit.action = { [weak self] in self?.onEdit?() }

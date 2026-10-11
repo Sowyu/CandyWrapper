@@ -36,7 +36,11 @@ final class ThreadSession {
     struct Retained {
         let store: ThreadStore
         let relay: ShellSession.ChangeRelay
+        /// The last update the panel showed, painted in the same pass as the click on a reopen.
+        var shown: ThreadUpdate? = nil
     }
+    /// The last update rendered, kept for `Retained.shown`.
+    private var shown: ThreadUpdate?
 
     init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil, cache: ThreadCache? = nil) {
         self.threadId = threadId
@@ -49,12 +53,20 @@ final class ThreadSession {
         self.store = store
         relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
+        shown = retained?.shown
         if retained != nil {
             Task { [weak self] in await self?.showRetained() }
         } else {
             // A cold open paints from the disk cache before the network; the store publishes it.
             Task { await store.restoreFromCache() }
         }
+    }
+
+    /// Paints the retained store's last shown update now, inside the click's pass, so a reopen
+    /// goes from the old thread's frame to this one with nothing between. Call once the callbacks
+    /// are set. The store's own state follows a moment later (`showRetained`).
+    func paintRetained() {
+        if let shown { render(shown) }
     }
 
     /// The retained state, before the resumed stream catches up.
@@ -106,7 +118,7 @@ final class ThreadSession {
         relay.set {}
         let store = self.store
         Task { await store.flushCache() }
-        return Retained(store: store, relay: relay)
+        return Retained(store: store, relay: relay, shown: shown)
     }
 
     /// The store calls `onChange` once per window between takes, so each pull renders every change since the last.
@@ -118,6 +130,7 @@ final class ThreadSession {
 
     private func render(_ update: ThreadUpdate) {
         guard active, let panel else { return }
+        shown = update
         let (projectTitle, workspaceRoot) = place(update.projection)
         OpenTiming.measure("panel setProjection") {
             panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
@@ -581,13 +594,27 @@ final class ThreadController {
         guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
         OpenTiming.begin(id.rawValue)
         hideNoActiveThread()
+        let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()
-        panel.setDraft(projectTitle: nil)
-        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        // The panel keeps painting until the new thread's first projection replaces it in one pass
+        // (`beginThreadSwitch`); clearing it here showed an empty window for a frame or more.
+        let snapshot = sidebar?.snapshot
+        let shell = snapshot?.threads.first { $0.id == id } ?? snapshot?.archivedThreads.first { $0.id == id }
+        let keepRows = !force && previousEnvironment == id.environmentId
+        if let shell {
+            let project = snapshot?.projects.first { $0.id == shell.projectId }
+            panel.beginThreadSwitch(projectTitle: project?.title ?? "", threadTitle: shell.title, keepRows: keepRows)
+            panel.header.projectIcon = project.map(ProjectIconSource.init)
+        } else {
+            // No shell yet (a link before the first snapshot): T3 renders nothing (ThreadRouteView.tsx:181).
+            panel.setDraft(projectTitle: nil)
+            panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        }
         composer.showThread(id)
         files.show(id)
         let kept = force ? nil : (takeRetained(id) ?? keepAlive?.take(id))
-        lineage.update(threadId: id, projection: nil)
+        // Held rows keep their lineage header and footer; the first projection resets them.
+        if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil) }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
         session.onProjection = { [weak self] projection in
             if let self {
@@ -602,6 +629,7 @@ final class ThreadController {
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
+        session.paintRetained()
         // composer.showThread fired onTargetChange before the session was set, so sync now.
         automations.sync()
         terminal.show(id)

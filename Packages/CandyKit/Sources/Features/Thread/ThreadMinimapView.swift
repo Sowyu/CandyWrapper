@@ -44,7 +44,16 @@ public final class ThreadMinimapView: DSView {
         if hovered == index { showPreview() }
     }
     public var currentIndex: Int? { didSet { if currentIndex != oldValue { needsDisplay = true; updateNavigation() } } }
-    public var persistentGutter = true { didSet { if persistentGutter != oldValue { needsDisplay = true } } }
+    public var persistentGutter = true { didSet { if persistentGutter != oldValue { needsDisplay = true; alphaValue = persistentGutter || hovered != nil ? 1 : 0 } } }
+    /// Without a persistent gutter the strip fades in while hovered (`opacity-0 transition-opacity duration-150
+    /// hover:opacity-100`, MessagesTimeline.tsx:1788-1792).
+    private func updateGutter() { HoverReveal.fade(self, to: persistentGutter || hovered != nil ? 1 : 0) }
+    /// Each arrow fades in under its own pointer, not the strip's (`hover:opacity-100` on the arrow, :1969-1975).
+    private var hoveredArrow: ButtonView? { didSet { if hoveredArrow !== oldValue { updateNavigation() } } }
+    private func arrow(_ event: NSEvent) -> ButtonView? {
+        let p = convert(event.locationInWindow, from: nil)
+        return [previous, next].first { $0.frame.contains(p) }
+    }
     private let previous = ButtonView(icon: .chevronUp, variant: .ghost, size: .iconXs)
     private let next = ButtonView(icon: .chevronDown, variant: .ghost, size: .iconXs)
     private weak var previewPopup: OpenPopup?
@@ -65,7 +74,8 @@ public final class ThreadMinimapView: DSView {
     private func updateNavigation() {
         previous.isEnabled = (currentIndex ?? 0) > 0
         next.isEnabled = (currentIndex ?? 0) < items.count - 1
-        previous.alphaValue = hovered == nil ? 0 : 1; next.alphaValue = previous.alphaValue
+        HoverReveal.fade([previous], visible: hoveredArrow === previous)
+        HoverReveal.fade([next], visible: hoveredArrow === next)
     }
     public override func layout() {
         super.layout()
@@ -93,7 +103,7 @@ public final class ThreadMinimapView: DSView {
     public var onSelect: ((String) -> Void)?
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
-        toolTip = nil; needsDisplay = true; updateNavigation(); showPreview()
+        toolTip = nil; needsDisplay = true; updateGutter(); showPreview()
     } }
     private var tracking: NSTrackingArea?
     public override var wantsUpdateLayer: Bool { false }
@@ -109,11 +119,11 @@ public final class ThreadMinimapView: DSView {
         let y = convert(event.locationInWindow, from: nil).y
         return max(0, min(items.count - 1, Int((y / max(1, bounds.height) * CGFloat(items.count - 1)).rounded())))
     }
-    public override func mouseEntered(with event: NSEvent) { hovered = index(event) }
-    public override func mouseMoved(with event: NSEvent) { hovered = index(event) }
+    public override func mouseEntered(with event: NSEvent) { hovered = index(event); hoveredArrow = arrow(event) }
+    public override func mouseMoved(with event: NSEvent) { hovered = index(event); hoveredArrow = arrow(event) }
     public override func mouseExited(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if !bounds.insetBy(dx: -8, dy: -28).contains(point) { hovered = nil }
+        if !bounds.insetBy(dx: -8, dy: -28).contains(point) { hovered = nil; hoveredArrow = nil }
     }
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -131,7 +141,6 @@ public final class ThreadMinimapView: DSView {
         }
     }
     public override func draw(_ dirtyRect: NSRect) {
-        guard persistentGutter || hovered != nil else { return }
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
             let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8

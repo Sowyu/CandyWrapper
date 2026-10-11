@@ -78,6 +78,34 @@ struct ThreadTimelineTests {
         #expect(!t.followsEnd)
     }
 
+    /// A thread switch keeps the last thread's rows until the new thread's first projection, then
+    /// swaps in one pass that starts at the end (T3's `resolveThreadSwitchTimeline`). Clearing first
+    /// painted an empty window between the two threads.
+    @Test func switchingThreadsNeverPaintsAnEmptyTimeline() throws {
+        let all = try ThreadPreview.projections().filter { !TimelineRows.derive(TimelineRowsInput(projection: $0)).isEmpty }
+        let a = try #require(all.first), b = try #require(all.last { $0.thread.id != a.thread.id })
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 844, height: 780))
+        panel.setProjection(a, projectTitle: "demo-repo", workspaceRoot: nil)
+        panel.layoutSubtreeIfNeeded()
+        panel.timeline.scrollView.contentView.scroll(to: .zero)
+        var seen: [(TimelineChange, Int)] = []
+        let forward = panel.model.onChange
+        panel.model.onChange = { change in seen.append((change, panel.model.items.count)); forward?(change) }
+        let rowsOfA = panel.timeline.items.map(\.id)
+        panel.beginThreadSwitch(projectTitle: "demo-repo", threadTitle: b.thread.title, keepRows: true)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.timeline.items.map(\.id) == rowsOfA)
+        #expect(panel.header.threadTitle == b.thread.title)
+        #expect(!panel.composer.isHidden)
+        panel.setProjection(b, projectTitle: "demo-repo", workspaceRoot: nil)
+        panel.layoutSubtreeIfNeeded()
+        #expect(seen.allSatisfy { $0.1 > 0 })
+        #expect(seen.first?.0 == .thread)
+        #expect(panel.timeline.followsEnd)
+        #expect(!panel.switchingThread)
+        #expect(panel.timeline.items.map(\.id) != rowsOfA)
+    }
+
     @Test func expandStateLivesInTheModel() throws {
         let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
         let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 844, height: 780))

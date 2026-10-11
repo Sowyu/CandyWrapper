@@ -59,6 +59,13 @@ open class ControlView: DSView {
             window?.invalidateCursorRects(for: self)
         }
         if old.active != state.active, scalesWhenPressed { animatePressScale(state.active) }
+        if old.focusVisible != state.focusVisible {
+            var ancestor = superview
+            while let view = ancestor {
+                (view as? FocusWithinObserver)?.focusWithinChanged(state.focusVisible)
+                ancestor = view.superview
+            }
+        }
     }
 
     // MARK: Hover

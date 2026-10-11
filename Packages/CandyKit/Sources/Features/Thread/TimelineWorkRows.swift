@@ -428,7 +428,9 @@ final class WorkLineView: DSView {
 
 // MARK: - Rows
 
-/// Shared by the work rows: the `WorkLogBlock` bottom padding and the timestamp hover.
+/// Shared by the work rows: the `WorkLogBlock` bottom padding. Each work line is its own
+/// `group/timeline-row` (WorkLog.tsx:78), so hover reveals one line's timestamp, at once with no
+/// fade (`TimelineRowTimestamp`, MessagesTimeline.tsx:2658-2695). Live and thinking rows have none.
 class WorkRowBase: TimelineRowView {
     var lines: [WorkLineView] = []
 
@@ -447,10 +449,6 @@ class WorkRowBase: TimelineRowView {
 
     func hideLines(from i: Int) { for l in lines.dropFirst(i) { l.isHidden = true } }
 
-    override func hoverChanged() {
-        lines.forEach { $0.showsTime = hovered }
-        lines.forEach { $0.needsLayout = true }
-    }
 }
 
 /// A `work` row: one tool call (`py-0.5`), or the open body of a group (`py-0` lines, `pb-1`).
@@ -507,7 +505,7 @@ final class WorkRowView: WorkRowBase {
                             readTarget.map { id in { model?.onOpenThread?(id) } })
             if pinnedTime.count <= i { pinnedTime.append(false) }
             pinnedTime[i] = severe
-            l.showsTime = hovered || severe
+            l.showsTime = hoveredEntry == i || severe
             while details.count <= i {
                 let d = WorkDetailView()
                 addSubview(d)
@@ -541,9 +539,17 @@ final class WorkRowView: WorkRowBase {
     /// Failed error rows keep their timestamp visible.
     private var pinnedTime: [Bool] = []
 
+    /// Each entry's span: its line, its open detail and the `py-0.5` around them (WorkLogRow wraps both).
+    private var spans: [ClosedRange<CGFloat>] = []
+    private var hoveredEntry: Int?
+    override var tracksPointerMoves: Bool { true }
+
     override func hoverChanged() {
-        for (i, l) in lines.enumerated() { l.showsTime = hovered || (i < pinnedTime.count && pinnedTime[i]) }
-        needsLayout = true
+        let y = pointer?.y
+        let entry = y.flatMap { y in spans.prefix(entries.count).firstIndex { $0.contains(y) } }
+        guard entry != hoveredEntry else { return }
+        hoveredEntry = entry
+        for (i, l) in lines.enumerated() { l.showsTime = i == entry || (i < pinnedTime.count && pinnedTime[i]) }
     }
 
     private var rowPad: CGFloat { isGroupBody ? 0 : 2 }
@@ -563,7 +569,10 @@ final class WorkRowView: WorkRowBase {
     override func layout() {
         super.layout()
         var y: CGFloat = 0
+        spans.removeAll(keepingCapacity: true)
         for i in entries.indices {
+            let start = y
+            defer { spans.append(start...max(start, y - 0.001)) }
             if isCard(i), let card = cards[i] {
                 card.frame = NSRect(x: 0, y: y, width: bounds.width, height: SubagentCardLinkView.height)
                 y += SubagentCardLinkView.height
@@ -576,6 +585,8 @@ final class WorkRowView: WorkRowBase {
             if dh > 0 { details[i].frame = NSRect(x: 2, y: y + 2, width: bounds.width - 4, height: dh - 8) }
             y += dh + rowPad
         }
+        // An entry that opened or closed under a still pointer moves the spans.
+        if hovered { hoverChanged() }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -612,6 +623,8 @@ final class WorkToggleRowView: WorkRowBase {
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 28 + blockPadding }
+
+    override func hoverChanged() { line(0).showsTime = hovered }
 
     override func layout() {
         super.layout()

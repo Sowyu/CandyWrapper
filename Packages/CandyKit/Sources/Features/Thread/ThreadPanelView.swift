@@ -238,7 +238,7 @@ public final class ThreadPanelView: DSView {
     public var onProactivePullRequest: (() -> Void)?
 
     public func evaluateProactivePanels() {
-        guard !applyingProjection, window != nil, !isDraft, let projection = model.projection else { return }
+        guard !applyingProjection, !switchingThread, window != nil, !isDraft, let projection = model.projection else { return }
         let latest = projection.runs.max { $0.ordinal < $1.ordinal }
         let running = projection.runs.last { $0.status == .running || $0.status == .waiting }
         let summary = summaries.first { $0.runId == latest?.id }
@@ -747,8 +747,33 @@ public final class ThreadPanelView: DSView {
     // ponytail: by title, so two projects with one title can show the wrong icon on a draft; pass the project to setDraft when ComposerController changes next
     public var projectIconForTitle: ((String) -> ProjectIconSource?)?
 
+    /// Another thread is opening and its first projection has not arrived (see `beginThreadSwitch`).
+    public private(set) var switchingThread = false
+
+    /// Starts showing another thread before its first projection, so no frame shows an empty panel.
+    /// T3 keeps one ChatView across thread routes (ThreadRouteView.tsx:27-35): the header names the
+    /// new thread from its shell at once, the composer stays, and the timeline paints the last
+    /// thread's rows while the new one loads with no rows of its own (`resolveThreadSwitchTimeline`,
+    /// ChatView.logic.ts:411-438, ChatView.tsx:3964-3974), only within one environment
+    /// (`threadKeysShareEnvironment`). The next `setProjection` swaps everything in one pass.
+    /// Without `keepRows` the timeline empties: T3's loading state (header and composer, no
+    /// placeholder, ChatView.tsx:11474).
+    public func beginThreadSwitch(projectTitle: String, threadTitle: String, keepRows: Bool) {
+        if isDraft { setDraft(projectTitle: nil) }
+        if !keepRows { setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil) }
+        switchingThread = true
+        timeline.isInert = true
+        header.projectTitle = projectTitle
+        header.threadTitle = threadTitle
+        header.setThreadVisible(true)
+        header.cancelTitleRename()
+        updateComposerShown()
+    }
+
     /// Shows a thread. Pass nil to clear.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?) {
+        switchingThread = false
+        timeline.isInert = false
         applyingProjection = true
         defer { applyingProjection = false; evaluateProactivePanels() }
         model.projectTitle = projectTitle
@@ -784,7 +809,7 @@ public final class ThreadPanelView: DSView {
     /// The composer shows with a thread, a draft, or a just-sent first message. Call after
     /// changing `model.optimisticMessages`.
     public func updateComposerShown() {
-        composerShown = isDraft || model.projection != nil || !model.optimisticMessages.isEmpty
+        composerShown = isDraft || switchingThread || model.projection != nil || !model.optimisticMessages.isEmpty
         needsLayout = true
     }
 

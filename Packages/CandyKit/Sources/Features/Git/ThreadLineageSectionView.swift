@@ -161,11 +161,13 @@ final class ThreadLineageRowView: ControlView {
 
     private func hoverChanged(_ on: Bool) {
         hoverInside = on
-        // `opacity-0 transition-opacity group-hover:opacity-100` on the arrow; Stop replaces the trailing item.
-        var fades: [NSView] = [arrow]
-        if let stop { fades.append(stop) }
-        TimelineRowView.reveal(fades, on, duration: 0.15)
-        if stop != nil { TimelineRowView.reveal([trailing], !on, duration: 0.15) }
+        // `opacity-0 transition-opacity group-hover:opacity-100` on the arrow (ThreadRelationshipsControl.tsx:446).
+        // Stop replaces the trailing item at once: neither has a transition (:393, :452-458, :546).
+        HoverReveal.fade([arrow], visible: on)
+        if let stop {
+            stop.alphaValue = on ? 1 : 0
+            trailing.alphaValue = on ? 0 : 1
+        }
         restyle()
     }
 

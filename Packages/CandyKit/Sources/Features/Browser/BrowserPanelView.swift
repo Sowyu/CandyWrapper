@@ -253,9 +253,10 @@ public final class BrowserChromeRowView: DSView {
         }
         address.frame = NSRect(x: x, y: 0, width: max(0, right - x), height: 28)
         // The inline-end addon (`pe-[calc(--spacing(2.5)-1px)]`) is laid out even while invisible,
-        // so it narrows the field; it is revealed on hover (`group-hover/address`).
+        // so it narrows the field; it fades in over 150 ms on hover (`transition-opacity group-hover/address`,
+        // PreviewChromeRow.tsx:213).
         externalHolder.isHidden = !showsOpenExternal
-        externalHolder.alphaValue = hovered ? 1 : 0
+        HoverReveal.fade([externalHolder], visible: hovered)
         externalHolder.frame = NSRect(x: address.frame.maxX - 1 - 9 - 24, y: y, width: 24, height: 24)
         openExternal.frame = externalHolder.bounds
         updateTrackingAreas()
