@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 /// An image drawn from a loader that decodes off the main thread at display size (`object-cover`
 /// by default). Nothing is decoded until the view sits in a window.
@@ -14,6 +15,8 @@ public final class AsyncImageView: DSView {
     public let fallback = LabelView("", font: DSFont.ui(10), color: Themed.color(\.secondaryLabel))
     public private(set) var image: CGImage?
     public var onLoad: (() -> Void)?
+    public var onContextMenu: ((NSEvent, NSView) -> Void)?
+    public override func rightMouseDown(with event: NSEvent) { onContextMenu?(event, self) }
     /// The pixel side to decode at; by default the view's own size at the screen's scale.
     public var requestedSide: Int?
 
@@ -89,8 +92,9 @@ public final class ComposerImageShelfView: DSView {
         public var name: String
         public var status: ComposerFileRow.Status
         public var fileURL: URL
-        public init(id: String, name: String, status: ComposerFileRow.Status, fileURL: URL) {
-            self.id = id; self.name = name; self.status = status; self.fileURL = fileURL
+        public var source: JSONValue?
+        public init(id: String, name: String, status: ComposerFileRow.Status, fileURL: URL, source: JSONValue? = nil) {
+            self.id = id; self.name = name; self.status = status; self.fileURL = fileURL; self.source = source
         }
     }
 
@@ -105,12 +109,18 @@ public final class ComposerImageShelfView: DSView {
     /// Rows that fit `width`, with the 12pt margin; 0 without images.
     public func preferredHeight(width: CGFloat) -> CGFloat {
         guard !tiles.isEmpty else { return 0 }
-        let rows = CGFloat(rowCount(width))
-        return rows * Self.side + (rows - 1) * Self.gap + Self.marginBottom
+        return tileFrames(width: width).map(\.maxY).max().map { $0 + Self.marginBottom } ?? 0
     }
-
-    private func perRow(_ width: CGFloat) -> Int { max(1, Int((width + Self.gap) / (Self.side + Self.gap))) }
-    private func rowCount(_ width: CGFloat) -> Int { (tiles.count + perRow(width) - 1) / perRow(width) }
+    private func tileFrames(width: CGFloat) -> [CGRect] {
+        var x: CGFloat = 0, y: CGFloat = 0, height: CGFloat = 0
+        return tiles.map { tile in
+            let size = tile.source == nil ? CGSize(width: 64, height: 64) : CGSize(width: min(208, width), height: 112)
+            if x > 0 && x + size.width > width { x = 0; y += height + Self.gap; height = 0 }
+            let frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
+            x += size.width + Self.gap; height = max(height, size.height)
+            return frame
+        }
+    }
 
     private func rebuild() {
         while views.count > tiles.count { views.removeLast().removeFromSuperview() }
@@ -126,17 +136,14 @@ public final class ComposerImageShelfView: DSView {
 
     public override func layout() {
         super.layout()
-        let n = perRow(bounds.width)
-        for (i, view) in views.enumerated() {
-            view.frame = NSRect(x: CGFloat(i % n) * (Self.side + Self.gap), y: CGFloat(i / n) * (Self.side + Self.gap),
-                                width: Self.side, height: Self.side)
-        }
+        for (view, frame) in zip(views, tileFrames(width: bounds.width)) { view.frame = frame }
     }
 
     fileprivate final class TileView: DSView {
         weak var owner: ComposerImageShelfView?
         private(set) var id = ""
         let image = AsyncImageView()
+        private var details: SnapShotAttachmentDetailsView?
         private let progressStrip = DSView()
         private let progress = LabelView("", font: DSFont.ui(10), color: Themed.color(\.foreground))
         let remove = ButtonView(nil, icon: .x, variant: .mediaClose, size: .iconXs)
@@ -161,8 +168,18 @@ public final class ComposerImageShelfView: DSView {
 
         func configure(_ tile: Tile) {
             id = tile.id
+            if details?.source != tile.source {
+                details?.removeFromSuperview(); details = nil
+                if let source = tile.source {
+                    let view = SnapShotAttachmentDetailsView(source: source)
+                    addSubview(view, positioned: .below, relativeTo: remove); details = view
+                }
+            }
             let url = tile.fileURL
             image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true) }
+            image.onContextMenu = { event, view in
+                MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
+            }
             remove.setAccessibilityLabel("Remove \(tile.name)")
             retry.setAccessibilityLabel("Retry upload for \(tile.name)")
             setAccessibilityLabel("Preview \(tile.name)")
@@ -193,6 +210,7 @@ public final class ComposerImageShelfView: DSView {
             // Everything sits in the padding box, inside the 1px border.
             let inner = bounds.insetBy(dx: 1, dy: 1)
             image.frame = inner
+            details?.frame = NSRect(x: inner.minX, y: inner.maxY - 66, width: inner.width, height: 66)
             progressStrip.frame = NSRect(x: inner.minX, y: inner.maxY - 14, width: inner.width, height: 14)
             progress.frame = NSRect(x: 4, y: 0, width: inner.width - 8, height: 14)
             // `absolute right-1 top-1` and `bottom-1 left-1`, inside the 1px border.

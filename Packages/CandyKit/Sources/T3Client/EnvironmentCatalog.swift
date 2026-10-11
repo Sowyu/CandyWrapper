@@ -7,6 +7,7 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
     /// The descriptor's `environmentId`, the environment's identity. Never a URL.
     public var environmentId: String
     /// The descriptor's `label`, shown in hover text and badges.
+    public var sshAlias: String?
     public var label: String
     /// The preferred route: the server's HTTP origin.
     public var httpBaseURL: URL
@@ -58,11 +59,12 @@ public struct EnvironmentRegistration: Codable, Sendable, Equatable, Identifiabl
         self.createdAt = createdAt
     }
 
-    enum CodingKeys: String, CodingKey { case environmentId, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt, relay }
+    enum CodingKeys: String, CodingKey { case environmentId, sshAlias, label, httpBaseURL, alternateRoutes, machine, enabled, createdAt, relay }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         environmentId = try c.decode(String.self, forKey: .environmentId)
+        sshAlias = try c.decodeIfPresent(String.self, forKey: .sshAlias)
         label = try c.decode(String.self, forKey: .label)
         httpBaseURL = try c.decode(URL.self, forKey: .httpBaseURL)
         alternateRoutes = try c.decodeIfPresent([URL].self, forKey: .alternateRoutes) ?? []

@@ -11,6 +11,8 @@ func detailsHoverFill() -> NSColor { Themed.pick(light: Themed.black(0.035), dar
 /// `.select` ends in a 32pt chevron cell behind a 16pt `border/65` rule; `.locked` is the static row; `.row`
 /// may carry a trailing view (the Changes totals). Hover and open fill with `detailsHoverFill`.
 public final class DetailsRowControl: ControlView {
+    public var onContextMenu: ((NSEvent, NSView) -> Void)?
+    public override func rightMouseDown(with event: NSEvent) { onContextMenu?(event, self) }
     public enum Kind: Sendable { case row, select, locked }
     public var kind: Kind { didSet { if kind != oldValue { update() } } }
     public var icons: [IconDefinition] = [] { didSet { if icons != oldValue { rebuildIcons() } } }

@@ -9,6 +9,9 @@ import T3Store
 /// (decodes and reduces off the main thread). `Environments` merges every session's shell for the sidebar.
 @MainActor
 final class ShellSession {
+    private var lifecycleSubscription: Task<Void, Never>?
+    private(set) var welcome: JSONValue?
+    var lifecycleObservers: [UUID: (JSONValue) -> Void] = [:]
     let environmentId: String
     let supervisor: ConnectionSupervisor
     let store: ShellStore
@@ -61,6 +64,14 @@ final class ShellSession {
     func start() {
         guard !started, !stopped else { return }
         started = true
+        lifecycleSubscription = supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }) { [weak self] event in
+            guard case .value(let json) = event else { return }
+            await MainActor.run {
+                guard let self else { return }
+                if json["type"]?.stringValue == "welcome" { self.welcome = json["payload"] }
+                for observer in self.lifecycleObservers.values { observer(json) }
+            }
+        }
         // `stop` can run before this task reaches the supervisor; its disconnect must win.
         Task { [supervisor] in
             await supervisor.observePlatform()
@@ -81,6 +92,7 @@ final class ShellSession {
     func stop() {
         stopped = true
         subscription?.cancel()
+        lifecycleSubscription?.cancel()
         Task { await supervisor.disconnect() }
     }
 

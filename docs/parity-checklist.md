@@ -1,7 +1,7 @@
 # T3 Code parity checklist
 
 Target: official T3 Code v0.0.46-nightly.20261009.2861, native macOS (Swift/AppKit) client.
-Status 2026-10-11 (after WP7.14): 281 🟡, 97 ➖, 41 ⏳, 13 M9, 14 n/a.
+Status 2026-10-11 (after WP7.16b): 281 🟡, 101 ➖, 38 ⏳, 13 M9, 13 n/a.
 
 Status legend:
 
@@ -158,7 +158,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Image thumbnail shelf, expanded preview | comp/chat/ComposerImageThumbnail.tsx, comp/chat/ExpandedImagePreview.tsx | 🟡 | 64pt tiles decoded off the main thread at tile size (ImageIO thumbnails), upload percent strip, retry, remove (asks when the text mentions the image); preview with arrows, Escape, backdrop click, decoded at the box size. Fidelity `composer-attachments`. Missing: zoom and pan, media context menu (save, copy), videos |
 | Attach files (picker, drag, paste), 50 MiB per file, HTTP upload flow | docs/composer.md, comp/chat/composerAttachmentFiles.ts | 🟡 | Paperclip, drop on the composer, paste (images always, files without text, pasted image data as `image.png`); T3's classification, 100 files, 10 MiB images (HEIC to JPEG, oversized images re-encoded), 80 MiB of images, staging limit from `fileAttachments.maxUploadBytes`; `attachments.createUploadUrl` and the signed POST; files are chips (the last chip deleted drops the file); 32 KiB pastes fold into `pasted-text.txt` (Cmd+Shift+V keeps them inline); send waits for uploads; `attachments` plus image/file records in `context`. Missing: persisting draft attachments across relaunch, "Attach again" rows, inline base64 images for servers without `attachmentUploads`, attachments on queued-message edits |
 | Attached file preview panel | comp/files/AttachmentFilePreview.tsx | ⏳ | WP7.11 (2026-10-11): not built (needs the files package's preview dialog). |
-| SnapShot attachment details | comp/chat/SnapShotAttachmentDetails.tsx | ⏳ | WP7.11 (2026-10-11): not built (SnapShot attachments come with SnapShots capture, WP7.16). |
+| SnapShot attachment details | comp/chat/SnapShotAttachmentDetails.tsx | ➖ | WP7.16b: source metadata, icon/monogram, title gradient and accessibility JSON/text popover in composer and timeline; six recovery/details fidelity states mean 1.39%, worst 1.93%. JSON syntax highlighting and a sent timeline capture screen check remain. |
 | Model picker (providers sidebar, search, favorites, multi-select with shift-click) | comp/chat/ProviderModelPicker.tsx, comp/chat/ModelPickerContent.tsx, comp/chat/ModelPickerSidebar.tsx, comp/chat/ModelListRow.tsx | 🟡 | WP7.11 (2026-10-11): Shift-click or Shift-Return toggles models on a draft when the server has `requiredWorktreeBootstrap`; the trigger shows "A, B, N more" and each picked row is selected (ChatComposer.tsx:5508-5533, ProviderModelPicker.tsx:179-186). Checked on screen. |
 | Traits picker (effort, speed, thinking, context size) | comp/chat/TraitsPicker.tsx, comp/chat/TraitsSpeed.tsx | 🟡 | `mod+shift+e` |
 | Custom models editor | comp/settings/CustomModelEditor.tsx | ⏳ | Audit 2026-10-11: Settings can add and remove custom models (`ProvidersSettingsView`). No composer editor.; WP7.11 (2026-10-11): not built; Settings > Providers keeps add and remove. |
@@ -344,7 +344,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
 | Enable toggle and setup dialog (screen recording, accessibility, shortcut) | comp/settings/SnapShotSettings.tsx, comp/settings/SnapShotSetupDialog.tsx, docs/snap-shot.md | ➖ | WP7.16: Access/test/Shortcut/Enable flow and permission actions built. Missing official permission-row visuals, setup recorder/conflict checks. See docs/research/WP7.16-onboarding-snapshots-desktop.md. |
-| Include app text; Capture shortcut recorder; sound; flash; animations | comp/settings/SnapShotSettings.tsx, comp/settings/CaptureShortcutConfig.tsx | ➖ | WP7.16: chord recorder and official sound clips work. App text, pair/reset recorder, flash and flight animation remain missing. |
+| Include app text; Capture shortcut recorder; sound; flash; animations | comp/settings/SnapShotSettings.tsx, comp/settings/CaptureShortcutConfig.tsx | ➖ | WP7.16b: bounded accessibility tree with clipped image coordinates, app metadata, flash and distance-based flight; sound retained. Same-process AX data omitted after a verified worker-thread AppKit crash; pair/reset recorder and conflicts remain. |
 
 ### Settings > Providers
 
@@ -360,7 +360,7 @@ Route files are in `web/routes/settings.*.tsx`. Sidebar order: Project, General,
 | ACP session management section | comp/settings/AcpSessionManagementSection.tsx | ⏳ | |
 | Usage providers (incl. Cursor account usage via Keychain) | comp/settings/UsageProviderSettings.tsx | 🟡 | WP7.7c: Providers > Usage providers: Cursor Keychain switch on darwin servers, hub rows with Remove (confirmed), Add hub dialog (`cliproxy-<host>` ids). Not tried on screen with a real hub or Keychain |
 | Health check interval | comp/settings/SettingsPanels.tsx | 🟡 | WP7.7b: Providers > Advanced, written to that environment |
-| Provider update notifications (launch and primary) | comp/ProviderUpdateLaunchNotification.tsx, comp/ProviderUpdatePrimaryNotification.tsx | ⏳ | |
+| Provider update notifications (launch and primary) | comp/ProviderUpdateLaunchNotification.tsx, comp/ProviderUpdatePrimaryNotification.tsx | ➖ | WP7.16b: primary launch version advice and update failed/unchanged/succeeded notices, driver dedupe and Settings action; running state reuses sidebar pill. One-click update action and multi-environment coordination remain. ProviderUpdateLaunchNotification.logic.ts:160-325,579-602. |
 
 ### Settings > Integrations
 
@@ -543,16 +543,16 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 | Notification sound, audio unlock | web/threadNotifications.ts | 🟡 | WP7.8: T3's two clips (notification-completion.mp3, notification-input.mp3) through NSSound; nothing plays until a key or click after launch or choosing a sound mode, like T3's AudioContext unlock (threadNotifications.ts:67-100, Coordinator:70-78). |
 | Dock badge count of threads with unread notifications; cleared on window focus | desk/ipc/methods/notificationBadge.ts | 🟡 | WP7.8: NSDockTile badge = threads with a pending system notification; a focused window never badges; cleared with the notifications on window focus, quit and mode change; environments that leave drop theirs (notificationBadge.ts:20-70, Coordinator:33-68). Seen on screen. |
 | In-app toasts (toast manager, anchored copy toast, undo toasts) | comp/ui/toast.tsx, comp/ui/toastHelpers.ts | 🟡 | WP7.16: anchored one-second Copied!/Failed to copy glass popup on message and diff-path buttons; existing stack and undo toasts reused. Copy/progress fidelity mean 2.59%. |
-| Slow RPC toast, keybinding update toast, provider update toast | comp/SlowRpcRequestToastCoordinator.tsx, comp/KeybindingsUpdateToast.logic.ts | ➖ | WP7.16: bounded unary latency deadlines, persistent slow warning/details dialog and primary keybinding success/error notices. Missing inline expanded details, config-file action and provider update toasts. |
+| Slow RPC toast, keybinding update toast, provider update toast | comp/SlowRpcRequestToastCoordinator.tsx, comp/KeybindingsUpdateToast.logic.ts | ➖ | WP7.16b adds primary provider launch/update notices. Existing slow RPC and keybinding notices retained; expanded slow details, config-file action, one-click provider update and multi-environment coordination remain. |
 | Mobile push / Live Activities for agent activity | docs/mobile-notifications.md | n/a | Server publishes when "Publish agent activity" is on; no macOS client work; Not applicable: Server publishes; no macOS client work. |
 
 ## Onboarding and welcome
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| First-run gate (decides wizard vs app; Still connecting; Could not read settings) | comp/onboarding/FirstRunGate.tsx, web/routes/welcome.tsx | ⏳ | WP7.16: researched FirstRunGate.tsx:73-237; authoritative startup gate/recovery not built. Wizard is explicit --welcome or /welcome resume only. |
-| Welcome wizard step 1: connect computers (T3 Connect list, add a computer by pairing link) | comp/onboarding/WelcomeWizard.tsx, comp/cloud/CloudEnvironmentConnectList.tsx | ➖ | WP7.16: connected catalog choices and existing Connections entry point. Missing inline cloud list/pairing and automatic return. Sandbox client preferences are memory-only. |
-| Welcome wizard step 2: check agents (Claude Code, Codex install/sign-in via terminal) | comp/onboarding/WelcomeWizard.tsx | ➖ | WP7.16: live Claude/Codex statuses and existing Providers entry point. Missing ranked readiness and embedded install/sign-in terminal. |
+| First-run gate (decides wizard vs app; Still connecting; Could not read settings) | comp/onboarding/FirstRunGate.tsx, web/routes/welcome.tsx | ➖ | WP7.16b: automatic authoritative gate, cached-data fast path, bootstrap freshness, four-second connection recovery, settings read/retry and mandatory wizard. Native shell remains mounted behind the blocking recovery overlay; hosted-only branch is absent. FirstRunGate.tsx:73-237, firstRun.logic.ts:70-190. |
+| Welcome wizard step 1: connect computers (T3 Connect list, add a computer by pairing link) | comp/onboarding/WelcomeWizard.tsx, comp/cloud/CloudEnvironmentConnectList.tsx | ➖ | WP7.16b: live catalog, Connect machine choices/refresh, existing sign-in and pairing dialogs return to welcome. Official inline computer cards, inline pairing layout and full access guards remain. WelcomeWizard.tsx:1330-1415. |
+| Welcome wizard step 2: check agents (Claude Code, Codex install/sign-in via terminal) | comp/onboarding/WelcomeWizard.tsx | ➖ | WP7.16b: provider instances ranked by readiness, live status and Providers settings return to welcome. Embedded install/sign-in terminal and exact cards remain. providerReadiness.logic.ts:38-74. |
 | Welcome wizard step 3: import projects (scan, groups, select all/none, conversation import) | comp/onboarding/WelcomeWizard.tsx, docs/welcome-wizard.md | ➖ | WP7.16: selected-environment scan, selection, project.create without mkdir and agentSessions.import. Missing groups, bounded scrolling, full retry/access guards and summaries; import not exercised on screen. |
 | Wizard progress bar and navigation | comp/ui/wizard.tsx | 🟡 | WP7.16: existing WizardStepsView reused in welcome and capture setup; previous steps enabled, future disabled. Fidelity 1.01-1.52% across six states. |
 | Connect onboarding dialog | comp/cloud/ConnectOnboardingDialog.tsx | ⏳ | WP7.16: researched ConnectOnboardingDialog.tsx:35-42,242-362. Post-sign-in publish/devices wizard remains unbuilt. |
@@ -613,9 +613,9 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 |---|---|---|---|
 | Device panel (see Right panels) | comp/device/ | ➖ | WP7.12 (2026-10-11): Native device surface and transports built; see Right panels and docs/research/wp712-panels-2026-10-11.md for remaining parity and runtime coverage. |
 | Device hosts over SSH, tool updates | comp/settings/DeviceHostsSettings.tsx, comp/device/DeviceHostUpdates.tsx, docs/devices.md | ➖ | WP7.12 (2026-10-11): Existing SSH-host device sessions route through hostId on the T3 proxy. Host editor, connection checks and tool inventory/update/retry UI remain.  WP7.12b (2026-10-11): Host CRUD, validation and connection RPC built. Tool inventory/update/retry and grouped host results remain. |
-| SnapShot capture: global shortcut (both Shift keys by default), active window capture, attach to draft | desk/snapShot/MacSnapShot.ts, desk/snapShot/DesktopSnapShot.ts, desk/snapShot/MacModifierPairShortcutProcess.ts | ➖ | WP7.16: one-shot ScreenCaptureKit capture, event-driven modifier pair/chord in Shortcuts.swift, draft attachment. On-screen custom chord capture passed. Missing shortcut conflict checks and auto-draft creation; both-Shift covered by unit tests. |
-| SnapShot coordinator in renderer (attach, pending captures on disk) | comp/desktop/SnapShotCoordinator.tsx, comp/desktop/SnapShotShortcutKeys.tsx | ➖ | WP7.16: pins draft/environment before capture, compression and existing upload pipeline. Missing durable pending queue, restart recovery, source metadata and app text. |
-| SnapShot capture feedback (sound, flash, animation) | desk/snapShot/NativeCaptureFeedback.ts | ➖ | WP7.16: official Whoosh/Click sounds. Flash and flight animation remain unbuilt. |
+| SnapShot capture: global shortcut (both Shift keys by default), active window capture, attach to draft | desk/snapShot/MacSnapShot.ts, desk/snapShot/DesktopSnapShot.ts, desk/snapShot/MacModifierPairShortcutProcess.ts | ➖ | WP7.16b: metadata captured with image, local chord consumed, global monitor only while enabled/ready; creates a draft when a project is available. Capture/restart/removal checked on screen. No-project scratch creation and shortcut conflict checks remain. |
+| SnapShot coordinator in renderer (attach, pending captures on disk) | comp/desktop/SnapShotCoordinator.tsx, comp/desktop/SnapShotShortcutKeys.tsx | ➖ | WP7.16b: atomic local capture file, persisted draft/environment/source records and restart reupload; screen-verified. Pre-delivery crash queue, in-flight-send recovery, stash/source sync and sent-file lifecycle cleanup remain. Old pending server upload may expire after restart reupload. |
+| SnapShot capture feedback (sound, flash, animation) | desk/snapShot/NativeCaptureFeedback.ts | ➖ | WP7.16b: official sounds, 0.08 white flash (180ms animated/60ms static), transform/position flight (280-680ms, cubic .2/.8/.2/1), Reduce Motion. Exact image-to-tile crossfade/shadow and multi-display visual verification remain. |
 
 ## Desktop-only
 
@@ -633,11 +633,11 @@ Source: `desk/window/DesktopApplicationMenu.ts`.
 | App menu: Quit T3 Code (Cmd+Q, hold-to-quit logic) | same (line 187), desk/window/QuitHold.ts, comp/QuitHoldOverlay.tsx | 🟡 | WP7.8: `QuitHoldController` ports `makeQuitShortcutHandler` (QuitHold.ts:40-221) in the one key monitor (Shortcuts.swift): hold 1.2 s, double press 0.5 s, direct; conceal = leave full screen and alpha 0 (DesktopWindow.ts:246-259); the menu's Quit stays immediate. Overlay `QuitHoldOverlayView` (QuitHoldOverlay.tsx), fidelity 2.1-2.9%. Tests: QuitHoldTests. |
 | File menu: Close (Cmd+W) | same (lines 194-206) | 🟡 | WP7.8: File > Close Window, Cmd+W (role close, DesktopApplicationMenu.ts:192-206); keybindings resolve first in Shortcuts. |
 | Edit menu: Undo, Redo, Cut, Copy, Paste, Paste as Text (Cmd+Shift+V), Delete, Select All, Speech (Start/Stop Speaking) | same (lines 210-231) | 🟡 | |
-| View menu: Reload (Cmd+R), Force Reload (Shift+Cmd+R), Toggle Developer Tools (Alt+Cmd+I) | same (lines 238-255) | n/a | Dev tools and reload need a web inspector; native build can omit or map to debug tools; Not applicable: Reload and developer tools need a web inspector. No equivalent. |
-| View menu: Actual Size (Cmd+0), Zoom In (Cmd+=, Cmd+Plus), Zoom Out (Cmd+-), Toggle Full Screen | same (lines 258-268) | ➖ | WP7.16: native root zoom (0.5 levels), Actual Size and reconnect-based Reload/Force Reload. Missing independent embedded-browser zoom preservation and force-cache reset. |
+| View menu: Reload (Cmd+R), Force Reload (Shift+Cmd+R), Toggle Developer Tools (Alt+Cmd+I) | same (lines 238-255) | ➖ | WP7.16b: distinct force reload clears URLCache and retained thread stores, bypasses disk thread cache and reconnects. Full file/media/browser cache reset and developer-tools surface remain; no longer marked inapplicable. |
+| View menu: Actual Size (Cmd+0), Zoom In (Cmd+=, Cmd+Plus), Zoom Out (Cmd+-), Toggle Full Screen | same (lines 258-268) | ➖ | WP7.16b: existing native root zoom, Actual Size and fullscreen retained; force reload now bypasses thread caches. Independent embedded-browser zoom preservation remains. |
 | Window menu (system Window role: Minimize, Zoom, Bring All to Front) | same (line 271) | 🟡 | |
 | Help menu: Check for Updates... | same (lines 272-279) | M9 | Milestone 9: Needs the updater. |
-| Context menus (native menu for items, fallback in web) | desk/electron/ElectronMenu.ts, web/contextMenuFallback.ts | ➖ | WP7.16: file-tree rows now reuse native menu adapter for Open, reveal and detected editors. Branch selector, file chips and media menus remain missing. |
+| Context menus (native menu for items, fallback in web) | desk/electron/ElectronMenu.ts, web/contextMenuFallback.ts | ➖ | WP7.16b: shared native adapter; branch copy, file-chip viewer/editor/copy and image Save/Copy in draft, timeline and preview. File-chip reveal/detected-editor submenu and original-file/URL media actions remain. |
 
 ### Window behaviour
 
@@ -654,7 +654,7 @@ Source: `desk/window/DesktopApplicationMenu.ts`.
 | Native theme sync (window appearance follows chosen mode) | desk/electron/ElectronTheme.ts | 🟡 | Built (audit 2026-10-11): `PaletteCommands` sets `NSApp.appearance` for System, Light, Dark. Stale mark. |
 | Safe storage for secrets (Keychain) | desk/electron/ElectronSafeStorage.ts | 🟡 | |
 | Shell environment resolution (PATH from login shell) | desk/shell/DesktopShellEnvironment.ts | 🟡 | Needed to spawn the bundled server |
-| Open in editor / file manager / reveal in Finder | comp/chat/OpenInPicker.tsx, web/editorPreferences.ts, desk/electron/ElectronShell.ts | ➖ | WP7.16: advertised-host SSH URLs for VS Code-family, Zed and JetBrains, local URL handoff; file-tree reveal. Missing SSH-profile alias precedence, remote hint, full icons and file-chip menus. |
+| Open in editor / file manager / reveal in Finder | comp/chat/OpenInPicker.tsx, web/editorPreferences.ts, desk/electron/ElectronShell.ts | ➖ | WP7.16b: optional persisted SSH alias takes precedence over advertised host in remote editor URLs. SSH-profile editor feeding the alias, remote hint, complete icons and file-chip reveal/editor submenus remain. remoteOpen.ts:69-110. |
 | Native dialogs (folder pick, confirm) | desk/electron/ElectronDialog.ts, web/confirmDialog.ts, comp/ConfirmDialogHost.tsx | 🟡 | |
 | Tray / menu bar icon | none found in desk/src | n/a | No tray implemented in the official app; do not build; Not applicable: The official app has no tray. Checklist says do not build. |
 | Desktop settings stores (client settings, saved environments, connection catalog) | desk/settings/, desk/app/DesktopConnectionCatalogStore.ts | 🟡 | Client settings in `ClientSettingsStore` (UserDefaults), saved environments and routes in `EnvironmentCatalog` with tokens in the Keychain (WP7.7a, M6). WP7.8 fixed the row note. |

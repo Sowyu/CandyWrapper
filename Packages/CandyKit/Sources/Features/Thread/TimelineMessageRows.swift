@@ -505,7 +505,7 @@ final class PlanRowView: TimelineRowView {
 /// then files without a chip in the text as `py-1 text-sm` rows with the pierre icon, the name and
 /// an eye, each block `mb-2`. Images decode at cell size through the model's loader.
 final class UserMessageAttachmentsView: DSView {
-    private struct Image { let attachmentId: String; let name: String }
+    private struct Image { let attachmentId: String; let name: String; let source: JSONValue? }
     private var images: [Image] = []
     private var files: [String] = []
     private var cells: [AsyncImageView] = []
@@ -527,7 +527,7 @@ final class UserMessageAttachmentsView: DSView {
         for a in m.attachments {
             let type = a["type"]?.stringValue ?? "", id = a["id"]?.stringValue ?? "", name = a["name"]?.stringValue ?? ""
             if type == "image" {
-                if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name)) }
+                if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name, source: a["source"])) }
             } else if !(type == "file" && chipped.contains(id)) {
                 files.append(name)
             }
@@ -549,9 +549,17 @@ final class UserMessageAttachmentsView: DSView {
             cell.fallback.font = DSFont.ui(11)
             let id = image.attachmentId
             cell.set(key: id, fallbackText: image.name, loader: loader.map { load in { side in await load(id, side, true) } })
+            if let loader {
+                cell.onContextMenu = { event, view in
+                    MediaAttachmentContextMenu.show(name: image.name, load: { side in await loader(id, side, false) }, event: event, view: view)
+                }
+            }
             let click = NSClickGestureRecognizer(target: self, action: #selector(expand(_:)))
             cell.addGestureRecognizer(click)
             cell.setAccessibilityLabel("Preview \(image.name)")
+            if let source = image.source, source["kind"]?.stringValue == "snap-shot" {
+                cell.addSubview(SnapShotAttachmentDetailsView(source: source))
+            }
             addSubview(cell)
             return cell
         }
@@ -576,11 +584,18 @@ final class UserMessageAttachmentsView: DSView {
         model?.onExpandImage?(items, index)
     }
 
-    private var cellSize: CGSize {
-        let w = (Self.gridWidth - Self.gap) / 2
-        return CGSize(width: w, height: w * 3 / 4)
+    private func imageFrames(width: CGFloat) -> [CGRect] {
+        var x: CGFloat = 0, y: CGFloat = 0, height: CGFloat = 0
+        return images.map { image in
+            let snapshot = image.source?["kind"]?.stringValue == "snap-shot"
+            let w = snapshot ? min(208, width) : (width - Self.gap) / 2
+            let h = snapshot ? 112 : w * 3 / 4
+            if x > 0 && x + w > width { x = 0; y += height + Self.gap; height = 0 }
+            let rect = CGRect(x: x, y: y, width: w, height: h)
+            x += w + Self.gap; height = max(height, h)
+            return rect
+        }
     }
-
     /// The widest block: the 210pt grid, or the longest file row.
     var naturalWidth: CGFloat {
         let fileWidth = rows.map { 16 + 8 + ceil($0.label.textWidth) }.max() ?? 0
@@ -590,8 +605,7 @@ final class UserMessageAttachmentsView: DSView {
     func height(forWidth width: CGFloat) -> CGFloat {
         var h: CGFloat = 0
         if !images.isEmpty {
-            let gridRows = CGFloat((images.count + 1) / 2)
-            h += gridRows * cellSize.height + (gridRows - 1) * Self.gap + 8
+            h += (imageFrames(width: min(Self.gridWidth, width)).map(\.maxY).max() ?? 0) + 8
         }
         if !files.isEmpty { h += CGFloat(files.count) * Self.rowHeight + CGFloat(files.count - 1) * 4 + 8 }
         return h
@@ -606,14 +620,14 @@ final class UserMessageAttachmentsView: DSView {
 
     override func layout() {
         super.layout()
-        let size = cellSize
-        let gridWidth = min(Self.gridWidth, bounds.width)
-        let cw = gridWidth == Self.gridWidth ? size.width : (gridWidth - Self.gap) / 2
-        let ch = cw * 3 / 4
-        for (i, cell) in cells.enumerated() {
-            cell.frame = NSRect(x: CGFloat(i % 2) * (cw + Self.gap), y: CGFloat(i / 2) * (ch + Self.gap), width: cw, height: ch)
+        let frames = imageFrames(width: min(Self.gridWidth, bounds.width))
+        for (cell, frame) in zip(cells, frames) {
+            cell.frame = frame
+            for view in cell.subviews where view is SnapShotAttachmentDetailsView {
+                view.frame = NSRect(x: 0, y: frame.height - 60, width: frame.width, height: 60)
+            }
         }
-        var y: CGFloat = images.isEmpty ? 0 : CGFloat((images.count + 1) / 2) * (ch + Self.gap) - Self.gap + 8
+        var y: CGFloat = (frames.map(\.maxY).max().map { $0 + 8 }) ?? 0
         for row in rows {
             row.icon.frame = NSRect(x: 0, y: y + 6, width: 16, height: 16)
             row.label.frame = NSRect(x: 24, y: y + 4, width: max(0, bounds.width - 24), height: 20)

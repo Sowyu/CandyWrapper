@@ -90,6 +90,17 @@ final class GitController {
         strip.branch.action = { [weak self] in self?.openBranchPicker(inPanel: false) }
         let card = panel.detailsCard
         card.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: true) }
+        let branchMenu: (NSEvent, NSView) -> Void = { [weak self] event, view in
+            guard let name = self?.resolvedBranch, !name.isEmpty else { return }
+            let menu = SidebarCommands.nativeMenu([ThreadMenuItem("copy", "Copy branch name")]) { _ in
+                NSPasteboard.general.clearContents()
+                let copied = NSPasteboard.general.setString(name, forType: .string)
+                AnchoredCopyToast.show(from: view, success: copied)
+            }
+            NSMenu.popUpContextMenu(menu, with: event, for: view)
+        }
+        strip.branch.onContextMenu = branchMenu
+        card.branch.onContextMenu = branchMenu
         card.branch.action = { [weak self] in self?.openBranchPicker(inPanel: true) }
         card.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
         card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }

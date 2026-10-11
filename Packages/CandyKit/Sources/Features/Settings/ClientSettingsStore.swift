@@ -11,6 +11,7 @@ public final class ClientSettingsStore {
     static let defaultsKey = "clientSettings.v1"
     private let defaults: UserDefaults
     private let ephemeral: Bool
+    public private(set) var readFailed = false
     public private(set) var current: ClientSettings
     private var observers: [(id: Int, block: @MainActor (Set<String>) -> Void)] = []
     private var nextId = 0
@@ -20,10 +21,20 @@ public final class ClientSettingsStore {
         self.ephemeral = ephemeral
         let json = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
         current = ClientSettings(decoding: json)
+        readFailed = !ephemeral && defaults.data(forKey: Self.defaultsKey) != nil && json?.objectValue == nil
+    }
+
+    public func retryRead() {
+        let data = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey)
+        let json = data.flatMap { try? JSONValue(parsing: $0) }
+        readFailed = data != nil && json?.objectValue == nil
+        if !readFailed { current = ClientSettings(decoding: json) }
+        for o in observers { o.block(["hydration"]) }
     }
 
     /// Applies a patch, saves, and tells observers which keys changed.
     public func update(_ patch: [String: JSONValue]) {
+        guard !readFailed else { return }
         let changed = current.apply(patch)
         guard !changed.isEmpty else { return }
         if !ephemeral, let data = try? JSONEncoder().encode(current.encoded) { defaults.set(data, forKey: Self.defaultsKey) }

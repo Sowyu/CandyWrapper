@@ -470,19 +470,25 @@ final class ThreadController {
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
 
-    func open(_ id: ThreadId) {
+    func forceReload() {
+        retained.removeAll()
+        guard let id = session?.threadId, !panel.isDraft else { return }
+        open(id, force: true)
+    }
+
+    func open(_ id: ThreadId, force: Bool = false) {
         sidebar?.state.activeThreadId = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
-        guard id != session?.threadId || panel.isDraft else { return }
+        guard force || id != session?.threadId || panel.isDraft else { return }
         OpenTiming.begin(id.rawValue)
         session?.end()
         panel.setDraft(projectTitle: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         composer.showThread(id)
         files.show(id)
-        let kept = takeRetained(id) ?? keepAlive?.take(id)
+        let kept = force ? nil : (takeRetained(id) ?? keepAlive?.take(id))
         lineage.update(threadId: id, projection: nil)
-        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
+        let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
         session.onProjection = { [weak self] projection in
             self?.composer.projectionChanged(projection, threadId: id)
             self?.lineage.update(threadId: id, projection: projection)

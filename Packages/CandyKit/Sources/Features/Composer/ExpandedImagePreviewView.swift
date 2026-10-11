@@ -87,6 +87,7 @@ public final class ExpandedImagePreviewView: DSView {
         guard items.indices.contains(index) else { return }
         let item = items[index]
         caption.text = item.name + (items.count > 1 ? " (\(index + 1)/\(items.count))" : "")
+        image.onContextMenu = { event, view in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: view) }
         image.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.", loader: item.load)
         needsLayout = true
     }

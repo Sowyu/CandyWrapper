@@ -14,8 +14,16 @@ final class WelcomeOnboardingController {
     private weak var settings: SettingsController?
     private var host: ModalHost?
     private var dialog: DialogView?
+    private var gate: FirstRunRecoveryView?
+    private var deadline: DispatchWorkItem?
+    private var suspendingWelcome = false
+    private var gateRoute: FirstRunDecision.Route = .pending
+    private var live: Set<String> = []
+    private var lifecycle: (ShellSession, UUID)?
+    private var settingsObserver: Int?
     private var step = 0
     private var selected: Set<String> = []
+    private var seenComputers: Set<String> = []
     private var candidates: [(env: String, value: JSONValue)] = []
     private var selectedPaths: Set<String> = []
     private var importedProjects: [String: String] = [:]
@@ -25,13 +33,96 @@ final class WelcomeOnboardingController {
 
     init(window: NSWindow, environments: Environments, composer: ComposerController, settings: SettingsController) {
         self.window = window; self.environments = environments; self.composer = composer; self.settings = settings
-        environments.observe { [weak self] in if self?.step == 0 { self?.render() } }
-        composer.configObservers.append { [weak self] _ in if self?.step == 1 { self?.render() } }
+        settings.t3.observe { [weak self] in if self?.step == 0 { self?.render() } }
+        environments.observe { [weak self] in self?.evaluateFirstRun(); if self?.step == 0 { self?.render() } }
+        composer.configObservers.append { [weak self] _ in self?.evaluateFirstRun(); if self?.step == 1 { self?.render() } }
+    }
+    func beginFirstRun() {
+        guard let content = window?.contentView else { return }
+        let gate = FirstRunRecoveryView(frame: content.bounds)
+        gate.autoresizingMask = [.width, .height]
+        gate.onRetry = { [weak self] in
+            guard let self else { return }
+            if ClientSettingsStore.shared.readFailed { ClientSettingsStore.shared.retryRead() }
+            else { for id in environments.environmentIds { environments.reconnect(id) }; armDeadline() }
+            evaluateFirstRun()
+        }
+        self.gate = gate
+        content.addSubview(gate)
+        settingsObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.evaluateFirstRun() }
+        armDeadline()
+        evaluateFirstRun()
+    }
+    private func armDeadline() {
+        deadline?.cancel()
+        gate?.reason = .pending
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, gateRoute == .pending else { return }
+            gate?.reason = ClientSettingsStore.shared.readFailed ? .settings : .connecting
+        }
+        deadline = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+    func liveShell(_ env: String, snapshot: ShellSnapshot?) {
+        if snapshot == nil { live.remove(env) } else { live.insert(env) }
+        evaluateFirstRun()
+    }
+    private func evaluateFirstRun() {
+        guard gate != nil, gateRoute != .wizard else { return }
+        let store = ClientSettingsStore.shared
+        if store.readFailed { gate?.reason = .settings; return }
+        let primary = environments.primaryId
+        if let shell = environments.session(primary), shell !== lifecycle?.0 {
+            if let lifecycle { lifecycle.0.lifecycleObservers[lifecycle.1] = nil }
+            let id = UUID()
+            shell.lifecycleObservers[id] = { [weak self] _ in self?.evaluateFirstRun() }
+            lifecycle = (shell, id)
+        }
+        var evidence = FirstRunDecision.Evidence()
+        evidence.completed = !store.current.string("onboardingCompletedAt").isEmpty
+        evidence.catalogReady = environments.catalogReady
+        evidence.primaryLive = primary.map { live.contains($0) } ?? false
+        let ids = Array(Set(environments.environmentIds + environments.saved.filter(\.enabled).map(\.environmentId)))
+        evidence.bootstrapped = !ids.isEmpty && ids.allSatisfy { environments.hasShell($0) }
+        evidence.workspaceLive = ids.allSatisfy { live.contains($0) }
+        evidence.configAvailable = primary.flatMap { composer.config($0) } != nil
+        evidence.primaryId = primary
+        evidence.welcome = environments.session(primary)?.welcome
+        for env in ids {
+            guard let snapshot = environments.snapshot(env) else { continue }
+            for project in snapshot.projects {
+                if var json = (try? JSONValue(parsing: JSONEncoder().encode(project)))?.objectValue {
+                    json["environmentId"] = .string(env); evidence.projects.append(.object(json))
+                }
+            }
+            for thread in snapshot.threads {
+                if var json = (try? JSONValue(parsing: JSONEncoder().encode(thread)))?.objectValue {
+                    json["environmentId"] = .string(env)
+                    json["latestRun"] = thread.latestRunId.map { .string($0.rawValue) } ?? .null
+                    json["runtime"] = thread.activeProviderThreadId.map { .string($0) } ?? .null
+                    evidence.threads.append(.object(json))
+                }
+            }
+        }
+        let result = FirstRunDecision.resolve(evidence)
+        if result.route == .pending { return }
+        gateRoute = result.route
+        deadline?.cancel(); deadline = nil
+        gate?.removeFromSuperview()
+        if result.persist || evidence.completed || result.route == .wizard { gate = nil }
+        if result.persist { store.update(["onboardingCompletedAt": .string(ISO8601DateFormatter().string(from: Date()))]) }
+        if result.route == .wizard { show() }
+        if result.persist || evidence.completed || result.route == .wizard {
+            if let lifecycle { lifecycle.0.lifecycleObservers[lifecycle.1] = nil }; lifecycle = nil
+            if let settingsObserver { store.removeObserver(settingsObserver) }; settingsObserver = nil
+        }
     }
     func show() {
         guard host == nil, let window else { return }
-        selected = Set(environments.environmentIds.filter { environments.state($0)?.status == .connected })
+        suspendingWelcome = false
+        if selected.isEmpty { selected = Set(environments.environmentIds.filter { environments.state($0)?.status == .connected }) }
         let dialog = DialogView(title: "Set up T3 Code")
+        dialog.showsCloseButton = gateRoute != .wizard
         dialog.maxWidth = 768
         dialog.footerVariant = .bare
         self.dialog = dialog
@@ -39,7 +130,11 @@ final class WelcomeOnboardingController {
         let host = ModalHost.present(dialog, in: window)
         self.host = host
         dialog.onClose = { [weak host] in host?.close() }
-        host.onDismiss = { [weak self] in self?.task?.cancel(); self?.task = nil; self?.host = nil; self?.dialog = nil }
+        host.onDismiss = { [weak self] in
+            guard let self else { return }
+            task?.cancel(); task = nil; self.host = nil; self.dialog = nil
+            if gateRoute == .wizard && !suspendingWelcome && ClientSettingsStore.shared.current.string("onboardingCompletedAt").isEmpty { show() }
+        }
     }
     private func key(_ env: String, _ value: JSONValue) -> String { env + ":" + (value["path"]?.stringValue ?? "") }
     private func button(_ title: String, action: @escaping @MainActor () -> Void) -> ButtonView {
@@ -61,24 +156,52 @@ final class WelcomeOnboardingController {
         var content: [NSView] = [progress, LabelView(titles[step], font: DSFont.ui(24, weight: .semibold)),
                                  LabelView(descriptions[step], font: DSFont.ui(14), color: Themed.color(\.mutedForeground))]
         if step == 0 {
+            let connected = Set(environments.environmentIds.filter { environments.state($0)?.status == .connected })
+            selected.formUnion(connected.subtracting(seenComputers)); seenComputers.formUnion(connected)
             for env in environments.environmentIds {
                 content.append(OnboardingChoiceRowView(title: environments.label(env) ?? "Computer",
                     detail: environments.state(env)?.status == .connected ? "Connected" : "Not connected", selected: selected.contains(env)) { [weak self] on in
                     if on { self?.selected.insert(env) } else { self?.selected.remove(env) }; self?.render()
                 })
             }
-            content.append(button("Add a computer") { [weak self] in self?.host?.close(); self?.settings?.show(.connections) })
+            if let t3 = settings?.t3 {
+                if t3.signedIn == nil {
+                    content.append(button("Sign in to T3 Connect") { [weak self, weak t3] in
+                        guard let self, let window else { return }
+                        suspendingWelcome = true; host?.close()
+                        t3?.onOnboardingReturn = { [weak self] in self?.show() }
+                        t3?.presentSignIn(in: window)
+                    })
+                } else {
+                    for machine in t3.machines ?? [] where !environments.environmentIds.contains(machine.environmentId) {
+                        content.append(button("Connect \(machine.record.label)") { [weak t3] in t3?.add(machine.environmentId) })
+                    }
+                    if let error = t3.discoveryError { content.append(LabelView(error, font: DSFont.ui(12), color: Themed.color(\.destructive))) }
+                    content.append(button("Refresh computers") { [weak t3] in t3?.refreshMachines() })
+                }
+            }
+            content.append(button("Add a computer") { [weak self] in
+                guard let self else { return }
+                suspendingWelcome = true; host?.close()
+                settings?.onOnboardingReturn = { [weak self] in self?.show() }
+                settings?.presentAdd(routeTarget: nil)
+            })
         } else if step == 1 {
             for env in selected.sorted() {
                 content.append(LabelView(environments.label(env) ?? "Computer", font: DSFont.ui(14, weight: .medium)))
                 for driver in ["claudeAgent", "codex"] {
-                    let provider = composer.config(env)?.providers.first { $0.driver == driver }
+                    let provider = OnboardingProviderReadiness.select(composer.config(env)?.providers ?? [], driver: driver)
                     let title = driver == "codex" ? "Codex" : "Claude Code"
                     content.append(LabelView("\(title) · \(provider?.status ?? "Checking…")", font: DSFont.ui(14)))
                 }
             }
             // ponytail: provider setup opens the existing provider page; add the inline onboarding terminal before claiming step-two parity.
-            content.append(button("Set up agents") { [weak self] in self?.host?.close(); self?.settings?.show(.providers) })
+            content.append(button("Set up agents") { [weak self] in
+                guard let self else { return }
+                suspendingWelcome = true; host?.close()
+                settings?.onOnboardingReturn = { [weak self] in self?.show() }
+                settings?.show(.providers)
+            })
         } else {
             content.append(button("Select all") { [weak self] in guard let self else { return }; selectedPaths = Set(candidates.map { key($0.env, $0.value) }); render() })
             content.append(button("Select none") { [weak self] in self?.selectedPaths = []; self?.render() })

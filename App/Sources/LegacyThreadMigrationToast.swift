@@ -11,7 +11,7 @@ import T3Protocol
 final class LegacyThreadMigrationToast {
     private let environments: Environments
     private weak var toasts: ToastViewport?
-    private var subscription: (environmentId: String, shell: ShellSession, task: Task<Void, Never>)?
+    private var subscription: (environmentId: String, shell: ShellSession, observer: UUID)?
     private var toastId: Int?
 
     init(environments: Environments, toasts: ToastViewport) {
@@ -24,17 +24,16 @@ final class LegacyThreadMigrationToast {
         guard environmentId == environments.primaryId else { return }
         let shell = environments.session(environmentId)
         guard shell !== subscription?.shell else { return }
-        subscription?.task.cancel()
+        if let subscription { subscription.shell.lifecycleObservers[subscription.observer] = nil }
         subscription = nil
         guard let shell else { return }
-        // ponytail: a second `subscribeServerLifecycle` stream for this toast alone; share one when another feature reads lifecycle events
-        let task = shell.supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }) { [weak self] event in
-            guard case .value(let json) = event, json["type"]?.stringValue == "legacyThreadMigration" else { return }
-            let status = json["payload"]?["status"]?.stringValue
-            let total = json["payload"]?["totalThreadCount"]?.intValue ?? 0
-            await MainActor.run { self?.apply(status: status, total: total) }
+        let observer = UUID()
+        shell.lifecycleObservers[observer] = { [weak self] json in
+            guard json["type"]?.stringValue == "legacyThreadMigration" else { return }
+            self?.apply(status: json["payload"]?["status"]?.stringValue,
+                        total: json["payload"]?["totalThreadCount"]?.intValue ?? 0)
         }
-        subscription = (environmentId, shell, task)
+        subscription = (environmentId, shell, observer)
     }
 
     func apply(status: String?, total: Int) {
@@ -48,5 +47,33 @@ final class LegacyThreadMigrationToast {
         }
         if let toastId { toasts?.dismiss(toastId) }
         toastId = nil
+    }
+}
+
+/// The running update lives in the sidebar pill. Terminal results and launch advice use toasts.
+@MainActor
+final class ProviderUpdateLaunchToast {
+    private weak var viewport: ToastViewport?
+    private var shown: Int?
+    private var shownKey: String?
+    private var announced: Set<String> = []
+    private var updating: Set<String> = []
+    var openSettings: (() -> Void)?
+    init(viewport: ToastViewport) { self.viewport = viewport }
+    func update(_ providers: [ServerProvider]) {
+        let active = providers.filter { ["queued", "running"].contains($0.updateState?.status ?? "") }
+        updating.formUnion(active.map(\.driver))
+        let model: ProviderUpdateToastModel?
+        if !updating.isEmpty {
+            model = ProviderUpdateToastModel.progress(providers.filter { updating.contains($0.driver) }, count: updating.count)
+        } else { model = ProviderUpdateToastModel.initial(providers) }
+        guard let model, model.key != shownKey else { return }
+        if let shown { viewport?.dismiss(shown) }; shown = nil; shownKey = model.key
+        if model.phase == "running" { return }
+        guard announced.insert(model.key).inserted else { return }
+        if model.phase != "initial" { updating = [] }
+        let kind: ToastQueue.Kind = model.phase == "failed" ? .error : model.phase == "succeeded" ? .success : .warning
+        shown = viewport?.show(ToastView(title: model.title, message: model.message, kind: kind,
+            actionTitle: model.phase == "succeeded" ? nil : "Provider settings", action: { [weak self] in self?.openSettings?() }), timeout: model.timeout)
     }
 }

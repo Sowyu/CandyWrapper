@@ -164,6 +164,7 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
     public var environmentId: String
     /// Clipboard text folded into a file (`PastedTextAttachmentSource`).
     public var pastedText = false
+    public var snapShotSource: JSONValue?
 
     public init(id: String = UUID().uuidString.lowercased(), kind: Kind, name: String, mimeType: String, sizeBytes: Int,
                 fileURL: URL, status: ComposerFileRow.Status = .uploading(0), attachmentId: String? = nil, environmentId: String) {
@@ -183,6 +184,7 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
         guard status == .ready, let attachmentId else { return nil }
         var fields: [String: JSONValue] = ["type": .string(kind.rawValue), "id": .string(attachmentId), "name": .string(name),
                                            "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))]
+        if let snapShotSource { fields["source"] = snapShotSource }
         if pastedText { fields["source"] = .object(["_tag": .string("pasted-text")]) }
         return .object(fields)
     }

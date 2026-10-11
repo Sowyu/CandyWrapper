@@ -30,6 +30,7 @@ final class T3ConnectController {
     private var creating: Task<T3ConnectAccount?, Never>?
 
     private var modal: ModalHost?
+    var onOnboardingReturn: (() -> Void)?
     private var flow: T3ConnectSignInFlow?
     private var accountPage: (page: T3ConnectAccountView, model: T3ConnectAccountModel)?
     private weak var accountIdentity: AccountIdentityView?
@@ -188,7 +189,10 @@ final class T3ConnectController {
             if step != before { window?.makeFirstResponder(form.focusTarget) }
         }
         let host = ModalHost.present(dialog, in: window)
-        host.onDismiss = { [weak self] in self?.modal = nil; self?.flow = nil }
+        host.onDismiss = { [weak self] in
+            self?.modal = nil; self?.flow = nil
+            let callback = self?.onOnboardingReturn; self?.onOnboardingReturn = nil; callback?()
+        }
         modal = host
         window.makeFirstResponder(form.emailField)
     }

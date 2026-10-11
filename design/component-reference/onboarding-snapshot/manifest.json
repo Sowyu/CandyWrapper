@@ -1,0 +1,14 @@
+{
+  "connection" : {
+    "height" : 300,
+    "width" : 440
+  },
+  "details" : {
+    "height" : 60,
+    "width" : 208
+  },
+  "settings" : {
+    "height" : 300,
+    "width" : 440
+  }
+}

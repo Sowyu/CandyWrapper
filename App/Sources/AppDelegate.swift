@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var slowRPCObserver: NSObjectProtocol?
     private var slowRPCToast: Int?
     private weak var slowRPCViewport: ToastViewport?
+    private var providerUpdateToast: ProviderUpdateLaunchToast?
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
@@ -218,11 +219,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let priorLiveShell = environments.onLiveShell
         environments.onLiveShell = { [weak welcome, weak environments] env, snapshot in
             priorLiveShell?(env, snapshot)
+            welcome?.liveShell(env, snapshot: snapshot)
             if !showedWelcome, CommandLine.arguments.contains("--welcome"), env == environments?.primaryId {
                 showedWelcome = true
                 welcome?.show()
             }
         }
+        if !Self.isPreview && !CommandLine.arguments.contains("--welcome") { welcome.beginFirstRun() }
         startSession(environments, window: window)
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
@@ -317,10 +320,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let palette, let env = palette.scratchEnvironmentId(environments?.primaryId) else { return }
             palette.startScratchThread(env)
         }
+        let updateToast = ProviderUpdateLaunchToast(viewport: threads.panel.toasts)
+        providerUpdateToast = updateToast
+        updateToast.openSettings = { [weak settings] in settings?.show(.providers) }
         // The provider update pill follows the primary environment's providers (`primaryServerProvidersAtom`).
-        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments] env in
+        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments, weak updateToast] env in
             guard env == environments?.primaryId, let providers = threads?.composer.config(env)?.providers else { return }
             sidebar?.providerUpdatePill.update(providers)
+            updateToast?.update(providers)
         }
         sidebar.providerUpdatePill.onOpenSettings = { [weak settings, weak commands] in
             commands?.closeUtilityPage()
@@ -546,7 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // View (DesktopApplicationMenu.ts:236-269).
         let view = NSMenu(title: "View")
         view.addItem(withTitle: "Reload", action: #selector(reloadWorkspace(_:)), keyEquivalent: "r")
-        view.addItem(withTitle: "Force Reload", action: #selector(reloadWorkspace(_:)), keyEquivalent: "r").keyEquivalentModifierMask = [.command, .shift]
+        view.addItem(withTitle: "Force Reload", action: #selector(forceReloadWorkspace(_:)), keyEquivalent: "r").keyEquivalentModifierMask = [.command, .shift]
         view.addItem(.separator())
         view.addItem(withTitle: "Actual Size", action: #selector(resetWorkspaceZoom(_:)), keyEquivalent: "0")
         view.addItem(withTitle: "Zoom In", action: #selector(zoomWorkspaceIn(_:)), keyEquivalent: "=")
@@ -615,6 +622,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func reloadWorkspace(_ sender: Any?) {
         guard let environments else { return }
         for id in environments.environmentIds { environments.reconnect(id) }
+    }
+    @objc func forceReloadWorkspace(_ sender: Any?) {
+        URLCache.shared.removeAllCachedResponses()
+        threads?.forceReload()
+        reloadWorkspace(sender)
     }
     @objc func resetWorkspaceZoom(_ sender: Any?) { (mainWindow as? MainWindow)?.setWorkspaceZoom(0) }
     @objc func zoomWorkspaceIn(_ sender: Any?) { (mainWindow as? MainWindow)?.changeWorkspaceZoom(0.5) }
