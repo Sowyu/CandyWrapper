@@ -1,0 +1,30 @@
+{
+  "empty" : {
+    "height" : 36,
+    "width" : 384
+  },
+  "loading" : {
+    "height" : 36,
+    "width" : 384
+  },
+  "matches" : {
+    "height" : 36,
+    "width" : 384
+  },
+  "meter-0" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "meter-25" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "meter-95" : {
+    "height" : 28,
+    "width" : 28
+  },
+  "none" : {
+    "height" : 36,
+    "width" : 384
+  }
+}

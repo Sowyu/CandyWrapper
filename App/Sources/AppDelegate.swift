@@ -178,6 +178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
+        threads.panel.header.onThreadMenu = { [weak commands, weak threads] event, view in
+            guard let id = threads?.openThreadId else { return }
+            commands?.showThreadMenu(id, event: event, view: view, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
+        }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)

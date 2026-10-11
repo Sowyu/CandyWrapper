@@ -56,8 +56,9 @@ func page(theme: String) throws -> URL {
 
 // MARK: - Browser
 
+let suppliedChrome = ProcessInfo.processInfo.environment["CANDY_REFERENCE_CHROME"]
 let toolDir = NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"
-let chrome = (try? FileManager.default.contentsOfDirectory(atPath: toolDir))?.sorted().last.map { "\(toolDir)/\($0)/chrome-headless-shell" }
+let chrome = suppliedChrome ?? (try? FileManager.default.contentsOfDirectory(atPath: toolDir))?.sorted().last.map { "\(toolDir)/\($0)/chrome-headless-shell" }
 guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found under ~/.t3/tools"); exit(1) }
 let port = 9334 + Int(getpid() % 500) // per process, so parallel captures never share a DevTools port
 let proc = Process()

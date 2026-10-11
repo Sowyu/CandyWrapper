@@ -12,6 +12,24 @@ public final class ThreadHeaderView: TopbarDragView {
     private let favicon = ProjectMonogramView()
     private let project = LabelView("", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
     private let slash = LabelView("/", font: TL.font(14, .medium), color: TL.c(\.iconMuted))
+    private let titleHit = ThreadHeaderTitleView()
+    private let titleEditor = InputView(placeholder: "Thread title", size: .inline)
+    public var onThreadMenu: ((NSEvent, NSView) -> Void)?
+    public var onRenameThread: ((String) -> Void)?
+    public func beginTitleRename() {
+        guard onRenameThread != nil else { return }
+        titleEditor.text = threadTitle
+        titleEditor.isHidden = false
+        needsLayout = true
+        window?.makeFirstResponder(titleEditor)
+        (window?.firstResponder as? NSTextView)?.selectAll(nil)
+    }
+    private func finishTitleRename() {
+        guard !titleEditor.isHidden else { return }
+        let value = titleEditor.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        titleEditor.isHidden = true
+        if !value.isEmpty, value != threadTitle { onRenameThread?(value) }
+    }
     private let title = LabelView("", font: TL.font(14, .medium), color: TL.c(\.foreground))
     /// Thread panel, terminal, right panel (PanelLayoutControls.tsx:76).
     public let toggles: [ToggleView] = [IconName.squareMenu, .panelBottom, .panelRight].map {
@@ -34,6 +52,12 @@ public final class ThreadHeaderView: TopbarDragView {
         set { favicon.source = newValue }
     }
 
+    public func setThreadVisible(_ visible: Bool) {
+        for view in subviews where view !== titleEditor { view.isHidden = !visible }
+        if !visible { titleEditor.isHidden = true }
+    }
+    public func cancelTitleRename() { titleEditor.isHidden = true; titleHit.cancelPendingMenu() }
+
     public var threadTitle: String {
         get { title.text }
         set { title.text = newValue; needsLayout = true }
@@ -47,6 +71,17 @@ public final class ThreadHeaderView: TopbarDragView {
         toggles[1].setAccessibilityLabel("Toggle terminal")
         toggles[2].setAccessibilityLabel("Toggle right panel")
         toggles.forEach(addSubview)
+        addSubview(titleHit)
+        titleHit.onMenu = { [weak self] event, view in self?.onThreadMenu?(event, view) }
+        titleHit.onRename = { [weak self] in self?.beginTitleRename() }
+        addSubview(titleEditor)
+        titleEditor.isHidden = true
+        titleEditor.onSubmit = { [weak self] in self?.finishTitleRename() }
+        titleEditor.onCommit = { [weak self] _ in self?.finishTitleRename() }
+        titleEditor.onCommand = { [weak self] command in
+            guard command == #selector(NSResponder.cancelOperation(_:)) else { return false }
+            self?.titleEditor.isHidden = true; return true
+        }
     }
 
     public override func layout() {
@@ -65,6 +100,8 @@ public final class ThreadHeaderView: TopbarDragView {
         // (ChatHeader.tsx:256-345).
         let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
         title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 20 - reserve - titleX)), height: 20)
+        titleHit.frame = title.frame
+        titleEditor.frame = NSRect(x: title.frame.minX - 4, y: midY - 11, width: max(80, title.frame.width + 8), height: 22)
         var x = bounds.width - 12 - 1
         // While the right panel is open, the terminal and panel toggles live on its tab bar.
         for toggle in toggles.reversed() where toggle.superview === self {
@@ -89,6 +126,19 @@ public final class ThreadHeaderView: TopbarDragView {
 ///   `setDraft(projectTitle:)` for the new-thread page (hero headline, centered composer).
 public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
+    public let findBar = ThreadFindBarView()
+    public var findOpen = false { didSet {
+        findBar.isHidden = !findOpen
+        if !findOpen { pendingFindMatch = nil }
+        needsLayout = true
+    } }
+    private var pendingFindMatch: ThreadFindResult.Match?
+    public func revealThreadFind(_ match: ThreadFindResult.Match) {
+        pendingFindMatch = match
+        model.prepareThreadFind(match)
+        if timeline.revealFindEntry(match.entryId) { pendingFindMatch = nil }
+        else { onLoadEarlier?() }
+    }
     public let timeline = TimelineView()
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
@@ -108,6 +158,14 @@ public final class ThreadPanelView: DSView {
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
     public let noticeBanner = ComposerNoticeBannerView()
+    public let goalBanner = ComposerNoticeBannerView()
+    public let recoveryBanner = ComposerNoticeBannerView()
+    public var showsGoal = false { didSet { if showsGoal != oldValue { needsLayout = true } } }
+    public var showsRecovery = false { didSet { if showsRecovery != oldValue { needsLayout = true } } }
+    public let planFollowUpBanner = ComposerNoticeBannerView()
+    public var showsPlanFollowUp = false { didSet { if showsPlanFollowUp != oldValue { needsLayout = true } } }
+    private let threadFileDrop = ComposerFileDrop()
+
     public var showsNoticeBanner = false { didSet { if showsNoticeBanner != oldValue { needsLayout = true } } }
     /// The `/usage-limits` result, a notice in the banner stack above the environment banner.
     public var usageLimitsBanner: UsageLimitsBannerView? {
@@ -219,6 +277,7 @@ public final class ThreadPanelView: DSView {
         model.onChange = { [weak self] change in
             guard let self else { return }
             self.timeline.setItems(self.model.items, change: change)
+            if let match = self.pendingFindMatch { self.revealThreadFind(match) }
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
@@ -234,6 +293,11 @@ public final class ThreadPanelView: DSView {
         detailsCard.isHidden = true
         addSubview(detailsCard)
         addSubview(toasts)
+        findBar.isHidden = true
+        addSubview(findBar)
+        ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("chatWidth") { self?.needsLayout = true }
+        }
         header.toggles[0].onPressedChange = { [weak self] _ in
             guard let self else { return }
             header.toggles[0].isPressed = detailsOpen // the controller decides
@@ -494,6 +558,7 @@ public final class ThreadPanelView: DSView {
             header.projectIcon = projectIconForTitle?(projectTitle)
             header.threadTitle = "New thread"
             for view in header.subviews { view.isHidden = false }
+            header.cancelTitleRename()
         }
         updateComposerShown()
     }
@@ -509,9 +574,10 @@ public final class ThreadPanelView: DSView {
         header.projectTitle = projectTitle
         header.threadTitle = projection?.thread.title ?? ""
         // With no thread the bar stays, empty, so it still drags the window.
-        for view in header.subviews { view.isHidden = projection == nil }
+        header.setThreadVisible(projection != nil)
         if projection?.thread.id != model.projection?.thread.id {
             timeline.context.forgetDocuments()
+            header.cancelTitleRename()
             if rightPanelMaximized { toggleMaximized() }
         }
         diffPanel.threadId = projection?.thread.id
@@ -542,7 +608,7 @@ public final class ThreadPanelView: DSView {
     /// the spacer are centered in the column below the header, with the hero 16px above.
     private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
-        let width = max(0, min(Tokens.LengthRem.chatContentMaxWidth * 16, chat - 2 * lane))
+        let width = max(0, min(ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), chat - 2 * lane))
         let height = composer.preferredHeight
         let x = ((chat - width) / 2).rounded()
         let y: CGFloat
@@ -609,6 +675,13 @@ public final class ThreadPanelView: DSView {
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
         }
+        let planShown = docked && showsPlanFollowUp
+        planFollowUpBanner.isHidden = !planShown
+        if planShown {
+            let h = ComposerNoticeBannerView.height
+            planFollowUpBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = planFollowUpBanner.frame.minY
+        }
         let activityShown = docked && showsActivity
         activityRow.isHidden = !activityShown
         if activityShown {
@@ -639,6 +712,14 @@ public final class ThreadPanelView: DSView {
                 top = usage.frame.minY
             }
         }
+        for (banner, shown) in [(goalBanner, showsGoal), (recoveryBanner, showsRecovery)] {
+            banner.isHidden = !docked || !shown
+            if !banner.isHidden {
+                let h = ComposerNoticeBannerView.height
+                banner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+                top = banner.frame.minY
+            }
+        }
         let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
@@ -654,6 +735,13 @@ public final class ThreadPanelView: DSView {
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }
     }
+
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard ComposerFileDrop.hasFiles(sender), composer.onFiles != nil else { return [] }
+        return threadFileDrop.entered(sender)
+    }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { threadFileDrop.exited() }
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool { threadFileDrop.perform(sender) }
 
     /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
     /// through. Only the top fade uses the background color.
@@ -702,6 +790,8 @@ public final class ThreadPanelView: DSView {
             }
         }
         layoutComposer(chat: chat, height: chatHeight)
+        findBar.frame = NSRect(x: max(12, chat - 396), y: ThreadHeaderView.height + 12, width: max(0, min(384, chat - 24)), height: 36)
+        findBar.layer?.zPosition = 4
         // The details card as T3's popover (ThreadDetailsCard.tsx:132-150): under the header, end-aligned
         // with it, inside the viewport's 8pt padding, 264 wide.
         // ponytail: always the popover placement over the timeline; T3 pins the card inline at the canvas's top

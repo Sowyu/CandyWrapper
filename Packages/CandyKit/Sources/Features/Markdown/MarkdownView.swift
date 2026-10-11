@@ -7,6 +7,9 @@ import DesignSystem
 /// timeline can measure rows cheaply. Reuse a view for another message by setting `document`.
 // ponytail: one backing layer per message; a very long message gets a large layer. Switch to tiled drawing if memory shows it.
 public final class MarkdownView: DSView {
+    /// Search changes only the paint of visible rows, never their Markdown layout.
+    public var threadFindQuery = "" { didSet { if threadFindQuery != oldValue { needsDisplay = true } } }
+
     public var document = MarkdownDocument(blocks: []) {
         didSet { if document != oldValue { unwrappedCode = []; diagramCode = []; invalidate(); observeDiagrams() } }
     }
@@ -256,6 +259,20 @@ public final class MarkdownView: DSView {
             switch item {
             case .text(let box, let origin):
                 guard origin.y <= dirtyRect.maxY, origin.y + box.height >= dirtyRect.minY else { continue }
+                if !threadFindQuery.isEmpty {
+                    let text = box.text as NSString
+                    var remaining = NSRange(location: 0, length: text.length)
+                    while remaining.length > 0 {
+                        let range = text.range(of: threadFindQuery, options: [.caseInsensitive], range: remaining)
+                        if range.location == NSNotFound { break }
+                        ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(0.32).cgColor)
+                        for span in box.spans(range) {
+                            ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                                            width: span.x1 - span.x0, height: box.lineHeight))
+                        }
+                        remaining = NSRange(location: range.upperBound, length: text.length - range.upperBound)
+                    }
+                }
                 box.draw(in: ctx, at: origin)
             case .box(let rect, let fill, let border, let radius):
                 drawBox(rect, fill: fill, border: border, radius: radius, in: ctx)

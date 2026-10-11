@@ -1,0 +1,44 @@
+.wp710b-full-test.log
+✔ Test run with 262 tests in 34 suites passed after 2.538 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.675 seconds.
+↳ expected a server we own
+✘ Test run with 124 tests in 27 suites failed after 3.762 seconds with 1 issue.
+thread-leftovers empty.light: 4.25%
+thread-leftovers empty.dark: 4.21%
+thread-leftovers matches.light: 3.59%
+thread-leftovers matches.dark: 3.62%
+thread-leftovers none.light: 3.98%
+thread-leftovers none.dark: 4.01%
+thread-leftovers loading.light: 3.58%
+thread-leftovers loading.dark: 3.53%
+thread-leftovers meter-0.light: 0.00%
+thread-leftovers meter-0.dark: 0.00%
+thread-leftovers meter-25.light: 0.17%
+thread-leftovers meter-25.dark: 0.12%
+thread-leftovers meter-95.light: 1.14%
+thread-leftovers meter-95.dark: 1.32%
+FIDELITY thread-leftovers: 14 cases, mean differing 2.39%
+✔ Test run with 318 tests in 72 suites passed after 96.176 seconds.
+✔ Test run with 82 tests in 17 suites passed after 51.328 seconds.
+.wp710b-logic-test.log
+✔ Test run with 8 tests in 1 suite passed after 0.240 seconds.
+.wp710b-test.log
+thread-leftovers empty.light: 4.25%
+thread-leftovers empty.dark: 4.21%
+thread-leftovers matches.light: 3.59%
+thread-leftovers matches.dark: 3.62%
+thread-leftovers none.light: 3.98%
+thread-leftovers none.dark: 4.01%
+thread-leftovers loading.light: 3.58%
+thread-leftovers loading.dark: 3.53%
+thread-leftovers meter-0.light: 0.00%
+thread-leftovers meter-0.dark: 0.00%
+thread-leftovers meter-25.light: 0.17%
+thread-leftovers meter-25.dark: 0.12%
+thread-leftovers meter-95.light: 1.14%
+thread-leftovers meter-95.dark: 1.32%
+FIDELITY thread-leftovers: 14 cases, mean differing 2.39%
+✔ Test run with 9 tests in 2 suites passed after 0.603 seconds.
+
+Required xcodebuild: BUILD SUCCEEDED (2026-10-11 06:39 UTC).
+Final git diff --check: clean.

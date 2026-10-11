@@ -49,6 +49,14 @@ public final class TimelineView: DSView {
     private var laidOutWidth: CGFloat = 0
     private var tiling = false
     private var retile = false
+    public var threadFindQuery = "" {
+        didSet { if threadFindQuery != oldValue { visible.values.forEach(applyFindHighlight) } }
+    }
+    private func applyFindHighlight(_ view: NSView) {
+        if let markdown = view as? MarkdownView { markdown.threadFindQuery = threadFindQuery }
+        view.subviews.forEach(applyFindHighlight)
+    }
+
 
     /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem), under the header view if any.
     public var topInset: CGFloat = 24 { didSet { if topInset != oldValue { relayout() } } }
@@ -122,6 +130,7 @@ public final class TimelineView: DSView {
         // A new time format redraws the timestamps of the rows on screen (T3 re-renders them).
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("timestampFormat") { self?.reconfigureVisible() }
+            if keys.contains("chatWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
         }
         // A Mermaid diagram finished or toggled: the messages with diagrams measure again (their Markdown views
         // drop their own layouts first, so this waits a turn of the run loop).
@@ -139,14 +148,14 @@ public final class TimelineView: DSView {
             changed = true
         }
         guard changed else { return }
-        for view in visible.values { if let item = view.item, item.row.message?.text.contains("mermaid") == true { view.configure(item); view.needsLayout = true } }
+        for view in visible.values { if let item = view.item, item.row.message?.text.contains("mermaid") == true { view.configure(item); applyFindHighlight(view); view.needsLayout = true } }
         heights = items.map { height(of: $0) }
         relayout()
     }
 
     /// Configures the visible rows again with the same items.
     private func reconfigureVisible() {
-        for view in visible.values { if let item = view.item { view.configure(item) } }
+        for view in visible.values { if let item = view.item { view.configure(item); applyFindHighlight(view) } }
     }
 
     isolated deinit {
@@ -212,6 +221,17 @@ public final class TimelineView: DSView {
         OpenTiming.end("first frame", "\(items.count) rows, \(visible.count) row views, \(createdRowViews) created")
     }
 
+    /// Jump to a server search entry already present in the window of history.
+    @discardableResult
+    public func revealFindEntry(_ entryId: String) -> Bool {
+        guard let i = indexById[entryId], i < tops.count else { return false }
+        followsEnd = false
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, tops[i] - 60))))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        tile()
+        return true
+    }
+
     // MARK: Geometry
 
     /// `resolveChatCanvasLayout` without previews (chatCanvasLayout.ts:26-60): 48px padding (12px
@@ -221,7 +241,7 @@ public final class TimelineView: DSView {
         // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
         // keeps 48px beside an open right panel.
         let padding: CGFloat = viewportWidth >= 640 ? 48 : 12
-        let lane = max(0, min(Self.maxLane, w - padding * 2))
+        let lane = max(0, min(ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), w - padding * 2))
         return (((w - lane) / 2), lane)
     }
 
@@ -449,7 +469,7 @@ public final class TimelineView: DSView {
             // An id can change kind (the live activity row is `thinking`, then `workLive`). The old
             // view class can't draw the new kind, so it goes back to its own pool.
             if view.kind == Self.kind(item.row) {
-                if view.item != item { configureCount += 1; view.configure(item) }
+                if view.item != item { configureCount += 1; view.configure(item); applyFindHighlight(view) }
                 return view
             }
             visible[item.id] = nil
@@ -457,7 +477,7 @@ public final class TimelineView: DSView {
         }
         let view = dequeue(Self.kind(item.row))
         configureCount += 1
-        view.configure(item)
+        view.configure(item); applyFindHighlight(view)
         visible[item.id] = view
         return view
     }
@@ -551,7 +571,7 @@ public final class TimelineView: DSView {
             if let m = measured[item.id], m.width == lane, m.item == item { heights[i] = m.height; continue }
             // Off-screen rows borrow a pooled view and give it back.
             let view = visible[item.id] != nil ? viewFor(i) : dequeue(Self.kind(item.row))
-            if view.item != item { configureCount += 1; view.configure(item) }
+            if view.item != item { configureCount += 1; view.configure(item); applyFindHighlight(view) }
             let h = view.height(forWidth: lane)
             measured[item.id] = (lane, item, h)
             heights[i] = h
