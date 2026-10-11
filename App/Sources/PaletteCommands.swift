@@ -40,6 +40,8 @@ final class PaletteCommands {
     }
 
     var isOpen: Bool { overlay != nil }
+    /// The hidden "Toggle performance HUD" entry's action.
+    var togglePerformanceHUD: (@MainActor () -> Void)?
 
     func registerShortcuts(_ shortcuts: Shortcuts) {
         shortcuts.paletteOpen = { [weak self] in self?.isOpen ?? false }
@@ -621,7 +623,7 @@ final class PaletteCommands {
 
     /// `settingsSearchItems` (CommandPalette.tsx:2310-2331): "Settings · <section>", opening the page at the row.
     private func settingsItems(_ query: String) -> [PaletteEntry] {
-        SettingsSearch.search(query, in: SettingsSearch.available(settings.searchAvailability())).map { item in
+        hiddenItems(query) + SettingsSearch.search(query, in: SettingsSearch.available(settings.searchAvailability())).map { item in
             var entry = PaletteEntry(value: "setting:\(item.id)", searchTerms: [item.title, item.to.label] + item.searchTerms,
                                      title: item.title, description: "Settings \u{00B7} \(item.to.label)", icon: .settings,
                                      action: .run({ [weak self] in
@@ -632,6 +634,14 @@ final class PaletteCommands {
             entry.secondary = item.flags.contains(.secondary)
             return entry
         }
+    }
+
+    /// Entries T3 doesn't have, so they stay out of the default list and show only for a query
+    /// containing "hud".
+    private func hiddenItems(_ query: String) -> [PaletteEntry] {
+        guard let toggle = togglePerformanceHUD, query.lowercased().contains("hud") else { return [] }
+        return [PaletteEntry(value: "action:performance-hud", searchTerms: ["performance hud", "hud"], title: "Toggle performance HUD",
+                             icon: .chartNoAxesColumn, action: .run({ toggle() }, keepOpen: false))]
     }
 
     /// The open thread's or draft's project group, else the first group (`contextualProjectGroup`).

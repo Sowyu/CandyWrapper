@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private let quitOverlay = QuitHoldOverlayView()
+    /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
+    private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
     private let codexAuth = CodexAuthCallbackReceiver()
     /// URLs that arrived before the window existed (a cold launch from a link).
@@ -419,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette.registerShortcuts(shortcuts)
         settings.registerShortcuts(shortcuts)
         self.shortcuts = shortcuts
+        palette.togglePerformanceHUD = { [weak self] in self?.togglePerformanceHUD(nil) }
         self.palette = palette
     }
 
@@ -573,6 +576,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timeline.isHidden = true
         timeline.allowsKeyEquivalentWhenHidden = true
         appMenu.addItem(timeline)
+        // Hidden: the performance HUD. T3 binds nothing with Option, Shift and Command on P
+        // (packages/shared/src/keybindings.ts:124-208), and its matcher wants every modifier equal (:90-96).
+        let hud = NSMenuItem(title: "Toggle Performance HUD", action: #selector(togglePerformanceHUD(_:)), keyEquivalent: "p")
+        hud.keyEquivalentModifierMask = [.command, .option, .shift]
+        hud.isHidden = true
+        hud.allowsKeyEquivalentWhenHidden = true
+        appMenu.addItem(hud)
         appItem.submenu = appMenu
         // File: `{ role: "close" }` on macOS (DesktopApplicationMenu.ts:192-206).
         let file = NSMenu(title: "File")
@@ -664,6 +674,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func zoomWorkspaceOut(_ sender: Any?) { (mainWindow as? MainWindow)?.changeWorkspaceZoom(-0.5) }
 
     /// Cmd+Opt+Shift+L: the open thread's timeline report to /tmp/cw-timeline-<pid>.txt and stdout.
+    @objc func togglePerformanceHUD(_ sender: Any?) {
+        guard let host = mainWindow?.contentView else { return }
+        performanceHUD.toggle(in: host)
+    }
+
     @objc func logTimeline(_ sender: Any?) {
         guard let report = threads?.panel.timeline.debugReport() else { return }
         let path = "/tmp/cw-timeline-\(getpid()).txt"

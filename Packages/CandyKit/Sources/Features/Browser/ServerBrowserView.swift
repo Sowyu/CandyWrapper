@@ -263,6 +263,7 @@ public final class ServerBrowserView: DSView {
                 self.onSizeChange?(rounded)
             }
         }
+        sizeTimer?.tolerance = delay / 10
     }
 
     /// The last size reported, for the resize sent when this viewer gains control.

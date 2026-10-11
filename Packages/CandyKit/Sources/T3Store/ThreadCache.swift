@@ -128,7 +128,7 @@ public actor ThreadCache {
             historyCursor: history.historyCursor, hasMoreHistory: history.hasMoreHistory,
             latestLocalTurnOrdinal: history.latestLocalTurnOrdinal, projection: projection)
         guard writer == nil else { return }
-        writer = Task { await self.drain() }
+        writer = Task(priority: .utility) { await self.drain() }
     }
 
     /// Writes a thread's queued snapshot now (its view closed).
@@ -150,12 +150,12 @@ public actor ThreadCache {
     }
 
     private func drain() async {
-        try? await Task.sleep(for: firstWriteDelay)
+        try? await Task.sleep(for: firstWriteDelay, tolerance: firstWriteDelay / 10)
         while !pending.isEmpty {
             let batch = pending
             pending = [:]
             for (key, stored) in batch { write(stored, to: key) }
-            try? await Task.sleep(for: writeInterval)
+            try? await Task.sleep(for: writeInterval, tolerance: writeInterval / 10)
         }
         writer = nil
     }

@@ -875,6 +875,7 @@ final class GitController {
     private func startTicking() {
         tick?.invalidate()
         tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.renderGitActions() } }
+        tick?.tolerance = 0.2
     }
 
     private func stopTicking() {

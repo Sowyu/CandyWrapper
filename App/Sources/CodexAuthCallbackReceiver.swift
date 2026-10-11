@@ -37,7 +37,7 @@ final class CodexAuthCallbackReceiver {
                 failed("Sign-in expired. Try again.")
             }
         }
-        timeout.tolerance = 5
+        timeout.tolerance = 30
         timeouts[state] = timeout
         listener.newConnectionHandler = { [weak self] connection in
             MainActor.assumeIsolated { self?.serve(connection, handoff: handoff, request: request) }

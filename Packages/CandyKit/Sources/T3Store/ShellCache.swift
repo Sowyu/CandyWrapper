@@ -54,7 +54,7 @@ public actor ShellCache {
         pending[environmentId] = snapshot
         lastChange = .now
         guard writer == nil else { return }
-        writer = Task { await self.writeWhenQuiet() }
+        writer = Task(priority: .utility) { await self.writeWhenQuiet() }
     }
 
     /// Writes anything pending now, for app quit.
@@ -73,7 +73,7 @@ public actor ShellCache {
         while !Task.isCancelled {
             let wait = lastChange + quietPeriod - .now
             if wait <= .zero { break }
-            try? await Task.sleep(for: wait)
+            try? await Task.sleep(for: wait, tolerance: quietPeriod / 10)
         }
         guard !Task.isCancelled else { return }
         writer = nil

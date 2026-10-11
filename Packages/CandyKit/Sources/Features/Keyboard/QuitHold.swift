@@ -76,7 +76,7 @@ public final class QuitHoldController {
     public static func dispatchAfter(_ delay: TimeInterval, _ block: @escaping @MainActor () -> Void) -> () -> Void {
         nonisolated(unsafe) let block = block
         let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in MainActor.assumeIsolated { block() } }
-        timer.tolerance = delay * 0.05
+        timer.tolerance = delay * 0.1
         return { timer.invalidate() }
     }
 

@@ -82,6 +82,7 @@ public actor RPCConnection {
                     await self?.shutDown(.transport(.closed(error.localizedDescription)))
                     return
                 }
+                PerfCounters.received(messages.count)
                 guard let self else { return }
                 await self.handle(messages)
             }

@@ -811,16 +811,19 @@ final class SidebarShowMoreRowView: SidebarRowBase {
 /// The thread's terminal indicator (Sidebar.tsx:1722-1734, `terminalStatusFromRunningIds`): a 14pt
 /// terminal glyph, `text-teal-600 dark:text-teal-300/90`, pulsing with `status-pulse` (2s: full for
 /// 40%, six steps down to half, half until 90%, six steps back). The pulse is a Core Animation
-/// keyframe animation, so it runs in the render server without waking the app.
+/// keyframe animation, so it runs in the render server without waking the app. It stops while the
+/// glyph can't be seen (hidden, occluded window) or Reduce Motion is on, since a terminal process
+/// may run for hours.
 final class TerminalStatusGlyph: DSView {
     private let icon = IconView(name: .terminal, size: 14)
+    private lazy var loop = LoopingAnimation(view: self, key: "pulse", layer: { [weak self] in self?.icon.layer }) { Self.pulse() }
 
     var count = 0 {
         didSet {
             guard count != oldValue else { return }
             isHidden = count == 0
             setAccessibilityLabel("\(count) terminal \(count == 1 ? "process" : "processes") running")
-            updatePulse()
+            loop.update()
         }
     }
 
@@ -842,8 +845,10 @@ final class TerminalStatusGlyph: DSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        updatePulse()
+        loop.windowChanged()
     }
+    override func viewDidHide() { super.viewDidHide(); loop.update() }
+    override func viewDidUnhide() { super.viewDidUnhide(); loop.update() }
 
     static func pulse() -> CAKeyframeAnimation {
         var times: [NSNumber] = [0], values: [Double] = [1]
@@ -864,14 +869,5 @@ final class TerminalStatusGlyph: DSView {
         animation.repeatCount = .infinity
         animation.isRemovedOnCompletion = false
         return animation
-    }
-
-    private func updatePulse() {
-        let animate = count > 0 && window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if animate, icon.layer?.animation(forKey: "pulse") == nil {
-            icon.layer?.add(Self.pulse(), forKey: "pulse")
-        } else if !animate {
-            icon.layer?.removeAnimation(forKey: "pulse")
-        }
     }
 }
