@@ -3,12 +3,32 @@
     "height" : 22.9296875,
     "width" : 560
   },
+  "heading" : {
+    "height" : 179.6953125,
+    "width" : 560
+  },
+  "list" : {
+    "height" : 167.6953125,
+    "width" : 560
+  },
   "marks" : {
     "height" : 22.75,
     "width" : 560
   },
   "nested" : {
     "height" : 22.75,
+    "width" : 560
+  },
+  "nestedlist" : {
+    "height" : 176.140625,
+    "width" : 560
+  },
+  "quote" : {
+    "height" : 111.796875,
+    "width" : 560
+  },
+  "task" : {
+    "height" : 45.5,
     "width" : 560
   }
 }

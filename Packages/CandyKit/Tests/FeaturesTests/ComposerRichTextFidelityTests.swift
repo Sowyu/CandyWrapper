@@ -4,7 +4,7 @@ import DesignSystem
 import T3Protocol
 @testable import Features
 
-/// Inline rich text against T3's markup in Chromium
+/// Inline marks and blocks (lists, a nested list, a quote, headings, tasks) against T3's markup in Chromium
 /// (spec from scripts/gen-composer-rich-spec.py, references in design/component-reference/composer-rich).
 /// Writes ref, ours and diff PNGs plus report-composer-rich.html to /tmp/candywrapper-fidelity.
 @MainActor
@@ -20,14 +20,14 @@ struct ComposerRichTextFidelityTests {
         var lines: [(String, Double)] = [], images = ""
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String
-            _ = manifest[name]!
+            let css = manifest[name]!
             for theme in spec["themes"] as! [String] {
                 let base = "\(name).rest.\(theme)"
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(base).png"))))
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: .zero)
                 let editor = ComposerEditor()
                 editor.richTextEnabled = true
-                editor.frame = NSRect(x: 8, y: 8, width: 560, height: ComposerEditor.lineHeight)
+                editor.frame = NSRect(x: 8, y: 8, width: 560, height: max(ComposerEditor.lineHeight, css["height"]!))
                 editor.textContainerInset = NSSize(width: 0, height: editor.lineTop)
                 editor.setText((c["native"] as! [String: String])["text"]!)
                 canvas.addSubview(editor)

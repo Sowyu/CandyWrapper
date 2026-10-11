@@ -672,8 +672,9 @@ struct ComposerRichTextT3InlineTests {
 // MARK: - composer-rich-text-doc.test.ts: pasting into a list item or quote
 
 @MainActor struct ComposerRichTextT3PasteTests {
-    /// T3 builds paragraphs, not nested blocks, for text pasted into an item. Ours pastes the
-    /// text in place; the observable result is the same Markdown with the inline marks applied.
+    /// T3 builds paragraphs, not nested blocks, inside an item (`blocks: false`). Text inserted in
+    /// place keeps its lines literal and applies the inline marks; a real paste puts the lines
+    /// after the item (ComposerRichTextListSplitTests.putsLinesPastedAtTheEndOfAnItemAfterTheList).
     @Test func keepsInlineMarksButBuildsNoBlocks() {
         let editor = makeEditor()
         editor.setText("- x")
