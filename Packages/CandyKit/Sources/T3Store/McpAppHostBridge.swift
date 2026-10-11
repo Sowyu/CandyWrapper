@@ -22,12 +22,17 @@ public final class McpAppHostBridge {
         public var sendMessage: (String) async throws -> Void
         public var updateModelContext: (JSONValue?, JSONValue?) async throws -> Void
         public var onSizeChanged: (Double?, Double?) -> Void
+        public var downloadFiles: (([ThreadMcpAppDownload]) async throws -> Void)?
+        public var requestDisplayMode: ((String) async throws -> String)?
         public var onRequestTeardown: () -> Void
         public init(post: @escaping (JSONValue) -> Void, hostContext: @escaping () -> JSONValue,
                     callTool: @escaping (String, JSONValue) async throws -> JSONValue, readResource: @escaping (String) async throws -> JSONValue,
                     openLink: @escaping (String) async throws -> Void, sendMessage: @escaping (String) async throws -> Void,
                     updateModelContext: @escaping (JSONValue?, JSONValue?) async throws -> Void,
-                    onSizeChanged: @escaping (Double?, Double?) -> Void, onRequestTeardown: @escaping () -> Void) {
+                    onSizeChanged: @escaping (Double?, Double?) -> Void, onRequestTeardown: @escaping () -> Void,
+                    downloadFiles: (([ThreadMcpAppDownload]) async throws -> Void)? = nil,
+                    requestDisplayMode: ((String) async throws -> String)? = nil) {
+            self.downloadFiles = downloadFiles; self.requestDisplayMode = requestDisplayMode
             self.post = post; self.hostContext = hostContext; self.callTool = callTool; self.readResource = readResource
             self.openLink = openLink; self.sendMessage = sendMessage; self.updateModelContext = updateModelContext
             self.onSizeChanged = onSizeChanged; self.onRequestTeardown = onRequestTeardown
@@ -37,6 +42,7 @@ public final class McpAppHostBridge {
     private let app: McpAppReference
     private let hostVersion: String
     private let callbacks: Callbacks
+    private var appDisplayModes: [String]?
     private var initialized = false
     private var disposed = false
     private var toolCall: (arguments: JSONValue, result: JSONValue?)?
@@ -134,6 +140,7 @@ public final class McpAppHostBridge {
         switch method {
         case "ui/initialize":
             let requested = params["protocolVersion"]?.stringValue
+            appDisplayModes = params["appCapabilities"]?["availableDisplayModes"]?.arrayValue?.compactMap(\.stringValue)
             sentContext = callbacks.hostContext()
             var sandbox: [String: JSONValue] = [:]
             if let csp = app.csp { sandbox["csp"] = csp }
@@ -143,7 +150,7 @@ public final class McpAppHostBridge {
                 "hostInfo": .object(["name": .string("t3-code"), "version": .string(hostVersion)]),
                 "hostCapabilities": .object([
                     "openLinks": .object([:]), "serverTools": .object([:]), "serverResources": .object([:]), "logging": .object([:]),
-                    "message": .object(["text": .object([:])]),
+                    "message": .object(["text": .object([:])]), "downloadFile": .object([:]),
                     "updateModelContext": .object(["text": .object([:]), "structuredContent": .object([:])]),
                     "sandbox": .object(sandbox),
                 ]),
@@ -185,8 +192,17 @@ public final class McpAppHostBridge {
             let send = callbacks.sendMessage
             answer(id) { try await send(text); return .object([:]) }
         case "ui/request-display-mode":
-            // ponytail: inline only; T3 offers full screen through the Popover API. Add it with a full-window host view.
-            respond(id, .object(["mode": .string("inline")]))
+            let context = callbacks.hostContext(), current = context["displayMode"]?.stringValue ?? "inline"
+            guard let mode = params["mode"]?.stringValue, mode != current,
+                  context["availableDisplayModes"]?.arrayValue?.contains(.string(mode)) == true,
+                  appDisplayModes == nil || appDisplayModes?.contains(mode) == true,
+                  let change = callbacks.requestDisplayMode else { respond(id, .object(["mode": .string(current)])); return }
+            answer(id) { .object(["mode": .string(try await change(mode))]) }
+        case "ui/download-file":
+            guard let files = ThreadMcpAppDownload.read(params["contents"]), let download = callbacks.downloadFiles else {
+                fail(id, -32602, "ui/download-file needs embedded resources or resource links."); return
+            }
+            answer(id) { try await download(files); return .object([:]) }
         case "ui/update-model-context":
             let content = params["content"], structured = params["structuredContent"]
             guard content == nil || content?.arrayValue != nil, structured == nil || structured?.objectValue != nil else {
@@ -196,7 +212,6 @@ public final class McpAppHostBridge {
             let update = callbacks.updateModelContext
             answer(id) { try await update(content, structured); return .object([:]) }
         default:
-            // ponytail: no `ui/download-file`; T3 saves through the browser's download. Add it with a save panel.
             fail(id, -32601, "Method not found: \(method)")
         }
     }

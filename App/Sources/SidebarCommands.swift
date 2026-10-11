@@ -461,10 +461,10 @@ final class SidebarCommands {
         var state = ThreadActionMenu.State()
         // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
         state.branch = thread.branch
-        state.projectFilter = group.map { (label: $0.label, isActive: sidebar.state.projectScopeKey == $0.key) }
+        state.projectFilter = rename == nil ? group.map { (label: $0.label, isActive: sidebar.state.projectScopeKey == $0.key) } : nil
         state.isPinned = thread.pinnedAt != nil
-        state.isSettled = row?.section == .settled
-        state.isSnoozed = row?.section == .snoozed
+        state.isSettled = rename == nil ? row?.section == .settled : thread.settledOverride == .settled
+        state.isSnoozed = SidebarModel.effectiveSnoozed(presented, nowMs: nowMs)
         state.autoSettleEnabled = thread.autoSettleDisabledAt == nil
         state.canSnoozeNow = SidebarModel.canSnooze(presented, nowMs: nowMs)
         state.isRegeneratingTitle = thread.titleRegeneration != nil

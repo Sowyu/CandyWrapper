@@ -205,6 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installQuitHold(window: window, layout: layout)
         openIn = OpenInController(card: threads.panel.detailsCard, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
+        threads.panel.model.revealFileLabel = { [weak openIn] in openIn?.revealFileLabel }
+        threads.panel.model.revealFile = { [weak openIn] meta in openIn?.openFile(meta, reveal: true) }
+        threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
+            if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) }
+        }
         if let shortcuts, !Self.isPreview {
             let captures = SnapShotController(window: window, composer: threads.composer, shortcuts: shortcuts)
             snapShots = captures

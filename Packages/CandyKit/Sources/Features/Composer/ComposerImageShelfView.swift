@@ -44,7 +44,10 @@ public final class AsyncImageView: DSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        start()
+        if window == nil {
+            task?.cancel(); task = nil; image = nil; layer?.contents = nil
+            fallback.isHidden = false
+        } else { start() }
     }
 
     private func start() {

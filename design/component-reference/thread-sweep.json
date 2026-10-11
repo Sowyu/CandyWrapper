@@ -1,0 +1,47 @@
+{
+  "component": "thread-sweep",
+  "source": "apps/web/src/components/chat/ComposerTasksBadge.tsx; components/PermissionUpdateNotice.tsx; components/ui/toast.tsx",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "task-completed",
+      "html": "<div style=\"width:300px;padding:4px 0;display:flex;align-items:start;font-size:12px;line-height:16px\"><span style=\"width:28px;flex-shrink:0;padding:2px 6px\" class=\"text-success\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m20 6-11 11-5-5\"/></svg></span><span class=\"text-muted-foreground/55\" style=\"width:212px;overflow-wrap:anywhere\">Run the thread checks and inspect the complete conversation at a narrow width</span><span class=\"text-muted-foreground/45\" style=\"margin-left:8px;width:48px;font-size:10px\">1m 2s</span></div>",
+      "native": {
+        "kind": "task",
+        "state": "completed",
+        "text": "Run the thread checks and inspect the complete conversation at a narrow width"
+      }
+    },
+    {
+      "name": "task-running",
+      "html": "<div style=\"width:300px;padding:4px 0;display:flex;align-items:start;font-size:12px;line-height:16px\"><span style=\"width:28px;flex-shrink:0;padding:2px 6px\" class=\"text-primary\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/></svg></span><span class=\"text-foreground/90\" style=\"width:212px;overflow-wrap:anywhere\">Run the thread checks and inspect the complete conversation at a narrow width</span><span class=\"text-muted-foreground/45\" style=\"margin-left:8px;width:48px;font-size:10px\">now</span></div>",
+      "native": {
+        "kind": "task",
+        "state": "running",
+        "text": "Run the thread checks and inspect the complete conversation at a narrow width"
+      }
+    },
+    {
+      "name": "task-pending",
+      "html": "<div style=\"width:300px;padding:4px 0;display:flex;align-items:start;font-size:12px;line-height:16px\"><span style=\"width:28px;flex-shrink:0;padding:2px 6px\" class=\"text-muted-foreground/40\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/></svg></span><span class=\"text-muted-foreground/70\" style=\"width:212px;overflow-wrap:anywhere\">Run the thread checks and inspect the complete conversation at a narrow width</span><span class=\"text-muted-foreground/45\" style=\"margin-left:8px;width:48px;font-size:10px\"></span></div>",
+      "native": {
+        "kind": "task",
+        "state": "pending",
+        "text": "Run the thread checks and inspect the complete conversation at a narrow width"
+      }
+    },
+    {
+      "name": "permission-stacked",
+      "html": "<div class=\"dropdown-glass rounded-[10px] text-sm shadow-xl\" style=\"position:relative;border-radius:10px;width:360px;border:1px solid color-mix(in oklab,var(--foreground) 10%,transparent);padding:10px 14px;line-height:20px\"><div class=\"font-medium\">Permissions have changed for Sandbox</div><div class=\"text-muted-foreground\" style=\"margin-top:2px\">Pair again using a new link with the permissions you need.</div><div class=\"flex justify-end gap-1.5\" style=\"margin-top:8px\"><button class=\"[&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--control-radius)] border font-medium outline-none transition-[box-shadow,scale] [&:active:not([aria-haspopup])]:scale-[0.97] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 aria-disabled:cursor-not-allowed aria-disabled:opacity-64 [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [--control-icon-color:var(--contrast-muted-foreground)] border-transparent text-foreground data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent h-7 gap-1 px-[calc(--spacing(2)-1px)] text-sm sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5\">Dismiss</button><button class=\"[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--control-radius)] border font-medium outline-none transition-[box-shadow,scale] [&:active:not([aria-haspopup])]:scale-[0.97] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 aria-disabled:cursor-not-allowed aria-disabled:opacity-64 [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 not-disabled:inset-shadow-[0_1px_--theme(--color-white/16%)] border-primary bg-primary text-primary-foreground shadow-primary/24 shadow-xs [:active,[data-pressed]]:inset-shadow-[0_1px_--theme(--color-black/8%)] [:disabled,:active,[data-pressed]]:shadow-none [:hover,[data-pressed]]:bg-primary/90 h-7 gap-1 px-[calc(--spacing(2)-1px)] text-sm sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5\">Open Connections</button></div><div class=\"bg-popover text-muted-foreground rounded-full shadow-sm\" style=\"position:absolute;right:-6px;top:-6px;width:24px;height:24px;border:1px solid color-mix(in oklab,var(--foreground) 10%,transparent);display:flex;align-items:center;justify-content:center\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\"><path d=\"m18 6-12 12M6 6l12 12\"/></svg></div></div>",
+      "native": {
+        "kind": "permission"
+      }
+    }
+  ]
+}

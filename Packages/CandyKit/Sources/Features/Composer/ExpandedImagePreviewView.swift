@@ -27,6 +27,9 @@ public final class ExpandedImagePreviewView: DSView {
     private let close = ButtonView(nil, icon: .x, variant: .mediaClose, size: .iconXs)
     private let previous = ButtonView(nil, icon: .chevronLeft, variant: .mediaNavigation, size: .icon)
     private let next = ButtonView(nil, icon: .chevronRight, variant: .mediaNavigation, size: .icon)
+    private var zoom: CGFloat = 1
+    private var pan = CGPoint.zero
+    private var dragPoint: CGPoint?
     private weak var previousResponder: NSResponder?
 
     public init(items: [Item], index: Int) {
@@ -85,6 +88,7 @@ public final class ExpandedImagePreviewView: DSView {
 
     private func show() {
         guard items.indices.contains(index) else { return }
+        zoom = 1; pan = .zero
         let item = items[index]
         caption.text = item.name + (items.count > 1 ? " (\(index + 1)/\(items.count))" : "")
         image.onContextMenu = { event, view in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: view) }
@@ -95,6 +99,14 @@ public final class ExpandedImagePreviewView: DSView {
     public override var acceptsFirstResponder: Bool { true }
 
     public override func keyDown(with event: NSEvent) {
+        if zoom > 1, [123, 124, 125, 126].contains(event.keyCode),
+           ![123, 124].contains(event.keyCode) || image.frame.width > frameView.bounds.width {
+            if event.keyCode == 123 { pan.x += 40 }
+            if event.keyCode == 124 { pan.x -= 40 }
+            if event.keyCode == 125 { pan.y -= 40 }
+            if event.keyCode == 126 { pan.y += 40 }
+            needsLayout = true; return
+        }
         switch event.keyCode {
         case 53: dismiss()         // Escape
         case 123: move(-1)         // ArrowLeft
@@ -127,7 +139,12 @@ public final class ExpandedImagePreviewView: DSView {
         let x = (w - size.width) / 2, y = (h - block) / 2
         // `ring-1` sits outside the image's box.
         frameView.frame = NSRect(x: x - 1, y: y - 1, width: size.width + 2, height: size.height + 2)
-        image.frame = frameView.bounds.insetBy(dx: 1, dy: 1)
+        let viewport = frameView.bounds.insetBy(dx: 1, dy: 1)
+        let scaled = CGSize(width: viewport.width * zoom, height: viewport.height * zoom)
+        pan.x = min((scaled.width - viewport.width) / 2, max(-(scaled.width - viewport.width) / 2, pan.x))
+        pan.y = min((scaled.height - viewport.height) / 2, max(-(scaled.height - viewport.height) / 2, pan.y))
+        image.frame = NSRect(x: viewport.midX - scaled.width / 2 + pan.x, y: viewport.midY - scaled.height / 2 + pan.y,
+                             width: scaled.width, height: scaled.height)
         close.frame = NSRect(x: x + size.width - 24, y: y - 40, width: 24, height: 24)
         caption.frame = NSRect(x: x, y: y + size.height + 8, width: size.width, height: 16)
         let popupX = ((w - popupWidth) / 2).rounded()
@@ -139,5 +156,19 @@ public final class ExpandedImagePreviewView: DSView {
     public override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         if !frameView.frame.contains(p) { dismiss() }
+        else if event.clickCount == 2 { zoom = zoom == 1 ? 2 : 1; pan = .zero; needsLayout = true }
+        else { dragPoint = p }
     }
+    public override func mouseDragged(with event: NSEvent) {
+        guard zoom > 1, let previous = dragPoint else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        pan.x += point.x - previous.x; pan.y += point.y - previous.y
+        dragPoint = point; needsLayout = true
+    }
+    public override func mouseUp(with event: NSEvent) { dragPoint = nil }
+    public override func scrollWheel(with event: NSEvent) {
+        zoom = min(8, max(1, zoom * exp(event.scrollingDeltaY * (event.modifierFlags.contains(.control) ? 0.01 : 0.002))))
+        needsLayout = true
+    }
+    public override func magnify(with event: NSEvent) { zoom = min(8, max(1, zoom * (1 + event.magnification))); needsLayout = true }
 }

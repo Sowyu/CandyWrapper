@@ -32,6 +32,8 @@ public final class MarkdownView: DSView {
     /// in its right files panel (`panelPath`; media in the media viewer, PDF and HTML in the browser
     /// preview when one is available) and Cmd-click opens it in the preferred editor. Without a
     /// handler a click shows the chip's menu, as T3 does when no open action is available.
+    public var revealFileLabel: (() -> String?)?
+    public var onRevealFile: ((FileLinkMeta) -> Void)?
     public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
 
     /// Mermaid fences render as diagrams once the response settles (false while it streams).
@@ -52,6 +54,8 @@ public final class MarkdownView: DSView {
     private var cache: [CGFloat: MarkdownLayout] = [:]
     private var buttons: [ButtonView] = []
     private var chipViews: [FileChipHitView] = []
+    private var imageViews: [AsyncImageView] = []
+    private var imageItems: [ExpandedImagePreviewView.Item] = []
     private var linkViews: [MarkdownLinkHitView] = []
 
     /// Opens, menus and previews web links for every Markdown view (the app sets it: it knows the
@@ -129,6 +133,7 @@ public final class MarkdownView: DSView {
         super.layout()
         layoutChips()
         layoutLinks()
+        layoutImages()
         let controls = bounds.width > 0 ? layout(forWidth: bounds.width).controls : []
         while buttons.count < controls.count {
             let button = ButtonView(icon: .copy, variant: .ghostMuted, size: .iconXs)
@@ -203,6 +208,44 @@ public final class MarkdownView: DSView {
         }
     }
 
+    /// ChatMarkdown.tsx:1320-1347 and MermaidDiagram.tsx:204-216: images share the gallery.
+    private func layoutImages() {
+        imageItems = []
+        var frames: [CGRect] = []
+        if bounds.width > 0 {
+            for item in layout(forWidth: bounds.width).items {
+                switch item {
+                case .remoteImage(let url, let alt, let rect):
+                    guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
+                    imageItems.append(.init(key: url.absoluteString, name: alt.isEmpty ? "image" : alt,
+                        load: { side in await ThreadMarkdownImageLoader.load(url, side: side) }))
+                    frames.append(rect)
+                case .image(let image, let rect):
+                    imageItems.append(.init(key: "diagram-\(imageItems.count)-\(ObjectIdentifier(image))", name: "Diagram", load: { _ in image }))
+                    frames.append(rect)
+                default: break
+                }
+            }
+        }
+        while imageViews.count > frames.count { imageViews.removeLast().removeFromSuperview() }
+        while imageViews.count < frames.count {
+            let view = AsyncImageView(); view.cover = false; view.layer?.cornerRadius = 10
+            view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandMarkdownImage(_:))))
+            addSubview(view); imageViews.append(view)
+        }
+        for (index, view) in imageViews.enumerated() {
+            let item = imageItems[index]
+            view.frame = frames[index]
+            view.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.", loader: item.load)
+            view.setAccessibilityLabel("Preview " + item.name)
+            view.onContextMenu = { event, source in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: source) }
+        }
+    }
+    @objc private func expandMarkdownImage(_ gesture: NSClickGestureRecognizer) {
+        guard let window, let index = imageViews.firstIndex(where: { $0 === gesture.view }) else { return }
+        ExpandedImagePreviewView(items: imageItems, index: index).present(in: window)
+    }
+
     fileprivate func chipHover(_ index: Int, _ inside: Bool) {
         if inside { hoveredChip = index } else if hoveredChip == index { hoveredChip = nil }
     }
@@ -225,7 +268,9 @@ public final class MarkdownView: DSView {
             items.append(ThreadMenuItem("viewer", "Open in file viewer"))
             items.append(ThreadMenuItem("editor", "Open in editor"))
         }
+        if let label = revealFileLabel?(), onRevealFile != nil { items.append(ThreadMenuItem("reveal", label)) }
         let menu = NativeItemContextMenu.make(items) { [weak self, weak view] action in
+            if action == "reveal" { self?.onRevealFile?(chip.meta); return }
             if action == "viewer" || action == "editor" { self?.onOpenFile?(chip.meta, action == "editor"); return }
             NSPasteboard.general.clearContents()
             let copied = NSPasteboard.general.setString(action == "relative" ? relative : chip.meta.targetPath, forType: .string)
@@ -401,6 +446,8 @@ public final class MarkdownView: DSView {
                         fillUnderBorder: true, in: ctx)
                 let (icon, color) = FileChipStyle.icon(for: chip.meta)
                 Self.drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
+            case .remoteImage:
+                break
             case .link:
                 break
             case .clip(let rect):

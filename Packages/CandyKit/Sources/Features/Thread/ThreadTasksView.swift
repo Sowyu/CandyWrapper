@@ -26,7 +26,6 @@ public struct ThreadTaskStep: Equatable, Sendable {
 }
 
 /// A static segmented badge and a bounded, scrollable task drawer. No clock while idle.
-// ponytail: single-line task labels and static durations, port wrapped rows and duration formatting before full badge parity.
 public final class ThreadTasksView: ComposerBannerView {
     public var onHeightChange: (() -> Void)?
     public var steps: [ThreadTaskStep] = [] { didSet {
@@ -43,7 +42,7 @@ public final class ThreadTasksView: ComposerBannerView {
     private var segmentLayers: [CALayer] = []
     private let scroller = NSScrollView()
     private let body = DSView()
-    private var labels: [LabelView] = []
+    private var labels: [ThreadTaskStepView] = []
     public init() {
         super.init(variant: .neutral)
         addSubview(summary); addSubview(count); addSubview(scroller); addSubview(segments); addSubview(chevron)
@@ -55,7 +54,7 @@ public final class ThreadTasksView: ComposerBannerView {
         }
         chevron.action = summary.action
     }
-    public var height: CGFloat { 34 + Self.overlap + (expanded ? min(240, CGFloat(steps.count) * 28 + 8) : 0) }
+    public var height: CGFloat { 34 + Self.overlap + (expanded ? min(240, labels.reduce(8) { $0 + $1.height(forWidth: max(1, bounds.width - 32)) }) : 0) }
     private func rebuild() {
         labels.forEach { $0.removeFromSuperview() }; labels = []
         count.text = "\(steps.filter { $0.status == "completed" }.count)/\(steps.count)"
@@ -66,10 +65,8 @@ public final class ThreadTasksView: ComposerBannerView {
         scroller.isHidden = !expanded
         guard expanded else { return }
         for step in steps {
-            let mark = step.status == "completed" ? "✓" : step.status == "running" ? "◉" : "○"
-            let duration = step.durationMs.map { "  \($0 / 1000)s" } ?? (step.status == "running" ? "  now" : "")
-            let label = LabelView("\(mark)  \(step.text)\(duration)", font: DSFont.ui(12), color: Themed.color(step.status == "running" ? \.foreground : \.mutedForeground))
-            label.toolTip = step.text; body.addSubview(label); labels.append(label)
+            let label = ThreadTaskStepView(step: step)
+            body.addSubview(label); labels.append(label)
         }
     }
     public override func layout() {
@@ -85,8 +82,14 @@ public final class ThreadTasksView: ComposerBannerView {
         for (i, layer) in segmentLayers.enumerated() { layer.frame = NSRect(x: CGFloat(i) * (segmentWidth + 2), y: 0, width: segmentWidth, height: 3) }
         CATransaction.commit()
         scroller.frame = NSRect(x: 8, y: 34, width: bounds.width - 16, height: max(0, height - 34 - Self.overlap))
-        body.frame = NSRect(x: 0, y: 0, width: scroller.contentSize.width, height: CGFloat(labels.count) * 28)
-        for (i, label) in labels.enumerated() { label.frame = NSRect(x: 4, y: CGFloat(i) * 28, width: body.bounds.width - 8, height: 24) }
+        let width = scroller.contentSize.width
+        var y: CGFloat = 4
+        for label in labels {
+            let h = label.height(forWidth: max(1, width - 8))
+            label.frame = NSRect(x: 4, y: y, width: max(1, width - 8), height: h)
+            y += h
+        }
+        body.frame = NSRect(x: 0, y: 0, width: width, height: y + 4)
     }
     public override func updateLayer() {
         super.updateLayer()
@@ -96,5 +99,32 @@ public final class ThreadTasksView: ComposerBannerView {
             layer.backgroundColor = Themed.color(step.status == "completed" ? \.success : step.status == "running" ? \.primary : \.mutedForeground, step.status == "pending" ? 0.25 : 1).cgColor(in: self)
         }
         CATransaction.commit()
+    }
+}
+
+/// ComposerTasksBadge.tsx:166-218. Wrapped task text and source status glyphs.
+final class ThreadTaskStepView: DSView {
+    private let text: TextBlockView
+    private let duration: LabelView
+    private let icon: IconView
+    init(step: ThreadTaskStep) {
+        let running = step.status == "running", done = step.status == "completed"
+        text = TextBlockView(step.text, font: DSFont.ui(12), lineHeight: 16,
+            color: Themed.color(running ? \.foreground : \.mutedForeground, running ? 0.9 : done ? 0.55 : 0.7))
+        duration = LabelView(step.durationMs.map { formatDuration(Double($0)) } ?? (running ? "now" : ""),
+            font: DSFont.ui(10), color: Themed.color(\.mutedForeground, 0.45))
+        icon = IconView(name: done ? .check : running ? .circleDot : .circle, size: 12)
+        super.init(frame: .zero)
+        icon.strokeColor = Themed.color(done ? \.success : running ? \.primary : \.mutedForeground, done || running ? 1 : 0.4)
+        [text, duration, icon].forEach(addSubview)
+        setAccessibilityElement(true)
+        setAccessibilityLabel("\(done ? "Completed" : running ? "Running" : "Pending"): \(step.text) \(duration.text)")
+    }
+    func height(forWidth width: CGFloat) -> CGFloat { max(16, text.height(forWidth: max(1, width - 88))) + 8 }
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 6, y: 6, width: 12, height: 12)
+        text.frame = NSRect(x: 28, y: 4, width: max(1, bounds.width - 88), height: bounds.height - 8)
+        duration.frame = NSRect(x: bounds.width - 52, y: 4, width: 48, height: 16)
     }
 }

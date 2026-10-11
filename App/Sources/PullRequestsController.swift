@@ -558,6 +558,7 @@ final class PullRequestDetailBinding {
 @MainActor
 final class ThreadPullRequestsController {
     var openBrowserLink: ((URL) -> Bool)?
+    var openIntegratedBrowser: ((URL) -> Void)?
     private let panel: ThreadPanelView
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
@@ -901,7 +902,6 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
     }
 
     /// `showExternalLinkContextMenu` with Link to thread or Unlink from thread for a pull request URL.
-    // ponytail: "Open in integrated browser" is left out of this menu; add it when the browser panel takes a URL from here
     func showLinkMenu(_ url: URL, event: NSEvent, in view: NSView, from markdown: MarkdownView) {
         let href = url.absoluteString
         var action: String?
@@ -913,7 +913,7 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
             let canLink = (multiple || capabilities.has(env, "threadPullRequestLinking")) && (multiple || projects.contains { $0.repositoryIdentity?.owns(parsed) == true })
             action = linked ? "unlink-from-thread" : canLink ? "link-to-thread" : nil
         }
-        let items: [MenuItem] = PullRequestWriteLogic.linkMenuItems(canOpenInPreview: false, threadLinkAction: action).map { entry in
+        let items: [MenuItem] = PullRequestWriteLogic.linkMenuItems(canOpenInPreview: panel.browserAvailable && openIntegratedBrowser != nil, threadLinkAction: action).map { entry in
             var item = MenuItem(entry.label)
             item.action = { [weak self] in self?.runLinkAction(entry.id, href: href) }
             return item
@@ -923,6 +923,7 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
 
     private func runLinkAction(_ id: String, href: String) {
         switch id {
+        case "open-in-preview": if let url = URL(string: href) { openIntegratedBrowser?(url) }
         case "open-external": if let u = URL(string: href) { NSWorkspace.shared.open(u) }
         case "copy-link":
             NSPasteboard.general.clearContents()

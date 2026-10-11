@@ -1,5 +1,6 @@
 import Foundation
 import T3Protocol
+import T3Store
 
 /// threadExecution.ts:392-439, the provider-owned goal displayed above the composer.
 public enum ThreadGoalPresentation {
@@ -14,7 +15,7 @@ public enum ThreadGoalPresentation {
             parts.append(tokens(used) + (goal.tokenBudget.map { " / " + tokens($0) } ?? "") + " tokens")
         }
         if let seconds = goal.timeUsedSeconds, seconds >= 60 {
-            parts.append(seconds < 3600 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds / 3600)h \(seconds % 3600 / 60)m")
+            parts.append(formatDuration(Double(seconds) * 1_000))
         }
         if let checks = goal.checks, checks > 0 { parts.append("\(checks) " + (checks == 1 ? "check" : "checks")) }
         return parts.joined(separator: " · ")
@@ -31,6 +32,15 @@ public enum ThreadUsageLimitRecovery {
         if let snooze { recovery["snooze"] = .bool(snooze) }
         return .object(["type": .string("thread.metadata.update"), "threadId": .string(thread.id.localId.rawValue),
                         "commandId": .string(UUID().uuidString.lowercased()), "limitRecovery": .object(recovery)])
+    }
+    public static func canSchedule(_ thread: ThreadShell) -> Bool {
+        guard let reset = thread.usageLimitResetAt?.date else { return false }
+        let stopped = thread.latestRunCompletedAt.value?.date ?? thread.updatedAt.date
+        return stopped.map { reset > $0 } ?? false
+    }
+    public static func snoozed(_ thread: ThreadShell) -> Bool {
+        thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt
+            && thread.limitRecovery?.snooze == true && thread.snoozedUntil?.date == thread.usageLimitResetAt?.date
     }
     public static func scheduled(_ thread: ThreadShell) -> Bool {
         thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt && thread.limitRecovery?.autoResume == true

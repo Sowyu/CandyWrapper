@@ -8,6 +8,8 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
     public var maximum: Double?
     public var total: Double?
     public var cost: Double?
+    public var currency: String = "USD"
+    public var autoCompactThreshold: Double? = nil
     public var automatically: Bool
     public var percentage: Double? { maximum.flatMap { $0 > 0 ? min(100, max(0, used / $0 * 100)) : nil } }
     public static func derive(_ projection: ThreadProjection?) -> Self? {
@@ -16,8 +18,9 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
             guard let used = json["usedTokens"]?.doubleValue, used.isFinite else { return nil }
             return Self(used: max(0, used), maximum: json["maxTokens"]?.doubleValue,
                         total: live ? nil : json["totalProcessedTokens"]?.doubleValue,
-                        cost: live ? nil : json["cost"]?.doubleValue,
-                        automatically: live || json["compactsAutomatically"]?.boolValue == true)
+                        cost: live ? nil : (json["cost"]?.doubleValue ?? json["cost"]?["amount"]?.doubleValue),
+                        currency: json["cost"]?["currency"]?.stringValue ?? "USD",
+                        autoCompactThreshold: json["autoCompactThreshold"]?.doubleValue, automatically: live || json["compactsAutomatically"]?.boolValue == true)
         }
         for turn in projection.providerTurns.reversed() {
             if let usage = turn["tokenUsage"], let result = read(usage, live: true) { return result }
@@ -52,8 +55,11 @@ public final class ThreadContextWindowMeterView: ControlView {
         needsDisplay = true
         toolTip = summary
         setAccessibilityLabel(summary)
+        setAccessibilityValue(usage?.percentage.map { NSNumber(value: $0) })
     } }
     public var onCompact: (@MainActor () -> Void)?
+    private weak var detailsPopup: OpenPopup?
+    public var modelDisplayName: String?
     public var compactDisabledReason: String?
     public override var wantsUpdateLayer: Bool { false }
     public override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
@@ -63,6 +69,9 @@ public final class ThreadContextWindowMeterView: ControlView {
     }
     public override init(frame: NSRect) {
         super.init(frame: frame)
+        setAccessibilityRole(.progressIndicator)
+        setAccessibilityMinValue(0)
+        setAccessibilityMaxValue(100)
         action = { [weak self] in self?.showDetails() }
     }
     public override func draw(_ dirtyRect: NSRect) {
@@ -79,22 +88,35 @@ public final class ThreadContextWindowMeterView: ControlView {
         ctx.addArc(center: center, radius: radius, startAngle: -.pi / 2, endAngle: -.pi / 2 + fraction * 2 * .pi, clockwise: false)
         ctx.strokePath()
     }
+    public override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        showDetails()
+    }
+    public override func viewDidMoveToWindow() {
+        if window == nil, let detailsPopup { detailsPopup.content.popupHost?.close(detailsPopup) }
+        super.viewDidMoveToWindow()
+    }
     private func showDetails() {
+        guard detailsPopup == nil else { return }
         guard let usage else { return }
-        let content = ThreadContextWindowDetailsView(usage: usage, disabled: compactDisabledReason, compact: onCompact)
+        let content = ThreadContextWindowDetailsView(usage: usage, model: modelDisplayName, disabled: compactDisabledReason, compact: onCompact)
         let popover = PopoverView(content: content, padding: .compact, width: .sm)
-        popover.show(from: self)
+        detailsPopup = popover.show(from: self, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4))
     }
 }
 
 private final class ThreadContextWindowDetailsView: DSView {
     private let label: TextBlockView
     private let compact = ButtonView("Compact context", icon: .minimize2, variant: .outline, size: .xs)
-    init(usage: ThreadContextWindowUsage, disabled: String?, compact action: (@MainActor () -> Void)?) {
+    init(usage: ThreadContextWindowUsage, model: String?, disabled: String?, compact action: (@MainActor () -> Void)?) {
         var lines = ["Context Window", "\(usage.percentageLabel.map { $0 + " · " } ?? "")\(ThreadContextWindowUsage.tokens(usage.used))\(usage.maximum.map { "/" + ThreadContextWindowUsage.tokens($0) } ?? "")"]
         if let total = usage.total, total > 0 { lines.append("Total processed  \(ThreadContextWindowUsage.tokens(total))") }
-        if let cost = usage.cost { lines.append(String(format: "Cost  $%.2f", cost)) }
-        if usage.automatically { lines.append("Context compacts automatically.") }
+        if let cost = usage.cost { lines.append("Cost  " + usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
+        if usage.automatically {
+            if let threshold = usage.autoCompactThreshold, threshold > 0 {
+                lines.append("Compacts automatically at " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens.")
+            } else { lines.append(model.map { "Context for " + $0 + " compacts automatically when needed." } ?? "Context compacts automatically when needed.") }
+        }
         if let disabled { lines.append(disabled) }
         label = TextBlockView(lines.joined(separator: "\n"), font: DSFont.ui(11), lineHeight: 18, color: Themed.color(\.mutedForeground))
         super.init(frame: .zero)

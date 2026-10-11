@@ -35,6 +35,10 @@ final class ComposerController {
     private var pendingMessageId: MessageId?
     private var resuming = false
     private var threadRewindBusy = false
+    private var recoveryPending: Set<ThreadId> = []
+    private var recoveryErrors: [ThreadId: String] = [:]
+    private var recoveryResetWork: DispatchWorkItem?
+    private var recoveryResetKey: String?
     private var threadWorktreeSetupTask: Task<Void, Never>?
     private var threadWorktreeSetupTarget: ThreadId?
     private var threadFindTask: Task<Void, Never>?
@@ -227,6 +231,7 @@ final class ComposerController {
         }
         panel.recoveryBanner.onAction = { [weak self] index in self?.updateThreadRecovery(index) }
         panel.model.onEditPrompt = { [weak self] message in self?.editEarlierPrompt(message) }
+        panel.header.onEmptyTitle = { [weak self] in self?.toast(.warning, "Thread title cannot be empty") }
         panel.header.onRenameThread = { [weak self] title in
             guard let self, let id = self.openThreadId else { return }
             Task {
@@ -922,6 +927,7 @@ final class ComposerController {
 
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
+        composer.contextWindowMeter.modelDisplayName = pickers.current.modelSelection?.model
         composer.contextWindowMeter.usage = ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") ? ThreadContextWindowUsage.derive(projection) : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
@@ -2252,6 +2258,7 @@ extension ComposerController {
             return true
         }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
+        panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
         panel.model.attachmentMediaURL = { [weak self] id in
             await self?.mediaAttachmentURL(id)
         }
@@ -2453,6 +2460,16 @@ extension ComposerController {
         var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
         var error: String?
         for file in files {
+            if (try? file.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                if env != environments.primaryId {
+                    error = "Folders can't be dropped into remote environments"
+                } else {
+                    let separator = composer.text.isEmpty || composer.text.last?.isWhitespace == true ? "" : " "
+                    composer.text += separator + ComposerInlineTokens.fileLink(file.url.path) + " "
+                    prompts[key] = composer.text; scheduleSave(); focusComposer()
+                }
+                continue
+            }
             if reserved >= ComposerAttachmentRules.maxAttachments { error = ComposerAttachmentRules.countMessage; continue }
             switch ComposerAttachmentRules.classify(name: file.name, mimeType: file.mimeType) {
             case .unsupportedImage:
@@ -2659,6 +2676,39 @@ extension ComposerController {
     }
 
     // MARK: Previews
+
+    /// MessagesTimeline.tsx:2453-2490, AttachmentFilePreview.tsx:58-158.
+    private func openSentAttachment(_ file: JSONValue, download: Bool) {
+        guard let id = file["id"]?.stringValue, file["downloadable"]?.boolValue != false, let window = panel.window else { return }
+        let name = file["name"]?.stringValue ?? "Attachment"
+        let target = self.target
+        Task { [weak self, weak window] in
+            guard let self, let source = await attachmentSource(id), self.target == target, let window else { return }
+            let save: @MainActor @Sendable () -> Void = {
+                let panel = NSSavePanel(); panel.nameFieldStringValue = name
+                panel.beginSheetModal(for: window) { response in
+                    guard response == .OK, let url = panel.url else { return }
+                    Task {
+                        do {
+                            try await Task.detached(priority: .userInitiated) {
+                                let data = try Data(contentsOf: source)
+                                try data.write(to: url, options: .atomic)
+                            }.value
+                        } catch { self.toast(.error, "Could not download attachment", error.localizedDescription) }
+                    }
+                }
+            }
+            if download { save(); return }
+            let size = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            let preview = ComposerAttachmentPreview(name: name, file: source, sizeBytes: size)
+            let dialog = DialogView(title: name, message: ComposerFileRow.formatSize(size))
+            dialog.maxWidth = 800; dialog.panelContent = [preview]
+            let button = ButtonView("Download", icon: .download, variant: .outline)
+            button.action = save; dialog.footerButtons = [button]
+            let host = ModalHost.present(dialog, in: window)
+            host.onDismiss = { [weak dialog, weak preview] in preview?.close(); dialog?.panelContent = [] }
+        }
+    }
 
     private func expandDraftFile(_ attachment: ComposerAttachment) {
         guard let window = panel.window else { return }
@@ -3306,29 +3356,42 @@ extension ComposerController {
 
 
 extension ComposerController {
-    // ponytail: standalone commands use the saved thread modes; persist the selected modes when completing goal and compaction parity
     private func sendThreadStandalone(_ text: String) {
+        Task { [weak self] in
+            do { try await self?.dispatchThreadStandalone(text, queue: false) }
+            catch { self?.toast(.error, "Failed to send command.", error.localizedDescription) }
+        }
+    }
+    func sendAppMessage(_ text: String) async throws { try await dispatchThreadStandalone(text, queue: true) }
+
+    private func dispatchThreadStandalone(_ text: String, queue: Bool) async throws {
         guard let id = openThreadId, let supervisor = shell?.supervisor, let selection = pickers.current.modelSelection,
-              !composer.runState.canInterrupt, pendingMessageId == nil, !threadRewindBusy else { return }
+              !threadRewindBusy, pendingMessageId == nil, queue || !composer.runState.canInterrupt else {
+            throw RewindPreparationError("Messages from apps need an available started thread.")
+        }
+        let picks = pickers.current, picksKey = draftKey
         let messageId = MessageId(UUID().uuidString.lowercased())
-        pendingMessageId = messageId
-        let payload: JSONValue = .object([
+        pendingMessageId = messageId; refresh()
+        defer { if pendingMessageId == messageId { pendingMessageId = nil }; refresh() }
+        if let mode = picks.runtimeModeToPersist {
+            _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
+                "type": .string("thread.runtime-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
+                "threadId": .string(id.localId.rawValue), "runtimeMode": .string(mode.rawValue)]))
+        }
+        if let mode = picks.interactionModeToPersist {
+            _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
+                "type": .string("thread.interaction-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
+                "threadId": .string(id.localId.rawValue), "interactionMode": .string(mode.rawValue)]))
+        }
+        _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
             "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(id.localId.rawValue), "messageId": .string(messageId.rawValue),
             "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
-            "attachments": .array([]), "dispatchMode": .object(["type": .string("start_immediately")]),
-            "modelSelection": ThreadSession.encode(selection)])
-        refresh()
-        Task { [weak self] in
-            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
-            catch {
-                guard let self else { return }
-                if self.pendingMessageId == messageId { self.pendingMessageId = nil }
-                self.toast(.error, "Failed to send command.", error.localizedDescription)
-                self.refresh()
-            }
-        }
+            "attachments": .array([]), "dispatchMode": .object(["type": .string(queue ? "queue_after_active" : "start_immediately")]),
+            "modelSelection": ThreadSession.encode(selection)]))
+        if let picksKey { pickers.store.didSend(picksKey) }
     }
+
 }
 
 
@@ -3344,20 +3407,37 @@ extension ComposerController {
         panel.showsRecovery = limited
         if let thread, limited {
             let reset = thread.usageLimitResetAt?.date
-            let description = reset.map { "Resets " + $0.formatted(date: .numeric, time: .shortened) } ?? "Reset time unavailable; retry manually"
-            let actions = reset == nil ? [] : [ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset", "Snooze until reset"]
+            let pending = recoveryPending.contains(thread.id)
+            let description = recoveryErrors[thread.id] ?? reset.map { "Resets " + $0.formatted(date: .numeric, time: .shortened) } ?? "Reset time unavailable; retry manually"
+            var actions: [String] = []
+            if ThreadUsageLimitRecovery.canSchedule(thread) {
+                actions = [pending ? "Saving..." : ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset"]
+                if !ThreadUsageLimitRecovery.snoozed(thread) { actions.append(pending ? "Saving..." : "Snooze until reset") }
+            }
             panel.recoveryBanner.apply(.init(variant: .warning, icon: .gauge, title: "Usage limit reached", description: description, actions: actions))
+            panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : (reset ?? .distantPast) <= Date() ? [1] : []
+        }
+        let resetKey = limited ? thread.map { $0.id.rawValue + ":" + ($0.usageLimitResetAt?.raw ?? "") } : nil
+        if resetKey != recoveryResetKey {
+            recoveryResetWork?.cancel(); recoveryResetWork = nil; recoveryResetKey = resetKey
+            if limited, let reset = thread?.usageLimitResetAt?.date, reset > Date() {
+                let work = DispatchWorkItem { [weak self] in self?.updateThreadBanners() }
+                recoveryResetWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + min(reset.timeIntervalSinceNow + 0.01, 2_147_483), execute: work)
+            }
         }
     }
     private func updateThreadRecovery(_ index: Int?) {
-        guard let index, let thread = shellThread, let supervisor = shell?.supervisor else { return }
+        guard let index, let thread = shellThread, !recoveryPending.contains(thread.id), ThreadUsageLimitRecovery.canSchedule(thread), let supervisor = shell?.supervisor else { return }
         if index == 1, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
             toast(.warning, "The reset time has passed. Retry the thread manually."); return
         }
         guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? true : nil) else { return }
+        recoveryPending.insert(thread.id); recoveryErrors[thread.id] = nil; updateThreadBanners()
         Task { [weak self] in
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
-            catch { self?.toast(.error, "Could not change limit recovery.", error.localizedDescription) }
+            catch { self?.recoveryErrors[thread.id] = error.localizedDescription }
+            self?.recoveryPending.remove(thread.id); self?.updateThreadBanners()
         }
     }
 }
@@ -3424,7 +3504,9 @@ extension ComposerController {
 
 extension ComposerController {
     private func syncWorktreeSetup() {
-        let target = projection?.thread.worktreePath != nil || projection?.runs.last?.status.rawValue == "preparing" ? openThreadId : nil
+        let followUpSent = (projection?.messages.filter { $0.role == "user" }.count ?? 0) > 1
+        let setupApplies = projection?.thread.worktreePath != nil || projection?.runs.last?.status.rawValue == "preparing"
+        let target = !followUpSent && setupApplies ? openThreadId : nil
         guard threadWorktreeSetupTarget != target else { return }
         threadWorktreeSetupTask?.cancel(); threadWorktreeSetupTask = nil
         threadWorktreeSetupTarget = target

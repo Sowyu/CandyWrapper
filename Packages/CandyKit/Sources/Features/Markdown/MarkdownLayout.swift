@@ -170,6 +170,7 @@ public final class MarkdownLayout {
         case endClip
         /// A rendered Mermaid diagram's bitmap.
         case image(CGImage, CGRect)
+        case remoteImage(URL, String, CGRect)
     }
 
     struct Control {
@@ -319,14 +320,14 @@ private struct Builder {
         case .rule:
             // Preflight's hr: a 1px top border in --border, no margin.
             return Box(height: 1, items: [.box(CGRect(x: 0, y: 0, width: width, height: 1), fill: Themed.color(\.border), border: nil, radius: 0)])
-        case .image:
+        case .image(let alt, let url):
             // The loading slot of a standalone image: 16:9, at most 30rem wide, on the paragraph's baseline.
             let w = min(width, MarkdownStyle.imageMaxWidth), h = w * 9 / 16
             let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]))
             let below = MarkdownStyle.lineHeight - strut.baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
             let rect = CGRect(x: 0, y: 0, width: w, height: h)
             return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: h + below,
-                       items: [.box(rect, fill: Themed.color(\.muted, 0.6), border: Themed.color(\.border, 0.4), radius: 10)])
+                       items: [.box(rect, fill: Themed.color(\.muted, 0.6), border: Themed.color(\.border, 0.4), radius: 10), .remoteImage(url, alt, rect)])
         }
     }
 
@@ -698,6 +699,7 @@ private extension MarkdownLayout.Item {
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
         case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
+        case .remoteImage(let url, let alt, let r): .remoteImage(url, alt, r.offsetBy(dx: p.x, dy: p.y))
         }
     }
 }

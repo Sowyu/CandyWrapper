@@ -287,13 +287,13 @@ public final class TimelineView: DSView {
 
     /// `resolveChatCanvasLayout` without previews (chatCanvasLayout.ts:26-60): 48px padding (12px
     /// below 640px), the lane at most 736px wide, centered.
+    public var detailsCardLeft: CGFloat? { didSet { if detailsCardLeft != oldValue { relayout() } } }
     var laneFrame: (x: CGFloat, width: CGFloat) {
         let w = document.bounds.width
         // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
         // keeps 48px beside an open right panel.
         let padding: CGFloat = viewportWidth >= 640 ? 48 : 12
-        let lane = max(0, min(ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), w - padding * 2))
-        return (((w - lane) / 2), lane)
+        return ThreadDetailsPlacement.lane(width: w, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), padding: padding, cardLeft: detailsCardLeft)
     }
 
     /// The window's width, or the outermost view's when there is no window (tests).
@@ -456,7 +456,8 @@ public final class TimelineView: DSView {
 
     private func layoutMinimap() {
         let gutter = laneFrame.x
-        minimap.isHidden = minimap.items.count < 2 || gutter < 48
+        minimap.isHidden = minimap.items.count < 2 || gutter <= 12
+        minimap.persistentGutter = gutter >= 48
         let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - 288))
         minimap.frame = NSRect(x: 12, y: (bounds.height - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
         updateMinimapPosition()

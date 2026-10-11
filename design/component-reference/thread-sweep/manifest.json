@@ -1,0 +1,18 @@
+{
+  "permission-stacked" : {
+    "height" : 116,
+    "width" : 360
+  },
+  "task-completed" : {
+    "height" : 56,
+    "width" : 300
+  },
+  "task-pending" : {
+    "height" : 56,
+    "width" : 300
+  },
+  "task-running" : {
+    "height" : 56,
+    "width" : 300
+  }
+}

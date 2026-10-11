@@ -147,8 +147,9 @@ final class ThreadSession {
         http.timeout = 6
         let store = self.store, token = shell.token
         historyLoad = Task { [weak self] in
-            defer { self?.historyLoad = nil }
-            guard let request = await store.beginLoadEarlier() else { return }
+            guard let request = await store.beginLoadEarlier() else {
+                if self?.store === store { self?.historyLoad = nil }; return
+            }
             do {
                 let start = ContinuousClock.now
                 let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
@@ -158,8 +159,11 @@ final class ThreadSession {
                         format: "thread-timing history page %.1f ms (fetch and decode), %d rows, more %@\n",
                         OpenTiming.ms(ContinuousClock.now - start), page.items.count, page.hasMoreHistory ? "yes" : "no").utf8))
                 }
+                guard self?.store === store, !Task.isCancelled else { return }
+                self?.historyLoad = nil
                 await store.applyHistoryPage(page, requestCursor: request.cursor)
             } catch {
+                if self?.store === store { self?.historyLoad = nil }
                 await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns.")
             }
         }
@@ -298,6 +302,14 @@ final class ThreadController {
             return try await environments.dispatch(id, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
+        lineage.acknowledgeWake = { [weak self, weak sidebar] id, time in
+            sidebar?.state.localVisits[id] = time
+            guard let self, let env = id.environmentId, self.composer.config(env)?.capabilities.contains("threadVisitedTracking") == true else { return }
+            Task { _ = try? await self.environments.request(env, "orchestration.dispatchCommand", .object([
+                "type": .string("thread.visit"), "commandId": .string(UUID().uuidString.lowercased()),
+                "threadId": .string(id.localId.rawValue), "visitedAt": .string(time.raw)])) }
+        }
         // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
         // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
         panel.model.webAssetURL = { [weak self] id, name in
@@ -337,8 +349,10 @@ final class ThreadController {
                 let payload: JSONValue = .object(["threadId": .string(thread.rawValue), "itemId": .string(item.rawValue)])
                 return try? await self.environments.request(env, "orchestration.getTurnItem", payload)["item"]
             },
-            // ponytail: apps cannot send chat messages yet (T3's `onSendAppMessage`); wire it to the composer's send
-            sendMessage: nil)
+            sendMessage: { [weak self] text in
+                guard let self else { throw Environments.CommandError.notConnected }
+                try await self.composer.sendAppMessage(text)
+            })
         // `secrets.answerRequest` (SecretRequestCard.tsx:65-97): only the server's own secret and
         // authorization errors reach the card, so the typed value never shows.
         panel.model.answerSecret = { [weak self] input in
@@ -366,6 +380,7 @@ final class ThreadController {
             self.terminal.openExistingSetupTerminal(id)
         }
         terminal.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
+        pullRequests.openIntegratedBrowser = { [weak self] url in self?.browser.openURL(url.absoluteString) }
         pullRequests.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
         devices = DevicePanelController(panel: panel, environments: environments, files: files)
         files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged(); self?.devices.sync() }
