@@ -125,6 +125,7 @@ final class SidebarCommands {
     var threadReference: String? { threadReferenceTarget?.value }
 
     var isUsagePageOpen: Bool { utilityPage != nil && utilityKind == .usage }
+    var isUtilityPageOpen: Bool { utilityPage != nil }
 
     // MARK: Lookup
 
@@ -245,9 +246,32 @@ final class SidebarCommands {
         }
     }
 
-    /// `confirmAndUnpinThread` without the confirm (`confirmThreadUnpin` defaults to off).
-    // ponytail: no unpin confirmation; read confirmThreadUnpin once client settings exist (M7)
+    /// `confirmAndUnpinThread` (useThreadActions.ts:844-864): asks first when `confirmThreadUnpin` is on
+    /// (`requestThreadUnpinConfirmation`, :173-191).
     func unpin(_ id: ThreadId) {
+        guard ClientSettingsStore.shared.current.bool("confirmThreadUnpin") else { return performUnpin(id) }
+        let title = shell(id)?.title ?? "this thread"
+        confirm("Unpin thread \"\(title)\"?\nThis will move the thread out of your pinned section.") { [weak self] in self?.performUnpin(id) }
+    }
+
+    /// `api.dialogs.confirm` as `ConfirmDialogHost` draws it: the question line is the title, the rest the
+    /// description, Cancel and Confirm (destructive for the `destructive` variant).
+    private func confirm(_ message: String, destructive: Bool = false, then action: @escaping () -> Void) {
+        guard let window else { return }
+        let copy = ConfirmCopy.resolve(message)
+        let dialog = DialogView(kind: .alertDialog, title: copy.title, message: copy.description ?? "")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Confirm", variant: destructive ? .destructive : .default)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak host] in
+            host?.close()
+            action()
+        }
+    }
+
+    private func performUnpin(_ id: ThreadId) {
         let orderKey = shell(id)?.pinOrderKey
         let claim = ledger.begin("pin", id.rawValue)
         Task {
@@ -267,9 +291,18 @@ final class SidebarCommands {
         }
     }
 
-    /// Archive refuses a running provider; Undo unarchives and reopens the thread if it was open.
-    // ponytail: no archive confirmation; read confirmThreadArchive once client settings exist (M7)
+    /// Archive refuses a running provider; Undo unarchives and reopens the thread if it was open. With
+    /// `confirmThreadArchive` on, the context menu asks first (Sidebar.tsx:4772-4778).
     private func archive(_ id: ThreadId) {
+        guard let thread = shell(id) else { return }
+        if ClientSettingsStore.shared.current.bool("confirmThreadArchive") {
+            confirm("Archive thread \"\(thread.title)\"?") { [weak self] in self?.performArchive(id) }
+        } else {
+            performArchive(id)
+        }
+    }
+
+    private func performArchive(_ id: ThreadId) {
         guard let thread = shell(id) else { return }
         guard SidebarModel.runtimeCanArchive(SidebarModel.shellRuntime(thread)) else {
             toast("Failed to archive thread", "Cannot archive while the provider is active.", .error)

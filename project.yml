@@ -19,7 +19,9 @@ targets:
     platform: macOS
     sources:
       - App/Sources
-    resources: []
+      # T3's notification clips (apps/web/src/assets, MIT).
+      - path: App/Resources/Sounds
+        buildPhase: resources
     dependencies:
       - package: CandyKit
         product: DesignSystem
@@ -43,6 +45,12 @@ targets:
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
         NSQuitAlwaysKeepsWindows: true
+        # T3 registers `t3code` (ElectronProtocol.ts:15-24). Debug builds use their own scheme so a
+        # development build never takes the user's real T3 links from LaunchServices.
+        CFBundleURLTypes:
+          - CFBundleURLName: T3 Code
+            CFBundleURLSchemes:
+              - $(CANDY_URL_SCHEME)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.candywrapper.app
@@ -54,5 +62,7 @@ targets:
       configs:
         Debug:
           ONLY_ACTIVE_ARCH: YES
+          CANDY_URL_SCHEME: candywrapper-dev
         Release:
           ONLY_ACTIVE_ARCH: NO
+          CANDY_URL_SCHEME: t3code

@@ -398,6 +398,10 @@ public final class ThreadDetailsCardView: DSView {
     public static let width: CGFloat = 264
 
     public let runContext = DetailsRowControl(kind: .select)
+    /// `OpenInPicker` with `displayMode="panel"` (ThreadDetailsPanel.tsx:121-128): open the workspace in the
+    /// preferred editor, the chevron picks another.
+    public let openIn = DetailsSplitControl()
+    public var showsOpenIn = false { didSet { if showsOpenIn != oldValue { openIn.isHidden = !showsOpenIn; relayout() } } }
     public let branch = DetailsRowControl(kind: .select)
     public let gitActions = DetailsSplitControl()
     public let changes = DetailsRowControl(kind: .row)
@@ -440,7 +444,9 @@ public final class ThreadDetailsCardView: DSView {
         changes.trailing = totals
         initGit.icons = [IconName.gitBranchPlus.definition]
         initGit.text = "Initialize Git"
-        for v in [runContext, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
+        openIn.isHidden = true
+        openIn.secondary.setAccessibilityLabel("Choose editor")
+        for v in [runContext, openIn, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
         gitActions.primary.onStateChange = { [weak self] in self?.relayout() }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread details")
@@ -462,7 +468,7 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     public var preferredHeight: CGFloat {
-        var h: CGFloat = 2 + 8 + 32 + 10
+        var h: CGFloat = 2 + 8 + 32 + (showsOpenIn ? 32 : 0) + 10
         let rows = versionRows
         if showsVersionControl, !rows.isEmpty {
             h += 1 + 8 + 10 + rows.reduce(0) { $0 + ($1 === gitActions ? gitActions.preferredHeight : 32) }
@@ -479,7 +485,12 @@ public final class ThreadDetailsCardView: DSView {
         let inner = bounds.width - 2 - 16
         var y: CGFloat = 1 + 8
         runContext.frame = NSRect(x: 9, y: y, width: inner, height: 32)
-        y += 32 + 10
+        y += 32
+        if showsOpenIn {
+            openIn.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            y += 32
+        }
+        y += 10
         let rows = versionRows
         divider.isHidden = rows.isEmpty || !showsVersionControl
         divider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)

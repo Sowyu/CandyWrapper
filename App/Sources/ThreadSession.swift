@@ -381,7 +381,7 @@ final class ThreadController {
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         composer.showThread(id)
         files.show(id)
-        let kept = retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
+        let kept = takeRetained(id) ?? keepAlive?.take(id)
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: environments.threadCache)
         session.onProjection = { [weak self] projection in self?.composer.projectionChanged(projection, threadId: id) }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
@@ -393,15 +393,27 @@ final class ThreadController {
             openDiff = false
             panel.opensChangedTurnOnLoad = true
         }
+        // The thread left behind may still run: it streams on in the background.
+        keepAlive?.update()
+    }
+
+    /// Running threads' streams while they are not open (`RunningThreadKeepAlive`).
+    var keepAlive: RunningThreadKeepAlive?
+
+    func takeRetained(_ id: ThreadId) -> ThreadSession.Retained? {
+        retained.firstIndex { $0.id == id }.map { retained.remove(at: $0).store }
     }
 
     /// Keeps a closed thread's store for 5 minutes, like T3. Only the newest few: a huge thread's
     /// bounded window holds about 12 MB (900 runs, 3,600 nodes).
     // ponytail: count cap of 2, no byte budget; weigh retained stores by snapshot size if memory reviews flag it
     private func retain(_ old: ThreadSession) {
-        let store = old.end()
-        retained.removeAll { $0.id == old.threadId }
-        retained.append((old.threadId, store, Date().addingTimeInterval(Self.retention)))
+        retainStore(old.threadId, old.end())
+    }
+
+    func retainStore(_ id: ThreadId, _ store: ThreadSession.Retained) {
+        retained.removeAll { $0.id == id }
+        retained.append((id, store, Date().addingTimeInterval(Self.retention)))
         if retained.count > 2 { retained.removeFirst(retained.count - 2) }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.retention + 1) { [weak self] in
             MainActor.assumeIsolated { self?.retained.removeAll { $0.until <= Date() } }
@@ -419,6 +431,7 @@ final class ThreadController {
         session = nil
         terminal.show(nil)
         files.show(nil)
+        keepAlive?.update()
     }
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
@@ -429,6 +442,7 @@ final class ThreadController {
         session = nil
         terminal.show(nil)
         files.show(nil)
+        keepAlive?.update()
     }
 
     /// "<label> is reconnecting|offline" over the composer while the open thread's environment is not
@@ -502,6 +516,7 @@ final class ThreadController {
     private func environmentRemoved(_ environmentId: String) {
         let prefix = environmentId + ":"
         retained.removeAll { $0.id.environmentId == environmentId }
+        keepAlive?.drop(environmentId: environmentId)
         composer.environmentRemoved(environmentId)
         terminal.environmentRemoved(environmentId)
         let defaults = UserDefaults.standard

@@ -331,6 +331,10 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var usageLimitSources: [UsageLimitSourceSnapshot] = []
     /// `environment.platform.os` (`darwin`, `linux`, `win32`).
     public var platformOS: String?
+    /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
+    public var availableEditors: [String] = []
+    /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
+    public var revealsInFileManager = false
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -341,7 +345,9 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         self.keybindingsConfigPath = keybindingsConfigPath
     }
 
-    private enum CodingKeys: String, CodingKey { case providers, settings, keybindings, environment, keybindingsConfigPath }
+    private enum CodingKeys: String, CodingKey {
+        case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, shellRevealInFileManager
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -352,6 +358,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         platformOS = environment?["platform"]?["os"]?.stringValue
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
+        availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
+        revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false
     }
 }
 

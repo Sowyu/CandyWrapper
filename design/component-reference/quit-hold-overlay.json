@@ -1,0 +1,31 @@
+{
+ "component": "quit-hold-overlay",
+ "source": "apps/web/src/components/QuitHoldOverlay.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "hold",
+   "html": "<div class=\"rounded-full bg-foreground/95 px-8 py-4 text-2xl font-bold text-background shadow-xl\">Hold ⌘Q or press twice to quit</div>",
+   "wrapperStyle": "display:inline-block;padding:0",
+   "native": {
+    "mode": "hold",
+    "text": "Hold ⌘Q or press twice to quit"
+   }
+  },
+  {
+   "name": "double-click",
+   "html": "<div class=\"rounded-full bg-foreground/95 px-8 py-4 text-2xl font-bold text-background shadow-xl\">Press ⌘Q again to quit</div>",
+   "wrapperStyle": "display:inline-block;padding:0",
+   "native": {
+    "mode": "double-click",
+    "text": "Press ⌘Q again to quit"
+   }
+  }
+ ]
+}

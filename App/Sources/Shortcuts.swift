@@ -33,10 +33,44 @@ final class Shortcuts {
 
     init(window: NSWindow) {
         self.window = window
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             nonisolated(unsafe) let event = event
-            let used = MainActor.assumeIsolated { self?.handle(event) ?? false }
+            let used = MainActor.assumeIsolated { () -> Bool in
+                guard let self else { return false }
+                if self.quitHoldKey(event) { return true }
+                return event.type == .keyDown && self.handle(event)
+            }
             return used ? nil : event
+        }
+    }
+
+    /// Hold-to-quit sees the main window's keys before the menu does (T3's `before-input-event`,
+    /// DesktopWindow.ts:642-679). The menu's Quit item stays immediate.
+    var quitHold: QuitHoldController?
+    private var commandDown = false
+
+    private func quitHoldKey(_ event: NSEvent) -> Bool {
+        guard let quitHold, event.window === window else { return false }
+        let flags = event.modifierFlags
+        let meta = flags.contains(.command), alt = flags.contains(.option), shift = flags.contains(.shift), control = flags.contains(.control)
+        switch event.type {
+        case .keyDown, .keyUp:
+            let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            return quitHold.handle(QuitHoldController.Key(event.type == .keyDown ? .down : .up, key, meta: meta, control: control, alt: alt,
+                                                          shift: shift, isAutoRepeat: event.type == .keyDown && event.isARepeat))
+        case .flagsChanged:
+            // Electron reports modifier presses as keydowns of "Meta", "Shift", "Alt" or "Control".
+            if meta != commandDown {
+                commandDown = meta
+                quitHold.handle(QuitHoldController.Key(meta ? .down : .up, "meta", meta: meta, control: control, alt: alt, shift: shift))
+            } else if let key = [(55 as UInt16, "meta"), (54, "meta"), (56, "shift"), (60, "shift"), (58, "alt"), (61, "alt"),
+                                 (59, "control"), (62, "control")].first(where: { $0.0 == event.keyCode })?.1, key != "meta" {
+                let down = key == "shift" ? shift : key == "alt" ? alt : control
+                if down { quitHold.handle(QuitHoldController.Key(.down, key, meta: meta, control: control, alt: alt, shift: shift)) }
+            }
+            return false
+        default:
+            return false
         }
     }
 
@@ -46,8 +80,12 @@ final class Shortcuts {
 
     func onKey(_ handler: @escaping (NSEvent) -> Bool) { keyHandlers.append(handler) }
 
+    /// Every keydown in the window, before resolution (the notification sound's unlock gesture).
+    var onKeyDown: (() -> Void)?
+
     func handle(_ event: NSEvent) -> Bool {
         guard event.window === window else { return false }
+        onKeyDown?()
         // A shortcut recorder takes every key while it captures.
         if (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing == true { return false }
         let paletteOpen = paletteOpen()
