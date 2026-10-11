@@ -318,4 +318,19 @@ public final class CheckStatusGlyph: DSView {
     }
 
     public override func layout() { super.layout(); view?.frame = bounds }
+
+    /// Set, the glyph is a button (`role="button"`, the checks popover's trigger); the click does not
+    /// reach the row under it.
+    public var onClick: ((CheckStatusGlyph) -> Void)? { didSet { setAccessibilityRole(onClick == nil ? nil : .button); window?.invalidateCursorRects(for: self) } }
+    public override func resetCursorRects() { if onClick != nil { addCursorRect(bounds, cursor: .pointingHand) } }
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        guard onClick != nil else { return super.hitTest(point) }
+        return frame.contains(point) ? self : nil
+    }
+    public override func mouseDown(with event: NSEvent) { if onClick == nil { super.mouseDown(with: event) } }
+    public override func mouseUp(with event: NSEvent) {
+        guard let onClick else { super.mouseUp(with: event); return }
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick(self) }
+    }
+    public override func accessibilityPerformPress() -> Bool { onClick?(self); return onClick != nil }
 }

@@ -48,6 +48,8 @@ public struct MenuItem {
     public var accessoryWidth: CGFloat = 0
     /// base-ui `closeOnClick={false}` on a plain item: a click on the row does nothing.
     public var keepsOpen = false
+    /// The leading icon in its own color at full opacity (a pull request state glyph), not the muted one.
+    public var iconColor: NSColor?
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -651,8 +653,8 @@ final class MenuRowView: DSView {
         else { text = Themed.color(\.contrastForeground) }
         label.color = text
         let iconColor = item.isDestructive ? text : Themed.color(\.contrastMutedForeground)
-        iconView?.strokeColor = iconColor
-        iconView?.alphaValue = 0.8
+        iconView?.strokeColor = item.iconColor ?? iconColor
+        iconView?.alphaValue = item.iconColor == nil ? 0.8 : 1
         trailing?.strokeColor = Themed.color(\.contrastMutedForeground)
         trailing?.alphaValue = 0.8
         glyphView?.strokeColor = Themed.color(\.contrastMutedForeground)

@@ -24,9 +24,17 @@ public final class PullRequestDetailView: DSView {
     public private(set) var detail: PullRequestDetail?
     public var activityPending = true { didSet { if activityPending != oldValue { rebuildTabs() } } }
     public var activityError: String? { didSet { if activityError != oldValue { rebuildTabs() } } }
-    public var tab: Tab = .summary { didSet { if tab != oldValue { tabs.selectedIndex = tab.rawValue; showTab() } } }
+    public var tab: Tab = .summary {
+        didSet {
+            guard tab != oldValue else { return }
+            tabs.selectedIndex = tab.rawValue
+            // Each tab remembers its own scroll chrome; a short tab cannot scroll to reopen it.
+            condensed = condensedByTab[tab] ?? false
+            showTab()
+        }
+    }
     public var refreshing = false { didSet { more.icon = refreshing ? .refreshCw : .ellipsis } }
-    public var actionPending = false { didSet { rebuildActions() } }
+    public var actionPending = false { didSet { composer?.actionPending = actionPending; rebuildActions() } }
     public var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) { didSet { rebuild() } }
     /// The merge method the reader last picked (`pullRequestMergeMethod` in the UI state store).
     public var preferredMergeMethod = "merge" { didSet { rebuildActions() } }
@@ -45,7 +53,28 @@ public final class PullRequestDetailView: DSView {
     public var onCheckout: ((_ worktree: Bool) -> Void)?
     public var onMergeMethod: ((String) -> Void)?
     public var onComment: ((String) -> Void)?
-    public var onReview: ((_ verdict: String, _ body: String) -> Void)?
+    /// "Close with comment" or "Reopen with comment": post, then run the action.
+    public var onCommentAction: ((_ body: String, _ action: String) -> Void)?
+    public var onReview: ((_ verdict: String, _ body: String, _ comments: [PullRequestReviewCommentDraft]) -> Void)?
+    /// The review store's key for this pull request (`pullRequestReviewKey`); set with the detail.
+    public var reviewKey: String?
+    /// The composer for the pull request on screen; it outlives its popover so drafts survive.
+    public private(set) var composer: PullRequestComposerView?
+    private var composerPopup: OpenPopup?
+    private let pendingBadge = LabelView("", font: DSFont.ui(10, weight: .semibold))
+    /// The Summary's reviewer and label triggers (the caller opens the picker under the anchor).
+    public var onPickReviewers: ((NSView) -> Void)? { get { summary.onPickReviewers } set { summary.onPickReviewers = newValue } }
+    public var onPickLabels: ((NSView) -> Void)? { get { summary.onPickLabels } set { summary.onPickLabels = newValue } }
+    /// The description's Save, then `finishBodyEdit` once the host took it.
+    public var onSaveBody: ((String) -> Void)? { get { summary.onSaveBody } set { summary.onSaveBody = newValue } }
+    public var bodySaving: Bool { get { summary.bodySaving } set { summary.bodySaving = newValue } }
+    public func finishBodyEdit() { summary.finishBodyEdit() }
+    /// A comment's Save (`pullRequests.updateComment`), then `finishCommentEdit`.
+    public var onSaveComment: ((PullRequestComment, String) -> Void)? { get { summary.onSaveComment } set { summary.onSaveComment = newValue } }
+    public var commentSaving: Bool { get { summary.commentSaving } set { summary.commentSaving = newValue } }
+    public func finishCommentEdit() { summary.finishCommentEdit() }
+    /// A reaction pressed: (subject id, content, reacted, the bar to tell of a refusal).
+    public var onReact: ((String?, String, Bool, PullRequestReactionBarView) -> Void)?
     /// The Code tab asked for a scope: nil is all commits.
     public var onCommit: ((String?) -> Void)?
     public var onSetViewed: ((_ path: String, _ viewed: Bool) -> Void)?
@@ -77,6 +106,7 @@ public final class PullRequestDetailView: DSView {
     private let orderButton = ButtonView("Newest first", icon: .arrowDownUp, variant: .ghostMuted, size: .xs)
     private let tabRule = CALayer()
     private let headerRule = CALayer()
+    private let condensedRule = CALayer()
 
     // Content.
     let summary = PullRequestSummaryView()
@@ -85,6 +115,55 @@ public final class PullRequestDetailView: DSView {
     private var ghost: PullRequestDetailGhostView?
     private var failure: EmptyView?
     private let composerButton = ButtonView(nil, icon: .messageSquare, variant: .glass, size: .icon)
+    private var reviewObserver: NSObjectProtocol?
+
+    // Title editing (PullRequestDetailPanel.tsx:2382-2445).
+    private let titleEditButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
+    private let titleInput = InputView(placeholder: "", size: .sm)
+    private let titleCancel = ButtonView("Cancel", variant: .ghost, size: .xs)
+    private let titleSave = ButtonView("Save", variant: .outline, size: .xs)
+    private var titleTracking: NSTrackingArea?
+    /// The title draft while the editor is open, nil while it is closed.
+    public private(set) var titleDraft: String?
+    public var titleSaving = false { didSet { updateTitleEditor() } }
+    /// Save pressed with a changed title (`saveTitle`); the caller sends `pullRequests.update`.
+    public var onSaveTitle: ((String) -> Void)?
+    /// The source control write scope (`canWriteSourceControl`).
+    public var canWrite = true { didSet { updateTitleEditor() } }
+
+    // Native stack (PullRequestStackMenu.tsx).
+    private let stackButton = ButtonView("", icon: .layers, variant: .ghost, size: .xs)
+    private let stackMergeButton = ButtonView("Merge stack", icon: .gitMerge, variant: .default, size: .xs)
+    /// The host's stack for this pull request, nil without one.
+    public var stack: PullRequestStackDetail? { didSet { rebuildActions() } }
+    /// "Stack data may be stale…" or "Refreshing stack…", shown in the menu and the tooltip.
+    public var stackNotice: String? { didSet { rebuildActions() } }
+    /// The stack read failed: the menu offers "Retry stack refresh" and the button wears a warning.
+    public var stackFailed = false { didSet { rebuildActions() } }
+    /// Stack merge and rebase are allowed (`canMerge`, `canRebase` of the menu).
+    public var stackCanMerge = false { didSet { rebuildActions() } }
+    public var stackCanRebase = false { didSet { rebuildActions() } }
+    public var stackPending = false { didSet { rebuildActions() } }
+    /// With stack actions, a single merge waits for the stack read (`allowsSinglePullRequestMerge`).
+    public var allowsSingleMerge = true { didSet { rebuildActions() } }
+    public var onStackRetry: (() -> Void)?
+    public var onStackAction: ((_ action: String) -> Void)?
+    /// A stack layer picked: open that pull request.
+    public var onSelectPullRequest: ((Int) -> Void)?
+
+    // Condensed chrome (PullRequestDetailPanel.tsx:545-563, 1759-1800, 2245-2356).
+    public private(set) var condensed = false
+    private var condensedByTab: [Tab: Bool] = [:]
+    private let condensedNumber = LinkLabel()
+    private let condensedTitle = LabelView("", font: DSFont.ui(12, weight: .medium))
+    private let condensedAvatar = PullRequestAvatarView()
+    private let condensedTime = LabelView("", font: DSFont.ui(12))
+    private let condensedBase = LabelView("", font: DSFont.mono(10))
+    private let condensedArrow = IconView(name: .arrowLeft, size: 12)
+    private let condensedHead = LabelView("", font: DSFont.mono(10))
+    private let condensedFilesIcon = IconView(name: .fileDiff, size: 12)
+    private let condensedFiles = LabelView("", font: DSFont.ui(10))
+    private let condensedStat = PullRequestDiffStatView()
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -106,11 +185,55 @@ public final class PullRequestDetailView: DSView {
         more.iconSize = 16
         more.setAccessibilityLabel("More pull request actions")
         orderButton.iconSize = 12
-        for l in [tabRule, headerRule] { l.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]; headerBox.layer?.addSublayer(l) }
+        for l in [tabRule, headerRule, condensedRule] { l.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]; headerBox.layer?.addSublayer(l) }
         [summary, timeline, code].forEach(addSubview)
         addSubview(composerButton)
         composerButton.setAccessibilityLabel("Comment on pull request")
         composerButton.action = { [weak self] in self?.showComposer() }
+        pendingBadge.lineHeight = 14
+        pendingBadge.alignment = .center
+        pendingBadge.wantsLayer = true
+        pendingBadge.layer?.cornerRadius = 7
+        pendingBadge.isHidden = true
+        addSubview(pendingBadge)
+        reviewObserver = NotificationCenter.default.addObserver(forName: PullRequestReviewStore.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updatePendingCount() }
+        }
+        checksIcon.onClick = { [weak self] glyph in self?.showChecks(from: glyph) }
+        titleEditButton.iconSize = 12
+        titleEditButton.setAccessibilityLabel("Edit title")
+        titleEditButton.alphaValue = 0
+        titleEditButton.action = { [weak self] in self?.beginTitleEdit() }
+        titleInput.setAccessibilityLabel("Pull request title")
+        titleInput.onSubmit = { [weak self] in self?.saveTitle() }
+        titleInput.onCommand = { [weak self] sel in
+            guard sel == #selector(NSResponder.cancelOperation(_:)) else { return false }
+            self?.cancelTitleEdit()
+            return true
+        }
+        titleCancel.action = { [weak self] in self?.cancelTitleEdit() }
+        titleSave.action = { [weak self] in self?.saveTitle() }
+        titleInput.onChange = { [weak self] _ in self?.updateTitleEditor() }
+        [titleEditButton, titleInput, titleCancel, titleSave].forEach(headerBox.addSubview)
+        stackButton.iconSize = 14
+        stackButton.action = { [weak self] in self?.showStackMenu() }
+        stackMergeButton.iconSize = 14
+        stackMergeButton.action = { [weak self] in self?.confirmStack("merge") }
+        [stackButton, stackMergeButton].forEach(headerBox.addSubview)
+        for v in [condensedNumber, condensedTitle, condensedAvatar, condensedTime, condensedBase, condensedArrow, condensedHead, condensedFiles, condensedFilesIcon, condensedStat] as [NSView] {
+            headerBox.addSubview(v)
+        }
+        condensedNumber.font = DSFont.ui(12, weight: .medium)
+        condensedNumber.onClick = { [weak self] in if let d = self?.detail { self?.onOpenURL?(d.url) } }
+        condensedNumber.onMenu = { [weak self] event in self?.showNumberMenu(event) }
+        for l in [condensedTitle, condensedTime] { l.lineHeight = 16 }
+        for l in [condensedBase, condensedHead, condensedFiles] { l.lineHeight = 14 }
+        condensedBase.truncation = .middle; condensedHead.truncation = .middle
+        condensedStat.font = DSFont.mono(10)
+        condensedStat.lineHeight = 14
+        for t in [summary.scrollTarget, timeline.scrollTarget, code.scrollTarget] {
+            t.onScroll = { [weak self] top in self?.scrolled(top) }
+        }
         tabs.onChange = { [weak self] index in
             guard let self, let index, let t = Tab(rawValue: index) else { return }
             self.tab = t
@@ -132,6 +255,7 @@ public final class PullRequestDetailView: DSView {
             self.needsLayout = true
         }
         summary.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+        summary.onReact = { [weak self] id, content, reacted, bar in self?.onReact?(id, content, reacted, bar) }
         timeline.onOpenCommit = { [weak self] oid in self?.tab = .code; self?.onTab?(.code); self?.onCommit?(oid) }
         code.onCommit = { [weak self] oid in self?.onCommit?(oid) }
         code.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
@@ -165,13 +289,36 @@ public final class PullRequestDetailView: DSView {
         let sameIdentity = self.detail?.url == detail.url
         self.detail = detail
         phase = .loaded
-        if !sameIdentity { code.reset() }
+        if !sameIdentity {
+            code.reset()
+            titleDraft = nil
+            condensed = false
+            condensedByTab = [:]
+            closeComposer()
+            composer = nil
+            stack = nil
+            stackNotice = nil
+            stackFailed = false
+        }
         rebuild()
     }
 
-    /// The Code tab's patch, or its state.
-    public func setPatch(_ patch: String?, loading: Bool, error: String?, commit: String?) {
-        code.set(patch: patch, loading: loading, error: error, commit: commit, commits: detail?.commits ?? [])
+    /// The Code tab's slices so far, or its state; `nextCursor` says more is owed.
+    public func setDiff(patches: [String], loading: Bool, error: String?, nextCursor: String? = nil, moreLoading: Bool = false,
+                        moreError: String? = nil, commit: String?) {
+        code.set(patches: patches, loading: loading, error: error, nextCursor: nextCursor, moreLoading: moreLoading, moreError: moreError,
+                 commit: commit, commits: detail?.commits ?? [])
+    }
+
+    /// The Code tab wants the next slice.
+    public var onLoadMoreDiff: (() -> Void)? { get { code.onLoadMore } set { code.onLoadMore = newValue } }
+
+    /// What the conversation cards ask of the host; set once, used for every pull request.
+    public var reviewActions: PullRequestReviewThreadActions? { didSet { syncReview() } }
+
+    private func syncReview() {
+        guard let d = detail, let reviewActions else { return }
+        code.setReview(d, reviewKey: reviewKey ?? d.url, actions: reviewActions, nowMs: nowMs)
     }
 
     /// The viewed marks (`pullRequests.filesViewed` plus presses not confirmed yet). Nil hides them.
@@ -208,6 +355,22 @@ public final class PullRequestDetailView: DSView {
             numberLink.color = PullRequestStyle.color(tone)
             numberIcon.strokeColor = PullRequestStyle.color(tone)
             checkout.isHidden = context != .page
+            condensedNumber.text = "#\(d.number)"
+            condensedNumber.color = PullRequestStyle.color(tone)
+            condensedNumber.toolTip = PullRequestDetailLogic.openOnHostLabel(d.provider)
+            condensedTitle.text = d.title
+            condensedTitle.toolTip = d.title
+            condensedAvatar.actor = d.author
+            condensedAvatar.toolTip = d.author?.login ?? "ghost"
+            condensedTime.text = TimestampFormat.formatRelativeTimeLabel(d.updatedAt, nowMs: nowMs)
+            condensedBase.text = d.baseBranch
+            condensedBase.toolTip = d.baseBranch
+            condensedHead.text = d.headBranch
+            condensedHead.toolTip = d.headBranch
+            condensedFiles.text = d.changedFiles.formatted()
+            condensedStat.additions = d.additions
+            condensedStat.deletions = d.deletions
+            updateTitleEditor()
             titleLabel.text = d.title
             titleLabel.toolTip = d.title
             authorAvatar.actor = d.author
@@ -228,6 +391,8 @@ public final class PullRequestDetailView: DSView {
             let canComment = d.capabilities.comment && d.viewerPermissions.comment
             let verdicts = d.capabilities.review.verdicts.filter { d.viewerPermissions.verdicts.contains($0) }
             composerButton.isHidden = !canComment && verdicts.isEmpty
+            updatePendingCount()
+            syncReview()
             rebuildActions()
             rebuildTabs()
         }
@@ -273,10 +438,16 @@ public final class PullRequestDetailView: DSView {
     private func rebuildActions() {
         primary?.removeFromSuperview()
         primary = nil
-        guard let d = detail else { return }
+        guard let d = detail else { stackButton.isHidden = true; stackMergeButton.isHidden = true; return }
         let allowed = PullRequestDetailLogic.allowedMergeMethods(d)
         let method = PullRequestDetailLogic.selectedMergeMethod(allowed, preferred: preferredMergeMethod)
-        switch PullRequestDetailLogic.primaryControl(d) {
+        updateStackControls(d)
+        var control = PullRequestDetailLogic.primaryControl(d)
+        // ponytail: a stack gates only the merge and auto-merge controls here; T3 feeds `canMerge` and
+        // `canEnableAutoMerge` into `resolvePullRequestPrimaryControl`. Port the full resolver if a stacked
+        // pull request shows a different control than T3
+        if !allowsSingleMerge && (control == "merge" || control == "enable-auto-merge") { control = nil }
+        switch control {
         case "resolve":
             let b = ButtonView("Resolve conflicts", icon: .triangleAlert, variant: .destructiveOutline, size: .xs)
             b.iconSize = 14
@@ -319,6 +490,21 @@ public final class PullRequestDetailView: DSView {
     }
 
     // MARK: Menus and dialogs
+
+    /// The stack button (`⧉ 2/3`, a warning while stale) and "Merge stack" beside it.
+    private func updateStackControls(_ d: PullRequestDetail) {
+        guard let stack else { stackButton.isHidden = true; stackMergeButton.isHidden = true; return }
+        let plan = PullRequestWriteLogic.stackPlan(stack, current: d.number, pending: stackPending)
+        stackButton.isHidden = false
+        stackButton.title = "\(plan.position)/\(stack.layers.count)"
+        stackButton.trailingIcon = stackFailed ? .triangleAlert : nil
+        stackButton.setAccessibilityLabel("Stack \(stack.number), layer \(plan.position) of \(stack.layers.count)")
+        stackButton.toolTip = "View stack #\(stack.number), layer \(plan.position) of \(stack.layers.count)" + (stackNotice.map { " · \($0)" } ?? "")
+        stackMergeButton.isHidden = !(stackCanMerge && plan.selectedIsOpen)
+        stackMergeButton.isEnabled = !plan.mergeDisabled
+        let n = plan.mergeLayers.count
+        stackMergeButton.toolTip = "Merge stack through #\(d.number) into \(stack.base) (\(n) \(n == 1 ? "pull request" : "pull requests"))"
+    }
 
     /// The confirmation T3 asks before merging, auto-merging, reverting or closing.
     private func confirm(_ action: String, method: String? = nil) {
@@ -441,23 +627,179 @@ public final class PullRequestDetailView: DSView {
         MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }
 
-    /// `PullRequestComposer`: Comment, or Review with a verdict, in a popover over the glass button.
+    /// `PullRequestComposer`: Comment, or Review with a verdict, in a popover over the glass button
+    /// (`side="top" align="end" sideOffset={8} width="lg"`).
     private func showComposer() {
         guard let d = detail else { return }
-        let canComment = d.capabilities.comment && d.viewerPermissions.comment
-        let verdicts = d.capabilities.review.verdicts.filter { d.viewerPermissions.verdicts.contains($0) }
-        let form = PullRequestComposerForm(canComment: canComment, verdicts: verdicts, forgejo: d.provider == "forgejo")
-        let popover = PopoverView(content: form, width: .lg)
-        let open = popover.show(from: composerButton, placement: PopupPlacement(side: .top, align: .end, sideOffset: 8, fallbackAxisSide: .none))
-        form.onComment = { [weak self] body in if let open { self?.composerButton.popupHost?.close(open) }; self?.onComment?(body) }
-        form.onReview = { [weak self] verdict, body in if let open { self?.composerButton.popupHost?.close(open) }; self?.onReview?(verdict, body) }
-        form.onClose = { [weak self] in if let open { self?.composerButton.popupHost?.close(open) } }
+        let key = reviewKey ?? d.url
+        if composer?.reviewKey != key {
+            let c = PullRequestComposerView(detail: d, reviewKey: key)
+            c.onComment = { [weak self] body in self?.onComment?(body) }
+            c.onCommentAction = { [weak self] body, action in self?.onCommentAction?(body, action) }
+            c.onReview = { [weak self] verdict, body, comments in self?.onReview?(verdict, body, comments) }
+            c.onClose = { [weak self] in self?.closeComposer() }
+            composer = c
+        }
+        guard let composer else { return }
+        composer.actionPending = actionPending
+        composer.prepareToOpen()
+        composerPopup = PopoverView(content: composer, width: .lg)
+            .show(from: composerButton, placement: PopupPlacement(side: .top, align: .end, sideOffset: 8, fallbackAxisSide: .none))
+        DispatchQueue.main.async { [weak composer] in composer?.focusBox() }
+    }
+
+    /// Closes the composer popover (a comment posted or a review sent, or the close button).
+    public func closeComposer() {
+        if let composerPopup { composerButton.popupHost?.close(composerPopup) }
+        composerPopup = nil
+    }
+
+    /// The pending line comments' count on the composer button (`bg-info`, `text-3xs`).
+    public func updatePendingCount() {
+        let count = reviewKey.map { PullRequestReviewStore.shared.comments($0).count } ?? 0
+        pendingBadge.text = "\(count)"
+        pendingBadge.isHidden = count == 0 || composerButton.isHidden
+        if let d = detail {
+            let offer = PullRequestWriteLogic.composerOffer(d)
+            let started = count > 0 || !(reviewKey.map { PullRequestReviewStore.shared.summary($0) } ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            composerButton.setAccessibilityLabel(PullRequestWriteLogic.composerLabel(pending: count, reviewStarted: started, canComment: offer.canComment))
+        }
+        needsLayout = true
+    }
+
+    // MARK: Checks
+
+    /// The checks indicator's popover over the checks the detail holds (PullRequestDetailPanel.tsx:2581-2590).
+    private func showChecks(from glyph: NSView) {
+        guard let d = detail, let state = PullRequestDetailLogic.effectiveChecksState(d) else { return }
+        let view = PullRequestChecksPopoverView(checksState: state, summary: PullRequestDetailLogic.summarizeChecks(d.checks), body: .checks(d.checks))
+        view.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+        view.present(from: glyph)
+    }
+
+    // MARK: Title
+
+    private var canEditTitle: Bool { detail.map(PullRequestWriteLogic.canEditChangeRequest) ?? false }
+
+    private func beginTitleEdit() {
+        guard let d = detail, canEditTitle else { return }
+        titleDraft = d.title
+        titleInput.text = d.title
+        updateTitleEditor()
+        needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.titleInput)
+        }
+    }
+
+    public func cancelTitleEdit() {
+        titleDraft = nil
+        updateTitleEditor()
+        needsLayout = true
+    }
+
+    /// `saveTitle`: blank or unchanged closes the editor; otherwise the caller sends it and calls
+    /// `cancelTitleEdit` once the host took it (a failure keeps the words).
+    private func saveTitle() {
+        guard let d = detail, titleDraft != nil, !titleSaving, canWrite else { return }
+        guard let title = PullRequestWriteLogic.titleToSave(titleInput.text, current: d.title) else { cancelTitleEdit(); return }
+        onSaveTitle?(title)
+    }
+
+    private func updateTitleEditor() {
+        let editing = titleDraft != nil
+        if editing { titleDraft = titleInput.text }
+        titleLabel.isHidden = editing
+        titleEditButton.isHidden = editing || !canEditTitle
+        [titleInput, titleCancel, titleSave].forEach { $0.isHidden = !editing }
+        titleInput.isEnabled = !titleSaving
+        titleCancel.isEnabled = !titleSaving
+        titleSave.isEnabled = canWrite && !titleSaving && !titleInput.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        titleSave.title = titleSaving ? "Saving..." : "Save"
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let titleTracking { removeTrackingArea(titleTracking) }
+        titleTracking = NSTrackingArea(rect: titleRowRect, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(titleTracking!)
+    }
+    public override func mouseEntered(with event: NSEvent) { titleEditButton.alphaValue = 1 }
+    public override func mouseExited(with event: NSEvent) { titleEditButton.alphaValue = 0 }
+
+    private var titleRowRect: NSRect { NSRect(x: 0, y: 28 + 4, width: bounds.width, height: 24) }
+
+    // MARK: Stack
+
+    private func showStackMenu() {
+        guard let stack, let d = detail else { return }
+        let plan = PullRequestWriteLogic.stackPlan(stack, current: d.number, pending: stackPending)
+        var items = PullRequestStackMenu.header(number: stack.number, notice: stackNotice, stale: stackFailed,
+                                                onRetry: { [weak self] in self?.onStackRetry?() })
+        var select: (@MainActor (Int) -> Void)?
+        if onSelectPullRequest != nil { select = { [weak self] n in self?.onSelectPullRequest?(n) } }
+        items += PullRequestStackMenu.layers(stack, current: d.number, pending: stackPending, onSelect: select)
+        if stackCanMerge || stackCanRebase {
+            items.append(.separator)
+            if stackCanMerge {
+                var merge = MenuItem("Merge stack (\(plan.mergeLayers.count))", icon: .gitMerge, disabled: plan.mergeDisabled)
+                merge.action = { [weak self] in self?.confirmStack("merge") }
+                items.append(merge)
+            }
+            if stackCanRebase {
+                var rebase = MenuItem("Rebase stack", icon: .refreshCw, disabled: plan.rebaseDisabled)
+                rebase.action = { [weak self] in self?.confirmStack("update-branch") }
+                items.append(rebase)
+            }
+            if plan.showsReadyNote { items.append(.label("Every layer being merged must be open and ready for review.")) }
+        }
+        MenuPopupView.show(items, from: stackButton, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    /// The stack confirmation (PullRequestStackMenu.tsx:220-260): the layers it touches, Cancel, go.
+    private func confirmStack(_ action: String) {
+        guard let stack, let d = detail, let window else { return }
+        let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: preferredMergeMethod)
+        let copy = PullRequestWriteLogic.stackConfirmation(stack, current: d.number, action: action, mergeMethod: method)
+        let plan = PullRequestWriteLogic.stackPlan(stack, current: d.number, pending: stackPending)
+        let dialog = DialogView(kind: .dialog, title: copy.title, message: copy.message)
+        dialog.maxWidth = 448
+        dialog.panelContent = [PullRequestStackLayerListView(action == "merge" ? plan.mergeLayers : plan.unmerged)]
+        let cancel = ButtonView("Cancel", variant: .outline, size: .default)
+        let go = ButtonView(copy.button, variant: .default, size: .default)
+        dialog.footerButtons = [cancel, go]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { host.close() }
+        go.action = { [weak self] in host.close(); self?.onStackAction?(action) }
+    }
+
+    // MARK: Condensed chrome
+
+    private var activeScroll: PullRequestScrollWatcher {
+        switch tab { case .summary: summary.scrollTarget; case .timeline: timeline.scrollTarget; case .code: code.scrollTarget }
+    }
+
+    /// The fold under the top row: the title block, the author row and the branches row.
+    private var foldHeight: CGFloat { 4 + (titleDraft != nil ? 28 + 8 + 24 : 24) + 8 + 20 + 16 + 20 + 16 }
+    static let condensedRowHeight: CGFloat = 28
+
+    private func scrolled(_ top: CGFloat) {
+        guard phase == .loaded else { return }
+        let (next, refund) = PullRequestWriteLogic.condensed(previous: condensed, scrollTop: top, foldHeight: foldHeight,
+                                                              condensedRowHeight: Self.condensedRowHeight)
+        condensedByTab[tab] = next
+        guard next != condensed else { return }
+        condensed = next
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        if let refund { activeScroll.adjust(by: refund) }
     }
 
     // MARK: Layout
 
-    /// The header's height: the 28pt top row, the title block and the tab bar.
-    public static let headerHeight: CGFloat = 28 + 4 + 24 + 8 + 20 + 16 + 20 + 16 + 1 + 44
+    /// The header's height: the 28pt top row, the fold (or the condensed row) and the tab bar.
+    public var headerHeight: CGFloat { 28 + (condensed ? Self.condensedRowHeight : foldHeight) + 1 + 44 }
 
     public override func layout() {
         super.layout()
@@ -465,7 +807,7 @@ public final class PullRequestDetailView: DSView {
         ghost?.frame = bounds
         failure?.frame = bounds
         guard phase == .loaded else { return }
-        let hh = Self.headerHeight
+        let hh = headerHeight
         headerBox.frame = NSRect(x: 0, y: 0, width: w, height: hh + 1)
         // Top row (`h-7`, `pl-4`, actions `mr-4 gap-1`).
         var r = w - 16
@@ -479,44 +821,84 @@ public final class PullRequestDetailView: DSView {
             let cw = ceil(checkout.intrinsicContentSize.width)
             checkout.frame = NSRect(x: r - cw, y: 2, width: cw, height: 24); r -= cw + 4
         }
-        let nw = ceil(numberLink.textWidth) + 1
-        let repoWidth = min(ceil(repo.textWidth) + 1, max(0, r - 8 - 16 - nw - 2 - 10 - 4))
-        repo.frame = NSRect(x: 16, y: 6, width: repoWidth, height: 16)
-        numberLink.frame = NSRect(x: 16 + repoWidth + 4, y: 6, width: nw, height: 16)
-        numberIcon.frame = NSRect(x: numberLink.frame.maxX + 2, y: 9, width: 10, height: 10)
-        // Body (`mt-1 px-4 pb-4`).
-        var y: CGFloat = 28 + 4
-        titleLabel.frame = NSRect(x: 16, y: y + 1, width: max(0, w - 32), height: 22)
-        y += 24 + 8
-        authorAvatar.frame = NSRect(x: 16, y: y + 2, width: 16, height: 16)
-        var x: CGFloat = 16 + 16 + 6
-        let lw = ceil(authorLogin.textWidth) + 1
-        authorLogin.frame = NSRect(x: x, y: y + 2, width: lw, height: 16); x += lw + 6
-        dot.frame = NSRect(x: x, y: y + 2, width: ceil(dot.textWidth) + 1, height: 16); x += ceil(dot.textWidth) + 6
-        let uw = ceil(updated.textWidth) + 1
-        updated.frame = NSRect(x: x, y: y + 2, width: uw, height: 16); x += uw + 8
-        if !checkoutCommand.isHidden {
-            let cw = min(ceil(checkoutCommand.textWidth) + 9, max(0, w - 16 - x))
-            checkoutCommand.frame = NSRect(x: w - 16 - cw, y: y, width: cw, height: 20)
-            checkoutCommand.padding = 4
+        if !stackMergeButton.isHidden {
+            let sw = ceil(stackMergeButton.intrinsicContentSize.width)
+            stackMergeButton.frame = NSRect(x: r - sw, y: 2, width: sw, height: 24); r -= sw + 4
         }
-        y += 20 + 16
-        // `base ← head`, the files and the counts on the right.
-        let dw = diffStat.width
-        diffStat.frame = NSRect(x: w - 16 - dw, y: y + 2, width: dw, height: 16)
-        var fr = w - 16 - dw - (dw > 0 ? 8 : 0)
-        let fw = ceil(files.textWidth) + 1
-        let filesBlock = max(64, 14 + 6 + fw)
-        files.frame = NSRect(x: fr - fw, y: y + 2, width: fw, height: 16)
-        filesIcon.frame = NSRect(x: fr - fw - 6 - 14, y: y + 3, width: 14, height: 14)
-        fr -= filesBlock + 8
-        let branchesWidth = max(0, fr - 16)
-        let baseWidth = min(ceil(base.textWidth) + 1, branchesWidth * 0.4)
-        base.frame = NSRect(x: 16, y: y + 2, width: baseWidth, height: 16)
-        arrow.frame = NSRect(x: 16 + baseWidth + 6, y: y + 3, width: 14, height: 14)
-        let hx = arrow.frame.maxX + 6 + 4 // `PullRequestCopyableCode` is `px-1`
-        head.frame = NSRect(x: hx, y: y + 2, width: min(ceil(head.textWidth) + 1, max(0, 16 + branchesWidth - hx)), height: 16)
-        y += 20 + 16
+        if !stackButton.isHidden {
+            let sw = ceil(stackButton.intrinsicContentSize.width)
+            stackButton.frame = NSRect(x: r - sw, y: 2, width: sw, height: 24); r -= sw + 4
+        }
+        // The two top rows share the line: repository and number, or number and title while condensed.
+        [repo, numberLink, numberIcon].forEach { $0.isHidden = condensed }
+        [condensedNumber, condensedTitle].forEach { $0.isHidden = !condensed }
+        let nw = ceil(numberLink.textWidth) + 1
+        if condensed {
+            condensedNumber.frame = NSRect(x: 16, y: 6, width: nw, height: 16)
+            numberIcon.isHidden = false
+            numberIcon.frame = NSRect(x: 16 + nw + 2, y: 9, width: 10, height: 10)
+            let tx = 16 + nw + 2 + 10 + 4
+            condensedTitle.frame = NSRect(x: tx, y: 6, width: max(0, r - 8 - tx), height: 16)
+        } else {
+            let repoWidth = min(ceil(repo.textWidth) + 1, max(0, r - 8 - 16 - nw - 2 - 10 - 4))
+            repo.frame = NSRect(x: 16, y: 6, width: repoWidth, height: 16)
+            numberLink.frame = NSRect(x: 16 + repoWidth + 4, y: 6, width: nw, height: 16)
+            numberIcon.frame = NSRect(x: numberLink.frame.maxX + 2, y: 9, width: 10, height: 10)
+        }
+        // The fold (`mt-1 px-4 pb-4`), hidden while condensed.
+        let fold: [NSView] = [titleLabel, titleEditButton, titleInput, titleCancel, titleSave, authorAvatar, authorLogin, dot, updated,
+                              checkoutCommand, base, arrow, head, filesIcon, files, diffStat]
+        let condensedRow: [NSView] = [condensedAvatar, condensedTime, condensedBase, condensedArrow, condensedHead, condensedFilesIcon,
+                                      condensedFiles, condensedStat]
+        for v in condensedRow { v.isHidden = !condensed }
+        var y: CGFloat = 28 + 4
+        if condensed {
+            for v in fold { v.frame = .zero }
+            layoutCondensedRow(y: 28 + 4, width: w)
+            y = 28 + Self.condensedRowHeight
+        } else {
+            if titleDraft != nil {
+                titleInput.frame = NSRect(x: 16, y: y, width: max(0, w - 32), height: 28)
+                let sw = ceil(titleSave.intrinsicContentSize.width), cw = ceil(titleCancel.intrinsicContentSize.width)
+                titleSave.frame = NSRect(x: w - 16 - sw, y: y + 36, width: sw, height: 24)
+                titleCancel.frame = NSRect(x: w - 16 - sw - 8 - cw, y: y + 36, width: cw, height: 24)
+                y += 28 + 8 + 24 + 8
+            } else {
+                let ew: CGFloat = titleEditButton.isHidden ? 0 : 24 + 4
+                titleLabel.frame = NSRect(x: 16, y: y + 1, width: max(0, w - 32 - ew), height: 22)
+                titleEditButton.frame = NSRect(x: w - 16 - 24, y: y, width: 24, height: 24)
+                y += 24 + 8
+            }
+            authorAvatar.frame = NSRect(x: 16, y: y + 2, width: 16, height: 16)
+            var x: CGFloat = 16 + 16 + 6
+            let lw = ceil(authorLogin.textWidth) + 1
+            authorLogin.frame = NSRect(x: x, y: y + 2, width: lw, height: 16); x += lw + 6
+            dot.frame = NSRect(x: x, y: y + 2, width: ceil(dot.textWidth) + 1, height: 16); x += ceil(dot.textWidth) + 6
+            let uw = ceil(updated.textWidth) + 1
+            updated.frame = NSRect(x: x, y: y + 2, width: uw, height: 16); x += uw + 8
+            if !checkoutCommand.isHidden {
+                let cw = min(ceil(checkoutCommand.textWidth) + 9, max(0, w - 16 - x))
+                checkoutCommand.frame = NSRect(x: w - 16 - cw, y: y, width: cw, height: 20)
+                checkoutCommand.padding = 4
+            }
+            y += 20 + 16
+            // `base ← head`, the files and the counts on the right.
+            let dw = diffStat.width
+            diffStat.frame = NSRect(x: w - 16 - dw, y: y + 2, width: dw, height: 16)
+            var fr = w - 16 - dw - (dw > 0 ? 8 : 0)
+            let fw = ceil(files.textWidth) + 1
+            let filesBlock = max(64, 14 + 6 + fw)
+            files.frame = NSRect(x: fr - fw, y: y + 2, width: fw, height: 16)
+            filesIcon.frame = NSRect(x: fr - fw - 6 - 14, y: y + 3, width: 14, height: 14)
+            fr -= filesBlock + 8
+            let branchesWidth = max(0, fr - 16)
+            let baseWidth = min(ceil(base.textWidth) + 1, branchesWidth * 0.4)
+            base.frame = NSRect(x: 16, y: y + 2, width: baseWidth, height: 16)
+            arrow.frame = NSRect(x: 16 + baseWidth + 6, y: y + 3, width: 14, height: 14)
+            let hx = arrow.frame.maxX + 6 + 4 // `PullRequestCopyableCode` is `px-1`
+            head.frame = NSRect(x: hx, y: y + 2, width: min(ceil(head.textWidth) + 1, max(0, 16 + branchesWidth - hx)), height: 16)
+            y += 20 + 16
+        }
         // Tab bar (`border-t border-border/60 px-4 py-2`).
         tabRule.frame = CGRect(x: 0, y: y, width: w, height: 1)
         y += 1 + 8
@@ -539,6 +921,31 @@ public final class PullRequestDetailView: DSView {
         timeline.frame = content
         code.frame = content
         composerButton.frame = NSRect(x: w - 16 - 32, y: bounds.height - 12 - 32, width: 32, height: 32)
+        let bw = max(14, ceil(pendingBadge.textWidth) + 8)
+        pendingBadge.frame = NSRect(x: composerButton.frame.maxX + 4 - bw, y: composerButton.frame.minY - 4, width: bw, height: 14)
+    }
+
+    /// The condensed row (`px-4 pb-2 pt-1 text-xs`): avatar and time, a rule, `base ← head` in
+    /// `font-mono text-2xs`, then the files and counts in `text-2xs`.
+    private func layoutCondensedRow(y: CGFloat, width w: CGFloat) {
+        condensedAvatar.frame = NSRect(x: 16, y: y, width: 16, height: 16)
+        let tw = ceil(condensedTime.textWidth) + 1
+        condensedTime.frame = NSRect(x: 16 + 16 + 6, y: y, width: tw, height: 16)
+        var r = w - 16
+        let sw = condensedStat.width
+        condensedStat.frame = NSRect(x: r - sw, y: y + 1, width: sw, height: 14); r -= sw + (sw > 0 ? 8 : 0)
+        let fw = ceil(condensedFiles.textWidth) + 1
+        condensedFiles.frame = NSRect(x: r - fw, y: y + 1, width: fw, height: 14)
+        condensedFilesIcon.frame = NSRect(x: r - fw - 4 - 12, y: y + 2, width: 12, height: 12)
+        r -= fw + 4 + 12 + 8
+        var x = condensedTime.frame.maxX + 8 + 1 + 8
+        let room = max(0, r - x)
+        let bw = min(ceil(condensedBase.textWidth) + 1, room * 0.4)
+        condensedBase.frame = NSRect(x: x, y: y + 1, width: bw, height: 14); x += bw + 6
+        condensedArrow.frame = NSRect(x: x, y: y + 2, width: 12, height: 12); x += 12 + 6
+        condensedHead.frame = NSRect(x: x, y: y + 1, width: max(0, min(ceil(condensedHead.textWidth) + 1, r - x)), height: 14)
+        condensedRule.frame = CGRect(x: condensedTime.frame.maxX + 8, y: y + 2, width: 1, height: 12)
+        condensedRule.isHidden = false
     }
 
     private func restyle() {
@@ -552,10 +959,19 @@ public final class PullRequestDetailView: DSView {
         head.color = Themed.color(\.mutedForeground, 0.7)
         arrow.strokeColor = Themed.color(\.mutedForeground, 0.42)
         filesIcon.strokeColor = Themed.color(\.mutedForeground)
+        condensedTitle.color = Themed.color(\.foreground)
+        condensedTime.color = Themed.color(\.mutedForeground)
+        for l in [condensedBase, condensedHead] { l.color = Themed.color(\.mutedForeground, 0.65) }
+        condensedArrow.strokeColor = Themed.color(\.mutedForeground, 0.6)
+        condensedFiles.color = Themed.color(\.mutedForeground)
+        condensedFilesIcon.strokeColor = Themed.color(\.mutedForeground)
     }
 
     public override func updateLayer() {
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        condensedRule.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
+        pendingBadge.layer?.backgroundColor = Themed.color(\.info).cgColor(in: self)
+        pendingBadge.color = .white
         tabRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         headerRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         restyle()
@@ -650,88 +1066,4 @@ final class PullRequestDetailGhostView: DSView {
         ]
         for (bar, s) in zip(bars, specs) { bar.frame = NSRect(x: s.0, y: s.1, width: max(0, s.2), height: s.3) }
     }
-}
-
-/// The composer popover (PullRequestComposer.tsx, PullRequestCommentForm.tsx, PullRequestReviewForm.tsx).
-final class PullRequestComposerForm: DSView {
-    private let mode: ToggleGroupView?
-    private let titleLabel: LabelView?
-    private let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
-    private let comment = TextareaView(placeholder: "Leave a comment", size: .sm)
-    private let review = TextareaView(placeholder: "Summarize your review (optional)", size: .sm)
-    private let verdict: ToggleGroupView?
-    private let submitComment = ButtonView("Comment", variant: .default, size: .sm)
-    private let submitReview = ButtonView("Submit review", variant: .default, size: .sm)
-    private let verdicts: [String]
-    private let forgejo: Bool
-    private var reviewing: Bool
-    var onComment: ((String) -> Void)?
-    var onReview: ((String, String) -> Void)?
-    var onClose: (() -> Void)?
-
-    init(canComment: Bool, verdicts: [String], forgejo: Bool) {
-        self.verdicts = verdicts
-        self.forgejo = forgejo
-        reviewing = !canComment
-        mode = canComment && !verdicts.isEmpty ? ToggleGroupView(variant: .segmented, items: [("Comment", nil), ("Review", nil)], selected: 0) : nil
-        titleLabel = mode == nil ? LabelView(reviewing ? "Review pull request" : "Comment on pull request", font: DSFont.ui(14, weight: .semibold)) : nil
-        let labels = verdicts.map { $0 == "approve" ? "Approve" : $0 == "request-changes" ? "Request changes" : "Comment" }
-        verdict = verdicts.isEmpty ? nil : ToggleGroupView(variant: .segmented, items: labels.map { ($0, nil) }, selected: 0)
-        super.init(frame: NSRect(x: 0, y: 0, width: 352, height: 200))
-        [mode, titleLabel, close, comment, review, verdict, submitComment, submitReview].compactMap { $0 }.forEach(addSubview)
-        titleLabel?.lineHeight = 20
-        close.iconSize = 14
-        close.setAccessibilityLabel("Close composer")
-        close.action = { [weak self] in self?.onClose?() }
-        mode?.onChange = { [weak self] i in self?.reviewing = i == 1; self?.update() }
-        verdict?.onChange = { [weak self] _ in self?.update() }
-        comment.onChange = { [weak self] _ in self?.update() }
-        review.onChange = { [weak self] _ in self?.update() }
-        submitComment.action = { [weak self] in
-            guard let self else { return }
-            let body = self.comment.text
-            if !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { self.onComment?(body) }
-        }
-        submitReview.action = { [weak self] in
-            guard let self, let v = self.selectedVerdict else { return }
-            self.onReview?(v, self.review.text)
-        }
-        update()
-    }
-
-    private var selectedVerdict: String? { verdict?.selectedIndex.flatMap { verdicts.indices.contains($0) ? verdicts[$0] : nil } }
-
-    private func update() {
-        comment.isHidden = reviewing
-        submitComment.isHidden = reviewing
-        review.isHidden = !reviewing
-        verdict?.isHidden = !reviewing
-        submitReview.isHidden = !reviewing
-        submitComment.isEnabled = !comment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let needsSummary = selectedVerdict == "request-changes" && forgejo
-        review.placeholder = needsSummary ? "Summarize your review (required to request changes)" : "Summarize your review (optional)"
-        submitReview.isEnabled = !(needsSummary && review.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        needsLayout = true
-    }
-
-    override var intrinsicContentSize: NSSize { NSSize(width: 352, height: 24 + 12 + 96 + 8 + 28) }
-
-    override func layout() {
-        super.layout()
-        let w = bounds.width
-        if let mode { mode.frame = NSRect(x: 0, y: 0, width: mode.intrinsicContentSize.width, height: 24) }
-        titleLabel?.frame = NSRect(x: 0, y: 2, width: w - 32, height: 20)
-        close.frame = NSRect(x: w - 24, y: 0, width: 24, height: 24)
-        let area = NSRect(x: 0, y: 36, width: w, height: 96)
-        comment.frame = area
-        review.frame = area
-        let y = area.maxY + 8
-        let sw = ceil(submitComment.intrinsicContentSize.width)
-        submitComment.frame = NSRect(x: w - sw, y: y, width: sw, height: 28)
-        let rw = ceil(submitReview.intrinsicContentSize.width)
-        submitReview.frame = NSRect(x: w - rw, y: y, width: rw, height: 28)
-        if let verdict { verdict.frame = NSRect(x: 0, y: y + 2, width: verdict.intrinsicContentSize.width, height: 24) }
-    }
-
-    override func updateLayer() { titleLabel?.color = Themed.color(\.popoverForeground) }
 }

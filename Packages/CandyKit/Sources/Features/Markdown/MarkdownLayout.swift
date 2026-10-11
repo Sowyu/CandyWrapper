@@ -44,6 +44,8 @@ enum MarkdownStyle {
         var string: NSAttributedString
         var code: [NSRange]
         var files: [(range: NSRange, meta: FileLinkMeta, label: String)]
+        /// Web links (not file links), for hit testing.
+        var links: [(range: NSRange, url: URL)] = []
     }
 
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
@@ -55,6 +57,7 @@ enum MarkdownStyle {
         let out = NSMutableAttributedString()
         var chips: [NSRange] = []
         var fileChips: [(range: NSRange, meta: FileLinkMeta, label: String)] = []
+        var webLinks: [(range: NSRange, url: URL)] = []
         let pad = chipPaddingX + 1
         var leadingChip = false
         let parent = font(size, weight: weight)
@@ -103,6 +106,14 @@ enum MarkdownStyle {
             // An image inside running text shows its alt text, like a broken inline image.
             if run.isBreak, run.text == "\n" { run.text = "\u{2028}" }
             out.append(NSAttributedString(string: run.text, attributes: attributes))
+            if let url = run.link, out.length > start {
+                // Adjacent runs of one link (bold inside a link) make one target.
+                if let last = webLinks.last, last.url == url, last.range.upperBound == start {
+                    webLinks[webLinks.count - 1].range.length += out.length - start
+                } else {
+                    webLinks.append((NSRange(location: start, length: out.length - start), url))
+                }
+            }
             if run.code, out.length > start {
                 chips.append(NSRange(location: start, length: out.length - start))
                 if start > 0 {
@@ -121,7 +132,7 @@ enum MarkdownStyle {
         paragraph.firstLineHeadIndent = (firstLineIndent ?? headIndent) + (leadingChip ? pad : 0)
         paragraph.headIndent = headIndent
         out.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: out.length))
-        return Inline(string: out, code: chips, files: fileChips)
+        return Inline(string: out, code: chips, files: fileChips, links: webLinks)
     }
 }
 
@@ -143,6 +154,8 @@ public final class MarkdownLayout {
         case icon(IconName, CGRect, NSColor)
         /// A file path chip's box and icon; its label is part of the text item drawn after it.
         case fileChip(FileChip)
+        /// A web link's area on one line (not drawn; hit tested by `MarkdownView`).
+        case link(CGRect, URL)
         /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
         case clip(CGRect)
         case endClip
@@ -160,6 +173,8 @@ public final class MarkdownLayout {
     private(set) var controls: [Control] = []
     /// File chips in drawing order, for hit testing.
     public private(set) var fileChips: [FileChip] = []
+    /// Web link areas, one per line a link touches.
+    public private(set) var links: [(frame: CGRect, url: URL)] = []
 
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
@@ -172,6 +187,7 @@ public final class MarkdownLayout {
         items = flow.items
         controls = flow.controls
         fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
+        links = items.compactMap { if case .link(let r, let url) = $0 { (r, url) } else { nil } }
         height = flow.height
     }
 }
@@ -291,8 +307,18 @@ private struct Builder {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
+        box.items += Self.links(inline, in: textBox, lineHeight: lineHeight)
         box.items.append(.text(textBox, .zero))
         return box
+    }
+
+    @MainActor
+    static func links(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, lineHeight: CGFloat) -> [MarkdownLayout.Item] {
+        inline.links.flatMap { link in
+            textBox.spans(link.range).map { span in
+                MarkdownLayout.Item.link(CGRect(x: span.x0, y: span.baseline - lineHeight * 0.75, width: span.x1 - span.x0, height: lineHeight), link.url)
+            }
+        }
     }
 
     @MainActor
@@ -593,6 +619,7 @@ private extension MarkdownLayout.Item {
             .fileChip(FileChip(frame: chip.frame.offsetBy(dx: p.x, dy: p.y), icon: chip.icon.offsetBy(dx: p.x, dy: p.y), meta: chip.meta, label: chip.label))
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
         case .endClip: .endClip
+        case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
         }
     }
 }

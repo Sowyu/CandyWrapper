@@ -112,7 +112,7 @@ public final class TooltipController: NSResponder {
     }
 
     public func show(instant: Bool = false) {
-        guard popup == nil, let view, let host = view.popupHost else { return }
+        guard popup == nil, !text.isEmpty, let view, let host = view.popupHost else { return }
         let tip = TooltipView(text, variant: variant)
         popup = host.open(tip, trigger: view, placement: placement, motion: instant ? .none : .tooltip,
                           pressesTrigger: false, returnsFocus: false, passive: true)

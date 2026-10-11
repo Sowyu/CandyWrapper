@@ -37,6 +37,10 @@ public final class SelectView: ControlView {
     public var leading: NSView? { didSet { oldValue?.removeFromSuperview(); leading.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Items' subtitles in the popup (`SelectItem` with a description line).
     public var optionDetails: [String?] = []
+    /// Items' 12px leading glyphs (`SelectItem` children with an icon, `gap-1.5`).
+    public var optionGlyphs: [IconDefinition?] = []
+    /// `SelectPopup side`, read when `alignItemWithTrigger` is false.
+    public var popupSide: PopupPlacement.Side = .bottom
     /// Disabled items by index.
     public var disabledOptions: Set<Int> = []
     /// What the trigger shows for each option when it differs from the item (`SelectValue` children).
@@ -152,6 +156,7 @@ public final class SelectView: ControlView {
         let items = options.enumerated().map { i, title in
             var item = MenuItem(title, kind: hidesIndicator ? .item : .radio(i == selectedIndex))
             item.subtitle = optionDetails.indices.contains(i) ? optionDetails[i] : nil
+            item.glyph = optionGlyphs.indices.contains(i) ? optionGlyphs[i] : nil
             item.isDisabled = disabledOptions.contains(i)
             return item
         }
@@ -162,7 +167,7 @@ public final class SelectView: ControlView {
             self?.onChange?(i)
         }
         var placement = PopupPlacement.dropdown
-        if !alignItemWithTrigger { placement.align = popupAlign }
+        if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
         let popup = host.open(list, trigger: self, placement: placement, swallowsOutsideClick: true)
         list.hostPopup = popup
         list.highlightedIndex = selectedIndex ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil)
