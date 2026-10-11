@@ -1,0 +1,28 @@
+WP7.12b validation, 2026-10-11
+Worktree: astra-wp712b
+
+swift test --package-path Packages/CandyKit: PASS (880 tests)
+✔ Test run with 262 tests in 34 suites passed after 2.394 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.221 seconds.
+✔ Test run with 124 tests in 27 suites passed after 6.956 seconds.
+✔ Test run with 316 tests in 72 suites passed after 86.239 seconds.
+✔ Test run with 82 tests in 17 suites passed after 47.558 seconds.
+
+swift test --package-path Packages/CandyKit --filter Fidelity: PASS
+panel-leftovers review-draft.rest.dark 3.42%
+panel-leftovers review-draft.rest.light 3.09%
+panel-leftovers ssh-host-form.rest.dark 1.30%
+panel-leftovers ssh-host-form.rest.light 1.24%
+FIDELITY panel-leftovers: 4 cases, mean differing 2.26%
+✔ Test run with 41 tests in 29 suites passed after 86.458 seconds.
+✔ Test run with 61 tests in 11 suites passed after 60.317 seconds.
+
+xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd-astra712b PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.astra712b CANDY_URL_SCHEME=candywrapper-astra712b build: BUILD SUCCEEDED
+git diff --check: PASS
+
+On screen: profile creation, SSH editor (no save/test), folded diff search and case toggle, review draft to composer chip. Cleared composer draft without sending.
+No sandbox files/projects/agent turns created; no permission dialogs seen.
+Own app PIDs 12008 and 19423 stopped. Existing sandbox PID 32675 left running.
+Test homes created inside Packages/CandyKit/.build with process-specific credentials.
+Live devices, floating device and drawer unverified: no simulator runtimes/device helper available.
+Screenshots are cropped to the isolated app window.

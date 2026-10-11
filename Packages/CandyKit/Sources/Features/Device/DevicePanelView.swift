@@ -5,6 +5,12 @@ import T3Protocol
 /// DevicePanel.tsx:203-310 and DeviceSetup.tsx:108-239, using the shared native controls.
 public final class DevicePanelView: DSView {
     public let viewer = DevicePanelStreamView()
+    public var onToolsClosed: (() -> Void)?
+    public var onReadDetail: (() -> Void)?
+    public var onFloat: (() -> Void)?
+    public private(set) var toolsDrawer: DeviceToolsDrawerView?
+    private var toolsDeviceKey: String?
+    public func closeTools() { onToolsClosed?(); toolsDrawer?.removeFromSuperview(); toolsDrawer = nil; toolsDeviceKey = nil; needsLayout = true }
     public var onRefresh: (() -> Void)?
     public var onConfigure: (([String: JSONValue]) -> Void)?
     public var onOpen: ((DevicePanelDevice) -> Void)?
@@ -44,6 +50,7 @@ public final class DevicePanelView: DSView {
         let sessions = state?.sessions.filter { $0.threadId == thread } ?? []
         let opened = state?.devices.filter { device in sessions.contains { $0.key == device.key } } ?? []
         active = opened.first { $0.key == selected } ?? opened.first
+        if toolsDeviceKey != nil && toolsDeviceKey != active?.key { closeTools() }
         let setupNeeded = state?.onboardingCompleted == false
         let busy = state?.hostStatus == "installing" || state?.hostStatus == "starting"
         setup.isEnabled = !busy; agent.isEnabled = !busy; done.isEnabled = !busy; refresh.isEnabled = !busy
@@ -79,6 +86,10 @@ public final class DevicePanelView: DSView {
                 button.action = { [weak self] in self?.onButton?(name) }
                 rail.append(button); addSubview(button)
             }
+            let floating = ButtonView(nil, icon: .pictureInPicture2, variant: .ghost, size: .iconSm)
+            floating.setAccessibilityLabel("Float device over chat")
+            floating.action = { [weak self] in self?.onFloat?() }
+            rail.append(floating); addSubview(floating)
             let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
             close.setAccessibilityLabel("Close device")
             close.action = { [weak self] in self?.onClose?(active) }
@@ -90,21 +101,18 @@ public final class DevicePanelView: DSView {
             message.isHidden = true
         }
         refresh.isHidden = !empty.isHidden
+        if let toolsDrawer { addSubview(toolsDrawer, positioned: .above, relativeTo: nil) }
         needsLayout = true
     }
     private func showTools() {
-        func action(_ label: String, _ value: [String: JSONValue]) -> MenuItem {
-            var item = MenuItem(label)
-            item.action = { [weak self] in self?.onAction?(value) }
-            return item
-        }
-        MenuPopupView.show([
-            .submenu("Appearance", [action("Light", ["type": .string("setAppearance"), "value": .string("light")]), action("Dark", ["type": .string("setAppearance"), "value": .string("dark")])]),
-            .submenu("Text size", ["small", "default", "large", "extra-large"].map { action($0.capitalized, ["type": .string("setTextSize"), "value": .string($0)]) }),
-            .submenu("Rotate device", [action("Portrait", ["type": .string("setOrientation"), "value": .string("portrait")]), action("Landscape", ["type": .string("setOrientation"), "value": .string("landscape_left")])]),
-            action("Clear location", ["type": .string("clearLocation")]),
-            action("Shake", ["type": .string("shake")])
-        ], from: tools, placement: .dropdown)
+        guard let active else { return }
+        if toolsDrawer != nil { closeTools(); return }
+        let drawer = DeviceToolsDrawerView()
+        drawer.configure(platform: active.platform)
+        drawer.onAction = { [weak self] in self?.onAction?($0) }
+        drawer.onClose = { [weak self] in self?.closeTools() }
+        toolsDrawer = drawer; toolsDeviceKey = active.key
+        addSubview(drawer); onReadDetail?(); needsLayout = true
     }
     public override func layout() {
         super.layout()
@@ -119,6 +127,7 @@ public final class DevicePanelView: DSView {
         refresh.frame = NSRect(x: max(16, (bounds.width - 150) / 2), y: bounds.height - 42, width: 150, height: 28)
         setup.frame = NSRect(x: 24, y: 48, width: min(250, bounds.width - 48), height: 28)
         agent.frame = setup.frame
+        toolsDrawer?.frame = NSRect(x: max(0, bounds.width - 320), y: 40, width: min(320, bounds.width), height: max(0, bounds.height - 40))
         done.frame = NSRect(x: bounds.width - 84, y: 84, width: 60, height: 28)
     }
     public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }

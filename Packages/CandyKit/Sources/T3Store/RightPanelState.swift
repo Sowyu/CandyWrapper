@@ -7,6 +7,7 @@ import T3Protocol
 public enum RightPanelSurface: Codable, Sendable, Equatable {
     case diff
     case device
+    case deviceTarget(DevicePanelSurface)
     case files
     /// `file:<path>`: workspace relative, or absolute for a host file. `revealRequestId` counts the
     /// opens of this path so the same line can be revealed again.
@@ -24,6 +25,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     public var id: String {
         switch self {
         case .device: "device"
+        case .deviceTarget(let d): d.id
         case .diff: "diff"
         case .files: "files"
         case .file(let path, _, _): "file:" + path
@@ -37,7 +39,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser, terminal, device }
     public var kind: Kind {
         switch self {
-        case .device: .device
+        case .device, .deviceTarget: .device
         case .diff: .diff
         case .files: .files
         case .file: .file
@@ -52,6 +54,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     public var title: String {
         switch self {
         case .device: return "Device"
+        case .deviceTarget(let d): return d.title ?? d.name
         case .diff: return "Diff"
         case .files: return "Files"
         case .file(let path, _, _):
@@ -65,6 +68,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .terminal(let t): return TerminalLabels.label(t.activeTerminalId)
         }
     }
+
+    public var deviceTarget: DevicePanelSurface? { if case .deviceTarget(let d) = self { return d }; return nil }
 
     /// A browser surface's server tab id.
     public var browserTabId: String? {
@@ -85,6 +90,22 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     public var terminal: TerminalPanelSurface? {
         if case .terminal(let t) = self { return t }
         return nil
+    }
+}
+
+/// rightPanelStore.ts:629-666. Rename stays local to this tab.
+public struct DevicePanelSurface: Codable, Sendable, Equatable {
+    public var hostId: String
+    public var deviceId: String
+    public var platform: String
+    public var name: String
+    public var title: String?
+    public init(hostId: String, deviceId: String, platform: String, name: String) {
+        self.hostId = hostId; self.deviceId = deviceId; self.platform = platform; self.name = name
+    }
+    public var id: String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.!~*'()"))
+        return "device:" + (hostId.addingPercentEncoding(withAllowedCharacters: allowed) ?? hostId) + ":" + (deviceId.addingPercentEncoding(withAllowedCharacters: allowed) ?? deviceId)
     }
 }
 
@@ -153,6 +174,21 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         isOpen = true
         if !surfaces.contains(where: { $0.id == surface.id }) { surfaces.append(surface) }
         if activate { activeSurfaceId = surface.id }
+    }
+
+    public mutating func openDevice(_ target: DevicePanelSurface) {
+        let surface = RightPanelSurface.deviceTarget(target)
+        let existing = surfaces.first { $0.id == surface.id }
+        if let index = surfaces.firstIndex(of: .device) {
+            if existing == nil { surfaces[index] = surface } else { surfaces.remove(at: index) }
+        }
+        upsert(existing ?? surface)
+    }
+    public mutating func renameDevice(_ id: String, title: String) {
+        guard let index = surfaces.firstIndex(where: { $0.id == id }), var target = surfaces[index].deviceTarget else { return }
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        target.title = clean.isEmpty ? target.name : clean
+        surfaces[index] = .deviceTarget(target)
     }
 
     /// `open(ref, kind)` for the singletons.
@@ -391,6 +427,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .browser(let tabId): if tabId == nil { state.openBrowser(nil) }
         case .file(let path, let line, _): state.openFile(path, line: line)
         case .pullRequest(let target): state.openPullRequest(target)
+        case .deviceTarget: state.upsert(surface)
         case .terminal: break
         }
     }

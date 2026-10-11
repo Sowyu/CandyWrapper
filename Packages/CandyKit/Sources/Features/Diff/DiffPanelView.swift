@@ -24,6 +24,7 @@ public final class DiffPanelView: DSView {
             list.setDiff(UnifiedDiff(""))
             fileTree.model = FileTreeModel(); fileTree.changes = [:]
             searchMatches = []; searchIndex = 0
+            list.annotations = []; reviewDraft = nil; reviewStart = nil
             hasDiff = false
         }
     }
@@ -41,12 +42,42 @@ public final class DiffPanelView: DSView {
     public var showsRefresh = false { didSet { refreshButton.isHidden = !showsRefresh; needsLayout = true } }
     public var onOpenFile: (@MainActor (String) -> Void)? { didSet { list.onOpenFile = onOpenFile } }
 
+    public var onReviewComment: ((JSONValue) -> Void)?
+    private var reviewStart: (path: String, line: Int)?
+    private var reviewDraft: DiffReviewAnnotationView?
+    private func beginReview(_ target: DiffLineTarget) {
+        guard onReviewComment != nil, let file = list.diff.files.first(where: { $0.path == target.path }),
+              let index = file.hunks.flatMap({ Array($0.lines) }).first(where: {
+                  target.right ? list.diff.lines[$0].newNumber == target.newLine : list.diff.lines[$0].oldNumber == target.oldLine
+              }) else { return }
+        if NSApp.currentEvent?.modifierFlags.contains(.shift) != true || reviewStart?.path != target.path { reviewStart = (target.path, index) }
+        let start = reviewStart?.line ?? index
+        let id = UUID().uuidString.lowercased()
+        let draft = reviewDraft ?? DiffReviewAnnotationView()
+        reviewDraft = draft
+        draft.onCancel = { [weak self] in self?.list.annotations = []; self?.reviewDraft = nil; self?.reviewStart = nil }
+        draft.onSubmit = { [weak self, weak draft] text in
+            guard let self, let record = DiffReviewContext.record(diff: self.list.diff, path: target.path, start: start, end: index,
+                text: text, section: self.selectedRunId?.rawValue ?? "diff", title: self.scopeButton.title ?? "Diff", id: id) else { return }
+            self.onReviewComment?(record); draft?.onCancel?()
+        }
+        list.annotationView = { [weak self] _ in self?.reviewDraft }
+        list.annotations = [DiffAnnotation(path: target.path, right: target.right, line: target.right ? target.newLine : target.oldLine, id: id)]
+        window?.makeFirstResponder(draft.editor)
+    }
     public let list = DiffListView()
     private let scroll: ScrollAreaView
     private let fileTree = FileTreeView()
     private let treeScroll: ScrollAreaView
     private let find = InputView(placeholder: "Find", size: .compact)
     private let findCount = LabelView("", font: DSFont.ui(11))
+    private let findCase = ToggleView("Aa", variant: .ghost, size: .sm)
+    private let findWord = ToggleView("Ab", variant: .ghost, size: .sm)
+    private let findRegex = ToggleView(".*", variant: .ghost, size: .sm)
+    private let findPrevious = ButtonView(nil, icon: .arrowUp, variant: .ghost, size: .iconSm)
+    private let findNext = ButtonView(nil, icon: .arrowDown, variant: .ghost, size: .iconSm)
+    private let findClose = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
+    private var findControls: [NSView] { [find, findCount, findCase, findWord, findRegex, findPrevious, findNext, findClose] }
     private var searchMatches: [DiffPanelSearch.Match] = []
     private var searchIndex = 0
     private let scopeButton = ButtonView("Latest turn", variant: .secondary, size: .xs)
@@ -101,26 +132,29 @@ public final class DiffPanelView: DSView {
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
         treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
         treeScroll.isHidden = true
+        list.onVisibleFile = { [weak self] path in self?.fileTree.selectedPath = path }
         fileTree.onOpenFile = { [weak self] path in self?.fileTree.selectedPath = path; self?.list.reveal(path: path) }
-        find.isHidden = true; findCount.isHidden = true
-        find.onChange = { [weak self] query in
-            guard let self else { return }
-            self.searchMatches = DiffPanelSearch.matches(query, in: self.list.diff)
-            self.searchIndex = 0
-            self.revealSearch()
+        findControls.forEach { $0.isHidden = true; addSubview($0) }
+        for (toggle, label) in [(findCase, "Match case"), (findWord, "Match whole word"), (findRegex, "Use regular expression")] {
+            toggle.setAccessibilityLabel(label)
+            toggle.onPressedChange = { [weak self] _ in self?.search() }
         }
+        findPrevious.setAccessibilityLabel("Previous match")
+        findNext.setAccessibilityLabel("Next match")
+        findClose.setAccessibilityLabel("Close find")
+        findPrevious.action = { [weak self] in self?.stepSearch(-1) }
+        findNext.action = { [weak self] in self?.stepSearch(1) }
+        findClose.action = { [weak self] in self?.closeFind() }
+        find.onChange = { [weak self] _ in self?.search() }
         find.onCommand = { [weak self] selector in
             guard let self else { return false }
-            if selector == #selector(NSResponder.cancelOperation(_:)) {
-                self.find.isHidden = true; self.findCount.isHidden = true; self.needsLayout = true
-                self.window?.makeFirstResponder(self.list); return true
-            }
+            if selector == #selector(NSResponder.cancelOperation(_:)) { self.closeFind(); return true }
             if selector == #selector(NSResponder.insertNewline(_:)) {
-                if !self.searchMatches.isEmpty { self.searchIndex = (self.searchIndex + 1) % self.searchMatches.count; self.revealSearch() }
-                return true
+                self.stepSearch(NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? -1 : 1); return true
             }
             return false
         }
+        list.onLineClick = { [weak self] in self?.beginReview($0) }
         list.onCollapsedChange = { [weak self] in self?.updateCollapseButton() }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
@@ -233,11 +267,11 @@ public final class DiffPanelView: DSView {
         message.isHidden = true
         errorLine.isHidden = true
         scroll.isHidden = false
+        list.annotations = []; reviewDraft = nil; reviewStart = nil
         list.setDiff(diff, collapsedByDefault: collapsed)
         fileTree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
         fileTree.model = DiffPanelSearch.tree(diff)
-        searchMatches = DiffPanelSearch.matches(find.text, in: diff)
-        searchIndex = 0
+        if !find.isHidden { search() }
         totals.setInline(additions: diff.additions, deletions: diff.deletions)
         totals.isHidden = diff.files.isEmpty
         updateCollapseButton()
@@ -298,10 +332,28 @@ public final class DiffPanelView: DSView {
     public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
 
     public func showFind() {
-        find.isHidden = false; findCount.isHidden = false; needsLayout = true
+        findControls.forEach { $0.isHidden = false }; search(); needsLayout = true
         window?.makeFirstResponder(find)
     }
+    private func closeFind() {
+        findControls.forEach { $0.isHidden = true }
+        list.searchMatches = []; list.activeSearchMatch = nil
+        needsLayout = true; window?.makeFirstResponder(list)
+    }
+    private func search() {
+        searchMatches = DiffPanelSearch.matches(find.text, in: list.diff, caseSensitive: findCase.isPressed,
+                                               wholeWord: findWord.isPressed, regex: findRegex.isPressed)
+        searchIndex = 0; revealSearch()
+    }
+    private func stepSearch(_ direction: Int) {
+        guard !searchMatches.isEmpty else { return }
+        searchIndex = (searchIndex + direction + searchMatches.count) % searchMatches.count
+        revealSearch()
+    }
     private func revealSearch() {
+        list.searchMatches = searchMatches
+        list.activeSearchMatch = searchMatches.isEmpty ? nil : searchMatches[searchIndex]
+        findPrevious.isEnabled = !searchMatches.isEmpty; findNext.isEnabled = !searchMatches.isEmpty
         findCount.text = searchMatches.isEmpty ? "No results" : "\(searchIndex + 1) of \(searchMatches.count)"
         if !searchMatches.isEmpty { list.revealSearch(searchMatches[searchIndex]) }
     }
@@ -339,8 +391,14 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
-        find.frame = NSRect(x: 8, y: headerHeight + 4, width: max(0, bounds.width - 110), height: 28)
-        findCount.frame = NSRect(x: bounds.width - 94, y: headerHeight + 8, width: 86, height: 20)
+        find.frame = NSRect(x: 8, y: headerHeight + 4, width: max(32, bounds.width - 266), height: 28)
+        findCount.frame = NSRect(x: bounds.width - 166, y: headerHeight + 8, width: 72, height: 20)
+        for (i, control) in [findCase, findWord, findRegex].enumerated() {
+            control.frame = NSRect(x: bounds.width - 258 + CGFloat(i) * 30, y: headerHeight + 4, width: 28, height: 28)
+        }
+        for (i, control) in [findPrevious, findNext, findClose].enumerated() {
+            control.frame = NSRect(x: bounds.width - 92 + CGFloat(i) * 28, y: headerHeight + 4, width: 28, height: 28)
+        }
         let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
         treeScroll.frame = NSRect(x: 0, y: bodyTop, width: treeWidth, height: max(0, bounds.height - bodyTop))
         scroll.frame = NSRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop))

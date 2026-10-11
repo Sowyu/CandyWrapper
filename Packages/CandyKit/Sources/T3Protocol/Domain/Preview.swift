@@ -203,9 +203,9 @@ public enum PreviewRPC {
     /// (`fill`) and profile (`default`).
     // ponytail: T3's browser settings (default viewport, zoom, profile) are not built; the schema
     // defaults are sent. Read them from client settings once Settings > Integrations > Browser exists
-    public static func openPayload(threadId: String, url: String? = nil) -> JSONValue {
+    public static func openPayload(threadId: String, url: String? = nil, profileId: String = "default") -> JSONValue {
         var p: [String: JSONValue] = ["threadId": .string(threadId), "viewport": .object(["_tag": .string("fill")]),
-                                      "profileId": .string("default"), "runtime": .string("server")]
+                                      "profileId": .string(profileId), "runtime": .string("server")]
         if let url { p["url"] = .string(url) }
         return .object(p)
     }

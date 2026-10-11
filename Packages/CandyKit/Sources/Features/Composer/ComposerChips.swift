@@ -17,6 +17,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case image
         case file(name: String)
         /// A terminal excerpt (`TerminalContextInlineChip`).
+        case reviewComment
         case terminal
         case unresolved
     }
@@ -52,7 +53,7 @@ public struct ComposerChipLook: Equatable, Sendable {
                 return ComposerChipLook(kind: .terminal, label: r["label"]?.stringValue ?? label)
             case "review-comment":
                 if let pr = ComposerContext.pullRequest(in: r) { return ComposerChipLook(kind: .pullRequest(state: pr.displayState), label: "#\(pr.number)") }
-                return ComposerChipLook(kind: .unresolved, label: label)
+                return ComposerChipLook(kind: .reviewComment, label: label)
             default:
                 return ComposerChipLook(kind: .unresolved, label: label)
             }
@@ -68,6 +69,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .image: OKLab.oklch(0.62, 0.16, 16)
         case .file: OKLab.oklch(0.62, 0.136, 237)
         case .thread: OKLab.oklch(0.62, 0.12, 190)
+        case .reviewComment: OKLab.oklch(0.62, 0.15, 260)
         case .terminal: OKLab.oklch(0.62, 0.134, 163)
         case .pullRequest(let state):
             switch state {
@@ -94,6 +96,7 @@ public struct ComposerChipLook: Equatable, Sendable {
             let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
             return FileChipStyle.icon(for: meta)
         case .thread: return (IconName.messagesSquare.definition, nil)
+        case .reviewComment: return (IconName.messageSquare.definition, nil)
         case .terminal: return (IconName.terminal.definition, nil)
         case .pullRequest(let state):
             let name: IconName = switch state {
