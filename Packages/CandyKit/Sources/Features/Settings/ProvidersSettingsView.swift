@@ -207,6 +207,13 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private var selected: String?
     private var refreshing = false
     private var expandedModelAdd: Set<String> = []
+    /// Per instance: the variables the rows last matched or published, and the rows (`ProviderEnvironmentSection` state).
+    private var environmentDrafts: [String: (published: [ProviderEnvironmentLogic.Variable], rows: [ProviderEnvironmentLogic.Draft])] = [:]
+    private var environmentDraftId = 0
+    /// Instances with an update request in flight (`updatingProviderInstanceIds`).
+    private var updatingInstances: Set<String> = []
+    /// The instance the editor was built for.
+    private var editorInstance: String?
     private let usageProviders = SettingsSectionView(title: "Usage providers", rows: [])
     private let addHub = ButtonView("Add hub", icon: .plus, variant: .outline, size: .xs)
     private var updatingCursor = false
@@ -264,12 +271,24 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             item.onSelect = { [weak self] in self?.selected = row.instanceId; self?.refresh() }
             item.toggle.isEnabled = env.canWrite
             item.toggle.onChange = { [weak self] on in self?.setEnabled(row, on, env: env.id) }
+            let name = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
+            item.advisory = advisoryButton(row, provider: p, readOnly: !env.canWrite, displayName: name, micro: true)
+            if updatingInstances.contains(row.instanceId) || ProviderVersionAdvisoryLogic.isUpdating(p) {
+                item.updateProgress = (ProviderVersionAdvisoryLogic.isUpdating(p) ? p?.updateState?.message : nil) ?? "Starting update"
+            }
             return item
         }
         if let chosen {
-            providers.editor = editor(chosen, provider: live.first { $0.instanceId.rawValue == chosen.instanceId }, env: env)
+            // A server echo arriving while a field of the same editor has focus would drop what is being typed
+            // (T3's inputs keep their draft across renders). Keep that editor; its writes read the live instance.
+            let editing = editorInstance == chosen.instanceId && providers.editor?.isFirstResponderInside == true
+            if !editing {
+                providers.editor = editor(chosen, provider: live.first { $0.instanceId.rawValue == chosen.instanceId }, env: env)
+                editorInstance = chosen.instanceId
+            }
         } else {
             providers.editor = nil
+            editorInstance = nil
         }
         providers.needsLayout = true
         // Health check interval: the resolved value against the profile's preset.
@@ -482,6 +501,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             ?? ProvidersLogic.label(row.driver) ?? row.driver
         let e = ProviderEditorView()
         let readOnly = !env.canWrite
+        // Writes start from the instance as the server has it now: the editor can outlive an echo while a field has focus.
+        let current: @MainActor () -> JSONValue = { [weak self] in self?.liveInstance(row.instanceId) ?? row.instance }
         // Header: title, icon, version, reset (dirty default) or delete (other instances).
         let header = SettingsSectionView(title: displayName, rows: [])
         header.icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8))
@@ -492,6 +513,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             code.frame.size = NSSize(width: ceil(code.textWidth) + 1, height: 16)
             actions.append(code)
         }
+        if let advisory = advisoryButton(row, provider: provider, readOnly: readOnly, displayName: displayName) { actions.append(advisory) }
         if row.isDefault && row.isDirty {
             let reset = ResetSlot(label: "\(ProvidersLogic.label(row.driver) ?? row.driver) provider settings")
             reset.isShown = !readOnly
@@ -515,40 +537,66 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         name.setAccessibilityLabel("Display name")
         name.isEnabled = !readOnly
         name.onCommit = { [weak self] text in
-            var o = row.instance.objectValue ?? [:]
+            var o = current().objectValue ?? [:]
             let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard t != (o["displayName"]?.stringValue ?? "") else { return }
             if t.isEmpty { o.removeValue(forKey: "displayName") } else { o["displayName"] = .string(t) }
             self?.upsert(row, .object(o), env: env.id)
         }
-        let nameRow = SettingsRowView(title: "Display name", control: name)
+        // `ProviderAccentColorPicker layout="inline"` before the name, committing 120 ms after the last change.
+        let accent = ProviderAccentColorButton(displayName: displayName, color: row.instance["accentColor"]?.stringValue) { [weak self] color in
+            var o = current().objectValue ?? [:]
+            guard color != ProviderEnvironmentLogic.accentColor(o["accentColor"]?.stringValue) else { return }
+            if let color { o["accentColor"] = .string(color) } else { o.removeValue(forKey: "accentColor") }
+            self?.upsert(row, .object(o), env: env.id)
+        }
+        accent.isEnabled = !readOnly
+        let nameControl = SettingsControlGroup([accent, name], gap: 8)
+        nameControl.frame.size = NSSize(width: 28 + 8 + 224, height: 28)
+        let nameRow = SettingsRowView(title: "Display name", control: nameControl)
         nameRow.status = statusLine(row, provider)
         header.group.rows = [nameRow]
         var sections: [NSView & SettingsGroupRow] = [header]
 
+        // Setup: drivers with a dedicated variable field (Cursor's API key).
+        let envFields = ProviderEnvironmentLogic.fields(row.driver)
+        let variables = ProviderEnvironmentLogic.variables(row.instance)
+        if !envFields.isEmpty {
+            sections.append(SettingsSectionView(title: "Setup", rows: envFields.map { f in
+                let control = ProviderEnvironmentFieldControl(field: f, variable: variables.first { $0.name == f.name }, enabled: !readOnly,
+                    commit: { [weak self] value in
+                        self?.upsert(row, ProviderEnvironmentLogic.instance(current(), environment: ProviderEnvironmentLogic.setting(ProviderEnvironmentLogic.variables(current()), field: f, to: value)), env: env.id)
+                    },
+                    remove: { [weak self] in
+                        self?.upsert(row, ProviderEnvironmentLogic.instance(current(), environment: ProviderEnvironmentLogic.variables(current()).filter { $0.name != f.name }), env: env.id)
+                    })
+                return SettingsRowView(title: f.label, detail: f.detail, control: control)
+            }))
+        }
+
         let fields = ProvidersLogic.fields(row.driver)
         if !fields.isEmpty {
             let rows: [any SettingsGroupRow] = fields.map { f in
-                let current = row.instance["config"]?[f.key]?.stringValue ?? ""
+                let saved = row.instance["config"]?[f.key]?.stringValue ?? ""
                 let control: NSView
                 if f.secret {
                     let input = SecureInputView(placeholder: f.placeholder)
-                    input.text = current
+                    input.text = saved
                     input.frame.size = NSSize(width: 224, height: 32)
                     input.isEnabled = !readOnly
                     input.onSubmit = { [weak self, weak input] in
                         guard let input else { return }
-                        self?.upsert(row, ProvidersLogic.config(row.instance, set: f.key, to: input.text), env: env.id)
+                        self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: input.text), env: env.id)
                     }
                     control = input
                 } else {
-                    let input = InputView(placeholder: f.placeholder, text: current, size: .sm)
+                    let input = InputView(placeholder: f.placeholder, text: saved, size: .sm)
                     input.frame.size = NSSize(width: 224, height: 28)
                     input.isEnabled = !readOnly
                     input.setAccessibilityLabel(f.title)
                     input.onCommit = { [weak self] text in
-                        guard text.trimmingCharacters(in: .whitespacesAndNewlines) != current else { return }
-                        self?.upsert(row, ProvidersLogic.config(row.instance, set: f.key, to: text), env: env.id)
+                        guard text.trimmingCharacters(in: .whitespacesAndNewlines) != saved else { return }
+                        self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: text), env: env.id)
                     }
                     control = input
                 }
@@ -556,6 +604,33 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }
             sections.append(SettingsSectionView(title: "Runtime", rows: rows))
         }
+
+        // Environment: the generic variables, without the ones a Setup field owns.
+        let owned = Set(envFields.map(\.name))
+        let generic = variables.filter { !owned.contains($0.name) }
+        let list = ProviderEnvironmentVariablesView(rows: envDrafts(row.instanceId, generic), enabled: !readOnly)
+        list.onRowsChange = { [weak self] rows in
+            guard let self else { return }
+            self.environmentDrafts[row.instanceId] = (generic, rows)
+            guard let published = ProviderEnvironmentLogic.publish(rows) else { return }
+            self.environmentDrafts[row.instanceId] = (published, rows)
+            let dedicated = ProviderEnvironmentLogic.variables(current()).filter { owned.contains($0.name) }
+            self.upsert(row, ProviderEnvironmentLogic.instance(current(), environment: dedicated + published), env: env.id)
+        }
+        let addVariable = ButtonView("Add variable", icon: .plus, variant: .outline, size: .sm)
+        addVariable.iconSize = 12
+        addVariable.isEnabled = !readOnly
+        addVariable.frame.size = addVariable.intrinsicContentSize
+        addVariable.action = { [weak self] in
+            guard let self else { return }
+            self.environmentDraftId += 1
+            self.environmentDrafts[row.instanceId] = (generic, list.rows + [ProviderEnvironmentLogic.Draft(id: self.environmentDraftId)])
+            self.refresh()
+            self.onHeightChange?()
+        }
+        let variablesRow = SettingsRowView(title: "Variables", detail: "API keys, base URLs, and other per-instance CLI settings.", control: SettingsControlGroup([addVariable]))
+        variablesRow.footer = list.rows.isEmpty ? nil : list
+        sections.append(SettingsSectionView(title: "Environment", rows: [variablesRow]))
 
         // Models: favorites, visibility and order on this device; custom models on the environment.
         let prefs = context.client["providerModelPreferences"][row.instanceId]
@@ -574,7 +649,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         modelsView.onHidden = { [weak self] next in self?.writePreferences(row.instanceId, hidden: next, order: order) }
         modelsView.onOrder = { [weak self] next in self?.writePreferences(row.instanceId, hidden: hidden, order: next) }
         modelsView.onAdd = { [weak self] slug in
-            var o = row.instance.objectValue ?? [:]
+            var o = current().objectValue ?? [:]
             var config = o["config"]?.objectValue ?? [:]
             config["customModels"] = .array(custom.map(\.raw) + [.string(slug)])
             o["config"] = .object(config)
@@ -582,7 +657,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             self?.upsert(row, .object(o), env: env.id)
         }
         modelsView.onRemove = { [weak self] slug in
-            var o = row.instance.objectValue ?? [:]
+            var o = current().objectValue ?? [:]
             var config = o["config"]?.objectValue ?? [:]
             config["customModels"] = .array(custom.filter { $0.slug != slug }.map(\.raw))
             o["config"] = .object(config)
@@ -593,6 +668,59 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         sections.append(SettingsSectionView(title: "Models", rows: [modelsView]))
         e.sections = sections
         return e
+    }
+
+    private func liveInstance(_ id: String) -> JSONValue? {
+        guard let env = environment, let settings = env.settings else { return nil }
+        return ProvidersLogic.rows(settings: settings, providers: context.configs[env.id]?.providers ?? []).first { $0.instanceId == id }?.instance
+    }
+
+    /// The version advisory button, or nil when the provider is current. `Update now` runs `server.updateProvider`;
+    /// `Install vX` passes the compatibility advisory's recommended version.
+    private func advisoryButton(_ row: ProvidersLogic.Row, provider p: ServerProvider?, readOnly: Bool, displayName: String, micro: Bool = false) -> ButtonView? {
+        guard let p, let presentation = ProviderVersionAdvisoryLogic.presentation(p, enabled: row.enabled) else { return nil }
+        let updating = updatingInstances.contains(row.instanceId) || ProviderVersionAdvisoryLogic.isUpdating(p)
+        let progress = updating ? ((ProviderVersionAdvisoryLogic.isUpdating(p) ? p.updateState?.message : nil) ?? "Starting update") : nil
+        let problem = !updating && (p.updateState?.status == "failed" || p.updateState?.status == "unchanged") ? p.updateState?.message : nil
+        var run: (@MainActor () -> Void)?
+        if !readOnly, let env = environment?.id {
+            if presentation.targetVersion != nil {
+                if ProviderVersionAdvisoryLogic.canInstallRecommended(p) { run = { [weak self] in self?.runUpdate(env, p, target: presentation.targetVersion) } }
+            } else if ProviderVersionAdvisoryLogic.canUpdate(p) {
+                run = { [weak self] in if !updating { self?.runUpdate(env, p, target: nil) } }
+            }
+        }
+        let b = providerVersionAdvisoryButton(presentation, updating: updating, progress: progress, problem: problem, run: run, micro: micro) { [weak self] command in
+            self?.context.copy?(command, "\(displayName) update command copied")
+        }
+        b.frame.size = micro ? NSSize(width: 20, height: 20) : NSSize(width: 24, height: 24)
+        return b
+    }
+
+    private func runUpdate(_ env: String, _ p: ServerProvider, target: String?) {
+        guard let request = context.request, !updatingInstances.contains(p.instanceId.rawValue) else { return }
+        updatingInstances.insert(p.instanceId.rawValue)
+        refresh()
+        var input: [String: JSONValue] = ["provider": .string(p.driver), "instanceId": .string(p.instanceId.rawValue)]
+        if let target { input["targetVersion"] = .string(target) }
+        Task { [weak self] in
+            do {
+                _ = try await request(env, "server.updateProvider", .object(input))
+            } catch {
+                self?.context.toast?("Could not update \(ProvidersLogic.label(p.driver) ?? p.driver)", "\(error)", .error)
+            }
+            self?.updatingInstances.remove(p.instanceId.rawValue)
+            self?.refresh()
+        }
+    }
+
+    /// The rows to show: the page's drafts while what they last published still matches the server (T3 keeps
+    /// its draft rows until the environment changes from elsewhere), else fresh rows from the server.
+    private func envDrafts(_ instanceId: String, _ server: [ProviderEnvironmentLogic.Variable]) -> [ProviderEnvironmentLogic.Draft] {
+        if let held = environmentDrafts[instanceId], held.published == server { return held.rows }
+        let rows = server.map { v -> ProviderEnvironmentLogic.Draft in environmentDraftId += 1; return .init(id: environmentDraftId, v) }
+        environmentDrafts[instanceId] = (server, rows)
+        return rows
     }
 
     /// `providerModelPreferences[instanceId]`, dropped when both lists are empty.
@@ -752,6 +880,9 @@ final class ProviderListRow: ControlView {
     private let enabled: Bool
     var onSelect: (() -> Void)?
     var isSelected = false { didSet { restyle() } }
+    /// The version advisory button (`icon-micro`) after the version, and the update progress in place of the status.
+    var advisory: ButtonView? { didSet { oldValue?.removeFromSuperview(); advisory.map(addSubview); needsLayout = true } }
+    var updateProgress: String? { didSet { if let updateProgress { status.text = "Updating · \(updateProgress)"; dot.isHidden = true } } }
 
     init(row: ProvidersLogic.Row, provider: ServerProvider?) {
         let displayName = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
@@ -813,8 +944,9 @@ final class ProviderListRow: ControlView {
         name.frame = NSRect(x: textX, y: 12, width: nw, height: 20)
         let vw = min(96, ceil(version.textWidth) + 1)
         version.frame = NSRect(x: textX + nw + 8, y: 14, width: max(0, min(vw, right - textX - nw - 8)), height: 16)
+        advisory?.frame = NSRect(x: version.text.isEmpty ? textX + nw + 8 : version.frame.maxX + 8, y: 12, width: 20, height: 20)
         var sx = textX
-        if showsDot {
+        if showsDot && !dot.isHidden {
             CATransaction.begin(); CATransaction.setDisableActions(true)
             dot.frame = CGRect(x: sx, y: 34 + 6, width: 6, height: 6)
             CATransaction.commit()

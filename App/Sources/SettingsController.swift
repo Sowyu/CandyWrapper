@@ -111,6 +111,11 @@ final class SettingsController {
         actions.revokePairingLink = { [weak self] id in self?.revokePairingLink(id) }
         actions.revokeClient = { [weak self] id in self?.revokeClient(id) }
         actions.revokeOtherClients = { [weak self] in self?.revokeOtherClients() }
+        actions.setLoadBalancing = { [weak self] on in
+            ClientSettingsStore.shared.update(["loadBalancingEnabled": .bool(on)])
+            self?.refresh()
+        }
+        actions.setLoadPreference = { [weak self] id, weight in self?.setLoadPreference(id, weight) }
         connections.actions = actions
         nav.onSignIn = { [weak self] in
             guard let self, let window = self.window else { return }
@@ -228,7 +233,33 @@ final class SettingsController {
         }
         m.cloudEnabled = true
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
+        m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)
         return m
+    }
+
+    /// `LoadBalancingSettings` over `loadBalancingEnvironments`: this machine, then the switched-on saved ones; only
+    /// with two or more.
+    private func loadBalancingModel(primaryLabel: String?) -> ConnectionsPageModel.LoadBalancing? {
+        var machines: [ConnectionsPageModel.LoadBalancing.Machine] = []
+        if let id = environments.primaryId {
+            machines.append(.init(id: id, label: primaryLabel ?? "This machine", machine: environments.machine(id) ?? "server", subtitle: "This machine"))
+        }
+        for r in environments.saved where r.enabled {
+            let inUse = environments.state(r.environmentId)?.status == .connected ? environments.routeInUse(r.environmentId) : nil
+            machines.append(.init(id: r.environmentId, label: r.label, machine: environments.machine(r.environmentId) ?? r.machine ?? "server",
+                                  subtitle: transport(r, inUse: inUse)))
+        }
+        guard machines.count >= 2 else { return nil }
+        let client = ClientSettingsStore.shared.current
+        return .init(enabled: client.bool("loadBalancingEnabled"), machines: machines,
+                     weights: LoadBalancingLogic.weights(client["loadBalancingWeights"]))
+    }
+
+    private func setLoadPreference(_ id: String, _ weight: Int) {
+        var weights = ClientSettingsStore.shared.current["loadBalancingWeights"].objectValue ?? [:]
+        weights[id] = .number(Double(weight))
+        ClientSettingsStore.shared.update(["loadBalancingWeights": .object(weights)])
+        refresh()
     }
 
     /// `environmentTransportLabel` with T3 Connect: `via <route>` or the first route's label with several

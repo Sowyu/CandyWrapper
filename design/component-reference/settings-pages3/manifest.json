@@ -1,0 +1,22 @@
+{
+  "bitbucket.access" : {
+    "height" : 169.5,
+    "width" : 764
+  },
+  "bitbucket.api" : {
+    "height" : 255,
+    "width" : 764
+  },
+  "connections.load-balancing" : {
+    "height" : 197,
+    "width" : 796
+  },
+  "provider.advisory" : {
+    "height" : 174,
+    "width" : 320
+  },
+  "provider.environment" : {
+    "height" : 254,
+    "width" : 492
+  }
+}

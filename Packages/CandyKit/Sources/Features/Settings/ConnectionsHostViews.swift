@@ -531,6 +531,8 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         private let title = LabelView("Authorized clients", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
         private let summaryLabel = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
         var summary: String { get { summaryLabel.text } set { summaryLabel.text = newValue; needsLayout = true } }
+        /// The section title (`FoldedSettingsSection title`); Load balancing reuses this header.
+        var heading: String { get { title.text } set { title.text = newValue; setAccessibilityLabel(newValue); needsLayout = true } }
         var isOpen = false { didSet { chevron.frameCenterRotation = isOpen ? 90 : 0; setAccessibilityExpanded(isOpen) } }
 
         override init(frame frameRect: NSRect) {

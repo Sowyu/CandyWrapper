@@ -42,6 +42,8 @@ public final class DialogView: DSView {
     private let titleText = TextBlockView()
     private let messageText = TextBlockView()
     private let closeButton = ButtonView(nil, icon: .x, variant: .ghost, size: .icon)
+    private let panelDocument = DSView()
+    private lazy var panelScroll = ScrollAreaView(documentView: panelDocument, scrollFade: true)
 
     public init(kind: Kind = .dialog, title: String, message: String? = nil) {
         self.kind = kind
@@ -173,12 +175,35 @@ public final class DialogView: DSView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        let f = frames(width: bounds.width)
+        var f = frames(width: bounds.width)
         titleText.frame = f.title
         messageText.frame = f.message
         messageText.isHidden = !hasMessage
-        zip(panelContent, f.panel).forEach { $0.frame = $1 }
-        zip(footerButtons, f.buttons).forEach { $0.frame = $1 }
+        // `DialogPanel` is a ScrollArea: when the host caps the dialog below its natural height, the panel scrolls
+        // between the fixed header and footer.
+        let overflow = f.height - bounds.height
+        var buttons = f.buttons, footer = f.footer
+        if overflow > 0.5, let first = f.panel.first, let last = f.panel.last {
+            let top = first.minY - 4, bottom = last.maxY + (hasFooter && footerVariant == .bare ? 4 : 24)
+            panelScroll.isHidden = false
+            if panelScroll.superview == nil { addSubview(panelScroll, positioned: .below, relativeTo: closeButton) }
+            panelScroll.frame = CGRect(x: borders.left, y: top, width: bounds.width - borders.left - borders.right, height: max(0, bottom - top - overflow))
+            panelDocument.frame = CGRect(x: 0, y: 0, width: panelScroll.frame.width, height: bottom - top)
+            for (view, frame) in zip(panelContent, f.panel) {
+                if view.superview !== panelDocument { panelDocument.addSubview(view) }
+                view.frame = frame.offsetBy(dx: -borders.left, dy: -top)
+            }
+            buttons = buttons.map { $0.offsetBy(dx: 0, dy: -overflow) }
+            footer = footer.offsetBy(dx: 0, dy: -overflow)
+        } else {
+            panelScroll.isHidden = true
+            for (view, frame) in zip(panelContent, f.panel) {
+                if view.superview !== self { addSubview(view) }
+                view.frame = frame
+            }
+        }
+        zip(footerButtons, buttons).forEach { $0.frame = $1 }
+        f.footer = footer
         footerLayer.isHidden = !hasFooter
         footerLayer.layout(boxSize: f.footer.size)
         footerLayer.frame.origin = CGPoint(x: f.footer.minX - footerLayer.outset, y: f.footer.minY - footerLayer.outset)

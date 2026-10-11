@@ -101,6 +101,8 @@ public struct ConnectionsPageModel: Equatable {
     /// T3 Connect configured: the empty state mentions connecting from it.
     public var cloudEnabled: Bool
     public var cloud: Cloud = .idle
+    /// Load balancing, with two or more machines switched on.
+    public var loadBalancing: LoadBalancing?
 
     public init(thisMachine: Machine? = nil, environments: [Environment] = [], cloudEnabled: Bool = true) {
         self.thisMachine = thisMachine; self.environments = environments; self.cloudEnabled = cloudEnabled
@@ -144,6 +146,9 @@ public struct ConnectionsActions {
     public var revokePairingLink: (String) -> Void = { _ in }
     public var revokeClient: (String) -> Void = { _ in }
     public var revokeOtherClients: () -> Void = {}
+    /// Load balancing switched on or off, and one machine's preference weight.
+    public var setLoadBalancing: (Bool) -> Void = { _ in }
+    public var setLoadPreference: (String, Int) -> Void = { _, _ in }
     public init() {}
 }
 
@@ -172,6 +177,11 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     }()
     private(set) lazy var accessSection: AuthorizedClientsSectionView = {
         let section = AuthorizedClientsSectionView()
+        section.onHeightChange = { [weak self] in self?.relayout() }
+        return section
+    }()
+    private(set) lazy var loadBalancingSection: LoadBalancingSectionView = {
+        let section = LoadBalancingSectionView()
         section.onHeightChange = { [weak self] in self?.relayout() }
         return section
     }()
@@ -293,6 +303,15 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             groupRows.append(empty!.view)
         }
         environmentsSection.group.rows = groupRows
+        // Load balancing, under the environments list (ConnectionsSettings.tsx:4169).
+        if let balancing = model.loadBalancing {
+            if loadBalancingSection.superview == nil { addSubview(loadBalancingSection) }
+            loadBalancingSection.onEnabled = { [weak self] on in self?.actions.setLoadBalancing(on) }
+            loadBalancingSection.onPreference = { [weak self] id, weight in self?.actions.setLoadPreference(id, weight) }
+            loadBalancingSection.configure(balancing)
+        } else if loadBalancingSection.superview != nil {
+            loadBalancingSection.removeFromSuperview()
+        }
         needsLayout = true
         onHeightChange?()
     }
@@ -378,7 +397,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         var h: CGFloat = 0
         if let machineSection { h += machineSection.height(forWidth: width) + 32 }
         if accessSection.superview != nil { h += accessSection.height(forWidth: width) + 32 }
-        return h + environmentsSection.height(forWidth: width)
+        h += environmentsSection.height(forWidth: width)
+        if loadBalancingSection.superview != nil { h += 32 + loadBalancingSection.height(forWidth: width) }
+        return h
     }
 
     public override func layout() {
@@ -396,7 +417,11 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             accessSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
             y += h + 32
         }
-        environmentsSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: environmentsSection.height(forWidth: bounds.width))
+        let eh = environmentsSection.height(forWidth: bounds.width)
+        environmentsSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: eh)
+        if loadBalancingSection.superview != nil {
+            loadBalancingSection.frame = NSRect(x: 0, y: y + eh + 32, width: bounds.width, height: loadBalancingSection.height(forWidth: bounds.width))
+        }
     }
 }
 

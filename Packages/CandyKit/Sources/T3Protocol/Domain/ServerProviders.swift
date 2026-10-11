@@ -236,6 +236,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var updateState: UpdateState?
     /// `versionAdvisory.latestVersion`, the version an update installs.
     public var latestVersion: String?
+    /// The whole `versionAdvisory` (`{status, latestVersion, updateCommand, canUpdate, canInstallVersion?, message}`): Settings > Providers.
+    public var versionAdvisory: JSONValue?
     /// `compatibilityAdvisory` (`{status: supported|unsupported|broken, message?}`) and `setup`
     /// (`{canAuthenticate?, canInstall?}`): the composer's provider status banner reads them.
     public var compatibilityAdvisory: JSONValue?
@@ -299,7 +301,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         if let update = (try? c.decodeIfPresent(JSONValue.self, forKey: .updateState)) ?? nil, let status = update["status"]?.stringValue {
             updateState = UpdateState(status: status, finishedAt: update["finishedAt"]?.stringValue, message: update["message"]?.stringValue)
         }
-        latestVersion = ((try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil)?["latestVersion"]?.stringValue
+        versionAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil
+        latestVersion = versionAdvisory?["latestVersion"]?.stringValue
         compatibilityAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .compatibilityAdvisory)) ?? nil
         setup = (try? c.decodeIfPresent(JSONValue.self, forKey: .setup)) ?? nil
     }
