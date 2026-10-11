@@ -208,6 +208,7 @@ public final class BrowserChromeRowView: DSView {
             spin.toValue = -2 * Double.pi
             spin.duration = 1
             spin.repeatCount = .infinity
+            spin.preferredFrameRateRange = Motion.loopFrameRate
             refreshIconLayer?.add(spin, forKey: "spin")
         } else {
             CATransaction.begin()

@@ -47,6 +47,7 @@ public final class LoopingAnimation {
         if run, layer.animation(forKey: key) == nil {
             let animation = make()
             animation.isRemovedOnCompletion = false
+            animation.preferredFrameRateRange = Motion.loopFrameRate
             layer.add(animation, forKey: key)
         } else if !run {
             layer.removeAnimation(forKey: key)

@@ -294,6 +294,12 @@ public enum Motion {
 
     public static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
+    /// Endless decorative loops (spinners, shimmers, pings, skeletons) draw at most 30 frames a second.
+    /// Without a range Core Animation runs them at the display's rate, 120 Hz on ProMotion, and keeps
+    /// the window server compositing at that rate for as long as an agent works. macOS's own spinners
+    /// step at about this rate.
+    public static let loopFrameRate = CAFrameRateRange(minimum: 10, maximum: 30, preferred: 30)
+
     /// CSS properties a `transition-*` class animates. `.color` is text and icon color.
     public struct Transition: OptionSet, Sendable {
         public let rawValue: UInt8
