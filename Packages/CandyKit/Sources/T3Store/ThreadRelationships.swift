@@ -245,6 +245,16 @@ public enum ThreadRelationships {
         return max(0, end - start)
     }
 
+    /// Milliseconds until the text of `elapsed` (or `compactElapsed`) for `elapsedMs` next changes, so a
+    /// live label wakes the app when its text changes and not once a second regardless.
+    public static func msUntilElapsedChanges(_ elapsedMs: Int64, compact: Bool) -> Int64 {
+        let ms = max(0, elapsedMs), s = ms / 1000
+        let unit: Int64 = compact
+            ? (s < 60 ? 1_000 : s < 3_600 ? 60_000 : s < 36_000 ? 360_000 : 3_600_000)
+            : (s < 3_600 ? 1_000 : 60_000)
+        return unit - ms % unit
+    }
+
     /// `formatCompactElapsedSeconds` (AgentElapsed.tsx:20-27): "45s", "12m", "1.5h", "14h", rounded down.
     public static func compactElapsed(seconds: Double) -> String {
         let s = max(0, Int(seconds.rounded(.down)))

@@ -702,12 +702,11 @@ final class ThinkingRowView: WorkRowBase {
     }
 }
 
-/// `WorkingTimelineRow` (:3705-3743): "Working for 4s" over a hairline. The seconds tick once a
-/// second only while the row is on screen in a visible window.
+/// `WorkingTimelineRow` (:3705-3743): "Working for 4s" over a hairline. The seconds tick on the
+/// shared `LabelClock`, only while the row is on screen in a visible window.
 final class WorkingRowView: TimelineRowView {
     private let label = LabelView("", font: TL.tabular(14), color: TL.c(\.mutedForeground))
     private let rule = FillView()
-    private var timer: Timer?
     private var startMs: Int64?
 
     override init(frame frameRect: NSRect) {
@@ -722,44 +721,19 @@ final class WorkingRowView: TimelineRowView {
         super.configure(item)
         startMs = item.row.createdAt?.epochMs
         tick()
-        updateTimer()
     }
 
-    /// `formatWorkingTimer` (:3477-3490).
+    /// `formatWorkingTimer` (:3477-3490). The text shows whole seconds, so it changes once a second.
     private func tick() {
-        guard let startMs else { label.text = "Working..."; return }
-        let seconds = max(0, (Int64(context.now().timeIntervalSince1970 * 1000) - startMs) / 1000)
+        guard let startMs else { label.text = "Working..."; LabelClock.shared.cancel(self); return }
+        let elapsedMs = max(0, Int64(context.now().timeIntervalSince1970 * 1000) - startMs)
+        let seconds = elapsedMs / 1000
         label.text = "Working for " + (seconds < 60 ? "\(seconds)s" : formatDuration(Double(seconds) * 1000))
+        LabelClock.shared.schedule(self, in: Double(1000 - elapsedMs % 1000) / 1000) { [weak self] in self?.tick() }
     }
 
-    private func updateTimer() {
-        let visible = window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false
-        let run = visible && !isHiddenOrHasHiddenAncestor && startMs != nil
-        if run, timer == nil {
-            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
-            t.tolerance = 0.1
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
-        } else if !run {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    private var occlusionObserver: NSObjectProtocol?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-        occlusionObserver = window.map {
-            NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: $0, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateTimer() }
-            }
-        }
-        updateTimer()
-    }
-    override func viewDidHide() { super.viewDidHide(); updateTimer() }
-    override func viewDidUnhide() { super.viewDidUnhide(); updateTimer() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); LabelClock.shared.visibilityChanged() }
+    override func viewDidUnhide() { super.viewDidUnhide(); LabelClock.shared.visibilityChanged() }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 4 + 24 + 8 + 1 + 6 }
 

@@ -497,11 +497,14 @@ public enum SidebarListBuilder {
 
     /// The earliest moment after `nowMs` at which any of these rows' labels change, or nil if none can.
     /// Relative times step at the minute, hour and day; Working counts seconds below a minute.
-    public static func nextLabelChange(_ rows: [SidebarRowModel], nowMs: Int64) -> Int64? {
+    /// `relative: false` leaves out relative times and snooze countdowns, `working: false` Working durations.
+    public static func nextLabelChange(_ rows: [SidebarRowModel], nowMs: Int64, relative: Bool = true, working: Bool = true) -> Int64? {
         var next: Int64?
         func consider(_ t: Int64) { if t > nowMs { next = min(next ?? t, t) } }
         for r in rows {
-            if let wake = r.snoozeWakeMs {
+            if !relative {
+                // Working durations only.
+            } else if let wake = r.snoozeWakeMs {
                 let remaining = wake - nowMs
                 if remaining > 0 {
                     let unit: Int64 = remaining <= 3_600_000 ? 60_000 : remaining <= 86_400_000 ? 3_600_000 : 86_400_000
@@ -510,7 +513,7 @@ public enum SidebarListBuilder {
             } else if let anchor = r.timeAnchorMs, r.topStatus == nil || r.variant == .slim {
                 consider(nextRelativeStep(anchor: anchor, nowMs: nowMs))
             }
-            if let start = r.workingStartedMs, r.variant == .card {
+            if working, let start = r.workingStartedMs, r.variant == .card {
                 let elapsed = max(0, nowMs - start)
                 let unit: Int64 = elapsed < 60_000 ? 1_000 : 60_000
                 consider(start + (elapsed / unit + 1) * unit)

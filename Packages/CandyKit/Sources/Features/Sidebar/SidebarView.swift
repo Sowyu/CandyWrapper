@@ -96,8 +96,6 @@ public final class SidebarContentView: DSView {
     /// The clock, injectable for tests and previews.
     public var now: () -> Date = Date.init
 
-    private var labelTimer: Timer?
-    private var occlusionObserver: NSObjectProtocol?
 
     /// The scope trigger shows the scoped project's favicon in place of the folder (SidebarThreadHeader.tsx:5).
     let filterMonogram = ProjectMonogramView()
@@ -567,48 +565,37 @@ public final class SidebarContentView: DSView {
 
     // MARK: Label refresh
 
-    /// One timer, aimed at the next moment a visible label changes, with 10% tolerance. None while the
-    /// window is hidden or occluded, or when no visible label can change.
+    /// One tick on the shared `LabelClock`, aimed at the next moment a visible label changes. The clock
+    /// holds it while the window is hidden or occluded and delivers it as soon as the window shows
+    /// again, so labels are fresh after a hidden stretch. None when no visible label can change.
     func scheduleLabelTimer() {
-        labelTimer?.invalidate()
-        labelTimer = nil
-        guard let window, window.occlusionState.contains(.visible) || window.isVisible && window.occlusionState.isEmpty else { return }
-        let ms = nowMs
-        guard let next = SidebarListBuilder.nextLabelChange(list.visibleRowModels, nowMs: ms) else { return }
-        let interval = max(0.05, Double(next - ms) / 1000)
-        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.labelTimerFired() }
-        }
-        timer.tolerance = interval * 0.1
-        RunLoop.main.add(timer, forMode: .common)
-        labelTimer = timer
+        guard window != nil else { LabelClock.shared.cancel(self); return }
+        let ms = nowMs, rows = list.visibleRowModels
+        let rebuildAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false)
+        let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
+        guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }
+        LabelClock.shared.schedule(self, in: Double(next - ms) / 1000) { [weak self] in self?.labelTimerFired(rebuildAt: rebuildAt) }
     }
 
-    /// Exposed so tests can see whether a timer is pending and when.
-    public var pendingLabelRefresh: Date? { labelTimer?.fireDate }
+    /// Exposed so tests can see whether a tick is pending and when.
+    public var pendingLabelRefresh: Date? { LabelClock.shared.due(for: self) }
 
-    private func labelTimerFired() {
-        labelTimer = nil
-        rebuild(animated: true)
+    /// A relative time or snooze label can move rows between sections, so its change rebuilds the list
+    /// (without motion after a hidden stretch). A Working duration only redraws its own row, as T3's
+    /// self-ticking `WorkingDuration` does (Sidebar.tsx:361-372).
+    private func labelTimerFired(rebuildAt: Int64?) {
+        let ms = nowMs
+        if let rebuildAt, rebuildAt <= ms {
+            rebuild(animated: ms - rebuildAt < 2_000)
+        } else {
+            list.nowMs = ms
+            scheduleLabelTimer()
+        }
         list.tickWorkingRows()
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-        occlusionObserver = nil
-        guard let window else { labelTimer?.invalidate(); labelTimer = nil; return }
-        occlusionObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                // Labels may be stale after a hidden stretch: rebuild once, then aim the timer again.
-                if self.window?.occlusionState.contains(.visible) == true { self.rebuild(animated: false) } else {
-                    self.labelTimer?.invalidate(); self.labelTimer = nil
-                }
-            }
-        }
         scheduleLabelTimer()
     }
 
