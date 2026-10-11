@@ -1,0 +1,31 @@
+{
+  "component": "settings-sweep",
+  "source": "ProjectActionsSettings.tsx:213-220; PanelAnimationsPreview.tsx:8-82; index.css:2086-2099",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "invalid-project",
+      "html": "<div data-slot=\"settings-row\" class=\"@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground py-3\"><div class=\"flex flex-col gap-3 @min-[32rem]/settings-row:grid @min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8\"><div class=\"min-w-0 flex-1 space-y-1\"><div class=\"flex min-h-5 items-center gap-1.5\"><h3 class=\"text-sm font-medium text-foreground\">t3.json is invalid</h3><span class=\"inline-flex h-5 w-5 shrink-0 items-center justify-center\"></span></div><p class=\"max-w-xl text-xs leading-normal text-muted-foreground/80\">A t3.json exists in this checkout but fails to parse, so every action and icon it declares is ignored. Check the JSON syntax and icon values.</p></div><div class=\"flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end\"></div></div></div>",
+      "wrapperStyle": "width:640px"
+    },
+    {
+      "name": "motion-preview",
+      "html": "<button class=\"flex h-10 w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-background p-1 shadow-xs/5 outline-none\"><span class=\"h-full w-4 shrink-0 rounded-md bg-sidebar\"></span><span class=\"flex min-w-0 flex-1 flex-col px-1\"><span class=\"flex min-h-0 flex-1 flex-col gap-1 pt-1\"><span class=\"h-0.5 w-full rounded-full bg-muted-foreground/25\"></span><span class=\"h-0.5 w-4/5 rounded-full bg-muted-foreground/20\"></span><span class=\"h-0.5 w-3/5 rounded-full bg-muted-foreground/15\"></span></span><span class=\"flex h-2 shrink-0 items-center overflow-hidden border-t border-border/70 bg-foreground/5 px-2\"><span class=\"h-px w-2/3 rounded-full bg-muted-foreground/25\"></span></span></span><span class=\"h-full w-5 shrink-0 rounded-md bg-muted\"></span></button>",
+      "wrapperStyle": "width:176px"
+    },
+    {
+      "name": "diff-default",
+      "html": "<div style=\"display:flex;width:160px;height:32px\"><span style=\"width:80px;background:var(--diff-addition)\"></span><span style=\"width:80px;background:var(--diff-deletion)\"></span></div>"
+    },
+    {
+      "name": "diff-blue-orange",
+      "html": "<div style=\"display:flex;width:160px;height:32px\"><span style=\"width:80px;background:light-dark(var(--color-blue-600),var(--color-blue-400))\"></span><span style=\"width:80px;background:light-dark(var(--color-orange-600),var(--color-orange-400))\"></span></div>"
+    }
+  ]
+}

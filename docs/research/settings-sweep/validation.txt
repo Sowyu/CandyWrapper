@@ -1,0 +1,152 @@
+Settings sweep validation, 2026-10-11
+Worktree: /Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-settings
+No commit. No T3 MCP tools. No delegated agents.
+
+Commands:
+  swift test --package-path Packages/CandyKit
+  swift test --package-path Packages/CandyKit --filter Fidelity
+  swift test --package-path Packages/CandyKit --filter SettingsSweepTests
+  xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd-astrasweepsettings PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.sweepsettings CANDY_URL_SCHEME=candywrapper-sweepsettings build
+  git diff --check
+
+Full suite: 1,079 tests passed (267 protocol, 96 store, 126 client, 488 feature, 86 design, 16 XCTest).
+Final focused suite: 7 passed, including packaged native notices.
+App build: BUILD SUCCEEDED.
+Diff whitespace check: clean.
+
+Explicit Fidelity run:
+FIDELITY panel-leftovers: 8 cases, mean differing 2.52%
+FIDELITY browser: 10 cases, mean differing 2.08%
+FIDELITY device-panels: 4 cases, mean differing 0.47%
+FIDELITY terminal-drawer: 6 cases, mean differing 0.85%
+FIDELITY files: 8 cases, mean differing 1.44%
+FIDELITY notifications: 12 cases, mean differing 2.59%
+FIDELITY thread-leftovers: 14 cases, mean differing 2.39%
+FIDELITY git: 14 cases, mean differing 3.06%
+FIDELITY onboarding-snapshot connection.light: 1.08%
+FIDELITY onboarding-snapshot connection.dark: 1.05%
+FIDELITY onboarding-snapshot settings.light: 1.18%
+FIDELITY onboarding-snapshot settings.dark: 1.16%
+FIDELITY onboarding-snapshot details.light: 1.93%
+FIDELITY onboarding-snapshot details.dark: 1.93%
+FIDELITY onboarding-snapshot mean: 1.39%
+FIDELITY sidebar-reuse light card: 0.0%
+FIDELITY sidebar-reuse light slim: 0.0%
+FIDELITY sidebar-reuse dark card: 0.0%
+FIDELITY sidebar-reuse dark slim: 0.0%
+FIDELITY connections: 32 cases, mean differing 1.85%
+FIDELITY run-on: 20 cases, mean differing 2.69%
+FIDELITY composer-rich: 6 cases, mean differing 2.74%
+FIDELITY usage: 10 cases, mean differing 3.61%
+FIDELITY settings-pages: 6 cases, mean differing 1.88%
+FIDELITY settings-pages2: 10 cases, mean differing 1.70%
+FIDELITY desktop-leftovers copied.light: 3.76%
+FIDELITY desktop-leftovers copied.dark: 5.10%
+FIDELITY desktop-leftovers copy-failed.light: 4.24%
+FIDELITY desktop-leftovers copy-failed.dark: 5.38%
+FIDELITY desktop-leftovers progress-0.light: 1.05%
+FIDELITY desktop-leftovers progress-0.dark: 1.01%
+FIDELITY desktop-leftovers progress-1.light: 1.22%
+FIDELITY desktop-leftovers progress-1.dark: 1.10%
+FIDELITY desktop-leftovers progress-2.light: 1.52%
+FIDELITY desktop-leftovers progress-2.dark: 1.50%
+FIDELITY desktop-leftovers mean: 2.59%
+FIDELITY sidebar-search: 26 cases, mean differing 2.09%
+FIDELITY theme-settings: 6 cases, mean differing 2.24%
+FIDELITY composer-menu: 12 cases, mean differing 2.94%
+FIDELITY settings-pages3: 10 cases, mean differing 3.38%
+FIDELITY pull-request-writes: 6 cases, mean differing 3.83%
+FIDELITY provider-setup: 6 cases, mean differing 3.78%
+FIDELITY pull-requests: 6 cases, mean differing 3.13%
+FIDELITY Diff body: 18 cases, mean differing 2.42%
+FIDELITY Markdown: 14 cases, mean differing 1.61%
+FIDELITY thread-completion: 14 cases, mean 2.78%, worst 4.48%
+FIDELITY sidebar-leftovers: 18 cases, mean differing 2.52%
+settings-sweep diff-blue-orange.rest.light 0.00%
+settings-sweep diff-blue-orange.rest.dark 0.00%
+settings-sweep diff-default.rest.light 0.00%
+settings-sweep diff-default.rest.dark 0.00%
+settings-sweep invalid-project.rest.light 4.77%
+settings-sweep invalid-project.rest.dark 4.70%
+settings-sweep motion-preview.rest.light 2.96%
+settings-sweep motion-preview.rest.dark 2.17%
+FIDELITY settings-sweep: 8 cases, mean differing 1.82%
+FIDELITY thread-lineage: 22 cases, mean differing 2.52%
+FIDELITY settings-runtime: 6 cases, mean differing 4.77%
+FIDELITY composer-footer: 14 cases, mean differing 1.87%
+FIDELITY Diff panel 09-diff-split: mean differing 5.12%
+FIDELITY Diff panel 10-diff-unified: mean differing 5.15%
+FIDELITY composer-attachments: 10 cases, mean differing 2.22%
+✔ Test run with 52 tests in 40 suites passed after 180.875 seconds.
+FIDELITY switch: 44 cases, mean differing 1.46%
+FIDELITY checkbox: 22 cases, mean differing 1.21%
+FIDELITY radio: 16 cases, mean differing 2.07%
+FIDELITY Command palette: 12 cases, mean differing 2.35%
+FIDELITY command-palette: mean differing 2.35%
+FIDELITY toggle-group: 4 cases, mean differing 2.57%
+FIDELITY Group: 12 cases, mean differing 4.33%
+FIDELITY alert: 22 cases, mean differing 2.96%
+FIDELITY PanelTabCloseButton: 12 cases, mean differing 3.69%
+FIDELITY collapsible-section-header: 32 cases, mean differing 0.72%
+FIDELITY empty: 8 cases, mean differing 1.19%
+FIDELITY toggle: 140 cases, mean differing 2.34%
+FIDELITY ScrollArea: 16 cases, mean differing 0.62%
+FIDELITY MiddleTruncate: 8 cases, mean differing 5.00%
+FIDELITY StandalonePage: 6 cases, mean differing 1.28%
+FIDELITY Table: 8 cases, mean differing 2.05%
+FIDELITY NumberField: 30 cases, mean differing 2.30%
+FIDELITY Settings: 4 cases, mean differing 1.08%
+FIDELITY DiscoveryList: 8 cases, mean differing 2.25%
+FIDELITY QRCode: 8 cases, mean differing 0.00%
+FIDELITY WizardSteps: 12 cases, mean differing 1.40%
+FIDELITY popover: 6 cases, mean differing 2.50%
+FIDELITY autocomplete-popup: 6 cases, mean differing 2.14%
+FIDELITY select-popup: 6 cases, mean differing 2.14%
+FIDELITY combobox-popup: 6 cases, mean differing 2.14%
+FIDELITY tooltip: 6 cases, mean differing 3.50%
+FIDELITY Kbd: 12 cases, mean differing 1.94%
+FIDELITY Textarea: 30 cases, mean differing 1.25%
+FIDELITY Separator: 4 cases, mean differing 0.00%
+FIDELITY select-trigger: 36 cases, mean differing 1.74%
+FIDELITY Skeleton: 6 cases, mean differing 0.00%
+FIDELITY InputGroup: 24 cases, mean differing 0.87%
+FIDELITY InputGroup hover: 4 cases, mean differing 0.81%
+FIDELITY Badge: 24 cases, mean differing 3.89%
+FIDELITY menu: 12 cases, mean differing 2.05%
+FIDELITY Label: 4 cases, mean differing 5.57%
+FIDELITY Spinner: 16 cases, mean differing 1.34%
+FIDELITY hue-slider: 8 cases, mean differing 1.17%
+FIDELITY sidebar-menu-sub: 2 cases, mean differing 0.93%
+FIDELITY toast: 10 cases, mean differing 2.88%
+FIDELITY TextBlock: 16 cases, mean differing 7.53%
+FIDELITY Input: 42 cases, mean differing 1.87%
+FIDELITY sidebar-menu-button: 60 cases, mean differing 0.72%
+FIDELITY command-item: 8 cases, mean differing 0.99%
+FIDELITY dialog: 6 cases, mean differing 3.64%
+FIDELITY alert-dialog: 4 cases, mean differing 2.94%
+FIDELITY sheet: 6 cases, mean differing 0.63%
+✔ Test run with 61 tests in 11 suites passed after 43.845 seconds.
+
+New reference states: eight cases across light/dark. Mean 1.82%, maximum 4.77%.
+Both default diff swatches and both blue/orange swatches: 0% differing pixels.
+Invalid-file note: light 4.77%, dark 4.70%.
+Motion preview: light 2.96%, dark 2.17%.
+Existing suites passed their established thresholds; this is not whole-page parity proof for unfinished rows.
+
+Screen check:
+Existing sandbox server PID 32675, port 47391. It was not stopped.
+Test apps PID 57502 and latest build PID 66370. Both stopped by exact PID.
+Viewport selected iPhone SE 375x667; rotate produced Responsive 667x375; reset to Fill panel persisted after relaunch.
+Settings Integrations, SnapShots, Providers and Add provider inspected. Wizard closed by stopping own app; no save/sign-in.
+No agent turn, new sandbox project/file, provider update, real credential, or permission dialog.
+Local test-client viewport preference changed then reset. The app may report its browser profile inventory in sandbox server memory through existing behavior.
+Existing launch warning: sandbox_extension_issue_file_to_process failed (Operation not permitted); app still launched and connected.
+
+Final full-suite rerun after all code/resource changes (exit 0):
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.074 (0.075) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.074 (0.083) seconds
+✔ Test run with 267 tests in 35 suites passed after 2.365 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.437 seconds.
+✔ Test run with 126 tests in 28 suites passed after 13.691 seconds.
+✔ Test run with 488 tests in 106 suites passed after 99.074 seconds.
+✔ Test run with 86 tests in 18 suites passed after 47.596 seconds.

@@ -206,7 +206,7 @@ public struct ModelPickerSections: Sendable {
     /// `selectedKeys` (`instance:slug`): the models a multi-model draft picked, each shown selected
     /// (`selectedModelKeySet`, ModelPickerContent.tsx:219-235); nil marks only the active model.
     public init(catalog: ProviderCatalog, active: ProviderInstanceId, activeModel: String, favorites: [ModelFavorite],
-                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil) {
+                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil, preferences: JSONValue = .object([:])) {
         let favoriteKeys = Set(favorites.map { "\($0.provider.rawValue):\($0.model)" })
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
         let visible = catalog.entries.filter(\.isVisibleInPicker)
@@ -219,7 +219,16 @@ public struct ModelPickerSections: Sendable {
         // ponytail: the OpenCode and Antigravity "unavailable but selected" exception is skipped; add it with those drivers
         var flat: [ModelPickerItem] = []
         for e in catalog.entries where e.isReady {
-            for m in e.models {
+            let preference = preferences[e.id.rawValue]
+            let hidden = Set((preference?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue))
+            let order = (preference?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue)
+            let models = e.models.enumerated().filter { $0.element.isCustom || !hidden.contains($0.element.slug) }
+                .sorted { a, b in
+                    let left = order.firstIndex(of: a.element.slug) ?? Int.max
+                    let right = order.firstIndex(of: b.element.slug) ?? Int.max
+                    return left == right ? a.offset < b.offset : left < right
+                }.map(\.element)
+            for m in models {
                 let key = "\(e.id.rawValue):\(m.slug)"
                 flat.append(ModelPickerItem(model: m, entry: e, isFavorite: favoriteKeys.contains(key),
                                             isSelected: selectedKeys.map { $0.contains(key) }

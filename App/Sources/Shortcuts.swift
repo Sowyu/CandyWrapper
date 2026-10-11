@@ -37,6 +37,7 @@ final class Shortcuts {
             nonisolated(unsafe) let event = event
             let used = MainActor.assumeIsolated { () -> Bool in
                 guard let self else { return false }
+                if (self.window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing == true { return false }
                 if self.handleSnapShot(event) { return true }
                 if self.quitHoldKey(event) { return true }
                 return event.type == .keyDown && self.handle(event)

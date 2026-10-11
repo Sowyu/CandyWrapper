@@ -37,12 +37,12 @@ public final class ProviderAddWizardView: DialogView {
         return SettingsRowView(title: title, detail: detail, control: input)
     }
     private func rebuild() {
-        let steps = WizardStepsView(steps: driver == "acpRegistry" ? ["Provider", "Identity", "Sign in"] : ["Provider", "Identity", "Config"], currentStep: step)
+        let steps = WizardStepsView(steps: ["Provider", "Identity", "Config"], currentStep: step)
         steps.onStepChange = { [weak self] requested in
             guard let self, !self.saving else { return }
             if requested > 1, let error = ProviderSetupLogic.validation(self.id, existing: self.existing) {
                 self.step = 1; self.error = error
-            } else { self.step = min(requested, self.driver == "acpRegistry" ? 1 : 2); self.error = nil }
+            } else { self.step = min(requested, 2); self.error = nil }
             self.rebuild()
         }
         steps.frame.size.height = 52
@@ -80,19 +80,40 @@ public final class ProviderAddWizardView: DialogView {
             let color = InputView(placeholder: "#2563eb", text: accent[driver] ?? "", size: .sm)
             color.onChange = { [weak self] text in guard let self else { return }; self.accent[self.driver] = text }
             body.append(row("Accent color", input: color))
-            if driver == "acpRegistry" {
-                let agent = InputView(placeholder: "Agent ID", text: configs[driver]?["agentId"]?.stringValue ?? "", size: .sm)
-                agent.onChange = { [weak self] text in self?.configs["acpRegistry", default: [:]]["agentId"] = .string(text) }
-                body.append(row("Registry agent", input: agent))
-            }
         } else {
-            for field in ProvidersLogic.fields(driver) {
-                let input = InputView(placeholder: field.placeholder, text: configs[driver]?[field.key]?.stringValue ?? "", size: .sm)
-                input.onChange = { [weak self] text in
-                    guard let self else { return }; let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    self.configs[self.driver, default: [:]][field.key] = value.isEmpty ? nil : .string(value)
+            for field in ProvidersLogic.fields(driver, config: .object(configs[driver] ?? [:])) {
+                let value = configs[driver]?[field.key]?.stringValue ?? field.defaultValue
+                if !field.options.isEmpty {
+                    let input = SelectView(options: field.options.map { $0.1 }, selected: field.options.firstIndex { $0.0 == value }, size: .sm)
+                    input.onChange = { [weak self] index in
+                        guard let self else { return }
+                        self.configs[self.driver, default: [:]][field.key] = .string(field.options[index].0)
+                        self.rebuild()
+                    }
+                    body.append(row(field.title, field.detail, input: input))
+                } else if field.secret {
+                    let input = SecureInputView(placeholder: field.placeholder)
+                    input.text = value
+                    input.onChange = { [weak self] text in
+                        guard let self else { return }
+                        self.configs[self.driver, default: [:]][field.key] = .string(text)
+                    }
+                    body.append(row(field.title, field.detail, input: input))
+                } else {
+                    let input = InputView(placeholder: field.placeholder, text: value, size: .sm)
+                    input.onChange = { [weak self] text in
+                        guard let self else { return }; let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        self.configs[self.driver, default: [:]][field.key] = value.isEmpty ? nil : .string(value)
+                    }
+                    body.append(row(field.title, field.detail, input: input))
                 }
-                body.append(row(field.title, field.detail, input: input))
+            }
+            if driver == "acpRegistry", configs[driver]?["source"]?.stringValue == "local" {
+                let args = SettingsProviderArgumentsView((configs[driver]?["commandArgs"]?.arrayValue ?? []).compactMap(\.stringValue)) { [weak self] values in
+                    self?.configs["acpRegistry", default: [:]]["commandArgs"] = .array(values.map(JSONValue.string))
+                }
+                args.onHeightChange = { [weak self] in self?.needsLayout = true }
+                body.append(args)
             }
             if body.count == 1 { body.append(SettingsNoticeView("This provider has no additional configuration.")) }
         }
@@ -103,7 +124,7 @@ public final class ProviderAddWizardView: DialogView {
         let back = ButtonView("Back", variant: .outline, size: .sm)
         back.action = { [weak self] in guard let self else { return }; self.step = max(0, self.step - 1); self.error = nil; self.rebuild() }
         back.isEnabled = !saving
-        let finish = step == 2 || (step == 1 && driver == "acpRegistry")
+        let finish = step == 2
         let next = ButtonView(saving ? "Adding…" : finish ? "Add provider" : "Next", size: .sm)
         next.isEnabled = !saving
         next.action = { [weak self] in
@@ -140,8 +161,12 @@ public final class ProviderAddWizardView: DialogView {
     }
     private func save() {
         guard let request = context.request else { return }
-        if driver == "acpRegistry", (configs[driver]?["agentId"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            error = "Select an ACP or configure one manually."; rebuild(); return
+        if driver == "acpRegistry" {
+            let local = configs[driver]?["source"]?.stringValue == "local"
+            let key = local ? "commandPath" : "agentId"
+            if (configs[driver]?[key]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                error = local ? "Enter a local ACP executable." : "Select an ACP or configure one manually."; rebuild(); return
+            }
         }
         let id = id, driver = driver, environment = environment
         let payload = ProviderSetupLogic.create(id: id, driver: driver, label: label, config: configs[driver] ?? [:], accent: accent[driver])

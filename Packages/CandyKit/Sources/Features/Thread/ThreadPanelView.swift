@@ -393,7 +393,7 @@ public final class ThreadPanelView: DSView {
         threadFileDrop.onFiles = { [weak self] urls in self?.composer.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         threadFileDrop.onHighlight = { [weak self] highlighted in self?.fileDropOverlay.isHidden = !highlighted }
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("chatWidth") { self?.needsLayout = true }
+            if keys.contains("chatWidth") || keys.contains("persistComposerContextStrip") { self?.needsLayout = true }
         }
         header.toggles[0].onPressedChange = { [weak self] _ in
             guard let self else { return }
@@ -585,6 +585,10 @@ public final class ThreadPanelView: DSView {
         if open, state.active?.kind == .diff { diffPanel.setSummaries(summaries) }
         needsLayout = true
         header.needsLayout = true
+        if open && !wasOpen && SettingsPanelMotion.duration > 0 {
+            layoutSubtreeIfNeeded()
+            SettingsPanelMotion.reveal(rightPanel, offset: CGSize(width: rightPanel.bounds.width, height: 0))
+        }
     }
 
     /// A user action on the panel: applies it and reports the new state.
@@ -640,11 +644,16 @@ public final class ThreadPanelView: DSView {
     /// Shows or hides the terminal drawer at `height`.
     public func setTerminal(open: Bool, height: CGFloat) {
         guard open != terminalOpen || height != terminalHeight else { return }
+        let wasOpen = terminalOpen
         terminalOpen = open
         terminalHeight = height
         terminalDrawer.isHidden = !open
         header.toggles[1].isPressed = open
         needsLayout = true
+        if open && !wasOpen && SettingsPanelMotion.duration > 0 {
+            layoutSubtreeIfNeeded()
+            SettingsPanelMotion.reveal(terminalDrawer, offset: CGSize(width: 0, height: terminalDrawer.bounds.height))
+        }
     }
 
     /// Cmd+D (`diff.toggle`, `toggle(ref, "diff")`): the panel on the diff, or closed.
@@ -777,7 +786,7 @@ public final class ThreadPanelView: DSView {
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
-        let strip = isDraft && showsContextStrip && !composer.isHidden
+        let strip = (isDraft || ClientSettingsStore.shared.current.bool("persistComposerContextStrip")) && showsContextStrip && !composer.isHidden
         contextStrip.isHidden = !strip
         composer.joinsContextStrip = strip
         let stripInset = ComposerContextStripView.inset

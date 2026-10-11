@@ -52,7 +52,14 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
         }
         load()
     }
+    public static func nativeEntries() -> [SettingsLicenseManifest.Entry] {
+        guard let url = Bundle.module.url(forResource: "native-licenses", withExtension: "json"),
+              let data = try? Data(contentsOf: url), let manifest = try? SettingsLicenseManifest.parse(data) else { return [] }
+        return manifest.entries
+    }
     private func load() {
+        entries = Self.nativeEntries()
+        rebuild()
         guard loading == nil, let env = context.scope.primaryId,
               let base = context.httpBaseURL?(env) else { message = "Connect an environment to view licenses."; rebuild(); return }
         loading = Task { [weak self] in
@@ -61,7 +68,7 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw CocoaError(.fileReadUnknown) }
                 let manifest = try SettingsLicenseManifest.parse(data)
                 guard !Task.isCancelled else { return }
-                self?.entries = manifest.entries
+                self?.entries = Self.nativeEntries() + manifest.entries
                 self?.message = "No matching licenses."
             } catch {
                 guard !Task.isCancelled else { return }
@@ -97,7 +104,7 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
             if expanded.contains(key) { row.footer = SettingsLicenseNoticeView(entry.noticeText) }
             rows.append(row)
         }
-        items = [SettingsSectionView(title: "Notices for dependencies, assets, and optional tools used by T3 Code.", rows: rows)]
+        items = [SettingsSectionView(title: "Notices for dependencies, assets, and optional tools used by CandyWrapper and T3 Code.", rows: rows)]
         onHeightChange?()
     }
 }

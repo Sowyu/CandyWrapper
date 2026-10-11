@@ -309,6 +309,16 @@ final class GitController {
             panel.detailsCard.showsVersionControl = false
             return
         }
+        if !target.isDraft {
+            panel.contextStrip.showsGitControls = isRepo
+            panel.showsContextStrip = isRepo || target.environmentId != sidebar?.state.environments.primaryId
+            let runOn = panel.contextStrip.runOn
+            runOn.options = [RunOnOption(environmentId: target.environmentId, label: environmentOption?.label ?? target.environmentId, machine: environmentOption?.machine ?? "")]
+            runOn.selectedId = target.environmentId
+            runOn.locked = true
+            runOn.autoBalanceLabel = nil
+            runOn.offersAutoBalance = false
+        }
         let modeLocked = !target.isDraft
         let label = BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: modeLocked)
         let env = environmentOption

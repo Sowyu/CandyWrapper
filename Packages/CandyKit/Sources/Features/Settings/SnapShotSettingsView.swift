@@ -36,14 +36,10 @@ public final class SnapShotSettingsView: ScopedSettingsPage {
 
         let text = clientSwitch("snap-shot-accessibility", "Include text and controls when the app makes them available.",
                                 key: "snapShotIncludeAccessibility", label: "Include app text in snapshots")
-        let shortcutBox = ShortcutRecorderView()
-        shortcutBox.preferredWidth = 176
-        shortcutBox.onRecord = { [weak self] binding in
-            guard let chord = SnapShotShortcutState.chord(binding) else { return }
-            self?.context.writeClient?(["snapShotShortcut": chord])
-        }
+        let shortcutBox = SettingsSnapShotShortcutControl(frame: .zero)
+        shortcutBox.onChange = { [weak self] value in self?.context.writeClient?(["snapShotShortcut": value]) }
         let shortcut = row("snap-shot-shortcut", detail: "Capture the window you're using without switching apps.", control: shortcutBox)
-        shortcut.accessories = [ResetSlot(label: "")]
+        shortcutBox.onConflict = { [weak shortcut] message in shortcut?.status = message }
         let sounds: [(String, String)] = [("off", "Off"), ("soft-pop", "Whoosh (Default)"), ("camera-shutter", "Click")]
         let sound = settingsSelect(sounds.map(\.1), width: nil, hideIndicator: false)
         sound.setAccessibilityLabel("Snapshot sound")
@@ -61,7 +57,7 @@ public final class SnapShotSettingsView: ScopedSettingsPage {
             enable?.isOn = on
             enabledRow?.status = on ? (self.context.snapShotReady?() == true ? "Ready to capture" : "Finish shortcut setup") : "Turn this on to set up snapshots."
             for r in [text, shortcut, soundRow, flash, animations] { r.isHidden = !on }
-            shortcutBox?.value = Self.shortcutLabel(self.client["snapShotShortcut"])
+            shortcutBox?.value = self.client["snapShotShortcut"]
             let selection = self.client.bool("snapShotPlaySound") ? self.client.string("snapShotSound") : "off"
             sound?.selectedIndex = sounds.firstIndex { $0.0 == selection }
         }

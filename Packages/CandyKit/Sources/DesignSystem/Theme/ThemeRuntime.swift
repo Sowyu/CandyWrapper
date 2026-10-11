@@ -41,6 +41,7 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var dark: ThemeRuntimeHalf?
     public var contrast: Int
     public var glassOpacity: Int
+    public var blueOrangeDiff = false
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -70,7 +71,7 @@ public enum ThemeRuntime {
         let old = input
         input = next
         var changed = false
-        if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast {
+        if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -108,8 +109,22 @@ public enum ThemeRuntime {
         let stock = input.contrast == 100
         let light = input.light == nil && stock ? nil : evaluate(input.light, contrast: input.contrast, contexts: (0, 2))
         let dark = input.dark == nil && stock ? nil : evaluate(input.dark, contrast: input.contrast, contexts: (1, 3))
-        return ThemePalettes(light: light?.0 ?? Tokens.light, dark: dark?.0 ?? Tokens.dark,
-                             sidebarLight: light?.1 ?? Tokens.sidebarLight, sidebarDark: dark?.1 ?? Tokens.sidebarDark)
+        func diff(_ palette: Palette, dark: Bool) -> Palette {
+            guard input.blueOrangeDiff else { return palette }
+            // index.css:2086-2099 and the bundled Tailwind theme colors.
+            let addition = ThemeCSSColor.parse(dark ? "oklch(70.7% .165 254.624)" : "oklch(54.6% .245 262.881)")!.token
+            let deletion = ThemeCSSColor.parse(dark ? "oklch(75% .183 55.934)" : "oklch(64.6% .222 41.116)")!.token
+            let members = palette.members
+            return Palette(members: { i in
+                switch Palette.memberNames[i] {
+                case "--diff-addition", "--diff-addition-foreground": return addition
+                case "--diff-deletion", "--diff-deletion-foreground": return deletion
+                default: return members[i]
+                }
+            })
+        }
+        return ThemePalettes(light: diff(light?.0 ?? Tokens.light, dark: false), dark: diff(dark?.0 ?? Tokens.dark, dark: true),
+                             sidebarLight: diff(light?.1 ?? Tokens.sidebarLight, dark: false), sidebarDark: diff(dark?.1 ?? Tokens.sidebarDark, dark: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }

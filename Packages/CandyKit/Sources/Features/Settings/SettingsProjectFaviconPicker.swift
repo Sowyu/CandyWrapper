@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import UniformTypeIdentifiers
 
 /// ProjectFaviconPickerDialog.tsx:30-142, using the shared command palette and its keyboard routing.
 @MainActor final class SettingsProjectFaviconPicker {
@@ -16,14 +17,31 @@ import T3Protocol
         self.context = context; self.member = member; self.onSelect = onSelect
     }
     func present(in window: NSWindow) {
-        controller.setMode(.init(name: "project-favicon", placeholder: "Search image files…", footerActionLabel: "Select icon") { [weak self] _ in
+        var mode = CommandPaletteController.Mode(name: "project-favicon", placeholder: "Search image files…", footerActionLabel: "Select icon") { [weak self] _ in
             guard let self else { return ([], "") }
             let entries = self.paths.map { path in
                 PaletteEntry(value: path, searchTerms: [path], title: (path as NSString).lastPathComponent, description: path, icon: .image,
                              action: .run({ [weak self] in self?.onSelect(path); self?.close() }, keepOpen: false))
             }
             return ([PaletteGroup(value: "project-favicon-files", label: self.member.title, items: entries)], self.message)
-        })
+        }
+        if context.scope.members.allSatisfy({ $0.environmentId == context.scope.primaryId }),
+           ["localhost", "127.0.0.1", "::1"].contains(context.httpBaseURL?(member.environmentId)?.host ?? "") {
+            let browse = ButtonView("Open in Finder", variant: .ghostMuted, size: .xs)
+            browse.action = { [weak self, weak window] in
+                guard let self, let window else { return }
+                let picker = NSOpenPanel()
+                picker.allowedContentTypes = [.image]
+                picker.canChooseDirectories = false; picker.allowsMultipleSelection = false
+                picker.directoryURL = URL(fileURLWithPath: self.member.workspaceRoot, isDirectory: true)
+                picker.beginSheetModal(for: window) { [weak self] response in
+                    guard response == .OK, let url = picker.url, let self else { return }
+                    self.onSelect(url.path); self.close()
+                }
+            }
+            mode.footerTrailing = browse
+        }
+        controller.setMode(mode)
         controller.onQueryChange = { [weak self] in self?.search($0) }
         controller.onClose = { [weak self] in self?.close() }
         let overlay = CommandPaletteOverlay(controller: controller)

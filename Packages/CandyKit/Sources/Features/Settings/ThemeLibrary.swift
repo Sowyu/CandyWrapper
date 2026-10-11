@@ -49,7 +49,7 @@ public final class ThemeLibrary {
     /// Applies the saved choice and follows the contrast and glass settings from then on.
     public func start() {
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -111,7 +111,12 @@ public final class ThemeLibrary {
     public func setEnvironmentThemes(_ values: [JSONValue]) {
         guard values != publishedRaw else { return }
         publishedRaw = values
-        environmentThemes = values.compactMap { value in
+        environmentThemes = values.compactMap(Self.publishedTheme)
+        changed()
+    }
+
+    /// One published theme, or nil when it is invalid or claims a reserved id.
+    public static func publishedTheme(_ value: JSONValue) -> ThemeDefinition? {
             guard let id = value["id"]?.stringValue, ThemePalette.isThemeId(id), !ThemePalette.reservedIds.contains(id),
                   let name = value["name"]?.stringValue, let raw = value["appearance"]?.stringValue,
                   let appearance = ThemeAppearance(rawValue: raw) else { return nil }
@@ -135,8 +140,6 @@ public final class ThemeLibrary {
             return ThemeDefinition(id: id, label: name, appearance: appearance, colors: colors, variants: variants,
                                    managed: seeded && value["colors"] == nil && value["variants"] == nil)
         }
-        changed()
-    }
 
     // MARK: Writes (useTheme.ts setters)
 
@@ -305,6 +308,8 @@ public final class ThemeLibrary {
     /// and glass settings.
     public func apply(client: ClientSettings = ClientSettingsStore.shared.current, app: NSApplication? = NSApp) {
         var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
+        SettingsPanelMotion.durationMs = client.int("panelAnimationDurationMs")
+        input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         let forced: String
         if let preview {
             // `applyThemeColorPreview`: the draft on both sides, in its own appearance.

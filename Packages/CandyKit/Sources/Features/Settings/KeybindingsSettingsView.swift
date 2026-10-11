@@ -211,6 +211,7 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
     var value = "" { didSet { sync() } }
     private(set) var isCapturing = false { didSet { sync(); restyle() } }
     var onRecord: ((String) -> Void)?
+    var onModifierPair: ((String) -> Void)?
     var onCancel: (() -> Void)?
     var onEnd: (() -> Void)?
     /// The text when nothing is recorded (the action editor says "Press shortcut").
@@ -267,6 +268,18 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
         value = binding
         onRecord?(binding)
         window?.makeFirstResponder(superview)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard isCapturing, let onModifierPair else { return }
+        for modifier in ["shift", "meta", "control", "alt"] {
+            var state = SnapShotShortcutState()
+            if state.update(flags: UInt64(event.modifierFlags.rawValue), shortcut: .object(["kind": .string("modifier-pair"), "modifier": .string(modifier)])) {
+                onModifierPair(modifier)
+                window?.makeFirstResponder(superview)
+                return
+            }
+        }
     }
 
     override func layout() {

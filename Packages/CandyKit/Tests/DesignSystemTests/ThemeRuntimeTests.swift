@@ -54,6 +54,21 @@ final class ThemeRuntimeTests: XCTestCase {
         XCTAssertTrue(ThemeRuntime.resolve(ThemeRuntimeInput()).isSame(as: .standard))
     }
 
+    func testBlueOrangeDiffLeavesOtherTokensUnchanged() {
+        var input = ThemeRuntimeInput()
+        input.blueOrangeDiff = true
+        let output = ThemeRuntime.resolve(input)
+        for (palette, stock) in [(output.light, Tokens.light), (output.dark, Tokens.dark)] {
+            for (i, name) in Palette.memberNames.enumerated() where !name.hasPrefix("--diff-") {
+                XCTAssertEqual(palette.members[i], stock.members[i], name)
+            }
+            XCTAssertNotEqual(palette.diffAddition, stock.diffAddition)
+            XCTAssertEqual(palette.diffAddition, palette.diffAdditionForeground)
+            XCTAssertEqual(palette.diffDeletion, palette.diffDeletionForeground)
+        }
+        XCTAssertTrue(ThemeRuntime.resolve(.init()).isSame(as: .standard))
+    }
+
     func testChromiumFixtures() {
         for (key, c) in Self.fixture.cases {
             var roles: [ThemeColorRole: String] = [:]

@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 /// macOS Access and Shortcut steps (SnapShotSetupDialog.tsx:223-410).
 @MainActor
@@ -15,8 +16,16 @@ public final class SnapShotSetupView {
     public var onEnable: (() -> Void)?
     public var tested = false
     private var shortcutStep = false
+    private let shortcutControl = SettingsSnapShotShortcutControl(frame: .zero)
+    private var shortcutConflict: String?
 
-    public init() { dialog.maxWidth = 576; dialog.footerVariant = .bare; render() }
+    public init() {
+        dialog.maxWidth = 576; dialog.footerVariant = .bare
+        shortcutControl.value = ClientSettingsStore.shared.current["snapShotShortcut"]
+        shortcutControl.onChange = { value in ClientSettingsStore.shared.update(["snapShotShortcut": value]) }
+        shortcutControl.onConflict = { [weak self] message in self?.shortcutConflict = message; self?.render() }
+        render()
+    }
 
     public func render() {
         let progress = WizardStepsView(steps: ["Access", "Shortcut"])
@@ -26,11 +35,13 @@ public final class SnapShotSetupView {
         let title = LabelView(shortcutStep ? "Choose your shortcut" : "Allow snapshots", font: DSFont.ui(16, weight: .semibold))
         let description = LabelView(shortcutStep ? "Use both Shift keys, or record a different shortcut." : "Allow each permission, then continue.", font: DSFont.ui(14))
         if shortcutStep {
-            let keys = LabelView("Shift + Shift", font: DSFont.ui(14, weight: .medium))
-            dialog.panelContent = [progress, title, description, keys]
+            let row = SettingsRowView(title: "Capture shortcut", control: shortcutControl)
+            row.status = shortcutConflict
+            dialog.panelContent = [progress, title, description, row]
             let back = ButtonView("Back", variant: .outline)
             back.action = { [weak self] in self?.shortcutStep = false; self?.render() }
             let enable = ButtonView("Enable snapshots")
+            enable.isEnabled = shortcutConflict == nil
             enable.action = { [weak self] in self?.onEnable?() }
             dialog.footerButtons = [back, enable]
         } else {

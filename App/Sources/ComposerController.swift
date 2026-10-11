@@ -27,6 +27,8 @@ final class ComposerController {
     private weak var sidebar: SidebarContentView?
     private var composer: ComposerView { panel.composer }
     private let environments: Environments
+    private var settingsWorkspaceTask: Task<Void, Never>?
+    private var settingsWorkspaceSendPending = false
     private(set) var target: Target?
     private var projection: ThreadProjection?
     /// Sent messages the stream hasn't confirmed, for the open thread.
@@ -285,6 +287,9 @@ final class ComposerController {
             configSubscriptions[environmentId]?.task.cancel()
             configSubscriptions[environmentId] = shell.map { ($0, subscribeConfig($0)) }
             readCapabilities(shell, environmentId: environmentId)
+            if shell == nil, environmentId == environments.primaryId {
+                ThemeLibrary.shared.setEnvironmentThemes([])
+            }
         }
         for (key, attachments) in draftAttachments {
             for attachment in attachments where attachment.environmentId == environmentId && restoredSnapShots.contains(attachment.id) && shell != nil {
@@ -619,6 +624,7 @@ final class ComposerController {
         queuedEdit = nil
         questionRequestId = nil
         target = .draft(session)
+        loadSettingsWorkspaceDefault(project, session: session)
         panel.usageLimitsBanner = nil
         projection = nil
         requests = PendingRequests()
@@ -634,6 +640,26 @@ final class ComposerController {
         scheduleSave()
         syncSidebarDrafts()
         onTargetChange?()
+    }
+
+    /// Read once when an unresolved draft opens; never override a subsequent workspace choice.
+    private func loadSettingsWorkspaceDefault(_ project: ProjectShell, session: DraftSession) {
+        settingsWorkspaceTask?.cancel(); settingsWorkspaceTask = nil
+        settingsWorkspaceSendPending = false
+        guard session.envMode == nil, let environment = project.id.environmentId else { return }
+        let environments = environments
+        settingsWorkspaceTask = Task { [weak self] in
+            let reply = try? await environments.request(environment, "projects.readFile", .object(["cwd": .string(project.workspaceRoot), "relativePath": .string("t3.json")]))
+            guard !Task.isCancelled, let self else { return }
+            self.settingsWorkspaceTask = nil
+            guard case .draft(let current) = self.target, current.draftId == session.draftId,
+                  current.projectId == session.projectId, current.envMode == nil else { return }
+            let settings = ServerSettingsValues(self.serverConfigs[environment]?.settings.raw)
+            let mode = SettingsProjectWorkspaceDefaults.resolve(settings: settings, projectId: project.id.localId.rawValue,
+                legacy: .init(defaultThreadEnvMode: project.defaultThreadEnvMode),
+                contents: reply?["truncated"]?.boolValue == true ? nil : reply?["contents"]?.stringValue)
+            self.updateDraft { $0.envMode = mode == "worktree" ? .worktree : .local }
+        }
     }
 
     /// The group's session. Sessions saved under a project id (before groups) move to the group key.
@@ -700,6 +726,7 @@ final class ComposerController {
     /// (`shouldShowEnvironmentIndicator`, BranchToolbar.logic.ts:59-65), a static label without a choice.
     private func updateRunOn() {
         guard case .draft(let session) = target, let group = group(of: ProjectId(session.projectId)) else {
+            if case .thread = target { return } // GitController supplies the active thread's context.
             panel.showsContextStrip = false
             return
         }
@@ -1130,6 +1157,18 @@ final class ComposerController {
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !threadRewindBusy else { return }
+        if case .draft(let draft) = target, draft.envMode == nil, let task = settingsWorkspaceTask {
+            guard !settingsWorkspaceSendPending else { return }
+            settingsWorkspaceSendPending = true
+            Task { [weak self] in
+                await task.value
+                guard let self else { return }
+                self.settingsWorkspaceSendPending = false
+                guard case .draft(let current) = self.target, current.draftId == draft.draftId, current.projectId == draft.projectId else { return }
+                self.send(text, mode: mode, background: background)
+            }
+            return
+        }
         if case .draft(let draft) = target, ClientSettingsStore.shared.current.bool("loadBalancingEnabled"), draft.environmentSelection == "auto", draft.loadBalancedEnvironmentId == nil {
             toast(.warning, "Auto balance unavailable", "Choose a machine before sending.")
             return
