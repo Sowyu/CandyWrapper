@@ -109,6 +109,10 @@ public enum PullRequestListLogic {
         names.prefix(10).map { String($0.prefix(200)).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
+    /// Compiled once: `parseQuery` runs on every keystroke in the search field.
+    private static let tokenRegex = try! NSRegularExpression(pattern: #"(?:[^\s"]|"[^"]*")+"#)
+    private static let qualifierRegex = try! NSRegularExpression(pattern: #"^(-?)([A-Za-z][A-Za-z0-9_-]*):(.*)$"#, options: [.dotMatchesLineSeparators])
+
     /// `parsePullRequestQuery`: GitHub style qualifiers (`label:`, `-label:`, `author:`, `draft:`,
     /// `review:`, `status:`/`checks:`, and an unknown `key:value` as a namespaced label) split from
     /// the text that is left.
@@ -117,8 +121,6 @@ public enum PullRequestListLogic {
         var labels: [[String]] = []
         var excluded: [String] = []
         var filters = PullRequestListFilters()
-        let tokenRegex = try! NSRegularExpression(pattern: #"(?:[^\s"]|"[^"]*")+"#)
-        let qualifierRegex = try! NSRegularExpression(pattern: #"^(-?)([A-Za-z][A-Za-z0-9_-]*):(.*)$"#, options: [.dotMatchesLineSeparators])
         for m in tokenRegex.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
             let token = String(raw[Range(m.range, in: raw)!])
             let q = qualifierRegex.firstMatch(in: token, range: NSRange(token.startIndex..., in: token))

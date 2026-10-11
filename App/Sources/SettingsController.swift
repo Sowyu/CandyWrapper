@@ -38,6 +38,11 @@ final class SettingsController {
     var extraPages: [SettingsSection: SettingsPageBase] = [:]
     weak var composer: ComposerController?
     var clientObserver: Int?
+    var themeObserver: NSObjectProtocol?
+    isolated deinit {
+        if let clientObserver { ClientSettingsStore.shared.removeObserver(clientObserver) }
+        if let themeObserver { NotificationCenter.default.removeObserver(themeObserver) }
+    }
     private(set) var isOpen = false
     /// Settings opened, changed page or closed (route history).
     var onOnboardingReturn: (() -> Void)?

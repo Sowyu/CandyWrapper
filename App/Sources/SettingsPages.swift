@@ -92,7 +92,7 @@ extension SettingsController {
         }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
         composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
-        NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
+        themeObserver = NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshPages() }
         }
     }

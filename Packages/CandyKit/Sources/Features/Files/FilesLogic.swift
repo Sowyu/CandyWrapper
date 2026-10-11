@@ -145,9 +145,11 @@ public enum FilePicker {
         public var pathMatches: [Int]
     }
 
+    /// Compiled once: `normalize` runs on every keystroke of a file search.
+    private static let leadingMarks = try! NSRegularExpression(pattern: "^[@./]+")
+
     public static func normalize(_ query: String) -> String {
-        let leading = try! NSRegularExpression(pattern: "^[@./]+")
-        return SearchRanking.normalize(query, trimLeading: leading).filter { !$0.isWhitespace }
+        SearchRanking.normalize(query, trimLeading: leadingMarks).filter { !$0.isWhitespace }
     }
 
     static func matchIndices(_ value: String, _ query: String) -> [Int]? {

@@ -23,6 +23,10 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     private var rendering = false
     private var webView: WKWebView?
     private var ready = false
+    /// The page finished loading (the script runs after that).
+    private var pageLoaded = false
+    /// The unpacked script between its background load and its run: `.some(nil)` when it failed.
+    private var script: String??
     private var idle: DispatchWorkItem?
     /// For the memory report and tests.
     public var isLive: Bool { webView != nil }
@@ -94,34 +98,66 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// Mermaid is about 3.5 MB of script: it loads only now, into a page that can reach nothing.
+    /// Mermaid is about 3.5 MB of script: it loads only now, into a page that can reach nothing. The
+    /// page and its web content process start at once while a background task reads and unpacks the
+    /// script; the script runs once both are there, so the main thread never decompresses it.
     private func start() {
         guard webView == nil else { return }
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
+        web.navigationDelegate = self
+        webView = web
+        pageLoaded = false
+        script = nil
+        Task { [weak self] in
+            let text = await Task.detached(priority: .userInitiated) { Self.loadScript() }.value
+            guard let self, self.webView === web else { return }
+            self.script = .some(text)
+            self.injectIfReady()
+        }
+        web.loadHTMLString(Self.page, baseURL: URL(string: "about:blank"))
+    }
+
+    /// The bundled script, unpacked; nil when it is missing or damaged. Runs off the main thread.
+    nonisolated static func loadScript() -> String? {
         guard let url = Bundle.module.url(forResource: "mermaid.min", withExtension: "js.lzma"),
               let packed = try? Data(contentsOf: url), let script = try? (packed as NSData).decompressed(using: .lzma) as Data,
-              let text = String(data: script, encoding: .utf8) else {
+              let text = NSMutableString(data: script, encoding: String.Encoding.utf8.rawValue) else { return nil }
+        // `;0` gives the evaluation a result WebKit can return. The string stays an NSString, so
+        // WebKit reads it on the main thread without transcoding a Swift string.
+        text.append("\n;0")
+        return text as String
+    }
+
+    /// Runs the script once the page has loaded and the script is unpacked, whichever comes last.
+    private func injectIfReady() {
+        guard pageLoaded, let pending = script, let web = webView else { return }
+        script = nil
+        guard let text = pending else {
+            release()
             let failed = queue
             queue.removeAll()
             for q in failed { store(q.key, .failed(message: "Mermaid failed to load.", retryable: true)) }
             return
         }
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .nonPersistent()
-        config.userContentController.addUserScript(WKUserScript(source: text, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1024, height: 768), configuration: config)
-        web.navigationDelegate = self
-        webView = web
-        web.loadHTMLString(Self.page, baseURL: URL(string: "about:blank"))
+        web.evaluateJavaScript(text) { [weak self, weak web] _, _ in
+            MainActor.assumeIsolated {
+                guard let self, let web, self.webView === web else { return }
+                self.ready = true
+                self.pump()
+            }
+        }
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        ready = true
-        pump()
+        pageLoaded = true
+        injectIfReady()
     }
 
     public func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         // The page loads once from its string; diagrams never navigate.
-        decisionHandler(!ready && action.request.url?.absoluteString == "about:blank" ? .allow : .cancel)
+        decisionHandler(!pageLoaded && action.request.url?.absoluteString == "about:blank" ? .allow : .cancel)
     }
 
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -141,6 +177,8 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         webView?.navigationDelegate = nil
         webView = nil
         ready = false
+        pageLoaded = false
+        script = nil
     }
 
     // MARK: Page

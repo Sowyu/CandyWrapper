@@ -1,4 +1,5 @@
 import AppKit
+import CoreVideo
 import DesignSystem
 import T3Protocol
 
@@ -74,8 +75,8 @@ public final class ServerBrowserView: DSView {
     // MARK: Frames
 
     /// Shows a decoded frame. Only the newest one reaches here.
-    public func setFrame(_ image: CGImage) {
-        frameView.image = image
+    public func setFrame(_ frame: CVPixelBuffer) {
+        frameView.buffer = frame
         if !hasFrame {
             hasFrame = true
             onFirstFrame?()
@@ -84,7 +85,7 @@ public final class ServerBrowserView: DSView {
 
     /// Clears the page (a new socket or tab).
     public func reset() {
-        frameView.image = nil
+        frameView.buffer = nil
         hasFrame = false
         viewport = nil
         control = nil
@@ -97,8 +98,8 @@ public final class ServerBrowserView: DSView {
 
     /// The agent's pointer at a page point (`placeAgentCursor`).
     public func showPointer(phase: String, x: Double, y: Double, sequence: Int) {
-        guard let viewport, let image = frameView.image, viewport.width > 0, viewport.height > 0 else { return }
-        let fit = BrowserPointerMap.fittedRect(box: frameView.bounds.size, image: CGSize(width: image.width, height: image.height))
+        guard let viewport, let image = frameView.pixelSize, viewport.width > 0, viewport.height > 0 else { return }
+        let fit = BrowserPointerMap.fittedRect(box: frameView.bounds.size, image: image)
         let left = frameView.frame.minX + fit.minX + x * fit.width / viewport.width
         let top = frameView.frame.minY + fit.minY + y * fit.height / viewport.height
         cursorHidden = control?.controller == .you
@@ -278,9 +279,9 @@ public final class ServerBrowserView: DSView {
     // MARK: Pointer
 
     private func pagePoint(_ event: NSEvent, clamp: Bool) -> CGPoint? {
-        guard hasControl, hasFrame, !contentHidden, let viewport, let image = frameView.image else { return nil }
+        guard hasControl, hasFrame, !contentHidden, let viewport, let image = frameView.pixelSize else { return nil }
         let p = frameView.convert(event.locationInWindow, from: nil)
-        return BrowserPointerMap.pagePoint(p, box: frameView.bounds.size, image: CGSize(width: image.width, height: image.height),
+        return BrowserPointerMap.pagePoint(p, box: frameView.bounds.size, image: image,
                                            viewport: viewport, clamp: clamp)
     }
 
@@ -466,16 +467,13 @@ public enum BrowserKeyMap {
     }
 }
 
-/// The frame layer: the newest image, letterboxed (`object-contain`), redrawn only when it changes.
+/// The frame layer: the newest frame, letterboxed (`object-contain`), redrawn only when it changes.
+/// The layer shows the decoded buffer's IOSurface as it is and commits with the rest of the run loop
+/// pass. Holding the buffer until the next frame keeps its pool from reusing it before that commit.
 final class FrameView: DSView {
-    var image: CGImage? {
-        didSet {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer?.contents = image
-            CATransaction.commit()
-        }
-    }
+    var buffer: CVPixelBuffer? { didSet { layer?.contents = buffer.flatMap { CVPixelBufferGetIOSurface($0)?.takeUnretainedValue() } } }
+    /// The frame's size in device px.
+    var pixelSize: CGSize? { buffer.map { CGSize(width: CVPixelBufferGetWidth($0), height: CVPixelBufferGetHeight($0)) } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

@@ -164,6 +164,40 @@ Server. The app starts its own server only when nothing serves the home, from `e
 
 HUD. ⌥⇧⌘P or "hud" in the palette. It reads `proc_pid_rusage` every 0.5 s with 10% tolerance, only while the window is visible. Frame time is the longest main run loop pass, wake to sleep, since the last sample: a frame's layout, drawing and Core Animation commit happen inside one pass, and measuring it needs no display link. Events are server messages decoded by any socket, counted only while the HUD is shown. During a haiku turn it read 12.3% CPU, a 29.6 ms longest pass, 14.5 events/s and 145 MB. Showing it costs about 4 wakeups/s. Hidden it costs nothing beyond one uncontended lock per received frame.
 
+## Heavy surfaces (2026-10-11, WP8.5)
+
+Release builds of dc64b72 (before) and the WP8.5 working tree (after), both with the bundle id `dev.candywrapper.test.heavy`, against the shared sandbox server, alternating builds in one session. Three other agents built and tested meanwhile (load average 3 to 37), so the numbers below lean on main-thread samples and memory more than on CPU.
+
+### Browser preview, animated page
+
+Workload: a server browser tab in the right panel (about 400x545 pt, 2x) on `scratch/site/anim.html` (a 120 px square rotating every 2 s), served by `python3 -m http.server`. CPU and footprint from `proc_pid_rusage` over 10 s windows (`/tmp/cw-perf/bin/probe rusage`); before and after each window a screenshot checked that our window was frontmost and showing the page, because other agents' windows cover the same spot and an occluded window stops the stream. Main-thread time from `sample <pid> 10`: samples outside the run loop's mach port wait, over all main-thread samples.
+
+| | Before | After |
+|---|---|---|
+| App CPU | 10.0, 10.4% (unchecked runs: 12.0, 10.7%) | 3.6, 3.4, 3.8, 3.5% |
+| Footprint while streaming | 50 to 55 MB | 43 to 45 MB |
+| Main thread busy | 14.0% | 0.2 to 0.7% |
+
+Where the time went before: 969 of the 998 busy main-thread samples sat in `ServerBrowserView.setFrame` → `CA::Transaction::commit` → `CA::Render::copy_image` → `IIOImageProviderInfo::CopyIOSurface` → `AppleJPEGReadPlugin`. The background decode with `kCGImageSourceShouldCacheImmediately` did not help: Core Animation asks the image's ImageIO provider for an IOSurface, and ImageIO decodes the JPEG again, on the main thread, for every frame. Two dead ends on the way: a plain bitmap `CGImage` made CA color-convert every frame on the main thread at commit (17.9% CPU, 215 MB footprint), and an ImageIO draw into our own IOSurface took the main thread to 0.7% but left the total at 12% (1.6 to 1.7 ms of CPU per 800x1090 frame, a new VideoToolbox session per frame inside ImageIO). One VideoToolbox JPEG session per stream costs 0.08 ms of CPU per frame (a throwaway benchmark, 200 frames: ImageIO decode 0.93 ms, ImageIO into an IOSurface 1.6 to 1.7 ms). Colors: the square's center read (207, 50, 173) before and (206, 51, 171) after on screen; the test compares both decode paths within 2 levels.
+
+T3's own client acks each frame on arrival (serverBrowserStream.ts:259-262) and stops the stream only when its surface is not `visible` (ChatView.tsx:10970, ServerBrowserSurface.tsx:371), staying connected under the empty and unreachable states (PreviewView.tsx:1082-1086). We do the same, and also stop while the window is occluded or minimized, as before. The protocol is unchanged.
+
+### Mermaid web view start
+
+Main-thread CPU (`CLOCK_THREAD_CPUTIME_ID` on the main thread) from the first `MermaidDiagrams.result` to the rendered diagram, and the wall time to the diagram, six starts per build in a Debug `swift test` probe, each after the 5 s idle release. Before and after alternated in one session.
+
+| | Before | After |
+|---|---|---|
+| Main thread, cold (first start) | 111 ms | 77 ms |
+| Main thread, warm | 54 to 75 ms | 27 to 29 ms |
+| First diagram, warm | 174 to 223 ms | 150 to 163 ms |
+
+What stays on the main thread is creating the `WKWebView` and handing WebKit the script; the read and LZMA unpack run in a detached task while the web content process starts, which is why the first diagram also shows sooner.
+
+### Terminal panes opened and closed
+
+Malloc stack logging on (`MallocStackLogging=lite`), so the absolute numbers run high: 62.7 MB before, 85.6 MB with three panes, 114.4 MB after closing them through their confirm dialogs (peak 202.8 MB). `heap` finds no terminal views, buffers or attachments after closing. `malloc_history` names what stays: three 4.1 MB `CFData` blocks from CoreText converting the WOFF2 Symbols Nerd Font to TTF on first terminal use (live for the process), and 25 MB of `Malloc Large (empty)` from the confirm dialogs' backing-scale window snapshots (`ModalHost.blurredSnapshot`), freed but kept dirty by the allocator; `malloc_zone_pressure_relief` returned 0 bytes. PROGRESS.md "Known bugs" has the two possible fixes.
+
 ## Milestone 7 wrap-up (2026-10-11)
 
 `2026-10-11-8739e4f-w1` (with `--stream`) against 35e734e, 36 commits apart. Real changes, which M8 picks up:

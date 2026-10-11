@@ -31,6 +31,8 @@ final class TerminalController {
     private let panelHost: Host
     private var metadata: [String: (session: ShellSession, task: Task<Void, Never>, activity: TerminalActivity)] = [:]
     private var modal: ModalHost?
+    private var resizeObserver: NSObjectProtocol?
+    isolated deinit { if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) } }
     /// "Add to chat" from a terminal: the composer inserts the excerpt chip.
     var onAddToChat: ((ComposerContext.TerminalSelection) -> Void)?
 
@@ -99,7 +101,7 @@ final class TerminalController {
         tab.list.onClose = { [weak self] id in self?.confirmClose([id]) { self?.closePanelTerminal(id) } }
         tab.emptyButton.action = { [weak self] in self?.addTerminalSurface() }
         panel.onAddTerminal = { [weak self] in self?.addTerminalSurface() }
-        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
+        resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
                 guard let self, let own = self.panel.window, ObjectIdentifier(own) == window else { return }

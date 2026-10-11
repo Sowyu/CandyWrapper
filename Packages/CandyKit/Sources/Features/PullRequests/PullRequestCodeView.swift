@@ -43,6 +43,7 @@ public final class PullRequestCodeView: DSView {
     private var threadCards: [String: PullRequestReviewThreadCardView] = [:]
     private var orphanCards: [PullRequestReviewThreadCardView] = []
     private var reviewObserver: NSObjectProtocol?
+    isolated deinit { if let reviewObserver { NotificationCenter.default.removeObserver(reviewObserver) } }
     var onCommit: ((String?) -> Void)?
     var onSetViewed: ((String, Bool) -> Void)?
     /// The next slice is wanted (`loadNextSlice`), or a failed one again.

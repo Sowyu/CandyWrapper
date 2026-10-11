@@ -13,7 +13,7 @@ public final class DevicePanelStreamClient {
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var tasks: [Task<Void, Never>] = []
-    private let jpeg = FrameDecoder()
+    private let jpeg = FrameDecoder(decode: JPEGFrame.image)
     private let video = DevicePanelVideoDecoder()
     private let platform: String
     private var stopped = false
