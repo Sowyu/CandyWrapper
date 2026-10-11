@@ -55,6 +55,18 @@ struct ThreadTimelineTests {
         #expect(!t.isPillVisible)
     }
 
+    /// A terminal drawer opening with a thread switch shrinks the viewport; the newest row stays in view.
+    @Test func staysAtTheEndWhenTheViewportShrinks() throws {
+        let items = try Self.manyItems()
+        let t = Self.timeline(Array(items.prefix(80)))
+        #expect(t.followsEnd)
+        t.setFrameSize(NSSize(width: t.frame.width, height: t.frame.height - 280))
+        t.layoutSubtreeIfNeeded()
+        #expect(t.followsEnd)
+        #expect(abs(Self.viewport(t).maxY - t.documentHeight) < 1)
+        #expect(!t.isPillVisible)
+    }
+
     @Test func prependingKeepsTheVisibleRowInPlace() throws {
         let items = try Self.manyItems()
         let t = Self.timeline(Array(items.suffix(150)))

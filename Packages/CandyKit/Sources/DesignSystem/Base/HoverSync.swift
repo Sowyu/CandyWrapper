@@ -7,6 +7,15 @@ public protocol HoverSyncClient: AnyObject {}
 
 extension DSView: HoverSyncClient {}
 
+/// A client whose reveal follows the pointer inside its hovered area (each work log line, a message's
+/// inner group). HoverSync forwards every pointer move to the hovered ones: AppKit sends `mouseMoved` only
+/// to an area it considers entered, and a view that rebuilds its area in `updateTrackingAreas` under a
+/// still pointer gets none until the pointer crosses the new area's edge.
+@MainActor
+public protocol HoverSyncPointerClient: HoverSyncClient {
+    func hoverPointerMoved()
+}
+
 /// Hover that follows the pointer the way Chromium's `:hover` does.
 ///
 /// AppKit sends mouseEntered and mouseExited only when the pointer moves across an area edge. Content
@@ -138,7 +147,10 @@ public final class HoverSync: NSResponder {
 
     @objc private func windowStateChanged(_ note: Notification) { setNeedsSync() }
 
-    public override func mouseMoved(with event: NSEvent) { sync() }
+    public override func mouseMoved(with event: NSEvent) {
+        sync()
+        for entry in hovered.values { (entry.owner as? HoverSyncPointerClient)?.hoverPointerMoved() }
+    }
     public override func mouseEntered(with event: NSEvent) { sync() }
     public override func mouseExited(with event: NSEvent) { sync() }
 
