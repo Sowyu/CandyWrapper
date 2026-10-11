@@ -292,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// One keyboard shortcut dispatcher for the window, fed by T3's keybindings (`Shortcuts`).
     private func installShortcuts(window: NSWindow, layout: SidebarLayoutView, sidebar: SidebarContentView, environments: Environments,
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
+        threads.permissionNotice.openConnections = { [weak settings] in settings?.open(); settings?.show(.connections) }
         let shortcuts = Shortcuts(window: window)
         let palette = PaletteCommands(window: window, sidebar: sidebar, environments: environments, threads: threads,
                                       commands: commands, settings: settings)

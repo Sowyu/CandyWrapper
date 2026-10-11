@@ -271,6 +271,15 @@ final class TerminalController {
         DispatchQueue.main.async { a.surface.focus() }
     }
 
+    /// WorktreeSetupCard's Open terminal selects the already-created script terminal.
+    func openExistingSetupTerminal(_ id: String) {
+        guard threadId != nil else { return }
+        var state = state
+        if !state.terminalIds.contains(id) { state.newTerminal(id) }
+        state.open = true; state.activate(id)
+        self.state = state; refresh(); focusActive(drawerHost, id)
+    }
+
     /// `toggleTerminalVisibility` (ChatView.tsx:4781-4830): opening a thread with no terminals
     /// opens `term-1` on the server first.
     func toggle() {

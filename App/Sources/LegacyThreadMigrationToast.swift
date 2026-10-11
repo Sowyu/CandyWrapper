@@ -77,3 +77,38 @@ final class ProviderUpdateLaunchToast {
             actionTitle: model.phase == "succeeded" ? nil : "Provider settings", action: { [weak self] in self?.openSettings?() }), timeout: model.timeout)
     }
 }
+
+/// PermissionUpdateNotice.tsx:20-75. Check once per connected session, never on a clock.
+@MainActor
+// ponytail: the shared toast offers close plus one inline action, add stacked Dismiss when ToastView gains the source action layout.
+final class ThreadPermissionUpdateNotice {
+    private let environments: Environments
+    private weak var toasts: ToastViewport?
+    var openConnections: (() -> Void)?
+    private var shown: Set<String> = []
+    private var tasks: [String: Task<Void, Never>] = [:]
+    init(environments: Environments, toasts: ToastViewport) { self.environments = environments; self.toasts = toasts }
+    func sessionChanged(_ environmentId: String) {
+        tasks.removeValue(forKey: environmentId)?.cancel()
+        guard !shown.contains(environmentId), !UserDefaults.standard.bool(forKey: key(environmentId)),
+              let shell = environments.session(environmentId) else { return }
+        tasks[environmentId] = Task { [weak self] in
+            guard let session = try? await shell.http.session(token: shell.token), !Task.isCancelled,
+                  session.hasLegacyPermissions, let self, !shown.contains(environmentId), let toasts else { return }
+            shown.insert(environmentId)
+            let label = environments.label(environmentId) ?? environmentId
+            var toastId: Int?
+            let dismiss: @MainActor () -> Void = { [weak self, weak toasts] in
+                guard let self else { return }
+                UserDefaults.standard.set(true, forKey: key(environmentId))
+                if let toastId { toasts?.dismiss(toastId) }
+            }
+            let toast = ToastView(title: "Permissions have changed for \(label)",
+                message: "This connection still uses the old permissions, so some actions may no longer be available. Pair again using a new link with the permissions you need.",
+                actionTitle: "Open Connections", action: { [weak self] in dismiss(); self?.openConnections?() })
+            toastId = toasts.show(toast, timeout: 0)
+            toast.onDidDismiss = { UserDefaults.standard.set(true, forKey: "t3code:permission-update:v1:" + environmentId) }
+        }
+    }
+    private func key(_ environmentId: String) -> String { "t3code:permission-update:v1:" + environmentId }
+}

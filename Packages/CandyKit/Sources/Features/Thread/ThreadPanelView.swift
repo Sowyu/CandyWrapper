@@ -129,12 +129,13 @@ public final class ThreadPanelView: DSView {
     public let findBar = ThreadFindBarView()
     public var findOpen = false { didSet {
         findBar.isHidden = !findOpen
-        if !findOpen { pendingFindMatch = nil }
+        if !findOpen { pendingFindMatch = nil; model.closeThreadFind(); timeline.threadFindMatch = nil }
         needsLayout = true
     } }
     private var pendingFindMatch: ThreadFindResult.Match?
     public func revealThreadFind(_ match: ThreadFindResult.Match) {
         pendingFindMatch = match
+        timeline.threadFindMatch = match
         model.prepareThreadFind(match)
         if timeline.revealFindEntry(match.entryId) { pendingFindMatch = nil }
         else { onLoadEarlier?() }
@@ -162,6 +163,7 @@ public final class ThreadPanelView: DSView {
     public let recoveryBanner = ComposerNoticeBannerView()
     public var showsGoal = false { didSet { if showsGoal != oldValue { needsLayout = true } } }
     public var showsRecovery = false { didSet { if showsRecovery != oldValue { needsLayout = true } } }
+    public let tasksView = ThreadTasksView()
     public let planFollowUpBanner = ComposerNoticeBannerView()
     public var showsPlanFollowUp = false { didSet { if showsPlanFollowUp != oldValue { needsLayout = true } } }
     private let threadFileDrop = ComposerFileDrop()
@@ -302,6 +304,9 @@ public final class ThreadPanelView: DSView {
         questionPanel.isHidden = true
         // Back to front: queue, request panel, composer (each slides under the next).
         addSubview(queue)
+        for banner in [goalBanner, recoveryBanner, planFollowUpBanner] { banner.isHidden = true; addSubview(banner) }
+        tasksView.isHidden = true; addSubview(tasksView)
+        tasksView.onHeightChange = { [weak self] in self?.needsLayout = true }
         environmentBanner.isHidden = true
         addSubview(environmentBanner)
         serverUpdateBanner.isHidden = true
@@ -745,6 +750,11 @@ public final class ThreadPanelView: DSView {
             let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
+        }
+        tasksView.isHidden = !docked || tasksView.steps.isEmpty
+        if !tasksView.isHidden {
+            tasksView.frame = NSRect(x: bannerX, y: top + overlap - tasksView.height, width: bannerWidth, height: tasksView.height)
+            top = tasksView.frame.minY
         }
         let planShown = docked && showsPlanFollowUp
         planFollowUpBanner.isHidden = !planShown

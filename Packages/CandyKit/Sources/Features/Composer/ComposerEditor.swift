@@ -47,6 +47,27 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
     /// Paste: records from the clipboard fragment for the pasted links.
     var onPasteRecords: (([String: JSONValue]) -> Void)?
 
+    /// Double-clicking a citation chip opens its comment editor (AssistantCitationCommentEditor). Checks the
+    /// character at the insertion point and the one before it, since a click on a chip's right half lands after it.
+    private func editCitation(near insertion: Int) -> Bool {
+        guard let window, let storage = textStorage else { return false }
+        let candidates = [insertion, insertion - 1].filter { $0 >= 0 && $0 < storage.length }
+        guard let index = candidates.first(where: { storage.attribute(.attachment, at: $0, effectiveRange: nil) is ComposerChipAttachment }),
+              let chip = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerChipAttachment,
+              let token = ComposerInlineTokens.collect(chip.source).first, case .citation(let citation) = token.kind else { return false }
+        let source = chip.source
+        let sourceOffset = expanded(NSRange(location: 0, length: index)).utf16.count
+        ThreadAssistantCitationEditor.present(citation, in: window) { [weak self] edited in
+            guard let self else { return }
+            let full = NSMutableString(string: self.expandedText)
+            let range = NSRange(location: sourceOffset, length: source.utf16.count)
+            guard NSMaxRange(range) <= full.length, full.substring(with: range) == source else { return }
+            full.replaceCharacters(in: range, with: edited.markdown)
+            self.setText(full as String)
+        }
+        return true
+    }
+
     enum MenuKey { case up, down, select, tab, escape }
 
     init() {
@@ -498,6 +519,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate {
         onInteract?()
         let point = convert(event.locationInWindow, from: nil)
         let index = characterIndexForInsertion(at: point)
+        if event.clickCount == 2, editCitation(near: index) { return }
         if let storage = textStorage, index < storage.length {
             if let chip = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerChipAttachment,
                onOpenChip?(chip.source) == true { return }

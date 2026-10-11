@@ -9,6 +9,7 @@ import T3Store
 // ponytail: one backing layer per message; a very long message gets a large layer. Switch to tiled drawing if memory shows it.
 public final class MarkdownView: DSView {
     /// Search changes only the paint of visible rows, never their Markdown layout.
+    public var threadFindOccurrence: Int? { didSet { if threadFindOccurrence != oldValue { needsDisplay = true } } }
     public var threadFindQuery = "" { didSet { if threadFindQuery != oldValue { needsDisplay = true } } }
 
     public var document = MarkdownDocument(blocks: []) {
@@ -54,6 +55,7 @@ public final class MarkdownView: DSView {
     /// Opens, menus and previews web links for every Markdown view (the app sets it: it knows the
     /// open thread, the browser panel and the pull request reads). Without one a click opens the
     /// system browser and the menu offers that and Copy Link.
+    public static var onOpenCitation: ((ThreadAssistantCitation) -> Void)?
     public static weak var linkHandler: MarkdownLinkHandler?
     private var hoveredChip: Int? {
         didSet { if hoveredChip != oldValue { needsDisplay = true } }
@@ -259,17 +261,18 @@ public final class MarkdownView: DSView {
         ctx.setAllowsFontSmoothing(true)
         let dark = effectiveAppearance.isDark
         var chipIndex = -1
+        var findOccurrence = 0
         for item in layout(forWidth: bounds.width).items {
             switch item {
             case .text(let box, let origin):
-                guard origin.y <= dirtyRect.maxY, origin.y + box.height >= dirtyRect.minY else { continue }
                 if !threadFindQuery.isEmpty {
                     let text = box.text as NSString
                     var remaining = NSRange(location: 0, length: text.length)
                     while remaining.length > 0 {
                         let range = text.range(of: threadFindQuery, options: [.caseInsensitive], range: remaining)
                         if range.location == NSNotFound { break }
-                        ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(0.32).cgColor)
+                        ctx.setFillColor((findOccurrence == threadFindOccurrence ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.32)).cgColor)
+                        findOccurrence += 1
                         for span in box.spans(range) {
                             ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
                                             width: span.x1 - span.x0, height: box.lineHeight))
@@ -277,7 +280,7 @@ public final class MarkdownView: DSView {
                         remaining = NSRange(location: range.upperBound, length: text.length - range.upperBound)
                     }
                 }
-                box.draw(in: ctx, at: origin)
+                if origin.y <= dirtyRect.maxY, origin.y + box.height >= dirtyRect.minY { box.draw(in: ctx, at: origin) }
             case .box(let rect, let fill, let border, let radius):
                 drawBox(rect, fill: fill, border: border, radius: radius, in: ctx)
             case .glyphs(let string, let point):
@@ -540,7 +543,9 @@ private final class MarkdownLinkHitView: NSView {
         tooltip.hide()
         pending?.cancel()
         if previewing { previewing = false; handler?.hideLinkPreview(anchor: self) }
-        if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
+        if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
+            ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -570,7 +575,9 @@ private final class MarkdownLinkHitView: NSView {
     override func accessibilityLabel() -> String? { url?.absoluteString }
     override func accessibilityPerformPress() -> Bool {
         guard let url, let owner else { return false }
-        if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
+        if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
+            ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
         return true
     }
 }

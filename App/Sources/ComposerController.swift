@@ -35,7 +35,12 @@ final class ComposerController {
     private var pendingMessageId: MessageId?
     private var resuming = false
     private var threadRewindBusy = false
+    private var threadWorktreeSetupTask: Task<Void, Never>?
+    private var threadWorktreeSetupTarget: ThreadId?
     private var threadFindTask: Task<Void, Never>?
+    private var threadFindRefreshTask: Task<Void, Never>?
+    private var threadFindSearching = false
+    private var threadFindRefreshPending = false
     private var threadFindResult: ThreadFindResult?
     private var threadFindGeneration = 0
     private var threadFindTarget: ThreadId?
@@ -803,6 +808,10 @@ final class ComposerController {
     func projectionChanged(_ projection: ThreadProjection?, threadId: ThreadId) {
         guard target == .thread(threadId) else { return }
         self.projection = projection
+        if panel.findOpen, !panel.findBar.input.text.isEmpty {
+            threadFindRefreshPending = true
+            scheduleThreadFindRefresh()
+        }
         requests = projection.map(PendingRequests.derive) ?? PendingRequests()
         // A pending approval or question settles the local send (ChatView.logic.ts:1236-1238).
         if !requests.isEmpty { pendingMessageId = nil }
@@ -834,6 +843,8 @@ final class ComposerController {
         panel.diffPanel.reviewComments = contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") }
         if threadFindTarget != openThreadId { closeThreadFind() }
 
+        syncWorktreeSetup()
+        panel.tasksView.steps = ThreadTaskStep.derive(projection)
         composer.contextWindowMeter.usage = ThreadContextWindowUsage.derive(projection)
         composer.needsLayout = true
         let runs = projection?.runs ?? []
@@ -2156,6 +2167,9 @@ extension ComposerController {
             return true
         }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
+        panel.model.attachmentMediaURL = { [weak self] id in
+            await self?.mediaAttachmentURL(id)
+        }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover)
@@ -3008,6 +3022,8 @@ extension ComposerController {
         let wasOpen = panel.findOpen
         threadFindGeneration += 1
         threadFindTask?.cancel(); threadFindTask = nil
+        threadFindRefreshTask?.cancel(); threadFindRefreshTask = nil
+        threadFindSearching = false; threadFindRefreshPending = false
         threadFindResult = nil; threadFindTarget = nil
         panel.findOpen = false
         panel.timeline.threadFindQuery = ""
@@ -3015,8 +3031,20 @@ extension ComposerController {
         if wasOpen { focusComposer() }
     }
 
-    // ponytail: unary search covers loaded message text; add progressive responses and exact occurrence navigation with the full find port
-    private func searchThread(delta: Int = 0) {
+    private func scheduleThreadFindRefresh() {
+        guard !threadFindSearching, threadFindRefreshTask == nil, threadFindRefreshPending else { return }
+        threadFindRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+            guard let self else { return }
+            self.threadFindRefreshTask = nil
+            self.threadFindRefreshPending = false
+            self.searchThread(preserveSelection: true)
+        }
+    }
+
+    private func searchThread(delta: Int = 0, preserveSelection: Bool = false) {
+        if delta != 0, threadFindResult?.complete == false { return }
+        threadFindRefreshTask?.cancel(); threadFindRefreshTask = nil
         threadFindGeneration += 1
         threadFindTask?.cancel()
         let generation = threadFindGeneration
@@ -3024,30 +3052,59 @@ extension ComposerController {
         let query = String(panel.findBar.input.text.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
         panel.timeline.threadFindQuery = query
         let old = threadFindResult
-        if delta == 0 { threadFindResult = nil }
+        if delta == 0 && !preserveSelection { threadFindResult = nil }
+        threadFindSearching = !query.isEmpty
         panel.findBar.present(query: query, index: 0, total: 0, loading: !query.isEmpty)
         guard !query.isEmpty else { return }
         var payload: [String: JSONValue] = ["threadId": .string(id.localId.rawValue), "query": .string(query)]
-        if delta != 0, let match = old?.match {
+        if delta != 0 || preserveSelection, let match = old?.match {
             payload["start"] = .object(["entryId": .string(match.entryId), "occurrence": .number(Double(match.occurrence))])
             payload["offset"] = .number(Double(delta))
         }
         let supervisor = shell.supervisor
+        let progressive = serverConfig.capabilities.contains("threadFindProgressive")
+        let requestPayload = JSONValue.object(payload)
         threadFindTask = Task { [weak self] in
             do {
                 if delta == 0 { try await Task.sleep(for: .milliseconds(100)) }
                 try Task.checkCancellation()
-                let json = try await supervisor.request("orchestration.searchThread", payload: .object(payload))
-                let result = try json.decode(as: ThreadFindResult.self)
-                guard let self, !Task.isCancelled, self.threadFindGeneration == generation, self.openThreadId == id else { return }
-                self.threadFindResult = result
-                self.panel.findBar.present(query: query, index: result.activeIndex, total: result.totalMatches)
-                if let match = result.match { self.panel.revealThreadFind(match) }
+                guard let self, self.threadFindGeneration == generation else { return }
+                if progressive {
+                    self.threadFindTask = supervisor.subscribe("orchestration.searchThreadStream", payload: { requestPayload }) { [weak self] event in
+                        await MainActor.run {
+                            guard let self, self.threadFindGeneration == generation, self.openThreadId == id else { return }
+                            switch event {
+                            case .value(let json):
+                                do { self.applyThreadFind(try json.decode(as: ThreadFindResult.self), query: query) }
+                                catch { self.panel.findBar.present(query: query, index: 0, total: 0, failed: true) }
+                            case .interrupted:
+                                self.threadFindSearching = false
+                                self.threadFindTask?.cancel()
+                                self.panel.findBar.present(query: query, index: 0, total: 0, failed: true)
+                            case .subscribed: break
+                            }
+                        }
+                    }
+                } else {
+                    let json = try await supervisor.request("orchestration.searchThread", payload: requestPayload)
+                    guard !Task.isCancelled, self.threadFindGeneration == generation, self.openThreadId == id else { return }
+                    self.applyThreadFind(try json.decode(as: ThreadFindResult.self), query: query)
+                }
             } catch {
                 guard let self, !Task.isCancelled, self.threadFindGeneration == generation else { return }
+                self.threadFindSearching = false
                 self.panel.findBar.present(query: query, index: 0, total: 0, failed: true)
             }
         }
+    }
+
+    private func applyThreadFind(_ result: ThreadFindResult, query: String) {
+        let changed = threadFindResult?.match != result.match
+        threadFindResult = result
+        threadFindSearching = result.complete == false
+        panel.findBar.present(query: query, index: result.activeIndex, total: result.totalMatches, counting: threadFindSearching)
+        if changed, let match = result.match { panel.revealThreadFind(match) }
+        if !threadFindSearching { scheduleThreadFindRefresh() }
     }
 }
 
@@ -3061,10 +3118,6 @@ extension ComposerController {
         }
         guard !composer.runState.canInterrupt, pendingMessageId == nil, !threadRewindBusy else {
             toast(.warning, "Interrupt the current turn before reverting checkpoints."); return
-        }
-        // ponytail: attachment prompts are not rewound until their files can be staged before rollback; add the download-and-reupload transaction with attachment recovery
-        guard message.attachments.isEmpty, message.context == nil else {
-            toast(.warning, "This prompt contains attachments or context that cannot yet be restored."); return
         }
         guard ComposerAttachmentRules.uploadBlockReason(currentAttachments.map(\.status)) == nil else {
             toast(.warning, "Wait for attachments to finish preparing before rewinding."); return
@@ -3085,21 +3138,73 @@ extension ComposerController {
             self.threadRewindBusy = true; self.refresh()
             Task {
                 defer { self.threadRewindBusy = false; self.refresh() }
+                var staged: [ComposerAttachment] = []
+                var minted: [String] = []
+                var dispatched = false
+                let observer = ThreadPromptRewindObserver(supervisor: supervisor, threadId: id.localId, messageId: message.id)
+                defer { observer.stop() }
                 do {
+                    guard let sourceShell = self.environments.session(id.environmentId) else { throw RewindPreparationError("The environment is not connected.") }
+                    if (self.draftAttachments[key]?.count ?? 0) + message.attachments.count > ComposerAttachmentRules.maxAttachments {
+                        throw RewindPreparationError("Make room for this message's attachments in the composer before rewinding.")
+                    }
+                    for value in message.attachments {
+                        guard let type = value["type"]?.stringValue, let kind = ComposerAttachment.Kind(rawValue: type),
+                              let oldId = value["id"]?.stringValue, let name = value["name"]?.stringValue,
+                              let mime = value["mimeType"]?.stringValue else { throw RewindPreparationError("This message has an attachment that cannot be restored.") }
+                        let asset = try await supervisor.request("assets.createUrl", payload: .object(["resource": .object([
+                            "_tag": .string("attachment"), "attachmentId": .string(oldId), "fileName": .string(name), "mimeType": .string(mime)])]))
+                        guard let relative = asset["relativeUrl"]?.stringValue, let url = URL(string: relative, relativeTo: sourceShell.http.baseURL)?.absoluteURL else {
+                            throw RewindPreparationError("The environment returned an invalid attachment URL.")
+                        }
+                        let (temp, response) = try await URLSession.shared.download(for: URLRequest(url: url, timeoutInterval: 30))
+                        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                            throw RewindPreparationError("Could not restore attachment: " + name)
+                        }
+                        let file = Self.attachmentWorkDirectory.appendingPathComponent(UUID().uuidString)
+                        try FileManager.default.createDirectory(at: Self.attachmentWorkDirectory, withIntermediateDirectories: true)
+                        try FileManager.default.moveItem(at: temp, to: file)
+                        let bytes = (try file.resourceValues(forKeys: [.fileSizeKey])).fileSize ?? 0
+                        var attachment = ComposerAttachment(kind: kind, name: name, mimeType: mime, sizeBytes: bytes, fileURL: file, environmentId: sourceShell.environmentId)
+                        staged.append(attachment)
+                        let upload = await Self.uploadAttachment(supervisor: supervisor, base: sourceShell.http.baseURL, type: type, name: name, mimeType: mime,
+                            sizeBytes: bytes, file: file, onMinted: { minted.append($0) }, onProgress: { _ in })
+                        guard case .uploaded(let newId) = upload else { throw RewindPreparationError("Could not restore attachment: " + name) }
+                        attachment.attachmentId = newId; attachment.status = .ready
+                        staged[staged.count - 1] = attachment
+                    }
+                    try await observer.wait(present: true)
+                    // Recheck mutable guards after staging; never rewind a turn started meanwhile.
+                    guard self.openThreadId == id, !self.composer.runState.canInterrupt, self.pendingMessageId == nil,
+                          (self.draftAttachments[key]?.count ?? 0) + staged.count <= ComposerAttachmentRules.maxAttachments else {
+                        throw RewindPreparationError("The thread changed while preparing the rewind. Try again.")
+                    }
+                    dispatched = true
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: ThreadPromptRewind.command(threadId: id.localId, checkpoint: checkpoint, restoreFiles: restoreFiles))
-                    // ponytail: bounded confirmation waits only during rollback; replace with scoped projection observation when attachment staging is added
-                    for _ in 0..<100 {
-                        if self.openThreadId != id { break }
-                        if self.projection?.messages.contains(where: { $0.id == message.id }) == false { break }
-                        try await Task.sleep(for: .milliseconds(100))
+                    try await observer.wait(present: false)
+                    let recovery = ThreadPromptAttachmentRestore.restore(text: message.text, context: message.context, attachments: message.attachments, staged: staged)
+                    self.draftAttachments[key, default: []] += staged
+                    for record in recovery.records {
+                        if let contextId = record["contextId"]?.stringValue { self.menuState.records[contextId] = record }
                     }
-                    guard self.openThreadId != id || self.projection?.messages.contains(where: { $0.id == message.id }) == false else {
-                        self.toast(.error, "The conversation has not confirmed the rewind. Your draft is unchanged."); return
-                    }
-                    let restored = ThreadPromptRewind.restoredPrompt(draft: self.prompts[key] ?? "", message: message.text)
+                    let restored = ThreadPromptRewind.restoredPrompt(draft: self.prompts[key] ?? "", message: recovery.text)
                     self.prompts[key] = restored; self.scheduleSave()
                     if self.draftKey == key { self.composer.text = restored; self.focusComposer() }
-                } catch { self.toast(.error, "Failed to revert thread state.", error.localizedDescription) }
+                } catch {
+                    if dispatched {
+                        // The server may have applied rollback before a transport error. Keep staged bytes recoverable.
+                        self.draftAttachments[key, default: []] += staged
+                        let recovery = ThreadPromptAttachmentRestore.restore(text: message.text, context: message.context, attachments: message.attachments, staged: staged)
+                        self.prompts[key] = ThreadPromptRewind.restoredPrompt(draft: self.prompts[key] ?? "", message: recovery.text)
+                        for record in recovery.records { if let contextId = record["contextId"]?.stringValue { self.menuState.records[contextId] = record } }
+                        if self.draftKey == key { self.composer.text = self.prompts[key] ?? "" }
+                        self.scheduleSave()
+                    } else {
+                        for upload in minted { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(upload)])) }
+                        for attachment in staged { try? FileManager.default.removeItem(at: attachment.fileURL) }
+                    }
+                    self.toast(.error, "Failed to revert thread state.", error.localizedDescription)
+                }
             }
         }
         keep.action = { perform(false) }
@@ -3161,6 +3266,93 @@ extension ComposerController {
         Task { [weak self] in
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
             catch { self?.toast(.error, "Could not change limit recovery.", error.localizedDescription) }
+        }
+    }
+}
+
+/// A scoped observer stays alive across navigation until rollback is confirmed.
+/// No polling: ThreadStore changes resume the pending continuation.
+@MainActor
+private final class ThreadPromptRewindObserver {
+    private let store: ThreadStore
+    private let messageId: MessageId
+    private var subscription: Task<Void, Never>?
+    private var deadline: Task<Void, Never>?
+    private var waiting: (Bool, CheckedContinuation<Void, Error>)?
+    private var present: Bool?
+    init(supervisor: ConnectionSupervisor, threadId: ThreadId, messageId: MessageId) {
+        self.messageId = messageId
+        store = ThreadStore(threadId: threadId, onChange: {})
+        let store = self.store
+        subscription = supervisor.subscribe("orchestration.subscribeThread", payload: {
+            ThreadSession.encode(await store.subscribeInput())
+        }) { [weak self] event in
+            guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
+            await store.apply([item])
+            guard let update = await store.takeUpdate(), let projection = update.projection else { return }
+            let contains = projection.messages.contains { $0.id == messageId }
+            await self?.received(contains)
+        }
+    }
+    private func received(_ value: Bool) {
+        present = value
+        if let (expected, continuation) = waiting, expected == value {
+            waiting = nil; deadline?.cancel(); deadline = nil; continuation.resume()
+        }
+    }
+    func wait(present expected: Bool) async throws {
+        if present == expected { return }
+        try await withCheckedThrowingContinuation { continuation in
+            waiting = (expected, continuation)
+            deadline = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                guard let self, let (_, continuation) = waiting else { return }
+                waiting = nil
+                continuation.resume(throwing: NSError(domain: "ThreadPromptRewind", code: 1, userInfo: [NSLocalizedDescriptionKey: "The conversation has not confirmed the rewind."]))
+            }
+        }
+    }
+    func stop() { subscription?.cancel(); deadline?.cancel(); subscription = nil; deadline = nil }
+}
+
+private struct RewindPreparationError: LocalizedError { var errorDescription: String?; init(_ message: String) { errorDescription = message } }
+
+
+extension ComposerController {
+    fileprivate func mediaAttachmentURL(_ id: String) async -> URL? {
+        guard let shell else { return nil }
+        let base = shell.http.baseURL
+        guard let result = try? await shell.supervisor.request("assets.createUrl", payload: .object([
+            "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(id)])])),
+              let relative = result["relativeUrl"]?.stringValue else { return nil }
+        return URL(string: relative, relativeTo: base)?.absoluteURL
+    }
+}
+
+
+extension ComposerController {
+    private func syncWorktreeSetup() {
+        let target = projection?.thread.worktreePath != nil || projection?.runs.last?.status.rawValue == "preparing" ? openThreadId : nil
+        guard threadWorktreeSetupTarget != target else { return }
+        threadWorktreeSetupTask?.cancel(); threadWorktreeSetupTask = nil
+        threadWorktreeSetupTarget = target
+        panel.timeline.worktreeSetup.snapshot = nil
+        guard let target, let supervisor = shell?.supervisor else { return }
+        panel.timeline.worktreeSetup.onCancel = { [weak self] in
+            guard self?.openThreadId == target else { return }
+            Task { do { _ = try await supervisor.request("worktreeSetup.cancel", payload: .object(["threadId": .string(target.localId.rawValue)])) }
+                catch { self?.toast(.error, "Could not cancel worktree setup", error.localizedDescription) } }
+        }
+        threadWorktreeSetupTask = supervisor.subscribe("subscribeWorktreeSetup", payload: { .object(["threadId": .string(target.localId.rawValue)]) }) { [weak self] event in
+            guard case .value(let json) = event else { return }
+            let snapshot = try? json.decode(as: ThreadWorktreeSetupSnapshot.self)
+            await MainActor.run {
+                guard let self, self.threadWorktreeSetupTarget == target else { return }
+                if let snapshot, snapshot.threadId == target.localId.rawValue,
+                   snapshot.sequence >= (self.panel.timeline.worktreeSetup.snapshot?.sequence ?? -1) {
+                    self.panel.timeline.worktreeSetup.snapshot = snapshot
+                }
+            }
         }
     }
 }

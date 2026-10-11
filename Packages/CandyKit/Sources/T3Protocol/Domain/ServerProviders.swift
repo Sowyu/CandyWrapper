@@ -382,7 +382,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
-             scratchWorkspaceRoot, newProjectsRoot
+             scratchWorkspaceRoot, newProjectsRoot, threadFind, threadFindProgressive
     }
 
     public init(from decoder: Decoder) throws {
@@ -393,6 +393,9 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         let environment = try? c.decodeIfPresent(JSONValue.self, forKey: .environment)
         platformOS = environment?["platform"]?["os"]?.stringValue
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
+        // These flags live at ServerConfig's top level (server.ts:687-688).
+        if try c.decodeIfPresent(Bool.self, forKey: .threadFind) == true { capabilities.insert("threadFind") }
+        if try c.decodeIfPresent(Bool.self, forKey: .threadFindProgressive) == true { capabilities.insert("threadFindProgressive") }
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
         remoteOpenTargets = (try? c.decodeIfPresent([JSONValue].self, forKey: .remoteOpenTargets)) ?? []

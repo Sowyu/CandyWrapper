@@ -1,0 +1,30 @@
+{
+  "inspector-failed" : {
+    "height" : 78.25,
+    "width" : 320
+  },
+  "inspector-file" : {
+    "height" : 51.125,
+    "width" : 320
+  },
+  "minimap-0" : {
+    "height" : 42,
+    "width" : 40
+  },
+  "minimap-2" : {
+    "height" : 42,
+    "width" : 40
+  },
+  "tasks-3-1" : {
+    "height" : 51,
+    "width" : 600
+  },
+  "tasks-3-3" : {
+    "height" : 51,
+    "width" : 600
+  },
+  "tasks-11-2" : {
+    "height" : 51,
+    "width" : 600
+  }
+}

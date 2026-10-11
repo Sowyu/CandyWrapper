@@ -17,7 +17,7 @@ struct LocalServerIntegrationTests {
     static let keychain = CredentialStore(service: "dev.candywrapper.test.local-server.\(ProcessInfo.processInfo.processIdentifier)")
 
     static func configuration() throws -> LocalServerConfiguration {
-        guard let binary = LocalServerDiscovery.resolveBinary(home: LocalServerDiscovery.defaultHome, path: path) else {
+        guard let binary = ProcessInfo.processInfo.environment["CANDY_TEST_LOCALSERVER_BINARY"].map({ URL(fileURLWithPath: $0) }) ?? LocalServerDiscovery.resolveBinary(home: LocalServerDiscovery.defaultHome, path: path) else {
             throw LocalServerLaunchError.notReady
         }
         precondition(!home.path.hasPrefix(LocalServerDiscovery.defaultHome.path), "never start a server against ~/.t3")

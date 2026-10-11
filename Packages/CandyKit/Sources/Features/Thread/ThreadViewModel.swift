@@ -71,11 +71,15 @@ public final class ThreadViewModel {
     // ponytail: unwired; the app sets it once the files panel and open-in-editor exist
     public var openFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
     /// A sent image at a pixel side (`assets.createUrl` for the attachment, decoded at that size).
+    public var attachmentMediaURL: (@Sendable (_ attachmentId: String) async -> URL?)?
     public var attachmentImage: (@Sendable (_ attachmentId: String, _ side: Int, _ cover: Bool) async -> CGImage?)?
     /// A click on a sent image: the message's images and the one clicked.
     public var onExpandImage: (([ExpandedImagePreviewView.Item], Int) -> Void)?
 
     /// Turn folds, superseded attempts and tool groups the user opened (row pass inputs).
+    private var findOpenedRuns: Set<RunId> = []
+    private var findOpenedAttempts: Set<RunAttemptId> = []
+    private var findOpenedMessages: Set<String> = []
     private var expandedRunIds: Set<RunId> = []
     private var expandedAttemptIds: Set<RunAttemptId> = []
     private var expandedWorkGroupIds: Set<String> = []
@@ -179,6 +183,7 @@ public final class ThreadViewModel {
             generation += 1
             rowsTask = nil
             rowsWanted = false
+            findOpenedRuns = []; findOpenedAttempts = []; findOpenedMessages = []
             expandedRunIds = []; expandedAttemptIds = []; expandedWorkGroupIds = []
             expandedEntries = []; expandedMessages = []; expandedPlans = []
             expandedChangedFiles = []; folderOverrides = [:]
@@ -201,24 +206,32 @@ public final class ThreadViewModel {
         var changed = false
         if let run = match.runId.map { RunId($0) } {
             changed = expandedRunIds.insert(run).inserted
+            if changed { findOpenedRuns.insert(run) }
             for attempt in projection?.attempts ?? [] where attempt.runId == run {
-                changed = expandedAttemptIds.insert(attempt.id).inserted || changed
+                if expandedAttemptIds.insert(attempt.id).inserted { findOpenedAttempts.insert(attempt.id); changed = true }
             }
         }
         if changed { derive() }
         if let row = items.first(where: { $0.id == match.entryId }), let message = row.row.message,
-           expandedMessages.insert(message.id.rawValue).inserted { refreshItems() }
+           expandedMessages.insert(message.id.rawValue).inserted { findOpenedMessages.insert(message.id.rawValue); refreshItems() }
     }
 
-    func toggleRun(_ id: RunId) { expandedRunIds.formSymmetricDifference([id]); derive() }
-    func toggleAttempt(_ id: RunAttemptId) { expandedAttemptIds.formSymmetricDifference([id]); derive() }
+    public func closeThreadFind() {
+        let changed = !findOpenedRuns.isEmpty || !findOpenedAttempts.isEmpty || !findOpenedMessages.isEmpty
+        expandedRunIds.subtract(findOpenedRuns); expandedAttemptIds.subtract(findOpenedAttempts); expandedMessages.subtract(findOpenedMessages)
+        findOpenedRuns = []; findOpenedAttempts = []; findOpenedMessages = []
+        if changed { derive(); refreshItems() }
+    }
+
+    func toggleRun(_ id: RunId) { findOpenedRuns.remove(id); expandedRunIds.formSymmetricDifference([id]); derive() }
+    func toggleAttempt(_ id: RunAttemptId) { findOpenedAttempts.remove(id); expandedAttemptIds.formSymmetricDifference([id]); derive() }
     func toggleGroup(_ id: String) { expandedWorkGroupIds.formSymmetricDifference([id]); derive() }
     func toggleEntry(_ id: String) {
         expandedEntries.formSymmetricDifference([id])
         if !expandedEntries.contains(id), outputs[id] != nil { scheduleEviction(id) }
         refreshItems()
     }
-    func toggleMessage(_ id: String) { expandedMessages.formSymmetricDifference([id]); refreshItems() }
+    func toggleMessage(_ id: String) { findOpenedMessages.remove(id); expandedMessages.formSymmetricDifference([id]); refreshItems() }
     func togglePlan(_ id: String) { expandedPlans.formSymmetricDifference([id]); refreshItems() }
     func toggleChangedFiles(_ run: RunId) {
         expandedChangedFiles.formSymmetricDifference([run])

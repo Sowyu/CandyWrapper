@@ -10,6 +10,7 @@ public struct ComposerChipLook: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         case mention(path: String)
         case skill
+        case citation
         case thread
         /// `open`, `draft`, `merged`, `closed`, or nil for a pull request whose state is unknown.
         case pullRequest(state: String?)
@@ -42,6 +43,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
             return ComposerChipLook(kind: .mention(path: path), label: base.isEmpty ? path : base)
+        case .citation(let citation): return ComposerChipLook(kind: .citation, label: citation.label)
         case .skill(let name):
             return ComposerChipLook(kind: .skill, label: skillLabel(name))
         case .context(let kind, let contextId, let label):
@@ -64,6 +66,7 @@ public struct ComposerChipLook: Equatable, Sendable {
     var accent: NSColor? {
         switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
+        case .citation: OKLab.oklch(0.62, 0.12, 190)
         case .skill: OKLab.oklch(0.62, 0.16, 322)
         // ponytail: the image accent stays T3's default; T3 tints it with the picture's average color once loaded
         case .image: OKLab.oklch(0.62, 0.16, 16)
@@ -90,6 +93,7 @@ public struct ComposerChipLook: Equatable, Sendable {
                                     basename: (path as NSString).lastPathComponent, line: nil, column: nil)
             let (definition, color) = FileChipStyle.icon(for: meta)
             return (definition, color)
+        case .citation: return (IconName.quote.definition, nil)
         case .skill: return (IconName.package.definition, nil)
         case .image: return (IconName.image.definition, nil)
         case .file(let name):

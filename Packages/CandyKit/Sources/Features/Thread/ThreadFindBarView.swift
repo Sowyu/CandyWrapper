@@ -33,10 +33,10 @@ public final class ThreadFindBarView: DSView {
         }
         present(query: "", index: 0, total: 0)
     }
-    public func present(query: String, index: Int, total: Int, loading: Bool = false, failed: Bool = false) {
-        count.text = failed ? "Search failed" : loading ? "Searching…" : query.isEmpty ? "" : total == 0 ? "0/0" : "\(index + 1)/\(total)"
-        count.color = !query.isEmpty && total == 0 && !loading && !failed ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
-        previous.isEnabled = total > 0 && !loading && !failed
+    public func present(query: String, index: Int, total: Int, loading: Bool = false, failed: Bool = false, counting: Bool = false) {
+        count.text = failed ? "Search failed" : counting ? "1/…" : loading ? "Searching…" : query.isEmpty ? "" : total == 0 ? "0/0" : "\(index + 1)/\(total)"
+        count.color = !query.isEmpty && total == 0 && !loading && !failed && !counting ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
+        previous.isEnabled = total > 0 && !loading && !failed && !counting
         next.isEnabled = previous.isEnabled
         retry.isHidden = !failed
         needsLayout = true
@@ -68,6 +68,8 @@ public struct ThreadFindResult: Decodable, Equatable, Sendable {
         public var runId: String?
         public var occurrence: Int
     }
+    public var complete: Bool?
+    public var snapshotSequence: Int?
     public var totalMatches: Int
     public var activeIndex: Int
     public var match: Match?
