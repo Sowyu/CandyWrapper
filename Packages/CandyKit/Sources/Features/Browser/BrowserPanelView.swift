@@ -76,7 +76,7 @@ public final class BrowserChromeRowView: DSView {
     /// Holds the reveal-on-hover opacity; the button keeps its own disabled opacity.
     private let externalHolder = DSView()
     public let pictureInPicture = ButtonView(nil, icon: .pictureInPicture2, variant: .ghost, size: .iconXs)
-    public let more = ButtonView(nil, icon: .moreVertical, variant: .ghost, size: .iconXs)
+    public let more = ButtonView(nil, icon: .moreVertical, variant: .ghost, size: .iconXs).menuTrigger()
     private let progress = CALayer()
 
     public var onBack: (@MainActor () -> Void)?

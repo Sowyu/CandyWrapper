@@ -186,7 +186,7 @@ final class InlinePickerButton: ControlView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        scalesWhenPressed = false
+        opensPopupOnPress = true // a menu trigger
         label.lineHeight = 24
         addSubview(label)
         addSubview(chevron)

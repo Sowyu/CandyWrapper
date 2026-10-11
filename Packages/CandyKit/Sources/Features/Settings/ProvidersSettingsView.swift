@@ -950,10 +950,20 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         private let label = LabelView("Add provider", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
-            icon.strokeColor = Themed.color(\.mutedForeground)
+            scalesWhenPressed = false
+            transitions = .colors // transition-colors hover:bg-muted/25 hover:text-foreground (ProviderSettingsPanel.tsx:1196)
             label.lineHeight = 20
             addSubview(icon)
             addSubview(label)
+            restyle()
+        }
+        override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+        override func updateLayer() { restyle() }
+        private func restyle() {
+            let hot = state.hovered || state.focusVisible
+            label.color = Themed.color(hot ? \.foreground : \.mutedForeground)
+            icon.strokeColor = label.color
+            Motion.setBackground(layer, hot ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
         }
         override func layout() {
             super.layout()
@@ -975,7 +985,7 @@ final class ProviderListRow: ControlView {
     private let showsDot: Bool
     private let enabled: Bool
     var onSelect: (() -> Void)?
-    var isSelected = false { didSet { restyle() } }
+    var isSelected = false { didSet { Motion.transitioning(window == nil ? [] : transitions) { restyle() } } }
     /// The version advisory button (`icon-micro`) after the version, and the update progress in place of the status.
     var advisory: ButtonView? { didSet { oldValue?.removeFromSuperview(); advisory.map(addSubview); needsLayout = true } }
     var updateProgress: String? { didSet { if let updateProgress { status.text = "Updating · \(updateProgress)"; dot.isHidden = true } } }
@@ -988,6 +998,7 @@ final class ProviderListRow: ControlView {
         showsDot = key == "warning" || key == "error"
         super.init(frame: .zero)
         scalesWhenPressed = false
+        transitions = [.background] // transition-colors on the row (ProviderInstanceCard.tsx:914)
         layer?.addSublayer(fill)
         name.text = displayName
         name.lineHeight = 20
@@ -1021,7 +1032,7 @@ final class ProviderListRow: ControlView {
     }
 
     private func restyle() {
-        fill.backgroundColor = isSelected ? Themed.color(\.muted, 0.45).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil
+        Motion.setBackground(fill, isSelected ? Themed.color(\.muted, 0.45).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
         let dim: CGFloat = !enabled && !isSelected && !state.hoverOrPressed ? 0.6 : 1
         // `opacity-60 transition-opacity group-hover:opacity-100` (ProviderInstanceCard.tsx:918-922).
         for v in [icon, name, version, status] as [NSView] { HoverReveal.fade(v, to: dim) }

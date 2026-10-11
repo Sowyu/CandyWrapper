@@ -132,7 +132,7 @@ public final class DiffPanelView: DSView {
     private var findControls: [NSView] { [find, findCount, findCase, findWord, findRegex, findPrevious, findNext, findClose] }
     private var searchMatches: [DiffPanelSearch.Match] = []
     private var searchIndex = 0
-    private let scopeButton = ButtonView("Latest turn", variant: .secondary, size: .xs)
+    private let scopeButton = ButtonView("Latest turn", variant: .secondary, size: .xs).menuTrigger()
     private let totals = DiffStatView()
     private let refreshButton = ButtonView(nil, icon: .refreshCw, variant: .ghost, size: .iconSm)
     private let collapseButton = ButtonView(nil, icon: .chevronsUpDown, variant: .ghost, size: .iconSm)

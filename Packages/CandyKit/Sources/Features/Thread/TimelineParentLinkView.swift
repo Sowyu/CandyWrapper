@@ -67,6 +67,7 @@ final class TimelineParentLinkPill: ControlView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        transitions = .colors // transition-colors (TimelineSystemDivider.tsx:51)
         layer?.borderWidth = 1
     }
     override func layout() { super.layout(); layer?.cornerRadius = bounds.height / 2 }
@@ -74,6 +75,6 @@ final class TimelineParentLinkPill: ControlView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
-        layer?.backgroundColor = (state.hovered ? Themed.color(\.muted) : Themed.color(\.background)).cgColor(in: self)
+        Motion.setBackground(layer, (state.hovered ? Themed.color(\.muted) : Themed.color(\.background)).cgColor(in: self))
     }
 }

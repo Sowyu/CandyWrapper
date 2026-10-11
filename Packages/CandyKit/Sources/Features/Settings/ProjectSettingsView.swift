@@ -28,7 +28,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     private var openEditor: ProjectActionEditor?
     /// The project the page shows, so a new selection rebuilds the name field.
     private var shownKey: String?
-    private let importAction = ButtonView("Import scripts", icon: .chevronDown, variant: .ghost, size: .xs)
+    private let importAction = ButtonView("Import scripts", icon: .chevronDown, variant: .ghost, size: .xs).menuTrigger()
     private var projectFileContents: String?
     private var projectFileKey: String?
     private var projectFileTask: Task<Void, Never>?

@@ -412,9 +412,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.routeHistory = history
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }
-        // Escape drops a multi-selection (_chat.tsx:98-102).
-        shortcuts.onKey { [weak sidebar] event in
-            guard event.keyCode == 53, let sidebar, !sidebar.selectedThreadIds.isEmpty else { return false }
+        // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,
+        // so there Escape only goes back (useEscapeToGoBack, UsagePage.tsx:115).
+        shortcuts.onKey { [weak sidebar, weak settings, weak commands] event in
+            guard event.keyCode == 53, let sidebar, !sidebar.selectedThreadIds.isEmpty,
+                  settings?.isOpen != true, commands?.isUsagePageOpen != true else { return false }
             sidebar.clearSelection()
             return true
         }

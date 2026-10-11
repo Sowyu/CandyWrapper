@@ -174,6 +174,7 @@ final class KeybindingPillButton: ControlView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        transitions = .colors // KeybindingsSettings.tsx:821
         decoration.host = self
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
@@ -399,8 +400,8 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     private let pill = KeybindingPillButton()
     private let recorder = ShortcutRecorderView()
     private let save = ButtonView("Save", size: .sm)
-    private let actionsButton = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconSm)
-    private let warning = ButtonView(nil, icon: .triangleAlert, variant: .ghostMuted, size: .iconMicro)
+    private let actionsButton = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconSm).menuTrigger()
+    private let warning = ButtonView(nil, icon: .triangleAlert, variant: .ghostMuted, size: .iconMicro).transitioning(.colors) // KeybindingsSettings.tsx:233
     private let when = WhenLineView()
     private let badge: BadgeView?
     private let controls: SettingsControlGroup
@@ -544,7 +545,7 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
     private let recorder = ShortcutRecorderView()
     private let save = ButtonView("Save", size: .sm)
     private let cancel = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconSm)
-    private let warning = ButtonView(nil, icon: .triangleAlert, variant: .ghostMuted, size: .iconMicro)
+    private let warning = ButtonView(nil, icon: .triangleAlert, variant: .ghostMuted, size: .iconMicro).transitioning(.colors) // KeybindingsSettings.tsx:233
     private let when = WhenLineView()
     private var warningTip: TooltipController?
     var allRows: () -> [KeybindingRow] = { [] }

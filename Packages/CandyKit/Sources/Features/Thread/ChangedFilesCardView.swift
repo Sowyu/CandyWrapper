@@ -149,7 +149,9 @@ final class ChangedFileRowView: DSView {
     private let stat = DiffStatView()
     private var row: ChangedFilesCardView.Row?
     private var spacer = false
-    private var hovered = false { didSet { if hovered != oldValue { restyle() } } }
+    // `transition-colors hover:bg-accent/60` on the row (ChangedFilesTree.tsx:181,216): the fill fades, the
+    // names and chevron carry their own `group-hover` colors and snap.
+    private var hovered = false { didSet { if hovered != oldValue { restyle(); redisplay(transitioning: .background) } } }
     private var tracking: NSTrackingArea?
     var action: (() -> Void)?
 
@@ -234,7 +236,7 @@ final class ChangedFileRowView: DSView {
     }
 
     override func updateLayer() {
-        layer?.backgroundColor = hovered ? TL.c(\.accent, 0.6).cgColor(in: self) : nil
+        Motion.setBackground(layer, hovered ? TL.c(\.accent, 0.6).cgColor(in: self) : nil)
     }
 
     override func updateTrackingAreas() {

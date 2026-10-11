@@ -22,7 +22,11 @@ open class ControlView: DSView {
         didSet {
             guard state != oldValue else { return }
             if transitions.isEmpty || window == nil { return stateDidChange(from: oldValue) }
-            Motion.transitioning(transitions) { stateDidChange(from: oldValue) }
+            Motion.transitioning(transitions) {
+                stateDidChange(from: oldValue)
+                // A restyle in `updateLayer` runs now, inside the transition, not at the next display pass.
+                if needsDisplay { displayIfNeeded() }
+            }
         }
     }
 
@@ -99,10 +103,29 @@ open class ControlView: DSView {
 
     /// Menu and select triggers open on press (base-ui `useClick` with `event: 'mousedown'`,
     /// MenuTrigger.js:157, SelectRoot.js:294). Dragging onto an item and releasing chooses it.
-    /// `MenuPopupView.show(from:)` and SelectView turn it on; popover triggers keep opening on release.
-    public var opensPopupOnPress = false
+    /// Set it where a menu trigger is built (`menuTrigger()`), so the first press opens too.
+    /// Popover triggers keep opening on release.
+    public var opensPopupOnPress = false {
+        didSet { if opensPopupOnPress { scalesWhenPressed = false } } // `aria-haspopup` triggers do not shrink (button.tsx:11)
+    }
+
+    /// Sets `transitions` where the control is declared: `ButtonView(...).transitioning(.colors)`.
+    @discardableResult
+    public func transitioning(_ transitions: Motion.Transition) -> Self {
+        self.transitions = transitions
+        return self
+    }
+
+    /// Marks this control as a menu or select trigger: it opens on press and does not shrink.
+    @discardableResult
+    public func menuTrigger() -> Self {
+        opensPopupOnPress = true
+        return self
+    }
     /// Set while a press opened this control's menu, until the button comes up.
     private var pressOpenedAt: TimeInterval?
+    /// Set when the press already ran the action, so the release does not run it again.
+    private var pressPerformed = false
     /// Set by PopupHost when a press on this trigger closed its popup.
     var pressClosedPopup = false
 
@@ -111,6 +134,7 @@ open class ControlView: DSView {
         pressClosedPopup = false
         state.active = true
         state.focusVisible = false
+        pressPerformed = opensPopupOnPress
         if opensPopupOnPress {
             pressOpenedAt = event.timestamp
             performAction()
@@ -134,12 +158,15 @@ open class ControlView: DSView {
         let inside = bounds.contains(convert(event.locationInWindow, from: nil))
         state.active = false
         // The press closed this control's open popup (PopupHost swallowed it); the release must not reopen it.
-        if pressClosedPopup { pressClosedPopup = false; return }
+        if pressClosedPopup { pressClosedPopup = false; pressPerformed = false; return }
         if let openedAt = pressOpenedAt {
             pressOpenedAt = nil
+            pressPerformed = false
             releasePressedMenu(event, heldFor: event.timestamp - openedAt)
             return
         }
+        // A menu that opens later (it loads first) or not at all: the press was the click.
+        if pressPerformed { pressPerformed = false; return }
         if inside { performAction() }
     }
 
@@ -244,6 +271,16 @@ func pressDragMenu(in view: NSView) -> PressDragMenu? {
     return nil
 }
 
+public extension NSView {
+    /// Marks the view for display and, in a window, displays it now inside `Motion.transitioning`, so an
+    /// `updateLayer` restyle fades like a `transition-*` class. For views that track hover themselves.
+    func redisplay(transitioning transitions: Motion.Transition) {
+        needsDisplay = true
+        guard window != nil else { return }
+        Motion.transitioning(transitions) { displayIfNeeded() }
+    }
+}
+
 /// Shared motion values and the Reduce Motion switch.
 @MainActor
 public enum Motion {
@@ -271,26 +308,56 @@ public enum Motion {
 
     /// What labels, icons and box decorations changed inside `transitioning` animate. Empty otherwise.
     public private(set) static var activeTransitions: Transition = []
+    /// How long those changes take: 150 ms unless a `duration-*` class says otherwise.
+    public private(set) static var activeDuration: CFTimeInterval = Durations.default
 
-    /// Runs `body` so the color changes it makes fade over 150 ms, like a `transition-*` class.
-    /// Under Reduce Motion they snap.
-    public static func transitioning(_ transitions: Transition, _ body: () -> Void) {
+    /// Runs `body` so the color changes it makes fade over 150 ms (or `duration`), like a `transition-*`
+    /// class. Under Reduce Motion they snap.
+    public static func transitioning(_ transitions: Transition, duration: CFTimeInterval = Durations.default, _ body: () -> Void) {
         guard !transitions.isEmpty, !reduced else { return body() }
-        let outer = activeTransitions
+        let outer = (activeTransitions, activeDuration)
         activeTransitions = transitions
-        defer { activeTransitions = outer }
+        activeDuration = duration
+        defer { (activeTransitions, activeDuration) = outer }
         body()
     }
 
-    /// Fades a redrawn layer from its old image to its next one, 150 ms. For drawn text and box
-    /// decorations a cross-fade of two images in different colors is the same as fading the color.
-    public static func crossfade(_ layer: CALayer, duration: CFTimeInterval = Durations.default) {
+    /// Fades a redrawn layer from its old image to its next one, 150 ms (or the active `duration-*`). For
+    /// drawn text and box decorations a cross-fade of two images in different colors is the same as fading the color.
+    public static func crossfade(_ layer: CALayer, duration: CFTimeInterval = Motion.activeDuration) {
         guard layer.contents != nil else { return }
         let fade = CATransition()
         fade.type = .fade
         fade.duration = duration
         fade.timingFunction = easeInOut
         layer.add(fade, forKey: kCATransition)
+    }
+
+    /// Sets a layer's background color. Inside `transitioning` with `.background` it fades from what is on
+    /// screen, as `transition-colors` fades `background-color`; otherwise it snaps.
+    public static func setBackground(_ layer: CALayer?, _ color: CGColor?) {
+        setColor(layer, \.backgroundColor, "backgroundColor", color, fadesWith: .background)
+    }
+
+    /// Sets a layer's border color; fades inside `transitioning` with `.border`.
+    public static func setBorderColor(_ layer: CALayer?, _ color: CGColor?) {
+        setColor(layer, \.borderColor, "borderColor", color, fadesWith: .border)
+    }
+
+    private static func setColor(_ layer: CALayer?, _ property: ReferenceWritableKeyPath<CALayer, CGColor?>, _ key: String,
+                                 _ color: CGColor?, fadesWith kind: Transition) {
+        guard let layer else { return }
+        let old = (layer.presentation() ?? layer)[keyPath: property]
+        // Set first: on a plain sublayer the set adds an implicit animation under the same key, which the fade replaces.
+        layer[keyPath: property] = color
+        if activeTransitions.contains(kind), !CFEqual(old ?? CGColor.clear, color ?? CGColor.clear) {
+            let fade = CABasicAnimation(keyPath: key)
+            fade.fromValue = old ?? CGColor.clear
+            fade.toValue = color ?? CGColor.clear
+            fade.duration = activeDuration
+            fade.timingFunction = easeInOut
+            layer.add(fade, forKey: key)
+        }
     }
 
     public static func animate(_ layer: CALayer, keyPath: String, to value: Any, duration: CFTimeInterval,

@@ -227,6 +227,7 @@ public final class OpenPopup {
 
 /// Holds one popup; its layer carries the scale and opacity transitions around the transform origin.
 final class PopupContainer: DSView {
+    override var mouseDownCanMoveWindow: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         return bounds.contains(local) ? super.hitTest(point) : nil
@@ -259,6 +260,10 @@ public final class PopupHost: DSView {
         return host
     }
 
+    // A transparent NSView says yes by default; over the top bar that let a press that opened a menu
+    // drag the window when the pointer moved on to an item.
+    public override var mouseDownCanMoveWindow: Bool { false }
+
     public override func hitTest(_ point: NSPoint) -> NSView? {
         for popup in popups.reversed() {
             if let hit = popup.container.hitTest(convert(point, from: superview)) { return hit }
@@ -289,10 +294,8 @@ public final class PopupHost: DSView {
         reposition(popup)
         if pressesTrigger { (trigger as? ControlView)?.isPopupOpen = true }
         if let control = trigger as? ControlView, pressDragMenu(in: content) != nil {
-            // A menu or select trigger opens on press from now on. ponytail: the first open of a trigger still
-            // waits for the release; set `opensPopupOnPress` where the trigger is built if that first press shows
+            // Backstop for a trigger built without `menuTrigger()`: it opens on press from its second use.
             control.opensPopupOnPress = true
-            control.scalesWhenPressed = false // `aria-haspopup` triggers do not shrink (button.tsx:11)
         }
         animate(popup, entering: true)
         installMonitors()

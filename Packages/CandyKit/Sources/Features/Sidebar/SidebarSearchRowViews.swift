@@ -160,6 +160,7 @@ final class SidebarNoProjectsButton: ControlView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        transitions = .colors // transition-colors (Sidebar.tsx:5563)
         title.font = SB.font(11, .medium); title.lineHeight = 16
         addSubview(icon)
         addSubview(title)
@@ -182,7 +183,7 @@ final class SidebarNoProjectsButton: ControlView {
 
     override func updateLayer() {
         let hot = state.hovered || isKeyboardFocused
-        layer?.backgroundColor = hot ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        Motion.setBackground(layer, hot ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil)
         layer?.borderColor = SB.c(\.sidebarBorder).cgColor(in: self)
         let color = hot ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
         title.color = color

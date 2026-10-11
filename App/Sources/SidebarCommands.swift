@@ -794,11 +794,7 @@ final class SidebarCommands {
         layout.main.addSubview(view)
         utilityPage = view
         utilityKind = page
-        sidebar.isOnUtilityPage = true
-        // No route thread or draft on these pages, so no row is active (Sidebar.tsx:2490-2494).
-        // ponytail: a draft prompt save while the page shows re-marks the draft row; route the active ids through one owner if that shows
-        sidebar.state.activeThreadId = nil
-        sidebar.state.activeDraftId = nil
+        sidebar.isOnUtilityPage = true // clears the active row and draft while the page shows
         layout.needsLayout = true
         if page == .pullRequests {
             pullRequestsPage.didShow()

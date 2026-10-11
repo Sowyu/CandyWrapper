@@ -147,7 +147,14 @@ public final class ScrollAreaView: DSView {
 /// (hover `--app-scrollbar-thumb-hover`). Opacity runs on Core Animation: in over 100ms, out over 150ms after 300ms.
 final class ScrollAreaScroller: NSScroller {
     static let thickness: CGFloat = 6
-    var thumbHovered = false { didSet { if thumbHovered != oldValue { needsDisplay = true } } }
+    var thumbHovered = false {
+        didSet {
+            guard thumbHovered != oldValue else { return }
+            // `transition-colors hover:bg-(--app-scrollbar-thumb-hover)` (scroll-area.tsx:100).
+            if window != nil, !Motion.reduced, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
+    }
     private var shown = false
     private var knobTracking: NSTrackingArea?
 

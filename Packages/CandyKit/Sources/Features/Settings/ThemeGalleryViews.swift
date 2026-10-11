@@ -254,6 +254,7 @@ final class ThemeLibraryCardView: ControlView {
         self.card = card
         super.init(frame: .zero)
         scalesWhenPressed = false
+        transitions = .colors // ThemeSettings.tsx:157
         decoration.host = self
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false

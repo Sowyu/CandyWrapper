@@ -105,7 +105,13 @@ public final class MarkdownView: DSView {
     public static var onRevealFile: ((FileLinkMeta) -> Void)?
     public static weak var linkHandler: MarkdownLinkHandler?
     private var hoveredChip: Int? {
-        didSet { if hoveredChip != oldValue { needsDisplay = true } }
+        didSet {
+            guard hoveredChip != oldValue else { return }
+            // `[a&]:transition-colors` (ContextChip.tsx:26): the chip's border fades. Only the chip differs
+            // between the two images, so a cross-fade of the text layer fades just its border.
+            if window != nil, !Motion.reduced, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
     }
     private var copiedResets: [Int: DispatchWorkItem] = [:]
 

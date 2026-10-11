@@ -422,7 +422,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let terminal = TerminalStatusGlyph()
     let prBadge = PullRequestBadgeView()
-    let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread")
+    let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     var actions = SidebarRowActions()
     /// The actions hold the status slot (`static`); they keep fading out after this turns false.

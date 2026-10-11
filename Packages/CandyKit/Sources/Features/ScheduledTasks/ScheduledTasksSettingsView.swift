@@ -92,7 +92,7 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
         toggle.setAccessibilityLabel("Enable \(t.title)")
         toggle.isEnabled = !busy.contains(t.id)
         toggle.onChange = { [weak self] _ in self?.act(env, t, "scheduledTasks.setEnabled", .object(["id": .string(t.id), "enabled": .bool(!t.enabled)])) }
-        let more = ButtonView(nil, icon: .ellipsis, variant: .ghost, size: .iconSm)
+        let more = ButtonView(nil, icon: .ellipsis, variant: .ghost, size: .iconSm).menuTrigger()
         more.setAccessibilityLabel("Actions for \(t.title)")
         more.isEnabled = !busy.contains(t.id)
         more.action = { [weak self, weak more] in

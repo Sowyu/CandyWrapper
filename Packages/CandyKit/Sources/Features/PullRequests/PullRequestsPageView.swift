@@ -100,10 +100,10 @@ public final class PullRequestsPageView: DSView {
 
     public let header = SettingsHeaderView()
     public let search = InputGroupView(placeholder: "Search pull requests, or label:bug", leading: .icon(.search))
-    let sortButton = ButtonView("Sort", icon: .arrowDownUp, variant: .outline)
-    let filtersButton = ButtonView("Filters", icon: .listFilter, variant: .outline)
+    let sortButton = ButtonView("Sort", icon: .arrowDownUp, variant: .outline).menuTrigger()
+    let filtersButton = ButtonView("Filters", icon: .listFilter, variant: .outline).menuTrigger()
     let filterCount = CountPill()
-    let providerButton = ButtonView("All", icon: .plug2, variant: .outline)
+    let providerButton = ButtonView("All", icon: .plug2, variant: .outline).menuTrigger()
     let refreshButton = ButtonView(nil, icon: .refreshCw, variant: .outline, size: .icon)
     private let document = Document()
     private let scroll: ScrollAreaView

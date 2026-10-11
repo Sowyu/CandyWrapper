@@ -88,9 +88,9 @@ public final class PullRequestDetailView: DSView {
     private let repo = LinkLabel()
     private let numberLink = LinkLabel()
     private let numberIcon = IconView(name: .externalLink, size: 10)
-    private let checkout = ButtonView("Check out", icon: .gitBranch, variant: .outline, size: .xs)
+    private let checkout = ButtonView("Check out", icon: .gitBranch, variant: .outline, size: .xs).menuTrigger()
     private var primary: NSView?
-    let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs)
+    let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private let titleLabel = LabelView("", font: DSFont.ui(16, weight: .semibold))
     private let authorAvatar = PullRequestAvatarView()
     private let authorLogin = LabelView("", font: DSFont.ui(12, weight: .medium))
@@ -137,7 +137,7 @@ public final class PullRequestDetailView: DSView {
     public var canWrite = true { didSet { updateTitleEditor() } }
 
     // Native stack (PullRequestStackMenu.tsx).
-    private let stackButton = ButtonView("", icon: .layers, variant: .ghost, size: .xs)
+    private let stackButton = ButtonView("", icon: .layers, variant: .ghost, size: .xs).menuTrigger()
     private let stackMergeButton = ButtonView("Merge stack", icon: .gitMerge, variant: .default, size: .xs)
     /// The host's stack for this pull request, nil without one.
     public var stack: PullRequestStackDetail? { didSet { rebuildActions() } }
@@ -994,7 +994,10 @@ public final class PullRequestDetailView: DSView {
 final class LinkLabel: DSView {
     private let label = LabelView()
     private var tracking: NSTrackingArea?
-    private var hovered = false { didSet { label.isUnderlined = hovered && underlines; needsDisplay = true } }
+    // A padded label is `PullRequestCopyableCode` (:35): `transition-colors hover:bg-accent/45`, so its fill fades.
+    private var hovered = false {
+        didSet { label.isUnderlined = hovered && underlines; redisplay(transitioning: padding > 0 ? .background : []) }
+    }
     var underlines = true
     var padding: CGFloat = 0 { didSet { needsLayout = true } }
     var text: String { get { label.text } set { label.text = newValue; needsLayout = true } }
@@ -1017,7 +1020,7 @@ final class LinkLabel: DSView {
         layer?.cornerRadius = 4
     }
 
-    override func updateLayer() { layer?.backgroundColor = hovered && padding > 0 ? Themed.color(\.accent, 0.45).cgColor(in: self) : nil }
+    override func updateLayer() { Motion.setBackground(layer, hovered && padding > 0 ? Themed.color(\.accent, 0.45).cgColor(in: self) : nil) }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

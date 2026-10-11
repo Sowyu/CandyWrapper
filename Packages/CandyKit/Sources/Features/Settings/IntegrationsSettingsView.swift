@@ -99,7 +99,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             context.writeClient?(["browserDefaultProfileId": profiles[i]["id"] ?? .string("default")])
         }
         let defaultRow = row("browser-default-profile", detail: "Used for new browser tabs.", control: choose); defaultRow.title = "Default profile"
-        let manage = ButtonView("Manage profiles", variant: .outline, size: .sm)
+        let manage = ButtonView("Manage profiles", variant: .outline, size: .sm).menuTrigger()
         manage.action = { [weak self, weak manage] in
             guard let self, let manage else { return }
             let items = BrowserProfiles.resolved(client).filter { $0["id"]?.stringValue != "incognito" }.map { profile -> MenuItem in
@@ -194,7 +194,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         addHost.action = { [weak self] in self?.editDeviceHost(nil) }
         let hostRow = row("device-hosts", detail: "Add remote machines with simulator or emulator runtimes installed, and the selected environments will connect over SSH and set up device tools automatically.", control: addHost)
         hostRow.title = "Device hosts"
-        let manage = ButtonView("Manage hosts", variant: .outline, size: .sm)
+        let manage = ButtonView("Manage hosts", variant: .outline, size: .sm).menuTrigger()
         manage.action = { [weak self, weak manage] in
             guard let self, let manage else { return }
             let hosts = self.context.scope.targets.first?.settings["deviceHosts"].arrayValue ?? []
