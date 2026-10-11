@@ -25,7 +25,9 @@ public struct TimelineLatestRun: Sendable, Hashable {
 /// (composer state). `durationStart` and `revertTurnCount` are left out: the renderer never reads
 /// the first, and rollback is out of scope for a read-only view.
 public struct TimelineRow: Sendable, Hashable, Identifiable {
-    public enum Kind: Sendable, Hashable {
+    /// `indirect` keeps each payload in its own shared box: the largest case (`workLive`, two work entries)
+    /// made every row 2 KB inline, and a 2,000-message thread copies its row arrays on every history page.
+    public indirect enum Kind: Sendable, Hashable {
         /// One user or assistant message. The assistant flags decide the footer and copy button.
         case message(
             ChatMessage, projectedItem: ProjectedTurnItem?, showAssistantMeta: Bool, showAssistantCopyButton: Bool,

@@ -72,7 +72,8 @@ public struct TimelineAttempt: Sendable, Hashable {
 
 /// `TimelineEntry` (session-logic.ts:123-169), the output of pass 1.
 public struct TimelineEntry: Sendable, Hashable, Identifiable {
-    public enum Kind: Sendable, Hashable {
+    /// `indirect`, as `TimelineRow.Kind`: a shared box per payload keeps entry arrays small to copy.
+    public indirect enum Kind: Sendable, Hashable {
         case message(ChatMessage, projectedItem: ProjectedTurnItem?)
         case proposedPlan(ProposedPlan)
         case work(WorkLogEntry)

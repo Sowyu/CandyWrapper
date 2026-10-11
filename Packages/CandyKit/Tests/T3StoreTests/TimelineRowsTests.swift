@@ -28,6 +28,13 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
 
 /// Ports of apps/web/src/components/chat/MessagesTimeline.logic.test.ts.
 @Suite struct TimelineRowsTests {
+    /// The row and entry payloads live in shared boxes (`indirect`). Inline, the largest case made each
+    /// row 2 KB, and a long thread copies these arrays on every older page.
+    @Test func rowsAndEntriesStaySmall() {
+        #expect(MemoryLayout<TimelineRow>.stride <= 128)
+        #expect(MemoryLayout<TimelineEntry>.stride <= 192)
+    }
+
     // LT:1300
     @Test func foldsTheFirstAssistantMessageAndSettledWorkBeforeTheTerminalResponse() {
         let entries = [
