@@ -402,6 +402,17 @@ public final class ThreadDetailsCardView: DSView {
     /// preferred editor, the chevron picks another.
     public let openIn = DetailsSplitControl()
     public var showsOpenIn = false { didSet { if showsOpenIn != oldValue { openIn.isHidden = !showsOpenIn; relayout() } } }
+    /// `ProjectScriptsControl displayMode="panel"` (ProjectScriptsControl.tsx:283-470): "Run" the primary
+    /// action with the chevron listing every action, "Actions" when none is a one-click action, or
+    /// "Add project script" without actions. Nil hides the row (no project).
+    public enum ScriptsRow: Equatable, Sendable {
+        case run(name: String, icon: IconName)
+        case actions
+        case add
+    }
+    public let scripts = DetailsSplitControl()
+    public let addScript = DetailsRowControl(kind: .row)
+    public var scriptsRow: ScriptsRow? { didSet { if scriptsRow != oldValue { updateScripts() } } }
     public let branch = DetailsRowControl(kind: .select)
     public let gitActions = DetailsSplitControl()
     public let changes = DetailsRowControl(kind: .row)
@@ -450,7 +461,12 @@ public final class ThreadDetailsCardView: DSView {
         initGit.text = "Initialize Git"
         openIn.isHidden = true
         openIn.secondary.setAccessibilityLabel("Choose editor")
-        for v in [runContext, openIn, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
+        scripts.isHidden = true
+        scripts.secondary.setAccessibilityLabel("Script actions")
+        addScript.isHidden = true
+        addScript.icons = [IconName.plus.definition]
+        addScript.text = "Add project script"
+        for v in [runContext, openIn, scripts, addScript, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
         gitActions.primary.onStateChange = { [weak self] in self?.relayout() }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread details")
@@ -458,6 +474,31 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     private func relayout() { invalidateIntrinsicContentSize(); needsLayout = true; superview?.needsLayout = true }
+
+    private func updateScripts() {
+        switch scriptsRow {
+        case .run(let name, let icon):
+            scripts.primary.icon = icon.definition
+            scripts.primary.text = name
+            scripts.primary.setAccessibilityLabel("Run \(name)")
+            scripts.primary.toolTip = "Run \(name)"
+            scripts.secondary.setAccessibilityLabel("Script actions")
+        case .actions:
+            scripts.primary.icon = IconName.wrench.definition
+            scripts.primary.text = "Actions"
+            scripts.primary.setAccessibilityLabel("Project actions")
+            scripts.primary.toolTip = nil
+            scripts.secondary.setAccessibilityLabel("Choose project action")
+        case .add, nil:
+            break
+        }
+        scripts.isHidden = scriptsRow == nil || scriptsRow == .add
+        addScript.isHidden = scriptsRow != .add
+        relayout()
+    }
+
+    /// The scripts row's view while it shows.
+    private var scriptsView: NSView? { !scripts.isHidden ? scripts : !addScript.isHidden ? addScript : nil }
 
     private func updateRows() {
         branch.isHidden = !showsVersionControl || !isRepo
@@ -472,7 +513,7 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     public var preferredHeight: CGFloat {
-        var h: CGFloat = 2 + 8 + 32 + (showsOpenIn ? 32 : 0) + 10
+        var h: CGFloat = 2 + 8 + 32 + (showsOpenIn ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
         let rows = versionRows
         if showsVersionControl, !rows.isEmpty {
             h += 1 + 8 + 10 + rows.reduce(0) { $0 + ($1 === gitActions ? gitActions.preferredHeight : 32) }
@@ -493,6 +534,10 @@ public final class ThreadDetailsCardView: DSView {
         y += 32
         if showsOpenIn {
             openIn.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            y += 32
+        }
+        if let row = scriptsView {
+            row.frame = NSRect(x: 9, y: y, width: inner, height: 32)
             y += 32
         }
         y += 10

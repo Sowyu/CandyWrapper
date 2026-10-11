@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */; };
+		1047A050AEFA93C1A6FF1E13 /* ProjectCloneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */; };
 		1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */; };
 		237342D7C8F16250C670D589 /* BrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */; };
 		27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */; };
@@ -19,6 +20,7 @@
 		50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21423E229A8AD862537E9ECA /* SettingsController.swift */; };
 		54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37909056866A108B1B58D3C6 /* MainWindow.swift */; };
 		5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28281CD4D81D6A990C1B210 /* ThreadSession.swift */; };
+		617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */; };
 		66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */; };
 		6853335632C49221DEDD17A8 /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA413FF2F602E6306049C36 /* ServerController.swift */; };
 		6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812D0A51D97E799EF04BF25 /* Environments.swift */; };
@@ -63,9 +65,10 @@
 		5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCommands.swift; sourceTree = "<group>"; };
 		606083DF126114F0273EEEDD /* ShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSession.swift; sourceTree = "<group>"; };
 		67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningThreadKeepAlive.swift; sourceTree = "<group>"; };
-		71BA027EC2BDC6A0154A676E /* OpenInController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenInController.swift; sourceTree = "<group>"; };
-		7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadNotificationCoordinator.swift; sourceTree = "<group>"; };
 		6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyThreadMigrationToast.swift; sourceTree = "<group>"; };
+		71BA027EC2BDC6A0154A676E /* OpenInController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenInController.swift; sourceTree = "<group>"; };
+		723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCloneController.swift; sourceTree = "<group>"; };
+		7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadNotificationCoordinator.swift; sourceTree = "<group>"; };
 		7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteCommands.swift; sourceTree = "<group>"; };
 		7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		8812D0A51D97E799EF04BF25 /* Environments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Environments.swift; sourceTree = "<group>"; };
@@ -76,6 +79,7 @@
 		A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
 		B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserController.swift; sourceTree = "<group>"; };
 		C28281CD4D81D6A990C1B210 /* ThreadSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSession.swift; sourceTree = "<group>"; };
+		C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectScriptsController.swift; sourceTree = "<group>"; };
 		CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTasksStore.swift; sourceTree = "<group>"; };
 		CB23CCA031F2AB693BDD07D9 /* CandyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CandyKit; path = Packages/CandyKit; sourceTree = SOURCE_ROOT; };
 		CDA413FF2F602E6306049C36 /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
@@ -142,6 +146,8 @@
 				71BA027EC2BDC6A0154A676E /* OpenInController.swift */,
 				FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
+				723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */,
+				C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */,
 				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
 				2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */,
 				67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */,
@@ -283,6 +289,8 @@
 				D97D87BA1FC8BBAB38BFE647 /* OpenInController.swift in Sources */,
 				9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
+				1047A050AEFA93C1A6FF1E13 /* ProjectCloneController.swift in Sources */,
+				617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */,
 				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
 				7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */,
 				A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */,

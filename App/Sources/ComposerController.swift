@@ -50,6 +50,12 @@ final class ComposerController {
     private var resuming = false
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
+    /// "Open provider setup" on the provider status banner: Settings, Providers.
+    var openProviderSetup: (() -> Void)?
+    /// The provider status the user dismissed (`dismissedProviderStatusBannerKey`).
+    private var dismissedProviderBannerKey: String?
+    /// Opens a new thread in the open thread's project, leaving the thread (`handleNewThreadInActiveProject`).
+    var onNewThread: (() -> Void)?
     /// The open draft's project is a Git repository: the strip shows the run context and branch.
     var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
     /// The target changed (a thread or draft opened, or the draft's workspace changed).
@@ -154,7 +160,7 @@ final class ComposerController {
             self.applyClientSettings()
             if keys.contains("planModeEnabled") { self.refresh() }
         }
-        composer.onSend = { [weak self] text, mode in self?.send(text, mode: mode) }
+        composer.onSend = { [weak self] text, mode, background in self?.send(text, mode: mode, background: background) }
         composer.onStop = { [weak self] in self?.stop() }
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
@@ -355,6 +361,20 @@ final class ComposerController {
             }
             return true
         }
+        // `composer.cycleHost` (no default key, ChatView.tsx:8195-8208): a draft moves to the next machine
+        // of its project group, wrapping; locked drafts and single-machine groups leave the key alone.
+        shortcuts.on("composer.cycleHost") { [weak self] call in
+            guard let self, self.isActive, case .draft(let session) = self.target, self.pendingMessageId == nil,
+                  let group = self.group(of: ProjectId(session.projectId)) else { return false }
+            let targets = self.runOnTargets(group)
+            guard targets.count > 1 else { return false }
+            if !call.isRepeat {
+                let current = ProjectId(session.projectId).environmentId
+                let index = targets.firstIndex { $0.option.environmentId == current } ?? -1
+                self.changeEnvironment(targets[(index + 1) % targets.count].option.environmentId)
+            }
+            return true
+        }
         // `modelPicker.jump.N` while the picker is open (ModelPickerContent.tsx:797-811).
         shortcuts.on(Keymap.modelPickerJumpCommands) { [weak self] call in
             guard let self, self.pickers.isModelPickerOpen,
@@ -408,6 +428,12 @@ final class ComposerController {
     var shortcutContext: [String: Bool] {
         ["composerFocus": composer.isEditorFocused, "modelPickerOpen": pickers.isModelPickerOpen,
          "turnRunning": composer.runState.canInterrupt]
+    }
+
+    /// The open draft's project, nil on a thread.
+    var activeDraftProjectId: ProjectId? {
+        if case .draft(let s) = target { return ProjectId(s.projectId) }
+        return nil
     }
 
     /// The project the open thread or draft belongs to (`contextualProjectRef`).
@@ -469,7 +495,7 @@ final class ComposerController {
     /// the member (and so the environment) the thread will be created in. An empty stored draft moves to
     /// the requested member (`setLogicalProjectDraftThreadId` in useHandleNewThread.ts:280-305).
     // ponytail: a draft with text is reused as is; T3 mints a fresh draft then (useHandleNewThread.ts:185-195)
-    private func showDraft(_ project: ProjectShell, stored: DraftSession? = nil) {
+    private func showDraft(_ project: ProjectShell, stored: DraftSession? = nil, workspace: DraftSession? = nil) {
         let group = group(of: project.id)
         let key = group?.key ?? project.id.rawValue
         var session: DraftSession
@@ -485,7 +511,8 @@ final class ComposerController {
         } else {
             let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
             session = DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
-                                   projectId: project.id.rawValue, createdAt: Date())
+                                   projectId: project.id.rawValue, createdAt: Date(), envMode: workspace?.envMode,
+                                   branch: workspace?.branch, worktreePath: workspace?.worktreePath, startFromOrigin: workspace?.startFromOrigin)
             sessions[key] = session
         }
         flushPrompt()
@@ -774,6 +801,21 @@ final class ComposerController {
             panel.errorBanner.banner = banner
             panel.needsLayout = true
         }
+        // The provider status banner (ChatView.tsx:4206-4221): the composer's provider instance; a
+        // dismissal holds until the status key changes, and a cleared key forgets it.
+        let provider = targetEnvironmentId.flatMap { config($0) }?.providers.first { $0.instanceId == pickers.current.instanceId }
+        let providerKey = ProviderStatusBannerLogic.key(provider)
+        if providerKey == nil { dismissedProviderBannerKey = nil }
+        let providerBanner = ProviderStatusBannerLogic.banner(provider, dismissedKey: dismissedProviderBannerKey)
+        if providerBanner != panel.providerBanner.banner {
+            panel.providerBanner.banner = providerBanner
+            panel.providerBanner.onDismiss = { [weak self] in
+                self?.dismissedProviderBannerKey = providerKey
+                self?.refresh()
+            }
+            panel.providerBanner.setup.action = { [weak self] in self?.openProviderSetup?() }
+            panel.needsLayout = true
+        }
         panel.updateComposerShown()
     }
 
@@ -889,6 +931,8 @@ final class ComposerController {
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
             supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection),
             planModeEnabled: ClientSettingsStore.shared.current.bool("planModeEnabled"))
+        // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
+        if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.update(draftKey: draftKey ?? "", context: context)
         // A new label (config arrived, thread switched) changes the controls' width.
         composer.needsLayout = true
@@ -901,7 +945,9 @@ final class ComposerController {
         return sidebar?.snapshot?.threads.first { $0.id == id }
     }
 
-    private func send(_ text: String, mode: ComposerLogic.SendMode) {
+    /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
+    /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
+    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
         guard let shell, pendingMessageId == nil, let target else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
@@ -937,6 +983,12 @@ final class ComposerController {
         if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
             if let picksKey { threadErrors.set(picksKey, "Select a base branch before sending in New worktree mode.") }
             refresh()
+            return
+        }
+        // Several models picked: one thread and worktree each, the draft stays (ChatView.tsx:8824-8845, 9464-9680).
+        if case .draft(let session) = target, let multiple = pickers.currentMultiple {
+            sendFanout(multiple, session: session, text: text, messageText: messageText, trimmed: trimmed, attachments: attachments,
+                       uploaded: uploaded, picks: picks, supervisor: shell.supervisor)
             return
         }
         // The send goes ahead: the thread's local error clears (ChatView.tsx:9782).
@@ -978,6 +1030,15 @@ final class ComposerController {
                 workspaceStrategy: BranchToolbarLogic.workspaceStrategy(
                     mode: draftIsGitRepo ? session.envMode ?? .local : .local, branch: session.branch,
                     worktreePath: session.worktreePath, startFromOrigin: session.startFromOrigin ?? false))
+            // Started in the background: a fresh draft in the same project, with the same workspace
+            // picks (`resolveBackgroundDraftWorkspaceOptions`), replaces the composer at once.
+            if background, let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) {
+                sessions = sessions.filter { $0.value.draftId != session.draftId }
+                var workspace = session
+                workspace.worktreePath = nil
+                workspace.startFromOrigin = session.envMode == .worktree && session.startFromOrigin == true
+                showDraft(project, workspace: workspace)
+            }
             Task { [weak self] in
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
@@ -986,8 +1047,16 @@ final class ComposerController {
                     sessions = sessions.filter { $0.value.draftId != session.draftId }
                     prompts[session.draftId] = nil
                     scheduleSave()
-                    openThread?(ThreadId(session.threadId))
+                    if background {
+                        let id = ThreadId(session.threadId)
+                        panel.toasts.show(ToastView(title: "Started in background", kind: .success, actionTitle: "Open",
+                                                    action: { [weak self] in self?.openThread?(id) }), timeout: 5)
+                    } else {
+                        openThread?(ThreadId(session.threadId))
+                    }
                 } catch {
+                    // ponytail: a failed background start puts its text back into the fresh draft; T3 restores
+                    // the failed draft as its own sidebar draft (restoreFailedBackgroundDraftThread). Port it if that bites
                     self?.restoreAttachments(attachments, key: picksKey)
                     self?.sendFailed(error, messageId: messageId, text: text, draft: session, key: picksKey)
                 }
@@ -1020,11 +1089,81 @@ final class ComposerController {
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
+                    // `composer.sendAndNewThread`: the thread keeps running; a fresh composer opens
+                    // in its project while the user still looks at it (ChatView.tsx:10020-10027).
+                    if background, self?.target == .thread(threadId) { self?.onNewThread?() }
                 } catch {
                     self?.restoreAttachments(attachments, key: picksKey)
                     self?.sendFailed(error, messageId: messageId, text: text, draft: nil, key: picksKey)
                 }
             }
+        }
+    }
+
+    /// The multi-model send: every selection gets `orchestration.launchThread` with its own thread id
+    /// and a `worktree` strategy on the draft's base branch, as `startThreadTurn` builds it from
+    /// `bootstrap.prepareWorktree` (client-runtime commands.ts:626-680). The draft keeps the
+    /// composer; models that failed stay picked and the text comes back.
+    private func sendFanout(_ selections: [ModelSelection], session: DraftSession, text: String, messageText: String, trimmed: String,
+                            attachments: [ComposerAttachment], uploaded: [JSONValue], picks: ResolvedComposerSelection,
+                            supervisor: ConnectionSupervisor) {
+        guard draftIsGitRepo, let branch = session.branch, !selections.isEmpty else {
+            panel.toasts.show(ToastView(title: "Choose models and a base branch",
+                                        message: "Multiple models need a new thread in a Git project. Each gets its own worktree.", kind: .warning))
+            return
+        }
+        let key = session.draftId
+        let catalog = ProviderCatalog(serverConfig.providers)
+        for s in selections where catalog.entry(s.instanceId)?.isReady != true {
+            threadErrors.set(key, "Provider for \(s.model) is unavailable.")
+            refresh()
+            return
+        }
+        threadErrors.set(key, nil)
+        let referenced = contextRecords(for: trimmed)
+        let records = ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] } + attachments.compactMap(\.contextRecord)
+        let context: JSONValue? = records.isEmpty ? nil : .object(["version": .number(1), "records": .array(records)])
+        var titleText = ComposerContext.stripReferences(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        if titleText.isEmpty { titleText = attachments.first?.name ?? "New thread" }
+        let title = ComposerLogic.titleSeed(titleText)
+        let strategy = BranchToolbarLogic.workspaceStrategy(mode: .worktree, branch: branch, worktreePath: nil,
+                                                            startFromOrigin: session.startFromOrigin ?? false)
+        if let draftKey { draftAttachments[draftKey] = nil }
+        composer.text = ""
+        remember("")
+        let projectId = EnvironmentScope.localId(of: session.projectId)
+        Task { [weak self] in
+            var failed: [ModelSelection] = []
+            await withTaskGroup(of: (ModelSelection, Error?).self) { group in
+                for s in selections {
+                    let payload = ComposerLogic.launchThreadPayload(
+                        commandId: UUID().uuidString.lowercased(), threadId: UUID().uuidString.lowercased(), projectId: projectId, title: title,
+                        modelSelection: ThreadSession.encode(s), runtimeMode: picks.runtimeMode.rawValue,
+                        interactionMode: picks.interactionMode.rawValue, messageId: UUID().uuidString.lowercased(), text: messageText,
+                        context: context, attachments: uploaded, workspaceStrategy: strategy)
+                    group.addTask {
+                        do { _ = try await supervisor.request("orchestration.launchThread", payload: payload); return (s, nil) } catch { return (s, error) }
+                    }
+                }
+                for await (s, error) in group {
+                    guard let error else { continue }
+                    failed.append(s)
+                    self?.panel.toasts.show(ToastView(title: "Could not start \(s.model)", message: Self.message(error) ?? "Failed to send message.", kind: .error))
+                }
+            }
+            guard let self else { return }
+            let started = selections.count - failed.count
+            if started > 0 {
+                panel.toasts.show(ToastView(title: "Started \(started) \(started == 1 ? "thread" : "threads") in background", kind: .success))
+            }
+            // ponytail: no "Allow retry" guard against duplicate threads after an uncertain failure (uncertainMultipleSubmissionsRef); add it if retries duplicate
+            if !failed.isEmpty {
+                pickers.setMultiple(failed, for: key)
+                if target == .draft(session), composer.text.isEmpty { composer.text = text; remember(text) }
+            } else if started > 0 {
+                pickers.setMultiple(nil, for: key)
+            }
+            refresh()
         }
     }
 
@@ -1507,6 +1646,9 @@ extension ComposerController {
         var pathTask: Task<Void, Never>?
         var pullRequests: (key: String, entries: [ComposerMenus.PullRequestEntry], failed: Bool)?
         var pullRequestTask: Task<Void, Never>?
+        /// `#<number>` outside the listed rows: `pullRequests.detail` for it (ChatComposer.tsx:2615-2647), by key and number.
+        var exactPullRequest: (key: String, number: Int, entry: ComposerMenus.PullRequestEntry?)?
+        var exactPullRequestTask: Task<Void, Never>?
         /// `server.refreshProviders` requests by `env|instance|cwd`, at most one per TTL (5 minutes).
         var workspaceRefresh: [String: Date] = [:]
         var pullRequestsSupported: [String: Bool] = [:]
@@ -1627,7 +1769,10 @@ extension ComposerController {
             guard let listed = menuState.pullRequests, listed.key == key else {
                 return .init(items: [], emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: true))
             }
-            let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: listed.entries, hostSearched: true)
+            // The exact number's detail leads when the list lacks it.
+            let exact = menuState.exactPullRequest.flatMap { $0.key == key && String($0.number) == trigger.query ? $0.entry : nil }
+            let entries = exact.map { e in [e] + listed.entries.filter { $0.reference.number != e.reference.number } } ?? listed.entries
+            let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: entries, hostSearched: true)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: false, pullRequestsFailed: listed.failed,
                                                                            query: trigger.query))
         }
@@ -1663,9 +1808,14 @@ extension ComposerController {
         case .pullRequest:
             menuState.pullRequestTask?.cancel()
             guard menuState.pullRequestsSupported[targetEnvironmentId ?? ""] == true, let project = menuProject,
-                  let repository = menuRepository, let key = pullRequestKey(trigger.query), menuState.pullRequests?.key != key else { return }
+                  let repository = menuRepository, let key = pullRequestKey(trigger.query) else { return }
             let text = trigger.query.allSatisfy(\.isNumber) ? "" : trigger.query
             let projectId = EnvironmentScope.localId(of: project.id.rawValue)
+            // Numbers share the listed rows; a new number may still need its own lookup.
+            if menuState.pullRequests?.key == key {
+                lookUpExactPullRequest(trigger.query, key: key, projectId: projectId, repository: repository, supervisor: supervisor)
+                return
+            }
             menuState.pullRequestTask = Task { [weak self] in
                 if !text.isEmpty { try? await Task.sleep(for: .seconds(ComposerMenus.pullRequestDebounce)) }
                 guard !Task.isCancelled else { return }
@@ -1677,15 +1827,41 @@ extension ComposerController {
                 menuState.pullRequests = (key, Self.pullRequestEntries(reply, projectId: projectId, repository: repository, query: text),
                                           reply == nil || Self.listFailed(reply, projectId: projectId))
                 panel.menus.reload()
+                lookUpExactPullRequest(trigger.query, key: key, projectId: projectId, repository: repository, supervisor: supervisor)
             }
         case .slashCommand, .skill:
             break
         }
     }
 
+    /// `#<n>` that the listed rows lack: `pullRequests.detail` after the number settles for 180 ms
+    /// (`exactPullRequestLookup`). A miss leaves the list as it is.
+    private func lookUpExactPullRequest(_ query: String, key: String, projectId: String, repository: String, supervisor: ConnectionSupervisor) {
+        menuState.exactPullRequestTask?.cancel()
+        guard let number = Int(query), number > 0, menuState.exactPullRequest?.key != key || menuState.exactPullRequest?.number != number,
+              menuState.pullRequests?.entries.contains(where: { $0.reference.number == number }) != true else { return }
+        menuState.exactPullRequestTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            let payload: JSONValue = .object(["projectId": .string(projectId), "repository": .string(repository), "number": .number(Double(number))])
+            let reply = try? await supervisor.request("pullRequests.detail", payload: payload)
+            guard !Task.isCancelled, let self else { return }
+            var entry: ComposerMenus.PullRequestEntry?
+            if let d = reply, case .number(let n)? = d["number"], Int(n) == number {
+                let isDraft: Bool = if case .bool(let b)? = d["isDraft"] { b } else { false }
+                let pr = PullRequestReference(number: number, title: d["title"]?.stringValue ?? "", url: d["url"]?.stringValue ?? "",
+                                              headBranch: d["headBranch"]?.stringValue ?? "", baseBranch: d["baseBranch"]?.stringValue ?? "",
+                                              state: d["state"]?.stringValue ?? "open", isDraft: isDraft)
+                entry = ComposerMenus.PullRequestEntry(reference: pr, repository: d["repository"]?.stringValue ?? repository,
+                                                       authorLogin: d["author"]?["login"]?.stringValue, updatedAt: d["updatedAt"]?.stringValue ?? "")
+            }
+            menuState.exactPullRequest = (key, number, entry)
+            if entry != nil { panel.menus.reload() }
+        }
+    }
+
     /// `pullRequests.list` rows for this project and repository. With a text query a row stays when
     /// its host searched (`searchesOnHost`) or its own fields match (`matchesPullRequestQuery`).
-    // ponytail: no `pullRequests.detail` lookup for an exact number outside the 99 listed; add it when long-lived repos need it
     private static func pullRequestEntries(_ reply: JSONValue?, projectId: String, repository: String, query: String) -> [ComposerMenus.PullRequestEntry] {
         guard case .array(let list)? = reply?["entries"] else { return [] }
         var searchesOnHost: Set<String> = []
@@ -1963,6 +2139,19 @@ extension ComposerController {
         composer.insertAtCaret(references.joined(separator: " ") + " ")
         composer.focus()
         return true
+    }
+
+    /// "Add to chat" from a terminal (`addTerminalContext`, ChatComposer.tsx:6502-6533): a new
+    /// excerpt record and its chip at the caret. An open question takes no context.
+    func addTerminalContext(_ selection: ComposerContext.TerminalSelection) {
+        guard target != nil, questionRequestId == nil else { return }
+        let id = UUID().uuidString.lowercased()
+        let record = ComposerContext.terminalRecord(id: id, selection)
+        guard let contextId = record["contextId"]?.stringValue else { return }
+        menuState.records[contextId] = record
+        composer.insertAtCaret(ComposerContext.reference(ComposerContext.terminalReference(id: id, selection)) + " ")
+        // After the terminal takes focus back (T3 focuses the editor on the next frame).
+        focusComposer()
     }
 
     fileprivate func addFiles(_ files: [ComposerIncomingFile], pastedText: Bool = false) {

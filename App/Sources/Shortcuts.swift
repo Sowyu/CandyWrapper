@@ -80,6 +80,10 @@ final class Shortcuts {
 
     func onKey(_ handler: @escaping (NSEvent) -> Bool) { keyHandlers.append(handler) }
 
+    /// Commands named at run time (`script.<id>.run`): the handler sees every command with the prefix.
+    func on(prefix: String, _ handler: @escaping (Invocation) -> Bool) { prefixHandlers.append((prefix, handler)) }
+    private var prefixHandlers: [(String, (Invocation) -> Bool)] = []
+
     /// Every keydown in the window, before resolution (the notification sound's unlock gesture).
     var onKeyDown: (() -> Void)?
 
@@ -95,7 +99,8 @@ final class Shortcuts {
         if paletteOpen {
             if !Self.commandsWhilePaletteOpen.contains(command) { return paletteCommand?(invocation) ?? false }
         }
-        return handlers[command]?(invocation) ?? false
+        if let handler = handlers[command] { return handler(invocation) }
+        return prefixHandlers.first { command.hasPrefix($0.0) }?.1(invocation) ?? false
     }
 
     /// `editableFocus`: a text field or editor has the keyboard (lib/editableFocus.ts).

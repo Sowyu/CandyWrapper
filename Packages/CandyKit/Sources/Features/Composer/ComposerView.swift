@@ -81,8 +81,10 @@ public final class ComposerView: DSView {
     // MARK: Outputs
 
     /// Return or the button with content: the text (untrimmed) and how to deliver it. While
-    /// `editingQueued`, the send saves the edit; the mode doesn't matter.
-    public var onSend: ((String, ComposerLogic.SendMode) -> Void)?
+    /// `editingQueued`, the send saves the edit; the mode doesn't matter. `background` is the
+    /// `background` submission intent: start the draft in the background, or send and open a new
+    /// thread.
+    public var onSend: ((_ text: String, _ mode: ComposerLogic.SendMode, _ background: Bool) -> Void)?
     public var onStop: (() -> Void)?
     public var onResume: (() -> Void)?
     /// Every edit, for the per-thread draft.
@@ -468,9 +470,8 @@ public final class ComposerView: DSView {
             return true
         }
         if pending == .approval { return true }
-        // ponytail: `.background` sends in the foreground; starting in the background and opening a fresh composer waits for its own package
         let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault)
-        send(mode)
+        send(mode, background: intent == .background)
         // A send key never inserts a newline, even when nothing was sent.
         return true
     }
@@ -487,10 +488,10 @@ public final class ComposerView: DSView {
         }
     }
 
-    private func send(_ mode: ComposerLogic.SendMode) {
+    private func send(_ mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent,
               ComposerLogic.lengthValidationMessage(prompt) == nil else { return }
-        onSend?(prompt, mode)
+        onSend?(prompt, mode, background)
     }
 
     // MARK: Drops on the padding

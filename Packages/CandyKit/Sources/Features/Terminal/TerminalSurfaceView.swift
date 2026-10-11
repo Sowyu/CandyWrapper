@@ -23,6 +23,10 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     public var onResize: ((Int, Int) -> Void)?
     /// A link was clicked: an http(s) URL or a path.
     public var onLink: ((String) -> Void)?
+    /// A click landed in the terminal (in a split, it becomes the active pane).
+    public var onFocus: (() -> Void)?
+    /// "Add to chat" with the selection: its text and its 1-based buffer lines. Nil hides the item.
+    public var onAddToChat: ((_ text: String, _ lineStart: Int, _ lineEnd: Int) -> Void)?
 
     public override init(frame frameRect: NSRect) {
         var options = TerminalOptions.default
@@ -185,20 +189,60 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
 
     // MARK: Context menu
 
-    /// T3's right-click menu (`terminalContextMenuItems`) without "Add to chat", which needs the
-    /// composer's terminal context chips.
-    // ponytail: no "Add to chat" and no post-selection popup; add both with the terminal context chip
+    /// T3's right-click menu (`terminalContextMenuItems`, ThreadTerminalDrawer.tsx:276-309): the
+    /// selection items, disabled without a selection, then Paste, Select all and Jump to latest.
     func contextMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let copy = menu.addItem(withTitle: "Copy", action: #selector(menuCopy), keyEquivalent: "")
-        copy.isEnabled = hasSelection
+        let menu = selectionMenu()
+        for item in menu.items { item.isEnabled = hasSelection }
         menu.addItem(withTitle: "Paste", action: #selector(menuPaste), keyEquivalent: "")
         menu.addItem(withTitle: "Select all", action: #selector(menuSelectAll), keyEquivalent: "")
         menu.addItem(withTitle: "Jump to latest", action: #selector(menuJump), keyEquivalent: "")
         for item in menu.items { item.target = self }
         return menu
     }
+
+    /// `terminalSelectionMenuItems`: "Add to chat" (when the composer takes it) and "Copy".
+    private func selectionMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        if onAddToChat != nil { menu.addItem(withTitle: "Add to chat", action: #selector(menuAddToChat), keyEquivalent: "") }
+        menu.addItem(withTitle: "Copy", action: #selector(menuCopy), keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        return menu
+    }
+
+    /// The selection's text and 1-based lines (`terminalSelectionLineRange`), nil when blank.
+    var selectionContext: (text: String, lineStart: Int, lineEnd: Int)? {
+        guard hasSelection, let raw = selectionText else { return nil }
+        let text = raw.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: #"^\n+|\n+$"#, with: "", options: .regularExpression)
+        guard !text.isEmpty, let selection = terminal.selection else { return nil }
+        let start = min(selection.start.row, selection.end.row) + 1
+        return (text, start, max(start, max(selection.start.row, selection.end.row) + 1))
+    }
+
+    @objc private func menuAddToChat() {
+        guard let context = selectionContext else { return }
+        onAddToChat?(context.text, context.lineStart, context.lineEnd)
+        terminal.selectNone()
+        focus()
+    }
+
+    /// The post-selection popup (`observeSelectionActions`, selectionActions.ts:35-130): after a
+    /// drag or multi-click selection ends, Add to chat and Copy open at the pointer. A double or
+    /// triple click waits 500 ms for the gesture to finish. One-shot, nothing runs after.
+    func selectionEnded(clickCount: Int, at point: NSPoint) {
+        pendingPopup?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.selectionContext != nil, self.window?.isKeyWindow == true else { return }
+            self.selectionMenu().popUp(positioning: nil, at: point, in: self.terminal)
+        }
+        pendingPopup = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (clickCount >= 2 ? 0.5 : 0), execute: work)
+    }
+
+    /// A new click or a right-click cancels a popup that has not opened yet.
+    func cancelSelectionPopup() { pendingPopup?.cancel(); pendingPopup = nil }
+    private var pendingPopup: DispatchWorkItem?
 
     @objc private func menuCopy() { terminal.copy(self); focus() }
     @objc private func menuPaste() { terminal.paste(self); focus() }
@@ -212,5 +256,21 @@ final class InputTerminalView: TerminalView {
     /// True while a reset replays history: terminal replies are dropped.
     var muted = false
 
-    override func menu(for event: NSEvent) -> NSMenu? { surface?.contextMenu() }
+    override func menu(for event: NSEvent) -> NSMenu? {
+        surface?.cancelSelectionPopup()
+        return surface?.contextMenu()
+    }
+
+    /// A press in a pane makes it the active one (the grid cell's `onMouseDown`).
+    override func mouseDown(with event: NSEvent) {
+        surface?.cancelSelectionPopup()
+        surface?.onFocus?()
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        guard event.clickCount >= 2 || selectionActive, selectionActive else { return }
+        surface?.selectionEnded(clickCount: event.clickCount, at: convert(event.locationInWindow, from: nil))
+    }
 }

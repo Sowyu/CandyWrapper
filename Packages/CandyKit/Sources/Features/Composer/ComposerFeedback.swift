@@ -111,6 +111,12 @@ public struct ThreadErrorState: Sendable {
     public struct Banner: Equatable, Sendable {
         public var message: String
         public var variant: Variant
+        /// `AlertTitle` above the message (the provider status banner); nil for thread errors.
+        public var title: String? = nil
+        /// The provider status banner's info glyph instead of the alert circle.
+        public var info = false
+        /// "Open provider setup" after the message.
+        public var setupLink = false
     }
 
     private var local: [String: String] = [:]

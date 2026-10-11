@@ -235,6 +235,10 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var updateState: UpdateState?
     /// `versionAdvisory.latestVersion`, the version an update installs.
     public var latestVersion: String?
+    /// `compatibilityAdvisory` (`{status: supported|unsupported|broken, message?}`) and `setup`
+    /// (`{canAuthenticate?, canInstall?}`): the composer's provider status banner reads them.
+    public var compatibilityAdvisory: JSONValue?
+    public var setup: JSONValue?
 
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
@@ -256,7 +260,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
         case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
-        case updateState, versionAdvisory
+        case updateState, versionAdvisory, compatibilityAdvisory, setup
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -294,6 +298,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
             updateState = UpdateState(status: status, finishedAt: update["finishedAt"]?.stringValue, message: update["message"]?.stringValue)
         }
         latestVersion = ((try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil)?["latestVersion"]?.stringValue
+        compatibilityAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .compatibilityAdvisory)) ?? nil
+        setup = (try? c.decodeIfPresent(JSONValue.self, forKey: .setup)) ?? nil
     }
 
     /// `resolveProviderSkillsForCwd`: the workspace snapshot's skills, else the provider's.
