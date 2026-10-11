@@ -100,6 +100,41 @@ struct OverlaysFidelityTests {
                          dark ? "dark" : "light", Double(over) / Double(w * h) * 100, Double(total) / Double(w * h)))
         }
     }
+
+    /// The backdrop drawn at half the point size matches the old path (a full backing-scale snapshot, then
+    /// downscaled): under the 60% tint no channel moves by more than the fidelity tolerance.
+    @Test func smallSnapshotMatchesFullSize() throws {
+        for dark in [false, true] {
+            let view = GalleryColumn(sections: Array(TogglesGallery.sections.prefix(2)), dark: dark)
+            view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            let size = NSSize(width: 520, height: view.contentHeight)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = view
+            view.frame = NSRect(origin: .zero, size: size)
+            view.layoutSubtreeIfNeeded()
+            window.display()
+            defer { window.contentView = nil }
+            let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let old = ModalHost.blurred(rep.cgImage!, pointSize: size)!
+            let new = ModalHost.blurredSnapshot(of: view)!
+            #expect(old.width == new.width && old.height == new.height)
+            let a = FidelityTests.pixels(NSBitmapImageRep(cgImage: old), old.width, old.height)
+            let b = FidelityTests.pixels(NSBitmapImageRep(cgImage: new), old.width, old.height)
+            var worst = 0, total = 0, over = 0
+            for i in stride(from: 0, to: a.count, by: 4) {
+                let m = (0..<3).map { abs(Int(a[i + $0]) - Int(b[i + $0])) * 4 / 10 }.max()!
+                worst = max(worst, m)
+                total += m
+                if m > FidelityTests.tolerance { over += 1 }
+            }
+            let n = Double(old.width * old.height)
+            print(String(format: "BACKDROP %@: half-size vs full-size snapshot at %.0fx, %.2f%% over tolerance, worst %d, mean %.2f",
+                         dark ? "dark" : "light", Double(rep.pixelsWide) / rep.size.width, Double(over) / n * 100, worst, Double(total) / n))
+            #expect(worst <= FidelityTests.tolerance)
+        }
+    }
 }
 
 /// Toast timing and stacking, driven by a fake clock.
