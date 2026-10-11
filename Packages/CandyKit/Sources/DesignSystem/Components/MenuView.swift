@@ -84,7 +84,7 @@ public struct MenuItem {
 
 /// The popup list behind Menu, Select, Combobox and Autocomplete. The styles differ only in the
 /// surface and the fills for highlighted and selected rows.
-public final class MenuPopupView: DSView, PopupContent {
+public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     public enum Style: Sendable {
         case menu, select, combobox, autocomplete
     }
@@ -397,6 +397,10 @@ public final class MenuPopupView: DSView, PopupContent {
 
     func rowIndex(at point: CGPoint) -> Int? {
         rows.firstIndex { $0.frame.contains(clip.convert(point, from: self)) }
+    }
+
+    public func pressDragRow(at windowPoint: NSPoint) -> Int? {
+        rowIndex(at: convert(windowPoint, from: nil)).flatMap { items[$0].isSelectable ? $0 : nil }
     }
 
     public override func mouseMoved(with event: NSEvent) {

@@ -71,7 +71,13 @@ public final class LabelView: DSView {
         if let recipe = fontRecipe { font = recipe.resolve() }
     }
     // Setters skip unchanged values: rows reconfigure on every streamed delta, and each redraw costs a frame.
-    public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { if color != oldValue { needsDisplay = true } } }
+    public var color: NSColor = ThemeColors.main.color(\.foreground) {
+        didSet {
+            guard color != oldValue else { return }
+            if Motion.activeTransitions.contains(.color), window != nil, let layer { Motion.crossfade(layer) }
+            needsDisplay = true
+        }
+    }
     /// CSS line-height in points. Defaults to the font's natural height.
     public var lineHeight: CGFloat? { didSet { if lineHeight != oldValue { invalidate() } } }
     public var alignment: NSTextAlignment = .left { didSet { if alignment != oldValue { needsDisplay = true } } }

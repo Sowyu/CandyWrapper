@@ -246,6 +246,8 @@ public final class PopupHost: DSView {
     public private(set) var popups: [OpenPopup] = []
     private var keyMonitor: Any?
     private var mouseMonitor: Any?
+    /// Closed tooltips still fading out.
+    private var exitingPassive: [PopupContainer] = []
 
     /// The host for `window`, created on first use as the topmost subview of the content view.
     public static func host(for window: NSWindow) -> PopupHost {
@@ -270,6 +272,12 @@ public final class PopupHost: DSView {
                      motion: PopupMotion = .none, swallowsOutsideClick: Bool = false, pressesTrigger: Bool = true,
                      returnsFocus: Bool = true, parent: OpenPopup? = nil, passive: Bool = false) -> OpenPopup {
         if let parent { closeChildren(of: parent) } else if passive { popups.filter(\.isPassive).forEach { close($0, returnFocus: false) } } else { closeAll() }
+        if passive {
+            // One tooltip or hover card at a time: one that is still fading out goes now, as base-ui's
+            // provider closes the previous tooltip instantly when the next one opens (`data-instant`).
+            for container in exitingPassive { container.layer?.removeAllAnimations(); container.removeFromSuperview() }
+            exitingPassive.removeAll()
+        }
         // Keep the host above content added after it.
         if let superview, superview.subviews.last !== self { superview.addSubview(self, positioned: .above, relativeTo: nil) }
         let popup = OpenPopup(content: content, trigger: trigger, anchorRect: anchorRect, placement: placement, motion: motion,
@@ -280,6 +288,12 @@ public final class PopupHost: DSView {
         addSubview(popup.container)
         reposition(popup)
         if pressesTrigger { (trigger as? ControlView)?.isPopupOpen = true }
+        if let control = trigger as? ControlView, pressDragMenu(in: content) != nil {
+            // A menu or select trigger opens on press from now on. ponytail: the first open of a trigger still
+            // waits for the release; set `opensPopupOnPress` where the trigger is built if that first press shows
+            control.opensPopupOnPress = true
+            control.scalesWhenPressed = false // `aria-haspopup` triggers do not shrink (button.tsx:11)
+        }
         animate(popup, entering: true)
         installMonitors()
         return popup
@@ -347,6 +361,10 @@ public final class PopupHost: DSView {
         if popups.contains(where: { $0.keepsOpenOnTriggerPress && onTrigger($0) }) { return false }
         let swallow = popups.contains(where: \.swallowsOutsideClick)
         let onPressedTrigger = popups.contains { $0.pressesTrigger && onTrigger($0) }
+        if swallow || onPressedTrigger {
+            // AppKit still sends the release to the trigger under a swallowed press; it must not reopen the popup.
+            for popup in popups where onTrigger(popup) { (popup.trigger as? ControlView)?.pressClosedPopup = true }
+        }
         closeAll()
         // A press on the trigger closes the popup; the trigger must not reopen it in the same click.
         return swallow || onPressedTrigger
@@ -397,7 +415,15 @@ public final class PopupHost: DSView {
         t = CATransform3DTranslate(t, -origin.x, -origin.y, 0)
         let small = NSValue(caTransform3D: t), identity = NSValue(caTransform3D: CATransform3DIdentity)
         CATransaction.begin()
-        if !entering { CATransaction.setCompletionBlock { MainActor.assumeIsolated { container.removeFromSuperview() } } }
+        if !entering {
+            if popup.isPassive { exitingPassive.append(container) }
+            CATransaction.setCompletionBlock { [weak self] in
+                MainActor.assumeIsolated {
+                    container.removeFromSuperview()
+                    self?.exitingPassive.removeAll { $0 === container }
+                }
+            }
+        }
         let transform = CABasicAnimation(keyPath: "sublayerTransform")
         transform.fromValue = entering ? small : identity
         transform.toValue = entering ? identity : small

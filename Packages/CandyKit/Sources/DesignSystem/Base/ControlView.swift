@@ -19,8 +19,16 @@ open class ControlView: DSView {
     }
 
     public internal(set) var state = State() {
-        didSet { if state != oldValue { stateDidChange(from: oldValue) } }
+        didSet {
+            guard state != oldValue else { return }
+            if transitions.isEmpty || window == nil { return stateDidChange(from: oldValue) }
+            Motion.transitioning(transitions) { stateDidChange(from: oldValue) }
+        }
     }
+
+    /// The control's `transition-*` class: what fades when hover, press, focus or open state restyles it.
+    /// Empty snaps, which is right for T3's buttons and rows (button.tsx:11 animates only shadow and scale).
+    public var transitions: Motion.Transition = []
 
     public var isEnabled: Bool {
         get { state.enabled }
@@ -89,14 +97,33 @@ open class ControlView: DSView {
 
     // MARK: Press
 
+    /// Menu and select triggers open on press (base-ui `useClick` with `event: 'mousedown'`,
+    /// MenuTrigger.js:157, SelectRoot.js:294). Dragging onto an item and releasing chooses it.
+    /// `MenuPopupView.show(from:)` and SelectView turn it on; popover triggers keep opening on release.
+    public var opensPopupOnPress = false
+    /// Set while a press opened this control's menu, until the button comes up.
+    private var pressOpenedAt: TimeInterval?
+    /// Set by PopupHost when a press on this trigger closed its popup.
+    var pressClosedPopup = false
+
     open override func mouseDown(with event: NSEvent) {
         guard state.enabled else { return }
+        pressClosedPopup = false
         state.active = true
         state.focusVisible = false
+        if opensPopupOnPress {
+            pressOpenedAt = event.timestamp
+            performAction()
+            if pressedMenu == nil { pressOpenedAt = nil }
+        }
     }
 
     open override func mouseDragged(with event: NSEvent) {
         guard state.enabled else { return }
+        if pressOpenedAt != nil {
+            pressedMenu?.mouseMoved(with: event)
+            return
+        }
         let inside = bounds.contains(convert(event.locationInWindow, from: nil))
         state.active = inside
         state.hovered = inside
@@ -106,7 +133,42 @@ open class ControlView: DSView {
         guard state.enabled else { return }
         let inside = bounds.contains(convert(event.locationInWindow, from: nil))
         state.active = false
+        // The press closed this control's open popup (PopupHost swallowed it); the release must not reopen it.
+        if pressClosedPopup { pressClosedPopup = false; return }
+        if let openedAt = pressOpenedAt {
+            pressOpenedAt = nil
+            releasePressedMenu(event, heldFor: event.timestamp - openedAt)
+            return
+        }
         if inside { performAction() }
+    }
+
+    /// The menu this control opened, while it is open.
+    private var pressedMenu: PressDragMenu? {
+        guard let host = window?.contentView?.subviews.lazy.compactMap({ $0 as? PopupHost }).first,
+              let content = host.popups.last(where: { $0.trigger === self })?.content else { return nil }
+        return pressDragMenu(in: content)
+    }
+
+    /// How long the button must be held before a release on `row` chooses it. base-ui ignores a quick
+    /// press-and-release that lands on an item (MenuTrigger.js:185-188, 200 ms).
+    open func dragSelectDelay(row: Int, in menu: PressDragMenu) -> TimeInterval { 0.2 }
+
+    /// The button came up after a press that opened the menu: choose the item under the pointer, keep the
+    /// menu open over the trigger or the popup, or close it anywhere else (MenuTrigger.js:102-123,
+    /// SelectTrigger.js:192-206, 2 px slack around the trigger).
+    private func releasePressedMenu(_ event: NSEvent, heldFor held: TimeInterval) {
+        guard let host = window?.contentView?.subviews.lazy.compactMap({ $0 as? PopupHost }).first,
+              let popup = host.popups.last(where: { $0.trigger === self }) else { return }
+        if popup.container.bounds.contains(popup.container.convert(event.locationInWindow, from: nil)) {
+            if let menu = pressDragMenu(in: popup.content), let row = menu.pressDragRow(at: event.locationInWindow),
+               held >= dragSelectDelay(row: row, in: menu) {
+                menu.mouseUp(with: event)
+            }
+            return
+        }
+        if bounds.insetBy(dx: -2, dy: -2).contains(convert(event.locationInWindow, from: nil)) { return }
+        host.close(popup, returnFocus: false)
     }
 
     open func performAction() { action?() }
@@ -166,6 +228,22 @@ open class ControlView: DSView {
     }
 }
 
+/// Popup content a press on its trigger can drag into and release on: base-ui menus and selects.
+/// The trigger forwards drags as mouseMoved (highlight) and the release as mouseUp (choose).
+@MainActor
+public protocol PressDragMenu: NSView {
+    /// The selectable row under a point in window coordinates.
+    func pressDragRow(at windowPoint: NSPoint) -> Int?
+}
+
+/// The first press-drag menu in `view`'s subtree, itself included.
+@MainActor
+func pressDragMenu(in view: NSView) -> PressDragMenu? {
+    if let menu = view as? PressDragMenu { return menu }
+    for sub in view.subviews { if let menu = pressDragMenu(in: sub) { return menu } }
+    return nil
+}
+
 /// Shared motion values and the Reduce Motion switch.
 @MainActor
 public enum Motion {
@@ -178,6 +256,42 @@ public enum Motion {
     public static let easeInOut = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
 
     public static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// CSS properties a `transition-*` class animates. `.color` is text and icon color.
+    public struct Transition: OptionSet, Sendable {
+        public let rawValue: UInt8
+        public init(rawValue: UInt8) { self.rawValue = rawValue }
+        public static let color = Transition(rawValue: 1)
+        public static let background = Transition(rawValue: 2)
+        public static let border = Transition(rawValue: 4)
+        public static let shadow = Transition(rawValue: 8)
+        /// Tailwind `transition-colors`: color, background-color, border-color (and fill, stroke).
+        public static let colors: Transition = [.color, .background, .border]
+    }
+
+    /// What labels, icons and box decorations changed inside `transitioning` animate. Empty otherwise.
+    public private(set) static var activeTransitions: Transition = []
+
+    /// Runs `body` so the color changes it makes fade over 150 ms, like a `transition-*` class.
+    /// Under Reduce Motion they snap.
+    public static func transitioning(_ transitions: Transition, _ body: () -> Void) {
+        guard !transitions.isEmpty, !reduced else { return body() }
+        let outer = activeTransitions
+        activeTransitions = transitions
+        defer { activeTransitions = outer }
+        body()
+    }
+
+    /// Fades a redrawn layer from its old image to its next one, 150 ms. For drawn text and box
+    /// decorations a cross-fade of two images in different colors is the same as fading the color.
+    public static func crossfade(_ layer: CALayer, duration: CFTimeInterval = Durations.default) {
+        guard layer.contents != nil else { return }
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = duration
+        fade.timingFunction = easeInOut
+        layer.add(fade, forKey: kCATransition)
+    }
 
     public static func animate(_ layer: CALayer, keyPath: String, to value: Any, duration: CFTimeInterval,
                                timing: CAMediaTimingFunction = easeInOut) {

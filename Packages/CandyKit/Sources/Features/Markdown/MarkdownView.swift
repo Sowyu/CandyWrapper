@@ -685,7 +685,7 @@ public final class MarkdownView: DSView {
 }
 
 /// The interactive part of a file chip; the chip itself is drawn by `MarkdownView`.
-private final class FileChipHitView: NSView {
+private final class FileChipHitView: NSView, HoverSyncClient {
     weak var owner: MarkdownView?
     let index: Int
     var chip: FileChip? { didSet { tooltip.text = chip?.meta.targetPath ?? ""; window?.invalidateCursorRects(for: self) } }
@@ -739,7 +739,7 @@ public protocol MarkdownLinkHandler: AnyObject {
 
 /// The interactive part of a web link; the text is drawn by `MarkdownView`. The hover waits 350 ms
 /// and leaves after 120 ms (`PreviewCardTrigger delay={350} closeDelay={120}`).
-private final class MarkdownLinkHitView: NSView {
+private final class MarkdownLinkHitView: NSView, HoverSyncClient {
     weak var owner: MarkdownView?
     var url: URL? {
         didSet {

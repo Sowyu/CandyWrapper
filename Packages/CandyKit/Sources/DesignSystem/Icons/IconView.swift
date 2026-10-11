@@ -169,6 +169,25 @@ public final class IconView: NSView {
     }
 
     private func applyColors() {
+        // `transition-colors`: stroke and fill fade from what is on screen now.
+        let fades = Motion.activeTransitions.contains(.color) && window != nil
+        let shown = fades ? shapes.map { s -> (CGColor?, CGColor?) in
+            let l = s.layer.presentation() ?? s.layer
+            return (l.strokeColor, l.fillColor)
+        } : []
+        defer {
+            for (s, old) in zip(shapes, shown) {
+                for (key, from, to) in [("strokeColor", old.0, s.layer.strokeColor), ("fillColor", old.1, s.layer.fillColor)]
+                where from != nil && to != nil && from != to {
+                    let a = CABasicAnimation(keyPath: key)
+                    a.fromValue = from
+                    a.toValue = to
+                    a.duration = Motion.Durations.default
+                    a.timingFunction = Motion.easeInOut
+                    s.layer.add(a, forKey: key)
+                }
+            }
+        }
         withoutActions {
             for s in shapes {
                 let p = s.element.paint

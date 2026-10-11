@@ -59,6 +59,10 @@ public final class SelectView: ControlView {
         self.size = size
         super.init(frame: .zero)
         scalesWhenPressed = false // aria-haspopup
+        opensPopupOnPress = true
+        // `transition-[color,box-shadow,background-color]` (select.tsx:14). The border joins the fade because
+        // focus swaps it together with the ring, and one cross-fade cannot snap part of a box.
+        transitions = [.color, .background, .shadow, .border]
         decoration.host = self
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
@@ -149,6 +153,13 @@ public final class SelectView: ControlView {
     }
 
     // MARK: Popup
+
+    /// base-ui Select: a release on another item counts after 200 ms, on the selected item after 400 ms,
+    /// and after 400 ms for both when nothing is selected (SelectTrigger.js:104-128).
+    public override func dragSelectDelay(row: Int, in menu: PressDragMenu) -> TimeInterval {
+        guard let selectedIndex else { return 0.4 }
+        return row == selectedIndex ? 0.4 : 0.2
+    }
 
     public override func performAction() {
         super.performAction()

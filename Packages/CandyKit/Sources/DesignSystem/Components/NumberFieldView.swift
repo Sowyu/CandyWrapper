@@ -34,6 +34,7 @@ public final class NumberFieldView: BoxView {
         self.value = value
         self.size = size
         super.init(frame: .zero)
+        decoration.transition = [.shadow, .border] // transition-shadow (number-field.tsx:36)
         input.unstyled = true
         input.font = DSFont.ui(14).monospacedDigits
         input.lineHeight = size.metrics.height - 2
@@ -110,6 +111,7 @@ final class NumberStepperView: ControlView {
         super.init(frame: .zero)
         scalesWhenPressed = false
         decoration.host = self
+        transitions = .colors // number-field.tsx:52,70
         decoration.outset = 0
         layer?.addSublayer(decoration)
         addSubview(self.icon)

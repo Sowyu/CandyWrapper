@@ -367,6 +367,8 @@ public final class PickerControlsView: DSView {
         self.model = model; self.traits = traits; self.access = access
         super.init(frame: .zero)
         overflow.showsChevron = false
+        // The traits menu, the access select and the overflow menu open on press (TraitsPicker.tsx, CompactComposerControlsMenu.tsx).
+        for trigger in [traits, access, overflow] { trigger.opensPopupOnPress = true; trigger.scalesWhenPressed = false }
         overflow.setAccessibilityLabel("More composer controls")
         for v in [model, separators[0], traits, separators[1], access, overflow] as [NSView] { addSubview(v) }
     }

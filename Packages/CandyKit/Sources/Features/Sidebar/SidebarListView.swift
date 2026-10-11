@@ -276,7 +276,7 @@ public final class SidebarListView: DSView {
         let instant = hoverClosedAt.map { Date().timeIntervalSince($0) < 0.4 } ?? false
         let work = DispatchWorkItem { [weak self, weak row] in
             guard let self, let row, row.state.hovered, Self.hoverThreadId(row.item) == id else { return }
-            self.showHoverCard(id, over: row)
+            self.showHoverCard(id, over: row, instant: instant)
         }
         hoverWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + (instant ? 0 : 0.15), execute: work)
@@ -292,7 +292,7 @@ public final class SidebarListView: DSView {
         }
     }
 
-    private func showHoverCard(_ id: ThreadId, over row: SidebarRowBase) {
+    private func showHoverCard(_ id: ThreadId, over row: SidebarRowBase, instant: Bool = false) {
         // The snooze menu's open state disables the card (`disabled={snoozeMenuOpen}`).
         if let card = row as? SidebarCardRowView, card.snoozeButton.state.popupOpen { return }
         // Nothing under a dialog or the palette shows a card (their backdrops cover the rows).
@@ -301,7 +301,8 @@ public final class SidebarListView: DSView {
         closeHoverCard()
         let popup = host.open(SidebarThreadHoverCardView(model), trigger: row,
                               placement: PopupPlacement(side: .right, align: .start, sideOffset: 4),
-                              motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
+                              // `data-instant`: a card that follows another within the provider timeout skips the motion.
+                              motion: instant ? .none : .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
         hoverPopup = (id, popup)
     }
 

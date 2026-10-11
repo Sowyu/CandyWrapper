@@ -67,7 +67,32 @@ public struct BoxStyle: Equatable {
 /// focus rings can spill outside like CSS. Redraws only when the style or size changes.
 @MainActor
 public final class BoxDecorationLayer: CALayer {
-    public var boxStyle = BoxStyle() { didSet { if boxStyle != oldValue { setNeedsDisplay() } } }
+    public var boxStyle = BoxStyle() {
+        didSet {
+            guard boxStyle != oldValue else { return }
+            let allowed = transition.union(Motion.activeTransitions)
+            if !allowed.isEmpty, host?.window != nil, !Motion.reduced, allowed.isSuperset(of: Self.changes(from: oldValue, to: boxStyle)) {
+                Motion.crossfade(self)
+            }
+            setNeedsDisplay()
+        }
+    }
+    /// Properties that always fade on this box, whatever changed them: `.shadow` is `transition-shadow`,
+    /// the 150 ms focus ring fade of inputs, checkboxes and badges. A change that touches anything else snaps.
+    public var transition: Motion.Transition = []
+
+    /// What differs between two styles, in `transition-*` terms. Geometry counts as nothing animatable.
+    static func changes(from a: BoxStyle, to b: BoxStyle) -> Motion.Transition {
+        var result: Motion.Transition = []
+        if a.fill != b.fill { result.insert(.background) }
+        if a.border != b.border { result.insert(.border) }
+        if a.shadows != b.shadows || a.beforeShadows != b.beforeShadows { result.insert(.shadow) }
+        if a.radius != b.radius || a.backgroundClip != b.backgroundClip || a.borderWidth != b.borderWidth
+            || a.borderEdges != b.borderEdges || a.corners != b.corners {
+            result.insert(Motion.Transition(rawValue: 0x80))
+        }
+        return result
+    }
     /// The view whose appearance resolves the dynamic colors.
     public weak var host: NSView?
     /// Room for shadows and the 3px focus ring.

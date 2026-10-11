@@ -22,6 +22,7 @@ public class ChoiceView: ControlView {
         super.init(frame: .zero)
         scalesWhenPressed = false
         decoration.host = self
+        decoration.transition = [.shadow] // transition-shadow (checkbox.tsx:11, radio-group.tsx:22)
         layer?.addSublayer(decoration)
         layer?.addSublayer(mark)
         layer?.masksToBounds = false

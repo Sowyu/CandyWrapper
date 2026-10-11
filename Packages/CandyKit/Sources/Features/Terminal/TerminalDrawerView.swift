@@ -246,10 +246,18 @@ public final class TerminalActionCluster: DSView {
             icon.frame = NSRect(x: 4, y: 4, width: 13, height: 13)
         }
 
+        private var shownHot = false
+
         override func updateLayer() {
             icon.strokeColor = Themed.color(\.foreground, 0.9)
-            let fill: NSColor? = state.hovered && !limited ? Themed.color(\.accent) : nil
-            layer?.backgroundColor = fill?.cgColor(in: self)
+            let hot = state.hovered && !limited
+            let fill = hot ? Themed.color(\.accent).cgColor(in: self) : CGColor.clear
+            // `transition-colors` (ThreadTerminalDrawer.tsx:1557-1592): the hover fill fades 150 ms. Theme changes snap.
+            if let layer, hot != shownHot, window != nil, !Motion.reduced {
+                Motion.animate(layer, keyPath: "backgroundColor", to: fill, duration: Motion.Durations.default)
+            }
+            shownHot = hot
+            layer?.backgroundColor = fill
         }
     }
 }

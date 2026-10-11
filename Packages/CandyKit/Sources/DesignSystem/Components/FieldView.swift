@@ -65,6 +65,7 @@ public class FieldView: DSView {
         editor = FieldEditor(multiline: multiline)
         super.init(frame: .zero)
         decoration.host = self
+        decoration.transition = [.shadow, .border] // transition-shadow (input.tsx:68, textarea.tsx:20); the border swaps with the ring
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
 
