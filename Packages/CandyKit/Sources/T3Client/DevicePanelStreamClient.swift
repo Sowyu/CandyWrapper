@@ -95,11 +95,11 @@ public final class DevicePanelStreamClient {
     }
     public func key(code: UInt16, text: String?, down: Bool) {
         // macOS virtual key codes to USB HID usages, stream.ts's hidUsageForCode.
-        let hid: [UInt16: Int] = [0:4,1:22,2:7,3:9,4:11,5:10,6:29,7:27,8:6,9:25,11:5,12:20,13:26,14:8,15:21,16:28,17:23,31:18,32:24,34:12,35:19,37:15,38:13,40:14,45:17,46:16,36:40,48:43,49:44,51:42,53:41,123:80,124:79,125:81,126:82]
+        let hid: [UInt16: Int] = [0:4,1:22,2:7,3:9,4:11,5:10,6:29,7:27,8:6,9:25,11:5,12:20,13:26,14:8,15:21,16:28,17:23,31:18,32:24,34:12,35:19,37:15,38:13,40:14,45:17,46:16,36:40,48:43,49:44,51:42,53:41,123:80,124:79,125:81,126:82,18:30,19:31,20:32,21:33,23:34,22:35,26:36,28:37,25:38,29:39,27:45,24:46,33:47,30:48,42:49,41:51,39:52,50:53,43:54,47:55,44:56,117:76,59:224,56:225,58:226,55:227,62:228,60:229,61:230,54:231]
         if platform == "ios", let usage = hid[code] {
             send(DevicePanelWire.tagged(6, .object(["type": .string(down ? "down" : "up"), "usage": .number(Double(usage))])))
         } else if platform == "android", down {
-            let keys: [UInt16: Int] = [36:66,48:61,51:67,123:21,124:22,125:20,126:19]
+            let keys: [UInt16: Int] = [36:66,48:61,51:67,123:21,124:22,125:20,126:19,117:112,115:122,119:123,116:92,121:93]
             let json: JSONValue
             if code == 53 { json = .object(["type": .string("back")]) }
             else if let key = keys[code] { json = .object(["type": .string("key"), "keycode": .number(Double(key))]) }

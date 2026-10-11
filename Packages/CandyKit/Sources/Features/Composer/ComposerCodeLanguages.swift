@@ -49,6 +49,13 @@ enum ComposerCodeLanguages {
         let id = language(info)
         return entries.first { $0.id == (aliases[id.lowercased()] ?? id.lowercased()) }?.label ?? id
     }
+    static func filtered(_ query: String, current info: String) -> [(id: String, label: String)] {
+        let raw = language(info)
+        let current = aliases[raw.lowercased()] ?? raw.lowercased()
+        let choices = entries.contains { $0.id == current } ? entries : [(id: raw, label: raw)] + entries
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return choices.filter { needle.isEmpty || $0.id.contains(needle) || $0.label.lowercased().contains(needle) }
+    }
     static func replacing(_ info: String, with language: String) -> String {
         let leading = String(info.prefix(while: \.isWhitespace))
         let rest = String(info.dropFirst(leading.count + self.language(info).count))

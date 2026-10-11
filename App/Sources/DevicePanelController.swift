@@ -16,6 +16,7 @@ final class DevicePanelController {
     private var floating = false
     private let floatingViewer = DevicePanelStreamView()
     private var selected: String?
+    private var previousSessions: [ThreadId: Set<String>] = [:]
     private var subscription: Task<Void, Never>?
     private var load: Task<Void, Never>?
     private var connect: Task<Void, Never>?
@@ -88,15 +89,35 @@ final class DevicePanelController {
             floating = false; panel.deviceMiniPlayerShown = false
             thread = next; state = nil; selected = nil
         }
-        guard visible, let thread, let env = thread.environmentId, let shell = environments.session(env) else {
+        guard let thread, let env = thread.environmentId, let shell = environments.session(env) else {
             stopStream(); subscription?.cancel(); subscription = nil; load?.cancel(); return
         }
         if subscription == nil {
             subscription = shell.supervisor.subscribe("subscribeDeviceState", payload: { .object([:]) }, handler: { [weak self] event in
                 guard case .value(let json) = event, let state = try? JSONValueDecoder().decode(DevicePanelState.self, from: json) else { return }
-                await MainActor.run { guard self?.thread == thread else { return }; self?.state = state; self?.render() }
+                await MainActor.run { guard self?.thread == thread else { return }; self?.receive(state) }
             })
-            request("device.list", [:])
+            request("device.list", visible ? [:] : ["inspectOnly": .bool(true)])
+        }
+        render()
+    }
+    /// ChatView.tsx:5471-5524: the first snapshot is a baseline, never a request to reopen tabs.
+    private func receive(_ state: DevicePanelState) {
+        self.state = state
+        guard let thread else { return }
+        let opened = state.devices.filter { device in state.sessions.contains { $0.threadId == thread.localId.rawValue && $0.key == device.key } }
+        let previous = previousSessions.updateValue(Set(opened.map(\.key)), forKey: thread)
+        if let previous, (panel.window?.contentView?.bounds.width ?? 0) > 980 {
+            for device in opened where !previous.contains(device.key) {
+                if ClientSettingsStore.shared.current.bool("autoShowFloatingPreview") {
+                    selected = device.key; floating = true; panel.deviceMiniPlayerShown = true
+                } else {
+                    let target = DevicePanelSurface(hostId: device.hostId, deviceId: device.id, platform: device.platform, name: device.name)
+                    if !panel.panelState.surfaces.contains(where: { $0.id == target.id }) {
+                        panel.mutatePanel { $0.openDevice(target); return [] }
+                    }
+                }
+            }
         }
         render()
     }

@@ -593,8 +593,41 @@ public final class ThreadPanelView: DSView {
         let closed = change(&next)
         guard next != panelState || !closed.isEmpty else { return }
         panelActionRevision += 1
+        let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : Double(ClientSettingsStore.shared.current.int("panelAnimationDurationMs")) / 1000
+        let animateSheet = viewportWidth <= 980 && !rightPanelMaximized && next.isOpen != panelState.isOpen && duration > 0
+        if animateSheet, !next.isOpen { animateClosingSheet(duration: duration) }
         setPanelState(next)
+        if animateSheet, next.isOpen {
+            layoutSubtreeIfNeeded()
+            animateSheetLayer(rightPanel.layer, opening: true, duration: duration)
+            animateSheetLayer(rightPanelBackdrop.layer, opening: true, duration: duration, translate: false)
+        }
         onPanelChange?(next, closed)
+    }
+
+    /// RightPanelSheet.tsx and sheet.tsx: a 32px translation plus opacity. Restored routes do not animate.
+    private func animateSheetLayer(_ target: CALayer?, opening: Bool, duration: Double, translate: Bool = true) {
+        guard let target else { return }
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = opening ? 0 : 1; opacity.toValue = opening ? 1 : 0
+        let move = CABasicAnimation(keyPath: "transform.translation.x")
+        move.fromValue = opening ? 32 : 0; move.toValue = opening ? 0 : 32
+        let group = CAAnimationGroup(); group.animations = translate ? [opacity, move] : [opacity]
+        group.duration = duration; group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        group.fillMode = .forwards; group.isRemovedOnCompletion = opening
+        target.add(group, forKey: "right-panel-sheet")
+    }
+    private func animateClosingSheet(duration: Double) {
+        // Keep only a still frame during exit so hidden device and browser transports stop immediately.
+        guard rightPanel.bounds.width > 0, let bitmap = rightPanel.bitmapImageRepForCachingDisplay(in: rightPanel.bounds) else { return }
+        rightPanel.cacheDisplay(in: rightPanel.bounds, to: bitmap)
+        let ghost = CALayer(); ghost.contents = bitmap.cgImage; ghost.frame = rightPanel.frame; ghost.zPosition = 21
+        let backdrop = CALayer(); backdrop.frame = bounds; backdrop.zPosition = 20
+        backdrop.backgroundColor = Themed.color(\.background, 0.6).cgColor(in: self)
+        layer?.addSublayer(backdrop); layer?.addSublayer(ghost)
+        animateSheetLayer(ghost, opening: false, duration: duration)
+        animateSheetLayer(backdrop, opening: false, duration: duration, translate: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { ghost.removeFromSuperlayer(); backdrop.removeFromSuperlayer() }
     }
 
     /// Opens or closes the panel without telling `onPanelChange`.

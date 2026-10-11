@@ -49,9 +49,10 @@ final class RightPanelView: DSView {
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
     /// panel controls take, and keeps the active tab in view.
-    // ponytail: no left and right scroll buttons or wheel scrolling; the strip follows the active
-    // tab. Add T3's "Scroll tabs" buttons when people keep many tabs open
-    private let strip = DSView()
+    private let strip = RightPanelTabStripView()
+    private let scrollLeft = ButtonView(nil, icon: .chevronLeft, variant: .ghostMuted, size: .iconXs)
+    private let scrollRight = ButtonView(nil, icon: .chevronRight, variant: .ghostMuted, size: .iconXs)
+    private var revealActiveTab = true
     private var stripOffset: CGFloat = 0
     private let border = CALayer()
     private(set) var state = RightPanelState()
@@ -84,15 +85,22 @@ final class RightPanelView: DSView {
         layer?.addSublayer(border)
         launcher.onPick = { [weak self] kind in self?.onAdd?(kind) }
         file.explorer = files
+        strip.onScroll = { [weak self] delta in self?.scrollTabs(delta) }
+        scrollLeft.action = { [weak self] in guard let self else { return }; self.scrollTabs(-max(120, self.strip.bounds.width * 0.75)) }
+        scrollRight.action = { [weak self] in guard let self else { return }; self.scrollTabs(max(120, self.strip.bounds.width * 0.75)) }
+        scrollLeft.setAccessibilityLabel("Scroll tabs left"); scrollRight.setAccessibilityLabel("Scroll tabs right")
+        scrollLeft.toolTip = "Scroll tabs left"; scrollRight.toolTip = "Scroll tabs right"
+        scrollLeft.iconSize = 14; scrollRight.iconSize = 14
         strip.clipsToBounds = true
         strip.addSubview(add)
-        [diff, launcher, strip].forEach(addSubview)
+        [diff, launcher, strip, scrollLeft, scrollRight].forEach(addSubview)
         clipsToBounds = true
     }
 
     /// Shows `state`'s tabs and its active surface. Inactive surfaces leave the view tree, so a
     /// hidden file tab's web view or player stops.
     func apply(_ state: RightPanelState) {
+        revealActiveTab = self.state.activeSurfaceId != state.activeSurfaceId || self.state.surfaces != state.surfaces
         self.state = state
         tabs.forEach { $0.removeFromSuperview() }
         tabs = state.surfaces.map { surface in
@@ -101,6 +109,9 @@ final class RightPanelView: DSView {
                                    tinted: surface.kind != .file && surface.kind != .pullRequest && favicon == nil)
             tab.isActive = surface.id == state.activeSurfaceId
             tab.onSelect = { [weak self] in self?.onActivate?(surface.id) }
+            if surface.deviceTarget != nil {
+                tab.onRename = { [weak self] value in self?.onRenameDevice?(surface.id, value) }
+            }
             tab.close.action = { [weak self] in self?.onClose?(surface.id) }
             tab.onMenu = { [weak self, weak tab] event in if let tab { self?.showTabMenu(surface, tab: tab, event: event) } }
             tab.onMiddleClick = { [weak self] in self?.onClose?(surface.id) }
@@ -184,14 +195,7 @@ final class RightPanelView: DSView {
         if surface.deviceTarget != nil {
             var rename = MenuItem("Rename")
             rename.action = { [weak self] in
-                guard let self, let window = self.window else { return }
-                let dialog = DialogView(title: "Rename device")
-                let input = InputView(text: surface.title)
-                let save = ButtonView("Save"), cancel = ButtonView("Cancel", variant: .ghost)
-                dialog.panelContent = [input]; dialog.footerButtons = [cancel, save]
-                let modal = ModalHost.present(dialog, in: window)
-                cancel.action = { [weak modal] in modal?.close() }
-                save.action = { [weak self, weak input, weak modal] in self?.onRenameDevice?(surface.id, input?.text ?? ""); modal?.close() }
+                (tab as? PanelTabView)?.beginRename()
             }
             items.append(rename)
         }
@@ -208,6 +212,12 @@ final class RightPanelView: DSView {
         MenuPopupView.showContextMenu(items, in: tab, at: tab.convert(event.locationInWindow, from: nil))
     }
 
+    private func scrollTabs(_ delta: CGFloat) {
+        revealActiveTab = false
+        stripOffset += delta
+        needsLayout = true
+    }
+
     override func layout() {
         super.layout()
         // `border-l border-border`; the content is `width - 1` wide right of it.
@@ -215,13 +225,21 @@ final class RightPanelView: DSView {
         strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - 112), height: Self.tabBarHeight)
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
-        if let i = tabs.firstIndex(where: \.isActive) {
+        let overflow = total > strip.bounds.width
+        scrollLeft.isHidden = !overflow; scrollRight.isHidden = !overflow
+        if overflow { strip.frame.size.width = max(0, strip.frame.width - 48) }
+        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: 14, width: 24, height: 24)
+        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: 14, width: 24, height: 24)
+        if revealActiveTab, let i = tabs.firstIndex(where: \.isActive) {
             let start = widths[..<i].reduce(0, +) + CGFloat(i) * 4
             let end = start + widths[i] + (i == tabs.count - 1 ? 4 + 24 : 0)
             if start < stripOffset { stripOffset = start }
             if end > stripOffset + strip.bounds.width { stripOffset = end - strip.bounds.width }
         }
         stripOffset = max(0, min(stripOffset, total - strip.bounds.width))
+        revealActiveTab = false
+        scrollLeft.isEnabled = stripOffset > 1
+        scrollRight.isEnabled = stripOffset + strip.bounds.width < total - 1
         var x: CGFloat = -stripOffset
         for (tab, w) in zip(tabs, widths) {
             tab.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: w, height: 24)
@@ -252,6 +270,8 @@ final class RightPanelView: DSView {
 final class PanelTabView: DSView {
     let close: PanelTabCloseButton
     private let title: LabelView
+    private var renameInput: InputView?
+    var onRename: ((String) -> Void)?
     var isActive = true { didSet { restyle() } }
     private var hovered = false { didSet { if hovered != oldValue { close.isTabHovered = hovered; restyle() } } }
     private var tracking: NSTrackingArea?
@@ -281,7 +301,7 @@ final class PanelTabView: DSView {
         self.init(title: text, identity: IconView(name: icon, size: 12, strokeColor: Themed.color(\.foreground)), tinted: true)
     }
 
-    var preferredWidth: CGFloat { min(144, 6 + 16 + 2 + ceil(title.textWidth) + 8) }
+    var preferredWidth: CGFloat { if renameInput != nil { return 128 }; return min(144, 6 + 16 + 2 + ceil(title.textWidth) + 8) }
 
     private func restyle() {
         title.color = Themed.color(isActive || hovered ? \.foreground : \.mutedForeground)
@@ -293,6 +313,7 @@ final class PanelTabView: DSView {
         super.layout()
         close.frame = NSRect(x: 6, y: (bounds.height - 16) / 2, width: 16, height: 16)
         title.frame = NSRect(x: 24, y: (bounds.height - 16) / 2, width: max(0, bounds.width - 24 - 8), height: 16)
+        renameInput?.frame = NSRect(x: 24, y: 1, width: max(0, bounds.width - 28), height: 22)
     }
 
     override func updateLayer() {
@@ -308,10 +329,31 @@ final class PanelTabView: DSView {
         tracking = area
     }
 
+    func beginRename() {
+        guard onRename != nil, renameInput == nil else { return }
+        let input = InputView(text: title.text, size: .inline)
+        input.setAccessibilityLabel("Device tab name")
+        renameInput = input; title.isHidden = true; addSubview(input)
+        input.onCommit = { [weak self] value in self?.finishRename(value) }
+        input.onSubmit = { [weak self, weak input] in self?.finishRename(input?.text) }
+        input.onCommand = { [weak self] selector in
+            guard selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+            self?.finishRename(nil); return true
+        }
+        superview?.superview?.needsLayout = true; needsLayout = true
+        window?.makeFirstResponder(input)
+    }
+    private func finishRename(_ value: String?) {
+        guard let input = renameInput else { return }
+        renameInput = nil; input.onCommit = nil; input.removeFromSuperview(); title.isHidden = false
+        if let value { onRename?(value) }
+        superview?.superview?.needsLayout = true
+    }
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) {
-        if event.modifierFlags.contains(.control) { onMenu?(event) } else { onSelect?() }
+        if event.clickCount == 2, onRename != nil { beginRename() }
+        else if event.modifierFlags.contains(.control) { onMenu?(event) } else { onSelect?() }
     }
     override func rightMouseDown(with event: NSEvent) { onMenu?(event) }
     // `onAuxClick`: a middle click closes the tab.
@@ -451,4 +493,13 @@ final class LauncherRow: DSView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseUp(with event: NSEvent) { if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() } }
+}
+
+/// Wheel scrolling belongs to the tab strip, not the active surface.
+private final class RightPanelTabStripView: DSView {
+    var onScroll: ((CGFloat) -> Void)?
+    override func scrollWheel(with event: NSEvent) {
+        let delta = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) ? event.scrollingDeltaX : event.scrollingDeltaY
+        onScroll?(-delta * (event.hasPreciseScrollingDeltas ? 1 : 16))
+    }
 }

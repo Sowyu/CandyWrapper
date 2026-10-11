@@ -350,14 +350,21 @@ public final class DiffListView: DSView {
 
     // MARK: Line clicks
 
+    public var onLineRange: ((DiffLineTarget, DiffLineTarget) -> Void)?
+    private var rangeStart: DiffLineTarget?
     public override func mouseDown(with event: NSEvent) {
+        rangeStart = lineTarget(at: convert(event.locationInWindow, from: nil))
         window?.makeFirstResponder(self)
         if onLineClick == nil { super.mouseDown(with: event) }
     }
 
     public override func mouseUp(with event: NSEvent) {
         guard let onLineClick, let target = lineTarget(at: convert(event.locationInWindow, from: nil)) else { super.mouseUp(with: event); return }
-        onLineClick(target)
+        defer { rangeStart = nil }
+        if let start = rangeStart, start.path == target.path,
+           start.oldLine != target.oldLine || start.newLine != target.newLine {
+            onLineRange?(start, target)
+        } else { onLineClick(target) }
     }
 
     /// The gutter under `point`: unified rows pick the side by the line's kind, split rows by column.

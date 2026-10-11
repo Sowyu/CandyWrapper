@@ -478,6 +478,47 @@ final class ScheduledTaskFormView: DSView {
         return (t, t.height(forWidth: 528))
     }
 
+    private var baseBranchTask: Task<Void, Never>?
+    private func showBaseBranch(from trigger: NSView) {
+        guard let e = editor, let request = e.context.request,
+              let project = e.projects.first(where: { $0.projectId == e.selectedProjectId }) else { return }
+        let picker = BranchPickerView()
+        picker.selectedValue = e.draft.baseRef
+        picker.startFromOrigin = e.draft.startFromOrigin
+        picker.onStartFromOrigin = { [weak e] in e?.draft.startFromOrigin = $0 }
+        let popup = picker.present(from: trigger, placement: .dropdown)
+        picker.onPick = { [weak e, weak trigger, weak popup] value in
+            e?.draft.baseRef = value
+            (trigger as? ButtonView)?.title = value
+            if let popup { trigger?.popupHost?.close(popup) }
+        }
+        var query = "", cursor: Int?, refs: [VcsRef] = []
+        let environmentId = e.environmentId, cwd = project.workspaceRoot
+        popup?.onClose = { [weak self] in self?.baseBranchTask?.cancel(); self?.baseBranchTask = nil }
+        func load(_ next: Int?, picker: BranchPickerView) {
+            self.baseBranchTask?.cancel()
+            picker.statusText = next == nil ? "Loading refs..." : "Loading more refs..."
+            let sanitized = BranchToolbarLogic.sanitizeNewRefName(query)
+            self.baseBranchTask = Task { [weak picker] in
+                do {
+                    let json = try await request(environmentId, VcsRPC.listRefs, VcsRPC.listRefsInput(cwd: cwd, query: sanitized, cursor: next))
+                    guard !Task.isCancelled, let picker, picker.window != nil else { return }
+                    let page = try json.decode(as: VcsListRefsResult.self)
+                    if next == nil { refs = [] }
+                    var known = Set(refs.map(\.name))
+                    refs += page.refs.filter { known.insert($0.name).inserted }
+                    cursor = page.nextCursor
+                    picker.rows = refs.map { BranchPickerView.Row(value: $0.name, title: $0.name, badge: $0.isRemote == true ? "Remote" : nil) }
+                    picker.hasNextPage = cursor != nil
+                    picker.statusText = cursor == nil ? nil : "Showing \(refs.count) of \(page.totalCount) refs"
+                } catch { if !Task.isCancelled { picker?.statusText = String(describing: error) } }
+            }
+        }
+        picker.onQuery = { [weak picker] value in guard let picker else { return }; query = value; load(nil, picker: picker) }
+        picker.onLoadMore = { [weak picker] in if let cursor, let picker { load(cursor, picker: picker) } }
+        load(nil, picker: picker)
+    }
+
     func rebuild() {
         guard let e = editor else { return }
         rows.forEach { $0.view.removeFromSuperview() }
@@ -508,15 +549,9 @@ final class ScheduledTaskFormView: DSView {
         let pair = ScheduledTaskPairView(field("Project", project, height: 28), field("Workspace", workspace, height: 28))
         rows.append((pair, 50))
         if d.workspaceMode == .worktree {
-            // ponytail: a text field and an origin switch stand in for WorktreeBaseBranchPicker; reuse BranchPickerView when it needs ref search
-            let base = InputView(placeholder: "main", text: d.baseRef, size: .sm)
-            base.onChange = { [weak e] t in e?.draft.baseRef = t }
-            let origin = SwitchView(isOn: d.startFromOrigin, size: .sm)
-            origin.onChange = { [weak e] on in e?.draft.startFromOrigin = on }
-            let originLabel = LabelView("Start from origin", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-            originLabel.lineHeight = 16
-            let line = ScheduledTaskInlineRow([base], trailing: [originLabel, origin])
-            rows.append(field("Base branch", line, height: 28))
+            let base = ButtonView(d.baseRef.isEmpty ? "Select branch" : d.baseRef, icon: .gitBranch, variant: .outline, size: .sm)
+            base.action = { [weak self, weak base] in if let base { self?.showBaseBranch(from: base) } }
+            rows.append(field("Base branch", base, height: 28))
         } else if d.workspaceMode == .existingWorktree {
             let path = InputView(placeholder: "/path/to/checkout", text: d.existingWorktreePath)
             path.onChange = { [weak e] t in e?.draft.existingWorktreePath = t }

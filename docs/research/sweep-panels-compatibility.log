@@ -1,0 +1,875 @@
+Another instance of SwiftPM (PID: 47645) is already running using '/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/.build', waiting until that process has finished execution...Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 4]
+[2 / 6] Features
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Composer/ComposerRichText.swift:174:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+172 |     }
+173 |     /// A list item's marker, compiled once: `edit` runs on every Return and Tab in the composer.
+174 |     nonisolated(unsafe) private static let listMarker = try! NSRegularExpression(pattern: #"^([ \t]*)(-\s\[[ xX]\]|\d+[.)]|[-*+])([ \t]+|$)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+175 | 
+176 |     static func edit(_ text: String, selection: NSRange, indent: Bool = false) -> Edit? {
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:318:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+316 |     }
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:319:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:320:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:321:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:322:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:323:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:324:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:325:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:326:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:327:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:328:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:329:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+331 | 
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-sweep-panels/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:330:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+331 | 
+332 |     static let posixRoots = ["/Users/", "/home/", "/tmp/", "/var/", "/etc/", "/opt/", "/mnt/", "/Volumes/", "/private/", "/root/",
+[3 / 7] Features
+[7 / 10] Features
+[8 / 10] Features
+[9 / 11] Features
+[10 / 11] FeaturesTests-product
+[12 / 12] FeaturesTests-product
+Build complete! (13,56 sec)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite ComposerRichTextT3CopyTests started.
+◇ Suite SweepPanelsTests started.
+◇ Suite ComposerRichTextT3LiteralTests started.
+◇ Suite ComposerRichTextWireTests started.
+◇ Suite ComposerRichTextT3CaretTests started.
+◇ Suite ComposerRichTextT3InlineTests started.
+◇ Test panelOverflowScrollsWithoutChangingActiveSurface() started.
+◇ Suite ComposerRichTextT3DocTests started.
+◇ Test editsLiteralMarkdownInsertsANewlineAndPreservesAnExplicitlyClearedAnswer() started.
+◇ Test plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Suite ComposerRichTextT3PasteTests started.
+◇ Test leavesArrowKeysAloneAwayFromStyledEdges() started.
+◇ Test typedRuleMovesTheCaretToTheNextLine() started.
+◇ Test returnAfterATypedClosingFenceEndsTheBlock() started.
+◇ Test preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test returnOnAFenceLineOpensAClosedBlock() started.
+◇ Test keepsMarksTheUserToggledAtAnEdgeAndLetsTheArrowMove() started.
+◇ Test richTextRewritesWhatT3Rewrites(_:_:) started.
+◇ Test offersThePlainStopBetweenBoldTextAndAChipRightAfterIt() started.
+◇ Test letsTheCaretStepOutInFrontOfBoldThatStartsTheLine() started.
+◇ Test stepsOutOfInlineCodeAtTheEndOfALineWithoutInsertingASpace() started.
+◇ Test keepsTheMarkersOfTheListItemsItSpans() started.
+◇ Test keepsThePrefixOfTheQuoteLinesItSpans() started.
+◇ Test copiesTextWithinOneBlockWithoutItsMarker() started.
+◇ Test expandedChromeDoesNotScheduleADeferredCollapse() started.
+◇ Test keepsTheNestingOfAnItemAndItsChildren() started.
+◇ Test miniPlayerEdgesKeepOppositeCornerAndBounds() started.
+◇ Test diffTreeExpansionPreservesPathsAndOrdering() started.
+◇ Test letsTheCaretStepOutAfterBoldThatEndsTheLine() started.
+◇ Test languageSearchKeepsCurrentUnknownAndAliases() started.
+◇ Test oneFailedFanoutTargetKeepsItsRetryRoute() started.
+◇ Test customPresetsUseDriverIdsAndDefaults() started.
+◇ Test plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test turningRichTextOffKeepsThePrompt() started.
+◇ Test copiesAcrossBlocksAsTheyAreWritten() started.
+◇ Test case passing 1 argument value → "*" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "a*b" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "**" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "_" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test offersBothStopsWhereStyledTextMeetsPlainTextMidLine() started.
+◇ Test case passing 1 argument value → "
+
+" to preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test case passing 1 argument value → "2 * 3 * 4 = 24" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "a_b_c" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "  - [X] done
+
+**keep** €my-skill @README.md  
+" to preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test case passing 1 argument value → "x = y * z;" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "my_var_name" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "" to preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test case passing 1 argument value → "`" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "price: $20 or $5.99" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "```" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "line one
+line two
+" to preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test case passing 1 argument value → "``" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "a ` b" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 2 arguments value → "_italic_", expected → "*italic*" to richTextRewritesWhatT3Rewrites(_:_:) started.
+◇ Test case passing 2 arguments value → "- [X] done", expected → "- [x] done" to richTextRewritesWhatT3Rewrites(_:_:) started.
+◇ Test case passing 1 argument value → "C:\Users\me\file.txt" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "- [X] done
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+  detail €my-skill @README.md
+" to preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) started.
+◇ Test case passing 1 argument value → "\*not italic\*" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 2 arguments value → "__bold__", expected → "**bold**" to richTextRewritesWhatT3Rewrites(_:_:) started.
+◇ Test case passing 1 argument value → "# not a heading?" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "use `" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "\\" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 2 arguments value → "Use €my-skill now", expected → "Use $my-skill now" to richTextRewritesWhatT3Rewrites(_:_:) started.
+◇ Test case passing 1 argument value → "snake_case_name" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test rendersTripleMarkersAndNestedStyles() started.
+◇ Test keepsCodeSpanContentsLiteral() started.
+◇ Test parsesBoldMarkersIntoStyledSpans() started.
+◇ Test case passing 1 argument value → "#" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test preservesCrossingItalicAndBoldSpans() started.
+◇ Test case passing 1 argument value → "##" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test mapsMarkdownOffsetsAtStyledEdgesOntoDocumentText() started.
+◇ Test keepsRepeatedAndAlternateDelimitersLiteralInsideAnActiveMark() started.
+◇ Test resolvesACursorIdenticallyInBothModes(_:) started.
+◇ Test case passing 1 argument value → "> quoted reply" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test roundTripsTheRule(_:) started.
+◇ Test appliesASharedMarkToTextOnBothSidesOfAChip() started.
+◇ Test case passing 1 argument value → "#hashtag" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → ">" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test keepsTheCaretInsideAnEmptyFence() started.
+◇ Test case passing 1 argument value → ">>" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test keepsChipSourcesCanonicalThroughTheDocument() started.
+◇ Test keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test clampsACursorThatWasSittingInsideAMarkerOntoTheStyledText() started.
+◇ Test case passing 1 argument value → "-" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test closesAnUnclosedFenceThatHasABlockAfterIt() started.
+◇ Test canonicalizesTheEmptyFence(_:_:) started.
+◇ Test keepsAChipInAFenceInfoStringAsSourceAndKeepsLaterChipsAligned() started.
+◇ Test case passing 1 argument value → "--" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test keepsChipsInAFenceInfoStringAndBodyEachInTheirOwnPlace() started.
+◇ Test canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "- " to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test roundTripsTheList(_:) started.
+◇ Test givesABareListItemASpaceOnceItHasText(_:_:) started.
+◇ Test normalizesUppercaseCheckboxesToLowercase() started.
+◇ Test mapsEditablePositions(_:) started.
+◇ Test mapsEveryDocumentOffsetOfTheList(_:) started.
+◇ Test case passing 1 argument value → "1. one" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test preservesCrossingMarkRangesThroughControlledRebuilds(_:) started.
+◇ Test readsBlocksWrittenWithCRLFLineEndings() started.
+◇ Test case passing 1 argument value → "1." to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test roundTripsTheHeading(_:) started.
+◇ Test mapsEveryDocumentOffsetOfTheFence(_:) started.
+◇ Test givesTheCaretALineAfterTheFinalRule(_:_:) started.
+◇ Test case passing 1 argument value → "1)" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test parsesRulesAheadOfListsAndEmphasis() started.
+◇ Test writesCodeHoldingAClosingFenceInsideALongerFence() started.
+◇ Test keepsTheEndOfTheCodeInsideTheFenceRatherThanAfterIt() started.
+◇ Test preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test roundTripsTheQuote(_:) started.
+◇ Test keepsTheCaretAfterATrailingHardBreakInsideTheSameParagraph() started.
+◇ Test case passing 1 argument value → "2.5 is a number" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "- item" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test parsesTheBlocksItRendersAsTheRightNodeTypes() started.
+◇ Test clampsOffsetsInsideAQuoteOrHeadingMarkerToTheStartOfTheText() started.
+◇ Test stillPlacesTheEndOfAnInlineMarkAfterItsMarkers() started.
+◇ Test countsAChipSourceInAFenceAsLiteralCode() started.
+◇ Test roundTripsThroughARealDocument(_:) started.
+◇ Test keepsTheListLiteralInPlainMode(_:) started.
+◇ Test keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test parsesAQuoteAsABlockquoteOfOneParagraphPerLine() started.
+◇ Test case passing 1 argument value → "- [ ] todo" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "- [x] done" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test roundTripsTheFencedBlock(_:) started.
+◇ Test mapsEveryDocumentOffsetThroughCollapsedCoordinatesAndBack() started.
+◇ Test clampsOffsetsInsideAListMarkerToTheStartOfTheItemText() started.
+◇ Test clampsOffsetsInsideAFenceToTheEdgeOfTheCode() started.
+◇ Test case passing 1 argument value → "[ ]" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test keepsInlineMarksButBuildsNoBlocks() started.
+◇ Test case passing 1 argument value → "[link](https://example.com)" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "~" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test keepsFencesLiteralInPlainMode() started.
+◇ Test case passing 1 argument value → "~~" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "2 * 3 * 4 = 24" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test rendersALeadingTaskDedentAsSiblingsAndNestsUnderTheNewIndent() started.
+◇ Test case passing 1 argument value → "~/path" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "~~~" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "emoji 👩🏽‍💻 🇯🇵 ❤️" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "**" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "*" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "👍*👍*" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "日本語 **太字**" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "my_var_name" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "a_b_c" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "_" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "a*b" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "x = y * z;" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "```" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "snake_case_name" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "`" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "**unclosed" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "C:\Users\me\file.txt" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "\*not italic\*" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "price: $20 or $5.99" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "tail **" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "a ` b" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "* bullet" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "``" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "+ plus" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "* * *" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "use `" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "\\" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "	tab" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "> quoted reply" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "trailing space " to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "
+" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → ">" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "##" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- item" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "#hashtag" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "a
+b" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "-" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "__bold__" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "--" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "_italic_" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "  indented" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "1. one" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → ">>" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- " to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- [X] done" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "1)" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "```
+
+```" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "2.5 is a number" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "---
+" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "1." to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- [ ] todo" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "[ ]" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "[link](https://example.com)" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "~" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "~/path" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "Use €my-skill now" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "~~~" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "emoji 👩🏽‍💻 🇯🇵 ❤️" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "👍*👍*" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "日本語 **太字**" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "**unclosed" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "tail **" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "* * *" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- [x] done" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "line
+
+line" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "* bullet" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "line
+
+line" to plainModeSendsTextExactlyAsTyped(_:) started.
+◇ Test case passing 1 argument value → "~~" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "+ plus" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "trailing space " to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "
+" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "# not a heading?" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "a
+b" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "	tab" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "plain prose with no styling at all" to resolvesACursorIdenticallyInBothModes(_:) started.
+◇ Test case passing 1 argument value → "a chip @README.md counts one character in both modes" to resolvesACursorIdenticallyInBothModes(_:) started.
+◇ Test case passing 1 argument value → "$my-skill leads the line" to resolvesACursorIdenticallyInBothModes(_:) started.
+◇ Test case passing 1 argument value → "#" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "---" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "***" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "___" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "trailing newline
+" to resolvesACursorIdenticallyInBothModes(_:) started.
+◇ Test case passing 1 argument value → "* * *" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "---   " to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "-----" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "text
+---
+more" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "> quoted" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "- - -" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "  indented" to plainPromptsSurviveRichTextUnchanged(_:) started.
+◇ Test case passing 1 argument value → "- item
+---
+- item two" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "--" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "> a
+>b" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "-- -" to roundTripsTheRule(_:) started.
+◇ Test case passing 2 arguments value → "```
+
+```", expected → "```
+```" to canonicalizesTheEmptyFence(_:_:) started.
+◇ Test case passing 1 argument value → "```
+---
+```" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "---" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 2 arguments value → "```
+", expected → "```" to canonicalizesTheEmptyFence(_:_:) started.
+◇ Test case passing 1 argument value → "- - -" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "---text" to roundTripsTheRule(_:) started.
+◇ Test case passing 1 argument value → "#1234" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument prefix → "€" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "- one
+- two" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument prefix → "£" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument prefix → "¥" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "* star
+* star two" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument prefix → "₹" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "+ plus" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument prefix → "₩" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "* star
++ plus" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "# Heading" to keepsTheBlockLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument prefix → "₿" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 2 arguments marker → "-", expected → "- text" to givesABareListItemASpaceOnceItHasText(_:_:) started.
+◇ Test case passing 2 arguments marker → "1.", expected → "1. text" to givesABareListItemASpaceOnceItHasText(_:_:) started.
+◇ Test case passing 1 argument value → "text
+
+" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument value → "- [ ]
+- [ ] next
+" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument value → "
+" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument prefix → "𑿝" to canonicalizesSkillAliasesWhilePreservingAmounts(_:) started.
+◇ Test case passing 1 argument value → "3. starts at three
+4. four" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "- one
+- two" to mapsEveryDocumentOffsetOfTheList(_:) started.
+◇ Test case passing 1 argument value → "- [ ] parent
+  - [ ] child
+- [ ]" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument value → "- parent
+  - child
+  - sibling
+- uncle" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "- **bold** @README.md tail" to mapsEveryDocumentOffsetOfTheList(_:) started.
+◇ Test case passing 1 argument value → "para
+- [ ] task
+para" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument value → "1. a
+   - b
+2. c" to mapsEveryDocumentOffsetOfTheList(_:) started.
+◇ Test case passing 1 argument value → "**before @README.md after**" to mapsEditablePositions(_:) started.
+◇ Test case passing 1 argument value → "01. zero padded
+02. two" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "- outer
+  1. inner ordered
+  2. more
+- outer again" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "1. ordered
+   - bullet child
+2. next" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "-   wide space item" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "1." to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "- 
+- second" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "plain text" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument marks → [["italic"], ["bold", "italic"], ["bold"]] to preservesCrossingMarkRangesThroughControlledRebuilds(_:) started.
+◇ Test case passing 1 argument value → "hello **bold** stays literal" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "- **bold** item with @README.md" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "- [ ] task
+- bullet after" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument marks → [["bold"], ["bold", "strike"], ["strike"]] to preservesCrossingMarkRangesThroughControlledRebuilds(_:) started.
+◇ Test case passing 1 argument value → "a *italic* stays literal" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument marks → [["bold"], ["bold", "italic"], ["italic"]] to preservesCrossingMarkRangesThroughControlledRebuilds(_:) started.
+◇ Test case passing 1 argument marks → [["strike"], ["bold", "strike"], ["bold"]] to preservesCrossingMarkRangesThroughControlledRebuilds(_:) started.
+◇ Test case passing 1 argument value → "-" to mapsEveryDocumentOffsetOfTheList(_:) started.
+◇ Test case passing 1 argument value → "```ts
+const a = 1;
+```" to mapsEveryDocumentOffsetOfTheFence(_:) started.
+◇ Test case passing 1 argument value → "## Two" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "# Heading" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "- bullet
+- [x] task after" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "para
+- item
+para" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "###### Six" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "1) paren
+2) paren" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "struck ~~out~~ stays literal" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "	- tab indented
+	- again" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "-" to roundTripsTheList(_:) started.
+◇ Test case passing 2 arguments value → "---", expected → "---" to givesTheCaretALineAfterTheFinalRule(_:_:) started.
+◇ Test case passing 1 argument value → "####### seven hashes stays a paragraph" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "- [ ] stays a paragraph" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "1. first
+2. second" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "before
+```ts
+code
+```
+after" to mapsEveryDocumentOffsetOfTheFence(_:) started.
+◇ Test case passing 1 argument value → "- [x] stays a paragraph" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "- item
+
+- after a blank" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "#	Tab" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "# Trailing hashes stay literal #" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "line one
+line two" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 2 arguments value → "---
+", expected → "---" to givesTheCaretALineAfterTheFinalRule(_:_:) started.
+◇ Test case passing 1 argument value → "- item one
+```ts
+code
+```
+- item two" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "@README.md explain this" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "#1234" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "-no space stays literal" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "**bold** then @README.md then *italic*" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "#1234 is a pull request, not a heading" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "some `code` stays literal" to roundTripsByteIdenticallyInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "1.no space stays literal" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "# Heading with **bold** and @README.md" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "10. ten
+11. eleven" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "text
+# Heading
+text" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "#  two spaces" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "# " to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "  - leading indent only" to roundTripsTheList(_:) started.
+◇ Test case passing 1 argument value → "# Heading
+- item
+> quote
+---" to roundTripsTheHeading(_:) started.
+◇ Test case passing 2 arguments value → "a
+---", expected → "a
+---" to givesTheCaretALineAfterTheFinalRule(_:_:) started.
+◇ Test case passing 1 argument value → "#" to roundTripsTheHeading(_:) started.
+◇ Test case passing 1 argument value → "> quoted" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument text → "snake_case" to preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test case passing 1 argument value → "> line one
+> line two" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument text → "unmatched **" to preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test case passing 1 argument value → ">no space" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument text → "plain text" to preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test case passing 1 argument value → ">  two spaces" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument text → "** spaced **" to preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test case passing 1 argument value → "> a
+>b" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "```
+```" to mapsEveryDocumentOffsetOfTheFence(_:) started.
+◇ Test case passing 1 argument value → ">" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "
+
+" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "> **bold** and @README.md inside" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "- one
+- two" to keepsTheListLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "1. first
+2. second" to keepsTheListLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "plain text" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument c → **hello**  to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "- parent
+  - child" to keepsTheListLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument text → "\*literal\*" to preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) started.
+◇ Test case passing 1 argument value → "hello **bold** world" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument c →    to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "* star
++ plus" to keepsTheListLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument c →  ***left***  to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "before
+> quoted
+after" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "> - looks like a list but stays quote text" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "-no space stays literal" to keepsTheListLiteralInPlainMode(_:) started.
+◇ Test case passing 1 argument value → "> quote
+
+> another" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "**`x`**" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "struck ~~out~~ now" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- item
+> quote after list" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "```
+code
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "*`x`*" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument c → **hello *world***  to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "**a `code` c**" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "a *italic* word and `code` here" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument c → **` hello `** to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "> > nested stays literal inside the quote" to roundTripsTheQuote(_:) started.
+◇ Test case passing 1 argument value → "before
+```ts
+const a = 1;
+```
+after" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "line one
+line two" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "```
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument c → **` `** to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "trailing newline
+" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "```ts
+line one
+line two
+line three
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "```ts
+const a = 1;
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "```ts
+  indented
+    deeper
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "```js title=example
+code
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "- [ ] buy milk" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument c → **one  *two*  three** to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "```ts
+const a = 1;
+```
+" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "	-	[x]		item" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ]  " to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "-   [ ]  buy milk" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "```ts
+code without a closing fence" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "***bold italic*** keeps nesting" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "> a
+> b" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "```ts
+**not bold** and @README.md stay literal
+```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "- [ ]
+  - [ ] child" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "1. foo
+2. asdf
+" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "~~~py
+code
+~~~" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "````
+```
+````" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "> **q** @README.md" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "**before @README.md after**" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ] task
+```ts
+code
+```
+- [ ] after" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "  ```ts
+indented fence stays a paragraph
+  ```" to roundTripsTheFencedBlock(_:) started.
+◇ Test case passing 1 argument value → "*a**b***" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "**a*b***" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "text
+---
+more" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "**a *b* c**" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "*a **b** c*" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "---
+text" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "# Heading text" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "literal ￼ **before @README.md after**" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ] empty task follows
+- [ ]" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ] **bold** task with @README.md" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ] parent
+  - [ ] child
+  - [ ] sibling
+- [ ] uncle" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "para
+- [ ] task
+para" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [ ]No space stays literal" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "-[ ] also literal" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "- [x] done
+- [ ] next" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "@"docs/My File.md" and $my-skill please" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "snake_case stays literal" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "@README.md explain this" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "unmatched ** stays literal" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "**bold** then @README.md then *italic*" to roundTripsThroughARealDocument(_:) started.
+◇ Test case passing 1 argument value → "## **b** @README.md" to mapsEveryDocumentOffsetOfTheBlock(_:) started.
+◇ Test case passing 1 argument value → "```ts
+code
+````" to roundTripsTheFencedBlock(_:) started.
+✔ Test keepsRepeatedAndAlternateDelimitersLiteralInsideAnActiveMark() passed after 0.003 seconds.
+✔ Test keepsCodeSpanContentsLiteral() passed after 0.003 seconds.
+◇ Test case passing 1 argument value → "  - [ ] first
+ - [ ] second
+  - [ ] child" to roundTripsThroughARealDocument(_:) started.
+✔ Test parsesBoldMarkersIntoStyledSpans() passed after 0.002 seconds.
+✔ Test rendersTripleMarkersAndNestedStyles() passed after 0.003 seconds.
+✔ Test preservesCrossingItalicAndBoldSpans() passed after 0.002 seconds.
+✔ Test preservesUnmatchedMarkersEscapedMarkersAndIdentifiers(_:) with 5 test cases passed after 0.002 seconds.
+◇ Test case passing 1 argument c → ` hello ` to keepsBoundaryWhitespaceOutsideEmphasis(_:) started.
+◇ Test case passing 1 argument value → "~~`x`~~" to roundTripsThroughARealDocument(_:) started.
+✔ Suite ComposerRichTextT3InlineTests passed after 0.004 seconds.
+✔ Test editsLiteralMarkdownInsertsANewlineAndPreservesAnExplicitlyClearedAnswer() passed after 0.811 seconds.
+✔ Test leavesArrowKeysAloneAwayFromStyledEdges() passed after 0.811 seconds.
+✔ Test returnOnAFenceLineOpensAClosedBlock() passed after 0.821 seconds.
+✔ Test returnAfterATypedClosingFenceEndsTheBlock() passed after 0.821 seconds.
+✔ Test typedRuleMovesTheCaretToTheNextLine() passed after 0.821 seconds.
+✔ Test offersThePlainStopBetweenBoldTextAndAChipRightAfterIt() passed after 0.828 seconds.
+✔ Test keepsMarksTheUserToggledAtAnEdgeAndLetsTheArrowMove() passed after 0.828 seconds.
+✔ Test letsTheCaretStepOutInFrontOfBoldThatStartsTheLine() passed after 0.828 seconds.
+✔ Test stepsOutOfInlineCodeAtTheEndOfALineWithoutInsertingASpace() passed after 0.850 seconds.
+✔ Test keepsTheMarkersOfTheListItemsItSpans() passed after 0.850 seconds.
+✔ Test preservesTheCompleteAnswerThroughSelectionAndSerialization(_:) with 5 test cases passed after 0.862 seconds.
+✔ Test richTextRewritesWhatT3Rewrites(_:_:) with 4 test cases passed after 0.862 seconds.
+✔ Test expandedChromeDoesNotScheduleADeferredCollapse() passed after 0.862 seconds.
+✔ Test keepsTheNestingOfAnItemAndItsChildren() passed after 0.862 seconds.
+✔ Test panelOverflowScrollsWithoutChangingActiveSurface() passed after 0.862 seconds.
+✔ Suite ComposerRichTextT3LiteralTests passed after 0.863 seconds.
+✔ Test copiesTextWithinOneBlockWithoutItsMarker() passed after 0.862 seconds.
+✔ Test keepsThePrefixOfTheQuoteLinesItSpans() passed after 1.023 seconds.
+✔ Test miniPlayerEdgesKeepOppositeCornerAndBounds() passed after 1.023 seconds.
+✔ Test diffTreeExpansionPreservesPathsAndOrdering() passed after 1.353 seconds.
+✔ Test letsTheCaretStepOutAfterBoldThatEndsTheLine() passed after 1.359 seconds.
+✔ Test languageSearchKeepsCurrentUnknownAndAliases() passed after 1.366 seconds.
+✔ Test oneFailedFanoutTargetKeepsItsRetryRoute() passed after 1.370 seconds.
+✔ Test customPresetsUseDriverIdsAndDefaults() passed after 1.376 seconds.
+✔ Suite SweepPanelsTests passed after 1.377 seconds.
+✔ Test turningRichTextOffKeepsThePrompt() passed after 1.381 seconds.
+✔ Test copiesAcrossBlocksAsTheyAreWritten() passed after 1.393 seconds.
+✔ Suite ComposerRichTextT3CopyTests passed after 1.394 seconds.
+✔ Test offersBothStopsWhereStyledTextMeetsPlainTextMidLine() passed after 1.395 seconds.
+✔ Suite ComposerRichTextT3CaretTests passed after 1.395 seconds.
+✔ Test appliesASharedMarkToTextOnBothSidesOfAChip() passed after 1.410 seconds.
+✔ Test mapsMarkdownOffsetsAtStyledEdgesOntoDocumentText() passed after 1.410 seconds.
+✔ Test plainModeSendsTextExactlyAsTyped(_:) with 61 test cases passed after 1.411 seconds.
+✔ Test resolvesACursorIdenticallyInBothModes(_:) with 4 test cases passed after 1.423 seconds.
+✔ Test keepsTheCaretInsideAnEmptyFence() passed after 1.423 seconds.
+✔ Test keepsChipSourcesCanonicalThroughTheDocument() passed after 1.423 seconds.
+✔ Test clampsACursorThatWasSittingInsideAMarkerOntoTheStyledText() passed after 1.423 seconds.
+✔ Test plainPromptsSurviveRichTextUnchanged(_:) with 55 test cases passed after 1.424 seconds.
+✔ Test keepsAChipInAFenceInfoStringAsSourceAndKeepsLaterChipsAligned() passed after 1.423 seconds.
+✔ Test closesAnUnclosedFenceThatHasABlockAfterIt() passed after 1.423 seconds.
+✔ Test roundTripsTheRule(_:) with 13 test cases passed after 1.423 seconds.
+✔ Test canonicalizesTheEmptyFence(_:_:) with 2 test cases passed after 1.423 seconds.
+✔ Test keepsTheBlockLiteralInPlainMode(_:) with 6 test cases passed after 1.423 seconds.
+✔ Test canonicalizesSkillAliasesWhilePreservingAmounts(_:) with 7 test cases passed after 1.423 seconds.
+✔ Test normalizesUppercaseCheckboxesToLowercase() passed after 1.423 seconds.
+✔ Test mapsEditablePositions(_:) with 7 test cases passed after 1.423 seconds.
+✔ Test keepsChipsInAFenceInfoStringAndBodyEachInTheirOwnPlace() passed after 1.423 seconds.
+✔ Test givesABareListItemASpaceOnceItHasText(_:_:) with 2 test cases passed after 1.423 seconds.
+✔ Test readsBlocksWrittenWithCRLFLineEndings() passed after 1.423 seconds.
+✔ Test mapsEveryDocumentOffsetOfTheList(_:) with 4 test cases passed after 1.423 seconds.
+✔ Test preservesCrossingMarkRangesThroughControlledRebuilds(_:) with 4 test cases passed after 1.423 seconds.
+✔ Test givesTheCaretALineAfterTheFinalRule(_:_:) with 3 test cases passed after 1.423 seconds.
+✔ Test mapsEveryDocumentOffsetOfTheFence(_:) with 3 test cases passed after 1.423 seconds.
+✔ Test writesCodeHoldingAClosingFenceInsideALongerFence() passed after 1.423 seconds.
+✔ Test keepsTheEndOfTheCodeInsideTheFenceRatherThanAfterIt() passed after 1.423 seconds.
+✔ Suite ComposerRichTextWireTests passed after 1.425 seconds.
+✔ Test roundTripsTheHeading(_:) with 14 test cases passed after 1.423 seconds.
+✔ Test parsesRulesAheadOfListsAndEmphasis() passed after 1.423 seconds.
+✔ Test parsesAQuoteAsABlockquoteOfOneParagraphPerLine() passed after 1.423 seconds.
+✔ Test keepsTheListLiteralInPlainMode(_:) with 5 test cases passed after 1.423 seconds.
+✔ Test countsAChipSourceInAFenceAsLiteralCode() passed after 1.424 seconds.
+✔ Test roundTripsTheQuote(_:) with 12 test cases passed after 1.423 seconds.
+✔ Test stillPlacesTheEndOfAnInlineMarkAfterItsMarkers() passed after 1.423 seconds.
+✔ Test roundTripsThroughARealDocument(_:) with 38 test cases passed after 1.423 seconds.
+✔ Test keepsTheCaretAfterATrailingHardBreakInsideTheSameParagraph() passed after 1.423 seconds.
+✔ Test clampsOffsetsInsideAQuoteOrHeadingMarkerToTheStartOfTheText() passed after 1.423 seconds.
+✔ Test parsesTheBlocksItRendersAsTheRightNodeTypes() passed after 1.424 seconds.
+✔ Test keepsBoundaryWhitespaceOutsideEmphasis(_:) with 8 test cases passed after 1.423 seconds.
+✔ Test mapsEveryDocumentOffsetThroughCollapsedCoordinatesAndBack() passed after 1.423 seconds.
+✔ Test clampsOffsetsInsideAListMarkerToTheStartOfTheItemText() passed after 1.423 seconds.
+✔ Test keepsInlineMarksButBuildsNoBlocks() passed after 1.423 seconds.
+✔ Test clampsOffsetsInsideAFenceToTheEdgeOfTheCode() passed after 1.423 seconds.
+✔ Test rendersALeadingTaskDedentAsSiblingsAndNestsUnderTheNewIndent() passed after 1.423 seconds.
+✔ Test keepsFencesLiteralInPlainMode() passed after 1.423 seconds.
+✔ Test mapsEveryDocumentOffsetOfTheBlock(_:) with 6 test cases passed after 1.423 seconds.
+✔ Test roundTripsTheList(_:) with 26 test cases passed after 1.424 seconds.
+✔ Suite ComposerRichTextT3PasteTests passed after 1.425 seconds.
+✔ Test roundTripsTheFencedBlock(_:) with 16 test cases passed after 1.423 seconds.
+✔ Test roundTripsByteIdenticallyInPlainMode(_:) with 10 test cases passed after 1.423 seconds.
+✔ Suite ComposerRichTextT3DocTests passed after 1.425 seconds.
+✔ Test run with 79 tests in 8 suites passed after 1.425 seconds.

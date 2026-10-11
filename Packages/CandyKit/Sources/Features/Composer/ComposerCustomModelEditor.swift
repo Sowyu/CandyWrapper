@@ -72,15 +72,20 @@ struct ComposerCustomModelDraft {
 }
 
 /// Inline custom-model form, sharing the provider page's input and button components.
-// ponytail: descriptors only, without presets or built-in copying; add those before custom-model parity.
+// ponytail: compact native form; match the official wrapping layout in the visual pass.
 final class ComposerCustomModelEditor: DSView {
     var onSave: ((JSONValue) -> Void)?
     var onCancel: (() -> Void)?
     var onHeightChange: (() -> Void)?
+    private let driver: String
+    private let builtins: [ServerProviderModel]
     private var draft: ComposerCustomModelDraft
     private var rows: [[NSView]] = []
     private var error: String?
-    init(entry: JSONValue) { draft = ComposerCustomModelDraft(entry); super.init(frame: .zero); rebuild() }
+    init(entry: JSONValue, driver: String = "", builtins: [ServerProviderModel] = []) {
+        self.driver = driver; self.builtins = builtins.filter { !$0.isCustom && !$0.optionDescriptors.isEmpty }
+        draft = ComposerCustomModelDraft(entry); super.init(frame: .zero); rebuild()
+    }
     private func label(_ text: String) -> LabelView { LabelView(text, font: DSFont.ui(12), color: Themed.color(\.mutedForeground)) }
     private func input(_ placeholder: String, _ value: String, change: @escaping @MainActor @Sendable (String) -> Void) -> InputView {
         let field = InputView(placeholder: placeholder, text: value, size: .sm)
@@ -99,7 +104,18 @@ final class ComposerCustomModelEditor: DSView {
         subviews.forEach { $0.removeFromSuperview() }; rows = []
         rows.append([label("Display name")])
         rows.append([input(draft.slug, draft.name) { [weak self] in self?.draft.name = $0 }])
-        rows.append([label("Options shown in the composer")])
+        if !builtins.isEmpty {
+            let copy = SelectView(options: builtins.map(\.name), selected: nil, placeholder: "Copy from…", size: .compact)
+            copy.setAccessibilityLabel("Copy options from a built-in model")
+            copy.onChange = { [weak self] index in
+                guard let self, self.builtins.indices.contains(index),
+                      let data = try? JSONEncoder().encode(self.builtins[index].optionDescriptors),
+                      let descriptors = try? JSONDecoder().decode(JSONValue.self, from: data) else { return }
+                self.draft.descriptors = ComposerCustomModelDraft(.object(["capabilities": .object(["optionDescriptors": descriptors])])).descriptors
+                self.rebuild()
+            }
+            rows.append([label("Options shown in the composer"), copy])
+        } else { rows.append([label("Options shown in the composer")]) }
         if draft.descriptors.isEmpty { rows.append([label("No custom options. The composer uses the provider's default options.")]) }
         for i in draft.descriptors.indices {
             let d = draft.descriptors[i]
@@ -135,6 +151,15 @@ final class ComposerCustomModelEditor: DSView {
                 }])
             }
         }
+        let presets = ComposerCustomModelPresets.descriptors(driver)
+        if !presets.isEmpty {
+            let preset = SelectView(options: presets.map { $0["id"]?.stringValue ?? "" }, selected: nil, placeholder: "Add option…", size: .compact)
+            preset.onChange = { [weak self] index in
+                guard let self else { return }
+                self.draft.descriptors.append(presets[index]); self.rebuild()
+            }
+            rows.append([preset])
+        }
         rows.append([button("Custom option") { [weak self] in self?.draft.descriptors.append(["id": .string(""), "label": .string(""), "type": .string("select"), "options": .array([])]); self?.rebuild() }])
         if let error { rows.append([label(error)]) }
         rows.append([button("Save") { [weak self] in
@@ -167,6 +192,28 @@ final class ComposerCustomModelEditor: DSView {
                 view.frame = NSRect(x: x, y: 12 + CGFloat(i) * 36, width: row.count == 1 && view is LabelView ? bounds.width - 24 : width, height: 28)
                 x += width + 8
             }
+        }
+    }
+}
+
+/// customModelEditor.logic.ts:38-120: only ids consumed by each provider driver.
+enum ComposerCustomModelPresets {
+    static func descriptors(_ driver: String) -> [[String: JSONValue]] {
+        func select(_ id: String, _ label: String, _ choices: [(String, String)], _ current: String) -> [String: JSONValue] {
+            ["id": .string(id), "label": .string(label), "type": .string("select"), "options": .array(choices.map {
+                .object(["id": .string($0.0), "label": .string($0.1), "isDefault": .bool($0.0 == current)])
+            })]
+        }
+        func boolean(_ id: String, _ label: String) -> [String: JSONValue] { ["id": .string(id), "label": .string(label), "type": .string("boolean")] }
+        let effort = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra High")]
+        switch driver {
+        case "codex": return [select("reasoningEffort", "Reasoning", effort, "medium"), select("serviceTier", "Speed", [("default", "Standard"), ("fast", "Fast")], "default")]
+        case "claudeAgent": return [select("effort", "Reasoning", effort + [("max", "Max")], "high"), boolean("fastMode", "Fast Mode"), boolean("thinking", "Thinking")]
+        case "cursor": return [select("reasoning", "Reasoning", effort, "medium"), boolean("fastMode", "Fast Mode"), boolean("thinking", "Thinking")]
+        case "grok": return [select("reasoningEffort", "Reasoning", effort, "medium")]
+        case "pi": return [select("thinking", "Thinking", [("off", "Off"), ("minimal", "Minimal")] + effort + [("max", "Max")], "medium")]
+        case "opencode": return [select("variant", "Reasoning", effort, "medium"), select("agent", "Agent", [("build", "Build"), ("plan", "Plan")], "build")]
+        default: return []
         }
     }
 }

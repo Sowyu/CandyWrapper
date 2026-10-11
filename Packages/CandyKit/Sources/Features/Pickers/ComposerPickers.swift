@@ -45,7 +45,9 @@ public final class ComposerPickers {
 
     /// Drops the draft's fan-out (after a send, or keeping only the failed models).
     public func setMultiple(_ selections: [ModelSelection]?, for key: String) {
-        multipleSelections[key] = selections.flatMap { $0.count > 1 ? $0 : nil }
+        // A partial fan-out failure may retain one target. Keep its worktree and retry route;
+        // explicit single-model picks clear fan-out with nil in the picker handlers.
+        multipleSelections[key] = selections.flatMap { $0.isEmpty ? nil : $0 }
         refresh(notify: false)
         onMultipleChange?()
     }

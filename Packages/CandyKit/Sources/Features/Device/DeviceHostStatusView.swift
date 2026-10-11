@@ -53,7 +53,10 @@ public final class DeviceHostStatusView: DSView {
         close.action = { [weak self] in self?.modal?.close() }
         if let window { modal = ModalHost.present(dialog, in: window) }
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: 440, height: preferredHeight) }
+    public func height(forWidth width: CGFloat) -> CGFloat {
+        max(preferredHeight, 60 + detail.height(forWidth: max(1, width - 26)))
+    }
+    public override var intrinsicContentSize: NSSize { NSSize(width: 440, height: height(forWidth: 440)) }
     public override func layout() {
         super.layout()
         title.frame = NSRect(x: 13, y: 9, width: max(0, bounds.width - 104), height: 16)

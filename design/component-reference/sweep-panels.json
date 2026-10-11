@@ -1,0 +1,24 @@
+{
+  "component": "sweep-panels",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "language-filter",
+      "html": "<div class=\"bg-popover text-foreground font-sans\" style=\"width:222px;height:99px\"><div class=\"text-sm px-2 pt-1\" style=\"height:35px\">java</div><div class=\"p-1\"><div class=\"h-7 px-2 py-1 text-sm rounded-sm bg-accent\">Java</div><div class=\"h-7 px-2 py-1 text-sm rounded-sm \">JavaScript</div></div></div>",
+      "native": {},
+      "wrapperStyle": "display:block;width:222px"
+    },
+    {
+      "name": "language-empty",
+      "html": "<div class=\"bg-popover text-foreground font-sans\" style=\"width:222px;height:71px\"><div class=\"text-sm px-2 pt-1\" style=\"height:35px\">nonesuch</div><div class=\"p-1\"><div class=\"px-2 py-1 text-xs text-muted-foreground\">No matching languages.</div></div></div>",
+      "native": {},
+      "wrapperStyle": "display:block;width:222px"
+    }
+  ]
+}

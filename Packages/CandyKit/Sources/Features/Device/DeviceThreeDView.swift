@@ -129,6 +129,17 @@ public final class DeviceThreeDView: SCNView {
         guard lastTouch == nil else { return }
         orbit(x: -event.scrollingDeltaX, y: event.scrollingDeltaY)
     }
-    public override func keyDown(with event: NSEvent) { onKey?(event.keyCode, event.characters, true) }
+    public override func keyDown(with event: NSEvent) { onKey?(event.keyCode, event.modifierFlags.intersection([.command, .control]).isEmpty ? event.characters : nil, true) }
     public override func keyUp(with event: NSEvent) { onKey?(event.keyCode, event.characters, false) }
+    public override func flagsChanged(with event: NSEvent) {
+        let flag: NSEvent.ModifierFlags?
+        switch event.keyCode {
+        case 59, 62: flag = .control
+        case 56, 60: flag = .shift
+        case 58, 61: flag = .option
+        case 55, 54: flag = .command
+        default: flag = nil
+        }
+        if let flag { onKey?(event.keyCode, nil, event.modifierFlags.contains(flag)) }
+    }
 }

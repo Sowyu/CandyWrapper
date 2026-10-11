@@ -148,7 +148,10 @@ public final class DevicePanelView: DSView {
         heading.frame = NSRect(x: 16, y: 8, width: max(0, bounds.width - 110), height: 24)
         tools.frame = NSRect(x: bounds.width - 70, y: 8, width: 60, height: 24)
         var y: CGFloat = setup.isHidden && agent.isHidden ? 44 : 120
-        for row in hostRows { row.frame = NSRect(x: 16, y: y, width: max(0, bounds.width - 32), height: row.preferredHeight); y += row.preferredHeight + 8 }
+        for row in hostRows {
+            let width = max(0, bounds.width - 32), height = row.height(forWidth: max(1, bounds.width - 32))
+            row.frame = NSRect(x: 16, y: y, width: width, height: height); y += height + 8
+        }
         for row in rows { row.frame = NSRect(x: 16, y: y, width: max(0, bounds.width - 32), height: 28); y += 30 }
         viewer.frame = NSRect(x: 16, y: y + 8, width: max(0, bounds.width - 72), height: max(0, bounds.height - y - 58))
         for (i, button) in rail.enumerated() { button.frame = NSRect(x: bounds.width - 44, y: y + 12 + CGFloat(i) * 36, width: 28, height: 28) }
@@ -168,8 +171,19 @@ public final class DevicePanelStreamView: DSView {
     public var onKey: ((UInt16, String?, Bool) -> Void)?
     public var orientation = "portrait" { didSet { needsLayout = true } }
     public override var acceptsFirstResponder: Bool { true }
-    public override func keyDown(with event: NSEvent) { onKey?(event.keyCode, event.characters, true) }
+    public override func keyDown(with event: NSEvent) { onKey?(event.keyCode, event.modifierFlags.intersection([.command, .control]).isEmpty ? event.characters : nil, true) }
     public override func keyUp(with event: NSEvent) { onKey?(event.keyCode, event.characters, false) }
+    public override func flagsChanged(with event: NSEvent) {
+        let flag: NSEvent.ModifierFlags?
+        switch event.keyCode {
+        case 59, 62: flag = .control
+        case 56, 60: flag = .shift
+        case 58, 61: flag = .option
+        case 55, 54: flag = .command
+        default: flag = nil
+        }
+        if let flag { onKey?(event.keyCode, nil, event.modifierFlags.contains(flag)) }
+    }
     public var onFrameAvailability: ((Bool) -> Void)?
     public var hasFrame: Bool { latestImage != nil }
     public private(set) var threeDView: DeviceThreeDView?

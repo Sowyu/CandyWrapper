@@ -7,6 +7,13 @@ import DesignSystem
 public final class ComposerAttachmentPreview: DSView {
     private let surface = FileSurfaceView()
     private var load: Task<Void, Never>?
+    private var loadedText: String?
+    public var canCopy: Bool { loadedText != nil }
+    public func copyContents() {
+        guard let loadedText else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(loadedText, forType: .string)
+    }
     private let file: URL
     private let sizeBytes: Int
     public init(name: String, file: URL, sizeBytes: Int) {
@@ -22,9 +29,9 @@ public final class ComposerAttachmentPreview: DSView {
     }
     public override var intrinsicContentSize: NSSize { NSSize(width: 720, height: 480) }
     public override func layout() { super.layout(); surface.frame = bounds }
-    public func close() { load?.cancel(); load = nil; surface.setContent(.loading) }
+    public func close() { loadedText = nil; load?.cancel(); load = nil; surface.setContent(.loading) }
     private func reload() {
-        load?.cancel()
+        load?.cancel(); loadedText = nil
         if surface.wantsAsset { surface.setContent(.asset(file)); return }
         let file = file, sizeBytes = sizeBytes
         surface.setContent(.loading)
@@ -38,6 +45,7 @@ public final class ComposerAttachmentPreview: DSView {
             guard let data, let text = String(data: data, encoding: .utf8) else {
                 self.surface.setContent(.failure("The attachment is unavailable or is not UTF-8 text.", attemptedPath: nil, cwd: nil)); return
             }
+            self.loadedText = text
             self.surface.setContent(.text(text, truncated: sizeBytes > data.count, byteLength: sizeBytes, editable: false))
         }
     }

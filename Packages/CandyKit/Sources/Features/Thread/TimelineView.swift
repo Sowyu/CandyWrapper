@@ -32,6 +32,7 @@ public final class TimelineView: DSView {
 
     let context = TimelineContext()
     let scrollView = ComposerTimelineScrollView()
+    public var overflowsComposerViewport: Bool { (scrollView.documentView?.bounds.height ?? 0) > scrollView.contentView.bounds.height + 1 }
     public var onComposerScrollGesture: ((CGFloat, Bool, Bool) -> Void)? {
         get { scrollView.onGesture }
         set { scrollView.onGesture = newValue }

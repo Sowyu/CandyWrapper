@@ -21,6 +21,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
     private var lastEditKind = ""
     private var lastEditAt = -Double.infinity
+    private var codeHighlightTask: Task<Void, Never>?
     private var clipboardEdit = false
     private var applyingListEdit = false
 
@@ -137,6 +138,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         chipify(registerUndo: false)
         isChipifying = false
         setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+        highlightCodeBlocks()
         onTextChange?()
     }
 
@@ -148,6 +150,56 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return ComposerRichTextStyler.serialize(storage.attributedSubstring(from: range))
     }
 
+    /// Highlight whole code bodies off the main actor. Only the current document may receive tokens.
+    private func highlightCodeBlocks() {
+        codeHighlightTask?.cancel()
+        guard richTextEnabled, let storage = textStorage else { return }
+        let snapshot = expandedText
+        var blocks: [(range: NSRange, text: String, language: String)] = []
+        var start: Int?, language = ""
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let block = value as? ComposerBlockAttachment else { return }
+            switch block.kind {
+            case .codeHeader(_, let info):
+                start = min(storage.length, NSMaxRange(range) + 1)
+                let raw = ComposerCodeLanguages.language(info).lowercased()
+                language = ComposerCodeLanguages.aliases[raw] ?? raw
+            case .codeEnd:
+                if let a = start, range.location > a {
+                    let r = NSRange(location: a, length: range.location - a)
+                    blocks.append((r, storage.attributedSubstring(from: r).string, language))
+                }
+                start = nil
+            default: break
+            }
+        }
+        if let start, start < storage.length {
+            let range = NSRange(location: start, length: storage.length - start)
+            blocks.append((range, storage.attributedSubstring(from: range).string, language))
+        }
+        guard !blocks.isEmpty else { return }
+        let requests = blocks
+        codeHighlightTask = Task { [weak self] in
+            let worker = Task.detached(priority: .userInitiated) {
+                var result: [CodeToken] = []
+                for block in requests {
+                    guard !Task.isCancelled else { return [CodeToken]() }
+                    result += CodeHighlighter.tokens(block.text, language: block.language).map { token in
+                        CodeToken(range: NSRange(location: block.range.location + token.range.location, length: token.range.length), kind: token.kind)
+                    }
+                }
+                return result
+            }
+            let tokens = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
+            guard !Task.isCancelled, let self, self.expandedText == snapshot, let storage = self.textStorage else { return }
+            storage.beginEditing()
+            for token in tokens where NSMaxRange(token.range) <= storage.length {
+                storage.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
+            }
+            storage.endEditing()
+        }
+    }
+
     private var isChipifying = false
 
     func textDidChange(_ notification: Notification) {
@@ -156,6 +208,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             styleRichText(registerUndo: true)
             chipify(registerUndo: true)
         }
+        highlightCodeBlocks()
         onTextChange?()
     }
 
@@ -734,15 +787,16 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
                onOpenChip?(chip.source) == true { return }
             if let block = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerBlockAttachment,
                case .codeHeader(let fence, let info) = block.kind {
-                let items = ComposerCodeLanguages.entries.map { entry in
-                    var item = MenuItem.radio(entry.label, checked: ComposerCodeLanguages.label(info) == entry.label)
-                    item.closesOnClick = true
-                    item.action = { [weak self] in
-                        self?.replace(NSRange(location: index, length: 1), with: fence + ComposerCodeLanguages.replacing(info, with: entry.id))
-                    }
-                    return item
+                guard let host = popupHost else { return }
+                let picker = ComposerCodeLanguagePickerView(info: info)
+                let popup = host.open(PickerPopupView(picker), trigger: self, placement: .dropdown, swallowsOutsideClick: true)
+                picker.onPick = { [weak self, weak host, weak popup] language in
+                    if let popup { host?.close(popup) }
+                    guard let self, index < (self.textStorage?.length ?? 0),
+                          self.textStorage?.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerBlockAttachment === block else { return }
+                    self.replace(NSRange(location: index, length: 1), with: fence + ComposerCodeLanguages.replacing(info, with: language))
                 }
-                MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none), minimumWidth: 224, anchorRect: NSRect(x: point.x, y: point.y, width: 1, height: 1))
+                window?.makeFirstResponder(picker.search)
                 return
             }
         }
