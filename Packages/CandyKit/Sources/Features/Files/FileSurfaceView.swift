@@ -438,14 +438,19 @@ final class MarkdownFileView: NSView {
 }
 
 
-/// A sandboxed page for a workspace HTML file (BrowserDocumentFrame.tsx). The web view exists only
-/// while this view is in a window; leaving it tears the view and its web content process down.
+/// A workspace HTML file in T3's sandboxed frame (BrowserDocumentFrame.tsx:53-59), hosted by `ThreadWebFrameView`
+/// as `.workspaceFile`: opaque origin, no bridge, no navigation out of the frame, clicked http(s) links open in the
+/// browser. The web view exists only while this view is visible; hiding or leaving tears it and its content process down.
+// ponytail: `allow-downloads` is set but WKWebView downloads are not handled, so download links do nothing; add a WKDownloadDelegate when someone needs them.
 final class HTMLFileView: NSView {
     let url: URL
-    private(set) var web: WKWebView?
+    let frameView = ThreadWebFrameView()
+    var web: WKWebView? { frameView.webView }
     init(url: URL) {
         self.url = url
         super.init(frame: .zero)
+        frameView.autoresizingMask = [.width, .height]
+        addSubview(frameView)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -459,19 +464,11 @@ final class HTMLFileView: NSView {
 
     private func sync() {
         let visible = window != nil && !isHiddenOrHasHiddenAncestor
-        if visible, web == nil {
-            let config = WKWebViewConfiguration()
-            // A non-persistent store: nothing from the page outlives the tab.
-            config.websiteDataStore = .nonPersistent()
-            let web = WKWebView(frame: bounds, configuration: config)
-            web.autoresizingMask = [.width, .height]
-            addSubview(web)
-            web.load(URLRequest(url: url))
-            self.web = web
-        } else if !visible, let web {
-            web.stopLoading()
-            web.removeFromSuperview()
-            self.web = nil
+        frameView.frame = bounds
+        if visible, !frameView.isLive {
+            frameView.activate(.init(src: url, title: url.lastPathComponent, dark: effectiveAppearance.isDark, kind: .workspaceFile))
+        } else if !visible {
+            frameView.release()
         }
     }
 }
