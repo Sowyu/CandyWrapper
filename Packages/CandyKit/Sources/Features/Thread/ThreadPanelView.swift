@@ -362,7 +362,13 @@ public final class ThreadPanelView: DSView {
     public private(set) var detailsOpen = false
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
-    public private(set) var rightPanelMaximized = false
+    /// `maximizedRightPanelThreadKey` (ChatView.tsx:1915, 2392-2394): the panel asked to fill the window.
+    /// A narrow window shows the panel as a sheet and cannot maximize; widening it again restores the
+    /// maximized panel. Closing the panel or another thread clears it.
+    private var maximizeRequested = false
+    public var rightPanelMaximized: Bool { maximizeRequested && canMaximizeRightPanel }
+    /// `canMaximizeRightPanel = rightPanelOpen && !shouldUsePlanSidebarSheet`.
+    var canMaximizeRightPanel: Bool { rightPanelOpen && viewportWidth > 980 }
     private var summaries: [TurnDiffSummary] = []
     /// Development (`--open-diff`): open the panel on the newest run that changed files once the
     /// thread's checkpoints arrive.
@@ -642,7 +648,7 @@ public final class ThreadPanelView: DSView {
         let wasOpen = rightPanel.isHidden == false
         panelState = state
         let open = state.isOpen
-        if !open { rightPanelMaximized = false; maximize.isPressed = false }
+        if !open { setMaximized(false) }
         rightPanel.isHidden = !open
         rightPanel.apply(state)
         maximize.isHidden = !open
@@ -755,11 +761,17 @@ public final class ThreadPanelView: DSView {
         return true
     }
 
-    private func toggleMaximized() {
-        rightPanelMaximized.toggle()
-        maximize.isPressed = rightPanelMaximized
-        maximize.icon = rightPanelMaximized ? .minimize2 : .maximize2
-        let label = rightPanelMaximized ? "Restore panel size" : "Maximize panel"
+    /// `toggleRightPanelMaximized` (ChatView.tsx:6059-6064): the control, and `rightPanel.toggleMaximized`.
+    public func toggleMaximized() {
+        guard canMaximizeRightPanel else { return }
+        setMaximized(!maximizeRequested)
+    }
+
+    private func setMaximized(_ on: Bool) {
+        maximizeRequested = on
+        maximize.isPressed = on
+        maximize.icon = on ? .minimize2 : .maximize2
+        let label = on ? "Restore panel size" : "Maximize panel"
         maximize.setAccessibilityLabel(label)
         maximize.toolTip = label
         needsLayout = true
@@ -837,7 +849,7 @@ public final class ThreadPanelView: DSView {
             proactiveRepositoryIsGit = nil
             timeline.context.forgetDocuments()
             header.cancelTitleRename()
-            if rightPanelMaximized { toggleMaximized() }
+            if maximizeRequested { setMaximized(false) }
         }
         lazyDiffPanel.set(\.threadId, projection?.thread.id)
         summaries = projection.map(TurnDiffs.summaries) ?? []
@@ -1066,6 +1078,8 @@ public final class ThreadPanelView: DSView {
             }
         }
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
+        // The sheet has no maximize control (ChatView.tsx:11211-11232).
+        maximize.isHidden = !rightPanelOpen || sheet
         panelResize.frame = NSRect(x: chat - 4, y: 0, width: 8, height: bounds.height)
         if rightPanelOpen {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.

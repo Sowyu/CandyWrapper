@@ -260,6 +260,9 @@ public struct SidebarListState: Equatable, Sendable {
     public var scratchRoots: [String: String] = [:]
     /// `selectProjectGroupingSettings` (the Project grouping setting and its per-project overrides).
     public var grouping = SidebarModel.ProjectGrouping.current
+    /// `optimisticDrop.order` (Sidebar.tsx:2851-2871): a dropped section keeps the order the drop showed
+    /// while its key writes land one by one.
+    public var heldOrder: (section: SidebarSection, order: [ThreadId])?
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -273,6 +276,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.terminalProcesses == b.terminalProcesses && a.selectedThreadIds == b.selectedThreadIds
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
+            && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
     }
 }
 
@@ -393,9 +397,17 @@ public enum SidebarListBuilder {
             }
             return .row(model)
         }
+        // `orderItemsByPreferredIds`: the held ids first, in the drop's order, then the rest as sorted.
+        func held(_ threads: [SidebarThread], _ section: SidebarSection) -> [SidebarThread] {
+            guard let hold = state.heldOrder, hold.section == section else { return threads }
+            let byId = Dictionary(threads.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let first = hold.order.compactMap { byId[$0] }
+            let placed = Set(first.map(\.id))
+            return first + threads.filter { !placed.contains($0.id) }
+        }
         var items: [SidebarItem] = []
-        items += shelves.pinned.map { row($0, .pinned) }
-        items += shelves.active.map { row($0, .active) }
+        items += held(shelves.pinned, .pinned).map { row($0, .pinned) }
+        items += held(shelves.active, .active).map { row($0, .active) }
         if !shelves.working.isEmpty {
             let expanded = state.workingExpanded
             items.append(.shelfHeader(.working, label: expanded ? "Working" : "Working (\(shelves.working.count))", expanded: expanded))

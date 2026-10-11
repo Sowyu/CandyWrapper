@@ -158,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMainWindow() {
         let window = MainWindow()
         let sidebar = SidebarContentView()
+        sidebar.shelfDefaults = .standard
         // Development: `--fake-t3-connect` swaps T3 Connect's Clerk and relay for in-process fakes and keeps
         // saved environments in a temporary catalog (FakeT3Connect).
         let fakeConnect = CommandLine.arguments.contains("--fake-t3-connect") || (Self.isTestBuild && UserDefaults.standard.bool(forKey: "CandyDevFakeConnect"))
@@ -229,8 +230,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.pageContext.setupSnapShot = { [weak captures] in captures?.showSetup() }
             settings.pageContext.snapShotReady = { [weak captures] in captures?.ready == true }
         }
+        // `resolveInitialMainWindowBounds` (DesktopWindow.ts:194-205): a saved frame comes back only when
+        // one connected display holds all of it, so a display that is gone or now runs at another scale
+        // cannot leave the window off screen. Otherwise the default size, centered. AppKit would pull a
+        // stray frame partly back instead, so the check reads the saved frame before AppKit applies it.
+        let savedKey = "NSWindow Frame MainWindow"
+        if let s = UserDefaults.standard.string(forKey: savedKey)?.split(separator: " ").compactMap({ Double($0) }), s.count >= 4,
+           !NSScreen.screens.contains(where: { $0.frame.contains(NSRect(x: s[0], y: s[1], width: s[2], height: s[3])) }) {
+            UserDefaults.standard.removeObject(forKey: savedKey)
+        }
         window.center()
         window.setFrameAutosaveName("MainWindow")
+        if !NSScreen.screens.contains(where: { $0.frame.contains(window.frame) }) {
+            window.setFrame(NSRect(x: 0, y: 0, width: 1100, height: 780), display: false)
+            window.center()
+        }
         window.makeKeyAndOrderFront(nil)
         window.layoutTrafficLights()
         mainWindow = window

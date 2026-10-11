@@ -86,6 +86,27 @@ public final class SidebarContentView: DSView {
             if state != oldValue { rebuild(animated: true) }
         }
     }
+    /// Where the shelves' expansion persists, as T3's `t3code:sidebar:*-expanded` localStorage keys
+    /// (Sidebar.tsx:297-301). Nil in tests and previews; the app sets it once, which restores them.
+    public var shelfDefaults: UserDefaults? {
+        didSet {
+            guard let d = shelfDefaults else { return }
+            state.settledExpanded = d.bool(forKey: Self.settledExpandedKey)
+            state.snoozedExpanded = d.bool(forKey: Self.snoozedExpandedKey)
+            state.workingExpanded = d.bool(forKey: Self.workingExpandedKey)
+        }
+    }
+    static let settledExpandedKey = "sidebar.settledExpanded"
+    static let snoozedExpandedKey = "sidebar.snoozedExpanded"
+    static let workingExpandedKey = "sidebar.workingExpanded"
+
+    private func saveShelves() {
+        guard let d = shelfDefaults else { return }
+        d.set(state.settledExpanded, forKey: Self.settledExpandedKey)
+        d.set(state.snoozedExpanded, forKey: Self.snoozedExpandedKey)
+        d.set(state.workingExpanded, forKey: Self.workingExpandedKey)
+    }
+
     /// Traffic lights: the brand and toggle sit after `--workspace-controls-left` (90px) on windowed macOS.
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
@@ -164,6 +185,16 @@ public final class SidebarContentView: DSView {
             case .snoozed: self.state.snoozedExpanded.toggle()
             case .working: self.state.workingExpanded.toggle()
             }
+            self.saveShelves()
+        }
+        list.sortContextProvider = { [weak self] in
+            guard let self else { return SidebarSortPlanner.Context() }
+            let snoozed = self.snapshot.map {
+                SidebarListBuilder.Context(snapshot: $0, state: self.state, nowMs: self.nowMs).shelves.snoozed.count
+            } ?? 0
+            return SidebarSortPlanner.Context(settledExpanded: self.state.settledExpanded, settledVisibleCount: self.state.settledVisibleCount,
+                                              routeThreadId: self.state.activeThreadId, snoozedCount: snoozed,
+                                              activeTimeOrdered: self.state.workingShelfEnabled)
         }
         list.onShowMore = { [weak self] in self?.state.settledVisibleCount += SidebarListBuilder.settledPageCount }
         list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
