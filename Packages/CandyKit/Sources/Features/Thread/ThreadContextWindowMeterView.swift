@@ -53,6 +53,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     public var usage: ThreadContextWindowUsage? { didSet {
         guard usage != oldValue else { return }
         needsDisplay = true
+        updateArc(animated: oldValue != nil)
         toolTip = summary
         setAccessibilityLabel(summary)
         setAccessibilityValue(usage?.percentage.map { NSNumber(value: $0) })
@@ -73,7 +74,39 @@ public final class ThreadContextWindowMeterView: ControlView {
         setAccessibilityMinValue(0)
         setAccessibilityMaxValue(100)
         action = { [weak self] in self?.showDetails() }
+        arc.actions = ["position": NSNull(), "bounds": NSNull(), "path": NSNull(), "strokeEnd": NSNull(), "strokeColor": NSNull(), "hidden": NSNull()]
+        arc.fillColor = nil
+        arc.lineWidth = 2.5
+        arc.lineCap = .round
+        arc.isHidden = true
+        layer?.addSublayer(arc)
     }
+
+    /// The usage arc as a layer, so its `stroke-dashoffset` and `stroke` changes run 500ms `ease-out`
+    /// (ContextWindowMeter.tsx:82; Tailwind's `ease-out` is `cubic-bezier(0, 0, .2, 1)`).
+    private let arc = CAShapeLayer()
+    private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+
+    private func updateArc(animated: Bool) {
+        let fraction = min(1, max(0, (usage?.percentage ?? 0) / 100))
+        let color = (fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.72)).cgColor(in: self)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if animated, !arc.isHidden, fraction > 0, window != nil, !Motion.reduced {
+            Motion.animate(arc, keyPath: "strokeEnd", to: fraction, duration: 0.5, timing: Self.easeOut)
+            Motion.animate(arc, keyPath: "strokeColor", to: color, duration: 0.5, timing: Self.easeOut)
+        }
+        arc.isHidden = fraction <= 0
+        arc.strokeEnd = fraction
+        arc.strokeColor = color
+        CATransaction.commit()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateArc(animated: false)
+    }
+
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, let usage else { return }
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
@@ -81,12 +114,19 @@ public final class ThreadContextWindowMeterView: ControlView {
         ctx.setLineWidth(2.5)
         ctx.setStrokeColor(Themed.color(\.mutedForeground, 0.24).cgColor(in: self))
         ctx.strokeEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-        let fraction = (usage.percentage ?? 0) / 100
-        guard fraction > 0 else { return }
-        ctx.setStrokeColor((fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.72)).cgColor(in: self))
-        ctx.setLineCap(.round)
-        ctx.addArc(center: center, radius: radius, startAngle: -.pi / 2, endAngle: -.pi / 2 + fraction * 2 * .pi, clockwise: false)
-        ctx.strokePath()
+    }
+
+    public override func layout() {
+        super.layout()
+        // A full turn from the top, clockwise on screen (y grows downward here); `strokeEnd` is the share used.
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let path = CGMutablePath()
+        path.addArc(center: center, radius: 9.75 * 20 / 24, startAngle: -.pi / 2, endAngle: 3 * .pi / 2, clockwise: false)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        arc.frame = bounds
+        arc.path = path
+        CATransaction.commit()
     }
     public override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)

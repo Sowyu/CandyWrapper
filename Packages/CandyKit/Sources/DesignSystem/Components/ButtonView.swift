@@ -146,6 +146,11 @@ public final class ButtonView: ControlView {
         }
     }
 
+    /// Turns the leading icon, for a disclosure chevron with `transition-transform` (see `IconView.setRotation`).
+    public func setIconRotation(_ degrees: CGFloat, motion: IconView.RotationMotion = .ease(0.15)) {
+        leadingIconView?.setRotation(degrees, motion: motion)
+    }
+
     private func updateIcons() {
         leadingIconView?.removeFromSuperview()
         trailingIconView?.removeFromSuperview()

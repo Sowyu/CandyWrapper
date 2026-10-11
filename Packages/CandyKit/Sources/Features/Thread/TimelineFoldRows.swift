@@ -7,8 +7,8 @@ import T3Store
 /// hairline; `pt-1 pb-2`, border, then the wrapper's `pb-1.5`. Hover turns the label foreground.
 final class TurnFoldRowView: TimelineRowView {
     private let label = LabelView("", font: TL.tabular(14), color: TL.c(\.mutedForeground))
+    /// `MorphIcon` chevron-right to chevron-down (:2712): the morph is a quarter turn on a spring.
     private let chevron = IconView(name: .chevronRight, size: 14)
-    private let chevronOpen = IconView(name: .chevronDown, size: 14)
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private let rule = FillView()
 
@@ -18,7 +18,7 @@ final class TurnFoldRowView: TimelineRowView {
         time.lineHeight = 16
         time.alphaValue = 0
         rule.fill = TL.c(\.border, 0.6)
-        for v in [label, chevron, chevronOpen, time, rule] as [NSView] { addSubview(v) }
+        for v in [label, chevron, time, rule] as [NSView] { addSubview(v) }
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
@@ -28,11 +28,11 @@ final class TurnFoldRowView: TimelineRowView {
     }
 
     override func configure(_ item: TimelineItem) {
+        let sameRow = self.item?.id == item.id
         super.configure(item)
         guard case .turnFold(_, let text, let expanded) = item.row.kind else { return }
         label.text = text
-        chevron.isHidden = expanded
-        chevronOpen.isHidden = !expanded
+        chevron.setRotation(expanded ? 90 : 0, motion: sameRow ? .morph : .none)
         time.text = TL.dayAwareTimestamp(item.row.createdAt, now: context.now())
         setAccessibilityLabel(text)
         setAccessibilityExpanded(expanded)
@@ -46,7 +46,6 @@ final class TurnFoldRowView: TimelineRowView {
         let w = label.textWidth
         label.frame = NSRect(x: 4, y: 4, width: ceil(w) + 1, height: TL.relaxed)
         chevron.frame = NSRect(x: 4 + w + 4, y: 4 + (TL.relaxed - 14) / 2, width: 14, height: 14)
-        chevronOpen.frame = chevron.frame
         let tw = ceil(time.textWidth)
         time.frame = NSRect(x: bounds.width - 2 - tw, y: 4 + (TL.relaxed - 16) / 2, width: tw, height: 16)
         rule.frame = NSRect(x: 0, y: TL.snap(4 + TL.relaxed + 8), width: bounds.width, height: 1)
@@ -56,7 +55,6 @@ final class TurnFoldRowView: TimelineRowView {
         let color = hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
         label.color = color
         chevron.strokeColor = color
-        chevronOpen.strokeColor = color
         time.alphaValue = hovered ? 1 : 0
     }
 }
@@ -64,8 +62,8 @@ final class TurnFoldRowView: TimelineRowView {
 /// `AttemptFoldTimelineRow` (:2723-2743): a bordered full-width button for a superseded attempt.
 final class AttemptFoldRowView: TimelineRowView {
     private let box = FillView()
+    /// `MorphIcon` chevron-right to chevron-down (:2735-2738), a quarter turn on a spring.
     private let chevron = IconView(name: .chevronRight, size: 14, strokeColor: TL.c(\.mutedForeground))
-    private let chevronOpen = IconView(name: .chevronDown, size: 14, strokeColor: TL.c(\.mutedForeground))
     private let label = LabelView("", font: TL.font(12, .medium), color: TL.c(\.foreground, 0.8))
     private let note = LabelView("Partial output retained", font: TL.font(11), color: TL.c(\.mutedForeground))
 
@@ -76,7 +74,7 @@ final class AttemptFoldRowView: TimelineRowView {
         addSubview(box)
         label.lineHeight = 16
         note.lineHeight = 16
-        for v in [chevron, chevronOpen, label, note] as [NSView] { box.addSubview(v) }
+        for v in [chevron, label, note] as [NSView] { box.addSubview(v) }
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
@@ -86,11 +84,11 @@ final class AttemptFoldRowView: TimelineRowView {
     }
 
     override func configure(_ item: TimelineItem) {
+        let sameRow = self.item?.id == item.id
         super.configure(item)
         guard case .attemptFold(_, _, let text, let expanded) = item.row.kind else { return }
         label.text = text
-        chevron.isHidden = expanded
-        chevronOpen.isHidden = !expanded
+        chevron.setRotation(expanded ? 90 : 0, motion: sameRow ? .morph : .none)
         setAccessibilityExpanded(expanded)
         needsLayout = true
     }
@@ -101,7 +99,6 @@ final class AttemptFoldRowView: TimelineRowView {
         super.layout()
         box.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 34)
         chevron.frame = NSRect(x: 11, y: 10, width: 14, height: 14)
-        chevronOpen.frame = chevron.frame
         let lw = ceil(label.textWidth)
         label.frame = NSRect(x: 33, y: 9, width: lw, height: 16)
         note.frame = NSRect(x: 33 + lw + 8, y: 9, width: max(0, bounds.width - 33 - lw - 8 - 11), height: 16)
@@ -125,6 +122,7 @@ final class CompactionRowView: TimelineRowView {
         label.base.font = TL.font(12)
         label.base.lineHeight = 16
         label.base.color = TL.c(\.mutedForeground)
+        label.style = .focus
         addSubview(icon)
         addSubview(label)
     }

@@ -165,6 +165,8 @@ final class ChangedFileRowView: DSView {
     }
 
     func configure(_ row: ChangedFilesCardView.Row, spacer: Bool) {
+        // The same folder toggled in place turns its chevron (ChangedFilesTree.tsx:185-190, 150ms).
+        let sameNode = self.row?.node.path == row.node.path
         self.row = row
         self.spacer = spacer
         let isDirectory: Bool
@@ -174,7 +176,7 @@ final class ChangedFileRowView: DSView {
             folderName.text = name
             stat.isHidden = !s.isNonZero
             stat.setAligned(additions: s.additions, deletions: s.deletions, size: 10)
-            chevron.frameCenterRotation = 0
+            chevron.setRotation(row.expanded ? 90 : 0, motion: sameNode ? .ease(0.15) : .none)
             setAccessibilityExpanded(row.expanded)
         case .file(let name, let path, let s):
             isDirectory = false
@@ -217,10 +219,7 @@ final class ChangedFileRowView: DSView {
         stat.frame = NSRect(x: bounds.width - 8 - statWidth, y: 0, width: statWidth, height: bounds.height)
         let nameMax = max(0, stat.frame.minX - (statWidth > 0 ? 8 : 0))
         if case .directory = row.node {
-            // The chevron turns 90 degrees about its center when open.
-            chevron.frameCenterRotation = 0
             chevron.frame = NSRect(x: x, y: midY - 7, width: 14, height: 14)
-            if row.expanded { chevron.frameCenterRotation = 90 }
             x += 14 + 8
             folderOpen.frame = NSRect(x: x, y: midY - 7, width: 14, height: 14)
             folderClosed.frame = folderOpen.frame

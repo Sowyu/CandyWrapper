@@ -257,7 +257,8 @@ final class SectionItem: DSView, StackItem {
     private let label = LabelView("", font: DSFont.ui(12, weight: .medium))
     private let chevron = IconView(name: .chevronRight, size: 14)
     var title: String { get { label.text } set { label.text = newValue; needsLayout = true } }
-    var isOpen: Bool { didSet { body?.isHidden = !isOpen; chevron.frameCenterRotation = isOpen ? -90 : 0; onToggle?() } }
+    /// The chevron turns over 150ms, `rotate-90` when open (PullRequestSummaryTab.tsx:335-340).
+    var isOpen: Bool { didSet { body?.isHidden = !isOpen; chevron.setRotation(isOpen ? 90 : 0); onToggle?() } }
     var body: StackItem? { didSet { oldValue?.removeFromSuperview(); if let body { addSubview(body); body.isHidden = !isOpen } } }
     var accessory: NSView? { didSet { oldValue?.removeFromSuperview(); accessory.map(addSubview) } }
     var onToggle: (() -> Void)?
@@ -282,7 +283,7 @@ final class SectionItem: DSView, StackItem {
         let lw = ceil(label.textWidth) + 1
         label.frame = NSRect(x: 16, y: 12, width: lw, height: 16)
         chevron.frame = NSRect(x: 16 + lw + 6, y: 13, width: 14, height: 14)
-        chevron.frameCenterRotation = isOpen ? -90 : 0
+        chevron.setRotation(isOpen ? 90 : 0, motion: .none)
         if let accessory {
             let s = accessory.intrinsicContentSize
             accessory.frame = NSRect(x: bounds.width - 16 - s.width, y: (40 - s.height) / 2, width: s.width, height: s.height)
@@ -785,7 +786,9 @@ final class ConversationRow: DSView, StackItem {
     private let subtitle = LabelView("", font: DSFont.ui(10))
     private let chevron = IconView(name: .chevronDown, size: 14)
     private var cards: [CommentCard] = []
-    private var open = false { didSet { (superview as? StackDocument)?.needsLayout = true; superview?.superview?.superview?.superview?.needsLayout = true; needsLayout = true; cards.forEach { $0.isHidden = !open } } }
+    private var open = false { didSet { (superview as? StackDocument)?.needsLayout = true; superview?.superview?.superview?.superview?.needsLayout = true; needsLayout = true; cards.forEach { $0.isHidden = !open }
+        // `transition-transform`, `rotate-180` when open (PullRequestTimelineTab.tsx:336-341).
+        chevron.setRotation(open ? 180 : 0) } }
 
     init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String) {
         var actors: [String: PullRequestActor] = [:]
@@ -820,7 +823,6 @@ final class ConversationRow: DSView, StackItem {
         title.frame = NSRect(x: 48, y: 8, width: max(0, bounds.width - 48 - 30), height: 16)
         subtitle.frame = NSRect(x: 48, y: 26, width: max(0, bounds.width - 48 - 30), height: 14)
         chevron.frame = NSRect(x: bounds.width - 14, y: 17, width: 14, height: 14)
-        chevron.frameCenterRotation = open ? 180 : 0
         var y: CGFloat = 52
         for c in cards where open {
             let h = c.height(forWidth: bounds.width - 48)

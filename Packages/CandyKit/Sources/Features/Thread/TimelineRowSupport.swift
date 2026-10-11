@@ -212,6 +212,27 @@ final class ShineLabelView: DSView {
 
     var shining = false { didSet { if shining != oldValue { bright.isHidden = !shining; loop?.update() } } }
 
+    /// `shine` is `live-tool-shine` on live tool rows. `focus` is `live-activity-focus` (index.css:556-622),
+    /// the band over Thinking and the compaction row (`ActivityShimmerOverlay`, MessagesTimeline.tsx:3681):
+    /// a 72px window with soft edges that travels from -72px to the label's width + 72px in 2.2s, linear.
+    enum Style { case shine, focus }
+    var style = Style.shine {
+        didSet {
+            guard style != oldValue else { return }
+            switch style {
+            case .shine:
+                band.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+                band.locations = nil
+            case .focus:
+                band.colors = [0, 0.12, 0.55, 1, 0.55, 0.12, 0].map { CGColor(gray: 0, alpha: $0) }
+                // 0, .675, 1.575, 2.25, 2.925, 3.825 and 4.5rem of the 4.5rem window.
+                band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
+            }
+            band.removeAnimation(forKey: "shine")
+            loop?.update()
+        }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for label in [base, bright] {
@@ -230,7 +251,8 @@ final class ShineLabelView: DSView {
             let a = CABasicAnimation(keyPath: "position.x")
             let width = self?.bright.bounds.width ?? 0
             a.fromValue = -36
-            a.toValue = width + 36
+            // `focus` moves its band by the overlay's own width, the label plus 9rem.
+            a.toValue = self?.style == .focus ? width + 108 : width + 36
             a.duration = 2.2
             a.repeatCount = .infinity
             a.timingFunction = CAMediaTimingFunction(name: .linear)

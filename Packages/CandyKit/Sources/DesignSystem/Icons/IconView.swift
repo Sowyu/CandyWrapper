@@ -97,9 +97,57 @@ public final class IconView: NSView {
                 var t = CGAffineTransform(translationX: ox, y: h - oy)
                     .scaledBy(x: scale, y: -scale)
                     .translatedBy(x: -vb.x + s.element.paint.offsetX, y: -vb.y + s.element.paint.offsetY)
-                s.layer.frame = bounds
+                // bounds and position, not frame: frame is undefined while `rotation` turns the layer.
+                s.layer.bounds = bounds
+                s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
                 s.layer.lineWidth = s.element.paint.strokeWidth * scale
+            }
+        }
+    }
+
+    // MARK: Rotation
+
+    /// How a rotation change moves.
+    public enum RotationMotion {
+        /// Snap, for configuring a reused view or a first layout.
+        case none
+        /// CSS `transition-transform`: `duration` on Tailwind's default curve.
+        case ease(CFTimeInterval)
+        /// `MorphIcon` (`morphicons` 1.7.1) between two shapes that differ only by a turn, such as
+        /// chevron-right and chevron-down. The library fits the turn and runs its default "snappy"
+        /// spring, stiffness 420 and damping 30 at mass 1 (bundle `MorphIcon-*.js`, `K.snappy`).
+        case morph
+    }
+
+    /// Degrees, clockwise like CSS `rotate-90`, about the icon's center.
+    public private(set) var rotation: CGFloat = 0
+
+    /// `transition-transform` with `rotate-90` or `rotate-180`. Instant under Reduce Motion or offscreen.
+    public func setRotation(_ degrees: CGFloat, motion: RotationMotion = .ease(0.15)) {
+        guard degrees != rotation else { return }
+        rotation = degrees
+        // Shape layers draw y up, so a clockwise turn on screen is a negative z rotation.
+        let angle = -degrees * .pi / 180
+        withoutActions {
+            for s in shapes {
+                let l = s.layer
+                switch motion {
+                case .none: break
+                case _ where window == nil || Motion.reduced: break
+                case .ease(let duration):
+                    Motion.animate(l, keyPath: "transform.rotation.z", to: angle, duration: duration)
+                case .morph:
+                    let spring = CASpringAnimation(keyPath: "transform.rotation.z")
+                    spring.fromValue = l.presentation()?.value(forKeyPath: "transform.rotation.z") ?? l.value(forKeyPath: "transform.rotation.z")
+                    spring.toValue = angle
+                    spring.mass = 1
+                    spring.stiffness = 420
+                    spring.damping = 30
+                    spring.duration = spring.settlingDuration
+                    l.add(spring, forKey: "transform.rotation.z")
+                }
+                l.transform = CATransform3DMakeRotation(angle, 0, 0, 1)
             }
         }
     }

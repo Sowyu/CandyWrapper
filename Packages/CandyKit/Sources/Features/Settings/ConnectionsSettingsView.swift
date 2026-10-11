@@ -704,8 +704,8 @@ final class InlineDisclosureButton: ControlView {
     private let label = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let chevron = IconView(name: .chevronRight, size: 12)
     var title: String { get { label.text } set { label.text = newValue; invalidateIntrinsicContentSize() } }
-    /// `rotate-90` when open; in the flipped parent a positive angle turns clockwise.
-    var isOpen = false { didSet { chevron.frameCenterRotation = isOpen ? 90 : 0; setAccessibilityExpanded(isOpen) } }
+    /// `rotate-90` when open, `transition-transform duration-150` (ConnectionsSettings.tsx:1656-1681).
+    var isOpen = false { didSet { chevron.setRotation(isOpen ? 90 : 0); setAccessibilityExpanded(isOpen) } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -731,10 +731,7 @@ final class InlineDisclosureButton: ControlView {
         super.layout()
         let lw = ceil(label.textWidth)
         label.frame = NSRect(x: 0, y: 0, width: lw, height: 16)
-        // A rotated view's frame is in rotated space: place it unrotated, then turn it.
-        chevron.frameCenterRotation = 0
         chevron.frame = NSRect(x: lw + 2, y: 2, width: 12, height: 12)
-        chevron.frameCenterRotation = isOpen ? 90 : 0
     }
 }
 

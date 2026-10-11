@@ -303,12 +303,37 @@ final class PermissionsDisclosureRow: DSView, SettingsGroupRow {
     }
 }
 
-/// `ConnectionStatusDot`: a `size-2` dot in a `size-3` box with a tooltip.
-// ponytail: no `animate-status-ping` ring on live clients; add it if the static dot reads as stale
+/// `ConnectionStatusDot`: a `size-2` dot in a `size-3` box with a tooltip. With `pings` a halo in the
+/// tone at 60% bursts from 75% to 200% and fades in eight steps over the first 40% of every 2s
+/// (`animate-status-ping`, index.css:317-330), only while the dot is on screen.
 final class StatusDotView: DSView {
     enum Tone { case success, warning, idle }
     var tone: Tone = .idle { didSet { needsDisplay = true } }
+    var pings = false {
+        didSet {
+            guard pings != oldValue else { return }
+            halo.isHidden = !pings
+            if pings { ping.windowChanged() } else { halo.removeAnimation(forKey: "ping") }
+        }
+    }
     private let dot = CALayer()
+    private let halo = CALayer()
+    private lazy var ping = LoopingAnimation(view: self, key: "ping", layer: { [weak self] in self?.pings == true ? self?.halo : nil }) {
+        // steps(8) from 0% to 40%, then held at the end: discrete values at each eighth.
+        let steps = 8
+        let fractions = (0...steps).map { CGFloat($0) / CGFloat(steps) }
+        let times = (0...steps).map { NSNumber(value: 0.4 * Double($0) / Double(steps)) } + [1]
+        let opacity = CAKeyframeAnimation(keyPath: "opacity")
+        opacity.values = fractions.map { 0.9 * (1 - $0) }
+        let scale = CAKeyframeAnimation(keyPath: "transform.scale")
+        scale.values = fractions.map { 0.75 + 1.25 * $0 }
+        for a in [opacity, scale] { a.keyTimes = times; a.calculationMode = .discrete }
+        let group = CAAnimationGroup()
+        group.animations = [opacity, scale]
+        group.duration = 2
+        group.repeatCount = .infinity
+        return group
+    }
     private var tip: TooltipController?
     var tooltip = "" {
         didSet {
@@ -321,25 +346,38 @@ final class StatusDotView: DSView {
         super.init(frame: frameRect)
         dot.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
         dot.cornerRadius = 4
+        halo.actions = dot.actions
+        halo.isHidden = true
+        halo.opacity = 0 // between bursts, and whenever the loop is off
+        layer?.addSublayer(halo)
         layer?.addSublayer(dot)
         setAccessibilityRole(.button)
     }
 
     override func updateLayer() {
-        let color: NSColor = switch tone {
-        case .success: Themed.color(\.success)
-        case .warning: Themed.color(\.warning)
-        case .idle: Themed.color(\.mutedForeground, 0.3)
+        let (color, ring): (NSColor, NSColor) = switch tone {
+        case .success: (Themed.color(\.success), Themed.color(\.success, 0.6))
+        case .warning: (Themed.color(\.warning), Themed.color(\.warning, 0.6))
+        case .idle: (Themed.color(\.mutedForeground, 0.3), Themed.color(\.mutedForeground, 0.18))
         }
         dot.backgroundColor = color.cgColor(in: self)
+        halo.backgroundColor = ring.cgColor(in: self)
     }
 
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         dot.frame = CGRect(x: (bounds.width - 8) / 2, y: (bounds.height - 8) / 2, width: 8, height: 8)
+        // `absolute h-full w-full rounded-full`: the size-3 box.
+        let side = min(bounds.width, bounds.height)
+        halo.frame = CGRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: side, height: side)
+        halo.cornerRadius = side / 2
         CATransaction.commit()
     }
+
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if pings { ping.windowChanged() } }
+    override func viewDidHide() { super.viewDidHide(); if pings { ping.update() } }
+    override func viewDidUnhide() { super.viewDidUnhide(); if pings { ping.update() } }
 }
 
 /// `AccessScopeSummary`: `<n> scopes`, underlined, with the granted scopes on hover.
@@ -534,7 +572,8 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         var summary: String { get { summaryLabel.text } set { summaryLabel.text = newValue; needsLayout = true } }
         /// The section title (`FoldedSettingsSection title`); Load balancing reuses this header.
         var heading: String { get { title.text } set { title.text = newValue; setAccessibilityLabel(newValue); needsLayout = true } }
-        var isOpen = false { didSet { chevron.frameCenterRotation = isOpen ? 90 : 0; setAccessibilityExpanded(isOpen) } }
+        /// `transition-transform duration-150`, `rotate-90` when open (FoldedSettingsSection.tsx:76-81).
+        var isOpen = false { didSet { chevron.setRotation(isOpen ? 90 : 0); setAccessibilityExpanded(isOpen) } }
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
@@ -551,10 +590,7 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         override func layout() {
             super.layout()
             let h = bounds.height
-            // A rotated view's frame is in rotated space: place it unrotated, then turn it.
-            chevron.frameCenterRotation = 0
             chevron.frame = NSRect(x: 0, y: (h - 16) / 2, width: 16, height: 16)
-            chevron.frameCenterRotation = isOpen ? 90 : 0
             let tw = ceil(title.textWidth) + 1
             title.frame = NSRect(x: 24, y: (h - 20) / 2, width: tw, height: 20)
             let sx = 24 + ceil(title.textWidth) + 7
@@ -802,6 +838,7 @@ final class ClientSessionRowView: DSView, SettingsGroupRow {
 
     func configure(_ c: ConnectionsPageModel.Access.Client, canRevoke: Bool) {
         dot.tone = c.live ? .success : .idle
+        dot.pings = c.live // ConnectionsSettings.tsx:987-991
         dot.tooltip = c.statusTooltip
         title.text = c.label
         chip.isHidden = !c.current

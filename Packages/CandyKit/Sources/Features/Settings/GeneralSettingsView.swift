@@ -470,7 +470,8 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
         private let label = LabelView("", font: DSFont.ui(14), color: Themed.color(\.foreground, 0.7))
         private let chevron = IconView(name: .chevronRight, size: 16)
         var title = "" { didSet { label.text = title; needsLayout = true } }
-        var isOpen = false { didSet { chevron.frameCenterRotation = isOpen ? -90 : 0; setAccessibilityExpanded(isOpen) } }
+        /// `transition-transform duration-200`, `rotate-90` when open (SettingsPanels.tsx:2125).
+        var isOpen = false { didSet { chevron.setRotation(isOpen ? 90 : 0, motion: .ease(0.2)); setAccessibilityExpanded(isOpen) } }
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
             scalesWhenPressed = false
@@ -488,10 +489,7 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
             super.layout()
             let w = ceil(label.textWidth) + 1
             label.frame = NSRect(x: 16, y: 6, width: w, height: 20)
-            let r = chevron.frameCenterRotation
-            chevron.frameCenterRotation = 0
             chevron.frame = NSRect(x: 16 + w + 8, y: 8, width: 16, height: 16)
-            chevron.frameCenterRotation = r
         }
     }
 }

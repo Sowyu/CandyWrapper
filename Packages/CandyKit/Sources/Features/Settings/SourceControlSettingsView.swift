@@ -494,7 +494,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
     private let details: (NSView & SettingsGroupRow)?
     var onToggle: (() -> Void)?
     var isExpanded = false {
-        didSet { details?.isHidden = !isExpanded; toggle.icon = isExpanded ? .chevronUp : .chevronDown; toggle.setAccessibilityExpanded(isExpanded); needsLayout = true }
+        didSet { details?.isHidden = !isExpanded; toggle.setIconRotation(isExpanded ? 180 : 0); toggle.setAccessibilityExpanded(isExpanded); needsLayout = true }
     }
 
     init(item: SourceControlDiscoveryItem, details: (NSView & SettingsGroupRow)?) {

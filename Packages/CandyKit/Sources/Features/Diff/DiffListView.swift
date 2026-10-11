@@ -95,8 +95,25 @@ public final class DiffListView: DSView {
     public func setCollapsed(_ file: Int, _ value: Bool) {
         guard diff.files.indices.contains(file), collapsed.contains(file) != value else { return }
         if value { collapsed.insert(file) } else { collapsed.remove(file) }
+        fadingFiles = value ? [] : [file]
         relayoutKeepingAnchor()
+        fadingFiles = []
         onCollapsedChange?()
+    }
+
+    /// Files whose body rows fade in as they mount: expanding eases the body in over 200ms `ease-out`
+    /// (StyledDiffCodeView.tsx:241-250). Collapsing cuts, as in T3.
+    private var fadingFiles: Set<Int> = []
+    private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.58, 1)
+
+    private func fadeIn(_ view: NSView) {
+        guard let layer = view.layer, window != nil, !Motion.reduced else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.2
+        fade.timingFunction = Self.easeOut
+        layer.add(fade, forKey: "expand-fade")
     }
 
     public func toggle(_ file: Int) { setCollapsed(file, !collapsed.contains(file)) }
@@ -104,8 +121,10 @@ public final class DiffListView: DSView {
     public var allCollapsed: Bool { !diff.files.isEmpty && collapsed.count == diff.files.count }
 
     public func setAllCollapsed(_ value: Bool) {
+        fadingFiles = value ? [] : collapsed
         collapsed = value ? Set(diff.files.indices) : []
         relayoutKeepingAnchor()
+        fadingFiles = []
         onCollapsedChange?()
     }
 
@@ -263,9 +282,11 @@ public final class DiffListView: DSView {
             if let view = visible[index] {
                 if view.frame != frame { view.frame = frame }
             } else {
-                let view = dequeue(row.kind)
+                // A header goes back to the view that last showed its file, so its chevron can turn.
+                let view = row.kind == .header ? dequeueHeader(path: diff.files[Int(row.file)].path) : dequeue(row.kind)
                 view.frame = frame
                 configure(view, row, index: index, context)
+                if row.kind != .header, fadingFiles.contains(Int(row.file)) { fadeIn(view) }
                 visible[index] = view
             }
             visible[index]?.layer?.zPosition = row.kind == .header ? 2 : 0
@@ -285,6 +306,14 @@ public final class DiffListView: DSView {
             line.configure(row: row, context)
         default: break
         }
+    }
+
+    private func dequeueHeader(path: String) -> DiffRowView {
+        if let i = pools[.header]?.lastIndex(where: { ($0 as? DiffFileHeaderView)?.path == path }), let view = pools[.header]?.remove(at: i) {
+            view.isHidden = false
+            return view
+        }
+        return dequeue(.header)
     }
 
     private func dequeue(_ kind: DiffLayout.Row.Kind) -> DiffRowView {
