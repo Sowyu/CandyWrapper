@@ -26,17 +26,23 @@ final class SidebarCommands {
     private lazy var pullRequestsPage: PullRequestsPageController = {
         let c = PullRequestsPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
         c.onAddProject = { [weak self] in self?.addProject() }
+        c.container.onEscape = { [weak self] in self?.goBack() }
         return c
     }()
     private var utilityKind: UtilityPage?
     /// The Usage page, made on first open and kept for the session.
     private lazy var usage: UsageController = {
         let c = UsageController(environments: environments, composer: threads.composer, window: window)
-        c.page.onEscape = { [weak self] in self?.closeUtilityPage() }
+        c.page.onEscape = { [weak self] in self?.goBack() }
         return c
     }()
     /// A utility page opened or closed (route history).
     var onRouteChange: (() -> Void)?
+    /// Leaves Settings before a utility page shows (both replace the main area; T3 routes between them).
+    var closeSettings: () -> Void = {}
+    /// `useEscapeToGoBack` on Usage and Pull Requests: the previous route, false when there is none.
+    var historyBack: () -> Bool = { false }
+    var closePalette: () -> Void = {}
     /// The open utility page, nil on the thread view.
     var openUtilityKind: UtilityPage? { utilityPage == nil ? nil : utilityKind }
 
@@ -64,7 +70,14 @@ final class SidebarCommands {
         sidebar.actions.openUsage = { [weak self] in self?.openUtilityPage(.usage) }
         sidebar.actions.back = { [weak self] in self?.closeUtilityPage() }
         sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
-        sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
+        // A row, draft row, search result or file drop is a route change in T3 (`navigateToThread`,
+        // Sidebar.tsx:3144-3160): it leaves Usage or Pull Requests in the same click.
+        let openThread = sidebar.actions.openThread
+        sidebar.actions.openThread = { [weak self] id in self?.leavingUtilityPage { openThread(id) } }
+        let openDraft = sidebar.actions.openDraft
+        sidebar.actions.openDraft = { [weak self] id in self?.leavingUtilityPage { openDraft(id) } }
+        let dropFiles = sidebar.actions.dropFiles
+        sidebar.actions.dropFiles = { [weak self] id, urls in self?.leavingUtilityPage { dropFiles(id, urls) } }
         sidebar.list.canReorderDrop = { [weak self] id, section in
             guard let self, let env = id.environmentId, let config = self.threads.composer.config(env) else { return false }
             if section == .settled { return config.capabilities.contains("threadSettlement") }
@@ -119,7 +132,7 @@ final class SidebarCommands {
         // `thread.undo` (Mod+Z outside editable fields by default) only consumes the key when there
         // is something to undo, and never on repeat or with the model picker open (_chat.tsx:84-93).
         shortcuts.on("thread.undo") { [weak self] call in
-            guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil else { return false }
+            guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil, !self.isUsagePageOpen else { return false }
             return self.ledger.undoLatest()
         }
         // `thread.settle` settles the open thread, or unsettles a settled one.
@@ -145,7 +158,9 @@ final class SidebarCommands {
             if !call.isRepeat { self.copyThreadReference() }
             return true
         }
+        // `usage.open` closes the palette on the way (CommandPalette.tsx:567-572).
         shortcuts.on("usage.open") { [weak self] _ in
+            self?.closePalette()
             self?.openUtilityPage(.usage)
             return true
         }
@@ -179,6 +194,10 @@ final class SidebarCommands {
 
     var isUsagePageOpen: Bool { utilityPage != nil && utilityKind == .usage }
     var isUtilityPageOpen: Bool { utilityPage != nil }
+
+    /// The route's thread (`routeThreadKey`): none while Usage or Pull Requests shows, so parking or
+    /// deleting the thread behind the page moves nothing (Sidebar.tsx:2494, 3318-3346).
+    private var routeThreadId: ThreadId? { utilityPage == nil ? threads.openThreadId : nil }
 
     // MARK: Lookup
 
@@ -237,7 +256,7 @@ final class SidebarCommands {
                 }
             }
             // Only move on if the user is still on the settled thread.
-            if threads.openThreadId == id, shell(id)?.settledOverride == .settled { navigate?() }
+            if routeThreadId == id, shell(id)?.settledOverride == .settled { navigate?() }
         }
     }
 
@@ -291,7 +310,7 @@ final class SidebarCommands {
             guard let self else { return }
             _ = await self.attempt("Failed to wake thread", { try await self.environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) })
         }
-        if threads.openThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(SidebarThread(now), nowMs: nowMs) { navigate?() }
+        if routeThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(SidebarThread(now), nowMs: nowMs) { navigate?() }
         return nil
     }
 
@@ -372,7 +391,7 @@ final class SidebarCommands {
             toast("Failed to archive thread", "Cannot archive while the provider is active.", .error)
             return
         }
-        let wasOpen = threads.openThreadId == id
+        let wasOpen = routeThreadId == id
         let project = snapshot?.projects.first { $0.id == thread.projectId }
         let wokeAt = SidebarModel.threadWokeAt(SidebarThread(thread), nowMs: nowMs)
         let claim = ledger.begin("archive", id.rawValue)
@@ -419,7 +438,7 @@ final class SidebarCommands {
     /// `planForwardNavigation` (Sidebar.tsx:3318-3346): parking the open thread moves to the next card
     /// in list order (wrapping), else a draft in its project. Nil when the thread is not the open one.
     private func planForwardNavigation(_ id: ThreadId, leaving: Set<ThreadId> = []) -> (() -> Void)? {
-        guard threads.openThreadId == id, let sidebar else { return nil }
+        guard routeThreadId == id, let sidebar else { return nil }
         let rows: [SidebarRowModel] = sidebar.list.items.compactMap { if case .row(let r) = $0 { r } else { nil } }
         let project = shell(id).flatMap { t in snapshot?.projects.first { $0.id == t.projectId } }
         if let index = rows.firstIndex(where: { $0.id == id }),
@@ -601,10 +620,10 @@ final class SidebarCommands {
         }
         let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarThreadSortOrder")) ?? .updatedAt
         let fallback = SidebarModel.fallbackThreadAfterDelete(all, deleted: id, deleting: deleting, order: order)
-        let wasOpen = threads.openThreadId == id
+        let wasOpen = routeThreadId == id
         do { try await environments.dispatch(id, ThreadCommands.delete(id.localId)) } catch { return .failure(error) }
         sidebar?.deselect([id])
-        if wasOpen, threads.openThreadId == id {
+        if wasOpen, routeThreadId == id {
             if let fallback { threads.open(fallback) } else { threads.newThread(in: project) }
         }
         guard removeWorktree, let orphan, let project else { return .deleted }
@@ -766,6 +785,7 @@ final class SidebarCommands {
     /// footer shows Back.
     func openUtilityPage(_ page: UtilityPage) {
         guard let layout, let sidebar else { return }
+        closeSettings()
         let view: NSView = page == .pullRequests ? pullRequestsPage.container : usage.page
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage && page != .usage { usage.didHide() }
@@ -775,6 +795,10 @@ final class SidebarCommands {
         utilityPage = view
         utilityKind = page
         sidebar.isOnUtilityPage = true
+        // No route thread or draft on these pages, so no row is active (Sidebar.tsx:2490-2494).
+        // ponytail: a draft prompt save while the page shows re-marks the draft row; route the active ids through one owner if that shows
+        sidebar.state.activeThreadId = nil
+        sidebar.state.activeDraftId = nil
         layout.needsLayout = true
         if page == .pullRequests {
             pullRequestsPage.didShow()
@@ -786,8 +810,9 @@ final class SidebarCommands {
         onRouteChange?()
     }
 
-    /// Back (`navigateToMainApp`): the thread panel returns as it was.
-    func closeUtilityPage() {
+    /// Back (`navigateToMainApp`): the thread panel returns as it was. `record` false leaves the route
+    /// history to the navigation that follows.
+    func closeUtilityPage(record: Bool = true) {
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage { usage.didHide() }
@@ -796,7 +821,24 @@ final class SidebarCommands {
         utilityKind = nil
         layout.main.addSubview(threads.panel)
         sidebar?.isOnUtilityPage = false
+        sidebar?.state.activeThreadId = threads.openThreadId
+        threads.composer.syncSidebarDrafts()
+        threads.focusComposerOnReturn()
         layout.needsLayout = true
+        if record { onRouteChange?() }
+    }
+
+    /// Runs a navigation to a thread or draft; from a utility page the page closes first and the
+    /// history gets one entry, the destination.
+    private func leavingUtilityPage(_ navigate: () -> Void) {
+        guard utilityPage != nil else { return navigate() }
+        closeUtilityPage(record: false)
+        navigate()
         onRouteChange?()
+    }
+
+    /// Escape on Usage or Pull Requests (`useNavigateBack`): history back, else the thread view.
+    private func goBack() {
+        if !historyBack() { closeUtilityPage() }
     }
 }

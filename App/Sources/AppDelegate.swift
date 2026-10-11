@@ -190,6 +190,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
+        commands.closeSettings = { [weak settings] in settings?.close(record: false) }
+        settings.onThreadViewReturn = { [weak threads] in threads?.focusComposerOnReturn() }
         threads.panel.header.onThreadMenu = { [weak commands, weak threads] event, view in
             guard let id = threads?.openThreadId else { return }
             commands?.showThreadMenu(id, event: event, view: view, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
@@ -377,7 +379,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case nil: return nil
             }
         }
-        let record: () -> Void = { [weak history] in history?.record(currentRoute()) }
+        let record: () -> Void = { [weak history, weak threads] in
+            history?.record(currentRoute())
+            threads?.syncVisit()
+        }
         threads.onRouteChange = record
         settings.onRouteChange = record
         commands.onRouteChange = record
@@ -405,6 +410,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         self.routeHistory = history
+        commands.historyBack = { [weak history] in history?.back() ?? false }
+        commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102).
         shortcuts.onKey { [weak sidebar] event in
             guard event.keyCode == 53, let sidebar, !sidebar.selectedThreadIds.isEmpty else { return false }

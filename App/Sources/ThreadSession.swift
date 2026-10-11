@@ -697,6 +697,44 @@ final class ThreadController {
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
     var openThreadId: ThreadId? { panel.isDraft ? nil : session?.threadId }
 
+    /// The thread view is back after Settings or a utility page: T3 mounts ChatView again, which focuses
+    /// the composer unless the terminal is open (ChatView.tsx:6837-6845).
+    func focusComposerOnReturn() {
+        if !panel.terminalOpen { composer.focusComposer() }
+    }
+
+    private var visits = ThreadVisitTracker()
+    private var visitTimer: DispatchWorkItem?
+    private var visitViewShown = false
+
+    /// ChatView's visit effect (ChatView.tsx:2938-3000) for the open thread while the thread view shows:
+    /// a visit clears the row's Done and Woke marks. Runs on every shell change and route change.
+    func syncVisit() {
+        visitTimer?.cancel()
+        visitTimer = nil
+        let shown = panel.window != nil
+        // Settings and Usage unmount ChatView in T3, so its per-watermark dedupe starts over on the way back.
+        if shown, !visitViewShown { visits.reset() }
+        visitViewShown = shown
+        guard shown, let id = openThreadId, let sidebar,
+              let shell = sidebar.snapshot?.threads.first(where: { $0.id == id }) else { return }
+        let now = TimestampFormat.nowMs()
+        switch visits.decide(shell, routeKey: id.rawValue, local: sidebar.state.localVisits[id], nowMs: now) {
+        case .none: break
+        case .local(let time): sidebar.state.localVisits[id] = time
+        case .dispatch(let time, let delay):
+            let send: @MainActor () -> Void = { [weak self] in
+                guard let self else { return }
+                self.visits.didDispatch(shell, routeKey: id.rawValue, nowMs: TimestampFormat.nowMs())
+                Task { _ = try? await self.environments.dispatch(id, ThreadCommands.visit(id.localId, visitedAt: time)) }
+            }
+            guard delay > 0 else { return send() }
+            let work = DispatchWorkItem { MainActor.assumeIsolated { send() } }
+            visitTimer = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delay)), execute: work)
+        }
+    }
+
     func close() {
         session?.end()
         session = nil
@@ -879,6 +917,7 @@ final class ThreadController {
     }
 
     private func shellChanged(_ snapshot: ShellSnapshot) {
+        defer { syncVisit() }
         updateNoProjectsHero(snapshot)
         dropMissingThread(snapshot)
         composer.projectsChanged()

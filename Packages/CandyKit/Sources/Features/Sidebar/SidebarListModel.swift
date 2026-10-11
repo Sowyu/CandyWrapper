@@ -439,8 +439,10 @@ public enum SidebarListBuilder {
         let lastVisited = SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt, local: state.localVisits[shell.id])
         let isActive = shell.id == state.activeThreadId
         let isSelected = state.selectedThreadIds.contains(shell.id)
-        let isUnread = !isActive && SidebarModel.hasUnseenCompletion(latestRun: t.latestRun, lastVisitedAt: lastVisited)
-        let isWoke = !isActive && SidebarModel.isWoke(t, lastVisitedAt: lastVisited, nowMs: nowMs)
+        // Not gated on the open thread: its visit clears Done (ThreadVisitTracker), while a timer wake and a
+        // mark-unread on the open thread stay until the user acts (Sidebar.tsx:1262-1279).
+        let isUnread = SidebarModel.hasUnseenCompletion(latestRun: t.latestRun, lastVisitedAt: lastVisited)
+        let isWoke = SidebarModel.isWoke(t, lastVisitedAt: lastVisited, nowMs: nowMs)
         let status = SidebarModel.resolveSidebarThreadStatus(t)
         let variant: SidebarRowModel.Variant = section == .snoozed || section == .settled ? .slim : .card
         let action: SidebarRowModel.Action = section == .snoozed ? .unsnooze : section == .settled ? .unsettle : .settle

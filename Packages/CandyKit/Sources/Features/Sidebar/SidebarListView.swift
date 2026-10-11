@@ -487,6 +487,10 @@ public final class SidebarListView: DSView {
     }
 
     public override func becomeFirstResponder() -> Bool {
+        // A click on the list's padding or a gap between rows lands on a plain div in T3 and focuses nothing.
+        // Taking focus here put the active row in keyboard focus, which swaps its status (Working, Done) for
+        // the Settle actions until focus left (Sidebar.tsx:2019-2027 hides the label only on focus-visible).
+        if let type = window?.currentEvent?.type, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type) { return false }
         if focusedKey == nil, !items.isEmpty {
             let start = items.firstIndex { if case .row(let r) = $0 { r.isActive } else { false } } ?? 0
             focus(index: start)
