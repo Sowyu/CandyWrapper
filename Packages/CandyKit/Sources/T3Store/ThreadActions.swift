@@ -91,8 +91,7 @@ public enum ThreadCommands {
 
     /// The committed sequence from a dispatch result, `{"sequence": n}`.
     public static func sequence(_ result: JSONValue) -> Int? {
-        if case .number(let n)? = result["sequence"] { return Int(n) }
-        return nil
+        result["sequence"]?.intValue
     }
 }
 

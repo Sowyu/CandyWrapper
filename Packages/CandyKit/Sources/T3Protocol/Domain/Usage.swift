@@ -184,8 +184,8 @@ public struct UsageSummary: Equatable, Sendable {
     }
 
     public init?(json: JSONValue) {
-        guard case .object = json, let version = json["contractVersion"]?.doubleValue else { return nil }
-        contractVersion = Int(version)
+        guard case .object = json, let version = json["contractVersion"]?.intValue else { return nil }
+        contractVersion = version
         readAt = json["readAt"]?.stringValue ?? ""
         timeZone = json["timeZone"]?.stringValue ?? "UTC"
         sinceDay = json["sinceDay"]?.stringValue ?? ""
