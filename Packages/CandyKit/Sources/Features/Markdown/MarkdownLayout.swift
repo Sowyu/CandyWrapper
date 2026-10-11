@@ -198,6 +198,8 @@ public final class MarkdownLayout {
     public private(set) var fileChips: [FileChip] = []
     /// Web link areas, one per line a link touches.
     public private(set) var links: [(frame: CGRect, url: URL)] = []
+    /// The y of each top-level block, so a streaming update can redraw from its first changed block down.
+    public private(set) var blockTops: [CGFloat] = []
 
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
@@ -214,6 +216,7 @@ public final class MarkdownLayout {
         fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
         links = items.compactMap { if case .link(let r, let url) = $0 { (r, url) } else { nil } }
         height = flow.height
+        blockTops = builder.rootTops
     }
 }
 
@@ -247,6 +250,7 @@ private struct Builder {
     let files: FileChipResolver?
     var codeIndex = 0
     var diagrams: MarkdownLayout.Diagrams?
+    var rootTops: [CGFloat] = []
 
     init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
 
@@ -263,6 +267,7 @@ private struct Builder {
             if root, index == 0 { box.top = 0 }
             if root, index == blocks.count - 1 { box.bottom = 0 }
             if let previousBottom { y += max(previousBottom, box.top) } else { out.top = box.top }
+            if root { rootTops.append(y) }
             out.add(box, at: CGPoint(x: 0, y: y))
             y += box.height
             previousBottom = box.bottom

@@ -64,19 +64,20 @@ public struct TextLine {
 /// Font smoothing is on: measured closer to Chromium than plain antialiasing.
 public final class LabelView: DSView {
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
-    public var font: NSFont = DSFont.ui(14) { didSet { fontRecipe = FontRuntime.recipe(for: font); invalidate() } }
+    public var font: NSFont = DSFont.ui(14) { didSet { fontRecipe = FontRuntime.recipe(for: font); if font != oldValue { invalidate() } } }
     private var fontRecipe = FontRuntime.recipe(for: DSFont.ui(14))
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
         if let recipe = fontRecipe { font = recipe.resolve() }
     }
-    public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { needsDisplay = true } }
+    // Setters skip unchanged values: rows reconfigure on every streamed delta, and each redraw costs a frame.
+    public var color: NSColor = ThemeColors.main.color(\.foreground) { didSet { if color != oldValue { needsDisplay = true } } }
     /// CSS line-height in points. Defaults to the font's natural height.
-    public var lineHeight: CGFloat? { didSet { invalidate() } }
-    public var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
+    public var lineHeight: CGFloat? { didSet { if lineHeight != oldValue { invalidate() } } }
+    public var alignment: NSTextAlignment = .left { didSet { if alignment != oldValue { needsDisplay = true } } }
     /// Truncating labels clip to their box like CSS `truncate` (overflow: hidden). Unclipped,
     /// AppKit gave each one a backing store with room for overflow, about twice the label.
-    public var truncates = true { didSet { clipsToBounds = truncates; needsDisplay = true } }
+    public var truncates = true { didSet { clipsToBounds = truncates; if truncates != oldValue { needsDisplay = true } } }
     /// Where the ellipsis goes: `.start` is T3's `StartTruncatedPath` (`dir="rtl"` with `text-ellipsis`).
     public var truncation: CTLineTruncationType = .end { didSet { if truncation != oldValue { needsDisplay = true } } }
     /// `underline` with T3's `underline-offset-4`.
@@ -90,9 +91,11 @@ public final class LabelView: DSView {
     public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
     /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
     public var highlightedIndices: [Int]? { didSet { if highlightedIndices != oldValue { invalidate() } } }
-    public var highlightColor: NSColor? { didSet { needsDisplay = true } }
+    public var highlightColor: NSColor? { didSet { if highlightColor != oldValue { needsDisplay = true } } }
     /// The first `count` UTF-16 units in their own color (a search excerpt's "You:" tag).
-    public var prefixColor: (count: Int, color: NSColor)? { didSet { needsDisplay = true } }
+    public var prefixColor: (count: Int, color: NSColor)? {
+        didSet { if prefixColor?.count != oldValue?.count || prefixColor?.color != oldValue?.color { needsDisplay = true } }
+    }
 
     public override var wantsUpdateLayer: Bool { false }
 

@@ -28,6 +28,8 @@ final class ThreadSession {
     var onStatus: ((ThreadSyncStatus) -> Void)?
 
     private let relay: ShellSession.ChangeRelay
+    /// Streaming deltas reach the panel at most once per frame (30 a second when constrained).
+    private lazy var pacer = FramePacer { [weak self] in Task { @MainActor in await self?.pull() } }
 
     /// A closed thread's store and its change relay, kept so a reopen paints at once and resumes
     /// after the store's sequence instead of fetching a new snapshot.
@@ -45,7 +47,7 @@ final class ThreadSession {
         self.relay = relay
         let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onChange: { relay.fire() })
         self.store = store
-        relay.set { [weak self] in Task { @MainActor in await self?.pull() } }
+        relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
         if retained != nil {
             Task { [weak self] in await self?.showRetained() }

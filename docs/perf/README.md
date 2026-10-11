@@ -220,6 +220,35 @@ The milestone 6 review flagged `stream.footprint_mb` (+53%) and `stream.package_
 
 Why the stream scenario peaks near 87 MB when the idle scenario peaks at 31 MB: while a large view keeps redrawing, macOS draws it on the GPU, and the process then holds about 50 MB of GPU memory, shown as `owned unmapped (graphics)` in `vmmap -summary`. It is freed about 5 s after the last redraw. The cost is fixed per process: a bare AppKit window redrawing 17 lines of text once a second (`/tmp/cw-termmem/gpu/main.swift`, not kept) held 50.6 MB of it at 600x290 pt, 51 MB at 1150x290 and 51.4 MB at 1800x900, and none at 300x60. `drawsAsynchronously` changes nothing. Drawing into our own bitmap and setting `layer.contents` avoids it (36 MB instead of 85 to 96 MB) but costs 3.6 times the CPU at 30 redraws a second (28% against 7.6% of a core), so the app keeps AppKit's path: the spec's CPU and energy targets are hard, and the RAM targets (80 MB at launch, 200 MB with a heavy thread) leave room. The terminal drawer shows the same thing: 63.6 MB open and idle, 114.4 MB while `top` or any steady output redraws it, 52 to 54 MB 5 s after it stops. `stream.settled_footprint_mb` samples 8 s after the turn, past the release, and gates; `stream.footprint_mb` (1 s after) stays informational.
 
+## Streaming redraws (2026-10-11)
+
+WP8.3. Method: `/tmp/cw-exp/stream-peak.py` adapted to bring the app forward every second (other agents' windows covered it, and a covered window draws nothing, which reads as "no graphics memory"). One haiku turn ("the numbers from 1 to 60 as English words"), `footprint` every 0.25 s. A temporary swizzle of `-[NSView drawLayer:inContext:]` logged every drawn view with its clip rect; it is not in the commit. Release builds, same bundle id, run back to back: HEAD dc64b72 and the WP8.3 tree.
+
+| | before | after |
+|---|---|---|
+| Drawn views, turn plus 9 s | 87 (LabelView 73, ComposerEditor 10) | 29 (LabelView 25, no ComposerEditor) |
+| Drawn area | 999k pt² | 340k pt² |
+| App CPU over the turn | 1.9% | 1.7% |
+| Footprint before, peak, 8 s after | 42, 100, 50 MB | 40, 98, 48 MB |
+| `Owned physical footprint (unmapped) (graphics)` at peak | 48 MB | 48 MB |
+
+What redrew before: every second the sidebar row redrew five labels when only its "Ns" label changed, and the timeline's "Working for Ns" label; every projection redrew the composer's text view and two picker labels. Labels compared fresh dynamic NSColors, which are only equal to themselves, and `ComposerView.layout` reassigned the text view's inset. The Claude provider sends assistant text as one final item, and T3 stores at most one streaming update per 400 ms (docs/protocol.md, "Streaming assistant text"), so per-token redraws don't happen with it; the partial `MarkdownView` redraw shows at settle (736x38 instead of 736x126).
+
+Why the graphics memory stays. It is Core Animation's in-process Metal renderer for AppKit view drawing: `vmmap` names a window-sized `CA Whippet Drawable` IOSurface, and the `CAEnableMetalWhippet` default turns it off. A bare test app (`/tmp/cw-sd-exp/main.swift`, not kept), 1100x800 window, one redraw 30 times a second:
+
+| Redraw | Graphics | Footprint | CPU |
+|---|---|---|---|
+| Whole view, AppKit backing layer | 51 MB | 132 MB | 23% |
+| 17 pt dirty rect of it | 51 MB | 159 MB | 4.6% |
+| A separate 300x60 subview | 51 MB | 140 MB | 14% |
+| The same subview with `makeBackingLayer() -> CALayer()` | 0 | 19 MB | 1.4% |
+| Whole view with a plain `CALayer` | 0 | 28 MB | 37% |
+| Changing a layer's color or position | 0 | under 25 MB | under 1% |
+| A new `layer.contents` bitmap for the subview | 0 | 18 MB | 3.8% |
+| Nothing redraws | 0 | 16 MB | 0 |
+
+So the area does not matter: one AppKit redraw of any size starts the renderer for about 5 s, and a 300x60 window doesn't. `CAEnableMetalWhippet NO` is worse: it renders on the CPU and the whole-view case held 71 MB of CoreAnimation and 57 MB of Malloc Small. Plain `CALayer` backing avoids it and is ten times cheaper for small redraws, but it keeps a bitmap per drawn view where AppKit keeps a display list: the app with every drawn `DSView` on a plain layer (contentsScale set by hand, AppKit leaves it at 1) idled at 64 MB instead of 44 MB (the hidden `ThreadFileDropOverlay` alone drew 9 MB), and peaked at 67 MB during the turn instead of 101 MB. A plain layer taller than the screen also needs its own tiling: a 12,000 pt one held 101 MB. A turn draws from many places (new rows, the per-second labels, reasoning updates), so only moving all of them helps. Left for a decision: plain layers for small, often-redrawn views plus a tiled live mode for the streaming message, at a few MB of idle footprint.
+
 ## Baseline: median of the last three runs (2026-10-10)
 
 The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.

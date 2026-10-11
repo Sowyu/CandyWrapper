@@ -1,4 +1,5 @@
 import AppKit
+import DesignSystem
 import Features
 import T3Client
 import T3Protocol
@@ -21,6 +22,8 @@ final class ShellSession {
     private var subscription: Task<Void, Never>?
     private var pulling = false
     private var pullAgain = false
+    /// Sidebar changes reach the UI at most once per frame (30 a second when constrained).
+    private lazy var pacer = FramePacer { [weak self] in self?.pull() }
     private var started = false
     private var stopped = false
     /// After each change window, with the store's whole shell, unscoped (merge, disk cache, activity).
@@ -57,7 +60,7 @@ final class ShellSession {
         self.supervisor = supervisor
         let relay = ChangeRelay()
         store = ShellStore(cached: cached, onChange: { relay.fire() })
-        relay.set { [weak self] in Task { @MainActor in self?.pull() } }
+        relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }
     }
 
     /// Connects and subscribes once; later calls do nothing.
