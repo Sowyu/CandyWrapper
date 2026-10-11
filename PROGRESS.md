@@ -208,7 +208,7 @@ Milestone 9 started on 2026-10-11 after the M8 demo (v0.1.2). The user chose a s
 - [ ] Motion and hover leftovers (task polish): inventory items 30, 31, 32, 43, 48, 49, the hovers CandyWrapper does not draw yet, the device panel's JPEG decode.
 - [x] Partly built features (2026-10-11, task partials, research): docs/research/m9-partials-2026-10-11.md. Of the 92 partly built rows, 51 are gaps to build, 28 blocked, 10 built with only fidelity or checklist upkeep left, 3 skipped by design. State restoration already covers more than T3 restores; four small gaps remain. T3 Connect's cloud state is a medium port plus half a day on the user's real account.
 - [ ] Thread header densities, the details card and chips in sent messages (task threadview): partials items 1 and 2.
-- [ ] Composer rich text structure: lists, blockquote, headings, HTML paste and list splitting (partials item 3), after the banners task.
+- [ ] Composer rich text structure (task richtext): lists, blockquote, headings, HTML paste and list splitting (partials item 3).
 - [ ] The weekly gaps, partials items 4 to 30, in waves of up to four agents.
 - [ ] State restoration gaps: draft attachments across relaunch, sidebar shelf expansion, diff scope per thread, display and zoom checks on the saved window frame.
 - [ ] Checklist upkeep: the 10 built rows and the 5 stale keybinding lines the research found.
