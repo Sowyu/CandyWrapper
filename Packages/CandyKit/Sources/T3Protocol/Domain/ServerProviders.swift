@@ -212,6 +212,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var continuationGroupKey: String?
     public var showInteractionModeToggle: Bool?
     public var reportsContextWindow: Bool?
+    public var supportsConversationRollback: Bool?
     /// Absent or empty means every mode. Unknown values are dropped, like `ForwardCompatibleArray`.
     public var supportedRuntimeModes: [RuntimeMode]?
     public var requiresNewThreadForModelChange: Bool?
@@ -258,7 +259,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
-        case reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
+        case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
         case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
         case updateState, versionAdvisory, compatibilityAdvisory, setup
     }
@@ -277,6 +278,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         }
         showInteractionModeToggle = try c.decodeIfPresent(Bool.self, forKey: .showInteractionModeToggle)
         reportsContextWindow = try c.decodeIfPresent(Bool.self, forKey: .reportsContextWindow)
+        supportsConversationRollback = try c.decodeIfPresent(Bool.self, forKey: .supportsConversationRollback)
         supportedRuntimeModes = try c.decodeIfPresent([RuntimeMode].self, forKey: .supportedRuntimeModes)?
             .filter { RuntimeMode.all.contains($0) }
         requiresNewThreadForModelChange = try c.decodeIfPresent(Bool.self, forKey: .requiresNewThreadForModelChange)

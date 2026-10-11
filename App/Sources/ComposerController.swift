@@ -34,6 +34,12 @@ final class ComposerController {
     /// A send whose message hasn't shown up in the projection yet.
     private var pendingMessageId: MessageId?
     private var resuming = false
+    private var threadRewindBusy = false
+    private var threadFindTask: Task<Void, Never>?
+    private var threadFindResult: ThreadFindResult?
+    private var threadFindGeneration = 0
+    private var threadFindTarget: ThreadId?
+
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
     /// "Open provider setup" on the provider status banner: Settings, Providers.
@@ -147,6 +153,12 @@ final class ComposerController {
             if keys.contains("planModeEnabled") { self.refresh() }
         }
         composer.onSend = { [weak self] text, mode, background in self?.send(text, mode: mode, background: background) }
+        composer.contextWindowMeter.onCompact = { [weak self] in
+            guard let self, self.composer.contextWindowMeter.compactDisabledReason == nil, !self.composer.runState.canInterrupt, !self.composer.isBusy else { return }
+            let saved = self.composer.text
+            self.sendThreadStandalone("/compact")
+            self.composer.text = saved; self.remember(saved)
+        }
         composer.onStop = { [weak self] in self?.stop() }
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
@@ -184,6 +196,23 @@ final class ComposerController {
         question.onChange = { [weak self] in self?.syncQuestion() }
         composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
+        panel.goalBanner.onAction = { [weak self] index in
+            guard let self, let goal = self.shellThread?.goal, let index else { return }
+            self.sendThreadStandalone(index == 0 && ThreadGoalPresentation.canResume(goal) ? "/goal resume" : "/goal clear")
+        }
+        panel.recoveryBanner.onAction = { [weak self] index in self?.updateThreadRecovery(index) }
+        panel.model.onEditPrompt = { [weak self] message in self?.editEarlierPrompt(message) }
+        panel.header.onRenameThread = { [weak self] title in
+            guard let self, let id = self.openThreadId else { return }
+            Task {
+                do { try await self.environments.dispatch(id, ThreadCommands.rename(id.localId, title: title)) }
+                catch { self.toast(.error, "Failed to rename thread", error.localizedDescription) }
+            }
+        }
+        panel.findBar.input.onChange = { [weak self] _ in self?.searchThread() }
+        panel.findBar.onStep = { [weak self] delta in self?.searchThread(delta: delta) }
+        panel.findBar.onRetry = { [weak self] in self?.searchThread() }
+        panel.findBar.onClose = { [weak self] in self?.closeThreadFind() }
         setUpMenus()
         setUpAttachments()
         refresh()
@@ -329,6 +358,8 @@ final class ComposerController {
 
     /// The composer's keybindings, run by the app's dispatcher (ChatView.tsx:8030-8255).
     func registerShortcuts(_ shortcuts: Shortcuts) {
+        shortcuts.on("chat.find") { [weak self] _ in self?.openThreadFind() ?? false }
+
         // Digits 1 to 9 pick a question's option unless focus is in an editable field
         // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener, not a keybinding).
         shortcuts.onKey { [weak self] event in
@@ -766,10 +797,18 @@ final class ComposerController {
     }
 
     private func refresh() {
+        if threadFindTarget != openThreadId { closeThreadFind() }
+
+        composer.contextWindowMeter.usage = ThreadContextWindowUsage.derive(projection)
+        composer.needsLayout = true
         let runs = projection?.runs ?? []
-        composer.runState = ComposerLogic.RunState(runs: runs)
+        var runState = ComposerLogic.RunState(runs: runs)
+        if let thread = shellThread, thread.status == .failed, thread.lastErrorClass == .usageLimit {
+            runState.resumableRunId = thread.latestRunId
+        }
+        composer.runState = runState
         composer.isDraftRoute = panel.isDraft
-        composer.isBusy = pendingMessageId != nil || resuming
+        composer.isBusy = pendingMessageId != nil || resuming || threadRewindBusy
         var placeholder = ComposerLogic.PlaceholderInput()
         // T3's `phase === "disconnected"` means the thread has no runtime (`derivePhase(activeRuntime)`,
         // session-logic.ts:1069-1078), not a lost connection: drafts and unstarted threads get it.
@@ -788,6 +827,17 @@ final class ComposerController {
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.isBusy = queueBusy
         updatePickers()
+        let plan = ThreadPlanFollowUp.activePlan(projection)
+        let showPlan = pickers.current.interactionMode == .plan && plan != nil && requests.isEmpty && currentAttachments.isEmpty && !composer.isBusy
+        composer.planFollowUp = showPlan
+        composer.contextWindowMeter.compactDisabledReason = menuProvider?.slashCommands.contains(where: { $0.name == "compact" }) != true
+            ? "This provider does not support manual compaction." : composer.runState.canInterrupt || composer.isBusy || !requests.isEmpty || showPlan ? "Wait for the current turn to finish." : nil
+        panel.showsPlanFollowUp = showPlan
+        if let markdown = plan?.markdown, showPlan {
+            let title = markdown.components(separatedBy: .newlines).first(where: { $0.hasPrefix("# ") }).map { String($0.dropFirst(2)) }
+            panel.planFollowUpBanner.apply(.init(variant: .neutral, icon: .listTodo, title: "Plan ready", description: title))
+        }
+        updateThreadBanners()
         updateRunOn()
         refreshWorkspaceSnapshot()
         if panel.menus.isOpen { panel.menus.reload() }
@@ -943,6 +993,16 @@ final class ComposerController {
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
+        guard !threadRewindBusy else { return }
+        var text = text
+        var implementationPlan: PlanArtifact?
+        if composer.planFollowUp, let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown, let key = draftKey {
+            let next = ThreadPlanFollowUp.submission(draft: text, markdown: markdown)
+            text = next.text
+            if next.mode == .default { implementationPlan = plan }
+            pickers.store.setInteractionMode(key, next.mode)
+            updatePickers()
+        }
         guard let shell, pendingMessageId == nil, let target else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
@@ -1073,6 +1133,9 @@ final class ComposerController {
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
             if let context { command["context"] = context }
+            if let plan = implementationPlan {
+                command["sourcePlanRef"] = .object(["threadId": .string(threadId.localId.rawValue), "planId": .string(plan.id.rawValue)])
+            }
             let runtimeChange = picks.runtimeModeToPersist, interactionChange = picks.interactionModeToPersist
             Task { [weak self] in
                 do {
@@ -1251,7 +1314,7 @@ final class ComposerController {
     /// Resume (ChatView.tsx:8656-8730): continue an interrupted run, then release held queued runs.
     private func resume() {
         guard let shell, case .thread(let threadId) = target, let projection, !resuming else { return }
-        let state = ComposerLogic.RunState(runs: projection.runs)
+        let state = composer.runState
         guard state.canResume, let selection = pickers.current.modelSelection else { return }
         resuming = true
         let key = draftKey
@@ -2801,5 +2864,183 @@ extension ComposerController {
             if durable { for file in removed.files ?? [] { deleteUpload(file.attachmentId, environmentId: file.environmentId) } }
         }
         if !durable { toast(.warning, "Stash entry may come back", "The stash could not be updated on disk, so this prompt could reappear after a relaunch.") }
+    }
+}
+
+
+// MARK: Find in thread
+extension ComposerController {
+    @discardableResult
+    func openThreadFind() -> Bool {
+        guard let id = openThreadId else { return false }
+        guard serverConfig.capabilities.contains("threadFind") else {
+            toast(.warning, "Thread search is unavailable on this server.", "Update the server to enable it.")
+            return true
+        }
+        threadFindTarget = id
+        panel.findOpen = true
+        panel.layoutSubtreeIfNeeded()
+        panel.findBar.focus()
+        return true
+    }
+
+    private func closeThreadFind() {
+        let wasOpen = panel.findOpen
+        threadFindGeneration += 1
+        threadFindTask?.cancel(); threadFindTask = nil
+        threadFindResult = nil; threadFindTarget = nil
+        panel.findOpen = false
+        panel.timeline.threadFindQuery = ""
+        if !panel.findBar.input.text.isEmpty { panel.findBar.input.text = "" }
+        if wasOpen { focusComposer() }
+    }
+
+    // ponytail: unary search covers loaded message text; add progressive responses and exact occurrence navigation with the full find port
+    private func searchThread(delta: Int = 0) {
+        threadFindGeneration += 1
+        threadFindTask?.cancel()
+        let generation = threadFindGeneration
+        guard panel.findOpen, let id = openThreadId, let shell else { return }
+        let query = String(panel.findBar.input.text.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+        panel.timeline.threadFindQuery = query
+        let old = threadFindResult
+        if delta == 0 { threadFindResult = nil }
+        panel.findBar.present(query: query, index: 0, total: 0, loading: !query.isEmpty)
+        guard !query.isEmpty else { return }
+        var payload: [String: JSONValue] = ["threadId": .string(id.localId.rawValue), "query": .string(query)]
+        if delta != 0, let match = old?.match {
+            payload["start"] = .object(["entryId": .string(match.entryId), "occurrence": .number(Double(match.occurrence))])
+            payload["offset"] = .number(Double(delta))
+        }
+        let supervisor = shell.supervisor
+        threadFindTask = Task { [weak self] in
+            do {
+                if delta == 0 { try await Task.sleep(for: .milliseconds(100)) }
+                try Task.checkCancellation()
+                let json = try await supervisor.request("orchestration.searchThread", payload: .object(payload))
+                let result = try json.decode(as: ThreadFindResult.self)
+                guard let self, !Task.isCancelled, self.threadFindGeneration == generation, self.openThreadId == id else { return }
+                self.threadFindResult = result
+                self.panel.findBar.present(query: query, index: result.activeIndex, total: result.totalMatches)
+                if let match = result.match { self.panel.revealThreadFind(match) }
+            } catch {
+                guard let self, !Task.isCancelled, self.threadFindGeneration == generation else { return }
+                self.panel.findBar.present(query: query, index: 0, total: 0, failed: true)
+            }
+        }
+    }
+}
+
+
+// MARK: Edit from here
+extension ComposerController {
+    private func editEarlierPrompt(_ message: ChatMessage) {
+        guard let id = openThreadId, let projection, let key = draftKey, let window = panel.window else { return }
+        guard menuProvider?.supportsConversationRollback != false, menuProvider != nil else {
+            toast(.warning, "This provider does not support reverting conversation history. Start a new thread instead."); return
+        }
+        guard !composer.runState.canInterrupt, pendingMessageId == nil, !threadRewindBusy else {
+            toast(.warning, "Interrupt the current turn before reverting checkpoints."); return
+        }
+        // ponytail: attachment prompts are not rewound until their files can be staged before rollback; add the download-and-reupload transaction with attachment recovery
+        guard message.attachments.isEmpty, message.context == nil else {
+            toast(.warning, "This prompt contains attachments or context that cannot yet be restored."); return
+        }
+        guard ComposerAttachmentRules.uploadBlockReason(currentAttachments.map(\.status)) == nil else {
+            toast(.warning, "Wait for attachments to finish preparing before rewinding."); return
+        }
+        guard let checkpoint = ThreadPromptRewind.checkpoint(before: message, in: projection) else {
+            toast(.warning, "No ready checkpoint is available before this message."); return
+        }
+        let dialog = DialogView(kind: .alertDialog, title: "Edit from here?", message: "Rewind chat to before this message. Your prompt and attachments return to the composer.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let keep = ButtonView("Revert and keep changes")
+        let files = ButtonView("Revert files too", variant: .destructive)
+        dialog.footerButtons = projection.thread.worktreePath == nil ? [cancel, keep] : [cancel, files, keep]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        let perform: (Bool) -> Void = { [weak self, weak host] restoreFiles in
+            host?.close()
+            guard let self, self.openThreadId == id, let supervisor = self.shell?.supervisor else { return }
+            self.threadRewindBusy = true; self.refresh()
+            Task {
+                defer { self.threadRewindBusy = false; self.refresh() }
+                do {
+                    _ = try await supervisor.request("orchestration.dispatchCommand", payload: ThreadPromptRewind.command(threadId: id.localId, checkpoint: checkpoint, restoreFiles: restoreFiles))
+                    // ponytail: bounded confirmation waits only during rollback; replace with scoped projection observation when attachment staging is added
+                    for _ in 0..<100 {
+                        if self.openThreadId != id { break }
+                        if self.projection?.messages.contains(where: { $0.id == message.id }) == false { break }
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    guard self.openThreadId != id || self.projection?.messages.contains(where: { $0.id == message.id }) == false else {
+                        self.toast(.error, "The conversation has not confirmed the rewind. Your draft is unchanged."); return
+                    }
+                    let restored = ThreadPromptRewind.restoredPrompt(draft: self.prompts[key] ?? "", message: message.text)
+                    self.prompts[key] = restored; self.scheduleSave()
+                    if self.draftKey == key { self.composer.text = restored; self.focusComposer() }
+                } catch { self.toast(.error, "Failed to revert thread state.", error.localizedDescription) }
+            }
+        }
+        keep.action = { perform(false) }
+        files.action = { perform(true) }
+    }
+}
+
+
+extension ComposerController {
+    // ponytail: standalone commands use the saved thread modes; persist the selected modes when completing goal and compaction parity
+    private func sendThreadStandalone(_ text: String) {
+        guard let id = openThreadId, let supervisor = shell?.supervisor, let selection = pickers.current.modelSelection,
+              !composer.runState.canInterrupt, pendingMessageId == nil, !threadRewindBusy else { return }
+        let messageId = MessageId(UUID().uuidString.lowercased())
+        pendingMessageId = messageId
+        let payload: JSONValue = .object([
+            "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
+            "threadId": .string(id.localId.rawValue), "messageId": .string(messageId.rawValue),
+            "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
+            "attachments": .array([]), "dispatchMode": .object(["type": .string("start_immediately")]),
+            "modelSelection": ThreadSession.encode(selection)])
+        refresh()
+        Task { [weak self] in
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
+            catch {
+                guard let self else { return }
+                if self.pendingMessageId == messageId { self.pendingMessageId = nil }
+                self.toast(.error, "Failed to send command.", error.localizedDescription)
+                self.refresh()
+            }
+        }
+    }
+}
+
+
+extension ComposerController {
+    private func updateThreadBanners() {
+        let thread = shellThread
+        panel.showsGoal = thread?.goal != nil
+        if let goal = thread?.goal {
+            let actions = composer.runState.canInterrupt ? [] : ThreadGoalPresentation.canResume(goal) ? ["Resume", "Clear"] : ["Clear"]
+            panel.goalBanner.apply(.init(variant: .neutral, icon: .target, title: ThreadGoalPresentation.title(goal, working: composer.runState.canInterrupt), description: goal.objective, actions: actions))
+        }
+        let limited = thread?.status == .failed && thread?.lastErrorClass == .usageLimit
+        panel.showsRecovery = limited
+        if let thread, limited {
+            let reset = thread.usageLimitResetAt?.date
+            let description = reset.map { "Resets " + $0.formatted(date: .numeric, time: .shortened) } ?? "Reset time unavailable; retry manually"
+            let actions = reset == nil ? [] : [ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset", "Snooze until reset"]
+            panel.recoveryBanner.apply(.init(variant: .warning, icon: .gauge, title: "Usage limit reached", description: description, actions: actions))
+        }
+    }
+    private func updateThreadRecovery(_ index: Int?) {
+        guard let index, let thread = shellThread, let supervisor = shell?.supervisor else { return }
+        if index == 1, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
+            toast(.warning, "The reset time has passed. Retry the thread manually."); return
+        }
+        guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? true : nil) else { return }
+        Task { [weak self] in
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
+            catch { self?.toast(.error, "Could not change limit recovery.", error.localizedDescription) }
+        }
     }
 }

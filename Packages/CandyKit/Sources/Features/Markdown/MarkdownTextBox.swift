@@ -18,6 +18,7 @@ final class MarkdownTextBox {
         let x: CGFloat
     }
 
+    let text: String
     let lines: [Line]
     let height: CGFloat
     let lineHeight: CGFloat
@@ -35,6 +36,7 @@ final class MarkdownTextBox {
     init(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, strut: NSFont,
          chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true) {
         self.lineHeight = lineHeight
+        text = string.string
         let storage = NSTextContentStorage(), manager = NSTextLayoutManager()
         self.storage = storage
         self.manager = manager

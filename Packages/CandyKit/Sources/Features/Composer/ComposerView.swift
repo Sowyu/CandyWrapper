@@ -10,6 +10,11 @@ import T3Protocol
 /// `footerControls`. Height follows the text between 144 and 274 (`preferredHeight`), then the
 /// editor scrolls; `onHeightChange` tells the parent to re-layout.
 public final class ComposerView: DSView {
+    public let contextWindowMeter = ThreadContextWindowMeterView()
+    public var planFollowUp = false { didSet { if planFollowUp != oldValue { refresh(); needsLayout = true } } }
+    private let planPill = MessageActionPill()
+
+
     /// `rounded-3xl`: `calc(var(--radius) + 12px)`.
     public static let radius: CGFloat = 22
     /// Body `px-4 pt-4 pb-2`, footer `px-4 pb-4`, the 1px `p-px` of ComposerSurface.Main.
@@ -273,6 +278,11 @@ public final class ComposerView: DSView {
         TooltipController.attach(to: attach, text: "Attach files")
         attach.setAccessibilityLabel("Attach files")
         addSubview(attach)
+        addSubview(planPill)
+        planPill.isHidden = true
+        planPill.action = { [weak self] in self?.send(.auto) }
+        addSubview(contextWindowMeter)
+        contextWindowMeter.isHidden = true
         primary.action = { [weak self] in self?.primaryPressed() }
         addSubview(primary)
         questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
@@ -360,7 +370,10 @@ public final class ComposerView: DSView {
     }
 
     func refresh() {
-        placeholder.text = ComposerLogic.placeholder(placeholderInput)
+        placeholder.text = planFollowUp ? "Refine the plan or implement it" : ComposerLogic.placeholder(placeholderInput)
+        planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
+        planPill.isEnabled = !isBusy && sendDisabledReason == nil
+        if planFollowUp { needsLayout = true }
         editor.isEditable = !editorDisabled
         if let footer = questionFooter {
             questionPill.title = compactActions ? footer.compactLabel : footer.label
@@ -489,7 +502,7 @@ public final class ComposerView: DSView {
     }
 
     private func send(_ mode: ComposerLogic.SendMode, background: Bool = false) {
-        guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent,
+        guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent || planFollowUp,
               ComposerLogic.lengthValidationMessage(prompt) == nil else { return }
         onSend?(prompt, mode, background)
     }
@@ -650,6 +663,18 @@ public final class ComposerView: DSView {
             attach.isHidden = !footerShown
             primary.frame = NSRect(x: right - 32, y: rowY, width: 32, height: 32)
             actionsLeft = primary.frame.minX
+        }
+        planPill.isHidden = !planFollowUp || !footerShown || questionFooter != nil
+        if !planPill.isHidden {
+            primary.isHidden = true
+            let w = planPill.intrinsicContentSize.width
+            planPill.frame = NSRect(x: right - w, y: midY - 14, width: w, height: 28)
+            actionsLeft = planPill.frame.minX
+        }
+        contextWindowMeter.isHidden = contextWindowMeter.usage == nil || !footerShown || questionFooter != nil
+        if !contextWindowMeter.isHidden {
+            contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
+            actionsLeft = contextWindowMeter.frame.minX
         }
         attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,

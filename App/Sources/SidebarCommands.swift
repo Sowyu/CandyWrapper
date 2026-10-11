@@ -399,9 +399,9 @@ final class SidebarCommands {
 
     // MARK: Thread menu (Sidebar.tsx:4566-4840)
 
-    private func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView) {
+    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, rename: (() -> Void)? = nil) {
         guard let thread = shell(id), let sidebar else { return }
-        if sidebar.selectedThreadIds.contains(id) {
+        if rename == nil, sidebar.selectedThreadIds.contains(id) {
             showSelectionMenu(event: event, view: view)
             return
         }
@@ -426,6 +426,7 @@ final class SidebarCommands {
         state.snoozePresets = presets
         let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         let menu = Self.nativeMenu(items) { [weak self] choice in
+            if choice == "rename", let rename { rename(); return }
             self?.perform(choice, id: id, thread: thread, group: group, presets: presets)
         }
         NSMenu.popUpContextMenu(menu, with: event, for: view)

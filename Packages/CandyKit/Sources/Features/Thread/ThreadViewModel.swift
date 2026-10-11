@@ -64,6 +64,7 @@ public final class ThreadViewModel {
     public private(set) var projection: ThreadProjection?
     /// Shown in the breadcrumb.
     public var projectTitle = ""
+    public var onEditPrompt: ((ChatMessage) -> Void)?
     /// Makes read paths workspace relative in labels and details.
     public var workspaceRoot: String?
     /// File chip clicks in messages (`MarkdownView.onOpenFile`); nil shows the chip's copy menu.
@@ -193,6 +194,20 @@ public final class ThreadViewModel {
         while let task = rowsTask { await task.value }
         defer { offMainApplyCost = 0 }
         return offMainApplyCost
+    }
+
+    /// Opens only the folds containing the server-selected match, preserving other folds.
+    public func prepareThreadFind(_ match: ThreadFindResult.Match) {
+        var changed = false
+        if let run = match.runId.map { RunId($0) } {
+            changed = expandedRunIds.insert(run).inserted
+            for attempt in projection?.attempts ?? [] where attempt.runId == run {
+                changed = expandedAttemptIds.insert(attempt.id).inserted || changed
+            }
+        }
+        if changed { derive() }
+        if let row = items.first(where: { $0.id == match.entryId }), let message = row.row.message,
+           expandedMessages.insert(message.id.rawValue).inserted { refreshItems() }
     }
 
     func toggleRun(_ id: RunId) { expandedRunIds.formSymmetricDifference([id]); derive() }

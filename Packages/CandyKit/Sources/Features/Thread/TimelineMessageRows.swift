@@ -91,6 +91,7 @@ final class UserMessageRowView: TimelineRowView {
     private let toggle = ButtonView("Show full message", variant: .ghostMuted, size: .xs)
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private let copyButton = Features.copyButton()
+    private let editButton = ButtonView(icon: .pencil, variant: .ghostMuted, size: .xs)
     private let fadeMask = CAGradientLayer()
     private let marker = UserIntentMarkerView(frame: .zero)
     private var text = ""
@@ -113,6 +114,13 @@ final class UserMessageRowView: TimelineRowView {
         time.lineHeight = 16
         addSubview(time)
         addSubview(copyButton)
+        addSubview(editButton)
+        editButton.setAccessibilityLabel("Edit from here")
+        editButton.toolTip = "Edit from here"
+        editButton.action = { [weak self] in
+            guard let self, let m = self.item?.row.message else { return }
+            self.context.model?.onEditPrompt?(m)
+        }
         fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         toggle.action = { [weak self] in
             guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
@@ -129,6 +137,7 @@ final class UserMessageRowView: TimelineRowView {
         super.configure(item)
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         text = m.text
+        editButton.isHidden = m.inputIntent != .turnStart && m.inputIntent != .queuedTurn
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id, m.text, lineBreaks: true)
@@ -197,11 +206,12 @@ final class UserMessageRowView: TimelineRowView {
         let rowTop = top + bubbleHeight + 4
         let copySize = copyButton.intrinsicContentSize
         copyButton.frame = NSRect(x: width - 4 - copySize.width, y: rowTop, width: copySize.width, height: 24)
+        editButton.frame = NSRect(x: copyButton.frame.minX - 28, y: rowTop, width: 24, height: 24)
         let timeWidth = ceil(time.textWidth)
-        time.frame = NSRect(x: copyButton.frame.minX - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
+        time.frame = NSRect(x: (editButton.isHidden ? copyButton.frame.minX : editButton.frame.minX) - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
     }
 
-    override func hoverChanged() { Self.reveal([time, copyButton], hovered) }
+    override func hoverChanged() { Self.reveal([time, copyButton, editButton], hovered) }
 }
 
 /// `AssistantTimelineRow` (:2745-2793): markdown in `px-1 py-0.5`, then the meta row that shows on

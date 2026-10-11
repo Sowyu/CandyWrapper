@@ -178,6 +178,7 @@ public struct Checkpoint: Codable, Hashable, Sendable, Identifiable {
     public var scopeId: CheckpointScopeId
     public var runId: RunId?
     public var appRunOrdinal: Int?
+    public var ordinalWithinScope: Int?
     public var ref: String
     /// `ready`, `missing`, `error`, `stale`.
     public var status: String
