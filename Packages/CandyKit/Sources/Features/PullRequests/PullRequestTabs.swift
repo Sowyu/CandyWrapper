@@ -38,12 +38,41 @@ final class StackDocument: DSView {
     }
 }
 
+/// Reports a tab's scroll offset (the detail header condenses on it) and moves it by a refund.
+@MainActor
+final class PullRequestScrollWatcher {
+    private weak var scroll: ScrollAreaView?
+    private var observer: NSObjectProtocol?
+    var onScroll: ((CGFloat) -> Void)?
+
+    init(_ scroll: ScrollAreaView) {
+        self.scroll = scroll
+        let clip = scroll.scrollView.contentView
+        clip.postsBoundsChangedNotifications = true
+        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onScroll?(clip.bounds.minY) }
+        }
+    }
+
+    var top: CGFloat { scroll?.scrollView.contentView.bounds.minY ?? 0 }
+
+    /// Moves the content by `delta` without the header's change pulling it out from under the reader.
+    func adjust(by delta: CGFloat) {
+        guard let sv = scroll?.scrollView else { return }
+        let clip = sv.contentView
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(0, clip.bounds.minY + delta)))
+        sv.reflectScrolledClipView(clip)
+    }
+}
+
 /// A scroll view over a `StackDocument` that sizes the document on layout.
 final class StackScrollView: DSView {
     let document = StackDocument()
     private let scroll: ScrollAreaView
+    let watcher: PullRequestScrollWatcher
     override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: document)
+        watcher = PullRequestScrollWatcher(scroll)
         super.init(frame: frameRect)
         addSubview(scroll)
     }
@@ -67,17 +96,33 @@ public final class PullRequestSummaryView: DSView {
     private let descriptionSection = SectionItem(title: "Description")
     private let checks = SectionItem(title: "Checks", open: false)
     private let comments = SectionItem(title: "Comments (0)")
-    private let markdown = MarkdownItem()
+    private let markdown = PullRequestDescriptionItem()
     private let checkRows = ChecksListItem()
     private let commentList = CommentsItem()
     private let orderButton = ButtonView("Newest first", icon: .arrowDownUp, variant: .ghostMuted, size: .xs)
     private var newestFirst = true
     private var detail: PullRequestDetail?
     var onOpenURL: ((String) -> Void)?
+    var scrollTarget: PullRequestScrollWatcher { stack.watcher }
+    /// The reviewer and label pickers' triggers were pressed.
+    var onPickReviewers: ((NSView) -> Void)? { get { meta.onPickReviewers } set { meta.onPickReviewers = newValue } }
+    var onPickLabels: ((NSView) -> Void)? { get { meta.onPickLabels } set { meta.onPickLabels = newValue } }
+    /// The description editor's Save (`pullRequests.update` with `body`).
+    var onSaveBody: ((String) -> Void)? { get { markdown.onSave } set { markdown.onSave = newValue } }
+    /// A comment rewritten (`pullRequests.updateComment`).
+    var onSaveComment: ((PullRequestComment, String) -> Void)? { get { commentList.onSave } set { commentList.onSave = newValue } }
+    /// A reaction pressed on a comment: (comment id, content, reacted, the bar to tell of a refusal).
+    var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)? { get { commentList.onReact } set { commentList.onReact = newValue } }
+    var bodySaving: Bool { get { markdown.saving } set { markdown.saving = newValue } }
+    var commentSaving: Bool { get { commentList.saving } set { commentList.saving = newValue } }
+    func finishBodyEdit() { markdown.stopEditing(); stack.reload() }
+    func finishCommentEdit() { commentList.editingId = nil; stack.reload() }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(stack)
+        markdown.onResize = { [weak self] in self?.stack.reload() }
+        commentList.onResize = { [weak self] in self?.stack.reload() }
         descriptionSection.body = markdown
         checks.body = checkRows
         comments.body = commentList
@@ -99,8 +144,7 @@ public final class PullRequestSummaryView: DSView {
     func set(_ d: PullRequestDetail, activityPending: Bool, activityError: String?, nowMs: Int64) {
         detail = d
         meta.set(d)
-        markdown.view.cwd = d.workspaceRoot
-        markdown.view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : d.body)
+        markdown.set(d)
         checkRows.checks = d.checks
         comments.title = "Comments (\(d.commentCount))"
         commentList.set(d, pending: activityPending, error: activityError, nowMs: nowMs)
@@ -121,11 +165,21 @@ final class MetaRowsItem: DSView, StackItem {
     private var avatars: [PullRequestAvatarView] = []
     private var chips: [BadgeView] = []
     private var showsLabels = false
+    private let reviewerButton = ButtonView(nil, icon: .userPlus, variant: .ghost, size: .iconXs)
+    private let labelButton = ButtonView(nil, icon: .tag, variant: .ghost, size: .iconXs)
+    var onPickReviewers: ((NSView) -> Void)?
+    var onPickLabels: ((NSView) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for l in [reviewersLabel, labelsLabel, noneReviewers, noneLabels] { l.lineHeight = 16; addSubview(l) }
-        [reviewersIcon, labelsIcon].forEach(addSubview)
+        [reviewersIcon, labelsIcon, reviewerButton, labelButton].forEach(addSubview)
+        reviewerButton.iconSize = 14
+        labelButton.iconSize = 14
+        reviewerButton.setAccessibilityLabel("Request a review")
+        labelButton.setAccessibilityLabel("Change labels")
+        reviewerButton.action = { [weak self] in guard let self else { return }; self.onPickReviewers?(self.reviewerButton) }
+        labelButton.action = { [weak self] in guard let self else { return }; self.onPickLabels?(self.labelButton) }
     }
 
     func set(_ d: PullRequestDetail) {
@@ -151,6 +205,14 @@ final class MetaRowsItem: DSView, StackItem {
         chips.forEach(addSubview)
         noneLabels.isHidden = !d.labels.isEmpty || !showsLabels
         [labelsIcon, labelsLabel].forEach { $0.isHidden = !showsLabels }
+        // Shown wherever the host can take the change, disabled with the reason where this account may not
+        // (PullRequestSummaryTab.tsx:781-821, PullRequestCandidatePicker.tsx:75-88).
+        reviewerButton.isHidden = !(d.capabilities.reviewers.request && d.capabilities.reviewers.listCandidates)
+        reviewerButton.isEnabled = d.viewerPermissions.requestReviewers
+        reviewerButton.toolTip = d.viewerPermissions.requestReviewers ? "Request a review" : "Asking someone to review needs write access on this repository"
+        labelButton.isHidden = d.capabilities.labels != true
+        labelButton.isEnabled = d.viewerPermissions.labels != false
+        labelButton.toolTip = d.viewerPermissions.labels != false ? "Change labels" : "Changing labels needs triage access on this repository"
         needsLayout = true
     }
 
@@ -164,6 +226,8 @@ final class MetaRowsItem: DSView, StackItem {
         var x: CGFloat = 16 + 96 + 8
         for a in avatars { a.frame = NSRect(x: x, y: y + 4, width: 16, height: 16); x += 12 }
         noneReviewers.frame = NSRect(x: 16 + 104, y: y + 4, width: 40, height: 16)
+        let rx = avatars.isEmpty ? 16 + 104 + ceil(noneReviewers.textWidth) + 6 : x + 4 + 6
+        reviewerButton.frame = NSRect(x: rx, y: y, width: 24, height: 24)
         y += 24 + 8
         labelsIcon.frame = NSRect(x: 16, y: y + 5, width: 14, height: 14)
         labelsLabel.frame = NSRect(x: 36, y: y + 4, width: 70, height: 16)
@@ -174,6 +238,7 @@ final class MetaRowsItem: DSView, StackItem {
             x += cw + 4
         }
         noneLabels.frame = NSRect(x: 16 + 104, y: y + 4, width: 40, height: 16)
+        labelButton.frame = NSRect(x: chips.isEmpty ? 16 + 104 + ceil(noneLabels.textWidth) + 4 : x, y: y, width: 24, height: 24)
     }
 
     override func updateLayer() {
@@ -328,6 +393,13 @@ final class ChecksListItem: DSView, StackItem {
 // groups. Add the paging when a long review thread is slow to open
 final class CommentsItem: DSView, StackItem {
     private var cards: [CommentCard] = []
+    private var detail: PullRequestDetail?
+    private var nowMs: Int64 = 0
+    var editingId: String? { didSet { if editingId != oldValue { rebuildCards() } } }
+    var saving = false { didSet { cards.forEach { $0.editor?.saving = saving } } }
+    var onSave: ((PullRequestComment, String) -> Void)?
+    var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)?
+    var onResize: (() -> Void)?
     private let note = TextBlockView()
     var newestFirst = true { didSet { needsLayout = true } }
     private var state: (pending: Bool, error: String?) = (true, nil)
@@ -341,13 +413,33 @@ final class CommentsItem: DSView, StackItem {
 
     func set(_ d: PullRequestDetail, pending: Bool, error: String?, nowMs: Int64) {
         state = (pending, error)
+        detail = d
+        self.nowMs = nowMs
+        if editingId != nil, !d.comments.contains(where: { $0.id == editingId }) { editingId = nil }
+        rebuildCards()
+        note.text = pending ? "Loading comments…" : error ?? (d.comments.isEmpty ? "No comments yet." : "")
+        needsLayout = true
+    }
+
+    private func rebuildCards() {
         cards.forEach { $0.removeFromSuperview() }
-        cards = pending || error != nil ? [] : d.comments.map { c in
-            let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot)
+        guard let d = detail else { cards = []; return }
+        cards = state.pending || state.error != nil ? [] : d.comments.map { c in
+            let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
+                                   canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind),
+                                   canReact: d.capabilities.reactions == true, editing: editingId == c.id)
+            card.onEdit = { [weak self] in self?.editingId = c.id; self?.onResize?() }
+            card.onCancel = { [weak self] in self?.editingId = nil; self?.onResize?() }
+            card.onSave = { [weak self] body in self?.onSave?(c, body) }
+            card.reactionBar.onToggle = { [weak self, weak card] content, reacted in
+                guard let self, let card else { return }
+                self.onReact?(c.id, content, reacted, card.reactionBar)
+            }
+            card.editor?.saving = saving
+            card.editor?.onResize = { [weak self] in self?.onResize?() }
             addSubview(card)
             return card
         }
-        note.text = pending ? "Loading comments…" : error ?? (d.comments.isEmpty ? "No comments yet." : "")
         needsLayout = true
     }
 
@@ -376,6 +468,12 @@ final class CommentsItem: DSView, StackItem {
 /// One comment card (`rounded-lg border border-border/60`): a `bg-muted/25` head with the author,
 /// the time and the verdict, then the body.
 final class CommentCard: DSView {
+    let reactionBar = PullRequestReactionBarView()
+    private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
+    private(set) var editor: PullRequestMarkdownEditorView?
+    var onEdit: (() -> Void)?
+    var onCancel: (() -> Void)?
+    var onSave: ((String) -> Void)?
     private let headFill = CALayer()
     private let avatar = PullRequestAvatarView()
     private let login = LabelView("", font: DSFont.ui(12, weight: .medium))
@@ -384,9 +482,26 @@ final class CommentCard: DSView {
     private let body = MarkdownView()
     private let hasBody: Bool
 
-    init(_ c: PullRequestComment, nowMs: Int64, cwd: String) {
-        hasBody = PullRequestDetailLogic.visibleBody(c.body) != nil
+    init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false) {
+        // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
+        hasBody = PullRequestDetailLogic.visibleBody(c.body) != nil || canEdit
         super.init(frame: .zero)
+        reactionBar.canReact = canReact
+        reactionBar.reactions = c.reactions ?? []
+        addSubview(reactionBar)
+        editButton.iconSize = 12
+        editButton.setAccessibilityLabel("Edit comment")
+        editButton.isHidden = !canEdit || editing
+        editButton.action = { [weak self] in self?.onEdit?() }
+        addSubview(editButton)
+        if editing {
+            let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
+            e.onCancel = { [weak self] in self?.onCancel?() }
+            e.onSave = { [weak self] body in self?.onSave?(body) }
+            editor = e
+            addSubview(e)
+            DispatchQueue.main.async { [weak e] in e?.focus() }
+        }
         headFill.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(headFill)
         layer?.cornerRadius = 10
@@ -407,7 +522,10 @@ final class CommentCard: DSView {
         addSubview(body)
     }
 
-    func height(forWidth w: CGFloat) -> CGFloat { 36 + (hasBody ? 24 + body.height(forWidth: w - 24) : 0) + 2 }
+    func height(forWidth w: CGFloat) -> CGFloat {
+        if let editor { return 36 + 24 + editor.height(forWidth: w - 24) + 2 }
+        return 36 + (hasBody ? 24 + body.height(forWidth: w - 24 - (editButton.isHidden ? 0 : 28)) : 0) + 2
+    }
 
     override func layout() {
         super.layout()
@@ -418,9 +536,14 @@ final class CommentCard: DSView {
         login.frame = NSRect(x: x, y: 11, width: lw, height: 16); x += lw + 8
         let tw = ceil(time.textWidth) + 1
         time.frame = NSRect(x: x, y: 11, width: tw, height: 16); x += tw + 8
-        state.frame = NSRect(x: x, y: 11, width: max(0, bounds.width - 12 - x), height: 16)
-        body.isHidden = !hasBody
-        if hasBody { body.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24, height: body.height(forWidth: bounds.width - 24)) }
+        let rw = reactionBar.isHidden ? 0 : reactionBar.width
+        reactionBar.frame = NSRect(x: bounds.width - 12 - rw, y: 7, width: rw, height: 24)
+        state.frame = NSRect(x: x, y: 11, width: max(0, bounds.width - 12 - x - (rw > 0 ? rw + 8 : 0)), height: 16)
+        body.isHidden = !hasBody || editor != nil
+        let ew: CGFloat = editButton.isHidden ? 0 : 28
+        if hasBody { body.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24 - ew, height: body.height(forWidth: bounds.width - 24 - ew)) }
+        editButton.frame = NSRect(x: bounds.width - 12 - 24, y: 37 + 8, width: 24, height: 24)
+        if let editor { editor.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24, height: editor.height(forWidth: bounds.width - 24)) }
     }
 
     override func updateLayer() {
@@ -447,6 +570,7 @@ public final class PullRequestTimelineView: DSView {
     private var error: String?
     private var nowMs: Int64 = 0
     private let note = NoteItem()
+    var scrollTarget: PullRequestScrollWatcher { stack.watcher }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -715,119 +839,71 @@ final class ConversationRow: DSView, StackItem {
     }
 }
 
-// MARK: - Code
+/// The Description section (PullRequestSummaryTab.tsx:826-865): the Markdown with the pencil beside it
+/// where the reader may rewrite it, or the editor (`allowEmpty`: saving nothing clears it).
+final class PullRequestDescriptionItem: DSView, StackItem {
+    let view = MarkdownView()
+    private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
+    private var editor: PullRequestMarkdownEditorView?
+    private var detail: PullRequestDetail?
+    private var editingURL: String?
+    var saving = false { didSet { editor?.saving = saving } }
+    var onSave: ((String) -> Void)?
+    var onResize: (() -> Void)?
 
-/// The Code tab (PullRequestCodeTab.tsx): a `h-10` toolbar with the commit scope and the counts,
-/// over the shared diff list with a "Viewed" tick on each file header.
-public final class PullRequestCodeView: DSView {
-    private let toolbarFill = CALayer()
-    private let rule = CALayer()
-    private let scope = ButtonView("All commits", variant: .secondary, size: .xs)
-    private let counts = LabelView("", font: DSFont.ui(12))
-    private let list = DiffListView()
-    private let scroll: ScrollAreaView
-    private let status = LabelView("", font: DSFont.ui(12))
-    private var commits: [PullRequestCommit] = []
-    private var commit: String?
-    private var paths: [String] = []
-    private var states: [String: String]?
-    private var overlay: [String: Bool] = [:]
-    private var store: String?
-    var onCommit: ((String?) -> Void)?
-    var onSetViewed: ((String, Bool) -> Void)?
-
-    public override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: list)
+    override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for l in [toolbarFill, rule] { l.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]; layer?.addSublayer(l) }
-        scope.trailingIcon = .chevronDown
-        scope.iconSize = 14
-        counts.lineHeight = 16
-        status.lineHeight = 16
-        status.alignment = .center
-        [scope, counts, scroll, status].forEach(addSubview)
-        scope.action = { [weak self] in self?.showScopeMenu() }
-        list.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
+        addSubview(view)
+        editButton.iconSize = 12
+        editButton.setAccessibilityLabel("Edit description")
+        editButton.action = { [weak self] in self?.startEditing() }
+        addSubview(editButton)
     }
 
-    func reset() { commit = nil; paths = []; list.setDiff(UnifiedDiff("")) }
-
-    func set(patch: String?, loading: Bool, error: String?, commit: String?, commits: [PullRequestCommit]) {
-        self.commits = commits.sorted { (T3Timestamp($0.committedDate).epochMs ?? 0) > (T3Timestamp($1.committedDate).epochMs ?? 0) }
-        self.commit = commit
-        scope.title = commit.flatMap { oid in commits.first { $0.oid == oid }?.messageHeadline } ?? "All commits"
-        scope.isHidden = commits.isEmpty
-        if let patch {
-            let diff = UnifiedDiff(patch)
-            paths = diff.files.map(\.path)
-            list.setDiff(diff, collapsedByDefault: false)
-            // Viewed files start folded.
-            for (i, p) in paths.enumerated() where PullRequestDetailLogic.isFileViewed(p, states: states, overlay: overlay) { list.setCollapsed(i, true) }
-        }
-        status.text = loading ? "Loading pull request diff..." : error ?? (patch?.isEmpty == true ? "No patch available for this selection." : "")
-        status.isHidden = status.text.isEmpty
-        updateCounts()
+    func set(_ d: PullRequestDetail) {
+        detail = d
+        view.cwd = d.workspaceRoot
+        view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : d.body)
+        // Keyed by the pull request, so an editor left open never shows over the next one.
+        if editingURL != nil && editingURL != d.url { stopEditing() }
+        editButton.isHidden = editor != nil || !PullRequestWriteLogic.canEditChangeRequest(d)
         needsLayout = true
     }
 
-    func setViewed(states: [String: String]?, overlay: [String: Bool], store: String?) {
-        self.states = states; self.overlay = overlay; self.store = store
-        if store == nil {
-            list.viewedState = nil
-        } else {
-            list.viewedState = { [weak self] (path: String) -> (viewed: Bool, stale: Bool)? in
-                guard let self else { return nil }
-                let viewed = PullRequestDetailLogic.isFileViewed(path, states: self.states, overlay: self.overlay)
-                let stale = PullRequestDetailLogic.isStale(path, states: self.states)
-                return (viewed: viewed, stale: stale)
-            }
-        }
-        updateCounts()
+    private func startEditing() {
+        guard let d = detail else { return }
+        let e = PullRequestMarkdownEditorView(value: d.body, label: "Pull request description", placeholder: "Describe this pull request",
+                                              allowEmpty: true, cwd: d.workspaceRoot)
+        e.onCancel = { [weak self] in self?.stopEditing(); self?.onResize?() }
+        e.onSave = { [weak self] body in self?.onSave?(body) }
+        e.onResize = { [weak self] in self?.onResize?() }
+        editor = e
+        editingURL = d.url
+        addSubview(e)
+        editButton.isHidden = true
+        view.isHidden = true
+        onResize?()
+        DispatchQueue.main.async { [weak e] in e?.focus() }
     }
 
-    private func updateCounts() {
-        var text = "\(paths.count) \(paths.count == 1 ? "file" : "files")"
-        if store != nil && !paths.isEmpty {
-            text += "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
-            text += store == "environment" ? "viewed in T3 Code" : "viewed"
-        }
-        counts.text = text
-        needsLayout = true
+    func stopEditing() {
+        editor?.removeFromSuperview()
+        editor = nil
+        editingURL = nil
+        view.isHidden = false
+        editButton.isHidden = detail.map { !PullRequestWriteLogic.canEditChangeRequest($0) } ?? true
     }
 
-    private func showScopeMenu() {
-        var items = [MenuItem.radio("All commits", checked: commit == nil) { [weak self] _ in self?.onCommit?(nil) }]
-        items[0].closesOnClick = true
-        for c in commits.prefix(50) {
-            var item = MenuItem.radio(c.messageHeadline, checked: commit == c.oid) { [weak self] _ in self?.onCommit?(c.oid) }
-            item.shortcut = String(c.oid.prefix(7))
-            item.closesOnClick = true
-            items.append(item)
-        }
-        MenuPopupView.show(items, from: scope, placement: .dropdown)
+    func height(forWidth width: CGFloat) -> CGFloat {
+        if let editor { return editor.height(forWidth: width) }
+        return view.height(forWidth: width - (editButton.isHidden ? 0 : 28))
     }
 
-    public override func layout() {
+    override func layout() {
         super.layout()
-        let w = bounds.width
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        toolbarFill.frame = CGRect(x: 0, y: 0, width: w, height: 40)
-        rule.frame = CGRect(x: 0, y: 40, width: w, height: 1)
-        CATransaction.commit()
-        var x: CGFloat = 16
-        if !scope.isHidden {
-            let sw = min(256, ceil(scope.intrinsicContentSize.width))
-            scope.frame = NSRect(x: x, y: 8, width: sw, height: 24); x += sw + 12
-        }
-        counts.frame = NSRect(x: x, y: 12, width: max(0, w - 16 - x), height: 16)
-        scroll.frame = NSRect(x: 0, y: 41, width: w, height: max(0, bounds.height - 41))
-        status.frame = NSRect(x: 16, y: 41 + 24, width: max(0, w - 32), height: 16)
-    }
-
-    public override func updateLayer() {
-        toolbarFill.backgroundColor = Themed.color(\.background).cgColor(in: self)
-        rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
-        counts.color = Themed.color(\.mutedForeground)
-        status.color = Themed.color(\.mutedForeground)
+        let ew: CGFloat = editButton.isHidden ? 0 : 28
+        view.frame = NSRect(x: 0, y: 0, width: bounds.width - ew, height: bounds.height)
+        editButton.frame = NSRect(x: bounds.width - 24, y: 0, width: 24, height: 24)
+        editor?.frame = bounds
     }
 }

@@ -68,6 +68,10 @@ final class GitController {
     private var focusWork: DispatchWorkItem?
 
     private var picker: (view: BranchPickerView, popup: OpenPopup, query: String, pages: [VcsListRefsResult], inPanel: Bool)?
+    /// The open "Checkout pull request" dialog and its resolve debounce.
+    private var checkoutDialog: PullRequestThreadDialog?
+    private var resolveTask: Task<Void, Never>?
+    static let checkoutPrefix = "__checkout_pull_request__:"
     private var pickerSeq = 0
 
     /// The details card is per thread in T3 (`threadPanelVisibilityByThreadKey`); kept app-wide here.
@@ -518,7 +522,13 @@ final class GitController {
         let canCreate = !isSelectingWorktreeBase
         let items = BranchToolbarLogic.pickerItems(refs: refs, query: p.query, canCreate: canCreate)
         let byName = Dictionary(refs.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        p.view.rows = items.map { value in
+        // "Checkout pull request" first, on a local draft (BranchToolbarBranchSelector.tsx:286-312, 638-656).
+        // ponytail: the row is one line with the reference as its badge; T3 draws the provider icon and a second line
+        var checkout: [BranchPickerView.Row] = []
+        if target.isDraft, let reference = ChangeRequestURL.reference(p.query.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            checkout = [BranchPickerView.Row(value: Self.checkoutPrefix + reference, title: "Checkout pull request", badge: reference, middleTruncates: false)]
+        }
+        p.view.rows = checkout + items.map { value in
             if value.hasPrefix(BranchToolbarLogic.createRefPrefix) {
                 let name = BranchToolbarLogic.sanitizeNewRefName(String(value.dropFirst(BranchToolbarLogic.createRefPrefix.count)))
                 return BranchPickerView.Row(value: value, title: "Create new ref \"\(name)\"", middleTruncates: false)
@@ -537,7 +547,9 @@ final class GitController {
         let query = p.query.trimmingCharacters(in: .whitespacesAndNewlines)
         closePicker()
         composer.focusComposer()
-        if value.hasPrefix(BranchToolbarLogic.createRefPrefix) {
+        if value.hasPrefix(Self.checkoutPrefix) {
+            openPullRequestDialog(String(value.dropFirst(Self.checkoutPrefix.count)))
+        } else if value.hasPrefix(BranchToolbarLogic.createRefPrefix) {
             createRef(query)
         } else if let ref = refs.first(where: { $0.name == value }) {
             selectBranch(ref)
@@ -887,6 +899,75 @@ final class GitController {
     }
 
     private var stripShowsGit: Bool { panel.window != nil && !panel.contextStrip.isHidden && panel.contextStrip.showsGitControls }
+
+    // MARK: Checkout pull request (PullRequestThreadDialog.tsx)
+
+    /// `openPullRequestDialog`: only on a local draft (`canCheckoutPullRequestIntoThread`, ChatView.tsx:2209).
+    // ponytail: the source-control write and orchestration operate scopes are assumed granted; read them
+    // from the session's scopes once the client tracks them
+    func openPullRequestDialog(_ reference: String?) {
+        guard modal == nil, let target, target.isDraft, let window = panel.window else { return }
+        let dialog = PullRequestThreadDialog(initialReference: reference)
+        let host = present(dialog.dialog, in: window)
+        host.onDismiss = { [weak self] in self?.modal = nil; self?.checkoutDialog = nil; self?.resolveTask?.cancel() }
+        checkoutDialog = dialog
+        dialog.cancel.action = { host.close() }
+        dialog.onReference = { [weak self] ref in self?.resolveCheckout(ref, debounce: true) }
+        dialog.onConfirm = { [weak self, weak dialog] mode, ref in
+            guard let self, let dialog else { return }
+            self.prepareCheckout(dialog, mode: mode, reference: ref) { host.close() }
+        }
+        resolveCheckout(dialog.reference, debounce: false)
+        DispatchQueue.main.async { window.makeFirstResponder(dialog.input) }
+    }
+
+    /// `usePullRequestResolution`: `git.resolvePullRequest` 450 ms after typing stops.
+    private func resolveCheckout(_ reference: String?, debounce: Bool) {
+        resolveTask?.cancel()
+        guard let reference, let target, let shell, let dialog = checkoutDialog else { checkoutDialog?.resolving = false; return }
+        dialog.resolving = true
+        resolveTask = Task { [weak self] in
+            if debounce { try? await Task.sleep(for: .milliseconds(450)) }
+            guard !Task.isCancelled else { return }
+            do {
+                let value = try await shell.supervisor.request("git.resolvePullRequest", payload: PullRequestPayloads.resolvePullRequest(cwd: target.projectRoot, reference: reference))
+                let result = try value.decode(as: GitResolvePullRequestResult.self)
+                guard !Task.isCancelled, let dialog = self?.checkoutDialog, dialog.reference == reference else { return }
+                dialog.resolving = false
+                dialog.resolved = result.pullRequest
+            } catch {
+                guard !Task.isCancelled, let dialog = self?.checkoutDialog, dialog.reference == reference else { return }
+                dialog.resolving = false
+                dialog.resolveError = Self.message(error)
+            }
+        }
+    }
+
+    /// `git.preparePullRequestThread`, then the draft takes the branch and worktree (`handlePreparedPullRequestThread`).
+    private func prepareCheckout(_ dialog: PullRequestThreadDialog, mode: String, reference: String, done: @escaping () -> Void) {
+        guard let target, let shell, let draft = composer.currentDraft,
+              let payload = PullRequestPayloads.preparePullRequestThread(cwd: target.projectRoot, reference: reference, mode: mode,
+                                                                          threadId: EnvironmentScope.localId(of: draft.threadId)) else { return }
+        dialog.preparing = mode
+        Task { [weak self] in
+            do {
+                let value = try await shell.supervisor.request("git.preparePullRequestThread", payload: payload)
+                let result = try value.decode(as: GitPreparePullRequestThreadResult.self)
+                guard let self else { return }
+                dialog.preparing = nil
+                self.composer.updateDraft { d in
+                    d.branch = result.branch
+                    d.worktreePath = result.worktreePath
+                    d.envMode = result.worktreePath == nil ? .local : .worktree
+                }
+                self.refresh()
+                done()
+            } catch {
+                dialog.preparing = nil
+                dialog.prepareError = Self.message(error)
+            }
+        }
+    }
 
     // MARK: Helpers
 

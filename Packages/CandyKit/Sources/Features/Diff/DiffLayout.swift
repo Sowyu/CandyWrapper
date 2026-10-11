@@ -10,12 +10,13 @@ struct DiffLayout {
     typealias Style = DiffViewStyle
 
     struct Row: Equatable {
-        enum Kind: UInt8 { case header, separator, line, noNewline, footer }
+        enum Kind: UInt8 { case header, separator, line, noNewline, footer, annotation }
         var kind: Kind
         var file: Int32
         /// `line` and `noNewline`: index into `UnifiedDiff.lines`, or -1. Unified rows use only
         /// `left`; split rows pair the old side (`left`) with the new side (`right`).
         /// `separator`: `left` is the hunk index, `right` the hidden line count.
+        /// `annotation`: `left` is the index into `DiffListView.annotations`.
         var left: Int32
         var right: Int32
         var top: CGFloat
@@ -41,7 +42,11 @@ struct DiffLayout {
     private(set) var headerRow: [Int] = []
     private(set) var columns: [Columns] = []
 
-    init(diff: UnifiedDiff, collapsed: Set<Int>, style: Style, width: CGFloat, wrap: Bool, ch: CGFloat) {
+    /// An annotation pinned under a line: `right` is the new side, `line` its 1-based number there.
+    struct Anchor { var right: Bool; var line: Int; var index: Int }
+
+    init(diff: UnifiedDiff, collapsed: Set<Int>, style: Style, width: CGFloat, wrap: Bool, ch: CGFloat,
+         anchors: [Int: [Anchor]] = [:], anchorHeight: (Int) -> CGFloat = { _ in 0 }) {
         self.style = style
         self.width = width
         self.wrap = wrap
@@ -64,6 +69,16 @@ struct DiffLayout {
                 rows.append(Row(kind: kind, file: Int32(f), left: left, right: right, top: y))
                 y += height
             }
+            let fileAnchors = anchors[f] ?? []
+            /// Annotation rows under the line pair (`left` old side, `right` new side), one per anchor.
+            func annotate(_ left: Int32, _ right: Int32) {
+                guard !fileAnchors.isEmpty else { return }
+                let old = left >= 0 && diff.lines[Int(left)].kind != .addition ? Int(diff.lines[Int(left)].oldNumber) : -1
+                let new = right >= 0 && diff.lines[Int(right)].kind != .deletion ? Int(diff.lines[Int(right)].newNumber) : -1
+                for a in fileAnchors where a.right ? a.line == new : a.line == old {
+                    add(.annotation, Int32(a.index), -1, height: anchorHeight(a.index))
+                }
+            }
             for (h, hunk) in file.hunks.enumerated() where true {
                 if hunk.collapsedBefore > 0 {
                     add(.separator, Int32(h), Int32(hunk.collapsedBefore), height: DiffStyle.separatorHeight)
@@ -74,6 +89,7 @@ struct DiffLayout {
                         let index = Int32(i)
                         add(.line, index, -1, height: CGFloat(lines(index, 0)) * DiffStyle.lineHeight)
                         if diff.lines[i].noNewline { add(.noNewline, index, -1, height: DiffStyle.lineHeight) }
+                        annotate(index, index)
                     }
                 case .split:
                     for (l, r) in Self.splitPairs(diff, hunk.lines) {
@@ -81,6 +97,7 @@ struct DiffLayout {
                         add(.line, l, r, height: height)
                         let ln = l >= 0 && diff.lines[Int(l)].noNewline, rn = r >= 0 && diff.lines[Int(r)].noNewline
                         if ln || rn { add(.noNewline, ln ? l : -1, rn ? r : -1, height: DiffStyle.lineHeight) }
+                        annotate(l, r)
                     }
                 }
             }

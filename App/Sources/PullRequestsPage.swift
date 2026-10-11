@@ -9,8 +9,8 @@ import T3Store
 /// environment that can list them, merged and grouped; the filters and sort; the selected pull
 /// requests in the page's own right panel. Ports the route's reads at one page per question
 /// (`PAGE_SIZE` 99, "Load more" grows it), without the cross-reload snapshot.
-// ponytail: no cursored continuation or per-scope answer cache; a refresh or filter change reads the
-// page again. Add `nextCursors` paging and the stored snapshot when lists past 99 rows feel slow
+// ponytail: no per-scope answer cache; a refresh or filter change reads the page again. Add the
+// stored snapshot when reopening the page feels slow
 @MainActor
 final class PullRequestsPageController {
     let container = PullRequestsPageContainer()
@@ -32,6 +32,10 @@ final class PullRequestsPageController {
     private var projectKey: String?
     private var menuFilters = PullRequestListFilters()
     private var pageSize = PullRequestListLogic.pageSize
+    /// Where each environment's listing carries on (`nextCursors` per environment) and the ones
+    /// truncated without a cursor (routes/_chat.pull-requests.tsx:690-760, 1175-1197).
+    private var envCursors: [String: [String: String]] = [:]
+    private var truncatedEnvs: [String] = []
 
     // Answers.
     private struct Answer {
@@ -92,11 +96,9 @@ final class PullRequestsPageController {
         page.onFilters = { [weak self] f in self?.menuFilters = f; self?.reload() }
         page.onRefresh = { [weak self] in self?.refreshFromHost() }
         page.onRetry = { [weak self] in self?.reload() }
-        page.onLoadMore = { [weak self] in
-            guard let self else { return }
-            self.pageSize = min(self.pageSize + PullRequestListLogic.pageSize, PullRequestListLogic.maxPageSize)
-            self.reload(keepRows: true)
-        }
+        page.onLoadMore = { [weak self] in self?.loadMore() }
+        page.onShowChecks = { [weak self] entry, anchor in self?.showChecks(entry, from: anchor) }
+        page.onShowStack = { [weak self] entry, anchor in self?.showStack(entry, from: anchor) }
         page.onAddProject = { [weak self] in self?.onAddProject?() }
         page.onSelect = { [weak self] entry in self?.select(entry) }
         page.onSpeedAction = { [weak self] entry, action in self?.speedAction(entry, action) }
@@ -231,6 +233,8 @@ final class PullRequestsPageController {
             var authored: [PullRequestListEntry]? = wantsPartitions ? [] : nil
             var reviewing: [PullRequestListEntry]? = wantsPartitions ? [] : nil
             var failure: String?
+            var cursors: [String: [String: String]] = [:]
+            var truncated: [String] = []
             for env in targets {
                 func read(_ inv: String, _ filters: PullRequestListFilters, _ text: String?) async throws -> PullRequestListResult {
                     let input = PullRequestPayloads.list(state: state, involvement: inv, limit: pageSize, projectId: scoped?.projectId, host: host,
@@ -241,6 +245,8 @@ final class PullRequestsPageController {
                 }
                 do {
                     let r = try await read(involvement, filters, parsed.text.isEmpty ? nil : parsed.text)
+                    cursors[env] = r.nextCursors.isEmpty ? nil : r.nextCursors
+                    if r.truncated { truncated.append(env) }
                     merged.entries += r.entries
                     merged.errors += r.errors
                     merged.providers += r.providers.filter { p in !merged.providers.contains { $0.host == p.host } }
@@ -264,6 +270,8 @@ final class PullRequestsPageController {
             } else {
                 self.error = failure
                 self.answer = Answer(result: merged, authored: authored, reviewing: reviewing)
+                self.envCursors = cursors
+                self.truncatedEnvs = truncated
                 if host == nil || self.hosts.isEmpty { self.hosts = merged.providers }
                 self.overrides = PullRequestListLogic.settle(self.overrides, answered: merged.entries, now: Date().timeIntervalSince1970 * 1000)
                 self.loadStats(merged.entries, gen: gen)
@@ -397,6 +405,104 @@ final class PullRequestsPageController {
             m.errorBanner = error
         }
         page.model = m
+    }
+
+    // MARK: Paging
+
+    /// "Load more pull requests": continue where each environment's listing stopped, raising the page
+    /// only for the ones truncated without a cursor; with no cursors at all, read a bigger page.
+    private func loadMore() {
+        let next = PullRequestWriteLogic.loadMore(pageSize: pageSize, nextCursors: envCursors, truncatedEnvironments: truncatedEnvs)
+        pageSize = next.pageSize
+        guard let cursors = next.cursors, var answer else { reload(keepRows: true); return }
+        let parsed = PullRequestListLogic.parseQuery(sentQuery)
+        let filters = menuFilters.merging(parsed.filters)
+        let scoped = scopedProject()
+        let (state, involvement, host, pageSize, regrown) = (self.state, self.involvement, self.host, self.pageSize, next.regrown)
+        let targets = capableEnvironments.filter { (scoped == nil || scoped?.env == $0) && PullRequestWriteLogic.continues($0, cursors: cursors, regrown: regrown) }
+        let gen = generation
+        loading = true
+        render()
+        Task { [weak self] in
+            guard let self else { return }
+            var newCursors = self.envCursors
+            var truncated: [String] = []
+            for env in targets {
+                let input = PullRequestPayloads.list(state: state, involvement: involvement, limit: pageSize, projectId: scoped?.projectId, host: host,
+                                                     filters: filters, query: parsed.text.isEmpty ? nil : parsed.text, cursors: regrown.contains(env) ? nil : cursors[env])
+                guard var r = try? await self.environments.request(env, "pullRequests.list", input).decode(as: PullRequestListResult.self) else { continue }
+                for i in r.entries.indices { r.entries[i].environmentId = env }
+                // A regrown environment answers from the top again: its rows replace the ones it gave before.
+                if regrown.contains(env) { answer.result.entries.removeAll { $0.environmentId == env } }
+                let have = Set(answer.result.entries.map(PullRequestListLogic.key))
+                answer.result.entries += r.entries.filter { !have.contains(PullRequestListLogic.key($0)) }
+                newCursors[env] = r.nextCursors.isEmpty ? nil : r.nextCursors
+                if r.truncated { truncated.append(env) }
+            }
+            guard self.generation == gen else { return }
+            answer.result.truncated = !truncated.isEmpty
+            self.answer = answer
+            self.envCursors = newCursors
+            self.truncatedEnvs = truncated
+            self.loading = false
+            self.loadStats(answer.result.entries, gen: gen)
+            self.render()
+        }
+    }
+
+    // MARK: Row popovers
+
+    /// A row's checks popover: the rollup now, the checks once `pullRequests.detail` answers (`LazyChecksBody`).
+    private func showChecks(_ entry: PullRequestListEntry, from anchor: NSView) {
+        guard let state = entry.checksState, let env = entry.environmentId else { return }
+        let view = PullRequestChecksPopoverView(checksState: state, summary: nil, body: .loading)
+        view.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        view.present(from: anchor)
+        let ref = PullRequestRef(projectId: entry.projectId, host: capabilities.has(env, "threadPullRequests") ? entry.host : nil,
+                                 repository: entry.repository, number: entry.number)
+        Task { [weak view] in
+            do {
+                let d = try await self.environments.request(env, "pullRequests.detail", ref.payload).decode(as: PullRequestDetail.self)
+                view?.body = .checks(d.checks)
+            } catch {
+                view?.body = .message(PullRequestDetailBinding.failure(error, number: entry.number).1)
+            }
+        }
+    }
+
+    /// A row's stack menu (`PullRequestStackPopover`): "Loading stack…", then the layers; a pick opens it.
+    private func showStack(_ entry: PullRequestListEntry, from anchor: NSView) {
+        guard let membership = entry.stack, let env = entry.environmentId else { return }
+        let menu = MenuPopupView(items: PullRequestStackMenu.placeholder(number: membership.number, text: "Loading stack…"))
+        guard let host = anchor.popupHost else { return }
+        let popup = host.open(menu, trigger: anchor, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+                              swallowsOutsideClick: true)
+        menu.hostPopup = popup
+        let ref = PullRequestRef(projectId: entry.projectId, host: entry.host, repository: entry.repository, number: entry.number)
+        Task { [weak self, weak menu] in
+            guard let self, let menu else { return }
+            do {
+                let value = try await self.environments.request(env, "pullRequests.stack", ref.payload)
+                guard value != .null, let stack = try? value.decode(as: PullRequestStackDetail.self) else {
+                    menu.setItems(PullRequestStackMenu.placeholder(number: membership.number, text: "This pull request is no longer in a stack."))
+                    host.reposition(popup)
+                    return
+                }
+                let items = PullRequestStackMenu.header(number: stack.number, notice: nil, stale: false, onRetry: nil)
+                    + PullRequestStackMenu.layers(stack, current: entry.number, pending: false) { [weak self] number in
+                        host.close(popup)
+                        var e = entry
+                        e.number = number
+                        e.url = ChangeRequestURL.url(kind: e.provider, host: e.host, repository: e.repository, number: number) ?? e.url
+                        self?.select(e)
+                    }
+                menu.setItems(items)
+                host.reposition(popup)
+            } catch {
+                menu.setItems(PullRequestStackMenu.placeholder(number: membership.number, text: PullRequestDetailBinding.failure(error, number: entry.number).1))
+                host.reposition(popup)
+            }
+        }
     }
 
     // MARK: Selection and actions

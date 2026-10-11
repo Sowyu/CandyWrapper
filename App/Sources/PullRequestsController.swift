@@ -61,6 +61,13 @@ final class PullRequestDetailBinding {
     private var viewedStates: [String: String]?
     private var overlay: [String: Bool] = [:]
     private var pendingViewed: Set<String> = []
+    /// The Code tab's slices (`sliceState`): patches in order and the cursor of the next one.
+    private var slices: [String] = []
+    private var sliceCursor: String?
+    private var sliceLoading = false
+    private var sliceError: String?
+    /// The native stack read (`usePullRequestStack`).
+    private var stackGeneration = 0
 
     init(view: PullRequestDetailView, environments: Environments, capabilities: PullRequestCapabilities) {
         self.view = view
@@ -79,10 +86,29 @@ final class PullRequestDetailBinding {
         view.onMergeMethod = { m in UserDefaults.standard.set(m, forKey: Self.mergeMethodKey) }
         view.onAction = { [weak self] action, method in self?.perform(action, mergeMethod: method) }
         view.onComment = { [weak self] body in self?.comment(body) }
-        view.onReview = { [weak self] verdict, body in self?.review(verdict, body: body) }
+        view.onReview = { [weak self] verdict, body, comments in self?.review(verdict, body: body, comments: comments) }
         view.onCommit = { [weak self] oid in self?.commit = oid; self?.patchKey = nil; self?.loadCode() }
         view.onSetViewed = { [weak self] path, viewed in self?.setViewed(path, viewed) }
         view.onCheckout = { [weak self] _ in self?.toast("Check out is not in CandyWrapper yet", "Use the copied command from the header.", .info) }
+        view.onCommentAction = { [weak self] body, action in self?.commentAction(body, action) }
+        view.onSaveTitle = { [weak self] title in self?.update(title: title) }
+        view.onSaveBody = { [weak self] body in self?.update(body: body) }
+        view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
+        view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
+        view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
+        view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
+        view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
+        view.onStackAction = { [weak self] action in self?.runStackAction(action) }
+        view.onStackRetry = { [weak self] in self?.loadStack() }
+        view.reviewActions = PullRequestReviewThreadActions(
+            reply: { [weak self] id, body, done in self?.write("pullRequests.replyToThread", { PullRequestPayloads.replyToThread($0, threadId: id, body: body) },
+                                                               failure: "Reply could not be posted", done: done) },
+            setResolved: { [weak self] id, resolved in self?.write("pullRequests.setThreadResolution", { PullRequestPayloads.setThreadResolution($0, threadId: id, resolved: resolved) },
+                                                                    failure: "The conversation could not be updated", done: { _ in }) },
+            loadMore: { [weak self] id, cursor, done in self?.loadThreadComments(id, cursor, done) },
+            editComment: { [weak self] id, body, done in self?.write("pullRequests.updateComment", { PullRequestPayloads.updateComment($0, commentId: id, kind: "review-comment", body: body) },
+                                                                     failure: "The comment could not be saved", done: done) },
+            react: { [weak self] id, content, reacted, bar in self?.react(id, content, reacted, bar) })
     }
 
     /// `pullRequestMergeMethod` in T3's UI state store.
@@ -105,6 +131,7 @@ final class PullRequestDetailBinding {
         patchKey = nil
         viewedStates = nil
         overlay = [:]
+        slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
         view.tab = .summary
         view.showLoading(number: target.number)
         reload(invalidate: false)
@@ -133,7 +160,9 @@ final class PullRequestDetailBinding {
                 self.detail = d
                 self.view.activityPending = true
                 self.view.activityError = nil
+                if let ref = self.reference { self.view.reviewKey = PullRequestReviewStore.key(ref) }
                 self.view.show(d)
+                self.loadStack()
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)
                 if self.view.tab == .code { self.patchKey = nil; self.loadCode() }
@@ -166,27 +195,52 @@ final class PullRequestDetailBinding {
         }
     }
 
-    /// The Code tab: the patch over HTTP (large payloads skip the socket) and the viewed marks.
+    /// The Code tab: the first slice of the patch over HTTP (large payloads skip the socket) and the
+    /// viewed marks; later slices follow `nextCursor` (PullRequestCodeTab.tsx:254-340, 620-640).
     private func loadCode() {
-        guard let shell, let ref = reference, let d = detail, d.capabilities.diff else { return }
+        guard let ref = reference, let d = detail, d.capabilities.diff else { return }
         let key = "\(ref.projectId):\(ref.repository):\(ref.number):\(commit ?? "all"):\(d.updatedAt)"
         guard patchKey != key else { return }
         patchKey = key
+        slices = []; sliceCursor = nil; sliceError = nil
+        view.setDiff(patches: [], loading: true, error: nil, commit: commit)
+        fetchSlice(cursor: nil, key: key)
+        loadViewed()
+    }
+
+    private func loadNextSlice() {
+        guard let cursor = sliceCursor, !sliceLoading, let key = patchKey else { return }
+        sliceError = nil
+        fetchSlice(cursor: cursor, key: key)
+    }
+
+    private func fetchSlice(cursor: String?, key: String) {
+        guard let shell, let ref = reference else { return }
         let commit = self.commit
-        view.setPatch(nil, loading: true, error: nil, commit: commit)
         let gen = generation
+        sliceLoading = true
+        if cursor != nil { showSlices(loading: false, error: nil) }
         Task { [weak self] in
             do {
-                let result = try await shell.http.post("api/pull-requests/diff", PullRequestPayloads.diff(ref, commit: commit), token: shell.token,
+                let result = try await shell.http.post("api/pull-requests/diff", PullRequestPayloads.diff(ref, cursor: cursor, commit: commit), token: shell.token,
                                                        as: PullRequestDiffResult.self)
                 guard let self, self.generation == gen, self.patchKey == key else { return }
-                self.view.setPatch(result.patch, loading: false, error: nil, commit: commit)
+                self.sliceLoading = false
+                self.slices.append(result.patch)
+                self.sliceCursor = result.nextCursor
+                self.showSlices(loading: false, error: nil)
             } catch {
                 guard let self, self.generation == gen, self.patchKey == key else { return }
-                self.view.setPatch(nil, loading: false, error: Self.failure(error, number: ref.number).1, commit: commit)
+                self.sliceLoading = false
+                let message = Self.failure(error, number: ref.number).1
+                if cursor == nil { self.showSlices(loading: false, error: message) } else { self.sliceError = message; self.showSlices(loading: false, error: nil) }
             }
         }
-        loadViewed()
+    }
+
+    private func showSlices(loading: Bool, error: String?) {
+        view.setDiff(patches: slices, loading: loading, error: error, nextCursor: sliceCursor, moreLoading: sliceLoading && !slices.isEmpty,
+                     moreError: sliceError, commit: commit)
     }
 
     private func loadViewed() {
@@ -250,23 +304,227 @@ final class PullRequestDetailBinding {
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.comment", payload: payload)
+                self?.view.composer?.commentPosted()
+                self?.view.closeComposer()
                 self?.reload(invalidate: false)
             } catch {
-                self?.toast("Could not post the comment", Self.failure(error, number: ref.number).1, .error)
+                self?.view.composer?.commentSubmitting = nil
+                self?.toast("Could not post the comment", nil, .error)
             }
         }
     }
 
-    private func review(_ verdict: String, body: String) {
+    /// `PullRequestReviewForm.submit`: the verdict, the summary and the pending line comments in one request.
+    private func review(_ verdict: String, body: String, comments: [PullRequestReviewCommentDraft]) {
         guard let shell, let ref = reference else { return }
         Task { [weak self] in
             do {
-                _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body))
-                self?.toast(verdict == "approve" ? "Pull request approved" : verdict == "request-changes" ? "Changes requested" : "Review submitted", nil, .success)
+                _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body, comments: comments))
+                self?.view.composer?.reviewSubmitted(body: body, comments: comments)
+                self?.view.closeComposer()
+                self?.toast(PullRequestWriteLogic.verdicts.first { $0.value == verdict }?.sent ?? "Review submitted", nil, .success)
                 self?.reload(invalidate: false)
             } catch {
-                self?.toast("The review could not be submitted", Self.failure(error, number: ref.number).1, .error)
+                // The draft is kept.
+                self?.view.composer?.reviewPending = false
+                self?.toast("The review could not be submitted", nil, .error)
             }
+        }
+    }
+
+    // MARK: WP7.5c writes
+
+    /// One write RPC with its payload built from the reference; `done` says whether the host took it,
+    /// then the detail reads again.
+    private func write(_ method: String, _ build: (PullRequestRef) -> JSONValue?, failure: String, refresh: Bool = true,
+                       done: @escaping @MainActor (Bool) -> Void) {
+        guard let shell, let ref = reference, let payload = build(ref) else { done(false); return }
+        Task { [weak self] in
+            do {
+                _ = try await shell.supervisor.request(method, payload: payload)
+                done(true)
+                if refresh { self?.reload(invalidate: false) }
+            } catch {
+                self?.toast(failure, Self.failure(error, number: ref.number).1, .error)
+                done(false)
+            }
+        }
+    }
+
+    private func update(title: String) {
+        view.titleSaving = true
+        write("pullRequests.update", { PullRequestPayloads.update($0, title: title) }, failure: "The title could not be saved") { [weak self] ok in
+            self?.view.titleSaving = false
+            if ok { self?.view.cancelTitleEdit() }
+        }
+    }
+
+    private func update(body: String) {
+        view.bodySaving = true
+        write("pullRequests.update", { PullRequestPayloads.update($0, body: body) }, failure: "Could not save the description") { [weak self] ok in
+            self?.view.bodySaving = false
+            if ok { self?.view.finishBodyEdit() }
+        }
+    }
+
+    private func updateComment(_ comment: PullRequestComment, _ body: String) {
+        guard comment.kind != "review" else { return }
+        view.commentSaving = true
+        write("pullRequests.updateComment", { PullRequestPayloads.updateComment($0, commentId: comment.id, kind: comment.kind, body: body) },
+              failure: "Could not save the comment") { [weak self] ok in
+            self?.view.commentSaving = false
+            if ok { self?.view.finishCommentEdit() }
+        }
+    }
+
+    /// `PullRequestReactionBar.toggle`: the pill already moved; a refusal takes it back.
+    private func react(_ subject: String?, _ content: String, _ reacted: Bool, _ bar: PullRequestReactionBarView) {
+        write("pullRequests.setReaction", { PullRequestPayloads.setReaction($0, subjectId: subject, content: content, reacted: reacted) },
+              failure: "The reaction could not be saved") { [weak bar] ok in if !ok { bar?.pressFailed(content) } }
+    }
+
+    private func loadThreadComments(_ threadId: String, _ cursor: String, _ done: @escaping @MainActor (PullRequestThreadCommentsResult?) -> Void) {
+        guard let shell, let ref = reference else { done(nil); return }
+        Task { [weak self] in
+            do {
+                let value = try await shell.supervisor.request("pullRequests.threadComments", payload: PullRequestPayloads.threadComments(ref, threadId: threadId, cursor: cursor))
+                done(try value.decode(as: PullRequestThreadCommentsResult.self))
+            } catch {
+                self?.toast("More comments could not be loaded", nil, .error)
+                done(nil)
+            }
+        }
+    }
+
+    /// `performCommentAction`: post the comment, then close or reopen.
+    private func commentAction(_ body: String, _ action: String) {
+        guard let shell, let ref = reference, let payload = PullRequestPayloads.comment(ref, body: body) else { return }
+        view.actionPending = true
+        Task { [weak self] in
+            do {
+                _ = try await shell.supervisor.request("pullRequests.comment", payload: payload)
+            } catch {
+                self?.view.actionPending = false
+                self?.view.composer?.commentSubmitting = nil
+                self?.toast("Could not post the comment", nil, .error)
+                return
+            }
+            self?.view.composer?.commentPosted()
+            self?.view.closeComposer()
+            self?.perform(action, mergeMethod: nil)
+        }
+    }
+
+    /// The label and reviewer pickers (PullRequestLabelPicker.tsx, PullRequestReviewerPicker.tsx): the
+    /// candidates are read once it opens; each pick toggles one and the list is read again.
+    private func openPicker(_ kind: PullRequestCandidatePickerView.Kind, from anchor: NSView) {
+        guard let shell, let ref = reference else { return }
+        let picker = PullRequestCandidatePickerView(kind: kind)
+        var labels: [PullRequestLabelCandidate] = []
+        var people: [PullRequestReviewerCandidate] = []
+        var query = ""
+        func render() {
+            if kind == .labels {
+                picker.rows = PullRequestWriteLogic.filterLabels(labels, query: query).map {
+                    .init(key: $0.name, title: $0.name, detail: $0.description, dot: PullRequestListLogic.labelColor($0.color).flatMap(PullRequestStyle.hex),
+                          checked: $0.isApplied)
+                }
+            } else {
+                picker.rows = PullRequestWriteLogic.filterReviewers(people, query: query).map {
+                    .init(key: "\($0.kind):\($0.id)", title: $0.login, actor: PullRequestActor(login: $0.login, name: $0.name, avatarUrl: $0.avatarUrl, isBot: $0.isBot),
+                          trailing: $0.kind == "team" ? "team" : nil, checked: $0.isRequested)
+                }
+            }
+        }
+        func read() {
+            Task {
+                do {
+                    if kind == .labels {
+                        let list = try await shell.supervisor.request("pullRequests.labelCandidates", payload: ref.payload).decode(as: PullRequestLabelCandidateList.self)
+                        labels = list.candidates; picker.truncated = list.truncated
+                    } else {
+                        let list = try await shell.supervisor.request("pullRequests.reviewerCandidates", payload: ref.payload).decode(as: PullRequestReviewerCandidateList.self)
+                        people = list.candidates; picker.truncated = list.truncated
+                    }
+                    picker.state = .loaded
+                    render()
+                } catch {
+                    picker.state = .failed(Self.failure(error, number: ref.number).1)
+                }
+            }
+        }
+        picker.onQuery = { q in query = q; render() }
+        picker.onPick = { [weak self] key in
+            guard let self else { return }
+            picker.disabled = true
+            if kind == .labels, let c = labels.first(where: { $0.name == key }) {
+                self.write("pullRequests.setLabels", { PullRequestPayloads.setLabels($0, labels: [c.name], applied: !c.isApplied) },
+                           failure: c.isApplied ? "Could not take \(c.name) off" : "Could not put \(c.name) on") { _ in picker.disabled = false; read() }
+            } else if let c = people.first(where: { "\($0.kind):\($0.id)" == key }) {
+                self.write("pullRequests.requestReviewers", { PullRequestPayloads.requestReviewers($0, reviewers: [(c.id, c.kind)], requested: !c.isRequested) },
+                           failure: c.isRequested ? "Could not take back the review request to \(c.login)" : "Could not ask \(c.login) for a review") { [weak self] ok in
+                    picker.disabled = false
+                    if ok { self?.toast(c.isRequested ? "Review request to \(c.login) taken back" : "Review requested from \(c.login)", nil, .success) }
+                    read()
+                }
+            }
+        }
+        picker.present(from: anchor)
+        read()
+    }
+
+    // MARK: Stack
+
+    /// `pullRequests.stack` once the detail says the host keeps stacks.
+    private func loadStack() {
+        guard let shell, let ref = reference, let d = detail, d.capabilities.stacks == true, capabilities.has(environmentId, "threadPullRequests") else {
+            view.stack = nil
+            view.allowsSingleMerge = true
+            return
+        }
+        let supportsActions = d.capabilities.stackActions == true && capabilities.has(environmentId, "pullRequestStackActions")
+        stackGeneration += 1
+        let gen = stackGeneration
+        view.stackFailed = false
+        view.stackNotice = view.stack == nil ? nil : PullRequestWriteLogic.stackNotice(hasData: true, isSuccess: false, isPending: true, error: false)
+        view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: view.stack != nil, stackPending: true, stackError: false)
+        Task { [weak self] in
+            do {
+                let value = try await shell.supervisor.request("pullRequests.stack", payload: ref.payload)
+                let stack = value == .null ? nil : try value.decode(as: PullRequestStackDetail.self)
+                guard let self, self.stackGeneration == gen else { return }
+                self.view.stack = stack
+                self.view.stackNotice = nil
+                self.view.stackCanMerge = supportsActions && PullRequestDetailLogic.can(d, "merge") && !PullRequestDetailLogic.allowedMergeMethods(d).isEmpty
+                self.view.stackCanRebase = supportsActions && d.viewerPermissions.stackRebase == true
+                self.view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: stack != nil, stackPending: false, stackError: false)
+            } catch {
+                guard let self, self.stackGeneration == gen else { return }
+                self.view.stackFailed = true
+                self.view.stackNotice = PullRequestWriteLogic.stackNotice(hasData: self.view.stack != nil, isSuccess: false, isPending: false, error: true)
+                self.view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: self.view.stack != nil, stackPending: false, stackError: true)
+            }
+        }
+    }
+
+    /// "Merge stack" or "Rebase stack" (PullRequestStackMenu.tsx:76-124).
+    private func runStackAction(_ action: String) {
+        guard let shell, let ref = reference, let stack = view.stack, let d = detail else { return }
+        let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: view.preferredMergeMethod)
+        guard let payload = PullRequestWriteLogic.stackActionPayload(stack, ref: ref, action: action, mergeMethod: method) else { return }
+        view.stackPending = true
+        toast(action == "merge" ? "Merging stack..." : "Rebasing stack...", nil, .info)
+        Task { [weak self] in
+            do {
+                _ = try await shell.supervisor.request("pullRequests.runAction", payload: payload)
+                self?.toast(action == "merge" ? "Stack merge request completed" : "Stack rebased",
+                            action == "merge" ? "GitHub merged the stack or added it to its merge queue." : nil, .success)
+            } catch {
+                self?.toast(action == "merge" ? "Could not merge the stack" : "Could not rebase the stack", Self.failure(error, number: ref.number).1, .error)
+            }
+            self?.view.stackPending = false
+            self?.onActed?(action)
+            self?.reload(invalidate: false)
         }
     }
 
@@ -302,6 +560,10 @@ final class ThreadPullRequestsController {
     private var modal: ModalHost?
     /// The open Link dialog; its fields talk to it weakly, so it is held here while it shows.
     private var linkDialog: LinkPullRequestDialog?
+    // ponytail: preview details are cached for the session with no eviction; bound it if long sessions grow
+    fileprivate var previewCache: [String: PullRequestDetail] = [:]
+    fileprivate weak var previewAnchor: NSView?
+    fileprivate var previewPopup: OpenPopup?
 
     init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments, capabilities: PullRequestCapabilities) {
         self.panel = panel
@@ -321,9 +583,10 @@ final class ThreadPullRequestsController {
         list.onCopy = { [weak self] url in self?.copy(url, title: "Link copied") }
         list.onOpenExternal = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
         list.onWatch = { [weak self] link, watching in self?.watch(link, watching) }
+        MarkdownView.linkHandler = self
     }
 
-    private var thread: ThreadShell? {
+    fileprivate var thread: ThreadShell? {
         guard let id = openThreadId() else { return nil }
         return sidebar?.snapshot?.threads.first { $0.id == id }
     }
@@ -530,7 +793,7 @@ final class ThreadPullRequestsController {
     }
 
     /// `changeLink` (usePullRequestLinking.ts:84-111) through the command the server advertises.
-    private func change(thread: ThreadShell, resolved: LinkPullRequestLogic.Resolved, link: Bool, done: @escaping (String?) -> Void) {
+    fileprivate func change(thread: ThreadShell, resolved: LinkPullRequestLogic.Resolved, link: Bool, done: @escaping (String?) -> Void) {
         guard let env = thread.id.environmentId else { return }
         let key = ThreadPullRequestKey(host: resolved.host, repository: resolved.repository, number: resolved.number).normalized
         let threadId = thread.id.localId.rawValue
@@ -589,5 +852,91 @@ final class ThreadPullRequestsController {
             if call.isRepeat { return self.panel.panelState.active?.pullRequest != nil }
             return self.copyNumber()
         }
+    }
+}
+
+// MARK: - Links in Markdown (ChatMarkdown.tsx:2486-2530, 2955-3125; PullRequestLinkPreview.tsx)
+
+extension ThreadPullRequestsController: MarkdownLinkHandler {
+    /// `resolvePullRequestPreviewTarget` for the open thread's environment.
+    private func previewTarget(_ url: URL) -> (env: String, ref: PullRequestRef)? {
+        guard let thread, let env = thread.id.environmentId else { return nil }
+        let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }.map { (id: $0.id.localId.rawValue, identity: $0.repositoryIdentity) }
+        guard var ref = PullRequestWriteLogic.previewTarget(url: url.absoluteString, pullRequestsEnabled: capabilities.has(env, "pullRequests"), projects: projects) else { return nil }
+        if !capabilities.has(env, "threadPullRequests") { ref.host = nil }
+        return (env, ref)
+    }
+
+    func openLink(_ url: URL, from markdown: MarkdownView) {
+        // A pull request a project here reads opens in the panel (`useOpenChangeRequestLink`).
+        if let target = previewTarget(url) {
+            panel.mutatePanel {
+                $0.openPullRequest(PullRequestSurfaceTarget(environmentId: target.env, projectId: target.ref.projectId, host: target.ref.host,
+                                                            repository: target.ref.repository, number: target.ref.number, url: url.absoluteString))
+                return []
+            }
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// `showExternalLinkContextMenu` with Link to thread or Unlink from thread for a pull request URL.
+    // ponytail: "Open in integrated browser" is left out of this menu; add it when the browser panel takes a URL from here
+    func showLinkMenu(_ url: URL, event: NSEvent, in view: NSView, from markdown: MarkdownView) {
+        let href = url.absoluteString
+        var action: String?
+        if let thread, let env = thread.id.environmentId, let parsed = ChangeRequestURL.parse(href) {
+            let multiple = capabilities.has(env, "threadPullRequests")
+            let linked = (thread.pullRequests ?? []).contains { $0.key.normalized == parsed.key.normalized }
+                || thread.linkedPullRequest.map { $0.number == parsed.number && $0.repository.lowercased() == parsed.repository.lowercased() } == true
+            let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }
+            let canLink = (multiple || capabilities.has(env, "threadPullRequestLinking")) && (multiple || projects.contains { $0.repositoryIdentity?.owns(parsed) == true })
+            action = linked ? "unlink-from-thread" : canLink ? "link-to-thread" : nil
+        }
+        let items: [MenuItem] = PullRequestWriteLogic.linkMenuItems(canOpenInPreview: false, threadLinkAction: action).map { entry in
+            var item = MenuItem(entry.label)
+            item.action = { [weak self] in self?.runLinkAction(entry.id, href: href) }
+            return item
+        }
+        MenuPopupView.showContextMenu(items, in: view, at: view.convert(event.locationInWindow, from: nil))
+    }
+
+    private func runLinkAction(_ id: String, href: String) {
+        switch id {
+        case "open-external": if let u = URL(string: href) { NSWorkspace.shared.open(u) }
+        case "copy-link":
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(href, forType: .string)
+        case "link-to-thread", "unlink-from-thread":
+            guard let thread, let parsed = ChangeRequestURL.parse(href) else { return }
+            let link = id == "link-to-thread"
+            change(thread: thread, resolved: LinkPullRequestLogic.Resolved(host: parsed.host, repository: parsed.repository, number: parsed.number, url: href), link: link) { [weak self] error in
+                if let error { self?.panel.toasts.show(ToastView(title: link ? "Unable to link pull request" : "Unable to unlink pull request", message: error, kind: .error)) }
+            }
+        default: break
+        }
+    }
+
+    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool { previewTarget(url) != nil }
+
+    /// The card reads `pullRequests.detail` once it opens; a failed read shows nothing (the URL tooltip is T3's fallback).
+    func showLinkPreview(_ url: URL, anchor: NSView, from markdown: MarkdownView) {
+        guard let target = previewTarget(url) else { return }
+        let key = "\(target.env) \(url.absoluteString)"
+        previewAnchor = anchor
+        if let d = previewCache[key] { previewPopup = PullRequestLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor); return }
+        Task { [weak self, weak anchor] in
+            guard let self, let d = try? await self.environments.request(target.env, "pullRequests.detail", target.ref.payload).decode(as: PullRequestDetail.self) else { return }
+            self.previewCache[key] = d
+            guard let anchor, self.previewAnchor === anchor, anchor.window != nil else { return }
+            self.previewPopup = PullRequestLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor)
+        }
+    }
+
+    func hideLinkPreview(anchor: NSView) {
+        guard previewAnchor === anchor else { return }
+        previewAnchor = nil
+        if let previewPopup, let window = anchor.window { PopupHost.host(for: window).close(previewPopup, returnFocus: false) }
+        previewPopup = nil
     }
 }

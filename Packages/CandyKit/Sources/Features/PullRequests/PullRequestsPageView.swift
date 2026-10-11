@@ -93,6 +93,10 @@ public final class PullRequestsPageView: DSView {
     public var onSpeedAction: ((PullRequestListEntry, String) -> Void)?
     public var onCopyLink: ((String) -> Void)?
     public var onOpenURL: ((String) -> Void)?
+    /// A row's checks glyph: open the checks popover over it (the caller reads the detail).
+    public var onShowChecks: ((PullRequestListEntry, NSView) -> Void)?
+    /// A row's `n/m` stack count: open the stack menu over it (the caller reads the stack).
+    public var onShowStack: ((PullRequestListEntry, NSView) -> Void)?
 
     public let header = SettingsHeaderView()
     public let search = InputGroupView(placeholder: "Search pull requests, or label:bug", leading: .icon(.search))
@@ -239,6 +243,8 @@ public final class PullRequestsPageView: DSView {
                     let r = PullRequestRowView()
                     r.onSelect = { [weak self] e in self?.onSelect?(e) }
                     r.onSpeedAction = { [weak self] e, a in self?.onSpeedAction?(e, a) }
+                    r.onChecks = { [weak self] e, v in self?.onShowChecks?(e, v) }
+                    r.onStack = { [weak self] e, v in self?.onShowStack?(e, v) }
                     r.onNumberMenu = { [weak self, weak r] e, event in
                         guard let self, let r else { return }
                         self.showLinkMenu(url: e.url, provider: e.provider, in: r, event: event)
@@ -588,6 +594,14 @@ final class PullRequestRowView: DSView {
     var onSelect: ((PullRequestListEntry) -> Void)?
     var onSpeedAction: ((PullRequestListEntry, String) -> Void)?
     var onNumberMenu: ((PullRequestListEntry, NSEvent) -> Void)?
+    /// The checks glyph pressed (`PullRequestChecksPopover variant="icon"`); the click does not select the row.
+    var onChecks: ((PullRequestListEntry, NSView) -> Void)? {
+        didSet {
+            checks.onClick = onChecks == nil ? nil : { [weak self] glyph in if let self, let e = self.entry { self.onChecks?(e, glyph) } }
+        }
+    }
+    /// The stack count pressed (`PullRequestStackPopover`).
+    var onStack: ((PullRequestListEntry, NSView) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -820,7 +834,12 @@ final class PullRequestRowView: DSView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseUp(with event: NSEvent) {
-        guard let entry, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        guard let entry, bounds.contains(p) else { return }
+        if let onStack, !stack.isHidden, stack.frame.union(stackIcon.frame).insetBy(dx: -2, dy: -4).contains(p) {
+            onStack(entry, stack)
+            return
+        }
         onSelect?(entry)
     }
     override func rightMouseDown(with event: NSEvent) {

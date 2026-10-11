@@ -236,6 +236,8 @@ public enum ThreadPullRequests {
         public var link: ThreadPullRequestLink
         public var depth: Int
         public var stackSize: Int?
+        /// A host's native stack ("stack") rather than a base-branch chain ("chain").
+        public var native = false
     }
 
     public static func lines(_ links: [ThreadPullRequestLink]) -> [Line] {
@@ -244,7 +246,8 @@ public enum ThreadPullRequests {
             return l != r ? l > r : a.offset < b.offset
         }.map(\.element)
         return ordered.flatMap { chain in
-            chain.layers.enumerated().map { Line(link: $0.element, depth: $0.offset, stackSize: $0.offset == 0 && chain.layers.count > 1 ? chain.layers.count : nil) }
+            chain.layers.enumerated().map { Line(link: $0.element, depth: $0.offset, stackSize: $0.offset == 0 && chain.layers.count > 1 ? chain.layers.count : nil,
+                                                 native: chain.native) }
         }
     }
 

@@ -37,6 +37,12 @@ public final class MarkdownView: DSView {
     private var cache: [CGFloat: MarkdownLayout] = [:]
     private var buttons: [ButtonView] = []
     private var chipViews: [FileChipHitView] = []
+    private var linkViews: [MarkdownLinkHitView] = []
+
+    /// Opens, menus and previews web links for every Markdown view (the app sets it: it knows the
+    /// open thread, the browser panel and the pull request reads). Without one a click opens the
+    /// system browser and the menu offers that and Copy Link.
+    public static weak var linkHandler: MarkdownLinkHandler?
     private var hoveredChip: Int? {
         didSet { if hoveredChip != oldValue { needsDisplay = true } }
     }
@@ -83,6 +89,7 @@ public final class MarkdownView: DSView {
     public override func layout() {
         super.layout()
         layoutChips()
+        layoutLinks()
         let controls = bounds.width > 0 ? layout(forWidth: bounds.width).controls : []
         while buttons.count < controls.count {
             let button = ButtonView(icon: .copy, variant: .ghostMuted, size: .iconXs)
@@ -127,6 +134,22 @@ public final class MarkdownView: DSView {
             view.chip = chips[i]
         }
         if let hovered = hoveredChip, hovered >= chips.count { hoveredChip = nil }
+    }
+
+    /// One transparent view per line a web link touches: pointer cursor, click, menu, hover.
+    private func layoutLinks() {
+        let links = bounds.width > 0 ? layout(forWidth: bounds.width).links : []
+        while linkViews.count < links.count {
+            let view = MarkdownLinkHitView(owner: self)
+            addSubview(view)
+            linkViews.append(view)
+        }
+        for (i, view) in linkViews.enumerated() {
+            guard i < links.count else { view.isHidden = true; continue }
+            view.isHidden = false
+            view.frame = links[i].frame
+            view.url = links[i].url
+        }
     }
 
     fileprivate func chipHover(_ index: Int, _ inside: Bool) {
@@ -222,6 +245,8 @@ public final class MarkdownView: DSView {
                         fillUnderBorder: true, in: ctx)
                 let (icon, color) = FileChipStyle.icon(for: chip.meta)
                 Self.drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
+            case .link:
+                break
             case .clip(let rect):
                 ctx.saveGState()
                 ctx.clip(to: rect)
@@ -362,5 +387,117 @@ private final class FileChipHitView: NSView {
         guard let value = sender.representedObject as? String else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+}
+
+/// What the app does with a web link in Markdown (ChatMarkdown.tsx:2990-3125): open it, show T3's
+/// link menu (with Link to thread or Unlink for a pull request), and the pull request preview card.
+@MainActor
+public protocol MarkdownLinkHandler: AnyObject {
+    func openLink(_ url: URL, from markdown: MarkdownView)
+    func showLinkMenu(_ url: URL, event: NSEvent, in view: NSView, from markdown: MarkdownView)
+    /// True when the link gets a preview card instead of the URL tooltip.
+    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool
+    func showLinkPreview(_ url: URL, anchor: NSView, from markdown: MarkdownView)
+    func hideLinkPreview(anchor: NSView)
+}
+
+/// The interactive part of a web link; the text is drawn by `MarkdownView`. The hover waits 350 ms
+/// and leaves after 120 ms (`PreviewCardTrigger delay={350} closeDelay={120}`).
+private final class MarkdownLinkHitView: NSView {
+    weak var owner: MarkdownView?
+    var url: URL? {
+        didSet {
+            // A pull request link shows its card instead of the URL.
+            tooltip.text = hasPreview ? "" : url?.absoluteString ?? ""
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+    private var tooltip: TooltipController!
+    private var pending: DispatchWorkItem?
+    private var previewing = false
+
+    init(owner: MarkdownView) {
+        self.owner = owner
+        super.init(frame: .zero)
+        tooltip = TooltipController.attach(to: self, text: "")
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        setAccessibilityRole(.link)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    private var handler: MarkdownLinkHandler? { MarkdownView.linkHandler }
+    private var hasPreview: Bool {
+        guard let url, let owner, let handler else { return false }
+        return handler.previewsLink(url, from: owner)
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard hasPreview else { return }
+        tooltip.hide()
+        pending?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let url = self.url, let owner = self.owner else { return }
+            self.previewing = true
+            self.handler?.showLinkPreview(url, anchor: self, from: owner)
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        pending?.cancel()
+        pending = nil
+        guard previewing else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.previewing = false
+            self.handler?.hideLinkPreview(anchor: self)
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        guard let url, let owner, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        tooltip.hide()
+        pending?.cancel()
+        if previewing { previewing = false; handler?.hideLinkPreview(anchor: self) }
+        if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let url, let owner else { return }
+        tooltip.hide()
+        if let handler {
+            handler.showLinkMenu(url, event: event, in: self, from: owner)
+            return
+        }
+        let menu = NSMenu()
+        let open = NSMenuItem(title: "Open in system browser", action: #selector(openExternal), keyEquivalent: "")
+        open.target = self
+        let copy = NSMenuItem(title: "Copy Link", action: #selector(copyLink), keyEquivalent: "")
+        copy.target = self
+        menu.addItem(open)
+        menu.addItem(copy)
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func openExternal() { if let url { NSWorkspace.shared.open(url) } }
+    @objc private func copyLink() {
+        guard let url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    override func accessibilityLabel() -> String? { url?.absoluteString }
+    override func accessibilityPerformPress() -> Bool {
+        guard let url, let owner else { return false }
+        if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
+        return true
     }
 }

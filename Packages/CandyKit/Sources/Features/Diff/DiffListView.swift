@@ -1,6 +1,32 @@
 import AppKit
 import DesignSystem
 
+/// A card pinned under one line of a file (pierre's line annotations): a review conversation, a
+/// pending review comment or the draft of a new one. `right` is the new side.
+public struct DiffAnnotation: Equatable, Sendable {
+    public var path: String
+    public var right: Bool
+    public var line: Int
+    public var id: String
+    public init(path: String, right: Bool, line: Int, id: String) { self.path = path; self.right = right; self.line = line; self.id = id }
+}
+
+/// An annotation's view, which knows its height for a width.
+@MainActor
+public protocol DiffAnnotationContent: NSView {
+    func height(forWidth width: CGFloat) -> CGFloat
+}
+
+/// A line number clicked: the file and both of the line's numbers (0 where the side has none).
+public struct DiffLineTarget: Equatable, Sendable {
+    public var path: String
+    public var oldPath: String?
+    public var right: Bool
+    public var oldLine: Int
+    public var newLine: Int
+    public var kind: UnifiedDiff.Line.Kind
+}
+
 /// The diff body: every file's header and, for expanded files, its hunks, in one virtualized
 /// column like T3's `CodeView`. Only rows inside the clip view plus `overscan` have views, recycled
 /// per kind; a 20,000-line diff keeps the same few dozen views. The current file's header sticks
@@ -21,6 +47,14 @@ public final class DiffListView: DSView {
     public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { reconfigureAll() } }
     /// A tick pressed: viewing a file folds it, clearing the tick opens it (`toggleFileDiffFoldForViewed`).
     public var onSetViewed: (@MainActor (String, Bool) -> Void)?
+    /// Cards under lines. Their views come from `annotationView` and are kept while their id stays.
+    public var annotations: [DiffAnnotation] = [] { didSet { if annotations != oldValue { relayout() } } }
+    public var annotationView: (@MainActor (DiffAnnotation) -> DiffAnnotationContent?)?
+    private var annotationViews: [String: DiffAnnotationContent] = [:]
+    /// A click in a line's number gutter (the Code tab starts a review comment there).
+    public var onLineClick: (@MainActor (DiffLineTarget) -> Void)?
+    /// The list's end came within a screen of the viewport (`renderCodeViewFooter`'s sentinel).
+    public var onNearEnd: (@MainActor () -> Void)?
 
     private(set) var rowLayout = DiffLayout(diff: UnifiedDiff(""), collapsed: [], style: .unified, width: 0, wrap: true, ch: 7.8)
     private var highlighter = DiffHighlighter(diff: UnifiedDiff(""))
@@ -86,9 +120,37 @@ public final class DiffListView: DSView {
 
     private var viewportHeight: CGFloat { enclosingScrollView?.contentView.bounds.height ?? bounds.height }
 
+    /// Annotation heights changed (a card expanded, a reply box opened): lay out again.
+    public func reloadAnnotations() { relayoutKeepingAnchor() }
+
     private func relayout() {
         let width = enclosingScrollView?.contentView.bounds.width ?? bounds.width
-        rowLayout = DiffLayout(diff: diff, collapsed: collapsed, style: style, width: width, wrap: wrap, ch: DiffStyle.ch)
+        var anchors: [Int: [DiffLayout.Anchor]] = [:]
+        var live: [String: DiffAnnotationContent] = [:]
+        if !annotations.isEmpty, annotationView != nil {
+            let fileIndex = Dictionary(diff.files.enumerated().map { ($0.element.path, $0.offset) }, uniquingKeysWith: { a, _ in a })
+            for (i, a) in annotations.enumerated() {
+                guard let f = fileIndex[a.path], !collapsed.contains(f) else { continue }
+                guard let view = annotationViews[a.id] ?? annotationView?(a) else { continue }
+                live[a.id] = view
+                anchors[f, default: []].append(DiffLayout.Anchor(right: a.right, line: a.line, index: i))
+            }
+        }
+        for (id, view) in annotationViews where live[id] == nil { view.removeFromSuperview() }
+        annotationViews = live
+        let views = annotations.map { live[$0.id] }
+        rowLayout = DiffLayout(diff: diff, collapsed: collapsed, style: style, width: width, wrap: wrap, ch: DiffStyle.ch,
+                               anchors: anchors, anchorHeight: { views[$0]?.height(forWidth: width) ?? 0 })
+        var placed = Set<String>()
+        for (i, row) in rowLayout.rows.enumerated() where row.kind == .annotation {
+            guard let view = views[Int(row.left)] else { continue }
+            if view.superview !== self { addSubview(view) }
+            view.layer?.zPosition = 1
+            view.frame = NSRect(x: 0, y: row.top, width: width, height: rowLayout.bottom(of: i) - row.top)
+            placed.insert(annotations[Int(row.left)].id)
+        }
+        // A card whose line is not in a rendered hunk is drawn nowhere here; the caller lists it.
+        for (id, view) in annotationViews where !placed.contains(id) { view.removeFromSuperview() }
         maxScrollX = wrap ? 0 : longestLineWidth(width: width)
         let height = max(rowLayout.height, viewportHeight)
         if frame.size != NSSize(width: width, height: height) { setFrameSize(NSSize(width: width, height: height)) }
@@ -161,7 +223,8 @@ public final class DiffListView: DSView {
         let file = Int(topRow.file)
         let sticky = !collapsed.contains(file) && topRow.kind != .header ? rowLayout.headerRow[file] : -1
         var wanted = Set(lo..<hi)
-        wanted = wanted.filter { rows[$0].kind != .footer }
+        wanted = wanted.filter { rows[$0].kind != .footer && rows[$0].kind != .annotation }
+        if hi >= rows.count - 1 || rect.maxY > rowLayout.height - max(rect.height, 240) { onNearEnd?() }
         if sticky >= 0 { wanted.insert(sticky) }
         for (index, view) in visible where !wanted.contains(index) {
             visible[index] = nil
@@ -257,5 +320,47 @@ public final class DiffListView: DSView {
 
     public override func updateLayer() {
         layer?.backgroundColor = DiffStyle.surface.cgColor(in: self)
+    }
+
+    /// The ids of annotations placed on a rendered line (the rest belong in an off-diff list).
+    public var placedAnnotationIds: Set<String> {
+        Set(rowLayout.rows.filter { $0.kind == .annotation }.map { annotations[Int($0.left)].id })
+    }
+
+    // MARK: Line clicks
+
+    public override func mouseDown(with event: NSEvent) {
+        if onLineClick == nil { super.mouseDown(with: event) }
+    }
+
+    public override func mouseUp(with event: NSEvent) {
+        guard let onLineClick, let target = lineTarget(at: convert(event.locationInWindow, from: nil)) else { super.mouseUp(with: event); return }
+        onLineClick(target)
+    }
+
+    /// The gutter under `point`: unified rows pick the side by the line's kind, split rows by column.
+    func lineTarget(at point: NSPoint) -> DiffLineTarget? {
+        guard !rowLayout.rows.isEmpty else { return nil }
+        let index = rowLayout.rowIndex(at: point.y)
+        let row = rowLayout.rows[index]
+        guard row.kind == .line else { return nil }
+        let f = Int(row.file)
+        let cols = rowLayout.columns[f]
+        let file = diff.files[f]
+        let onRight: Bool
+        let lineIndex: Int32
+        if cols.isSplit {
+            let rightGutter = cols.codeX[1] - cols.gutter
+            if point.x >= rightGutter && point.x < cols.codeX[1] { onRight = true; lineIndex = row.right }
+            else if point.x < cols.gutter { onRight = false; lineIndex = row.left }
+            else { return nil }
+        } else {
+            guard point.x < cols.gutter else { return nil }
+            lineIndex = row.left
+            onRight = lineIndex >= 0 && diff.lines[Int(lineIndex)].kind != .deletion
+        }
+        guard lineIndex >= 0 else { return nil }
+        let line = diff.lines[Int(lineIndex)]
+        return DiffLineTarget(path: file.path, oldPath: file.oldPath, right: onRight, oldLine: Int(line.oldNumber), newLine: Int(line.newNumber), kind: line.kind)
     }
 }

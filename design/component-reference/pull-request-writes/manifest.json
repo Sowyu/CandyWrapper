@@ -1,0 +1,14 @@
+{
+  "checks-popover" : {
+    "height" : 127.5,
+    "width" : 320
+  },
+  "link-preview" : {
+    "height" : 89.25,
+    "width" : 320
+  },
+  "review-form" : {
+    "height" : 178,
+    "width" : 384
+  }
+}

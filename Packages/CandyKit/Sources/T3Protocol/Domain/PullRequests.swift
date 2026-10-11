@@ -41,6 +41,9 @@ public struct PullRequestReaction: Codable, Hashable, Sendable {
     public var count: Int
     public var actors: [String]
     public var viewerHasReacted: Bool
+    public init(content: String, count: Int, actors: [String], viewerHasReacted: Bool) {
+        self.content = content; self.count = count; self.actors = actors; self.viewerHasReacted = viewerHasReacted
+    }
 }
 
 /// `PullRequestComment` (pullRequest.ts:200). `kind`: issue-comment, review-comment, review.
@@ -531,12 +534,18 @@ public enum PullRequestPayloads {
         return .object(o)
     }
 
-    /// `PullRequestActionInput` (pullRequest.ts:1073). Write RPC: `pullRequests.runAction`.
-    public static func action(_ ref: PullRequestRef, action: String, mergeMethod: String? = nil, updateMethod: String? = nil) -> JSONValue {
+    /// `PullRequestActionInput` (pullRequest.ts:1073). Write RPC: `pullRequests.runAction`. The stack
+    /// fields go only to environments advertising `pullRequestStackActions` (PullRequestStackMenu.tsx:95-104).
+    public static func action(_ ref: PullRequestRef, action: String, mergeMethod: String? = nil, updateMethod: String? = nil,
+                              stackNumber: Int? = nil, expectedStackHeads: [(number: Int, headSha: String)]? = nil) -> JSONValue {
         var o = ref.json
         o["action"] = .string(action)
         if let mergeMethod { o["mergeMethod"] = .string(mergeMethod) }
         if let updateMethod { o["updateMethod"] = .string(updateMethod) }
+        if let stackNumber { o["stackNumber"] = .number(Double(stackNumber)) }
+        if let expectedStackHeads {
+            o["expectedStackHeads"] = .array(expectedStackHeads.map { .object(["number": .number(Double($0.number)), "headSha": .string($0.headSha)]) })
+        }
         return .object(o)
     }
 
@@ -560,12 +569,12 @@ public enum PullRequestPayloads {
         return .object(o)
     }
 
-    /// `PullRequestSubmitReviewInput` (pullRequest.ts:1175), without inline comments.
-    public static func submitReview(_ ref: PullRequestRef, verdict: String, body: String) -> JSONValue {
+    /// `PullRequestSubmitReviewInput` (pullRequest.ts:1175) with the pending line comments.
+    public static func submitReview(_ ref: PullRequestRef, verdict: String, body: String, comments: [PullRequestReviewCommentDraft] = []) -> JSONValue {
         var o = ref.json
         o["verdict"] = .string(verdict)
         o["body"] = .string(body)
-        o["comments"] = .array([])
+        o["comments"] = .array(comments.map(\.json))
         return .object(o)
     }
 
