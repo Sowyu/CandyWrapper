@@ -1,6 +1,8 @@
 import CoreGraphics
+import CoreVideo
 import Foundation
 import ImageIO
+import IOSurface
 import Testing
 import UniformTypeIdentifiers
 @testable import T3Client
@@ -20,20 +22,43 @@ struct FrameDecoderTests {
         return data as Data
     }
 
-    @Test func decodes() {
-        let image = FrameDecoder.image(Self.jpeg(width: 64, height: 40))
+    /// The red, green and blue of the buffer's center pixel.
+    static func center(_ buffer: CVPixelBuffer) -> [Int] {
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        let row = CVPixelBufferGetHeight(buffer) / 2 * CVPixelBufferGetBytesPerRow(buffer)
+        let p = CVPixelBufferGetBaseAddress(buffer)!.advanced(by: row + CVPixelBufferGetWidth(buffer) / 2 * 4).assumingMemoryBound(to: UInt8.self)
+        return [Int(p[2]), Int(p[1]), Int(p[0])]
+    }
+
+    @Test func decodes() throws {
+        let decoder = JPEGSurfaceDecoder()
+        // The session follows the frame size; the result is an sRGB-tagged IOSurface a layer shows as is.
+        for (w, h) in [(64, 40), (800, 600), (64, 40)] {
+            let buffer = try #require(decoder.decode(Self.jpeg(width: w, height: h)))
+            #expect(CVPixelBufferGetWidth(buffer) == w && CVPixelBufferGetHeight(buffer) == h)
+            #expect(CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA)
+            let surface = try #require(CVPixelBufferGetIOSurface(buffer)?.takeUnretainedValue())
+            #expect(IOSurfaceCopyValue(surface, kIOSurfaceColorSpace) != nil)
+            // The same colors as ImageIO's decode.
+            let drawn = try #require(JPEGFrame.drawn(Self.jpeg(width: w, height: h)))
+            #expect(zip(Self.center(buffer), Self.center(drawn)).allSatisfy { abs($0 - $1) <= 2 })
+        }
+        #expect(decoder.decode(Data("not a jpeg".utf8)) == nil)
+        let image = JPEGFrame.image(Self.jpeg(width: 64, height: 40))
         #expect(image?.width == 64 && image?.height == 40)
-        #expect(FrameDecoder.image(Data("not a jpeg".utf8)) == nil)
+        #expect(JPEGFrame.image(Data("not a jpeg".utf8)) == nil)
     }
 
     @MainActor
     @Test func deliversNewestFrame() async {
-        let decoder = FrameDecoder()
+        let decoder = FrameDecoder(decode: JPEGFrame.drawn)
         var sizes: [Int] = []
-        decoder.deliver = { sizes.append($0.width) }
-        // While the first decodes, later frames replace each other; the last one always lands.
+        decoder.deliver = { sizes.append(CVPixelBufferGetWidth($0)) }
+        // The main thread is busy until the loop ends: frames decoded meanwhile replace each other,
+        // and the newest one always lands.
         for w in [10, 20, 30, 40] { decoder.paint(Self.jpeg(width: w, height: 10)) }
         for _ in 0..<100 where sizes.last != 40 { try? await Task.sleep(for: .milliseconds(10)) }
-        #expect(sizes.first == 10 && sizes.last == 40 && sizes.count <= 4)
+        #expect(sizes.last == 40 && sizes.count <= 2)
     }
 }

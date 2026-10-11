@@ -23,6 +23,8 @@ final class GitController {
     private let environments: Environments
     private let composer: ComposerController
     private var modal: ModalHost?
+    private var keyObserver: NSObjectProtocol?
+    isolated deinit { if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) } }
     /// Settings > Source Control, set by the app.
     var openSourceControlSettings: (() -> Void)?
 
@@ -108,7 +110,7 @@ final class GitController {
         card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }
         card.initGit.action = { [weak self] in self?.initializeGit() }
         card.changes.action = { [weak self] in self?.panel.toggleDiff() }
-        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
+        keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
                 guard let self, let own = self.panel.window, ObjectIdentifier(own) == window else { return }

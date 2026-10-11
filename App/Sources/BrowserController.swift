@@ -21,6 +21,11 @@ final class BrowserController {
     /// `capabilities.serverBrowser` per environment, from its descriptor.
     private var serverBrowser: [String: Bool] = [:]
     private var profileObserver: Int?
+    private var occlusionObserver: NSObjectProtocol?
+    isolated deinit {
+        if let profileObserver { ClientSettingsStore.shared.removeObserver(profileObserver) }
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+    }
     private var profileReports: [String: Task<Void, Never>] = [:]
     private var capabilityTasks: Set<String> = []
     /// One `subscribePreviewEvents` per environment with an open thread.
@@ -90,7 +95,7 @@ final class BrowserController {
         }
         panel.miniPlayer.onResize = { [weak self] size in self?.panel.miniPlayerSize = size }
         panel.miniPlayer.onMove = { [weak self] origin in self?.panel.miniPlayerOrigin = origin }
-        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
+        occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.render() }
         }
     }

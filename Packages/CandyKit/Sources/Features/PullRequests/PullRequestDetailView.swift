@@ -120,6 +120,7 @@ public final class PullRequestDetailView: DSView {
     private var failure: EmptyView?
     private let composerButton = ButtonView(nil, icon: .messageSquare, variant: .glass, size: .icon)
     private var reviewObserver: NSObjectProtocol?
+    isolated deinit { if let reviewObserver { NotificationCenter.default.removeObserver(reviewObserver) } }
 
     // Title editing (PullRequestDetailPanel.tsx:2382-2445).
     private let titleEditButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
