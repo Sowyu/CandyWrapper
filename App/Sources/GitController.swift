@@ -285,7 +285,11 @@ final class GitController {
 
     private var runOnChoices: Bool { panel.contextStrip.runOn.options.count > 1 }
 
+    /// After each render (the card's Open in row follows the target).
+    var onRender: (() -> Void)?
+
     private func render() {
+        defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
         guard let target else {
             panel.detailsCard.showsVersionControl = false

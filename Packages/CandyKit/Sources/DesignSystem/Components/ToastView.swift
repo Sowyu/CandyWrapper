@@ -32,16 +32,21 @@ public final class ToastView: DSView {
     private let actionButton: ButtonView?
     private let closeOrb = ToastCloseOrb()
 
+    /// `data.leadingIcon` (toast.tsx:343-349): replaces the type icon, in its own color (the thread notification toasts).
+    private let leadingIconColor: NSColor?
+
     public init(title: String, message: String? = nil, kind: ToastQueue.Kind = .plain, actionTitle: String? = nil,
-                action: (@MainActor () -> Void)? = nil) {
+                action: (@MainActor () -> Void)? = nil, leadingIcon: (name: IconName, color: NSColor)? = nil) {
         self.kind = kind
-        let icon: IconName? = switch kind {
+        leadingIconColor = leadingIcon?.color
+        let typeIcon: IconName? = switch kind {
         case .error: .circleAlert
         case .info: .info
         case .success: .circleCheck
         case .warning: .triangleAlert
         case .plain, .loading: nil
         }
+        let icon = leadingIcon?.name ?? typeIcon
         // ponytail: loading shows no spinner yet; use SpinnerView at 80% opacity when a loading toast exists
         iconView = icon.map { IconView(name: $0) }
         actionButton = actionTitle.map { ButtonView($0, variant: .default, size: .xs) }
@@ -132,13 +137,14 @@ public final class ToastView: DSView {
         decoration.boxStyle = box
         titleText.color = Themed.color(\.contrastPopoverForeground)
         messageText.color = Themed.color(\.contrastMutedForeground)
-        iconView?.strokeColor = switch kind {
+        let typeColor: NSColor = switch kind {
         case .error: Themed.color(\.destructive)
         case .info: Themed.color(\.info)
         case .success: Themed.color(\.success)
         case .warning: Themed.color(\.warning)
         case .plain, .loading: Themed.color(\.contrastPopoverForeground)
         }
+        iconView?.strokeColor = leadingIconColor ?? typeColor
     }
 
     /// Hit testing through the stack transform (`sublayerTransform`), so translated and scaled toasts get their clicks.

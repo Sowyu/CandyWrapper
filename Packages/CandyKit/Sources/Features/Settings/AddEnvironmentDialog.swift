@@ -81,6 +81,12 @@ public final class AddEnvironmentFormView: DSView {
         submit.action = { [weak self] in self?.submitNow() }
     }
 
+    /// Fills both fields, as pasting the pairing URL would.
+    public func prefill(host: String, code: String) {
+        self.host.text = host
+        self.code.text = code
+    }
+
     /// The pairing URL parser (T3Client's `Pairing.splitPairingURL`); the app sets it.
     public var splitPairingURL: ((String) -> (host: String, code: String)?)?
 

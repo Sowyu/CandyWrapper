@@ -19,6 +19,9 @@ public final class SettingsPageContext {
     public var appVersion = ""
 
     public var writeClient: (([String: JSONValue]) -> Void)?
+    /// Saves a notification mode after asking for notification permission when it needs it; returns the
+    /// row's message when the mode can't be used (the app's `ThreadNotificationCoordinator.choose`).
+    public var chooseNotificationMode: ((ThreadNotificationMode) async -> String?)?
     /// A server patch for the scope's targets (`planScopedSettingsPatch`).
     public var writeServer: (([String: JSONValue]) -> Void)?
     public var setAppearanceMode: ((String) -> Void)?

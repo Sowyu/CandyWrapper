@@ -180,11 +180,31 @@ public final class GeneralSettingsView: SettingsPageBase {
     // MARK: Behavior (SettingsPanels.tsx:2484-3043)
 
     private func behaviorSection() -> SettingsSectionView {
-        // ponytail: notifications store the mode; the alerts themselves come with WP7.8 (notifications)
-        let notifications = clientSelect("thread-notifications",
-                                         "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while T3 Code is open.",
-                                         key: "notificationMode", options: [("off", "Off"), ("notifications", "Notifications only"), ("sound", "Sound only"),
-                                                                             ("notifications-and-sound", "Notifications with sound")], width: 224)
+        let notificationsDetail = "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while T3 Code is open."
+        let modes = ThreadNotificationMode.allCases
+        let notifications = clientSelect("thread-notifications", notificationsDetail, key: "notificationMode",
+                                         options: modes.map { ($0.rawValue, $0.label) }, width: 224)
+        // NotificationSettings.tsx:31-66: a mode with system alerts asks for permission before it is saved, and a
+        // refusal keeps the old mode with T3's message in place of the description.
+        if let select = notifications.control as? SelectView {
+            select.onChange = { [weak self, weak select, weak notifications] i in
+                guard let self else { return }
+                guard let choose = self.context.chooseNotificationMode else {
+                    self.context.writeClient?(["notificationMode": .string(modes[i].rawValue)])
+                    return
+                }
+                notifications?.detail = notificationsDetail
+                select?.isEnabled = false
+                Task { @MainActor in
+                    let message = await choose(modes[i])
+                    select?.isEnabled = true
+                    notifications?.detail = message ?? notificationsDetail
+                    // A refused mode leaves the select on the stored one.
+                    select?.selectedIndex = modes.firstIndex { $0.rawValue == self.client.string("notificationMode") }
+                    notifications?.needsLayout = true
+                }
+            }
+        }
         let inApp = clientSwitch("in-app-notifications",
                                  "Show a toast when another thread finishes, fails, or needs input or approval while this app has focus.",
                                  key: "inAppNotificationsEnabled")

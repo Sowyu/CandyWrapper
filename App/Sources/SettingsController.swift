@@ -3,6 +3,7 @@ import DesignSystem
 import Features
 import T3Client
 import T3Protocol
+import T3Store
 
 /// Settings as pages inside the main window (T3's `/settings/*` routes): the settings nav replaces the
 /// thread sidebar, the page replaces the thread panel, and Back or Escape returns. General, Appearance,
@@ -22,6 +23,8 @@ final class SettingsController {
     private var built = false
     /// The open page; T3 opens `/settings` at General.
     var section: SettingsSection = .general
+    /// `ThreadNotificationCoordinator.choose`, set by the app.
+    var chooseNotificationMode: ((ThreadNotificationMode) async -> String?)?
     // Pages and their shared context (SettingsPages.swift).
     let pageContext = SettingsPageContext()
     var scopeSelection = SettingsScopeSelection()
@@ -230,6 +233,17 @@ final class SettingsController {
     }
 
     // MARK: Actions
+
+    /// The toast stack while Settings shows, for toasts that aren't about Settings (thread notifications).
+    var visibleToasts: ToastViewport? { isOpen ? page.toasts : nil }
+
+    /// A pairing link opened with the app (`/pair#token=...`): Settings > Connections with the add dialog filled in.
+    func openPairingLink(host: String, code: String) {
+        open()
+        show(.connections)
+        presentAdd(routeTarget: nil)
+        form?.prefill(host: host, code: code)
+    }
 
     func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
         guard isOpen else { return }

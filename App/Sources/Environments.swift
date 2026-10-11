@@ -118,6 +118,9 @@ final class Environments {
 
     /// After each merge, for views besides the thread view (Settings follows projects and their scripts).
     private var shellObservers: [() -> Void] = []
+    /// Each environment's live shell from its server, and nil when the environment leaves or gets a new
+    /// session (T3's shell `status` leaving "live"). Cached shells never come through here.
+    var onLiveShell: ((String, ShellSnapshot?) -> Void)?
     func observeShell(_ change: @escaping () -> Void) { shellObservers.append(change) }
 
     // MARK: The local environment
@@ -409,6 +412,7 @@ final class Environments {
         entries[id]?.session?.stop()
         entries[id]?.watch?.cancel()
         entries[id] = nil
+        onLiveShell?(id, nil)
         optimistic.remove(environmentId: id)
         shells.remove(id)
         iconRoutes.set(id, nil)
@@ -438,6 +442,7 @@ final class Environments {
             }
         }
         changed()
+        onLiveShell?(id, nil)
         if let session {
             // ServerController may have set `onSnapshot` (cache, activity); chain after it.
             let previous = session.onSnapshot
@@ -445,6 +450,7 @@ final class Environments {
                 previous?(snapshot)
                 guard let self, let session, self.entries[id]?.session === session else { return }
                 self.shellChanged(id, snapshot)
+                self.onLiveShell?(id, snapshot)
                 if id == self.primaryId { LaunchTiming.mark("live sidebar") }
                 if id != self.primaryId { Task { await self.cache.noteChanged(snapshot, environmentId: id) } }
             }

@@ -1,7 +1,9 @@
 import AppKit
 import DesignSystem
 import Features
+import T3Client
 import T3Protocol
+import T3Store
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -16,8 +18,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcuts: Shortcuts?
     private var palette: PaletteCommands?
     private var terminationSignal: DispatchSourceSignal?
+    private var notifications: ThreadNotificationCoordinator?
+    private var quitHold: QuitHoldController?
+    private var openIn: OpenInController?
+    private let quitOverlay = QuitHoldOverlayView()
+    private let codexAuth = CodexAuthCallbackReceiver()
+    /// URLs that arrived before the window existed (a cold launch from a link).
+    private var pendingURLs: [URL]? = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if handOffToRunningInstance() { return }
+        // The View menu carries its own Toggle Full Screen (DesktopApplicationMenu.ts:258-268).
+        UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")
         NSApp.mainMenu = makeMainMenu()
         // Development: `--appearance light|dark` sets the app's own appearance, leaving the system's alone.
         let args = CommandLine.arguments
@@ -33,6 +45,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationWillTerminate(_ notification: Notification) { notifications?.willTerminate() }
+
+    /// T3 holds a single-instance lock (DesktopClerk.ts:122-131): a second launch focuses the first window
+    /// (`second-instance`, :186-196) and quits. Development launches (any `--` flag) may run side by side.
+    private func handOffToRunningInstance() -> Bool {
+        guard !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }),
+              let id = Bundle.main.bundleIdentifier,
+              let other = NSRunningApplication.runningApplications(withBundleIdentifier: id).first(where: { $0 != .current })
+        else { return false }
+        other.activate()
+        NSApp.terminate(nil)
+        return true
+    }
+
+    /// `open-url` (DesktopClerk.ts:183-185): `t3code://auth/codex` starts a ChatGPT sign-in handoff,
+    /// `t3code://app/welcome` and `/settings/...` return to provider setup, and a pairing link adds the
+    /// environment. Debug builds register `candywrapper-dev` instead of `t3code` (project.yml).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard pendingURLs == nil else {
+            pendingURLs?.append(contentsOf: urls)
+            return
+        }
+        for url in urls { handle(url) }
+    }
+
+    private static let urlScheme = (Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]])?
+        .first.flatMap { ($0["CFBundleURLSchemes"] as? [String])?.first } ?? "t3code"
+
+    func handle(_ url: URL) {
+        switch DesktopOpenURL.parse(url.absoluteString, scheme: Self.urlScheme) {
+        case .codexAuthHandoff(let handoff):
+            codexAuth.receive(handoff) { [weak self] error in
+                self?.mainWindow?.makeKeyAndOrderFront(nil)
+                self?.threads?.panel.toasts.show(ToastView(title: "Could not complete ChatGPT sign-in", message: error, kind: .error))
+            }
+        case .resume(let destination):
+            NSApp.activate()
+            mainWindow?.makeKeyAndOrderFront(nil)
+            // ponytail: no welcome wizard yet, so /welcome only brings the window forward; /settings opens the page, not the instance
+            if let section = Self.settingsSection(destination.path) {
+                sidebarCommands?.closeUtilityPage()
+                settings?.open()
+                settings?.show(section)
+            }
+        case .pairing(let host, let code):
+            NSApp.activate()
+            mainWindow?.makeKeyAndOrderFront(nil)
+            sidebarCommands?.closeUtilityPage()
+            settings?.openPairingLink(host: host, code: code)
+        case nil:
+            mainWindow?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// T3's settings routes (apps/web/src/routes/settings.*.tsx) to pages.
+    static func settingsSection(_ path: String) -> SettingsSection? {
+        guard path == "/settings" || path.hasPrefix("/settings/") else { return nil }
+        let name = path.dropFirst("/settings".count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        switch name {
+        case "appearance": return .appearance
+        case "archived": return .archive
+        case "connections": return .connections
+        case "diagnostics": return .diagnostics
+        case "integrations": return .integrations
+        case "keybindings": return .keybindings
+        case "projects": return .projects
+        case "providers": return .providers
+        case "scheduled-tasks": return .scheduledTasks
+        case "snap-shot": return .snapShots
+        case "source-control": return .sourceControl
+        case "storage": return .storage
+        default: return .general
+        }
+    }
 
     /// `kill` sends SIGTERM, which would end the app without stopping the server it started.
     /// Route it through the normal quit.
@@ -82,6 +169,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)
+        installNotifications(window: window, environments: environments, threads: threads, commands: commands, settings: settings)
+        // T3's desktop keeps running threads streaming (RunningThreadKeepAlive.tsx); a preview never connects.
+        if !Self.isPreview {
+            let keepAlive = RunningThreadKeepAlive(environments: environments)
+            keepAlive.openThread = { [weak threads] in threads?.openThreadId }
+            keepAlive.takeRetained = { [weak threads] id in threads?.takeRetained(id) }
+            keepAlive.retain = { [weak threads] id, store in threads?.retainStore(id, store) }
+            threads.keepAlive = keepAlive
+        }
+        installQuitHold(window: window, layout: layout)
+        openIn = OpenInController(card: threads.panel.detailsCard, git: threads.git, environments: environments, composer: threads.composer,
+                                  shortcuts: shortcuts)
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
@@ -92,6 +191,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
         PerfScroll.schedule(window)
+        let early = pendingURLs ?? []
+        pendingURLs = nil
+        for url in early { handle(url) }
+    }
+
+    /// Thread notifications, the sound and the dock badge (`ThreadNotificationCoordinator`).
+    private func installNotifications(window: NSWindow, environments: Environments, threads: ThreadController, commands: SidebarCommands,
+                                      settings: SettingsController) {
+        let coordinator = ThreadNotificationCoordinator(environments: environments, window: window)
+        coordinator.openThread = { [weak threads, weak settings, weak commands] in
+            guard settings?.isOpen != true, commands?.isUtilityPageOpen != true,
+                  let id = threads?.openThreadId, let env = id.environmentId else { return nil }
+            return (env, id.localId)
+        }
+        coordinator.toasts = { [weak threads, weak settings] in settings?.visibleToasts ?? threads?.panel.toasts }
+        coordinator.navigate = { [weak threads, weak settings, weak commands] env, local in
+            settings?.close()
+            commands?.closeUtilityPage()
+            threads?.open(ThreadId(EnvironmentScope.key(env, local.rawValue)))
+        }
+        settings.chooseNotificationMode = { [weak coordinator] mode in await coordinator?.choose(mode) }
+        shortcuts?.onKeyDown = { [weak coordinator] in coordinator?.noteUserGesture() }
+        notifications = coordinator
+    }
+
+    /// Hold-to-quit on Cmd+Q in the main window (`makeQuitShortcutHandler`, DesktopWindow.ts:642-679) and its overlay.
+    private func installQuitHold(window: NSWindow, layout: NSView) {
+        let overlay = quitOverlay
+        layout.addSubview(overlay)
+        var shownMode: QuitHoldController.Mode?
+        let controller = QuitHoldController(
+            getMode: { QuitHoldController.Mode(rawValue: ClientSettingsStore.shared.current.string("confirmQuit")) ?? .hold },
+            notify: { [weak overlay, weak layout] hint in
+                guard let overlay else { return }
+                switch hint {
+                case .down(let mode):
+                    shownMode = mode
+                    // Keep it above pages added since.
+                    if let layout, layout.subviews.last !== overlay { layout.addSubview(overlay) }
+                    overlay.show(mode)
+                case .up:
+                    overlay.hide(after: shownMode)
+                }
+            },
+            // `concealPendingQuitWindow`: leave full screen and go transparent while the keys are still down.
+            concealWindow: { [weak window] in
+                guard let window else { return }
+                if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+                window.alphaValue = 0
+            },
+            quit: { NSApp.terminate(nil) })
+        shortcuts?.quitHold = controller
+        quitHold = controller
     }
 
     /// One keyboard shortcut dispatcher for the window, fed by T3's keybindings (`Shortcuts`).
@@ -244,7 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(appItem)
         // T3's menu template (apps/desktop/src/window/DesktopApplicationMenu.ts:166-245), the parts that
         // exist here.
-        // ponytail: no Check for Updates, File, View or Help yet; add them with packaging (M9)
+        // ponytail: no Check for Updates (app menu and Help); add them with packaging and updates (M9)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About CandyWrapper", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
@@ -276,7 +428,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timeline.allowsKeyEquivalentWhenHidden = true
         appMenu.addItem(timeline)
         appItem.submenu = appMenu
+        // File: `{ role: "close" }` on macOS (DesktopApplicationMenu.ts:192-206).
+        let file = NSMenu(title: "File")
+        file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        main.addItem(withTitle: "File", action: nil, keyEquivalent: "").submenu = file
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = makeEditMenu()
+        // View (DesktopApplicationMenu.ts:236-269).
+        // ponytail: no Reload, Force Reload, Developer Tools or zoom items; they act on Chromium's page, and whole-UI zoom needs a DesignSystem scale factor
+        let view = NSMenu(title: "View")
+        view.addItem(withTitle: "Toggle Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+            .keyEquivalentModifierMask = [.command, .control]
+        main.addItem(withTitle: "View", action: nil, keyEquivalent: "").submenu = view
         let window = NSMenu(title: "Window")
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")

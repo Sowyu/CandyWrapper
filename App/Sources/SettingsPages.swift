@@ -50,6 +50,7 @@ extension SettingsController {
         }
         c.toggleFavorite = { [weak self] id, model in self?.composer?.pickers.store.toggleFavorite(id, model) }
         c.openSection = { [weak self] section in self?.show(section) }
+        c.chooseNotificationMode = { [weak self] mode in await self?.chooseNotificationMode?(mode) }
         c.closeSettings = { [weak self] in self?.close() }
         c.copy = { [weak self] text, title in
             NSPasteboard.general.clearContents()

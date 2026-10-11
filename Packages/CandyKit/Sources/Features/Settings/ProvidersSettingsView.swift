@@ -690,7 +690,9 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         let rs = refresh.intrinsicContentSize
         refresh.frame = NSRect(x: w - 16 - rs.width, y: (28 - rs.height) / 2, width: rs.width, height: rs.height)
         card.frame = NSRect(x: 0, y: 38, width: w, height: bounds.height - 38)
-        let inner = card.bounds.insetBy(dx: 1, dy: 1)
+        // Not `insetBy`: on a card smaller than 2pt it returns `.null`, whose infinite origin crashed
+        // CALayer when the page laid out before it had a size (opening Providers from a link).
+        let inner = CGRect(x: 1, y: 1, width: max(0, card.bounds.width - 2), height: max(0, card.bounds.height - 2))
         var y = inner.minY
         let listWidth = twoColumns ? 272 : inner.width
         for row in list {
