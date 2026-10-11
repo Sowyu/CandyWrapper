@@ -466,6 +466,7 @@ public struct ComposerInlineToken: Equatable, Sendable {
         /// A file or folder mention: `[name](path)`, `@path` or `@"quoted path"`.
         case mention(path: String)
         case skill(name: String)
+        case citation(ThreadAssistantCitation)
         /// `[label](t3-context://v1/<kind>/<id>)`.
         case context(kind: String, contextId: String, label: String)
     }
@@ -479,6 +480,7 @@ public enum ComposerInlineTokens {
     private static let skill = try! NSRegularExpression(pattern:
         #"(^|\s)\p{Sc}(?![0-9][0-9_]*(?:[kKmMbBtT]|[eE][0-9]+)?(?:\s|$))(?=[a-zA-Z0-9:_-]*[a-zA-Z])([a-zA-Z0-9][a-zA-Z0-9:_-]*)(?=\s)"#)
     private static let mention = try! NSRegularExpression(pattern: #"(^|\s)@(?:"((?:\\.|[^"\\])*)"|([^\s@"]+))(?=\s)"#)
+    private static let citation = try! NSRegularExpression(pattern: #"\[Assistant quote\]\((t3-citation://v1/[^\s)]{1,160000})\)"#)
     private static let fileLinkPattern = try! NSRegularExpression(pattern: #"(^|\s)\[((?:\\.|[^\]\\]){0,512})\]\(([^)\s]+)\)(?=\s)"#)
     private static let scheme = try! NSRegularExpression(pattern: "^[A-Za-z][A-Za-z0-9+.-]*:")
     private static let windowsDrive = try! NSRegularExpression(pattern: #"^[A-Za-z]:[\\/]"#)
@@ -526,6 +528,12 @@ public enum ComposerInlineTokens {
             add(m, .skill(name: name))
         }
         var links: [ComposerInlineToken] = []
+        if text.contains("t3-citation:") {
+            for match in citation.matches(in: text, range: all) {
+                guard let citation = ThreadAssistantCitation.parse(ns.substring(with: match.range(at: 1))) else { continue }
+                links.append(ComposerInlineToken(kind: .citation(citation), source: ns.substring(with: match.range), range: match.range))
+            }
+        }
         if text.contains("](t3-context:") {
             for m in contextLink.matches(in: text, range: all) {
                 guard let href = group(m, 3, in: ns), let parsed = ComposerContext.parseHref(href) else { continue }

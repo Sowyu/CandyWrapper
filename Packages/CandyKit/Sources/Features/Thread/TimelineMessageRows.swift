@@ -153,6 +153,9 @@ final class UserMessageRowView: TimelineRowView {
         needsLayout = true
     }
 
+    override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
+    override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
+
     /// The marker line and the 4px gap under it.
     private var markerSpace: CGFloat { marker.isHidden ? 0 : UserIntentMarkerView.height + 4 }
 
@@ -508,6 +511,8 @@ final class UserMessageAttachmentsView: DSView {
     private struct Image { let attachmentId: String; let name: String; let source: JSONValue? }
     private var images: [Image] = []
     private var files: [String] = []
+    private var media: [JSONValue] = []
+    private var mediaViews: [ThreadMediaAttachmentView] = []
     private var cells: [AsyncImageView] = []
     private var rows: [(icon: IconView, label: LabelView, eye: IconView?)] = []
     private weak var model: ThreadViewModel?
@@ -515,7 +520,7 @@ final class UserMessageAttachmentsView: DSView {
 
     func configure(_ m: ChatMessage, model: ThreadViewModel?) {
         self.model = model
-        var images: [Image] = [], files: [String] = []
+        var images: [Image] = [], files: [String] = [], media: [JSONValue] = []
         // Files with a chip in the text need no row (`chippedAttachmentIds`).
         var chipped = Set<String>()
         if case .array(let records)? = m.context?["records"] {
@@ -526,19 +531,27 @@ final class UserMessageAttachmentsView: DSView {
         }
         for a in m.attachments {
             let type = a["type"]?.stringValue ?? "", id = a["id"]?.stringValue ?? "", name = a["name"]?.stringValue ?? ""
-            if type == "image" {
+            let mime = a["mimeType"]?.stringValue ?? ""
+            if mime.hasPrefix("video/") || mime.hasPrefix("audio/") { media.append(a) }
+            else if type == "image" {
                 if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name, source: a["source"])) }
             } else if !(type == "file" && chipped.contains(id)) {
                 files.append(name)
             }
         }
-        guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files else { return }
+        guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files || media != self.media else { return }
         self.images = images
         self.files = files
+        self.media = media
         rebuild()
     }
 
     private func rebuild() {
+        mediaViews.forEach { $0.releasePlayer(); $0.removeFromSuperview() }
+        mediaViews = media.map { value in
+            let view = ThreadMediaAttachmentView(id: value["id"]?.stringValue ?? "", name: value["name"]?.stringValue ?? "", audio: value["mimeType"]?.stringValue?.hasPrefix("audio/") == true, loader: model?.attachmentMediaURL)
+            addSubview(view); return view
+        }
         cells.forEach { $0.removeFromSuperview() }
         rows.forEach { $0.icon.removeFromSuperview(); $0.label.removeFromSuperview(); $0.eye?.removeFromSuperview() }
         let loader = model?.attachmentImage
@@ -599,7 +612,7 @@ final class UserMessageAttachmentsView: DSView {
     /// The widest block: the 210pt grid, or the longest file row.
     var naturalWidth: CGFloat {
         let fileWidth = rows.map { 16 + 8 + ceil($0.label.textWidth) }.max() ?? 0
-        return max(images.isEmpty ? 0 : Self.gridWidth, fileWidth)
+        return max(images.isEmpty ? 0 : Self.gridWidth, fileWidth, media.isEmpty ? 0 : 320)
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -608,8 +621,11 @@ final class UserMessageAttachmentsView: DSView {
             h += (imageFrames(width: min(Self.gridWidth, width)).map(\.maxY).max() ?? 0) + 8
         }
         if !files.isEmpty { h += CGFloat(files.count) * Self.rowHeight + CGFloat(files.count - 1) * 4 + 8 }
+        h += mediaViews.reduce(0) { $0 + ($1.audio ? 84 : 208) }
         return h
     }
+
+    func setMediaVisible(_ visible: Bool) { mediaViews.forEach { $0.setVisible(visible) } }
 
     override func updateLayer() {
         for cell in cells {
@@ -632,6 +648,11 @@ final class UserMessageAttachmentsView: DSView {
             row.icon.frame = NSRect(x: 0, y: y + 6, width: 16, height: 16)
             row.label.frame = NSRect(x: 24, y: y + 4, width: max(0, bounds.width - 24), height: 20)
             y += Self.rowHeight + 4
+        }
+        for view in mediaViews {
+            let height: CGFloat = view.audio ? 76 : 200
+            view.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
+            y += height + 8
         }
     }
 }

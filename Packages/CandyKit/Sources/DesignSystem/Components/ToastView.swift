@@ -6,6 +6,7 @@ import QuartzCore
 /// Width comes from the frame (T3: 360); `height(forWidth:)` gives the natural height.
 /// ponytail: no copy-error button, expandable details or stacked-end action layout; add them with the thread toasts that use them
 public final class ToastView: DSView {
+    public var onDidDismiss: (() -> Void)?
     public let kind: ToastQueue.Kind
     public var id = 0
     /// Content opacity for toasts behind the front one in a collapsed stack (250ms fade).

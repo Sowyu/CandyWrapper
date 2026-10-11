@@ -142,3 +142,13 @@ public struct ProtocolIncompatibleBody: Codable, Sendable, Equatable {
     public var message: String
     public var orchestrationProtocolVersion: Int
 }
+
+extension AuthSessionState {
+    /// auth.ts:130-163,195-202. Omitted permissions are an old server, not an old-only grant.
+    public var hasLegacyPermissions: Bool {
+        let legacy: Set<String> = ["orchestration:read", "orchestration:operate", "terminal:operate", "review:write", "access:read", "access:write", "relay:read", "relay:write"]
+        let parents: Set<String> = ["orchestration:read", "orchestration:operate", "terminal:operate"]
+        guard authenticated, let permissions else { return false }
+        return permissions.allSatisfy { legacy.contains($0) } && permissions.contains { parents.contains($0) }
+    }
+}

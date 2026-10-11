@@ -126,6 +126,8 @@ class TimelineRowView: DSView {
         if hovered { hovered = false; hoverChanged() }
     }
 
+    func setContentVisible(_ visible: Bool) {}
+
     func hoverChanged() {}
 
     override func updateTrackingAreas() {

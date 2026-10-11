@@ -347,6 +347,10 @@ final class ThreadController {
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
         browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
+        panel.timeline.worktreeSetup.onOpenTerminal = { [weak self] in
+            guard let self, let id = self.panel.timeline.worktreeSetup.snapshot?.terminalId else { return }
+            self.terminal.openExistingSetupTerminal(id)
+        }
         terminal.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
         pullRequests.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
         devices = DevicePanelController(panel: panel, environments: environments, files: files)
@@ -376,6 +380,10 @@ final class ThreadController {
         // A chat file chip opens the file tab at its line (ChatMarkdown.tsx `fileLinkChip`).
         // ponytail: Cmd-click opens the panel too; route it to the preferred editor with WP7.8's editor open
         panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
+        MarkdownView.onOpenCitation = { [weak self] citation in
+            self?.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
+            self?.panel.timeline.revealFindEntry(citation.messageId)
+        }
         composer.openThread = { [weak self] id in self?.open(id) }
         composer.onNewThread = { [weak self] in self?.newThread() }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
@@ -463,6 +471,7 @@ final class ThreadController {
     /// An environment's session started, was replaced or ended: the open thread follows its own one.
     private func sessionChanged(_ environmentId: String) {
         migrationToast.sessionChanged(environmentId)
+        permissionNotice.sessionChanged(environmentId)
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
         clones.sessionChanged(environmentId)
@@ -663,6 +672,7 @@ final class ThreadController {
         return hero
     }()
     /// The legacy thread migration toast on the primary environment.
+    lazy var permissionNotice = ThreadPermissionUpdateNotice(environments: environments, toasts: panel.toasts)
     private lazy var migrationToast = LegacyThreadMigrationToast(environments: environments, toasts: panel.toasts)
     /// Whether an environment offers threads without a project, for the hero's second button.
     var offersScratch: () -> Bool = { false }

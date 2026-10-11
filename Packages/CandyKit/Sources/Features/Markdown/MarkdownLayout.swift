@@ -92,6 +92,10 @@ enum MarkdownStyle {
                 i = end
                 continue
             }
+            if let url = run.link, let citation = ThreadAssistantCitation.parse(url.absoluteString) {
+                run.text = "❝ " + citation.label
+                run.code = true
+            }
             i += 1
             let start = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]

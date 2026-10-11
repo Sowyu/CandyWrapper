@@ -37,6 +37,9 @@ public final class TimelineView: DSView {
         set { scrollView.onGesture = newValue }
     }
     private let document = DSView()
+    private let minimap = ThreadMinimapView()
+    public let worktreeSetup = ThreadWorktreeSetupView()
+    private var setupHeight: CGFloat = 0
     private let pill = ButtonView("Scroll to end", icon: .chevronDown, variant: .glass, size: .xs)
 
     private(set) var items: [TimelineItem] = []
@@ -53,11 +56,17 @@ public final class TimelineView: DSView {
     private var laidOutWidth: CGFloat = 0
     private var tiling = false
     private var retile = false
+    public var threadFindMatch: ThreadFindResult.Match? { didSet { if threadFindMatch != oldValue { visible.values.forEach(applyFindHighlight) } } }
     public var threadFindQuery = "" {
         didSet { if threadFindQuery != oldValue { visible.values.forEach(applyFindHighlight) } }
     }
     private func applyFindHighlight(_ view: NSView) {
-        if let markdown = view as? MarkdownView { markdown.threadFindQuery = threadFindQuery }
+        if let markdown = view as? MarkdownView {
+            markdown.threadFindQuery = threadFindQuery
+            var row: NSView? = markdown
+            while row != nil, !(row is TimelineRowView) { row = row?.superview }
+            markdown.threadFindOccurrence = (row as? TimelineRowView)?.item?.id == threadFindMatch?.entryId ? threadFindMatch?.occurrence : nil
+        }
         view.subviews.forEach(applyFindHighlight)
     }
 
@@ -73,7 +82,7 @@ public final class TimelineView: DSView {
             if let view { document.addSubview(view) }
         }
         headerHeight = view == nil ? 0 : height
-        topInset = 24 + headerHeight
+        topInset = 24 + headerHeight + setupHeight
         layoutHeader()
     }
     private var header: NSView?
@@ -98,6 +107,9 @@ public final class TimelineView: DSView {
     private func layoutHeader() {
         let lane = laneFrame
         header?.frame = NSRect(x: TL.snap(lane.x), y: 0, width: lane.width, height: headerHeight)
+        let height = worktreeSetup.height(forWidth: lane.width)
+        worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: headerHeight + 12, width: lane.width, height: height)
+        if setupHeight != height { setupHeight = height; topInset = 24 + headerHeight + height }
     }
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
     public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
@@ -121,7 +133,12 @@ public final class TimelineView: DSView {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.verticalScrollElasticity = .allowed
         scrollView.documentView = document
+        document.addSubview(worktreeSetup)
+        worktreeSetup.isHidden = true
+        worktreeSetup.onHeightChange = { [weak self] in self?.layoutHeader() }
         addSubview(scrollView)
+        addSubview(minimap)
+        minimap.onSelect = { [weak self] id in self?.revealFindEntry(id) }
         let clip = scrollView.contentView
         clip.postsBoundsChangedNotifications = true
         clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
@@ -174,6 +191,24 @@ public final class TimelineView: DSView {
         let anchor = captureAnchor()
         let old = items
         items = new
+        // Text-only patches retain the item index; rebuilding pairs is needed only when message rows change.
+        switch change {
+        case .rows(let changed):
+            for rowIndex in changed {
+                guard case .message(let message, _, _, _, _, _) = new[rowIndex].row.kind else { continue }
+                var lower = 0, upper = minimap.items.count
+                while lower < upper {
+                    let middle = (lower + upper) / 2
+                    if minimap.items[middle].rowIndex <= rowIndex { lower = middle + 1 } else { upper = middle }
+                }
+                guard lower > 0 else { continue }
+                let index = lower - 1
+                if message.role == .user { minimap.updatePreview(at: index, text: message.text, assistant: false) }
+                else if minimap.items[index].assistantRowIndex == rowIndex { minimap.updatePreview(at: index, text: message.text, assistant: true) }
+            }
+        default: minimap.items = ThreadMinimapItem.derive(new.map(\.row))
+        }
+        layoutMinimap()
         let consistent = heights.count == old.count && tops.count == old.count
         if case .rows(let changed) = change, consistent, new.count == old.count {
             var first = new.count
@@ -384,6 +419,7 @@ public final class TimelineView: DSView {
         tile(relayoutAll: true)
         layoutPill()
         layoutHeader()
+        layoutMinimap()
     }
 
     private func relayout() {
@@ -399,10 +435,22 @@ public final class TimelineView: DSView {
         followsEnd = maxScroll - viewport.minY <= 1
         updatePill()
         tile()
+        updateMinimapPosition()
         if viewport.minY < Self.nearTop, let first = items.first?.id, first != lastNearTopId, onNearTop != nil {
             lastNearTopId = first
             onNearTop?()
         }
+    }
+
+    private func layoutMinimap() {
+        let gutter = laneFrame.x
+        minimap.isHidden = minimap.items.count < 2 || gutter < 48
+        let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - 288))
+        minimap.frame = NSRect(x: 12, y: (bounds.height - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
+        updateMinimapPosition()
+    }
+    private func updateMinimapPosition() {
+        minimap.currentIndex = minimap.items.lastIndex { $0.rowIndex < tops.count && tops[$0.rowIndex] <= viewport.minY + 80 }
     }
 
     /// Lays out rows in the visible rect plus overscan. Rows measured for the first time can change
@@ -458,6 +506,7 @@ public final class TimelineView: DSView {
         for i in wanted {
             let view = viewFor(i)
             let frame = NSRect(x: TL.snap(lane.x), y: TL.snap(tops[i]), width: lane.width, height: heights[i])
+            view.setContentVisible(frame.intersects(viewport))
             if view.frame != frame || relayoutAll { view.frame = frame; view.needsLayout = true }
         }
     }

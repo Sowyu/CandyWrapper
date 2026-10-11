@@ -51,6 +51,7 @@ public final class ToastViewport: DSView {
 
     public func dismiss(_ id: Int, swipe: CGPoint? = nil) {
         guard let view = views.removeValue(forKey: id) else { return }
+        view.onDidDismiss?()
         let slotY = view.layer?.sublayerTransform.m42 ?? 0
         queue.remove(id, now: now())
         animateOut(view, fromY: slotY, swipe: swipe)
