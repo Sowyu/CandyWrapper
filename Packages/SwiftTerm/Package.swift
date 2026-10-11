@@ -7,6 +7,7 @@ let package = Package(
     name: "SwiftTerm",
     platforms: [.macOS(.v14)],
     products: [.library(name: "SwiftTerm", targets: ["SwiftTerm"])],
-    targets: [.target(name: "SwiftTerm", path: "Sources/SwiftTerm")],
+    // Release builds optimize for size, like CandyKit (its Package.swift says why).
+    targets: [.target(name: "SwiftTerm", path: "Sources/SwiftTerm", swiftSettings: [.unsafeFlags(["-Osize"], .when(configuration: .release))])],
     swiftLanguageModes: [.v5]
 )

@@ -1,6 +1,10 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+// Release builds optimize for size: the shipped bundle stays well under the spec's 25 MB for benchmarks 2 to 8%
+// slower (docs/perf/README.md, "Milestone 7 wrap-up"). Packages ignore the app project's settings.
+let sizeOptimized: [SwiftSetting] = [.unsafeFlags(["-Osize"], .when(configuration: .release))]
+
 let package = Package(
     name: "CandyKit",
     platforms: [.macOS(.v14)],
@@ -16,16 +20,17 @@ let package = Package(
         .package(path: "../SwiftTerm"),
     ],
     targets: [
-        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"], resources: [.copy("Resources/surface-grain.rgba")]),
+        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt"], resources: [.copy("Resources/surface-grain.rgba")], swiftSettings: sizeOptimized),
         // Wire and domain types from docs/protocol.md. No I/O.
-        .target(name: "T3Protocol"),
+        .target(name: "T3Protocol", swiftSettings: sizeOptimized),
         // Transport: HTTP auth, WebSocket RPC, reconnect supervisor, Keychain.
-        .target(name: "T3Client", dependencies: ["T3Protocol"]),
+        .target(name: "T3Client", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // Normalized state and reducers fed by T3Client streams.
-        .target(name: "T3Store", dependencies: ["T3Protocol"]),
+        .target(name: "T3Store", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/mermaid.min.js.lzma"), .copy("Resources/LICENSE-mermaid.txt"), .copy("Resources/native-licenses.json"),
-                         .copy("Resources/SymbolsNerdFontMono-Regular.woff2"), .copy("Resources/LICENSE-symbols-nerd-font.txt")]),
+                         .copy("Resources/SymbolsNerdFontMono-Regular.woff2"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
+                swiftSettings: sizeOptimized),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client"]),

@@ -10,6 +10,11 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     SWIFT_STRICT_CONCURRENCY: complete
     DEAD_CODE_STRIPPING: YES
+  configs:
+    # -Osize keeps the shipped bundle under the spec's 25 MB with room to spare (21.1 MB against 24.6 MB at -O
+    # on 8739e4f) for benchmarks 2 to 8% slower (docs/perf/README.md, "Milestone 7 wrap-up").
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: -Osize
 packages:
   CandyKit:
     path: Packages/CandyKit
