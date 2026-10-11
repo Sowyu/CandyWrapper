@@ -2522,7 +2522,7 @@ extension TerminalView {
             pendingDisplay = true
             DispatchQueue.main.asyncAfter(
                 deadline: DispatchTime (uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds + UInt64 (fpsDelay)),
-                execute: updateDisplay)
+                execute: { [weak self] in self?.updateDisplay() })
         } else {
         }
     }

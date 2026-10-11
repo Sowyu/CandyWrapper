@@ -1202,6 +1202,7 @@ final class ComposerController {
                 do {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
                     guard let self else { return }
+                    sentSnapShots(attachments)
                     pickers.store.didSend(session.draftId)
                     prompts[session.draftId] = nil
                     scheduleSave()
@@ -1253,6 +1254,7 @@ final class ComposerController {
                             "threadId": .string(threadId.localId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
+                    self?.sentSnapShots(attachments)
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
                     // `composer.sendAndNewThread`: the thread keeps running; a fresh composer opens
@@ -1324,9 +1326,11 @@ final class ComposerController {
             }
             // ponytail: no "Allow retry" guard against duplicate threads after an uncertain failure (uncertainMultipleSubmissionsRef); add it if retries duplicate
             if !failed.isEmpty {
+                restoreAttachments(attachments, key: key)
                 pickers.setMultiple(failed, for: key)
                 if target == .draft(session), composer.text.isEmpty { composer.text = text; remember(text) }
             } else if started > 0 {
+                sentSnapShots(attachments)
                 pickers.setMultiple(nil, for: key)
             }
             refresh()
@@ -2251,8 +2255,15 @@ extension ComposerController {
         syncAttachmentViews()
     }
 
-    /// The shelf, the send state and the chips for the current draft. T3 hides the shelf while an
-    /// approval or a question is open (ChatComposer.tsx:7062-7066).
+    /// The server claimed the uploads. Local captures no longer back a draft.
+    private func sentSnapShots(_ attachments: [ComposerAttachment]) {
+        SnapShotPendingCapture.removeDeliveredFiles(attachments)
+        for attachment in attachments where attachment.snapShotSource != nil {
+            if let id = attachment.attachmentId { sentFiles[id] = nil }
+        }
+        persistSnapShots()
+    }
+
     private func persistSnapShots() {
         let records = draftAttachments.keys.sorted().flatMap { key in
             (draftAttachments[key] ?? []).compactMap { SnapShotPendingCapture(draftKey: key, attachment: $0) }

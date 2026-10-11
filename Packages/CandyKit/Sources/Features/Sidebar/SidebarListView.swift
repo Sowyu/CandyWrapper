@@ -236,6 +236,7 @@ public final class SidebarListView: DSView {
     private func recycle(_ view: SidebarRowBase) {
         if case .row(let r)? = view.item, hoverPopup?.id == r.id { closeHoverCard() }
         lendRenameField(to: view, nil)
+        view.prepareForReuse()
         view.layer?.removeAllAnimations()
         view.isHidden = true
         view.isKeyboardFocused = false

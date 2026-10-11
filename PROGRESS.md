@@ -167,15 +167,22 @@ Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside mil
 ## Known bugs to fix before the M7 demo
 
 - Rich text is on by default in T3 (settings.ts:453), so every prompt goes through ComposerRichText. Port all 46 of T3's composer-rich-text and composer-rich-text-doc tests (WP7.11b ported about 10) and fix any serialization mismatch.
-- Check that a SnapShot's file in Application Support/<bundle id>/SnapShots is deleted after its draft is sent, not only when the attachment is removed (WP7.16b review).
-- `swift test` can fail one local-server integration test when other agents' T3 servers run at the same time (it finds a server it did not start); it passed on the WP7.10b merge run. Make it independent of other servers.
 - Closing terminal panes did not lower the footprint (62.8 to 67.6 MB open, 65.2 to 67.3 MB after closing; WP7.11). Check for a retained SwiftTerm view or stream.
+  - 2026-10-11 astra-bugs1: no permanent terminal retention reproduced. Fixed a queued redraw retaining SwiftTerm until the next frame and weakened attach/focus captures; immediate deallocation regression passes. Heap after closing all three panes has zero terminal views, buffers or controller attachments. Footprint remains above its pre-dialog level, so the total-footprint concern stays open for allocator/rendering-cache profiling. `leaks` reports only small macOS linkd NSXPC cycles. Measurements and citations: `docs/research/bugs1-2026-10-11.md`.
 - The Lineage section vanished once after a fork's first send and came back on relaunch (WP7.10, not reproduced). 2026-10-11 bug agent: not reproduced either (fork from a response, first send, Lineage stayed). Not caused by the draft bug below: an overwrite resets lineage on the server for good, it would not come back on relaunch.
 - With four agents on one screen, keys can reach the wrong test app (a terminal drawer opened by itself in WP7.10's window); the UI tools' CW_UI_PID check and the key post are not atomic.
-- Recycled sidebar rows keep a stale hover look (seen by WP7.9 on 2026-10-11; older than WP7.9).
 - T3 assets copied into the app (notification sounds in App/Resources/Sounds) need T3's MIT license notice in the bundle by milestone 9.
 
 ## Fixed bugs
+
+- Recycled sidebar rows kept a stale hover look (WP7.9).
+  - 2026-10-11 astra-bugs1: reset row and child-button interaction state when pooled or rebound. The 500-row regression failed before the fix and passes after; four recycled/rest fidelity cases differ by 0%. Screen scrolling checked. See `docs/research/bugs1-2026-10-11.md`.
+
+- Local-server integration tests joined a server another worktree started.
+  - 2026-10-11 astra-bugs1: historical shared home already fixed by baseline `ff6ecf6`; strengthened with a UUID home and a two-server regression that verifies independent ownership and shutdown. Original lifecycle assertions retained; full suite passes. See `docs/research/bugs1-2026-10-11.md`.
+
+- SnapShot files survived a successful send (WP7.16b review).
+  - 2026-10-11 astra-bugs1: fixed successful new-thread, existing-thread and fanout cleanup; failures retain files for retry. File-system regression passes. Screen: two Haiku 5.5 sends removed their captures (482 KB and 1.94 MB); sent attachment remains available from the server. See `docs/research/bugs1-2026-10-11.md` for citations and remaining coordinator scope.
 
 - A send from the new-thread draft landed in another thread's history ("Describe this image"), and that thread dropped out of the sidebar (WP7.10 on screen, 2026-10-11). Fixed 2026-10-11 (worktree agent, not committed). Cause: the launch sent the draft's stored thread id, and T3's `thread.create` does not check for an existing thread (Orchestrator.ts:2183-2232, ThreadLaunchService.ts:770-800), so a used id rewrites that thread's shell (title, project, lineage) and appends the message. Stored ids got reused when two apps shared one defaults domain (every Debug build was `dev.candywrapper.app`: app B kept the draft app A had launched and sent it again; reproduced on screen with two copies, "Reply Alpha" got B's message and B's title) and, in one app, by New thread while a launch was still in flight. Fix: `NewThreadDraftLaunch` (Features/Composer) gives every launch a fresh thread id and takes the draft out of the store while it flies; a failed launch restores it with another id. `DraftSession` moved there from ComposerController. Test: NewThreadDraftLaunchTests (fails on the old behavior). CLAUDE.md now tells agents to build test apps with their own bundle id and URL scheme.
 

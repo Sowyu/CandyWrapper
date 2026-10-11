@@ -62,6 +62,26 @@ struct OnboardingSnapShotTests {
         #expect(restored.attachment.attachmentId == nil)
         #expect(restored.attachment.status != .ready)
     }
+    @Test func deliveredCaptureDeletesOnlyItsOwnedFile() throws {
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent(".snapshot-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let capture = directory.appendingPathComponent("capture.png")
+        let ordinary = directory.appendingPathComponent("user.png")
+        try Data([1]).write(to: capture)
+        try Data([2]).write(to: ordinary)
+        var a = ComposerAttachment(kind: .image, name: "capture.png", mimeType: "image/png", sizeBytes: 1,
+                                   fileURL: capture, status: .ready, attachmentId: "uploaded", environmentId: "env")
+        a.snapShotSource = .object(["kind": .string("snap-shot")])
+        let b = ComposerAttachment(kind: .image, name: "user.png", mimeType: "image/png", sizeBytes: 1,
+                                   fileURL: ordinary, status: .ready, attachmentId: "other", environmentId: "env")
+        SnapShotPendingCapture.removeDeliveredFiles([a, b])
+        #expect(!FileManager.default.fileExists(atPath: capture.path))
+        #expect(FileManager.default.fileExists(atPath: ordinary.path))
+        SnapShotPendingCapture.removeDeliveredFiles([a])
+    }
+
     @Test func flightDurationIsBoundedAndDistanceDependent() {
         let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
         #expect(SnapShotFlightAnimation.duration(source: rect, destination: rect) == 0.28)
