@@ -21,6 +21,8 @@ struct ChangedFilesFidelityTests {
     static func render(dark: Bool, openDiff: Bool, cardTop: CGFloat) async throws -> (ThreadPanelView, NSBitmapImageRep) {
         let projection = try #require(try ThreadPreview.projection(titled: thread))
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
+        // The reference is a 1100pt window, including its 256pt sidebar.
+        panel.referenceViewportWidth = size.width + 256
         panel.bottomInset = ThreadFidelityTests.composerInset
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let patch = try DiffTests.recordedPatch()

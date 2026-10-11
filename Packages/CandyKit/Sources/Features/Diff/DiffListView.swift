@@ -34,6 +34,9 @@ public struct DiffLineTarget: Equatable, Sendable {
 public final class DiffListView: DSView {
     static let overscan: CGFloat = 200
 
+    public var searchMatches: [DiffPanelSearch.Match] = [] { didSet { if searchMatches != oldValue { searchByLine = Dictionary(grouping: searchMatches, by: \.line); reconfigureAll() } } }
+    private var searchByLine: [Int: [DiffPanelSearch.Match]] = [:]
+    public var activeSearchMatch: DiffPanelSearch.Match? { didSet { if activeSearchMatch != oldValue { reconfigureAll() } } }
     public private(set) var diff = UnifiedDiff("")
     public private(set) var collapsed: Set<Int> = []
     public var style: DiffViewStyle = .unified { didSet { if style != oldValue { relayout() } } }
@@ -54,6 +57,8 @@ public final class DiffListView: DSView {
     /// A click in a line's number gutter (the Code tab starts a review comment there).
     public var onLineClick: (@MainActor (DiffLineTarget) -> Void)?
     /// The list's end came within a screen of the viewport (`renderCodeViewFooter`'s sentinel).
+    public var onVisibleFile: ((String) -> Void)?
+    private var visibleFile: String?
     public var onNearEnd: (@MainActor () -> Void)?
 
     private(set) var rowLayout = DiffLayout(diff: UnifiedDiff(""), collapsed: [], style: .unified, width: 0, wrap: true, ch: 7.8)
@@ -211,7 +216,7 @@ public final class DiffListView: DSView {
     }
 
     private var context: DiffRowContext {
-        DiffRowContext(diff: diff, layout: rowLayout, highlighter: highlighter, scrollX: scrollX)
+        DiffRowContext(diff: diff, layout: rowLayout, highlighter: highlighter, scrollX: scrollX, searchByLine: searchByLine, activeSearchMatch: activeSearchMatch)
     }
 
     func tile() {
@@ -228,6 +233,9 @@ public final class DiffListView: DSView {
         // The sticky header: the header of the expanded file whose body crosses the top edge.
         let topRow = rows[rowLayout.rowIndex(at: rect.minY)]
         let file = Int(topRow.file)
+        if diff.files.indices.contains(file), visibleFile != diff.files[file].path {
+            visibleFile = diff.files[file].path; onVisibleFile?(diff.files[file].path)
+        }
         let sticky = !collapsed.contains(file) && topRow.kind != .header ? rowLayout.headerRow[file] : -1
         var wanted = Set(lo..<hi)
         wanted = wanted.filter { rows[$0].kind != .footer && rows[$0].kind != .annotation }

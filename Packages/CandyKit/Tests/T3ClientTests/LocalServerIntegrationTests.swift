@@ -5,17 +5,16 @@ import Testing
 import T3Protocol
 
 /// Launches a real `t3 serve` through LocalServerLauncher against a throwaway home under
-/// ../CandyWrapper-research (never ~/.t3). It reads ~/.t3/runtime/service-state.json only to
+/// the package build directory (never ~/.t3). It reads ~/.t3/runtime/service-state.json only to
 /// find the installed binary. Skips when no runtime is installed.
 @Suite(.serialized)
 struct LocalServerIntegrationTests {
-    static let research = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().appending(path: "CandyWrapper-research")
-    static let home = research.appending(path: "sandbox-localserver/t3home", directoryHint: .isDirectory)
+    // Parallel worktrees must never join or stop one another's test daemon.
+    static let home = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().appending(path: ".build/localserver-\(ProcessInfo.processInfo.processIdentifier)/t3home", directoryHint: .isDirectory)
     static let path = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     static let identity = ClientIdentity(appVersion: "0.0.0-candykit-test")
-    static let keychain = CredentialStore(service: "dev.candywrapper.test.local-server")
+    static let keychain = CredentialStore(service: "dev.candywrapper.test.local-server.\(ProcessInfo.processInfo.processIdentifier)")
 
     static func configuration() throws -> LocalServerConfiguration {
         guard let binary = LocalServerDiscovery.resolveBinary(home: LocalServerDiscovery.defaultHome, path: path) else {

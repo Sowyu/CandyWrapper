@@ -20,6 +20,7 @@ final class RightPanelView: DSView {
         return min(max(preferred, minWidth), maxWidth)
     }
 
+    var onRenameDevice: ((String, String) -> Void)?
     let device = DevicePanelView()
     let diff = DiffPanelView()
     let files = FilesPanelView()
@@ -146,7 +147,7 @@ final class RightPanelView: DSView {
 
     static func icon(for surface: RightPanelSurface) -> IconView {
         switch surface {
-        case .device: IconView(name: .smartphone, size: 12, strokeColor: Themed.color(\.foreground))
+        case .device, .deviceTarget: IconView(name: .smartphone, size: 12, strokeColor: Themed.color(\.foreground))
         case .diff: IconView(name: .fileDiff, size: 12, strokeColor: Themed.color(\.foreground))
         case .files: IconView(name: .files, size: 12, strokeColor: Themed.color(\.foreground))
         case .file(let path, _, _): FileTypeIcon.view(for: path, size: 12)
@@ -180,6 +181,20 @@ final class RightPanelView: DSView {
     private func showTabMenu(_ surface: RightPanelSurface, tab: NSView, event: NSEvent) {
         let index = state.surfaces.firstIndex { $0.id == surface.id } ?? 0
         var items: [MenuItem] = []
+        if surface.deviceTarget != nil {
+            var rename = MenuItem("Rename")
+            rename.action = { [weak self] in
+                guard let self, let window = self.window else { return }
+                let dialog = DialogView(title: "Rename device")
+                let input = InputView(text: surface.title)
+                let save = ButtonView("Save"), cancel = ButtonView("Cancel", variant: .ghost)
+                dialog.panelContent = [input]; dialog.footerButtons = [cancel, save]
+                let modal = ModalHost.present(dialog, in: window)
+                cancel.action = { [weak modal] in modal?.close() }
+                save.action = { [weak self, weak input, weak modal] in self?.onRenameDevice?(surface.id, input?.text ?? ""); modal?.close() }
+            }
+            items.append(rename)
+        }
         if let path = surface.filePath {
             var copy = MenuItem("Copy path")
             copy.action = { [weak self] in self?.onCopyPath?(path) }

@@ -204,6 +204,7 @@ public final class ThreadPanelView: DSView {
     private var composerShown = false
     public let model = ThreadViewModel()
     private let fade = CAGradientLayer()
+    private let rightPanelBackdrop = RightPanelSheetBackdropView()
     let rightPanel = RightPanelView()
     /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
     let maximize = ToggleView(nil, icon: .maximize2, variant: .ghost, size: .sm)
@@ -285,6 +286,9 @@ public final class ThreadPanelView: DSView {
         terminalDrawer.isHidden = true
         addSubview(terminalDrawer)
         rightPanel.isHidden = true
+        rightPanelBackdrop.isHidden = true
+        addSubview(rightPanelBackdrop)
+        rightPanelBackdrop.onClose = { [weak self] in self?.toggleRightPanel() }
         addSubview(rightPanel)
         maximize.setAccessibilityLabel("Maximize panel")
         maximize.isHidden = true
@@ -314,6 +318,7 @@ public final class ThreadPanelView: DSView {
             header.toggles[1].isPressed = terminalOpen // the controller decides
             onTerminalToggle?()
         }
+        rightPanel.onRenameDevice = { [weak self] id, title in self?.mutatePanel { $0.renameDevice(id, title: title); return [] } }
         rightPanel.onActivate = { [weak self] id in self?.mutatePanel { $0.activate(id); return [] } }
         rightPanel.onClose = { [weak self] id in self?.closeSurface(id) }
         rightPanel.onCloseOthers = { [weak self] id in self?.mutatePanel { $0.closeOthers(id) } }
@@ -441,6 +446,16 @@ public final class ThreadPanelView: DSView {
     /// "Browser" from the + menu or launcher: the app opens a server tab (`createBrowserSurface`).
     public var onAddBrowser: (@MainActor () -> Void)?
     /// The floating browser over the chat column; the app shows it and feeds its viewer.
+    public let deviceMiniPlayer = BrowserMiniPlayerView()
+    public var deviceMiniPlayerOrigin: CGPoint? { didSet { needsLayout = true } }
+    public var deviceMiniPlayerSize = CGSize(width: 148, height: 320) { didSet { needsLayout = true } }
+    public var deviceMiniPlayerShown = false {
+        didSet {
+            if deviceMiniPlayerShown, deviceMiniPlayer.superview !== self { addSubview(deviceMiniPlayer) }
+            if !deviceMiniPlayerShown { deviceMiniPlayer.removeFromSuperview() }
+            needsLayout = true
+        }
+    }
     public let miniPlayer = BrowserMiniPlayerView()
     /// The page size the player mirrors, and where the user dragged it.
     public var miniPlayerSource: CGSize? { didSet { if miniPlayerSource != oldValue { needsLayout = true } } }
@@ -540,7 +555,10 @@ public final class ThreadPanelView: DSView {
     }
 
     /// The window's width, or the outermost view's without a window (tests).
+    /// Full reference viewport when this panel is rendered alone in the component gallery.
+    var referenceViewportWidth: CGFloat?
     private var viewportWidth: CGFloat {
+        if let referenceViewportWidth { return referenceViewportWidth }
         if let window { return window.frame.width }
         var view: NSView = self
         while let parent = view.superview { view = parent }
@@ -752,11 +770,15 @@ public final class ThreadPanelView: DSView {
 
     public override func layout() {
         super.layout()
-        // ponytail: always inline; T3 shows the panel as a sheet over the chat below a 980px
-        // viewport and animates the width. Add both when windows that narrow matter
+        let sheet = viewportWidth <= 980 && !rightPanelMaximized
         let panelWidth = !rightPanelOpen ? 0 : rightPanelMaximized ? bounds.width
+            : sheet ? RightPanelSheetBackdropView.width(viewport: viewportWidth, container: bounds.width)
             : RightPanelView.width(viewport: viewportWidth, container: bounds.width, preferred: preferredPanelWidth)
-        let chat = max(0, bounds.width - panelWidth)
+        let chat = sheet ? bounds.width : max(0, bounds.width - panelWidth)
+        rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
+        rightPanelBackdrop.frame = bounds
+        rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
+        rightPanel.layer?.zPosition = sheet ? 21 : 0
         header.isHidden = chat == 0
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
@@ -767,7 +789,7 @@ public final class ThreadPanelView: DSView {
         terminalDrawer.isHidden = drawer == 0
         terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
-        rightPanel.frame = NSRect(x: chat, y: 0, width: panelWidth, height: bounds.height)
+        rightPanel.frame = NSRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
         if panelResize.superview == nil {
             addSubview(panelResize)
             panelResize.onDrag = { [weak self] delta in
@@ -777,7 +799,7 @@ public final class ThreadPanelView: DSView {
                 self.needsLayout = true
             }
         }
-        panelResize.isHidden = !rightPanelOpen || rightPanelMaximized
+        panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
         panelResize.frame = NSRect(x: chat - 4, y: 0, width: 8, height: bounds.height)
         if rightPanelOpen {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
@@ -804,6 +826,11 @@ public final class ThreadPanelView: DSView {
         // The floating browser keeps to the chat canvas, top right by default (previewMiniPlayerLayout.ts).
         // ponytail: no composer or details-card obstacles and no resize handles; add them from
         // previewMiniPlayerLayout.ts when the player is used beside long threads
+        if deviceMiniPlayerShown {
+            deviceMiniPlayer.frame = BrowserMiniPlayerView.frame(size: deviceMiniPlayerSize, origin: deviceMiniPlayerOrigin,
+                container: NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height)))
+            deviceMiniPlayer.layer?.zPosition = 2
+        }
         if miniPlayerShown {
             let canvas = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
             let size = miniPlayerSize ?? BrowserMiniPlayerView.size(source: miniPlayerSource)

@@ -10,6 +10,8 @@ struct DiffRowContext {
     let highlighter: DiffHighlighter
     /// Horizontal scroll of code text when lines do not wrap.
     let scrollX: CGFloat
+    var searchByLine: [Int: [DiffPanelSearch.Match]] = [:]
+    var activeSearchMatch: DiffPanelSearch.Match?
 }
 
 /// How file headers show their line counts. pierre's own `-D +A` (T3's turn diffs), or T3's
@@ -428,6 +430,7 @@ final class DiffLineRowView: DiffRowView {
 final class DiffCodeTextView: DSView {
     private struct Piece { var line: CTLine; var x: CGFloat; var y: CGFloat; var clip: CGRect }
     private var pieces: [Piece] = []
+    private var searchRects: [(CGRect, Bool)] = []
     private(set) var columns: DiffLayout.Columns?
     override var wantsUpdateLayer: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -441,7 +444,7 @@ final class DiffCodeTextView: DSView {
 
     func configure(row: DiffLayout.Row, columns: DiffLayout.Columns, _ context: DiffRowContext, marker: Bool) {
         self.columns = columns
-        pieces = []
+        pieces = []; searchRects = []
         let font = DiffStyle.codeFont, ch = DiffStyle.ch
         let indices: [Int32] = columns.isSplit ? [row.left, row.right] : [row.left]
         for (side, index) in indices.enumerated() where index >= 0 {
@@ -477,6 +480,18 @@ final class DiffCodeTextView: DSView {
                 let piece = attributed.attributedSubstring(from: NSRange(location: start, length: max(0, end - start)))
                 pieces.append(Piece(line: CTLineCreateWithAttributedString(Self.expandTabs(piece)), x: codeX - (columns.columns[side] == nil ? context.scrollX : 0),
                                     y: CGFloat(k) * DiffStyle.lineHeight, clip: clip))
+                let rendered = CTLineCreateWithAttributedString(Self.expandTabs(piece))
+                for match in (context.searchByLine[Int(index)] ?? []) where match.file == Int(row.file) {
+                    let r = NSIntersectionRange(match.range, NSRange(location: start, length: end - start))
+                    guard r.length > 0 else { continue }
+                    let prefix = (text as NSString).substring(with: NSRange(location: start, length: r.location - start)).replacingOccurrences(of: "\t", with: "  ")
+                    let content = (text as NSString).substring(with: r).replacingOccurrences(of: "\t", with: "  ")
+                    let left = CTLineGetOffsetForStringIndex(rendered, (prefix as NSString).length, nil)
+                    let right = CTLineGetOffsetForStringIndex(rendered, (prefix as NSString).length + (content as NSString).length, nil)
+                    let rect = CGRect(x: codeX + left - (columns.columns[side] == nil ? context.scrollX : 0), y: CGFloat(k) * DiffStyle.lineHeight,
+                                      width: right - left, height: DiffStyle.lineHeight).intersection(CGRect(x: clip.minX, y: 0, width: clip.width, height: CGFloat.greatestFiniteMagnitude))
+                    searchRects.append((rect, match == context.activeSearchMatch))
+                }
                 start = end
             }
         }
@@ -504,6 +519,10 @@ final class DiffCodeTextView: DSView {
         let metrics = TextLine(NSAttributedString(string: "0", attributes: [.font: DiffStyle.codeFont]))
         let baselineOffset = metrics.baseline(top: 0, lineHeight: DiffStyle.lineHeight)
         ctx.textMatrix = .identity
+        for (rect, active) in searchRects {
+            ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(active ? 0.65 : 0.28).cgColor)
+            ctx.fill(rect)
+        }
         for piece in pieces {
             ctx.saveGState()
             // Bounded by the view: AppKit records this drawing and replays it at 2x, and the

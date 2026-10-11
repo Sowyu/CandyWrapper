@@ -11,6 +11,15 @@ public final class BrowserMiniPlayerView: DSView {
     public static let cornerRadius: CGFloat = 12
     static let defaultBox = CGSize(width: 320, height: 320)
 
+    /// Device previews reuse the same floating shell, controls and resize math.
+    public var deviceContent: DevicePanelStreamView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            viewer.isHidden = deviceContent != nil
+            if let deviceContent { clip.addSubview(deviceContent) }
+            needsLayout = true
+        }
+    }
     public let viewer = ServerBrowserView()
     public var onOpenInPanel: (@MainActor () -> Void)?
     public var onClose: (@MainActor () -> Void)?
@@ -69,6 +78,7 @@ public final class BrowserMiniPlayerView: DSView {
         card.frame = bounds
         clip.frame = bounds
         viewer.frame = clip.bounds
+        deviceContent?.frame = clip.bounds
         // The handle sits `pillInset` (8, or 55% of the radius) from the top-right corner.
         let inset = max(8, (Self.cornerRadius * 0.55).rounded())
         let w = HandleView.pillWidth

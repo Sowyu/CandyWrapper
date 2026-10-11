@@ -613,11 +613,11 @@ final class BrowserController {
     /// A new server tab at `url` (an HTML render's "Open in panel").
     func openURL(_ url: String) { openTab(url: url) }
 
-    private func openTab(url: String?) {
+    private func openTab(url: String?, profileId: String? = nil) {
         guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
         Task { [weak self] in
             do {
-                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url))
+                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url, profileId: profileId ?? BrowserProfiles.defaultId(ClientSettingsStore.shared.current)))
                 let snapshot = try JSONValueDecoder().decode(PreviewSessionSnapshot.self, from: reply)
                 guard let self else { return }
                 self.mutateState(id) { $0.applyOpened(snapshot) }
@@ -688,8 +688,13 @@ final class BrowserController {
             },
             clearCookies: { [weak self] in self?.adjust(tab, ["clear": .string("cookies")]) },
             clearCache: { [weak self] in self?.adjust(tab, ["clear": .string("cache")]) })
-        let items = BrowserMoreMenu.items(enabled: true, zoomFactor: zoom, colorScheme: snapshot.colorScheme ?? "system",
-                                          deviceToolbarVisible: snapshot.hasFixedViewport, profileName: "Default", actions: actions, zoomLabel: cluster)
+        var items = BrowserMoreMenu.items(enabled: true, zoomFactor: zoom, colorScheme: snapshot.colorScheme ?? "system",
+                                          deviceToolbarVisible: snapshot.hasFixedViewport, profileName: BrowserProfiles.resolved(ClientSettingsStore.shared.current).first { $0["id"]?.stringValue == (snapshot.profileId ?? "default") }?["name"]?.stringValue ?? "Default", actions: actions, zoomLabel: cluster)
+        items.append(.submenu("Open in profile", BrowserProfiles.resolved(ClientSettingsStore.shared.current).map { profile in
+            var item = MenuItem(profile["name"]?.stringValue ?? "Profile")
+            item.action = { [weak self] in self?.openTab(url: snapshot.navStatus.url, profileId: profile["id"]?.stringValue) }
+            return item
+        }))
         MenuPopupView.show(items, from: anchor, placement: .dropdown)
     }
 

@@ -13,3 +13,14 @@ final class RightPanelResizeView: DSView {
         previousX = x
     }
 }
+
+/// RightPanelSheet.tsx:23-29. The chat keeps its width under the modal surface.
+final class RightPanelSheetBackdropView: DSView {
+    var onClose: (() -> Void)?
+    static func width(viewport: CGFloat, container: CGFloat) -> CGFloat {
+        min(container, viewport <= 760 ? min(viewport * 0.88, 384) : max(320, min(viewport * 0.42, 448)))
+    }
+    override func mouseDown(with event: NSEvent) { onClose?() }
+    override func cancelOperation(_ sender: Any?) { onClose?() }
+    override func updateLayer() { layer?.backgroundColor = NSColor.black.withAlphaComponent(0.4).cgColor }
+}

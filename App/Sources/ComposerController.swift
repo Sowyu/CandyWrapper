@@ -2235,6 +2235,13 @@ extension ComposerController {
 
     /// "Add to chat" from a terminal (`addTerminalContext`, ChatComposer.tsx:6502-6533): a new
     /// excerpt record and its chip at the caret. An open question takes no context.
+    func addReviewComment(_ record: JSONValue) {
+        guard target != nil, questionRequestId == nil, let id = record["contextId"]?.stringValue else { return }
+        menuState.records[id] = record
+        composer.insertAtCaret(ComposerContext.reference(ComposerContext.Reference(kind: "review-comment", contextId: id, label: record["label"]?.stringValue ?? "Comment")) + " ")
+        focusComposer()
+    }
+
     func addTerminalContext(_ selection: ComposerContext.TerminalSelection) {
         guard target != nil, questionRequestId == nil else { return }
         let id = UUID().uuidString.lowercased()

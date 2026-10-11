@@ -568,6 +568,7 @@ public enum ComposerInlineTokens {
 public enum ComposerContext {
     public struct Reference: Equatable, Sendable {
         public var kind: String, contextId: String, label: String
+        public init(kind: String, contextId: String, label: String) { self.kind = kind; self.contextId = contextId; self.label = label }
     }
 
     private static let hrefPrefix = "t3-context://v1/"

@@ -98,6 +98,8 @@ public struct ClientSettings: Equatable, Sendable {
         "snapShotFlash": SettingSpec(.bool, .bool(true)),
         "snapShotAnimations": SettingSpec(.bool, .bool(true)),
         // Settings > Integrations > Browser (settings.ts:319-364).
+        "browserProfiles": SettingSpec(.any, .array([])),
+        "browserDefaultProfileId": SettingSpec(.string(maxLength: 64), .string("default")),
         "browserDefaultViewport": SettingSpec(.any, .object(["_tag": .string("fill")])),
         "browserDefaultZoomFactor": SettingSpec(.any, .number(1)),
         "browserDefaultAppearance": SettingSpec(.literals(["system", "light", "dark"]), .string("system")),

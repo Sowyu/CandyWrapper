@@ -5,9 +5,10 @@ import T3Protocol
 /// Settings > Integrations (IntegrationsSettings.tsx, ProjectDefaultsSettings.tsx with `category="integrations"`):
 /// agent browser access, the browser defaults this device keeps, and the device hub rows.
 public final class IntegrationsSettingsView: ScopedSettingsPage {
+    private var deviceHostEditor: DeviceHostEditor?
     public init(context: SettingsPageContext) {
         super.init(context: context)
-        body = [browserAccessSection(), browserSection(), devicesSection()]
+        body = [browserAccessSection(), browserSection(), browserProfilesSection(), devicesSection()]
     }
 
     // MARK: Agent browser access (server, project-scoped)
@@ -23,7 +24,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
     // MARK: Browser defaults (this device)
 
     // ponytail: these rows store T3's client settings; the built-in browser that reads them comes with WP7.6b.
-    // Browser profiles (create, rename, import, clear) and custom viewport sizes are not drawn yet
+    // Custom viewport sizes remain in the browser toolbar work.
     private func browserSection() -> SettingsSectionView {
         let viewport = settingsSelect(["Fill panel", "Responsive"], width: 176)
         viewport.setAccessibilityLabel("Default browser viewport")
@@ -89,6 +90,84 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         return section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating])
     }
 
+    private func browserProfilesSection() -> SettingsSectionView {
+        let add = ButtonView("New profile", icon: .plus, variant: .outline, size: .sm)
+        add.action = { [weak self] in self?.editBrowserProfile(nil) }
+        let addRow = row("browser-profiles", detail: "Separate cookies and logins for each browser profile.", control: add)
+        addRow.title = "Browser profiles"
+        let choose = settingsSelect(["Default"], width: 176)
+        choose.onChange = { [weak self] i in
+            guard let self else { return }
+            let profiles = BrowserProfiles.resolved(client).filter { $0["id"]?.stringValue != "incognito" }
+            guard profiles.indices.contains(i) else { return }
+            context.writeClient?(["browserDefaultProfileId": profiles[i]["id"] ?? .string("default")])
+        }
+        let defaultRow = row("browser-default-profile", detail: "Used for new browser tabs.", control: choose); defaultRow.title = "Default profile"
+        let manage = ButtonView("Manage profiles", variant: .outline, size: .sm)
+        manage.action = { [weak self, weak manage] in
+            guard let self, let manage else { return }
+            let items = BrowserProfiles.resolved(client).filter { $0["id"]?.stringValue != "incognito" }.map { profile -> MenuItem in
+                var clear = MenuItem("Clear browsing data")
+                clear.action = { [weak self] in self?.clearBrowserProfile(profile, remove: false) }
+                var children = [clear]
+                if profile["id"]?.stringValue != "default" {
+                    var rename = MenuItem("Rename"); rename.action = { [weak self] in self?.editBrowserProfile(profile) }
+                    var remove = MenuItem("Remove"); remove.action = { [weak self] in self?.clearBrowserProfile(profile, remove: true) }
+                    children += [rename, remove]
+                }
+                return .submenu(profile["name"]?.stringValue ?? "Profile", children)
+            }
+            MenuPopupView.show(items, from: manage, placement: .dropdown)
+        }
+        let manageRow = row("browser-manage-profiles", control: manage); manageRow.title = "Saved profiles"
+        binder.add { [weak self, weak choose, weak add] in
+            guard let self else { return }
+            let profiles = BrowserProfiles.resolved(client).filter { $0["id"]?.stringValue != "incognito" }
+            choose?.options = profiles.map { $0["name"]?.stringValue ?? "Profile" }
+            choose?.selectedIndex = profiles.firstIndex { $0["id"]?.stringValue == BrowserProfiles.defaultId(client) }
+            add?.isEnabled = profiles.count < 25
+        }
+        return section("browser-profiles", "Browser profiles", [addRow, defaultRow, manageRow])
+    }
+    private func editBrowserProfile(_ profile: JSONValue?) {
+        let dialog = DialogView(title: profile == nil ? "New profile" : "Rename profile")
+        let name = InputView(placeholder: "Profile name", text: profile?["name"]?.stringValue ?? "")
+        let save = ButtonView("Save"), cancel = ButtonView("Cancel", variant: .ghost)
+        dialog.panelContent = [name]; dialog.footerButtons = [cancel, save]
+        let modal = context.presentDialog?(dialog)
+        cancel.action = { [weak modal] in modal?.close() }
+        save.action = { [weak self, weak modal, weak name] in
+            guard let self else { return }
+            let label = String((name?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(48))
+            guard !label.isEmpty else { return }
+            var profiles = BrowserProfiles.resolved(client).dropFirst(2).map { $0 }
+            let id = profile?["id"]?.stringValue ?? "profile-" + UUID().uuidString.lowercased()
+            let next = BrowserProfiles.profile(id, label)
+            if let index = profiles.firstIndex(where: { $0["id"]?.stringValue == id }) { profiles[index] = next }
+            else { guard profiles.count < 24 else { return }; profiles.append(next) }
+            context.writeClient?(["browserProfiles": .array(profiles)]); refresh(); modal?.close()
+        }
+    }
+    private func clearBrowserProfile(_ profile: JSONValue, remove: Bool) {
+        guard let id = profile["id"]?.stringValue, let request = context.request else { return }
+        context.confirm?(remove ? "Remove this profile and its browsing data?" : "Clear this profile's browsing data?", true) { [weak self] in
+            guard let self else { return }
+            let targets = context.scope.targets
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    for target in targets { _ = try await request(target.environmentId, "preview.clearProfile", .object(["profileId": .string(id)])) }
+                    if remove {
+                        let profiles = BrowserProfiles.resolved(client).dropFirst(2).filter { $0["id"]?.stringValue != id }
+                        var patch: [String: JSONValue] = ["browserProfiles": .array(profiles)]
+                        if BrowserProfiles.defaultId(client) == id { patch["browserDefaultProfileId"] = .string("default") }
+                        context.writeClient?(patch); refresh()
+                    }
+                } catch { context.toast?("Unable to clear browser profile", String(describing: error), .error) }
+            }
+        }
+    }
+
     // MARK: Devices
 
     /// The device hub and agent device access (`DeviceIntegrationControls`). Outside a project scope T3 turns
@@ -115,8 +194,49 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             (agent?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite
             (hub?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
         }
-        let s = section("devices", "Devices", [hub, agent])
+        let addHost = ButtonView("Add host", icon: .plus, variant: .outline, size: .sm)
+        addHost.action = { [weak self] in self?.editDeviceHost(nil) }
+        let hostRow = row("device-hosts", detail: "Add remote machines with simulator or emulator runtimes installed, and the selected environments will connect over SSH and set up device tools automatically.", control: addHost)
+        hostRow.title = "Device hosts"
+        let manage = ButtonView("Manage hosts", variant: .outline, size: .sm)
+        manage.action = { [weak self, weak manage] in
+            guard let self, let manage else { return }
+            let hosts = self.context.scope.targets.first?.settings["deviceHosts"].arrayValue ?? []
+            let items: [MenuItem] = hosts.map { host in
+                var edit = MenuItem("Edit"); edit.action = { [weak self] in self?.editDeviceHost(host) }
+                var remove = MenuItem("Remove"); remove.action = { [weak self] in self?.removeDeviceHost(host) }
+                return .submenu(host["label"]?.stringValue ?? "Host", [edit, remove])
+            }
+            MenuPopupView.show(items.isEmpty ? [MenuItem("No remote device hosts")] : items, from: manage, placement: .dropdown)
+        }
+        let manageRow = row("device-hosts-manage", detail: "SSH aliases and identity files are resolved on each environment.", control: manage)
+        manageRow.title = "Remote device hosts"
+        binder.add { [weak self, weak addHost, weak manage] in
+            guard let self else { return }
+            let enabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
+            addHost?.isEnabled = enabled; manage?.isEnabled = enabled
+        }
+        let s = section("devices", "Devices", [hub, agent, hostRow, manageRow])
         return s
+    }
+    private func editDeviceHost(_ host: JSONValue?) {
+        deviceHostEditor = DeviceHostEditor(context: context, original: host)
+        deviceHostEditor?.present()
+    }
+    private func removeDeviceHost(_ host: JSONValue) {
+        guard context.scope.canWrite, !context.scope.isProjectScope, let request = context.request else { return }
+        let targets = context.scope.targets
+        Task { [weak self] in
+            guard let self else { return }
+            for target in targets {
+                do {
+                    let current = self.context.scope.targets.first { $0.environmentId == target.environmentId }?.settings["deviceHosts"].arrayValue ?? []
+                    let next = try DeviceHostEditing.update(current, host: host, original: host, remove: true)
+                    let result = try await request(target.environmentId, "server.updateSettings", .object(["patch": .object(["deviceHosts": .array(next)])]))
+                    context.applySettings?(target.environmentId, result)
+                } catch { context.toast?("Device hosts not saved on all environments", String(describing: error), .error) }
+            }
+        }
     }
     private func configureDevice(_ patch: [String: JSONValue]) {
         guard context.scope.canWrite, let request = context.request else { return }
