@@ -18,20 +18,6 @@ import T3Store
 /// environment session with the local ids.
 @MainActor
 final class ComposerController {
-    /// A new thread that exists only here until its first send (T3's `DraftSessionState`). Both ids
-    /// are scoped: the project's environment is where the thread will be created.
-    struct DraftSession: Codable, Equatable {
-        var draftId: String
-        var threadId: String
-        var projectId: String
-        var createdAt: Date
-        /// The branch toolbar's picks (`DraftThreadState`: `envMode`, `branch`, `worktreePath`, `startFromOrigin`).
-        var envMode: EnvMode?
-        var branch: String?
-        var worktreePath: String?
-        var startFromOrigin: Bool?
-    }
-
     enum Target: Equatable {
         case thread(ThreadId)
         case draft(DraftSession)
@@ -1017,8 +1003,12 @@ final class ComposerController {
         let supervisor = shell.supervisor
 
         switch target {
-        case .draft(let session):
+        case .draft(let stored):
             // First send of a draft: one launchThread; the thread exists after the reply (05-composer.jsonl).
+            // The launch takes a thread id of its own and the draft leaves the store (`NewThreadDraftLaunch`).
+            let (session, sessionKey) = NewThreadDraftLaunch.begin(stored, in: &sessions)
+            self.target = .draft(session)
+            scheduleSave()
             panel.setDraft(projectTitle: nil)
             refresh()
             let payload = ComposerLogic.launchThreadPayload(
@@ -1033,7 +1023,6 @@ final class ComposerController {
             // Started in the background: a fresh draft in the same project, with the same workspace
             // picks (`resolveBackgroundDraftWorkspaceOptions`), replaces the composer at once.
             if background, let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) {
-                sessions = sessions.filter { $0.value.draftId != session.draftId }
                 var workspace = session
                 workspace.worktreePath = nil
                 workspace.startFromOrigin = session.envMode == .worktree && session.startFromOrigin == true
@@ -1044,7 +1033,6 @@ final class ComposerController {
                     _ = try await supervisor.request("orchestration.launchThread", payload: payload)
                     guard let self else { return }
                     pickers.store.didSend(session.draftId)
-                    sessions = sessions.filter { $0.value.draftId != session.draftId }
                     prompts[session.draftId] = nil
                     scheduleSave()
                     if background {
@@ -1057,8 +1045,13 @@ final class ComposerController {
                 } catch {
                     // ponytail: a failed background start puts its text back into the fresh draft; T3 restores
                     // the failed draft as its own sidebar draft (restoreFailedBackgroundDraftThread). Port it if that bites
-                    self?.restoreAttachments(attachments, key: picksKey)
-                    self?.sendFailed(error, messageId: messageId, text: text, draft: session, key: picksKey)
+                    guard let self else { return }
+                    // The draft comes back with another thread id: the server may have created this one.
+                    let restored = NewThreadDraftLaunch.restore(session, key: sessionKey, in: &sessions)
+                    if let restored, self.target == .draft(session) { self.target = .draft(restored) }
+                    scheduleSave()
+                    restoreAttachments(attachments, key: picksKey)
+                    sendFailed(error, messageId: messageId, text: text, draft: restored ?? session, key: picksKey)
                 }
             }
         case .thread(let threadId):

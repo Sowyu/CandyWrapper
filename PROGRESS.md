@@ -146,11 +146,14 @@ Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside mil
 ## Known bugs to fix before the M7 demo
 
 - Closing terminal panes did not lower the footprint (62.8 to 67.6 MB open, 65.2 to 67.3 MB after closing; WP7.11). Check for a retained SwiftTerm view or stream.
-- A send from the new-thread draft landed in another thread's history ("Describe this image"), and that thread dropped out of the sidebar (WP7.10 on screen, 2026-10-11). Data integrity: diagnose first.
-- The Lineage section vanished once after a fork's first send and came back on relaunch (WP7.10, not reproduced).
+- The Lineage section vanished once after a fork's first send and came back on relaunch (WP7.10, not reproduced). 2026-10-11 bug agent: not reproduced either (fork from a response, first send, Lineage stayed). Not caused by the draft bug below: an overwrite resets lineage on the server for good, it would not come back on relaunch.
 - With four agents on one screen, keys can reach the wrong test app (a terminal drawer opened by itself in WP7.10's window); the UI tools' CW_UI_PID check and the key post are not atomic.
 - Recycled sidebar rows keep a stale hover look (seen by WP7.9 on 2026-10-11; older than WP7.9).
 - T3 assets copied into the app (notification sounds in App/Resources/Sounds) need T3's MIT license notice in the bundle by milestone 9.
+
+## Fixed bugs
+
+- A send from the new-thread draft landed in another thread's history ("Describe this image"), and that thread dropped out of the sidebar (WP7.10 on screen, 2026-10-11). Fixed 2026-10-11 (worktree agent, not committed). Cause: the launch sent the draft's stored thread id, and T3's `thread.create` does not check for an existing thread (Orchestrator.ts:2183-2232, ThreadLaunchService.ts:770-800), so a used id rewrites that thread's shell (title, project, lineage) and appends the message. Stored ids got reused when two apps shared one defaults domain (every Debug build was `dev.candywrapper.app`: app B kept the draft app A had launched and sent it again; reproduced on screen with two copies, "Reply Alpha" got B's message and B's title) and, in one app, by New thread while a launch was still in flight. Fix: `NewThreadDraftLaunch` (Features/Composer) gives every launch a fresh thread id and takes the draft out of the store while it flies; a failed launch restores it with another id. `DraftSession` moved there from ComposerController. Test: NewThreadDraftLaunchTests (fails on the old behavior). CLAUDE.md now tells agents to build test apps with their own bundle id and URL scheme.
 
 ## Milestone 10: stress test for glitches and performance (planned, last)
 
