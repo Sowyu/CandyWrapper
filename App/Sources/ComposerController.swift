@@ -184,6 +184,7 @@ final class ComposerController {
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
+        panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none
         composer.footerControls = [pickers.controlsView]
@@ -623,6 +624,7 @@ final class ComposerController {
         var environments: SidebarEnvironments
     }
     private var lastRunOnInputs: RunOnInputs?
+    private var loadBalanceTask: Task<Void, Never>?
 
     /// Points a draft at another member: same draft and local thread id, the member's environment.
     static func retarget(_ session: inout DraftSession, to project: ProjectShell) {
@@ -668,11 +670,58 @@ final class ComposerController {
         let env = ProjectId(session.projectId).environmentId
         let runOn = panel.contextStrip.runOn
         runOn.options = targets.map(\.option)
+        runOn.offersAutoBalance = targets.count > 1 && ClientSettingsStore.shared.current.bool("loadBalancingEnabled")
+        runOn.autoBalanceLabel = runOn.offersAutoBalance && session.environmentSelection == "auto" ? (loadBalanceTask != nil ? "Checking machines…" : session.loadBalancedEnvironmentId == nil ? "Auto balance unavailable" : "Auto balance") : nil
         runOn.selectedId = env
         runOn.locked = targets.count < 2 || pendingMessageId != nil
         // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
         panel.contextStrip.showsGitControls = draftIsGitRepo
         panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
+    }
+
+    /// ChatView.tsx:4344-4437. A choice samples each eligible host once; resolved drafts do no idle work.
+    // ponytail: explicit Auto balance only, enable the default automatic choice after shared-project coverage on two sandbox hosts.
+    private func chooseAutomaticEnvironment() {
+        guard case .draft(var session) = target, pendingMessageId == nil, let group = group(of: ProjectId(session.projectId)),
+              let selection = pickers.current.modelSelection else { return }
+        guard currentAttachments.isEmpty else {
+            toast(.warning, "Keep attachments on this machine", "Remove attachments before choosing automatic routing, then attach them on the selected machine.")
+            return
+        }
+        loadBalanceTask?.cancel()
+        session.environmentSelection = "auto"; session.loadBalancedEnvironmentId = nil; session.branch = nil; session.worktreePath = nil
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        sessions[key] = session; target = .draft(session)
+        let candidates = runOnTargets(group).filter { candidate in
+            guard environments.session(candidate.option.environmentId) != nil else { return false }
+            return providers(candidate.option.environmentId).contains { p in
+                p.instanceId == selection.instanceId && p.enabled && p.installed && p.status != .error
+                    && p.auth?["status"]?.stringValue != "unauthenticated" && p.availability != "unavailable"
+            }
+        }
+        let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
+        let draftID = session.draftId
+        loadBalanceTask = Task { [weak self] in
+            guard let self else { return }
+            var snapshots: [ProviderLoadBalanceLogic.Candidate] = []
+            for candidate in candidates {
+                guard !Task.isCancelled else { return }
+                let env = candidate.option.environmentId
+                if let value = try? await self.environments.request(env, "server.getHostResources", .object([:])) {
+                    snapshots.append(.init(id: env, resources: value, receivedAt: Date().timeIntervalSince1970 * 1000, weight: Double(weights[env] ?? 50)))
+                }
+            }
+            guard !Task.isCancelled else { return }
+            self.loadBalanceTask = nil
+            guard case .draft(var current) = self.target, current.draftId == draftID, current.environmentSelection == "auto" else { return }
+            if let chosen = ProviderLoadBalanceLogic.choose(snapshots, now: Date().timeIntervalSince1970 * 1000),
+               let project = candidates.first(where: { $0.option.environmentId == chosen })?.project {
+                self.flushPrompt(); Self.retarget(&current, to: project); current.loadBalancedEnvironmentId = chosen
+                self.sessions[key] = current; self.target = .draft(current); self.syncSidebarDrafts(); self.onTargetChange?()
+            }
+            self.scheduleSave(); self.refresh()
+        }
+        scheduleSave(); refresh()
     }
 
     /// `onEnvironmentChange` (ChatView.tsx:4450-4517): the open draft moves to the group's member on that
@@ -681,9 +730,11 @@ final class ComposerController {
         guard case .draft(var session) = target, pendingMessageId == nil,
               let group = group(of: ProjectId(session.projectId)),
               let project = runOnTargets(group).first(where: { $0.option.environmentId == environmentId })?.project,
-              project.id.rawValue != session.projectId else { return }
+              (project.id.rawValue != session.projectId || session.environmentSelection == "auto") else { return }
         flushPrompt()
         let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        loadBalanceTask?.cancel(); loadBalanceTask = nil
+        session.environmentSelection = "manual"; session.loadBalancedEnvironmentId = nil
         Self.retarget(&session, to: project)
         sessions[key] = session
         target = .draft(session)
@@ -1040,6 +1091,10 @@ final class ComposerController {
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !threadRewindBusy else { return }
+        if case .draft(let draft) = target, ClientSettingsStore.shared.current.bool("loadBalancingEnabled"), draft.environmentSelection == "auto", draft.loadBalancedEnvironmentId == nil {
+            toast(.warning, "Auto balance unavailable", "Choose a machine before sending.")
+            return
+        }
         var text = text
         var implementationPlan: PlanArtifact?
         if composer.planFollowUp, let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown, let key = draftKey {

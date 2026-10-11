@@ -140,8 +140,12 @@ extension SettingsController {
                           detail: "Run agents on this computer. Turn off to use T3 Code only with remote environments.",
                           control: .toggle(.init(isOn: true, isEnabled: false, tooltip: Self.bridgeTooltip, label: "Local environment"))))
         if canMaintain {
-            // ponytail: "Up to date" whenever the version is known; T3 compares with its own app version and offers updates (M9)
-            rows.append(.version(line.isEmpty ? "Loading…" : line, upToDate: d != nil))
+            if ServerVersionSkewLogic.serverIsBehind(d?.serverVersion) {
+                rows.append(.init(id: "version", title: "Version", detail: line, status: ServerVersionSkewLogic.hint,
+                    control: .copyCommand(ServerVersionSkewLogic.manualCommand())))
+            } else {
+                rows.append(.version(line.isEmpty ? "Loading…" : line, upToDate: d != nil))
+            }
             rows.append(networkAccessRow(id))
             rows.append(tailscaleRow())
             if canReadRelay || canManageRelay { rows += cloudRows(canReadRelay: canReadRelay, canManageRelay: canManageRelay) }

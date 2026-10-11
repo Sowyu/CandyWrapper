@@ -228,6 +228,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         usageProviders.headerAction = addHub
         addHub.action = { [weak self] in self?.openAddHub() }
         body = [placeholder, providers, usageProviders, section(nil, "Advanced", [healthRow])]
+        providers.add.action = { [weak self] in self?.openAddProvider() }
+        providers.addRow.action = { [weak self] in self?.openAddProvider() }
         providers.refresh.action = { [weak self] in self?.refreshProviders() }
         binder.add { [weak self] in self?.update() }
     }
@@ -258,6 +260,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let live = context.configs[env.id]?.providers ?? []
         let rows = ProvidersLogic.rows(settings: settings, providers: live)
         let chosen = rows.first { $0.instanceId == selected } ?? rows.first
+        providers.add.isEnabled = env.canWrite
+        providers.addRow.isEnabled = env.canWrite
         providers.refresh.isEnabled = !refreshing
         let last = live.map { $0.checkedAt ?? "" }.max()
         providers.setChecked(refreshing ? "Refreshing providers" : last.map { iso -> String in
@@ -299,6 +303,15 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         (healthRow.accessories.last as? ResetSlot)?.isShown = seconds != preset && env.canWrite
         health.isEnabled = env.canWrite
         updateUsageProviders(env, settings: s)
+    }
+
+    private func openAddProvider() {
+        guard let env = environment, env.canWrite, let window else { return }
+        let ids = Set(env.settings?["providerInstances"].objectValue?.keys.map { $0 } ?? [])
+        let dialog = ProviderAddWizardView(context: context, environment: env.id, label: env.label, existing: ids)
+        let host = ModalHost.present(dialog, in: window)
+        dialog.close = { [weak host] in host?.close() }
+        dialog.onCreated = { [weak self] id in self?.selected = id; self?.refresh() }
     }
 
     // MARK: Usage providers (UsageProviderSettings.tsx)
@@ -572,6 +585,36 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         header.group.rows = [nameRow]
         var sections: [NSView & SettingsGroupRow] = [header]
 
+        if row.driver == "codex" {
+            let addAccount = ButtonView("Add ChatGPT account", variant: .outline, size: .sm)
+            addAccount.isEnabled = !readOnly
+            addAccount.action = { [weak self] in
+                guard let self, let window = self.window else { return }
+                let dialog = ProviderCodexAccountDialog(context: self.context, environment: env.id)
+                let host = ModalHost.present(dialog, in: window)
+                dialog.close = { [weak host] in host?.close() }
+                dialog.onCreated = { [weak self] id in self?.selected = id; self?.refresh() }
+            }
+            sections.append(SettingsSectionView(title: "ChatGPT", rows: [SettingsRowView(title: "Accounts", control: addAccount)]))
+            if row.instance["config"]?["setupMode"]?.stringValue == "managed" {
+                let runtime = ProviderCodexRuntimeView(context: context, environment: env.id, instance: row.instanceId, readOnly: readOnly)
+                runtime.onHeightChange = { [weak self] in self?.onHeightChange?() }
+                sections.append(SettingsSectionView(title: "Runtime", rows: [runtime]))
+            }
+        }
+        if provider?.setup?["canAuthenticate"]?.boolValue == true || row.driver == "acpRegistry" {
+            let auth = ProviderAuthenticationView(context: context, environment: env.id, label: env.label,
+                instance: row.instanceId, provider: provider, readOnly: readOnly)
+            auth.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            sections.append(SettingsSectionView(title: "Setup", rows: [auth]))
+        }
+
+        if row.driver == "acpRegistry", let provider, provider.nativeSessions?["canList"]?.boolValue == true {
+            let sessions = ProviderAcpSessionsView(context: context, environment: env.id, instance: row.instanceId, provider: provider, readOnly: readOnly)
+            sessions.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            sections.append(SettingsSectionView(title: "Sessions", rows: [sessions]))
+        }
+
         // Setup: drivers with a dedicated variable field (Cursor's API key).
         let envFields = ProviderEnvironmentLogic.fields(row.driver)
         let variables = ProviderEnvironmentLogic.variables(row.instance)
@@ -787,7 +830,7 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
     private let card = BoxView()
     private let listFill = CALayer()
     private let divider = CALayer()
-    private let addRow = SidebarStyleAddRow()
+    let addRow = SidebarStyleAddRow()
     var list: [ProviderListRow] = [] { didSet { oldValue.forEach { $0.removeFromSuperview() }; list.forEach(card.addSubview); needsLayout = true } }
     var editor: ProviderEditorView? { didSet { oldValue?.removeFromSuperview(); editor.map(card.addSubview); needsLayout = true } }
 
@@ -797,7 +840,6 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         addSubview(title)
         add.iconSize = 14
         add.setAccessibilityLabel("Add provider")
-        // ponytail: adding provider instances (AddProviderInstanceDialog, ACP registry search) is not built; both entry points show disabled
         add.isEnabled = false
         _ = TooltipController.attach(to: add, text: "Add provider")
         addSubview(add)

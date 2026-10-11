@@ -14,6 +14,8 @@ public struct DraftSession: Codable, Equatable, Sendable {
     public var branch: String?
     public var worktreePath: String?
     public var startFromOrigin: Bool?
+    public var environmentSelection: String?
+    public var loadBalancedEnvironmentId: String?
 
     public init(draftId: String, threadId: String, projectId: String, createdAt: Date, envMode: EnvMode? = nil,
                 branch: String? = nil, worktreePath: String? = nil, startFromOrigin: Bool? = nil) {

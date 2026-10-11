@@ -242,6 +242,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// (`{canAuthenticate?, canInstall?}`): the composer's provider status banner reads them.
     public var compatibilityAdvisory: JSONValue?
     public var setup: JSONValue?
+    public var nativeSessions: JSONValue?
+    public var configurableProviders: Bool?
 
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
@@ -263,7 +265,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
         case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
-        case updateState, versionAdvisory, compatibilityAdvisory, setup
+        case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -304,6 +306,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         versionAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil
         latestVersion = versionAdvisory?["latestVersion"]?.stringValue
         compatibilityAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .compatibilityAdvisory)) ?? nil
+        nativeSessions = try? c.decodeIfPresent(JSONValue.self, forKey: .nativeSessions)
+        configurableProviders = try? c.decodeIfPresent(Bool.self, forKey: .configurableProviders)
         setup = (try? c.decodeIfPresent(JSONValue.self, forKey: .setup)) ?? nil
     }
 

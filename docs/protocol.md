@@ -2016,3 +2016,16 @@ Every item below is **UNVERIFIED**: no source line or recording confirmed it.
 22. Whether `vcs.listRefs.refresh: true` fetches from remotes; the worktree path the server picks when `vcs.createWorktree.path` is `null`; how the `review.*` cwd guard treats projects outside the server launch cwd.
 23. Whether any MCP tool lets agents drive terminals.
 24. Resolved 2026-10-09: a server started with an inherited `T3_SERVICE_LAUNCHER_CONTEXT` and no IPC channel exits with code 1 at startup, logging `ServiceLauncherClientError: The service launcher IPC channel is unavailable.` from `cloud.service_launcher_client.resolve_startup` (observed on the sandbox, see section 11.4).
+
+
+## WP7.14b provider setup details (2026-10-11)
+
+Source review and row-by-row citations: [providers and environments](research/WP7.14b-providers-environments.md).
+
+- Create an instance with `server.updateSettings`, an empty `patch` and `providerInstanceMutation: {operation: "create", instanceId, instance}`. Existing Codex CLI setup uses `config.setupMode: "existing"`.
+- `provider.auth.subscribe` is scoped to `instanceId`. Responses carry both the active `flowId` and `interactionId`; terminal responses use `{type: "terminal", data}`. Terminal `outputOffset` is the cumulative UTF-16 **end** offset, including when the server trims the output window.
+- ACP session list/import/delete use `server.listAcpRegistrySessions`, `server.importAcpRegistrySession`, and `server.deleteAcpRegistrySession`. Import carries `instanceId`, `projectId`, `sessionId`, and nullable `title`/`updatedAt`.
+- Host resource scoring reads `server.getHostResources`; `server.hostResources` is not the method name.
+- A server update reply acknowledges preparation; it does not establish that the new server is ready. The desktop flow needs a commit token, progress events, reconnection and a ready event. This lifecycle is not yet implemented by the native client.
+
+These contracts were read from source and payload-tested where implemented. No real provider sign-in, CLI update, server update or SSH connection was performed.

@@ -26,7 +26,7 @@ final class LegacyThreadMigrationToast {
         guard shell !== subscription?.shell else { return }
         if let subscription { subscription.shell.lifecycleObservers[subscription.observer] = nil }
         subscription = nil
-        guard let shell else { return }
+        guard let shell else { apply(status: nil, total: 0); return }
         let observer = UUID()
         shell.lifecycleObservers[observer] = { [weak self] json in
             guard json["type"]?.stringValue == "legacyThreadMigration" else { return }

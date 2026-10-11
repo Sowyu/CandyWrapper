@@ -316,7 +316,7 @@ final class GitController {
         let strip = panel.contextStrip
         let indicator = runOnChoices || (env != nil && target.environmentId != environments.primaryId)
         strip.runContext.glyphs = indicator ? [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)] : [folderIcon(target)]
-        strip.runContext.text = indicator ? env?.label ?? "Run on" : label
+        strip.runContext.text = strip.runOn.autoBalanceLabel ?? (indicator ? env?.label ?? "Run on" : label)
         strip.runContext.tooltipText = label
         strip.runContext.interactive = target.isDraft && composer.currentDraft != nil
         strip.branch.text = branchLabel
@@ -421,11 +421,12 @@ final class GitController {
         let runOn = panel.contextStrip.runOn
         if runOn.options.count > 1 {
             items.append(.label("Run on"))
+            if let item = runOn.autoBalanceMenuItem() { items.append(item) }
             for option in runOn.options {
-                var item = MenuItem.radio(option.label, checked: option.environmentId == runOn.selectedId)
+                var item = MenuItem.radio(option.label, checked: runOn.autoBalanceLabel == nil && option.environmentId == runOn.selectedId)
                 item.glyph = EnvironmentMachineIcon.definition(option.machine)
                 item.closesOnClick = true
-                item.action = { [weak runOn] in if option.environmentId != runOn?.selectedId { runOn?.onChange?(option.environmentId) } }
+                item.action = { [weak runOn] in if option.environmentId != runOn?.selectedId || runOn?.autoBalanceLabel != nil { runOn?.onChange?(option.environmentId) } }
                 items.append(item)
             }
             items.append(.separator)
