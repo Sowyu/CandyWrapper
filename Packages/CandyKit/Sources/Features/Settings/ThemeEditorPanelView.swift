@@ -19,6 +19,7 @@ final class ThemeEditorPanelView: DSView {
     private var dragOffset: CGPoint?
     private var resizeStart: (pointer: CGPoint, size: CGSize, origin: CGPoint)?
     private var inspectMonitor: Any?
+    private var frameObserver: NSObjectProtocol?
     /// Off for a panel drawn on its own (the fidelity test); on, it keeps itself in the window's corner.
     var placesInHost = true
 
@@ -53,10 +54,11 @@ final class ThemeEditorPanelView: DSView {
 
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        NotificationCenter.default.removeObserver(self)
+        if let frameObserver { NotificationCenter.default.removeObserver(frameObserver) }
+        frameObserver = nil
         guard let superview else { return }
         superview.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: superview, queue: .main) { [weak self] _ in
+        frameObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: superview, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.place() }
         }
         place()
@@ -247,7 +249,8 @@ final class ThemeEditorPanelView: DSView {
 
     override func removeFromSuperview() {
         if let m = inspectMonitor { NSEvent.removeMonitor(m); inspectMonitor = nil }
-        NotificationCenter.default.removeObserver(self)
+        if let frameObserver { NotificationCenter.default.removeObserver(frameObserver) }
+        frameObserver = nil
         super.removeFromSuperview()
     }
 }

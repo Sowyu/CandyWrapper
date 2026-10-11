@@ -711,9 +711,9 @@ public enum ComposerContext {
 
     /// The pull request a review-comment record carries.
     public static func pullRequest(in record: JSONValue) -> PullRequestReference? {
-        guard let pr = record["pullRequest"], case .number(let n)? = pr["number"] else { return nil }
+        guard let pr = record["pullRequest"], let n = pr["number"]?.intValue else { return nil }
         let isDraft: Bool = if case .bool(let b)? = pr["isDraft"] { b } else { false }
-        return PullRequestReference(number: Int(n), title: pr["title"]?.stringValue ?? "", url: pr["url"]?.stringValue ?? "",
+        return PullRequestReference(number: n, title: pr["title"]?.stringValue ?? "", url: pr["url"]?.stringValue ?? "",
                                     headBranch: pr["headBranch"]?.stringValue ?? "", baseBranch: pr["baseBranch"]?.stringValue ?? "",
                                     state: pr["state"]?.stringValue ?? "open", isDraft: isDraft)
     }

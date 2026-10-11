@@ -518,14 +518,18 @@ final class BrowserController {
                 guard let url = PreviewStream.httpURL(base: http.baseURL, route: "upload", query: [("threadId", thread), ("tabId", tab), ("chooser", chooser)],
                                                       ticket: ticket.ticket) else { return }
                 let boundary = "candywrapper-\(UUID().uuidString)"
-                var body = Data()
-                for file in urls {
-                    let data = try Data(contentsOf: file)
-                    body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(file.lastPathComponent)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8))
-                    body.append(data)
-                    body.append(Data("\r\n".utf8))
-                }
-                body.append(Data("--\(boundary)--\r\n".utf8))
+                // The reader's files can be any size: read them off the main thread.
+                let body = try await Task.detached(priority: .userInitiated) {
+                    var body = Data()
+                    for file in urls {
+                        let data = try Data(contentsOf: file)
+                        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(file.lastPathComponent)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8))
+                        body.append(data)
+                        body.append(Data("\r\n".utf8))
+                    }
+                    body.append(Data("--\(boundary)--\r\n".utf8))
+                    return body
+                }.value
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")

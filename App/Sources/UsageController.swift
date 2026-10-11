@@ -95,7 +95,7 @@ final class UsageController {
         page.onSelectModel = { [weak self] key in self?.openModel(key) }
         page.onEnableCursor = { [weak self] env in self?.enableCursor(env) }
         page.limits.onUseReset = { [weak self] account in self?.useReset(account) }
-        page.limits.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        page.limits.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         composer?.configObservers.append { [weak self] _ in
             guard let self, self.isVisible else { return }
             self.render()

@@ -77,7 +77,7 @@ final class PullRequestDetailBinding {
         view.onTab = { [weak self] tab in if tab == .code { self?.loadCode() } }
         view.onRetry = { [weak self] in self?.reload(invalidate: false) }
         view.onRefresh = { [weak self] in self?.reload(invalidate: true) }
-        view.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         view.onCopy = { [weak self] text, label in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -590,7 +590,7 @@ final class ThreadPullRequestsController {
         list.onLink = { [weak self] in self?.openLinkDialog() }
         list.onUnlink = { [weak self] link in self?.unlink(link) }
         list.onCopy = { [weak self] url in self?.copy(url, title: "Link copied") }
-        list.onOpenExternal = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        list.onOpenExternal = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         list.onWatch = { [weak self] link, watching in self?.watch(link, watching) }
         MarkdownView.linkHandler = self
     }
@@ -732,14 +732,14 @@ final class ThreadPullRequestsController {
     func open(_ link: ThreadPullRequestLink) {
         guard let thread, let env = thread.id.environmentId, capabilities.has(env, "pullRequests"),
               let parsed = ChangeRequestURL.parse(link.url) else {
-            if let u = URL(string: link.url) { NSWorkspace.shared.open(u) }
+            if let u = SafeExternalURL.parse(link.url) { NSWorkspace.shared.open(u) }
             return
         }
         let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }
         let project = projects.first { $0.repositoryIdentity?.owns(parsed) == true }
             ?? projects.first { $0.repositoryIdentity?.pullRequestHost == parsed.host }
             ?? self.project
-        guard let project else { if let u = URL(string: link.url) { NSWorkspace.shared.open(u) }; return }
+        guard let project else { if let u = SafeExternalURL.parse(link.url) { NSWorkspace.shared.open(u) }; return }
         panel.mutatePanel {
             $0.openPullRequest(PullRequestSurfaceTarget(projectId: project.id.localId.rawValue, host: link.host, repository: link.repository,
                                                         number: link.number, url: link.url))
@@ -923,8 +923,8 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
 
     private func runLinkAction(_ id: String, href: String) {
         switch id {
-        case "open-in-preview": if let url = URL(string: href) { openIntegratedBrowser?(url) }
-        case "open-external": if let u = URL(string: href) { NSWorkspace.shared.open(u) }
+        case "open-in-preview": if let url = SafeExternalURL.parse(href) { openIntegratedBrowser?(url) }
+        case "open-external": if let u = SafeExternalURL.parse(href) { NSWorkspace.shared.open(u) }
         case "copy-link":
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(href, forType: .string)

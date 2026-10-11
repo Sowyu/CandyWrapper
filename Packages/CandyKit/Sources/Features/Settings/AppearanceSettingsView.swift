@@ -138,6 +138,9 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let done: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
             do {
+                // Check the size before reading: this runs on the main thread.
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                guard size <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
                 let data = try Data(contentsOf: url)
                 guard data.count <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
                 let object = try JSONSerialization.jsonObject(with: data)

@@ -383,7 +383,7 @@ final class FilesController {
             let text = reply["contents"]?.stringValue ?? ""
             let truncated = reply["truncated"] == .bool(true)
             var bytes = text.utf8.count
-            if case .number(let n)? = reply["byteLength"] { bytes = Int(n) }
+            if let n = reply["byteLength"]?.intValue { bytes = n }
             return .text(text, truncated: truncated, byteLength: bytes, editable: !truncated && !path.hasPrefix("/"))
         } catch let error as RPCClientError {
             let typed = error.typedError

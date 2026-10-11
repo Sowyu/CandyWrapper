@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 import T3Store
 import T3Protocol
 
@@ -680,6 +681,8 @@ private final class MarkdownLinkHitView: NSView {
         if previewing { previewing = false; handler?.hideLinkPreview(anchor: self) }
         if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
             ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        } else if !SafeExternalURL.isSafe(url) {
+            // T3 opens only http and https from a message (`parseSafeExternalUrl`); a `file:` or app link does nothing.
         } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
     }
 
@@ -700,7 +703,7 @@ private final class MarkdownLinkHitView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    @objc private func openExternal() { if let url { NSWorkspace.shared.open(url) } }
+    @objc private func openExternal() { if let url, SafeExternalURL.isSafe(url) { NSWorkspace.shared.open(url) } }
     @objc private func copyLink() {
         guard let url else { return }
         NSPasteboard.general.clearContents()
@@ -712,6 +715,8 @@ private final class MarkdownLinkHitView: NSView {
         guard let url, let owner else { return false }
         if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
             ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        } else if !SafeExternalURL.isSafe(url) {
+            // T3 opens only http and https from a message (`parseSafeExternalUrl`); a `file:` or app link does nothing.
         } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
         return true
     }

@@ -881,7 +881,7 @@ final class GitController {
             let host = self.present(wizard.dialog, in: window)
             wizard.onClose = { [weak host] in host?.close() }
             wizard.onOpenSettings = { [weak host] in host?.close() }
-            wizard.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+            wizard.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
             wizard.onPublish = { [weak self, weak wizard] provider, repository, visibility, remote, proto in
                 let payload = VcsRPC.publishInput(cwd: target.cwd, provider: provider, repository: repository, visibility: visibility,
                                                   remoteName: remote, protocol: proto)

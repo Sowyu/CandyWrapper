@@ -2049,7 +2049,7 @@ extension ComposerController {
             let reply = try? await supervisor.request("pullRequests.detail", payload: payload)
             guard !Task.isCancelled, let self else { return }
             var entry: ComposerMenus.PullRequestEntry?
-            if let d = reply, case .number(let n)? = d["number"], Int(n) == number {
+            if let d = reply, d["number"]?.intValue == number {
                 let isDraft: Bool = if case .bool(let b)? = d["isDraft"] { b } else { false }
                 let pr = PullRequestReference(number: number, title: d["title"]?.stringValue ?? "", url: d["url"]?.stringValue ?? "",
                                               headBranch: d["headBranch"]?.stringValue ?? "", baseBranch: d["baseBranch"]?.stringValue ?? "",
@@ -2075,9 +2075,9 @@ extension ComposerController {
         return list.compactMap { e in
             guard e["projectId"]?.stringValue == projectId,
                   e["repository"]?.stringValue?.trimmingCharacters(in: .whitespaces).lowercased() == repo,
-                  case .number(let n)? = e["number"] else { return nil }
+                  let n = e["number"]?.intValue else { return nil }
             let isDraft: Bool = if case .bool(let b)? = e["isDraft"] { b } else { false }
-            let pr = PullRequestReference(number: Int(n), title: e["title"]?.stringValue ?? "", url: e["url"]?.stringValue ?? "",
+            let pr = PullRequestReference(number: n, title: e["title"]?.stringValue ?? "", url: e["url"]?.stringValue ?? "",
                                           headBranch: e["headBranch"]?.stringValue ?? "", baseBranch: e["baseBranch"]?.stringValue ?? "",
                                           state: e["state"]?.stringValue ?? "open", isDraft: isDraft)
             let entry = ComposerMenus.PullRequestEntry(reference: pr, repository: e["repository"]?.stringValue ?? "",
@@ -2915,7 +2915,7 @@ extension ComposerController {
         }
         let banner = UsageLimitsBannerView(report: report)
         banner.dismiss.action = { [weak self] in self?.panel.usageLimitsBanner = nil }
-        banner.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
+        banner.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         for (account, view) in banner.resetViews {
             guard let target = account.resetCreditTarget ?? account.instanceId.map({ .instance($0) }) else { continue }
             view.onUse = { [weak self, weak view] in
