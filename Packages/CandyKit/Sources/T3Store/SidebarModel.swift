@@ -84,7 +84,7 @@ public enum SidebarTopStatus: String, Sendable {
 }
 
 public enum SidebarSection: String, Sendable, CaseIterable {
-    case pinned, active, snoozed, settled
+    case pinned, active, working, snoozed, settled
 }
 
 /// `ThreadStatusPill` (apps/web/src/components/Sidebar.logic.ts:626-638). Colors belong to the
@@ -414,16 +414,59 @@ public enum SidebarModel {
     public struct Shelves: Sendable, Equatable {
         public var pinned: [SidebarThread] = []
         public var active: [SidebarThread] = []
+        /// The Working beta shelf (`sidebarWorkingShelfEnabled`): inbox threads busy without the user.
+        public var working: [SidebarThread] = []
         public var snoozed: [SidebarThread] = []
         public var settled: [SidebarThread] = []
     }
 
-    /// The shelf split and per-shelf order from the sidebar's memo (Sidebar.tsx:2780-2881),
-    /// without the Working beta shelf and drag previews. Shelves render in the order pinned,
-    /// active, snoozed, settled.
+    /// `isThreadWorking` (client-runtime state/threadInbox.ts:21-34): a running run, or one stopped with
+    /// background work that will wake it. Approvals, questions, plan prompts and failures stay in the inbox.
+    public static func isThreadWorking(_ thread: SidebarThread) -> Bool {
+        if thread.hasPendingApprovals || thread.hasPendingUserInput { return false }
+        let runtimeActive = thread.runtime.map { activeRunStatuses.contains($0.status) } ?? false
+        if !runtimeActive, thread.runtime?.status != .idle { return false }
+        let runSettled = thread.latestRun.map { run in
+            ![.preparing, .queued, .starting, .running, .waiting].contains(run.status) && thread.runtime?.activeRunId != run.runId
+        } ?? false
+        return !(thread.shell.interactionMode == .plan && thread.shell.hasActionableProposedPlan && runSettled)
+    }
+
+    static func sortableMs(_ t: T3Timestamp?) -> Int64 { t?.epochMs ?? 0 }
+
+    /// Newest first by `timestamps`, then id and environment, descending/ascending as T3 (`sortNewestFirst`).
+    static func sortNewestFirst(_ threads: [SidebarThread], _ timestamp: (SidebarThread) -> Int64) -> [SidebarThread] {
+        threads.map { ($0, timestamp($0)) }.sorted { l, r in
+            if l.1 != r.1 { return l.1 > r.1 }
+            let lid = l.0.id.localId.rawValue, rid = r.0.id.localId.rawValue
+            if lid != rid { return lid < rid }
+            return (l.0.id.environmentId ?? "") < (r.0.id.environmentId ?? "")
+        }.map(\.0)
+    }
+
+    /// `sortInboxThreadsByReturn`: newest return to the user first (created, un-settled, run requested or
+    /// completed, or a return this client saw).
+    public static func sortInboxThreadsByReturn(_ threads: [SidebarThread], returnedAt: (ThreadId) -> Int64?) -> [SidebarThread] {
+        sortNewestFirst(threads) { t in
+            max(sortableMs(t.shell.createdAt), sortableMs(t.shell.unsettledAt), sortableMs(t.latestRun?.requestedAt),
+                sortableMs(t.latestRun?.completedAt), returnedAt(t.id) ?? 0)
+        }
+    }
+
+    /// `sortWorkingThreadsBySend`: newest message the user sent first; servers without the authored stamp
+    /// fall back to the latest run's request.
+    public static func sortWorkingThreadsBySend(_ threads: [SidebarThread]) -> [SidebarThread] {
+        sortNewestFirst(threads) { t in
+            max(sortableMs(t.shell.createdAt), sortableMs(t.shell.latestUserAuthoredMessageAt ?? t.latestRun?.requestedAt))
+        }
+    }
+
+    /// The shelf split and per-shelf order from the sidebar's memo (Sidebar.tsx:2780-2881), without
+    /// drag previews. Shelves render in the order pinned, active, working, snoozed, settled. With the
+    /// Working shelf on, inbox threads that are working fold into it and the inbox orders by return.
     public static func buildShelves(
         _ threads: [SidebarThread], scopedProjectIds: Set<ProjectId>? = nil, capabilities: Capabilities,
-        nowMs: Int64
+        nowMs: Int64, workingShelf: Bool = false, returnedAt: (ThreadId) -> Int64? = { _ in nil }
     ) -> Shelves {
         var shelves = Shelves()
         for thread in filterSidebarV2VisibleThreads(threads, scopedProjectIds: scopedProjectIds) {
@@ -433,13 +476,15 @@ public enum SidebarModel {
                 pinned: thread.shell.pinnedAt != nil)
             switch section {
             case .pinned: shelves.pinned.append(thread)
-            case .active: shelves.active.append(thread)
+            case .active, .working:
+                if workingShelf, isThreadWorking(thread) { shelves.working.append(thread) } else { shelves.active.append(thread) }
             case .snoozed: shelves.snoozed.append(thread)
             case .settled: shelves.settled.append(thread)
             }
         }
         shelves.pinned = sortPinnedThreadsByOrderKey(shelves.pinned)
-        shelves.active = sortActiveThreadsByOrderKey(shelves.active)
+        shelves.active = workingShelf ? sortInboxThreadsByReturn(shelves.active, returnedAt: returnedAt) : sortActiveThreadsByOrderKey(shelves.active)
+        shelves.working = sortWorkingThreadsBySend(shelves.working)
         // Soonest wake first (Sidebar.tsx:2874-2879).
         shelves.snoozed = stableSorted(shelves.snoozed) {
             firstValidTimestampMs($0.shell.snoozedUntil) < firstValidTimestampMs($1.shell.snoozedUntil)
@@ -597,11 +642,32 @@ public enum SidebarModel {
             })
     }
 
-    /// `SidebarProjectGroupingMode` (packages/contracts/src/settings.ts:67-73). The
-    /// `repository_path` mode is not ported.
-    public enum ProjectGroupingMode: String, Sendable {
+    /// `SidebarProjectGroupingMode` (packages/contracts/src/settings.ts:67-73).
+    public enum ProjectGroupingMode: String, Sendable, Hashable {
         case repository
+        /// The same repository and the same folder inside it.
+        case repositoryPath = "repository_path"
         case separate
+    }
+
+    /// `ProjectGroupingSettings`: the `sidebarProjectGroupingMode` client setting and its per-project
+    /// overrides, keyed by physical project key (`deriveProjectGroupingOverrideKey`).
+    public struct ProjectGrouping: Hashable, Sendable {
+        public var mode: ProjectGroupingMode
+        public var overrides: [String: ProjectGroupingMode]
+        public init(mode: ProjectGroupingMode = .repository, overrides: [String: ProjectGroupingMode] = [:]) {
+            self.mode = mode; self.overrides = overrides
+        }
+
+        /// `resolveProjectGroupingMode`.
+        public func mode(for project: ProjectShell) -> ProjectGroupingMode { overrides[physicalProjectKey(project)] ?? mode }
+
+        /// The client settings' grouping, which every caller of `buildProjectGroups` uses unless it passes one.
+        public static var current: ProjectGrouping {
+            get { currentLock.withLock { $0 } }
+            set { currentLock.withLock { $0 = newValue } }
+        }
+        static let currentLock = OSAllocatedUnfairLock(initialState: ProjectGrouping())
     }
 
     /// A logical project: one or more physical projects shown under one label.
@@ -638,7 +704,17 @@ public enum SidebarModel {
     public static func deriveLogicalProjectKey(_ project: ProjectShell, mode: ProjectGroupingMode) -> String {
         let physical = physicalProjectKey(project)
         if mode == .separate { return physical }
-        return project.repositoryIdentity?.groupingKey ?? physical
+        guard let canonical = project.repositoryIdentity?.groupingKey else { return physical }
+        if mode == .repository { return canonical }
+        // `deriveRepositoryScopedKey` for `repository_path`: the folder's path inside the repository.
+        guard let root = project.repositoryIdentity?.rootPath?.trimmingCharacters(in: .whitespacesAndNewlines), !root.isEmpty else { return canonical }
+        let path = normalizeProjectPath(project.workspaceRoot), base = normalizeProjectPath(root)
+        guard !path.isEmpty, !base.isEmpty else { return canonical }
+        if path == base { return canonical }
+        let separator = base.contains("\\") ? "\\" : "/"
+        guard path.hasPrefix(base + separator) else { return canonical }
+        let relative = String(path.dropFirst(base.count + 1)).replacingOccurrences(of: "\\", with: "/")
+        return relative.isEmpty ? canonical : "\(canonical)::\(relative)"
     }
 
     /// Port of `deriveProjectGroupLabel` (projectGrouping.ts:159-190).
@@ -666,23 +742,29 @@ public enum SidebarModel {
     /// Remembers the last result: every sidebar build, scope lookup and composer update asks with the
     /// same projects until one changes.
     // ponytail: one entry; key by caller if two callers start alternating different project lists
-    public static func buildProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode = .repository,
+    public static func buildProjectGroups(_ projects: [ProjectShell], grouping: ProjectGrouping = .current,
                                           preferredEnvironmentId: String? = nil) -> [ProjectGroup] {
-        let key = GroupsKey(projects: projects, mode: mode, preferred: preferredEnvironmentId)
+        let key = GroupsKey(projects: projects, grouping: grouping, preferred: preferredEnvironmentId)
         if let hit = groupsCache.withLock({ $0?.key == key ? $0?.groups : nil }) { return hit }
-        let groups = computeProjectGroups(projects, mode: mode, preferredEnvironmentId: preferredEnvironmentId)
+        let groups = computeProjectGroups(projects, grouping: grouping, preferredEnvironmentId: preferredEnvironmentId)
         groupsCache.withLock { $0 = (key, groups) }
         return groups
     }
 
+    /// One grouping mode for every project, no overrides.
+    public static func buildProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode,
+                                          preferredEnvironmentId: String? = nil) -> [ProjectGroup] {
+        buildProjectGroups(projects, grouping: ProjectGrouping(mode: mode), preferredEnvironmentId: preferredEnvironmentId)
+    }
+
     struct GroupsKey: Equatable, Sendable {
         var projects: [ProjectShell]
-        var mode: ProjectGroupingMode
+        var grouping: ProjectGrouping
         var preferred: String?
     }
     static let groupsCache = OSAllocatedUnfairLock<(key: GroupsKey, groups: [ProjectGroup])?>(initialState: nil)
 
-    static func computeProjectGroups(_ projects: [ProjectShell], mode: ProjectGroupingMode,
+    static func computeProjectGroups(_ projects: [ProjectShell], grouping: ProjectGrouping,
                                              preferredEnvironmentId: String?) -> [ProjectGroup] {
         func freshness(_ p: ProjectShell) -> Int64 { p.updatedAt.epochMs ?? p.createdAt.epochMs ?? 0 }
         func replaces(_ existing: ProjectShell, _ candidate: ProjectShell) -> Bool {
@@ -707,7 +789,7 @@ public enum SidebarModel {
                 identitySource = candidates.filter { $0.repositoryIdentity != nil }
                     .reduce(nil as ProjectShell?) { best, p in best.map { replaces($0, p) ? p : $0 } ?? p } ?? winner
             }
-            let key = deriveLogicalProjectKey(identitySource, mode: mode)
+            let key = deriveLogicalProjectKey(identitySource, mode: grouping.mode(for: winner))
             logicalByPhysical[physical] = key
             if members[key] == nil { groupOrder.append(key) }
             members[key, default: []].append(winner)
@@ -756,4 +838,29 @@ public enum SidebarModel {
         sortLogicalProjectsForSidebar(
             groups, threads: threads.filter { $0.archivedAt == nil && !isSidebarSubagentThread($0) }, order: order)
     }
+}
+
+/// `createInboxReturnTracker` (client-runtime state/threadInbox.ts:110-148): when this client saw each
+/// thread leave the Working section. The first observation only takes a baseline, so turning the beta
+/// on never reshuffles the inbox.
+public final class SidebarInboxReturnTracker: @unchecked Sendable {
+    private var lastWorking: Set<ThreadId>?
+    private var returns: [ThreadId: Int64] = [:]
+
+    public init() {}
+
+    /// Every thread shell on each rebuild, or nil to reset while the beta is off.
+    public func observe(_ threads: [SidebarThread]?, nowMs: Int64) {
+        guard let threads else { lastWorking = nil; returns = [:]; return }
+        var working = Set<ThreadId>(), present = Set<ThreadId>()
+        for t in threads {
+            present.insert(t.id)
+            if SidebarModel.isThreadWorking(t) { working.insert(t.id) }
+        }
+        returns = returns.filter { present.contains($0.key) }
+        for id in lastWorking ?? [] where present.contains(id) && !working.contains(id) { returns[id] = nowMs }
+        lastWorking = working
+    }
+
+    public func returnedAt(_ id: ThreadId) -> Int64? { returns[id] }
 }

@@ -58,6 +58,12 @@ for n in sorted(names):
     else:
         missing.append(n)
 
+# The project icon picker's popular icons are named in projectIconOptions.ts, not imported.
+opts = open(os.path.join(SRC, "projectIconOptions.ts"), encoding="utf-8").read()
+popular = re.search(r"POPULAR_PROJECT_ICONS = \[(.*?)\]", opts, re.S)
+for k in re.findall(r'"([a-z0-9-]+)"', popular.group(1) if popular else ""):
+    if k in have: resolved.setdefault(k, k)
+
 # ---------- shape model ----------
 def num(v):
     f = float(v)

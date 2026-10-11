@@ -17,10 +17,14 @@ public final class CommandPaletteController {
         public var threadItems: (String) -> [PaletteEntry]
         /// True while the thread message search for the query has not settled.
         public var threadSearchPending: (String) -> Bool
+        /// `settingsSearchItems`: settings matching a non-empty query.
+        public var settingsItems: (String) -> [PaletteEntry]
         public init(rootGroups: @escaping () -> [PaletteGroup], projectItems: @escaping () -> [PaletteEntry] = { [] },
-                    threadItems: @escaping (String) -> [PaletteEntry] = { _ in [] }, threadSearchPending: @escaping (String) -> Bool = { _ in false }) {
+                    threadItems: @escaping (String) -> [PaletteEntry] = { _ in [] }, threadSearchPending: @escaping (String) -> Bool = { _ in false },
+                    settingsItems: @escaping (String) -> [PaletteEntry] = { _ in [] }) {
             self.rootGroups = rootGroups; self.projectItems = projectItems
             self.threadItems = threadItems; self.threadSearchPending = threadSearchPending
+            self.settingsItems = settingsItems
         }
     }
 
@@ -37,6 +41,21 @@ public final class CommandPaletteController {
         public var results: (String) -> (groups: [PaletteGroup], empty: String)
         /// A mode with its own body (`panelSize="fill"`), such as Search project contents.
         public var custom: Custom?
+        /// Return before the rows get it: the query, the highlighted row and the modifier keys; true when used
+        /// (browse adds the typed path, New project creates).
+        public var onSubmit: ((_ query: String, _ highlighted: PaletteEntry?, _ flags: NSEvent.ModifierFlags) -> Bool)?
+        /// Base UI's `autoHighlight="always"`: false in browse and the add-project steps.
+        public var autoHighlight = true
+        /// The control inside the input's end (the browse "Add" button).
+        public var accessory: NSView?
+        /// A footer action after the key hints ("Open in Finder").
+        public var footerTrailing: NSView?
+        /// The Enter hint's label for the highlighted row, when it depends on it; nil hides the hint.
+        public var footerLabel: ((PaletteEntry?) -> String?)?
+        /// A status line in place of the rows while there are none ("Loading folders...").
+        public var status: ((String) -> String?)?
+        /// The input's start addon outside submenus (browse shows the folder-plus).
+        public var startIcon: IconName = .search
         public init(name: String, placeholder: String, footerActionLabel: String, results: @escaping (String) -> (groups: [PaletteGroup], empty: String)) {
             self.name = name; self.placeholder = placeholder; self.footerActionLabel = footerActionLabel; self.results = results
         }
@@ -60,6 +79,12 @@ public final class CommandPaletteController {
     public private(set) var mode: Mode?
     /// Escape in a mode: the app switches back to commands (`toggleMode("command")`).
     public var onLeaveMode: (() -> Void)?
+    /// The query's own mode on a page without one (`isBrowsing`: a path typed at the root or in a
+    /// submenu lists folders), nil for the page's rows.
+    public var browse: ((String) -> Mode?)?
+
+    /// The rows' mode: the overlay mode, else the open page's own, else the query's browse mode.
+    private var activeMode: Mode? { mode ?? stack.last?.mode ?? browse?(query) }
 
     /// Enters `mode` with an empty query, or back to commands with nil.
     public func setMode(_ mode: Mode?) {
@@ -110,8 +135,8 @@ public final class CommandPaletteController {
 
     /// Rebuilds the rows from the source for the current view and query.
     public func refresh() {
-        if view.inputAccessory !== mode?.custom?.accessory { view.inputAccessory = mode?.custom?.accessory }
         if let mode, let custom = mode.custom {
+            if view.inputAccessory !== custom.accessory { view.inputAccessory = custom.accessory }
             displayed = []
             flat = []
             if case .custom(let v) = view.content, v === custom.view {} else { view.content = .custom(custom.view) }
@@ -123,51 +148,55 @@ public final class CommandPaletteController {
             view.superview?.needsLayout = true
             return
         }
-        if let mode {
-            let result = mode.results(query)
+        if let active = activeMode {
+            let result = active.results(query)
             displayed = result.groups
             flat = displayed.flatMap(\.items)
-            view.content = displayed.isEmpty ? .empty(message: result.empty, actionsOnly: false) : .results(displayed.map { group in
-                CommandPaletteGroup(group.label.isEmpty ? nil : group.label, group.items.map { entry in
-                    var item = CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description)
-                    item.glyph = entry.glyph
-                    item.titleHighlights = entry.titleHighlights
-                    item.descriptionHighlights = entry.descriptionHighlights
-                    return item
-                })
-            })
-            view.input.placeholder = mode.placeholder
-            view.showsBackButton = false
-            view.showsBackHint = false
-            view.footerActionLabel = mode.footerActionLabel
-            view.escapeLabel = "Back"
+            let status = flat.isEmpty ? active.status?(query) : nil
+            if let status {
+                view.content = .loading(status)
+            } else if displayed.isEmpty {
+                view.content = .empty(message: result.empty, actionsOnly: false)
+            } else {
+                view.content = .results(displayed.map { CommandPaletteGroup($0.label.isEmpty ? nil : $0.label, $0.items.map(Self.item)) })
+            }
+            view.input.placeholder = active.placeholder
+            let overlay = mode != nil
+            view.showsBackButton = !overlay && isInSubmenu
+            view.showsBackHint = !overlay && isInSubmenu
+            view.escapeLabel = overlay ? "Back" : "Close"
+            if view.inputAccessory !== active.accessory { view.inputAccessory = active.accessory }
+            // The accessory reads the app's state when it lays out (its label and enabled state).
+            if let accessory = active.accessory { accessory.needsLayout = true; accessory.layoutSubtreeIfNeeded(); view.needsLayout = true }
+            if view.footerTrailing !== active.footerTrailing { view.footerTrailing = active.footerTrailing }
+            view.startIcon = active.startIcon
             // `autoHighlight="always"`: the first row stays highlighted as results change.
             // The reference capture (45) shows no highlight before typing.
-            if let value = highlightedValue, flat.contains(where: { $0.value == value }) {} else { highlightedValue = query.isEmpty ? nil : firstEnabled?.value }
+            if let value = highlightedValue, flat.contains(where: { $0.value == value && !$0.isDisabled }) {} else {
+                highlightedValue = active.autoHighlight && !query.isEmpty ? firstEnabled?.value : nil
+            }
+            view.footerActionLabel = active.footerLabel.map { $0(highlightedEntry) } ?? active.footerActionLabel
             view.superview?.needsLayout = true
             applyHighlight()
             return
         }
+        if view.inputAccessory != nil { view.inputAccessory = nil }
+        if view.footerTrailing != nil { view.footerTrailing = nil }
+        view.startIcon = .search
         view.escapeLabel = "Close"
         let active = stack.last?.groups ?? source.rootGroups()
         let searching = !isInSubmenu && !query.hasPrefix(">")
+        let hasQuery = searching && !PaletteSearch.normalize(query).isEmpty
         displayed = PaletteSearch.filter(active, query: query, isInSubmenu: isInSubmenu,
                                          projectItems: searching ? source.projectItems() : [],
-                                         threadItems: searching && !PaletteSearch.normalize(query).isEmpty ? source.threadItems(query) : [])
+                                         settingsItems: hasQuery ? source.settingsItems(query) : [],
+                                         threadItems: hasQuery ? source.threadItems(query) : [])
         flat = displayed.flatMap(\.items)
-        let keymap = ActiveKeymap.keymap
         if displayed.isEmpty {
             let pending = searching && source.threadSearchPending(query)
             view.content = .empty(message: pending ? "Searching thread messages\u{2026}" : nil, actionsOnly: query.hasPrefix(">"))
         } else {
-            view.content = .results(displayed.map { group in
-                CommandPaletteGroup(group.label.isEmpty ? nil : group.label, group.items.map { entry in
-                    CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description,
-                                       shortcut: entry.shortcutCommand.flatMap { keymap.label(for: $0) },
-                                       timestamp: entry.timestamp, isSubmenu: entry.isSubmenu, isDisabled: entry.isDisabled,
-                                       titleEmphasis: entry.titleEmphasis, match: entry.match, note: entry.note)
-                })
-            })
+            view.content = .results(displayed.map { CommandPaletteGroup($0.label.isEmpty ? nil : $0.label, $0.items.map(Self.item)) })
         }
         view.input.placeholder = PaletteSearch.placeholder(inSubmenu: isInSubmenu)
         view.showsBackButton = isInSubmenu
@@ -176,6 +205,24 @@ public final class CommandPaletteController {
         if let value = highlightedValue, !flat.contains(where: { $0.value == value && !$0.isDisabled }) { highlightedValue = nil }
         view.superview?.needsLayout = true
         applyHighlight()
+    }
+
+    /// The row the view draws for an entry.
+    static func item(_ entry: PaletteEntry) -> CommandPaletteItem {
+        var item = CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description,
+                                      shortcut: entry.shortcutCommand.flatMap { ActiveKeymap.keymap.label(for: $0) },
+                                      timestamp: entry.timestamp, isSubmenu: entry.isSubmenu, isDisabled: entry.isDisabled,
+                                      titleEmphasis: entry.titleEmphasis, match: entry.match, note: entry.note)
+        item.matchIsUser = entry.matchIsUser
+        item.matchHighlights = entry.matchHighlights
+        item.glyph = entry.glyph
+        item.titleHighlights = entry.titleHighlights
+        item.descriptionHighlights = entry.descriptionHighlights
+        item.isStatic = entry.isStatic
+        item.trailingIcon = entry.trailingIcon
+        item.trailingCheckbox = entry.trailingCheckbox
+        item.noteIsWarning = entry.noteIsWarning
+        return item
     }
 
     private func applyHighlight() {
@@ -189,7 +236,8 @@ public final class CommandPaletteController {
         if let custom = mode?.custom { custom.onQuery(text); return }
         highlightCleared = true
         highlightedValue = nil
-        if mode == nil, text.isEmpty, stack.last?.initialQuery != nil { pop(); return }
+        // `nextQuery === "" && currentView?.initialQuery`: an empty initial query keeps its page.
+        if mode == nil, text.isEmpty, !(stack.last?.initialQuery ?? "").isEmpty { pop(); return }
         onQueryChange?(text)
         refresh()
     }
@@ -238,7 +286,9 @@ public final class CommandPaletteController {
             move(-1)
             return true
         case #selector(NSResponder.insertNewline(_:)):
-            if let entry = highlightedEntry ?? firstEnabled { execute(entry) }
+            let active = activeMode
+            if let submit = active?.onSubmit, submit(query, highlightedEntry, NSApp.currentEvent?.modifierFlags ?? []) { return true }
+            if let entry = highlightedEntry ?? ((active?.autoHighlight ?? true) ? firstEnabled : nil) { execute(entry) }
             return true
         case #selector(NSResponder.deleteBackward(_:)):
             guard query.isEmpty, isInSubmenu else { return false }
@@ -251,6 +301,18 @@ public final class CommandPaletteController {
         default:
             return false
         }
+    }
+
+    /// The highlighted row's value (`highlightedItemValue`), nil while none is.
+    public var highlightedItemValue: String? { highlightedValue }
+
+    /// Replaces the typed query (browse navigation, the clone destination), as typing it would.
+    public func replaceQuery(_ text: String) {
+        setQuery(text)
+        highlightCleared = true
+        highlightedValue = nil
+        onQueryChange?(text)
+        refresh()
     }
 
     private var highlightedEntry: PaletteEntry? {

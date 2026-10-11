@@ -241,7 +241,7 @@ public final class ComposerView: DSView {
         fileDrop.onHighlight = { [weak self] on in self?.dropHighlight.isHidden = !on }
         fileDrop.onFiles = { [weak self] urls in self?.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         editor.fileDrop = fileDrop
-        registerForDraggedTypes([.fileURL, .composerMention])
+        registerForDraggedTypes([.fileURL, .composerMention, .sidebarThreads])
         editor.onPasteAttachments = { [weak self] pboard in
             guard let self, let onFiles = self.onFiles else { return false }
             let files = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory)
@@ -477,14 +477,26 @@ public final class ComposerView: DSView {
 
     // MARK: Drops on the padding
 
+    /// Sidebar threads dropped on the composer (`THREAD_CONTEXT_DROP_EVENT`): true when they were taken.
+    public var onThreadsDropped: (([ThreadId]) -> Bool)?
+
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         if Self.mention(in: sender) != nil { return .copy }
+        // `in-data-[thread-context-over]:bg-accent/45 ring-1 ring-primary/70`, the file drop's highlight.
+        if onThreadsDropped != nil, SidebarThreadDrag.threads(sender.draggingPasteboard) != nil {
+            dropHighlight.isHidden = false
+            return .copy
+        }
         return ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.entered(sender) : []
     }
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
     public override func draggingExited(_ sender: (any NSDraggingInfo)?) { fileDrop.exited() }
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         if let mention = Self.mention(in: sender) { return insertMentionAtEnd(mention) }
+        if let threads = SidebarThreadDrag.threads(sender.draggingPasteboard), let onThreadsDropped {
+            dropHighlight.isHidden = true
+            return onThreadsDropped(threads)
+        }
         return ComposerFileDrop.hasFiles(sender) && onFiles != nil ? fileDrop.perform(sender) : false
     }
 

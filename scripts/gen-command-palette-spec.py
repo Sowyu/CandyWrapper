@@ -39,15 +39,15 @@ LABEL = "px-2 py-1.5 font-medium text-muted-foreground text-xs"
 SHORTCUT = "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest"
 ICON = "size-4 text-icon-muted"  # CommandPalette.logic.ts ITEM_ICON_CLASS
 
-def input_row(placeholder, value, back):
+def input_row(placeholder, value, back, addon_icon=None, accessory=""):
     addon = (f'<button type="button" class="flex cursor-pointer items-center" aria-label="Back">{lucide("arrow-left", "")}</button>' if back
-             else lucide("search", "translate-x-0.5 text-icon-muted"))
+             else lucide(addon_icon, "") if addon_icon else lucide("search", "translate-x-0.5 text-icon-muted"))
     v = f' value="{value}"' if value else ""
     return ('<div class="relative"><div class="px-[var(--command-shell-inset)] py-1.5 [&_[data-slot=autocomplete-start-addon]]:ps-[calc(var(--command-shell-inset)+0.0625rem)]">'
             '<div class="relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-64">'
             f'<div aria-hidden="true" class="{ADDON}" data-slot="autocomplete-start-addon">{addon}</div>'
             f'<span class="{CONTROL}" data-size="lg" data-slot="input-control"><input class="{FIELD}" data-slot="autocomplete-input" placeholder="{placeholder}"{v}></span>'
-            '</div></div></div>')
+            f'</div></div>{accessory}</div>')
 
 def row(icon, title, active=False, emphasis=None, desc=None, shortcut=None, chevron=False, note=None, stamp=None):
     t = title + (f'<span class="font-semibold">{emphasis}</span>' if emphasis else "")
@@ -71,18 +71,40 @@ def results(groups):
     return ('<div class="flex max-h-[inherit] flex-col size-full min-w-0" data-slot="command-list">'
             f'<div class="min-h-0 scroll-py-6 overflow-x-hidden overscroll-y-contain py-2"><div class="px-2">{rows}</div></div></div>')
 
-def footer(back):
+def footer(back, action="Select", trailing=""):
     def hint(keys, text):
         inner = "".join('<kbd data-slot="kbd" class="' + KBD + '">' + k + "</kbd>" for k in keys)
         return f'<kbd data-slot="kbd-group" class="inline-flex items-center gap-1">{inner}<span>{text}</span></kbd>'
-    hints = hint([lucide("arrow-up", ""), lucide("arrow-down", "")], "Navigate") + hint(["Enter"], "Select")
+    hints = hint([lucide("arrow-up", ""), lucide("arrow-down", "")], "Navigate") + (hint(["Enter"], action) if action else "")
     if back: hints += hint(["Backspace"], "Back")
     hints += hint(["Esc"], "Close")
-    return f'<div class="{FOOTER}" data-slot="command-footer"><div class="flex items-center gap-3">{hints}</div></div>'
+    return f'<div class="{FOOTER}" data-slot="command-footer"><div class="flex items-center gap-3">{hints}</div>{trailing}</div>'
 
-def palette(body, placeholder="Search commands, projects, and threads...", value="", back=False):
+def palette(body, placeholder="Search commands, projects, and threads...", value="", back=False, addon_icon=None, accessory="",
+            action="Select", trailing=""):
     return (f'<div role="dialog" data-slot="command-dialog-popup" class="{POPUP}">'
-            f'{input_row(placeholder, value, back)}<div class="{PANEL}">{body}</div>{footer(back)}</div>')
+            f'{input_row(placeholder, value, back, addon_icon, accessory)}<div class="{PANEL}">{body}</div>{footer(back, action, trailing)}</div>')
+
+# ThreadSearchMatch.tsx:51-66 under a thread row (CommandPaletteResults.tsx:205-218).
+def match_row(title, desc, stamp, source, before, hit, after, active=False):
+    tag = ('<span class="text-info-foreground">You:</span>' if source == "user" else '<span class="text-success-foreground">Agent:</span>')
+    excerpt = (f'<span class="truncate text-xs text-muted-foreground/85">{tag} {before}'
+               f'<mark class="bg-transparent font-semibold text-foreground">{hit}</mark>{after}</span>')
+    body = ('<span class="flex min-w-0 flex-1 flex-col"><span class="flex min-w-0 items-center gap-1.5 text-sm text-foreground">'
+            f'<span class="truncate">{title}</span></span>{excerpt}<span class="min-w-0 text-muted-foreground/70 text-xs">{desc}</span></span>')
+    out = lucide("message-square", ICON) + body + f'<span class="min-w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground/70">{stamp}</span>'
+    cls = ITEM + (" bg-accent! text-accent-foreground!" if active else "")
+    return f'<div role="option" data-slot="command-item" class="{cls}"{" data-active" if active else ""}>{out}</div>'
+
+# button.tsx base, outline, xs (scripts/gen-button-spec.py), then the accessory's own classes (CommandPalette.tsx:3404-3440).
+# `cn()` drops the base's `relative` for `absolute`; the placement is repeated inline as well.
+BUTTON = ("[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--control-radius)] border font-medium text-base outline-none transition-[box-shadow,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 sm:text-sm [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 ")
+OUTLINE = ("[--control-icon-color:var(--contrast-muted-foreground)] border-input bg-popover not-dark:bg-clip-padding text-foreground shadow-xs/5 not-disabled:not-active:not-data-pressed:before:shadow-[0_1px_--theme(--color-black/4%)] dark:bg-input/32 dark:not-disabled:before:shadow-[0_-1px_--theme(--color-white/2%)] dark:not-disabled:not-active:not-data-pressed:before:shadow-[0_-1px_--theme(--color-white/6%)] ")
+GHOST_MUTED = "[--control-icon-color:currentColor] border-transparent text-muted-foreground data-pressed:bg-accent "
+XS = "h-7 gap-1 px-[calc(--spacing(2)-1px)] text-sm sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 "
+ACCESSORY = (f'<button type="button" tabindex="-1" class="{BUTTON.replace("relative ", "")}{OUTLINE}{XS}absolute inset-e-2.5 top-1/2 -translate-y-1/2" style="inset-inline-end:0.625rem;top:50%;translate:0 -50%"><span>Add</span>'
+             f'<kbd data-slot="kbd-group" class="inline-flex items-center gap-1 pointer-events-none -me-0.5"><kbd data-slot="kbd" class="{KBD}">Enter</kbd></kbd-group></button>')
+FINDER = f'<button type="button" class="{BUTTON}{GHOST_MUTED}{XS}h-auto px-2 text-xs hover:bg-transparent">Open in Finder</button>'
 
 EMPTY = '<div class="py-10 text-center text-sm text-muted-foreground">{}</div>'
 
@@ -103,6 +125,14 @@ cases = [
                      row("message-square", "Add notes and docstring", desc="demo-repo · Local", stamp="2d ago")]),
     ]), value="demo"), "native": {"case": "search"}},
     {"name": "empty", "html": palette(EMPTY.format("No matching commands, projects, or threads."), value="zzzz"), "native": {"case": "empty"}},
+    {"name": "match", "html": palette(results([
+        ("Threads", [match_row("Write a story", "demo-repo · Local", "2m ago", "assistant", "The ", "lighthouse", " keeper climbed", active=True),
+                     match_row("Plan a migration", "demo-repo · Local", "16m ago", "user", "move the ", "lighthouse", " policies")]),
+    ]), value="lighthouse"), "native": {"case": "match"}},
+    {"name": "browse", "html": palette(results([("Directories", [
+        row("corner-left-up", ".."), row("folder", "demo-repo"), row("folder", "git-demo"),
+    ])]), placeholder="Enter project path (e.g. ~/projects/my-app)", value="~/sandbox/", addon_icon="folder-plus", accessory=ACCESSORY,
+        action=None, trailing=FINDER), "native": {"case": "browse"}},
 ]
 spec = {"component": "command-palette", "source": "apps/web/src/components/CommandPaletteContent.tsx",
         "states": ["rest"], "themes": ["light", "dark"],

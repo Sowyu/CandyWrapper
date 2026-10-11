@@ -231,6 +231,20 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var checkedAt: String?
     /// `usageLimits`: the subscription windows the account reports (Usage > Limits, `/usage-limits`).
     public var usageLimits: ProviderUsageLimits?
+    /// `updateState` (`ServerProviderUpdateState`, contracts server.ts:231-237): a one-click update's progress.
+    public var updateState: UpdateState?
+    /// `versionAdvisory.latestVersion`, the version an update installs.
+    public var latestVersion: String?
+
+    public struct UpdateState: Hashable, Sendable {
+        /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
+        public var status: String
+        public var finishedAt: String?
+        public var message: String?
+        public init(status: String, finishedAt: String? = nil, message: String? = nil) {
+            self.status = status; self.finishedAt = finishedAt; self.message = message
+        }
+    }
 
     public init(instanceId: ProviderInstanceId, driver: String, displayName: String? = nil, enabled: Bool = true,
                 installed: Bool = true, status: ServerProviderStatus = .ready, models: [ServerProviderModel] = []) {
@@ -242,6 +256,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
         case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
+        case updateState, versionAdvisory
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -275,6 +290,10 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         auth = try? c.decodeIfPresent(JSONValue.self, forKey: .auth)
         checkedAt = try? c.decodeIfPresent(String.self, forKey: .checkedAt)
         usageLimits = ProviderUsageLimits(json: (try? c.decodeIfPresent(JSONValue.self, forKey: .usageLimits)) ?? nil)
+        if let update = (try? c.decodeIfPresent(JSONValue.self, forKey: .updateState)) ?? nil, let status = update["status"]?.stringValue {
+            updateState = UpdateState(status: status, finishedAt: update["finishedAt"]?.stringValue, message: update["message"]?.stringValue)
+        }
+        latestVersion = ((try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil)?["latestVersion"]?.stringValue
     }
 
     /// `resolveProviderSkillsForCwd`: the workspace snapshot's skills, else the provider's.
@@ -335,6 +354,10 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var availableEditors: [String] = []
     /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
     public var revealsInFileManager = false
+    /// `scratchWorkspaceRoot`: the folder threads without a project live in, nil when the server offers none.
+    public var scratchWorkspaceRoot: String?
+    /// `newProjectsRoot`: where "New project" creates name-only projects, nil when the server offers none.
+    public var newProjectsRoot: String?
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -346,7 +369,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, shellRevealInFileManager
+        case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, shellRevealInFileManager,
+             scratchWorkspaceRoot, newProjectsRoot
     }
 
     public init(from decoder: Decoder) throws {
@@ -360,6 +384,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
         revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false
+        scratchWorkspaceRoot = try? c.decodeIfPresent(String.self, forKey: .scratchWorkspaceRoot)
+        newProjectsRoot = try? c.decodeIfPresent(String.self, forKey: .newProjectsRoot)
     }
 }
 

@@ -442,7 +442,7 @@ final class ScheduledTaskFormView: DSView {
     private var webhookField: ScheduledTaskWebhookField?
     /// `DialogPanel` scrolls once the popup reaches the viewport (`max-h-[calc(100dvh-2rem)]` less header and footer).
     private let document = DSView()
-    private lazy var scroll = ScrollAreaView(documentView: document)
+    private lazy var scroll = ScrollAreaView(documentView: document, scrollFade: true)
     private var contentHeight: CGFloat { rows.reduce(0) { $0 + $1.height } + 20 * CGFloat(max(0, rows.count - 1)) }
     var maxHeight: CGFloat {
         let host: NSWindow? = window ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -453,7 +453,6 @@ final class ScheduledTaskFormView: DSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        // ponytail: no edge fades; ScrollAreaView's fade mask blanked the scrolled rows here. Add them back once the mask follows the clip origin
         // Inside a dialog: no titlebar inset.
         scroll.scrollView.automaticallyAdjustsContentInsets = false
         scroll.scrollView.contentInsets = NSEdgeInsets()

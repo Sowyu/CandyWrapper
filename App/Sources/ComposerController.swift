@@ -210,7 +210,7 @@ final class ComposerController {
     /// The session (shell) of the target's environment. Nil while that environment is disconnected.
     private var shell: ShellSession? { environments.session(targetEnvironmentId) }
 
-    private var targetEnvironmentId: String? {
+    var targetEnvironmentId: String? {
         switch target {
         case .thread(let id): id.environmentId
         case .draft(let s): ProjectId(s.projectId).environmentId
@@ -677,6 +677,35 @@ final class ComposerController {
         UserDefaults.standard.set(prompts, forKey: Self.promptsKey)
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: Self.sessionsKey)
         syncSidebarDrafts()
+    }
+
+    // MARK: Agent session
+
+    /// `stopThreadSession` for the open thread: one `provider-session.detach` per provider session in its projection.
+    func stopSessions(_ thread: ThreadShell) async throws {
+        guard target == .thread(thread.id) else { return }
+        let sessions = projection?.providerSessions.compactMap { $0["id"]?.stringValue } ?? []
+        for payload in ThreadCommands.detachSessions(thread.id.localId, sessionIds: sessions) {
+            try await environments.dispatch(thread.id, payload)
+        }
+    }
+
+    /// "Restart agent session" on the open thread (CommandPalette.tsx:1999-2033): detach every provider
+    /// session when the thread has a runtime, toast, then `server.refreshProviders {instanceId, cwd, fresh}`.
+    func restartAgentSession(_ thread: ThreadShell, cwd: String?) async throws {
+        let id = thread.id
+        let runtime = SidebarModel.shellRuntime(thread)
+        if runtime != nil { try await stopSessions(thread) }
+        panel.toasts.show(ToastView(title: "Agent session will restart", message: "Your next message starts a fresh session.", kind: .success))
+        guard let env = id.environmentId, let cwd else { return }
+        let instance = runtime != nil ? thread.providerInstanceId.rawValue : thread.modelSelection.instanceId.rawValue
+        let reply = try await environments.request(env, "server.refreshProviders",
+                                                   .object(["instanceId": .string(instance), "cwd": .string(cwd), "fresh": .bool(true)]))
+        if let providers = try? reply["providers"]?.decode(as: [ServerProvider].self) {
+            var config = serverConfigs[env] ?? ServerProviderConfig(providers: [])
+            config.providers = providers
+            serverConfigs[env] = config
+        }
     }
 
     // MARK: Stream
@@ -1209,6 +1238,9 @@ extension ComposerController {
     /// A draft row's click: a plain navigation to the draft, which changes nothing in it. False when the
     /// draft or its project is gone.
     @discardableResult
+    /// Whether a draft session still exists (it goes once its thread is sent or it is discarded).
+    func hasDraft(_ draftId: String) -> Bool { sessions.values.contains { $0.draftId == draftId } }
+
     func openDraft(_ draftId: String) -> Bool {
         guard let session = sessions.values.first(where: { $0.draftId == draftId }),
               let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) else { return false }
@@ -1832,6 +1864,7 @@ extension ComposerController {
 
     fileprivate func setUpAttachments() {
         composer.onFiles = { [weak self] files in self?.addFiles(files) }
+        composer.onThreadsDropped = { [weak self] ids in self?.dropThreads(ids) ?? false }
         composer.onPasteText = { [weak self] text, bypass in self?.foldPastedText(text, bypass: bypass) ?? false }
         composer.pasteDirectory = Self.attachmentWorkDirectory
         composer.imageShelf.onRemove = { [weak self] id in self?.removeImage(id) }
@@ -1902,6 +1935,34 @@ extension ComposerController {
     /// `addComposerAttachments`: count, type and size checks in order, so concurrent adds see each
     /// other's slots; files get a chip at the caret and upload at once; images are prepared off the
     /// main thread first and get a chip only when the prompt already has prose.
+    /// Files dropped on the open thread's sidebar row (`consumePendingFileDrop`, ChatView.tsx:10930-10950).
+    func attachDroppedFiles(_ urls: [URL]) { addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
+
+    /// Sidebar threads dropped on the composer (ChatComposer.tsx:6245-6267): threads from another
+    /// environment are refused; the rest become thread context references at the caret, once each.
+    func dropThreads(_ ids: [ThreadId]) -> Bool {
+        guard let env = targetEnvironmentId, !ids.isEmpty else { return false }
+        if ids.contains(where: { $0.environmentId != env }) {
+            _ = panel.toasts.show(ToastView(title: "Use threads from this environment",
+                                            message: "The agent can only read threads on its own server.", kind: .error))
+            return true
+        }
+        var known = Set(ComposerContext.referencedIds(composer.text))
+        var references: [String] = []
+        for id in ids {
+            guard let shell = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { continue }
+            let local = id.localId.rawValue
+            let record = ComposerContext.threadRecord(threadId: local, title: shell.title, environmentId: env)
+            guard let contextId = record["contextId"]?.stringValue, known.insert(contextId).inserted else { continue }
+            menuState.records[contextId] = record
+            references.append(ComposerContext.reference(ComposerContext.threadReference(threadId: local, title: shell.title)))
+        }
+        guard !references.isEmpty else { return true }
+        composer.insertAtCaret(references.joined(separator: " ") + " ")
+        composer.focus()
+        return true
+    }
+
     fileprivate func addFiles(_ files: [ComposerIncomingFile], pastedText: Bool = false) {
         guard !files.isEmpty, let key = draftKey, let env = targetEnvironmentId else { return }
         if questionRequestId != nil {

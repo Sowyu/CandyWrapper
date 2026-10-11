@@ -94,6 +94,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         }
         shownKey = group.key
         nameInput.isEnabled = canEditGroup
+        chooseIconButton?.isEnabled = canEditGroup
         favicon.source = ProjectIconSource(title: representative.title, workspaceRoot: representative.workspaceRoot,
                                            faviconPath: representative.faviconPath, override: ProjectIconSource.override(representative.projectIcon))
         favicon.source?.environmentId = representative.environmentId
@@ -127,6 +128,18 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         updateActions()
     }
 
+    private weak var chooseIconButton: ButtonView?
+
+    /// "Choose icon" (ProjectSettingsPanel.tsx:515-525, 589-598): the picker over the representative's icon;
+    /// Save writes `{faviconPath: null, projectIcon}` to every member.
+    private func chooseIcon() {
+        guard canEditGroup, let window, let representative = members.first else { return }
+        ProjectIconPickerDialog.present(in: window, current: representative.projectIcon, projectName: representative.title) { [weak self] icon in
+            guard let self else { return }
+            self.context.updateProject?(self.members, ["faviconPath": .null, "projectIcon": icon], "Failed to update project icon")
+        }
+    }
+
     /// The Project icon row's description (ProjectSettingsPanel.tsx:500-510).
     static func iconDescription(_ m: SettingsScopeProject.Member) -> String {
         let icon = m.projectIcon
@@ -150,11 +163,12 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         // `ProjectFavicon className="size-6"`: the 16pt monogram drawn at 24.
         favicon.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
         favicon.bounds = NSRect(x: 0, y: 0, width: 16, height: 16)
-        // ponytail: the icon and image file pickers (ProjectIconPickerDialog, ProjectFaviconPickerDialog) are not built;
-        // both buttons show disabled. Build them when users ask to change icons from here
+        // ponytail: the image file picker (ProjectFaviconPickerDialog) is not built; Choose file shows disabled. Build it
+        // with the palette-style image search when users ask to pick an icon file from here
         let chooseIcon = ButtonView("Choose icon", variant: .outline, size: .sm)
         chooseIcon.setAccessibilityLabel("Choose a project icon")
-        chooseIcon.isEnabled = false
+        chooseIcon.action = { [weak self] in self?.chooseIcon() }
+        self.chooseIconButton = chooseIcon
         let chooseFile = ButtonView("Choose file", variant: .outline, size: .sm)
         chooseFile.setAccessibilityLabel("Choose a project icon file")
         chooseFile.isEnabled = false

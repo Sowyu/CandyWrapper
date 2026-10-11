@@ -67,6 +67,24 @@ public enum ThreadCommands {
         command("thread.metadata.update", threadId, commandId, ["regenerateTitle": .bool(true)])
     }
 
+    /// `updateThreadMetadata` with a new title (Sidebar.tsx:3261-3290).
+    public static func rename(_ threadId: ThreadId, title: String, commandId: String = newCommandId()) -> JSONValue {
+        command("thread.metadata.update", threadId, commandId, ["title": .string(title)])
+    }
+
+    public static func delete(_ threadId: ThreadId, commandId: String = newCommandId()) -> JSONValue {
+        command("thread.delete", threadId, commandId)
+    }
+
+    /// `stopThreadSession` (client-runtime operations/commands.ts:919-935): one `provider-session.detach`
+    /// per provider session, each with `<commandId>:detach:<sessionId>`.
+    public static func detachSessions(_ threadId: ThreadId, sessionIds: [String], commandId: String = newCommandId()) -> [JSONValue] {
+        sessionIds.map { id in
+            command("provider-session.detach", threadId, "\(commandId):detach:\(id)",
+                    ["providerSessionId": .string(id), "reason": .string("client-requested")])
+        }
+    }
+
     /// The committed sequence from a dispatch result, `{"sequence": n}`.
     public static func sequence(_ result: JSONValue) -> Int? {
         if case .number(let n)? = result["sequence"] { return Int(n) }
@@ -322,7 +340,79 @@ public enum SnoozePresets {
     }
 }
 
+/// The custom snooze dialog's input (`CustomSnoozeInput`, threadSettled.ts:321-354).
+public enum CustomSnooze {
+    public enum Unit: String, Sendable, CaseIterable { case minutes, hours, days }
+    case date(day: String, time: String)
+    case duration(amount: String, unit: Unit)
+
+    /// `resolveCustomSnooze`: the wake time, nil for a past or invalid local date or a non-positive duration.
+    /// A date that rolls over or a local time a DST change skips is rejected.
+    public func resolve(now: Date, calendar: Calendar = .current) -> Date? {
+        let wake: Date
+        switch self {
+        case .duration(let amount, let unit):
+            guard let n = Double(amount.trimmingCharacters(in: .whitespaces)), n.isFinite, n > 0 else { return nil }
+            let unitSeconds: Double = switch unit { case .minutes: 60; case .hours: 3600; case .days: 86_400 }
+            wake = now.addingTimeInterval(n * unitSeconds)
+        case .date(let day, let time):
+            let d = day.split(separator: "-").map(String.init), t = time.split(separator: ":").map(String.init)
+            guard d.count == 3, t.count == 2, d[0].count == 4, d[1].count == 2, d[2].count == 2, t[0].count == 2, t[1].count == 2,
+                  let y = Int(d[0]), let m = Int(d[1]), let dd = Int(d[2]), let h = Int(t[0]), let mi = Int(t[1]),
+                  let date = calendar.date(from: DateComponents(year: y, month: m, day: dd, hour: h, minute: mi)),
+                  Self.localDate(date, calendar: calendar) == day, Self.localTime(date, calendar: calendar) == time else { return nil }
+            wake = date
+        }
+        return wake > now ? wake : nil
+    }
+
+    /// `localSnoozeDate`: `YYYY-MM-DD`.
+    public static func localDate(_ date: Date, calendar: Calendar = .current) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    /// `localSnoozeTime`: `HH:MM`.
+    public static func localTime(_ date: Date, calendar: Calendar = .current) -> String {
+        let c = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+}
+
 extension SidebarModel {
+    /// `getOrphanedWorktreePathForThread` (worktreeCleanup.ts:11-33): the thread's worktree when no other
+    /// thread in `threads` uses it.
+    public static func orphanedWorktreePath(_ threads: [ThreadShell], threadId: ThreadId) -> String? {
+        func normalize(_ path: String?) -> String? {
+            guard let t = path?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+            return t
+        }
+        guard let target = threads.first(where: { $0.id == threadId }), let path = normalize(target.worktreePath) else { return nil }
+        return threads.contains { $0.id != threadId && normalize($0.worktreePath) == path } ? nil : path
+    }
+
+    /// `formatWorktreePathForDisplay`: the last path component.
+    public static func worktreeDisplayName(_ path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return path }
+        var normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        while normalized.hasSuffix("/") { normalized.removeLast() }
+        let last = normalized.split(separator: "/", omittingEmptySubsequences: false).last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        return last.isEmpty ? trimmed : last
+    }
+
+    /// `getFallbackThreadIdAfterDelete` (Sidebar.logic.ts:1262-1288): the newest other thread of the
+    /// same project that is not being deleted.
+    public static func fallbackThreadAfterDelete(_ threads: [ThreadShell], deleted: ThreadId, deleting: Set<ThreadId> = [],
+                                                 order: SortOrder = .updatedAt) -> ThreadId? {
+        guard let thread = threads.first(where: { $0.id == deleted }) else { return nil }
+        return threads.filter { $0.projectId == thread.projectId && $0.id != deleted && !deleting.contains($0.id) }
+            .max { l, r in
+                let lt = getThreadSortTimestamp(l, order), rt = getThreadSortTimestamp(r, order)
+                return lt != rt ? lt < rt : l.id.rawValue < r.id.rawValue // `sortThreads`: newest, then the larger id
+            }?.id
+    }
+
     /// `QUEUED_TURN_START_GRACE_MS`.
     public static let queuedTurnStartGraceMs: Int64 = 2 * 60 * 1000
 
@@ -443,6 +533,31 @@ public enum ThreadActionMenu {
             item.children = item.children.map { var c = $0; c.disabled = true; return c }
             return item
         }
+    }
+
+    /// The multi-select menu (Sidebar.tsx:4242-4352): counts cover only the threads each action touches.
+    /// `count` is every selected thread with a row; `canSnooze` is true when all of them can snooze now.
+    public static func bulkItems(count: Int, pinnedCount: Int, settlingCount: Int, canSnooze: Bool,
+                                 titleSupportedCount: Int, titleActionableCount: Int, canOperate: Bool = true,
+                                 snoozePresets: [SnoozePreset]) -> [ThreadMenuItem] {
+        var items: [ThreadMenuItem] = []
+        // `buildBulkUnpinContextMenuItem`: only when something selected is pinned.
+        if pinnedCount > 0 { items.append(.init("unpin", "Unpin (\(pinnedCount))", disabled: !canOperate)) }
+        items.append(.init("settle", "Settle (\(count))", disabled: settlingCount == 0 || !canOperate))
+        if canSnooze {
+            items.append(.init("snooze", "Snooze (\(count))", disabled: !canOperate,
+                               children: snoozePresets.map { .init("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))", disabled: !canOperate) }
+                                   + [.init("snooze:custom", "Custom…", disabled: !canOperate, separatorBefore: true)]))
+        }
+        // `buildBulkTitleRegenerationContextMenuItem`.
+        if titleSupportedCount > 0 {
+            items.append(titleActionableCount == 0
+                ? .init("regenerate-title", "Regenerating… (\(titleSupportedCount))", disabled: true)
+                : .init("regenerate-title", "Regenerate titles (\(titleActionableCount))", disabled: !canOperate))
+        }
+        items.append(.init("mark-unread", "Mark unread (\(count))"))
+        items.append(.init("delete", "Delete (\(count))", disabled: !canOperate, destructive: true))
+        return items
     }
 
     /// The menu without `ids` (actions this client does not have yet), at any depth.

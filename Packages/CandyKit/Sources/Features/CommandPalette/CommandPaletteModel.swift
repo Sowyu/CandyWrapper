@@ -29,6 +29,28 @@ public struct PaletteEntry {
     public var glyph: (IconDefinition, NSColor)?
     public var titleHighlights: [Int]?
     public var descriptionHighlights: [Int]?
+    /// A message match (`ThreadSearchMatchExcerpt`): `match` is "You: <snippet>" or "Agent: <snippet>",
+    /// and every ASCII-case-insensitive hit of `matchQuery` in the snippet draws semibold.
+    public var matchIsUser: Bool?
+    public var matchQuery: String?
+    /// A context row (the new project preview, the repository being cloned): drawn, never highlighted or run.
+    public var isStatic = false
+    /// `titleTrailingContent`: a check (the chosen machine), a checkbox, or a warning note ("Setup Required").
+    public var trailingIcon: IconName?
+    public var trailingCheckbox: Bool?
+    public var noteIsWarning = false
+
+    /// UTF-16 offsets of the query's hits in `match`, after the tag.
+    var matchHighlights: [Int]? {
+        guard let match, let isUser = matchIsUser, let query = matchQuery else { return nil }
+        let tag = isUser ? "You: " : "Agent: "
+        guard match.hasPrefix(tag) else { return nil }
+        let snippet = String(match.dropFirst(tag.count))
+        let offset = tag.utf16.count
+        return SearchExcerptView.highlights(in: snippet, query: query).flatMap { r in
+            (r.lowerBound.utf16Offset(in: snippet)..<r.upperBound.utf16Offset(in: snippet)).map { offset + $0 }
+        }
+    }
 
     public init(value: String, searchTerms: [String], title: String, titleEmphasis: String? = nil, description: String? = nil,
                 match: String? = nil, timestamp: String? = nil, searchRecency: Int64? = nil, icon: IconName, isDisabled: Bool = false,
@@ -54,8 +76,10 @@ public struct PalettePage {
     public var addonIcon: IconName
     public var groups: [PaletteGroup]
     public var initialQuery: String?
-    public init(addonIcon: IconName, groups: [PaletteGroup], initialQuery: String? = nil) {
-        self.addonIcon = addonIcon; self.groups = groups; self.initialQuery = initialQuery
+    /// A step whose rows follow the query (New project's name, the clone steps), in place of `groups`.
+    public var mode: CommandPaletteController.Mode?
+    public init(addonIcon: IconName, groups: [PaletteGroup], initialQuery: String? = nil, mode: CommandPaletteController.Mode? = nil) {
+        self.addonIcon = addonIcon; self.groups = groups; self.initialQuery = initialQuery; self.mode = mode
     }
 }
 

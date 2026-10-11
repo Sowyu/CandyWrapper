@@ -76,6 +76,8 @@ final class ProjectMonogramView: DSView {
         }
     }
     var dimmed = false { didSet { if dimmed != oldValue { needsDisplay = true } } }
+    /// Draws the 16px favicon at another size (`size-3` in the hover card is 0.75).
+    var scale: CGFloat = 1 { didSet { if scale != oldValue { needsDisplay = true } } }
     private var identity = (monogram: "PR", color: "blue")
     private var observing = false
 
@@ -119,6 +121,7 @@ final class ProjectMonogramView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        if scale != 1 { ctx.scaleBy(x: scale, y: scale) }
         let tileRect = CGRect(x: 0, y: 0, width: 16, height: 16)
         switch source?.override {
         case .emoji(let emoji)?:
@@ -225,7 +228,11 @@ final class RowActionButton: ControlView {
         super.stateDidChange(from: old)
         restyle()
         // The snooze menu pins the row's hover actions while it is open (Sidebar.tsx:1536-1539).
-        if state.popupOpen != old.popupOpen { (superview as? SidebarRowBase)?.refresh() }
+        if state.popupOpen != old.popupOpen, let row = superview as? SidebarRowBase {
+            row.refresh()
+            // `<Tooltip disabled={snoozeMenuOpen}>`: the menu takes the hover card away.
+            if state.popupOpen { row.onHoverChange?(row, false) }
+        }
     }
     override func updateLayer() { restyle() }
 
@@ -247,10 +254,61 @@ class SidebarRowBase: ControlView {
         scalesWhenPressed = false
     }
 
+    /// The list's shared rename field while this row's thread is being renamed.
+    weak var renameField: SidebarRenameFieldView?
+
+    /// The pointer entered or left the row (the hover card's trigger).
+    final var onHoverChange: (@MainActor (SidebarRowBase, Bool) -> Void)?
+    /// A press on a thread row moved `dragDistance`: the list starts a thread drag.
+    final var onBeginDrag: (@MainActor (SidebarRowBase, ThreadId, NSEvent) -> Void)?
+    /// Files dragged over the row (`isFileDragOver`: `ring-1 ring-inset ring-primary/70`).
+    var isFileDragOver = false { didSet { if isFileDragOver != oldValue { refresh() } } }
+    private var pressPoint: NSPoint?
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        pressPoint = event.locationInWindow
+        // A press dismisses the hover card, as pressing a tooltip's trigger does.
+        onHoverChange?(self, false)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if let p = pressPoint, case .row(let r)? = item, !r.isRenaming, let onBeginDrag,
+           hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
+            pressPoint = nil
+            var released = state
+            released.active = false
+            previewState(released)
+            onBeginDrag(self, r.id, event)
+            return
+        }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        pressPoint = nil
+        super.mouseUp(with: event)
+    }
+
     func configure(_ item: SidebarItem) { self.item = item; refresh() }
     func refresh() {}
-    override func stateDidChange(from old: State) { super.stateDidChange(from: old); refresh() }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        refresh()
+        if state.hovered != old.hovered { onHoverChange?(self, state.hovered) }
+    }
     override func performAction() { onOpen?(); super.performAction() }
+
+    /// `rowSurfaceClassName`: the open thread, then a selected row, then hover (or files dragged over).
+    static func surfaceColor(_ r: SidebarRowModel, hovered: Bool) -> NSColor? {
+        r.isActive ? SB.c(\.sidebarRowActive) : r.isSelected ? SB.c(\.sidebarRowSelected) : hovered ? SB.c(\.sidebarRowHover) : nil
+    }
+
+    /// The surface's ring: the keyboard focus ring (2px), else the file drag ring (`ring-1 ring-primary/70`).
+    func applyRing(_ surface: CALayer) {
+        surface.borderWidth = isKeyboardFocused ? 2 : isFileDragOver ? 1 : 0
+        surface.borderColor = (isKeyboardFocused ? SB.c(\.ring) : SB.c(\.primary, 0.7)).cgColor(in: self)
+    }
     // The list owns keyboard focus; rows never take it from a click.
     override var acceptsFirstResponder: Bool { false }
 
@@ -328,6 +386,8 @@ final class SidebarCardRowView: SidebarRowBase {
     private let title = LabelView()
     private let branchIcon = IconView(name: .folderGit2, size: 12)
     private let branch = LabelView()
+    /// A scratch thread's machine on line 3 (`size-3 text-muted-foreground/40`).
+    private let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
     private let provider = ProviderGlyphView()
     /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
@@ -344,7 +404,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
+        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         project.font = SB.font(12, .medium); project.lineHeight = 16
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
@@ -371,10 +431,8 @@ final class SidebarCardRowView: SidebarRowBase {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
-        surface.backgroundColor = r.isActive ? SB.c(\.sidebarRowActive).cgColor(in: self)
-            : state.hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-        surface.borderWidth = isKeyboardFocused ? 2 : 0
-        surface.borderColor = SB.c(\.ring).cgColor(in: self)
+        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
+        applyRing(surface)
         // Background work fades as a whole row (`opacity-70`, full on hover).
         alphaValue = r.recedes && r.status == .working && !hovered ? 0.7 : 1
         CATransaction.commit()
@@ -415,13 +473,17 @@ final class SidebarCardRowView: SidebarRowBase {
             : r.isUnread || r.isWoke || r.status == .input ? SB.c(\.foreground)
             : r.status == .failed ? SB.c(\.foreground, 0.95) : SB.c(\.foreground, 0.9)
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
-        branch.text = r.branch ?? ""
+        let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
+        branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
         branch.color = SB.c(\.mutedForeground, 0.4)
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
         branchIcon.strokeColor = SB.c(\.mutedForeground, 0.4)
+        scratchMachine.kind = showsScratch ? r.scratchMachine : nil
+        scratchMachine.isHidden = !showsScratch
+        scratchMachine.color = SB.c(\.mutedForeground, 0.4)
         provider.driver = r.providerIcon
         machine.kind = r.environmentMachine
-        machine.isHidden = r.environmentMachine == nil
+        machine.isHidden = r.environmentMachine == nil || showsScratch
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
@@ -473,6 +535,8 @@ final class SidebarCardRowView: SidebarRowBase {
         project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
         // Line 2: title, `mt-1`.
         title.frame = NSRect(x: left, y: top + 24, width: right - left, height: 20)
+        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                         frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
         // Line 3: branch and provider, `mt-0.5`, text-xs.
         let y3 = top + 46
         provider.frame = NSRect(x: right - 14, y: y3 + 1, width: 14, height: 14)
@@ -487,6 +551,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
         if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
+        if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
     }
 }
@@ -558,10 +623,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         let hovered = state.hovered || isKeyboardFocused
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.backgroundColor = r.isActive ? SB.c(\.sidebarRowActive).cgColor(in: self)
-            : state.hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-        surface.borderWidth = isKeyboardFocused ? 2 : 0
-        surface.borderColor = SB.c(\.ring).cgColor(in: self)
+        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
+        applyRing(surface)
         CATransaction.commit()
         let unsettle = r.action == .unsettle
         // Dimmed favicon at rest, restored on hover.
@@ -644,6 +707,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
         if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
         title.frame = NSRect(x: x, y: (h - 20) / 2, width: max(0, right - x), height: 20)
+        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                         frame: NSRect(x: x, y: (h - 22) / 2, width: max(0, right - x), height: 22))
     }
 }
 

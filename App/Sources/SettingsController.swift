@@ -36,6 +36,8 @@ final class SettingsController {
     weak var composer: ComposerController?
     var clientObserver: Int?
     private(set) var isOpen = false
+    /// Settings opened, changed page or closed (route history).
+    var onRouteChange: (() -> Void)?
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
     var modal: ModalHost?
@@ -150,6 +152,7 @@ final class SettingsController {
         page.removeFromSuperview()
         layout.main.addSubview(threadPanel)
         layout.needsLayout = true
+        onRouteChange?()
     }
 
     private func loadPrimaryDescriptor() {

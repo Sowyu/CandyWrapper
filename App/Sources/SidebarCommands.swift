@@ -35,11 +35,16 @@ final class SidebarCommands {
         c.page.onEscape = { [weak self] in self?.closeUtilityPage() }
         return c
     }()
-    private var pickingFolder = false
+    /// A utility page opened or closed (route history).
+    var onRouteChange: (() -> Void)?
+    /// The open utility page, nil on the thread view.
+    var openUtilityKind: UtilityPage? { utilityPage == nil ? nil : utilityKind }
+
+    /// `/projects/$projectKey` for a group key, set by the app.
+    var openProjectSettings: (String) -> Void = { _ in }
 
     /// Thread menu items this client does not have yet.
-    // ponytail: no Rename, New thread on branch, Delete, Custom snooze or Project settings; add them with inline rename, branch drafts, worktree cleanup, the custom snooze dialog and the settings pages (M7)
-    static let unbuiltMenuItems: Set<String> = ["rename", "new-thread-on-branch", "delete", "snooze:custom", "project-settings"]
+    static let unbuiltMenuItems: Set<String> = []
 
     init(sidebar: SidebarContentView, window: NSWindow, layout: SidebarLayoutView, environments: Environments, threads: ThreadController) {
         self.sidebar = sidebar
@@ -58,6 +63,8 @@ final class SidebarCommands {
         sidebar.actions.openPullRequests = { [weak self] in self?.openUtilityPage(.pullRequests) }
         sidebar.actions.openUsage = { [weak self] in self?.openUtilityPage(.usage) }
         sidebar.actions.back = { [weak self] in self?.closeUtilityPage() }
+        sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
+        sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
         ledger.onChange = { [weak self] in self?.undoNoticeChanged() }
     }
 
@@ -206,33 +213,44 @@ final class SidebarCommands {
         }
     }
 
-    private func snooze(_ id: ThreadId, _ preset: SnoozePreset) {
-        guard !snoozing.contains(id), let thread = shell(id) else { return }
+    private func snooze(_ id: ThreadId, _ preset: SnoozePreset) { snooze(id, until: preset.snoozedUntil) }
+
+    /// A command failure this client words itself, with T3's text.
+    struct CommandMessage: LocalizedError { let errorDescription: String? }
+
+    /// `performSnooze`; `leaving` are the other threads snoozing in the same batch, which forward
+    /// navigation skips. Returns the failure, nil on success or when the thread is already snoozing.
+    @discardableResult
+    private func performSnooze(_ id: ThreadId, until wake: Date, leaving: Set<ThreadId> = [], reportFailure: Bool = true) async -> Error? {
+        guard !snoozing.contains(id), let thread = shell(id) else { return nil }
         let presented = SidebarThread(thread)
-        // The server's own rule, checked first so the menu fails without a round trip.
         guard SidebarModel.canSnooze(presented, nowMs: nowMs) else {
-            toast("Failed to snooze thread", "This thread is waiting on you. Respond to the pending request before snoozing it.", .error)
-            return
+            let error = CommandMessage(errorDescription: "This thread is waiting on you. Respond to the pending request before snoozing it.")
+            if reportFailure { fail("Failed to snooze thread", error) }
+            return error
         }
         snoozing.insert(id)
-        let navigate = planForwardNavigation(id)
+        defer { snoozing.remove(id) }
+        let navigate = planForwardNavigation(id, leaving: leaving)
         let claim = ledger.begin("snooze", id.rawValue)
-        let until = T3Timestamp(preset.snoozedUntil)
-        Task {
-            defer { snoozing.remove(id) }
-            do {
-                try await environments.dispatch(id, ThreadCommands.snooze(id.localId, until: until.raw), optimistic: .snooze(until: until))
-            } catch {
-                ledger.finish(claim)
-                fail("Failed to snooze thread", error)
-                return
-            }
-            showUndo(.snoozed, claim) { [weak self] in
-                guard let self else { return }
-                _ = await self.attempt("Failed to wake thread", { try await self.environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) })
-            }
-            if threads.openThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(SidebarThread(now), nowMs: nowMs) { navigate?() }
+        let until = T3Timestamp(wake)
+        do {
+            try await environments.dispatch(id, ThreadCommands.snooze(id.localId, until: until.raw), optimistic: .snooze(until: until))
+        } catch {
+            ledger.finish(claim)
+            if reportFailure { fail("Failed to snooze thread", error) }
+            return error
         }
+        showUndo(.snoozed, claim) { [weak self] in
+            guard let self else { return }
+            _ = await self.attempt("Failed to wake thread", { try await self.environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) })
+        }
+        if threads.openThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(SidebarThread(now), nowMs: nowMs) { navigate?() }
+        return nil
+    }
+
+    private func snooze(_ id: ThreadId, until wake: Date) {
+        Task { await performSnooze(id, until: wake) }
     }
 
     /// Fresh pins go to the top of the pinned run, ahead of every keyed pin in any environment.
@@ -354,12 +372,12 @@ final class SidebarCommands {
 
     /// `planForwardNavigation` (Sidebar.tsx:3318-3346): parking the open thread moves to the next card
     /// in list order (wrapping), else a draft in its project. Nil when the thread is not the open one.
-    private func planForwardNavigation(_ id: ThreadId) -> (() -> Void)? {
+    private func planForwardNavigation(_ id: ThreadId, leaving: Set<ThreadId> = []) -> (() -> Void)? {
         guard threads.openThreadId == id, let sidebar else { return nil }
         let rows: [SidebarRowModel] = sidebar.list.items.compactMap { if case .row(let r) = $0 { r } else { nil } }
         let project = shell(id).flatMap { t in snapshot?.projects.first { $0.id == t.projectId } }
         if let index = rows.firstIndex(where: { $0.id == id }),
-           let next = (rows[(index + 1)...] + rows[..<index]).first(where: { $0.action == .settle }) {
+           let next = (rows[(index + 1)...] + rows[..<index]).first(where: { $0.action == .settle && !leaving.contains($0.id) }) {
             return { [weak self] in self?.threads.open(next.id) }
         }
         return { [weak self] in self?.threads.newThread(in: project) }
@@ -369,9 +387,13 @@ final class SidebarCommands {
 
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
-        let items = SnoozePresets.resolve(now: Date()).map { preset in
+        var items = SnoozePresets.resolve(now: Date()).map { preset in
             MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
         }
+        items.append(.separator)
+        items.append(MenuItem("Custom…") { [weak self] in
+            self?.requestCustomSnooze { wake in self?.snooze(id, until: wake) }
+        })
         MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }
 
@@ -379,6 +401,10 @@ final class SidebarCommands {
 
     private func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView) {
         guard let thread = shell(id), let sidebar else { return }
+        if sidebar.selectedThreadIds.contains(id) {
+            showSelectionMenu(event: event, view: view)
+            return
+        }
         let presented = SidebarThread(thread)
         let row = sidebar.list.items.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
         let group = snapshot.flatMap { s in
@@ -406,11 +432,19 @@ final class SidebarCommands {
     }
 
     private func perform(_ choice: String, id: ThreadId, thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) {
+        if choice == "snooze:custom" {
+            requestCustomSnooze { [weak self] wake in self?.snooze(id, until: wake) }
+            return
+        }
         if choice.hasPrefix("snooze:") {
             if let preset = presets.first(where: { "snooze:\($0.id)" == choice }) { snooze(id, preset) }
             return
         }
         switch choice {
+        case "rename": sidebar?.startRename(id)
+        case "project-settings": if let group { openProjectSettings(group.key) }
+        case "new-thread-on-branch": newThreadOnBranch(thread)
+        case "delete": confirmDelete(id)
         case "filter-by-project":
             // The way back to all projects is picking the scoped project again.
             if let group, let sidebar { sidebar.setProjectScope(sidebar.state.projectScopeKey == group.key ? nil : group.key) }
@@ -444,6 +478,198 @@ final class SidebarCommands {
         }
     }
 
+    // MARK: Rename, delete, custom snooze, branch threads (Sidebar.tsx:3261-3290, 4650-4830)
+
+    /// `commitThreadRename`: an empty title warns, an unchanged one does nothing.
+    private func commitRename(_ id: ThreadId, title: String, original: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            toast("Thread title cannot be empty", nil, .warning)
+            return
+        }
+        guard trimmed != original else { return }
+        simple(id, ThreadCommands.rename(id.localId, title: trimmed), failure: "Failed to rename thread")
+    }
+
+    /// `requestCustomSnooze`: the custom snooze dialog; `then` runs with the chosen wake time.
+    private func requestCustomSnooze(then: @escaping @MainActor (Date) -> Void) {
+        guard let window else { return }
+        SidebarCustomSnoozeDialog.present(in: window) { wake in if let wake { then(wake) } }
+    }
+
+    /// "New thread on <branch>": the thread's worktree when it has one, else its branch on the local
+    /// checkout, never from origin.
+    private func newThreadOnBranch(_ thread: ThreadShell) {
+        guard let project = snapshot?.projects.first(where: { $0.id == thread.projectId }) else { return }
+        threads.newThread(in: project)
+        threads.composer.updateDraft { d in
+            d.branch = thread.branch
+            d.worktreePath = thread.worktreePath
+            d.envMode = thread.worktreePath == nil ? .local : .worktree
+            d.startFromOrigin = false
+        }
+    }
+
+    /// The thread menu's Delete: confirms when `confirmThreadDelete` is on (the default).
+    private func confirmDelete(_ id: ThreadId) {
+        guard let thread = shell(id) else { return }
+        let run: @MainActor () -> Void = { [weak self] in
+            Task { [weak self] in
+                guard let self else { return }
+                if case .failure(let error) = await self.deleteThread(id) { self.fail("Failed to delete thread", error) }
+            }
+        }
+        guard ClientSettingsStore.shared.current.bool("confirmThreadDelete"), let window else { return run() }
+        ConfirmCopy.present("Delete thread \"\(thread.title)\"?\nThis permanently clears conversation history for this thread.",
+                            destructive: true, in: window) { yes in if yes { run() } }
+    }
+
+    private enum DeleteOutcome { case deleted, skipped, failure(Error) }
+
+    /// `deleteThread` (useThreadActions.ts:440-640): offers to remove a worktree only this thread used,
+    /// deletes, moves the open thread to the project's newest other thread, then removes the worktree.
+    // ponytail: stops the provider only for the open thread (its projection holds the sessions); fetch the projection if a stale session lingers after deleting a running background thread
+    private func deleteThread(_ id: ThreadId, deleting: Set<ThreadId> = []) async -> DeleteOutcome {
+        guard let thread = shell(id), let env = id.environmentId else { return .skipped }
+        let all = (snapshot?.threads ?? []).filter { $0.id.environmentId == env }
+        let surviving = all.filter { $0.id == id || !deleting.contains($0.id) }
+        let project = snapshot?.projects.first { $0.id == thread.projectId }
+        let config = threads.composer.config(env)
+        let orphan = SidebarModel.orphanedWorktreePath(surviving, threadId: id)
+        let scratchRoot = config?.scratchWorkspaceRoot.map(SidebarModel.normalizeProjectPath)
+        let isScratch = project.map { scratchRoot == SidebarModel.normalizeProjectPath($0.workspaceRoot) } ?? false
+        var removeWorktree = false
+        if let orphan, project != nil, !isScratch {
+            let settings = ServerSettingsValues(config?.settings.raw ?? .null)
+            let automatic = ProjectSettings.worktreeCleanup(settings, projectId: thread.projectId.localId.rawValue)["worktreeOnDelete"]?.boolValue ?? false
+            if !automatic, let window {
+                removeWorktree = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+                    ConfirmCopy.present("This thread is the only one linked to this worktree:\n\(SidebarModel.worktreeDisplayName(orphan))\n\nDelete the worktree too?",
+                                        destructive: true, in: window) { done.resume(returning: $0) }
+                }
+            }
+        }
+        if threads.openThreadId == id, SidebarModel.shellRuntime(thread) != nil {
+            try? await threads.composer.stopSessions(thread)
+        }
+        let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarThreadSortOrder")) ?? .updatedAt
+        let fallback = SidebarModel.fallbackThreadAfterDelete(all, deleted: id, deleting: deleting, order: order)
+        let wasOpen = threads.openThreadId == id
+        do { try await environments.dispatch(id, ThreadCommands.delete(id.localId)) } catch { return .failure(error) }
+        sidebar?.deselect([id])
+        if wasOpen, threads.openThreadId == id {
+            if let fallback { threads.open(fallback) } else { threads.newThread(in: project) }
+        }
+        guard removeWorktree, let orphan, let project else { return .deleted }
+        do {
+            _ = try await environments.request(env, "vcs.removeWorktree",
+                                               .object(["cwd": .string(project.workspaceRoot), "path": .string(orphan), "force": .bool(true)]))
+        } catch {
+            let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription ?? "An error occurred."
+            toast("Failed to delete worktree", "Could not remove \(SidebarModel.worktreeDisplayName(orphan)). \(message)", .error)
+            return .deleted
+        }
+        do {
+            _ = try await environments.request(env, "vcs.refreshStatus", .object(["cwd": .string(project.workspaceRoot)]))
+        } catch {
+            fail("Worktree deleted, but Git status refresh failed", error)
+        }
+        return .deleted
+    }
+
+    // MARK: Multi-select (Sidebar.tsx:4242-4510)
+
+    private func showSelectionMenu(event: NSEvent, view: NSView) {
+        guard let sidebar else { return }
+        // Only threads with a row now: selections can outlive their rows (settled paging, deletes elsewhere).
+        let rowIds = Set(sidebar.list.items.compactMap { if case .row(let r) = $0 { r.id } else { nil } })
+        let selected = (snapshot?.threads ?? []).filter { sidebar.selectedThreadIds.contains($0.id) && rowIds.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        let ms = nowMs
+        let pinned = selected.filter { $0.pinnedAt != nil }
+        let settling = selected.filter { $0.settledOverride != .settled }
+        let regeneratable = selected.filter { $0.titleRegeneration == nil }
+        let presets = SnoozePresets.resolve(now: Date())
+        // ponytail: every environment reads as supporting pins, snooze and title regeneration; gate per descriptor for old servers
+        let items = ThreadActionMenu.bulkItems(count: selected.count, pinnedCount: pinned.count, settlingCount: settling.count,
+                                               canSnooze: selected.allSatisfy { SidebarModel.canSnooze(SidebarThread($0), nowMs: ms) },
+                                               titleSupportedCount: selected.count, titleActionableCount: regeneratable.count,
+                                               snoozePresets: presets)
+        let menu = Self.nativeMenu(items) { [weak self] choice in
+            self?.performBulk(choice, selected: selected, pinned: pinned, settling: settling, regeneratable: regeneratable, presets: presets)
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
+    }
+
+    private func performBulk(_ choice: String, selected: [ThreadShell], pinned: [ThreadShell], settling: [ThreadShell],
+                             regeneratable: [ThreadShell], presets: [SnoozePreset]) {
+        let ids = selected.map(\.id)
+        if choice.hasPrefix("snooze:") {
+            let snoozeAll: @MainActor (Date) -> Void = { [weak self] wake in
+                guard let self else { return }
+                self.sidebar?.clearSelection()
+                Task {
+                    var done = 0
+                    var failures: [Error] = []
+                    for id in ids {
+                        if let error = await self.performSnooze(id, until: wake, leaving: Set(ids), reportFailure: false) { failures.append(error) } else { done += 1 }
+                    }
+                    guard let first = failures.first else { return }
+                    let n = failures.count
+                    self.fail(done > 0 ? "Failed to snooze \(n) thread\(n == 1 ? "" : "s")" : "Failed to snooze threads", first)
+                }
+            }
+            if choice == "snooze:custom" {
+                requestCustomSnooze(then: snoozeAll)
+            } else if let preset = presets.first(where: { "snooze:\($0.id)" == choice }) {
+                snoozeAll(preset.snoozedUntil)
+            }
+            return
+        }
+        switch choice {
+        case "unpin":
+            for t in pinned { unpin(t.id) }
+            sidebar?.clearSelection()
+        case "settle":
+            for t in settling where shell(t.id)?.settledOverride != .settled { settle(t.id) }
+            sidebar?.clearSelection()
+        case "regenerate-title":
+            Task {
+                for t in regeneratable {
+                    do { try await environments.dispatch(t.id, ThreadCommands.regenerateTitle(t.id.localId)) } catch {
+                        fail("Failed to regenerate thread titles", error)
+                        return
+                    }
+                }
+                sidebar?.clearSelection()
+            }
+        case "mark-unread":
+            for id in ids { simple(id, ThreadCommands.markUnread(id.localId), failure: nil) }
+            sidebar?.clearSelection()
+        case "delete":
+            let run: @MainActor () -> Void = { [weak self] in
+                Task { [weak self] in
+                    guard let self else { return }
+                    var deleted = Set<ThreadId>()
+                    var firstFailure: Error?
+                    for id in ids {
+                        switch await self.deleteThread(id, deleting: deleted.union([id])) {
+                        case .deleted, .skipped: deleted.insert(id)
+                        case .failure(let error): if firstFailure == nil { firstFailure = error }
+                        }
+                    }
+                    if let firstFailure { self.fail("Failed to delete threads", firstFailure) }
+                    self.sidebar?.deselect(Array(deleted))
+                }
+            }
+            guard ClientSettingsStore.shared.current.bool("confirmThreadDelete"), let window else { return run() }
+            let n = ids.count
+            ConfirmCopy.present("Delete \(n) thread\(n == 1 ? "" : "s")?\nThis permanently clears conversation history for these threads.",
+                                destructive: true, in: window) { yes in if yes { run() } }
+        default: break
+        }
+    }
+
     private func copy(_ text: String, title: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -472,30 +698,10 @@ final class SidebarCommands {
 
     // MARK: Add project (CommandPalette.tsx:2370-2516, 3228-3330)
 
-    /// T3 opens the command palette's add-project view; its "Open in Finder" footer is the desktop folder
-    /// picker on the primary environment. The project lands in that environment.
-    // ponytail: the folder picker only; the palette's browse, clone and new-project flows and the environment picker come with the command palette (M7)
-    func addProject() {
-        guard !pickingFolder, let window else { return }
-        guard let env = environments.primaryId, environments.session(env) != nil else {
-            let label = environments.primaryId.flatMap { environments.label($0) } ?? "The selected environment"
-            toast("Environment unavailable", "\(label) is not connected.", .error)
-            return
-        }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        pickingFolder = true
-        panel.beginSheetModal(for: window) { [weak self] response in
-            MainActor.assumeIsolated {
-                self?.pickingFolder = false
-                guard response == .OK, let url = panel.url else { return }
-                self?.addProject(path: url.path, environmentId: env)
-            }
-        }
-    }
+    /// Add project opens the command palette's add-project flow (`openCommandPalette({open: "add-project"})`).
+    var openAddProject: () -> Void = {}
+
+    func addProject() { openAddProject() }
 
     /// `handleAddProjectForEnvironment`: an existing project opens its latest unsettled thread or a
     /// draft; a new one is created with `project.create`, then a draft opens in it.
@@ -544,6 +750,7 @@ final class SidebarCommands {
             usage.didShow()
             window?.makeFirstResponder(usage.page)
         }
+        onRouteChange?()
     }
 
     /// Back (`navigateToMainApp`): the thread panel returns as it was.
@@ -557,6 +764,7 @@ final class SidebarCommands {
         layout.main.addSubview(threads.panel)
         sidebar?.isOnUtilityPage = false
         layout.needsLayout = true
+        onRouteChange?()
     }
 }
 

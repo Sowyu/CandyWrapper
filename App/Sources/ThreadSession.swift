@@ -264,7 +264,25 @@ final class ThreadController {
         terminal = TerminalController(panel: panel, sidebar: sidebar, environments: environments)
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
-        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync() }
+        composer.onTargetChange = { [weak self] in self?.git.refresh(); self?.automations.sync(); self?.onRouteChange?() }
+        // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
+        // instance's name when instances need telling apart (`shouldShowInstanceBadge`), and earlier providers.
+        sidebar.actions.hoverProvider = { [weak self] thread in
+            guard let env = thread.id.environmentId, let providers = self?.composer.config(env)?.providers else { return nil }
+            let catalog = ProviderCatalog(providers)
+            let instance = SidebarModel.shellRuntime(thread) != nil ? thread.providerInstanceId : thread.modelSelection.instanceId
+            let history = (thread.providerInstanceHistory ?? []).filter { $0 != instance }.map { catalog.entry($0)?.displayName ?? $0.rawValue }
+            guard let entry = catalog.entry(instance) else { return nil }
+            let model = entry.model(thread.modelSelection.model).map(ModelNames.trigger) ?? thread.modelSelection.model
+            let badge = entry.provider.accentColor != nil || catalog.entries.filter { $0.driver == entry.driver }.count > 1
+            return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history)
+        }
+        // Scratch rows name their machine; the sidebar learns each environment's scratch folder from its config.
+        composer.configObservers.append { [weak self, weak sidebar] env in
+            guard let sidebar, let config = self?.composer.config(env) else { return }
+            let root = config.scratchWorkspaceRoot.map(SidebarModel.normalizeProjectPath)
+            if sidebar.state.scratchRoots[env] != root { sidebar.state.scratchRoots[env] = root }
+        }
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
         let prCapabilities = PullRequestCapabilities(environments: environments)
@@ -290,6 +308,13 @@ final class ThreadController {
         panel.model.openFile = { [weak self] meta, _ in self?.files.openLink(meta) }
         composer.openThread = { [weak self] id in self?.open(id) }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
+        // Files dropped on a row open its thread and attach there (`handleThreadFileDrop`, Sidebar.tsx:3163-3187).
+        sidebar.actions.dropFiles = { [weak self] id, urls in
+            guard let self else { return }
+            self.open(id)
+            guard self.openThreadId == id else { return }
+            self.composer.attachDroppedFiles(urls)
+        }
         sidebar.actions.openDraft = { [weak self] id in
             guard let self, composer.openDraft(id) else { return }
             session?.end()
@@ -363,6 +388,7 @@ final class ThreadController {
 
     /// An environment's session started, was replaced or ended: the open thread follows its own one.
     private func sessionChanged(_ environmentId: String) {
+        migrationToast.sessionChanged(environmentId)
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
         git.sessionChanged(environmentId)
@@ -537,7 +563,35 @@ final class ThreadController {
 
     /// With the first shell: opens the `--open-thread` match or the remembered thread, else lands
     /// like T3's index route (`_chat.index.tsx:36-60`) in a draft for the most recently active project.
+    /// `NoProjectsHero` over the thread panel while no environment has a project (_chat.index.tsx:84-88).
+    private(set) lazy var noProjectsHero: SidebarNoProjectsHeroView = {
+        let hero = SidebarNoProjectsHeroView()
+        hero.autoresizingMask = [.width, .height]
+        return hero
+    }()
+    /// The legacy thread migration toast on the primary environment.
+    private lazy var migrationToast = LegacyThreadMigrationToast(environments: environments, toasts: panel.toasts)
+    /// Whether an environment offers threads without a project, for the hero's second button.
+    var offersScratch: () -> Bool = { false }
+    /// The panel moved to another thread or draft (route history).
+    var onRouteChange: (() -> Void)?
+
+    private func updateNoProjectsHero(_ snapshot: ShellSnapshot) {
+        let show = snapshot.projects.isEmpty
+        guard show || noProjectsHero.superview != nil else { return }
+        if show {
+            noProjectsHero.offersScratch = offersScratch()
+            if noProjectsHero.superview !== panel {
+                noProjectsHero.frame = panel.bounds
+                panel.addSubview(noProjectsHero)
+            }
+        } else {
+            noProjectsHero.removeFromSuperview()
+        }
+    }
+
     private func shellChanged(_ snapshot: ShellSnapshot) {
+        updateNoProjectsHero(snapshot)
         composer.projectsChanged()
         git.refresh()
         files.shellChanged()

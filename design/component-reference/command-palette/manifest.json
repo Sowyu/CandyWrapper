@@ -1,6 +1,14 @@
 {
+  "browse" : {
+    "height" : 234,
+    "width" : 576
+  },
   "empty" : {
     "height" : 190,
+    "width" : 576
+  },
+  "match" : {
+    "height" : 262,
     "width" : 576
   },
   "root" : {

@@ -98,6 +98,7 @@ extension SettingsController {
         if page.page !== view { page.page = view; page.scrollToTop() }
         refreshPages()
         extraPages[section]?.didShow()
+        onRouteChange?()
     }
 
     /// A search result: open its page, then scroll its anchor into view and pulse it.
@@ -210,8 +211,7 @@ extension SettingsController {
         for id in environments.environmentIds {
             projects += (environments.snapshot(id)?.projects ?? []).map { EnvironmentScope.scope($0, id) }
         }
-        let mode: SidebarModel.ProjectGroupingMode = ClientSettingsStore.shared.current.string("sidebarProjectGroupingMode") == "separate" ? .separate : .repository
-        return SidebarModel.buildProjectGroups(projects, mode: mode, preferredEnvironmentId: environments.primaryId).map { g in
+        return SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: environments.primaryId).map { g in
             SettingsScopeProject(key: g.key, displayName: g.label, members: g.members.map { p in
                 let env = p.id.environmentId ?? ""
                 return SettingsScopeProject.Member(
@@ -231,7 +231,7 @@ extension SettingsController {
     }
 
     /// `useAvailableSettingsSearchItems` for this client.
-    private func searchAvailability() -> SettingsSearchAvailability {
+    func searchAvailability() -> SettingsSearchAvailability {
         var a = SettingsSearchAvailability()
         a.hasEnvironment = !environments.environmentIds.isEmpty
         a.hasThreadAutoSettlement = environments.environmentIds.contains { composer?.config($0)?.capabilities.contains("threadAutoSettlement") == true }
@@ -499,6 +499,13 @@ extension SettingsController {
     func updateScheduledTaskWatch() {
         let ids = isOpen && section == .scheduledTasks ? Set(pageContext.scope.environmentIds) : []
         ScheduledTasksStore.shared.watch("settings", ids)
+    }
+
+    /// `/projects/$projectKey`, which redirects to `/settings/projects?project=<key>` (routes/projects.$projectKey.tsx).
+    func openProject(_ key: String) {
+        open()
+        scopeSelection = SettingsScopeSelection(machine: nil, project: key)
+        show(.projects)
     }
 
     /// Opens Scheduled Tasks for an environment, and a task's editor once its list arrives (the thread automations panel).

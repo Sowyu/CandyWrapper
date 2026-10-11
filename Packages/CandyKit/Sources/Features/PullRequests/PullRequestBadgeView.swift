@@ -140,10 +140,11 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     private let decoration = BoxDecorationLayer()
     var isEmpty: Bool { rows.isEmpty }
 
-    public init(badge: SidebarPullRequestBadge) {
+    /// `drawsSurface: false` leaves out the glass box, for a footer inside another card (the thread hover card).
+    public init(badge: SidebarPullRequestBadge, drawsSurface: Bool = true) {
         super.init(frame: .zero)
         decoration.host = self
-        layer?.addSublayer(decoration)
+        if drawsSurface { layer?.addSublayer(decoration) }
         layer?.masksToBounds = false
         var box = BoxStyle()
         box.radius = 8

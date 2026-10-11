@@ -88,6 +88,8 @@ public final class LabelView: DSView {
     /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
     public var highlightedIndices: [Int]? { didSet { if highlightedIndices != oldValue { invalidate() } } }
     public var highlightColor: NSColor? { didSet { needsDisplay = true } }
+    /// The first `count` UTF-16 units in their own color (a search excerpt's "You:" tag).
+    public var prefixColor: (count: Int, color: NSColor)? { didSet { needsDisplay = true } }
 
     public override var wantsUpdateLayer: Bool { false }
 
@@ -120,6 +122,9 @@ public final class LabelView: DSView {
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         if tracking != 0 { attributes[.kern] = tracking }
         let result = NSMutableAttributedString(string: text, attributes: attributes)
+        if let prefixColor, prefixColor.count <= result.length {
+            result.addAttribute(.foregroundColor, value: prefixColor.color, range: NSRange(location: 0, length: prefixColor.count))
+        }
         if let emphasizedSuffix {
             attributes[.font] = DSFont.ui(font.pointSize, weight: .semibold)
             result.append(NSAttributedString(string: emphasizedSuffix, attributes: attributes))
