@@ -27,7 +27,7 @@ public final class BrowserMiniPlayerView: DSView {
     public var onMove: (@MainActor (CGPoint) -> Void)?
 
     public var onResize: ((CGSize) -> Void)?
-    private let resize = BrowserMiniPlayerResizeView()
+    private let resizeHandles = BrowserMiniPlayerResizeDirection.allCases.map { BrowserMiniPlayerResizeView(direction: $0) }
     private let card = DSView()
     private let clip = DSView()
     private let handle = HandleView()
@@ -49,8 +49,11 @@ public final class BrowserMiniPlayerView: DSView {
             guard let self else { return }
             self.onMove?(CGPoint(x: self.frame.minX + delta.x, y: self.frame.minY + delta.y))
         }
-        [card, clip, handle, resize].forEach(addSubview)
-        resize.onResize = { [weak self] size in self?.onResize?(size) }
+        [card, clip, handle].forEach(addSubview)
+        for resize in resizeHandles {
+            addSubview(resize)
+            resize.onResize = { [weak self] rect in self?.onMove?(rect.origin); self?.onResize?(rect.size) }
+        }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Floating browser preview")
     }
@@ -74,7 +77,14 @@ public final class BrowserMiniPlayerView: DSView {
 
     public override func layout() {
         super.layout()
-        resize.frame = NSRect(x: bounds.width - 12, y: bounds.height - 12, width: 12, height: 12)
+        for resize in resizeHandles {
+            let d = resize.direction
+            let corner = (d.north || d.south) && (d.east || d.west)
+            let w: CGFloat = corner ? 12 : (d.east || d.west) ? 6 : max(0, bounds.width - 24)
+            let h: CGFloat = corner ? 12 : (d.north || d.south) ? 6 : max(0, bounds.height - 24)
+            resize.frame = NSRect(x: d.west ? 0 : d.east ? bounds.width - w : 12,
+                                  y: d.north ? 0 : d.south ? bounds.height - h : 12, width: w, height: h)
+        }
         card.frame = bounds
         clip.frame = bounds
         viewer.frame = clip.bounds

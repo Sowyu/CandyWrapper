@@ -1,0 +1,28 @@
+scripts/component-reference.swift:97:1: warning: unstructured throwing task created by 'init(name:priority:operation:)' is not used, which may accidentally ignore errors thrown inside the task [#NoUseUnstructuredThrowingTask]
+ 95 | }
+ 96 | let cdp = CDP()
+ 97 | Task {
+    | |- warning: unstructured throwing task created by 'init(name:priority:operation:)' is not used, which may accidentally ignore errors thrown inside the task [#NoUseUnstructuredThrowingTask]
+    | `- note: to silence this warning, handle the error inside the task, or store/discard the task value explicitly
+ 98 |     while true {
+ 99 |         guard case .string(let text) = try await ws.receive(),
+
+scripts/component-reference.swift:135:5: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+133 | for theme in themes {
+134 |     try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
+135 |     await sleep(1)
+    |     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+136 |     _ = try await evaluate("document.fonts.ready.then(() => true)")
+137 |     if let prepare = spec["prepare"] as? String {
+
+scripts/component-reference.swift:143:13: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+141 |         if result == nil {
+142 |             try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
+143 |             await sleep(1)
+    |             `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+144 |             result = try await evaluate(prepare)
+145 |         }
+
+chromium pid 33432
+light: 2 images
+dark: 2 images

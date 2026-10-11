@@ -36,13 +36,14 @@ public final class ComposerView: DSView {
     public var collapseOnScroll = false { didSet { if !collapseOnScroll { expandFromScroll() } } }
     private var scrollGesture = ComposerScrollGesture()
     private var scrollCollapsed = false
+    public var restingBlocked: (() -> Bool)?
     public var isResting: Bool {
         scrollCollapsed && !isDraftRoute && pending == .none && replacement == nil && !prompt.contains("\n")
-            && attachmentCount == 0 && sendDisabledReason == nil && !editingQueued
+            && attachmentCount == 0 && sendDisabledReason == nil && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
     }
     public func recordTimelineScroll(delta: CGFloat, canScroll: Bool, towardEnd: Bool) {
         if scrollGesture.record(now: ProcessInfo.processInfo.systemUptime, delta: delta,
-            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting,
+            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting && restingBlocked?() != true && dropHighlight.isHidden,
             canScroll: canScroll, towardEnd: towardEnd) {
             scrollCollapsed = true
             if isResting { window?.makeFirstResponder(nil); needsLayout = true; onHeightChange?() }

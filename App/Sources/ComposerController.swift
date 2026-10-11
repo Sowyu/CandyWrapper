@@ -33,6 +33,8 @@ final class ComposerController {
     private var optimistic: [ChatMessage] = []
     /// A send whose message hasn't shown up in the projection yet.
     private var pendingMessageId: MessageId?
+    private var uncertainFanout: [String: ThreadId] = [:]
+    private var fanoutInFlight: Set<String> = []
     private var resuming = false
     private var threadRewindBusy = false
     private var recoveryPending: Set<ThreadId> = []
@@ -173,6 +175,11 @@ final class ComposerController {
             guard let self else { return }
             self.applyClientSettings()
             if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") { self.refresh() }
+        }
+        composer.restingBlocked = { [weak self] in
+            guard let self else { return true }
+            return self.panel.menus.isOpen || self.panel.stashMenuOpen || !self.panel.timeline.overflowsComposerViewport
+                || self.composer.isBusy || self.draftKey.flatMap { self.threadErrors.visible($0, shell: self.shellThread) } != nil
         }
         panel.timeline.onComposerScrollGesture = { [weak self] delta, canScroll, towardEnd in
             self?.composer.recordTimelineScroll(delta: delta, canScroll: canScroll, towardEnd: towardEnd)
@@ -937,7 +944,7 @@ final class ComposerController {
         }
         composer.runState = runState
         composer.isDraftRoute = panel.isDraft
-        composer.isBusy = pendingMessageId != nil || resuming || threadRewindBusy
+        composer.isBusy = pendingMessageId != nil || resuming || threadRewindBusy || draftKey.map { fanoutInFlight.contains($0) } == true
         var placeholder = ComposerLogic.PlaceholderInput()
         // T3's `phase === "disconnected"` means the thread has no runtime (`derivePhase(activeRuntime)`,
         // session-logic.ts:1069-1078), not a lost connection: drafts and unstarted threads get it.
@@ -1167,6 +1174,15 @@ final class ComposerController {
             report(.noModel, key: picksKey)
             return
         }
+        if case .draft(let session) = target {
+            guard !fanoutInFlight.contains(session.draftId) else { return }
+            // A failed fan-out can leave one model selected and enter the single-send path.
+            let retryKey = fanoutRetryKey(session.draftId, selection)
+            if let thread = uncertainFanout[retryKey] {
+                showFanoutRetry(retryKey, thread: thread, model: selection.model)
+                return
+            }
+        }
         // In worktree mode a base branch is required (ChatView.tsx:9223-9230).
         if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
             if let picksKey { threadErrors.set(picksKey, "Select a base branch before sending in New worktree mode.") }
@@ -1313,6 +1329,14 @@ final class ComposerController {
             return
         }
         let key = session.draftId
+        guard !fanoutInFlight.contains(key) else { return }
+        for selection in selections {
+            let retryKey = fanoutRetryKey(key, selection)
+            if let thread = uncertainFanout[retryKey] {
+                showFanoutRetry(retryKey, thread: thread, model: selection.model)
+                return
+            }
+        }
         let catalog = ProviderCatalog(serverConfig.providers)
         for s in selections where catalog.entry(s.instanceId)?.isReady != true {
             threadErrors.set(key, "Provider for \(s.model) is unavailable.")
@@ -1332,23 +1356,29 @@ final class ComposerController {
         composer.text = ""
         remember("")
         let projectId = EnvironmentScope.localId(of: session.projectId)
+        fanoutInFlight.insert(key); refresh()
         Task { [weak self] in
             var failed: [ModelSelection] = []
-            await withTaskGroup(of: (ModelSelection, Error?).self) { group in
+            await withTaskGroup(of: (ModelSelection, String, Error?).self) { group in
                 for s in selections {
+                    let threadId = UUID().uuidString.lowercased()
                     let payload = ComposerLogic.launchThreadPayload(
-                        commandId: UUID().uuidString.lowercased(), threadId: UUID().uuidString.lowercased(), projectId: projectId, title: title,
+                        commandId: UUID().uuidString.lowercased(), threadId: threadId, projectId: projectId, title: title,
                         modelSelection: ThreadSession.encode(s), runtimeMode: picks.runtimeMode.rawValue,
                         interactionMode: picks.interactionMode.rawValue, messageId: UUID().uuidString.lowercased(), text: messageText,
                         context: context, attachments: uploaded, workspaceStrategy: strategy)
                     group.addTask {
-                        do { _ = try await supervisor.request("orchestration.launchThread", payload: payload); return (s, nil) } catch { return (s, error) }
+                        do { _ = try await supervisor.request("orchestration.launchThread", payload: payload); return (s, threadId, nil) } catch { return (s, threadId, error) }
                     }
                 }
-                for await (s, error) in group {
+                for await (s, threadId, error) in group {
                     guard let error else { continue }
                     failed.append(s)
-                    self?.panel.toasts.show(ToastView(title: "Could not start \(s.model)", message: Self.message(error) ?? "Failed to send message.", kind: .error))
+                    guard let self else { continue }
+                    let retryKey = self.fanoutRetryKey(key, s)
+                    let thread = ThreadId(threadId).scoped(to: ProjectId(session.projectId).environmentId ?? "")
+                    self.uncertainFanout[retryKey] = thread
+                    self.showFanoutRetry(retryKey, thread: thread, model: s.model, message: Self.message(error))
                 }
             }
             guard let self else { return }
@@ -1356,7 +1386,7 @@ final class ComposerController {
             if started > 0 {
                 panel.toasts.show(ToastView(title: "Started \(started) \(started == 1 ? "thread" : "threads") in background", kind: .success))
             }
-            // ponytail: no "Allow retry" guard against duplicate threads after an uncertain failure (uncertainMultipleSubmissionsRef); add it if retries duplicate
+            fanoutInFlight.remove(key)
             if !failed.isEmpty {
                 restoreAttachments(attachments, key: key)
                 pickers.setMultiple(failed, for: key)
@@ -1367,6 +1397,30 @@ final class ComposerController {
             }
             refresh()
         }
+    }
+
+    private func fanoutRetryKey(_ draft: String, _ selection: ModelSelection) -> String {
+        // Length-delimited fields avoid collisions in user-defined model ids.
+        [draft, selection.instanceId.rawValue, selection.model].map { "\($0.utf8.count):\($0)" }.joined()
+    }
+
+    /// ChatView.tsx:9503-9616. Any sent request can have succeeded despite a missing response.
+    private func showFanoutRetry(_ key: String, thread: ThreadId, model: String, message: String? = nil) {
+        panel.toasts.show(ToastView(title: "Could not start \(model)",
+            message: message ?? "The previous request may have started. Open its thread to check before sending again.",
+            kind: .error, actionTitle: "Allow retry", action: { [weak self] in
+                guard let self, let window = self.panel.window else { return }
+                let dialog = DialogView(kind: .alertDialog, title: "Allow retry?", message: "The previous request may already be running. Check its thread first. Allow another send that could create a duplicate thread?")
+                let open = ButtonView("Open thread", variant: .outline), cancel = ButtonView("Cancel", variant: .ghost), allow = ButtonView("Allow retry")
+                dialog.footerButtons = [open, cancel, allow]
+                let modal = ModalHost.present(dialog, in: window)
+                open.action = { [weak self, weak modal] in modal?.close(); self?.openThread?(thread) }
+                cancel.action = { [weak modal] in modal?.close() }
+                allow.action = { [weak self, weak modal] in
+                    if self?.uncertainFanout[key] == thread { self?.uncertainFanout[key] = nil }
+                    modal?.close()
+                }
+            }), timeout: 0)
     }
 
     /// I-composer-flow 1.7: drop the optimistic row, restore the text if the composer is still
@@ -2718,7 +2772,9 @@ extension ComposerController {
         dialog.panelContent = [preview]
         let download = ButtonView("Download", icon: .download, variant: .outline)
         let remove = ButtonView("Remove", icon: .trash2, variant: .destructiveOutline)
-        dialog.footerButtons = [remove, download]
+        let copy = ButtonView("Copy", icon: .copy, variant: .outline)
+        copy.action = { [weak preview] in preview?.copyContents() }
+        dialog.footerButtons = [remove, copy, download]
         dialog.footerLeadingCount = 1
         let host = ModalHost.present(dialog, in: window)
         host.onDismiss = { [weak dialog, weak preview] in preview?.close(); dialog?.panelContent = [] }

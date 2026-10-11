@@ -94,12 +94,12 @@ public final class DiffPanelView: DSView {
         }
         rebuildReviewAnnotations(); window?.makeFirstResponder(draft.editor)
     }
-    private func beginReview(_ target: DiffLineTarget) {
+    private func beginReview(_ target: DiffLineTarget, extending: Bool = false) {
         guard onReviewComment != nil, let file = list.diff.files.first(where: { $0.path == target.path }),
               let index = file.hunks.flatMap({ Array($0.lines) }).first(where: {
                   target.right ? list.diff.lines[$0].newNumber == target.newLine : list.diff.lines[$0].oldNumber == target.oldLine
               }) else { return }
-        if NSApp.currentEvent?.modifierFlags.contains(.shift) != true || reviewStart?.path != target.path { reviewStart = (target.path, index) }
+        if (!extending && NSApp.currentEvent?.modifierFlags.contains(.shift) != true) || reviewStart?.path != target.path { reviewStart = (target.path, index) }
         let start = reviewStart?.line ?? index
         let id = UUID().uuidString.lowercased()
         let draft = editingReviewId == nil ? reviewDraft ?? DiffReviewAnnotationView() : DiffReviewAnnotationView()
@@ -117,6 +117,9 @@ public final class DiffPanelView: DSView {
     public let list = DiffListView()
     private let scroll: ScrollAreaView
     private let fileTree = FileTreeView()
+    private let treeTitle = LabelView("Files", font: DSFont.ui(12, weight: .medium))
+    private let treeCount = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private let treeExpansion = ButtonView(nil, icon: .chevronsDownUp, variant: .ghost, size: .iconXs)
     private let treeScroll: ScrollAreaView
     private let find = InputView(placeholder: "Find", size: .compact)
     private let findCount = LabelView("", font: DSFont.ui(11))
@@ -181,6 +184,12 @@ public final class DiffPanelView: DSView {
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
         treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
         treeScroll.isHidden = true
+        treeExpansion.iconSize = 14
+        treeExpansion.action = { [weak self] in
+            guard let self else { return }
+            _ = self.fileTree.model.setAllExpanded(!self.fileTree.model.allExpanded)
+            self.needsLayout = true
+        }
         list.onVisibleFile = { [weak self] path in self?.fileTree.selectedPath = path }
         fileTree.onOpenFile = { [weak self] path in self?.fileTree.selectedPath = path; self?.list.reveal(path: path) }
         findControls.forEach { $0.isHidden = true; addSubview($0) }
@@ -204,13 +213,17 @@ public final class DiffPanelView: DSView {
             return false
         }
         list.onLineClick = { [weak self] in self?.beginReview($0) }
+        list.onLineRange = { [weak self] start, end in
+            self?.beginReview(start)
+            self?.beginReview(end, extending: true)
+        }
         list.onCollapsedChange = { [weak self] in self?.updateCollapseButton() }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [treeScroll, find, findCount, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine].forEach(addSubview)
+        [treeTitle, treeCount, treeExpansion, treeScroll, find, findCount, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine].forEach(addSubview)
         message.isHidden = true
         errorLine.isHidden = true
         totals.isHidden = true
@@ -218,6 +231,10 @@ public final class DiffPanelView: DSView {
         applySettings(initial: true)
         settingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("diffLayout") { self?.applySettings(initial: false) }
+            if keys.contains("diffColorScheme") {
+                func repaint(_ view: NSView) { view.needsDisplay = true; view.subviews.forEach(repaint) }
+                if let self { repaint(self) }
+            }
         }
     }
 
@@ -450,7 +467,16 @@ public final class DiffPanelView: DSView {
             control.frame = NSRect(x: bounds.width - 92 + CGFloat(i) * 28, y: headerHeight + 4, width: 28, height: 28)
         }
         let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
-        treeScroll.frame = NSRect(x: 0, y: bodyTop, width: treeWidth, height: max(0, bounds.height - bodyTop))
+        for view in [treeTitle, treeCount, treeExpansion] { view.isHidden = treeScroll.isHidden }
+        treeTitle.frame = NSRect(x: 12, y: bodyTop + 6, width: 60, height: 16)
+        treeCount.text = String(fileTree.model.directories.values.flatMap { $0 }.filter { !$0.isDirectory }.count)
+        treeCount.frame = NSRect(x: treeWidth - 62, y: bodyTop + 6, width: 24, height: 16)
+        treeExpansion.frame = NSRect(x: treeWidth - 32, y: bodyTop + 2, width: 24, height: 24)
+        treeExpansion.icon = fileTree.model.allExpanded ? .chevronsDownUp : .chevronsUpDown
+        treeExpansion.toolTip = fileTree.model.allExpanded ? "Collapse all folders" : "Expand all folders"
+        treeExpansion.setAccessibilityLabel(treeExpansion.toolTip)
+        treeExpansion.isHidden = treeScroll.isHidden || fileTree.model.directoryPaths.isEmpty
+        treeScroll.frame = NSRect(x: 0, y: bodyTop + 40, width: treeWidth, height: max(0, bounds.height - bodyTop - 40))
         scroll.frame = NSRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop))
         // The error paragraph (`px-3`, `mb-2`) takes its height off the top of the centered area.
         errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)

@@ -697,6 +697,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let custom = ProvidersLogic.customModels(row.instance)
         let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
         let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly)
+        modelsView.builtinModels = provider?.models ?? []
         modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
         modelsView.onAddOpen = { [weak self] open in
             if open { self?.expandedModelAdd.insert(row.instanceId) } else { self?.expandedModelAdd.remove(row.instanceId) }
@@ -1055,6 +1056,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     private let addCancel = ButtonView("Cancel", variant: .ghost, size: .sm)
     private let errorText = LabelView("", font: DSFont.ui(12), color: Themed.color(\.destructive))
     private var rows: [NSView] = []
+    var builtinModels: [ServerProviderModel] = []
+    private let driver: String
     private let models: [ProvidersLogic.DisplayModel]
     private let favorites: Set<String>
     private let hiddenSlugs: Set<String>
@@ -1076,6 +1079,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
                                "opencode": "openai/gpt-5", "pi": "anthropic/claude-sonnet-5"]
 
     init(models: [ProvidersLogic.DisplayModel], favorites: Set<String>, hidden: Set<String>, driver: String, canManage: Bool) {
+        self.driver = driver
         self.models = models
         self.favorites = favorites
         self.hiddenSlugs = hidden
@@ -1193,7 +1197,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             row.onEdit = { [weak self] in self?.editedSlug = m.slug; self?.rebuild(); self?.onHeightChange?() }
             rows.append(row)
             if editedSlug == m.slug {
-                let editor = ComposerCustomModelEditor(entry: customDefinitions[m.slug] ?? .string(m.slug))
+                let editor = ComposerCustomModelEditor(entry: customDefinitions[m.slug] ?? .string(m.slug), driver: driver, builtins: builtinModels)
                 editor.onHeightChange = { [weak self] in self?.needsLayout = true; self?.onHeightChange?() }
                 editor.onCancel = { [weak self] in self?.editedSlug = nil; self?.rebuild(); self?.onHeightChange?() }
                 editor.onSave = { [weak self] definition in self?.editedSlug = nil; self?.onEdit?(definition) }

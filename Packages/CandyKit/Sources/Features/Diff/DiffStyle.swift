@@ -63,16 +63,17 @@ enum DiffStyle {
     /// pierre-light and pierre-dark `editor.foreground`, the color of untokenized code.
     static let codeText = rgb(0x0a0a0a, 0xfafafa)
 
-    static let additionBase = rgb(0x18a46c, 0x07c480)
-    static let deletionBase = rgb(0xd52c36, 0xff2e3f)
+    static var alternateColors: Bool { ClientSettingsStore.shared.current.string("diffColorScheme") == "blue-orange" }
+    static var additionBase: NSColor { alternateColors ? Themed.base("blue-600", dark: "blue-400") : rgb(0x18a46c, 0x07c480) }
+    static var deletionBase: NSColor { alternateColors ? Themed.base("orange-600", dark: "orange-400") : rgb(0xd52c36, 0xff2e3f) }
     static let modifiedBase = rgb(0x009fff, 0x009fff)
 
-    static let additionLine = rgb(0xecf9f4, 0x0d1713)
-    static let additionNumber = rgb(0xeef9f5, 0x0e1713)
-    static let deletionLine = rgb(0xfef0f0, 0x1c100f)
-    static let deletionNumber = rgb(0xfef1f0, 0x1c110f)
+    static var additionLine: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : rgb(0xecf9f4, 0x0d1713) }
+    static var additionNumber: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : rgb(0xeef9f5, 0x0e1713) }
+    static var deletionLine: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : rgb(0xfef0f0, 0x1c100f) }
+    static var deletionNumber: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : rgb(0xfef1f0, 0x1c110f) }
     /// The lighter stripe of the deletion bar (`linear-gradient(0deg, alt 50%, base 50%)`, 2px tiles).
-    static let deletionBarAlt = rgb(0xffe8e4, 0x381917)
+    static var deletionBarAlt: NSColor { alternateColors ? mix(deletionBase, 0.20, surface) : rgb(0xffe8e4, 0x381917) }
     /// `--diffs-fg-number`: the theme foreground mixed 65% in Lab with the surface.
     static let number = rgb(0x575757, 0x9d9d9d)
 
@@ -132,7 +133,7 @@ enum DiffStyle {
 
     /// A pattern color from a tile drawn at 2x in a top-left coordinate space, made once per theme.
     private static func pattern(_ name: String, dark: Bool, size: CGFloat, draw: (CGContext) -> Void) -> CGColor {
-        let key = "\(name) \(dark)"
+        let key = "\(name) \(dark) \(alternateColors)"
         if let cached = patternCache[key] { return cached }
         let scale: CGFloat = 2
         let px = Int(size * scale)
