@@ -421,6 +421,8 @@ public final class PullRequestDetailView: DSView {
         let comments = activityError != nil ? "—" : activityPending ? "…" : d.commentCount.formatted()
         let commits = activityError != nil ? "—" : activityPending ? "…" : d.commits.count.formatted()
         timelineMeta.text = "\(comments)   ·   \(commits)"
+        // `transition-opacity`, `opacity-35` while the activity loads or failed (PullRequestDetailPanel.tsx:2602).
+        HoverReveal.fade(timelineMeta, to: activityPending || activityError != nil ? 0.35 : 1)
         summary.set(d, activityPending: activityPending, activityError: activityError, nowMs: nowMs)
         timeline.set(d, pending: activityPending, error: activityError, nowMs: nowMs)
         needsLayout = true
@@ -733,8 +735,9 @@ public final class PullRequestDetailView: DSView {
         titleTracking = NSTrackingArea(rect: titleRowRect, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
         addTrackingArea(titleTracking!)
     }
-    public override func mouseEntered(with event: NSEvent) { titleEditButton.alphaValue = 1 }
-    public override func mouseExited(with event: NSEvent) { titleEditButton.alphaValue = 0 }
+    // `PullRequestEditButton` (PullRequestEditButton.tsx:16): `opacity-0 transition-opacity group-hover:opacity-100`.
+    public override func mouseEntered(with event: NSEvent) { HoverReveal.fade([titleEditButton], visible: true) }
+    public override func mouseExited(with event: NSEvent) { HoverReveal.fade([titleEditButton], visible: false) }
 
     private var titleRowRect: NSRect { NSRect(x: 0, y: 28 + 4, width: bounds.width, height: 24) }
 
@@ -799,10 +802,89 @@ public final class PullRequestDetailView: DSView {
                                                               condensedRowHeight: Self.condensedRowHeight)
         condensedByTab[tab] = next
         guard next != condensed else { return }
+        let oldRule = tabRule.frame.minY
         condensed = next
         needsLayout = true
         layoutSubtreeIfNeeded()
         if let refund { activeScroll.adjust(by: refund) }
+        animateChrome(oldRule: oldRule)
+    }
+
+    /// PullRequestDetailPanel.tsx:1687-1690, 1759-1766, 2245-2260, 2362-2376: the two top lines and the
+    /// two rows under them cross-fade, the leaving one `opacity-0` with a 4px slide over 100 ms, the
+    /// arriving one back over 150 ms after 50 ms, all `ease-out`. Condensing collapses the fold at once;
+    /// reopening runs `grid-template-rows` over 200 ms `ease-out`, so the tab bar and the content slide
+    /// down while the fold shows from the top. Off under Reduce Motion.
+    private func animateChrome(oldRule: CGFloat) {
+        guard window != nil, !Motion.reduced, let box = headerBox.layer else { return }
+        let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+        let fold: [NSView] = [titleLabel, titleEditButton, titleInput, titleCancel, titleSave, authorAvatar, authorLogin, dot, updated,
+                              checkoutCommand, base, arrow, head, filesIcon, files, diffStat].filter { !$0.isHidden && $0.frame.width > 0 }
+        let condensedRow: [NSView] = [condensedAvatar, condensedTime, condensedBase, condensedArrow, condensedHead, condensedFilesIcon,
+                                      condensedFiles, condensedStat]
+        let fullLine: [NSView] = [repo, numberLink], shortLine: [NSView] = [condensedNumber, condensedTitle]
+        func arrive(_ views: [NSView], from dy: CGFloat) {
+            for layer in views.compactMap(\.layer) {
+                for (key, from, to) in [("opacity", 0.0, 1.0), ("position.y", Double(dy), 0.0)] {
+                    let a = CABasicAnimation(keyPath: key)
+                    a.fromValue = from
+                    a.toValue = to
+                    a.isAdditive = key == "position.y"
+                    a.beginTime = CACurrentMediaTime() + 0.05
+                    a.duration = 0.15
+                    a.fillMode = .backwards
+                    a.timingFunction = easeOut
+                    layer.add(a, forKey: "chrome.\(key)")
+                }
+            }
+        }
+        // The leaving views are hidden by now; their layers show for the fade, then follow the view again.
+        func leave(_ views: [NSView], to dy: CGFloat) {
+            let layers = views.compactMap(\.layer)
+            CATransaction.begin()
+            CATransaction.setCompletionBlock {
+                MainActor.assumeIsolated { for v in views { v.layer?.isHidden = v.isHidden } }
+            }
+            for layer in layers {
+                layer.isHidden = false
+                for (key, from, to) in [("opacity", 1.0, 0.0), ("position.y", 0.0, Double(dy))] {
+                    let a = CABasicAnimation(keyPath: key)
+                    a.fromValue = from
+                    a.toValue = to
+                    a.isAdditive = key == "position.y"
+                    a.duration = 0.1
+                    a.fillMode = .forwards
+                    a.isRemovedOnCompletion = false
+                    a.timingFunction = easeOut
+                    layer.add(a, forKey: "chrome.\(key)")
+                }
+            }
+            CATransaction.commit()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                MainActor.assumeIsolated { for l in layers { l.removeAnimation(forKey: "chrome.opacity"); l.removeAnimation(forKey: "chrome.position.y") } }
+            }
+        }
+        if condensed {
+            leave(fullLine, to: -4)
+            arrive(shortLine + condensedRow, from: 4)
+            return
+        }
+        leave(shortLine + condensedRow, to: 4)
+        arrive(fullLine + fold, from: -4)
+        let dy = tabRule.frame.minY - oldRule
+        guard dy > 0 else { return }
+        let movers = [tabRule, headerRule] + ([tabs, checksIcon, checksLabel, timelineMeta, orderButton, summary, timeline, code] as [NSView]).compactMap(\.layer)
+        for layer in movers {
+            let a = CABasicAnimation(keyPath: "position.y")
+            a.fromValue = -dy
+            a.toValue = 0
+            a.isAdditive = true
+            a.duration = 0.2
+            a.timingFunction = easeOut
+            layer.add(a, forKey: "chrome.slide")
+        }
+        // The fold's track grows with the slide: nothing of it shows below the moving tab bar.
+        CollapseMotion.clipBelow(fold.compactMap(\.layer), in: box, from: oldRule, to: tabRule.frame.minY, duration: 0.2, timing: easeOut)
     }
 
     // MARK: Layout

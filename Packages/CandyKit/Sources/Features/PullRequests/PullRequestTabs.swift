@@ -307,7 +307,8 @@ final class SectionItem: DSView, StackItem {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if p.y < 40, accessory.map({ !$0.frame.contains(p) }) ?? true { isOpen.toggle() }
+        // `CollapsiblePanel` (PullRequestSummaryTab.tsx:345): the body slides open over 200 ms.
+        if p.y < 40, accessory.map({ !$0.frame.contains(p) }) ?? true { CollapseMotion.run(in: self) { isOpen.toggle() } }
     }
 }
 
@@ -692,6 +693,8 @@ final class TimelineEventRow: DSView, StackItem {
     private var verdictIcon: IconView?
     var onClick: (() -> Void)?
     private let pinTop: Bool
+    /// Commit rows: `transition-colors group-hover:text-primary` on the title (PullRequestTimelineTab.tsx:389).
+    private var hover: HoverGroup?
 
     init(lifecycle e: PullRequestDetailLogic.TimelineEvent, nowMs: Int64) {
         let (icon, label): (IconName, String) = e.kind == .opened ? (.gitPullRequestArrow, "Pull request opened")
@@ -715,6 +718,7 @@ final class TimelineEventRow: DSView, StackItem {
         stat.font = DSFont.mono(10)
         setup()
         setAccessibilityLabel("View commit \(e.id)")
+        hover = HoverGroup(self) { [weak self] _ in self?.redisplay(transitioning: .color) }
     }
 
     init(verdict e: PullRequestDetailLogic.TimelineEvent, outcome: String, stale: Bool, nowMs: Int64, cwd: String) {
@@ -769,7 +773,7 @@ final class TimelineEventRow: DSView, StackItem {
     }
 
     override func updateLayer() {
-        title.color = Themed.color(\.foreground)
+        title.color = hover?.hovered == true ? Themed.color(\.primary) : Themed.color(\.foreground)
         actorName.color = Themed.color(\.foreground)
         subtitle.color = Themed.color(\.mutedForeground)
     }
@@ -842,7 +846,11 @@ final class ConversationRow: DSView, StackItem {
 
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if p.y < 48 { open.toggle(); needsDisplay = true; enclosingStack?.reload() }
+        // `CollapsiblePanel` (PullRequestTimelineTab.tsx:344) around `{open ? … : null}`: the cards slide open
+        // over 200 ms and go at once on close while the gap closes.
+        if p.y < 48 {
+            CollapseMotion.run(in: self, showsClosingContent: false) { open.toggle(); needsDisplay = true; enclosingStack?.reload() }
+        }
     }
 
     private var enclosingStack: StackScrollView? {

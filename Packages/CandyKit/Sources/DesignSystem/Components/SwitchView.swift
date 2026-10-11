@@ -5,6 +5,11 @@ import QuartzCore
 /// Spec: docs/research/recovered/ui-components-b.md section 3.
 /// Motion as in T3: track color 200ms ease-in-out, thumb slide 150ms `ease`,
 /// press stretch `scale-x-110` over 100ms after a 100ms delay, anchored on the side it rests on.
+/// While pressed T3 also sets `rounded-[size/size*1.1]` (switch.tsx:38), so the stretched thumb keeps
+/// round ends: a 10% wider pill. The thumb grows its width instead of scaling, which draws that pill;
+/// `BoxDecorationLayer`'s 9-slice keeps the ends round while the width runs.
+/// ponytail: T3 eases the radius over 150ms without the delay, a 0.6pt squarer circle for the first
+/// 100ms that this skips; draw an elliptical radius if anyone sees it
 public final class SwitchView: ControlView {
     public enum Size: String, CaseIterable, Sendable {
         case `default`, sm
@@ -21,7 +26,7 @@ public final class SwitchView: ControlView {
     private let ring = BoxDecorationLayer()
     private let track = CALayer()
     private let thumbSlide = CALayer()     // carries the translate
-    private let thumbStretch = CALayer()   // carries the press scale
+    private let thumbStretch = CALayer()   // the thumb's resting box; the thumb widens inside it when pressed
     private let thumb = BoxDecorationLayer()
 
     public convenience init(isOn: Bool = false, size: Size = .default) {
@@ -74,7 +79,6 @@ public final class SwitchView: ControlView {
         let d = size.thumb - 2
         thumbSlide.bounds = CGRect(x: 0, y: 0, width: d, height: d)
         thumbSlide.position = CGPoint(x: 2, y: 2) // p-[2px]
-        thumb.layout(boxSize: CGSize(width: d, height: d))
         CATransaction.commit()
         apply(animated: false)
     }
@@ -114,7 +118,10 @@ public final class SwitchView: ControlView {
         let offset = isMixed ? (t - 4) / 2 : (isOn ? t - 4 : 0)
         let slide = CATransform3DMakeTranslation(offset, 0, 0)
         let stretched = state.active && state.enabled
-        let stretch = CATransform3DMakeScale(stretched ? 1.1 : 1, 1, 1)
+        // `scale-x-110` from the resting side (`origin-left`, `data-checked:origin-right`).
+        let width = stretched ? d * 1.1 : d
+        let o = thumb.outset
+        let thumbFrame = CGRect(x: (isOn ? d - width : 0) - o, y: -o, width: width + 2 * o, height: d + 2 * o)
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -124,15 +131,20 @@ public final class SwitchView: ControlView {
                 Motion.animate(thumbSlide, keyPath: "transform", to: NSValue(caTransform3D: slide), duration: 0.15,
                                timing: CAMediaTimingFunction(name: .default)) // CSS `ease`
             }
-            if !CATransform3DEqualToTransform(thumbStretch.transform, stretch) {
-                let a = CABasicAnimation(keyPath: "transform")
-                a.fromValue = thumbStretch.presentation()?.transform ?? thumbStretch.transform
-                a.toValue = NSValue(caTransform3D: stretch)
-                a.beginTime = CACurrentMediaTime() + 0.1 // `scale .1s .1s`
-                a.duration = 0.1
-                a.fillMode = .backwards
-                a.timingFunction = CAMediaTimingFunction(name: .default)
-                thumbStretch.add(a, forKey: "transform")
+            if thumb.frame != thumbFrame {
+                let now = thumb.presentation() ?? thumb
+                for (key, from, to) in [("bounds", NSValue(rect: now.bounds), NSValue(rect: CGRect(origin: .zero, size: thumbFrame.size))),
+                                        ("position", NSValue(point: now.position),
+                                         NSValue(point: CGPoint(x: thumbFrame.midX, y: thumbFrame.midY)))] {
+                    let a = CABasicAnimation(keyPath: key)
+                    a.fromValue = from
+                    a.toValue = to
+                    a.beginTime = CACurrentMediaTime() + 0.1 // `scale .1s .1s`
+                    a.duration = 0.1
+                    a.fillMode = .backwards
+                    a.timingFunction = CAMediaTimingFunction(name: .default)
+                    thumb.add(a, forKey: key)
+                }
             }
         }
         track.backgroundColor = trackColor
@@ -142,7 +154,7 @@ public final class SwitchView: ControlView {
         thumbStretch.anchorPoint = CGPoint(x: isOn ? 1 : 0, y: 0.5)
         thumbStretch.bounds = CGRect(x: 0, y: 0, width: d, height: d)
         thumbStretch.position = CGPoint(x: isOn ? d : 0, y: d / 2)
-        thumbStretch.transform = stretch
+        thumb.frame = thumbFrame
         CATransaction.commit()
     }
 }

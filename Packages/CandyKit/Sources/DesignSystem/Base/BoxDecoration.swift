@@ -104,6 +104,10 @@ public final class BoxDecorationLayer: CALayer {
         needsDisplayOnBoundsChange = true
         isOpaque = false
         actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        // 9-slice on the middle pixel: a box that changes size under an animation (a switch thumb
+        // stretching, a card riding a collapsible) keeps its corners, border and shadow edges. At rest
+        // the image matches the bounds, so this changes no pixels.
+        contentsCenter = CGRect(x: 0.5, y: 0.5, width: 0, height: 0)
     }
 
     public override init(layer: Any) { super.init(layer: layer) }

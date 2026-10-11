@@ -236,10 +236,13 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
         row.isExpanded = expanded.contains(item.kind)
         row.onToggle = { [weak self, weak row] in
             guard let self, let row else { return }
-            if self.expanded.remove(item.kind) == nil { self.expanded.insert(item.kind) }
-            row.isExpanded = self.expanded.contains(item.kind)
-            self.needsLayout = true
-            self.onHeightChange?()
+            // `CollapsibleContent` (SourceControlSettings.tsx:356): the details slide open over 200 ms.
+            CollapseMotion.run(in: row) {
+                if self.expanded.remove(item.kind) == nil { self.expanded.insert(item.kind) }
+                row.isExpanded = self.expanded.contains(item.kind)
+                self.needsLayout = true
+                self.onHeightChange?()
+            }
         }
         return row
     }
@@ -492,6 +495,9 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
     private let toggle = ButtonView(nil, icon: .chevronDown, variant: .ghostMuted, size: .iconXs)
     private let availability = SwitchView(isOn: false)
     private let details: (NSView & SettingsGroupRow)?
+    /// `first:rounded-t-xl last:rounded-b-xl transition-colors hover:bg-muted/20` (SourceControlSettings.tsx:307).
+    private let hoverFill = CALayer()
+    private var hover: HoverGroup?
     var onToggle: (() -> Void)?
     var isExpanded = false {
         didSet { details?.isHidden = !isExpanded; toggle.setIconRotation(isExpanded ? 180 : 0); toggle.setAccessibilityExpanded(isExpanded); needsLayout = true }
@@ -507,6 +513,9 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         }
         super.init(frame: .zero)
         alphaValue = item.notReady ? 0.8 : 1
+        hoverFill.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "cornerRadius": NSNull()]
+        layer?.addSublayer(hoverFill)
+        hover = HoverGroup(self) { [weak self] _ in self?.restyleHover(transitioning: true) }
         addSubview(mark)
         dot.cornerRadius = 4
         dot.backgroundColor = item.dot.cgColor
@@ -542,6 +551,11 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         details?.isHidden = true
     }
 
+    private func restyleHover(transitioning: Bool) {
+        let color = hover?.hovered == true ? Themed.color(\.muted, 0.2).cgColor(in: self) : nil
+        Motion.transitioning(transitioning ? .background : []) { Motion.setBackground(hoverFill, color) }
+    }
+
     private var controlsWidth: CGFloat { (toggle.isHidden ? 0 : 24 + 8) + (availability.isHidden ? 0 : availability.intrinsicContentSize.width) }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -553,6 +567,15 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
 
     override func layout() {
         super.layout()
+        let rows = (superview as? SettingsGroupView)?.rows ?? []
+        var corners: CACornerMask = []
+        if rows.first === self { corners.formUnion([.layerMinXMinYCorner, .layerMaxXMinYCorner]) }
+        if rows.last === self { corners.formUnion([.layerMinXMaxYCorner, .layerMaxXMaxYCorner]) }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        hoverFill.frame = bounds
+        hoverFill.cornerRadius = corners.isEmpty ? 0 : 12
+        hoverFill.maskedCorners = corners
+        CATransaction.commit()
         let w = bounds.width
         let textWidth = w - 32 - controlsWidth - 12
         let summaryH = summary.height(forWidth: textWidth)
@@ -599,6 +622,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
 
     override func updateLayer() {
         super.updateLayer()
+        restyleHover(transitioning: false)
         dot.backgroundColor = item.dot.cgColor(in: self)
         if item.icon != nil { dot.borderColor = Themed.color(\.background).cgColor(in: self) }
     }

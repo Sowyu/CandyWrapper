@@ -142,8 +142,15 @@ public final class ComposerImageShelfView: DSView {
         for (view, frame) in zip(views, tileFrames(width: bounds.width)) { view.frame = frame }
     }
 
-    fileprivate final class TileView: DSView {
+    fileprivate final class TileView: DSView, FocusWithinObserver {
         weak var owner: ComposerImageShelfView?
+        /// Snap-shot frames reveal their remove button on hover or focus (ChatComposer.tsx:7198-7203):
+        /// `opacity-0 transition-opacity group-hover/attachment:opacity-100 group-focus-within/attachment:opacity-100`.
+        private var hover: HoverGroup?
+        private var focusWithin = false
+        private var isSnapShot = false
+        func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealRemove() }
+        private func revealRemove() { HoverReveal.fade([remove], visible: !isSnapShot || hover?.hovered == true || focusWithin) }
         private(set) var id = ""
         let image = AsyncImageView()
         private var details: SnapShotAttachmentDetailsView?
@@ -167,6 +174,7 @@ public final class ComposerImageShelfView: DSView {
             addSubview(remove)
             remove.action = { [weak self] in guard let self else { return }; owner?.onRemove?(id) }
             retry.action = { [weak self] in guard let self else { return }; owner?.onRetry?(id) }
+            hover = HoverGroup(self) { [weak self] _ in self?.revealRemove() }
         }
 
         func configure(_ tile: Tile) {
@@ -182,6 +190,10 @@ public final class ComposerImageShelfView: DSView {
             image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true) }
             image.onContextMenu = { event, view in
                 MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
+            }
+            if isSnapShot != (tile.source != nil) {
+                isSnapShot = tile.source != nil
+                HoverReveal.withoutAnimation { revealRemove() }
             }
             remove.setAccessibilityLabel("Remove \(tile.name)")
             retry.setAccessibilityLabel("Retry upload for \(tile.name)")

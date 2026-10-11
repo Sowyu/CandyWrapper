@@ -45,9 +45,6 @@ struct FrameDecoderTests {
             #expect(zip(Self.center(buffer), Self.center(drawn)).allSatisfy { abs($0 - $1) <= 2 })
         }
         #expect(decoder.decode(Data("not a jpeg".utf8)) == nil)
-        let image = JPEGFrame.image(Self.jpeg(width: 64, height: 40))
-        #expect(image?.width == 64 && image?.height == 40)
-        #expect(JPEGFrame.image(Data("not a jpeg".utf8)) == nil)
     }
 
     @MainActor

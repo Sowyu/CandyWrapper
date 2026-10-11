@@ -68,7 +68,11 @@ public final class PullRequestCodeView: DSView {
         [scope, counts, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
         scope.action = { [weak self] in self?.showScopeMenu() }
         footerRetry.action = { [weak self] in self?.onLoadMore?() }
-        orphanToggle.onClick = { [weak self] in self?.orphansOpen.toggle(); self?.needsLayout = true }
+        // `CollapsiblePanel` (PullRequestCodeTab.tsx:1500): the list slides open over 200 ms and the diff rides it.
+        orphanToggle.onClick = { [weak self] in
+            guard let self else { return }
+            CollapseMotion.run(in: self, root: self) { self.orphansOpen.toggle(); self.needsLayout = true }
+        }
         list.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
         list.annotationView = { [weak self] a in self?.annotationView(a) }
         list.onNearEnd = { [weak self] in

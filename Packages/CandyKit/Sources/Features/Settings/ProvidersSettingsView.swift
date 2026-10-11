@@ -1313,6 +1313,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         private let toggle = SwitchView(isOn: true, size: .sm)
         private let showMoves: Bool
         private let isCustom: Bool
+        /// `rounded-md transition-colors hover:bg-muted/30` (ProviderModelsSection.tsx:478).
+        private var hover: HoverGroup?
         var onFavorite: (() -> Void)?
         var onHidden: ((Bool) -> Void)?
         var onMove: ((Int) -> Void)?
@@ -1364,7 +1366,16 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             _ = TooltipController.attach(to: toggle, text: model.isCustom ? "Custom models are always shown in the picker" : hidden ? "Hidden from picker" : "Shown in picker")
             toggle.onChange = { [weak self] on in self?.onHidden?(!on) }
             for v in [star, name, slug, custom, caps, up, down, remove, edit, toggle] as [NSView] { addSubview(v) }
+            layer?.cornerRadius = 6
+            hover = HoverGroup(self) { [weak self] _ in self?.restyleHover(transitioning: true) }
         }
+
+        private func restyleHover(transitioning: Bool) {
+            let color = hover?.hovered == true ? Themed.color(\.muted, 0.3).cgColor(in: self) : nil
+            Motion.transitioning(transitioning ? .background : []) { Motion.setBackground(layer, color) }
+        }
+
+        override func updateLayer() { restyleHover(transitioning: false) }
 
         override func layout() {
             super.layout()

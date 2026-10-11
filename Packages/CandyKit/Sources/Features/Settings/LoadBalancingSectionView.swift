@@ -82,7 +82,8 @@ final class LoadBalancingSectionView: BoxView, SettingsGroupRow {
         layer?.addSublayer(rule)
         toggle.setAccessibilityLabel("Automatically balance load")
         toggle.onChange = { [weak self] on in self?.onEnabled?(on) }
-        header.action = { [weak self] in guard let self else { return }; self.isOpen.toggle() }
+        // `FoldedSettingsSection`'s `CollapsiblePanel` (FoldedSettingsSection.tsx:90): rows slide open over 200 ms.
+        header.action = { [weak self] in guard let self else { return }; CollapseMotion.run(in: self) { self.isOpen.toggle() } }
         for v in [header, toggle, note] as [NSView] { addSubview(v) }
         applyOpen()
     }

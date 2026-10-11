@@ -451,7 +451,11 @@ final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
         group = SettingsGroupView(rows: rows)
         super.init(frame: .zero)
         header.title = title
-        header.action = { [weak self] in guard let self else { return }; self.isOpen.toggle(); self.onToggle?() }
+        // `CollapsiblePanel` (SettingsPanels.tsx:2127): the card slides open over 200 ms.
+        header.action = { [weak self] in
+            guard let self else { return }
+            CollapseMotion.run(in: self) { self.isOpen.toggle(); self.onToggle?() }
+        }
         addSubview(header)
         group.isHidden = true
         addSubview(group)
