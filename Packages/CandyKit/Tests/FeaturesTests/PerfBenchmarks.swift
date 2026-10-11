@@ -453,6 +453,32 @@ struct PerfBenchmarks {
         #expect(height > 1000)
     }
 
+    /// A Codex-style answer streaming word by word: main-thread time of one delta near the end of a
+    /// 2,000-word answer. `_full` is the path before 2026-10-12 (parse and lay out the whole message
+    /// per delta), `_incremental` the streaming parse plus layout reuse that replaced it.
+    @Test func markdownStreamDelta() {
+        var text = ""
+        while text.split(separator: " ").count < 2_000 { text += longReply(sections: 4) }
+        let words = text.split(separator: " ", omittingEmptySubsequences: false)
+        let deltas = (words.count - 40..<words.count).map { words.prefix($0).joined(separator: " ") }
+        let start = MarkdownDocument.parse(deltas[0], extending: nil)
+        var parse = start
+        var layout = MarkdownLayout(document: start.document, width: 680)
+        var k = 0
+        measure("markdown_stream_delta_full", runs: 9, inner: 10, extra: ["words": words.count]) {
+            k = (k + 1) % deltas.count
+            _ = MarkdownLayout(document: MarkdownDocument(parsing: deltas[k]), width: 680)
+        }
+        k = 0
+        measure("markdown_stream_delta_incremental", runs: 9, inner: 10, extra: ["words": words.count]) {
+            k += 1
+            if k == deltas.count { k = 1; parse = start; layout = MarkdownLayout(document: start.document, width: 680) }
+            parse = MarkdownDocument.parse(deltas[k], extending: parse)
+            layout = MarkdownLayout(document: parse.document, width: 680, reusing: layout)
+        }
+        #expect(layout.height > 1000)
+    }
+
     @Test func sidebarModel() {
         let snapshot = bigSnapshot(threads: 1000)
         let nowMs = Int64(SidebarPreview.referenceNow.timeIntervalSince1970 * 1000)

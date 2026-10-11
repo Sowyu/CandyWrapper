@@ -116,6 +116,8 @@ public final class TimelineView: DSView {
     private var footerHeight: CGFloat = 0
     private func layoutHeader() {
         let lane = laneFrame
+        let host = worktreeSetup.isHidden ? parked : document
+        if worktreeSetup.superview !== host { host.addSubview(worktreeSetup) }
         header?.frame = NSRect(x: TL.snap(lane.x), y: 0, width: lane.width, height: headerHeight)
         let height = worktreeSetup.height(forWidth: lane.width)
         worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: headerHeight + 12, width: lane.width, height: height)
@@ -128,6 +130,12 @@ public final class TimelineView: DSView {
     /// The user scrolled within `nearTop` of the first row. Called once per first row, so the
     /// app can load an older page and prepend it; the visible rows stay where they are.
     public var onNearTop: (@MainActor () -> Void)?
+
+    /// Recycled rows and the hidden setup card wait here, outside the scroll document. A document
+    /// resize (each line a streaming answer adds) invalidates the visible rect of its whole subtree,
+    /// and AppKit then displays every drawing layer in it again, hidden ones included: pooled rows
+    /// were 60 of the 75 layer displays per streamed token.
+    private let parked = NSView()
 
     /// Counters for tests.
     private(set) var createdRowViews = 0
@@ -143,7 +151,9 @@ public final class TimelineView: DSView {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.verticalScrollElasticity = .allowed
         scrollView.documentView = document
-        document.addSubview(worktreeSetup)
+        parked.isHidden = true
+        addSubview(parked)
+        parked.addSubview(worktreeSetup)
         worktreeSetup.isHidden = true
         worktreeSetup.onHeightChange = { [weak self] in self?.layoutHeader() }
         addSubview(scrollView)
@@ -598,6 +608,7 @@ public final class TimelineView: DSView {
     private func dequeue(_ kind: Kind) -> TimelineRowView {
         if let view = pools[kind]?.popLast() {
             view.pooled = false
+            document.addSubview(view)
             view.isHidden = false
             return view
         }
@@ -634,6 +645,7 @@ public final class TimelineView: DSView {
         // The other order left every recycled row on screen at its old frame.
         view.prepareForReuse()
         view.isHidden = true
+        parked.addSubview(view)
         if let kind = view.kind { pools[kind, default: []].append(view) }
     }
 

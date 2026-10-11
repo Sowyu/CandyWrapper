@@ -23,13 +23,16 @@ final class ThreadSession {
     /// False once another thread took the panel.
     private var active = true
     /// After each projection the panel shows (the composer reads runs and requests from it).
-    var onProjection: ((ThreadProjection?) -> Void)?
+    /// `onlyStreamingText`: the update only grew a streaming answer's or reasoning text.
+    var onProjection: ((ThreadProjection?, _ onlyStreamingText: Bool) -> Void)?
     /// The store's sync status after each render (the composer's "Loading messages..." row).
     var onStatus: ((ThreadSyncStatus) -> Void)?
 
     private let relay: ShellSession.ChangeRelay
-    /// Streaming deltas reach the panel at most once per frame (30 a second when constrained).
-    private lazy var pacer = FramePacer { [weak self] in Task { @MainActor in await self?.pull() } }
+    /// Streaming deltas reach the panel at most 30 times a second, also on 120 Hz screens: 60 a second
+    /// cost 30% of a core against 26.5% at 30 on a heavy thread, with text still appearing as it
+    /// arrives (docs/perf/README.md, "Streaming text").
+    private lazy var pacer = FramePacer(maxRate: 30) { [weak self] in Task { @MainActor in await self?.pull() } }
 
     /// A closed thread's store and its change relay, kept so a reopen paints at once and resumes
     /// after the store's sequence instead of fetching a new snapshot.
@@ -125,10 +128,11 @@ final class ThreadSession {
     private func pull() async {
         guard let update = await store.takeUpdate() else { return }
         OpenTiming.mark("panel pull", "\(update.projection?.visibleTurnItems.count ?? 0) rows")
-        render(update)
+        let changes = update.changes
+        render(update, onlyStreamingText: changes.projectionChanged && changes.onlyStreamingText && !changes.reset)
     }
 
-    private func render(_ update: ThreadUpdate) {
+    private func render(_ update: ThreadUpdate, onlyStreamingText: Bool = false) {
         guard active, let panel else { return }
         shown = update
         let (projectTitle, workspaceRoot) = place(update.projection)
@@ -136,7 +140,7 @@ final class ThreadSession {
             panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
         }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
-        onProjection?(update.projection)
+        onProjection?(update.projection, onlyStreamingText)
         onStatus?(update.status)
     }
 
@@ -662,7 +666,12 @@ final class ThreadController {
         // Held rows keep their lineage header and footer; the first projection resets them.
         if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil) }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
-        session.onProjection = { [weak self] projection in
+        session.onProjection = { [weak self] projection, onlyStreamingText in
+            // A token changes no run, request, plan or relationship: only find needs the new text.
+            if onlyStreamingText {
+                self?.composer.projectionTextChanged(projection, threadId: id)
+                return
+            }
             if let self {
                 let thread = self.sidebar?.snapshot?.threads.first { $0.id == id }
                 let link = thread?.linkedPullRequest ?? thread?.branchPullRequest

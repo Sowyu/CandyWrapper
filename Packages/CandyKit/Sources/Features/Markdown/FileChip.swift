@@ -114,6 +114,8 @@ struct FileChipResolver {
     }
 
     var isEmpty: Bool { inline.isEmpty && links.isEmpty }
+    /// The only part of a chip's look that other blocks of the message decide.
+    var labelSuffixes: [String: String] { suffixes }
 
     func inlineCode(_ text: String) -> FileLinkMeta? { inline[text.trimmingCharacters(in: .whitespacesAndNewlines)] }
     func link(_ url: URL) -> FileLinkMeta? { links[url.absoluteString] }

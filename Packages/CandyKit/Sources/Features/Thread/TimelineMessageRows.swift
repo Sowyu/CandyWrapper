@@ -375,7 +375,7 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)
         }
-        markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text))
+        markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming)
         meta.isHidden = !showMeta
         meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected))
         needsLayout = true

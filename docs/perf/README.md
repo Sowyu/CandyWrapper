@@ -316,6 +316,33 @@ Why the graphics memory stays. It is Core Animation's in-process Metal renderer 
 
 So the area does not matter: one AppKit redraw of any size starts the renderer for about 5 s, and a 300x60 window doesn't. `CAEnableMetalWhippet NO` is worse: it renders on the CPU and the whole-view case held 71 MB of CoreAnimation and 57 MB of Malloc Small. Plain `CALayer` backing avoids it and is ten times cheaper for small redraws, but it keeps a bitmap per drawn view where AppKit keeps a display list: the app with every drawn `DSView` on a plain layer (contentsScale set by hand, AppKit leaves it at 1) idled at 64 MB instead of 44 MB (the hidden `ThreadFileDropOverlay` alone drew 9 MB), and peaked at 67 MB during the turn instead of 101 MB. A plain layer taller than the screen also needs its own tiling: a 12,000 pt one held 101 MB. A turn draws from many places (new rows, the per-second labels, reasoning updates), so only moving all of them helps. Left for a decision: plain layers for small, often-redrawn views plus a tiled live mode for the streaming message, at a few MB of idle footprint.
 
+## Streaming text (2026-10-12)
+
+Task streamcpu. The user measured 9.9% of a core on their Mac while an answer streamed live into a long thread. The M8 side by side never saw this: T3's Claude provider sends a reply as one final item.
+
+Wire facts first. T3 0.0.46 sends no text deltas: each `message.updated` and `turn-item.updated` carries the full text so far, and in the default `responseStreamingMode: "paragraph"` the server stores at most one update per item every 400 ms, cut at a finished block (assistantStreaming.ts:22-129, settings.ts:992-999). So a real stream is about 2.5 updates a second, each one a whole paragraph or more, and each delivered twice (message and turn item).
+
+Method. A replay proxy (`/tmp/cw-streamcpu/proxy.swift`, not kept) sits between the app and a copy of the side-by-side home on port 47433, forwards every byte, and injects thread stream chunks into the app's `subscribeThread` stream with sequences after the server's: 30 heavy runs (user message, reasoning, six tools, a 500-word answer with headings, lists, code and tables), then a Codex-like answer of about 1,200 words that grows N words per tick, both events per tick. Thread "Seeded 2000 messages", window 1100x780 pt frontmost and unobstructed (checked by screenshot), Release builds, same bundle id, `CANDY_THREAD_CACHE=off`. CPU, wakeups and WindowServer (pid 165) from `probe rusage` over the stream; Time Profiler 15 s per round.
+
+| App CPU over the stream | 40 updates a second, 1 word each | 2.5 a second, 20 words each (T3's rate) |
+|---|---|---|
+| Before (HEAD 37200e3) | 37.8%, 41.6% | 6.1%, 8.7% |
+| After | 26.8% | 4.2%, 4.4% |
+
+Where the main thread went at 40 a second, before: re-laying out the whole message 1.9 s of 15 s (tables 0.8 s), re-parsing it 0.5 s, the composer and lineage passes on every projection 0.6 s, layer display 0.5 s. What changed:
+
+1. `MarkdownDocument.parse(_:extending:)` parses only the text after the last finished block. The cut is a line after a blank line, outside any fence, that starts at column 0 with a character that can't continue a list or a quote; text with reference definitions or HTML blocks of CommonMark types 1 to 5 parses whole. `MarkdownIncrementalTests` checks it against a full parse at every third character of a 1,900-character sample built to break it (loose lists, fences inside items, quotes after gaps, setext headings), and fails when the cut rule is loosened. The settled text still parses whole once.
+2. `MarkdownLayout(reusing:)` keeps the layout of the unchanged leading top-level blocks (items, controls, tops, code index) and lays out only the rest. Reuse needs the same width, wrap and diagram state, body color, cwd, context chips and file chip labels.
+3. A text-only update (`ThreadChangeSet.onlyStreamingText`, set by the reducer when an event only grows a streaming answer's or reasoning text) skips the composer's pickers, queue and request passes and the lineage pass; find still refreshes.
+4. Recycled timeline rows and the hidden worktree setup card now wait in a hidden view outside the scroll document. Every document resize invalidates the visible rect of its whole subtree and AppKit then displays each drawing layer in it again, hidden ones included: 75 layer displays per update before, 20 after (counted with a temporary swizzle of `-[NSViewBackingLayer display]`). Empty `ButtonView` labels are hidden.
+5. `canSplit` scans bytes; Foundation's case-insensitive search cost more than the parse it saved. The fence info regex runs only when the info has `=`.
+
+PerfBenchmarks `markdown_stream_delta_*`, one delta near the end of a 2,151-word answer, release: full parse and layout 16.8 ms, incremental 0.46 ms median.
+
+Update rate (brief step 4). `ThreadSession`'s pacer now caps at 30 updates a second on any screen (before: one per frame, so 120 on ProMotion). On this 60 Hz screen with the stream sent at 60 ticks a second: one render per frame gave 30.1% and 29.8% app, 63 wakeups/s, WindowServer 37.1% and 37.0%; the 30 cap gave 26.4% and 26.7%, 31 wakeups/s, WindowServer 40.0% and 39.9%. WindowServer idled at 12 to 20% on this shared screen (other agents' windows), so its stream numbers move with them; it did not drop with fewer updates. Recorded on screen, text at 30 updates a second still appears word by word, and the 600 ms block fade is unchanged. A working turn that streams almost nothing cost 0.59% app.
+
+What is left at 40 a second (main thread 18% of a core): the last block's layout and draw per update, about 1 ms each; the timeline's row derivation 0.3 ms; window layout with AppKit's walk for Auto Layout views 0.25 ms; the document resize and scroll as the answer grows 0.3 ms; decoding two full-text events per tick off the main thread about 7%. At T3's real 2.5 updates a second all of this is about 4% on this thread. The rest would need fewer document resizes (growing it in steps, which changes scrolling at the end) or tiling the streaming message.
+
 ## Baseline: median of the last three runs (2026-10-10)
 
 The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.

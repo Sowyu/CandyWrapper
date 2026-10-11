@@ -11,17 +11,123 @@ public struct MarkdownDocument: Sendable, Equatable {
 
     /// `preservesLineBreaks`: soft breaks become line breaks, as T3 does for user messages (`remark-breaks`).
     public init(parsing markdown: String, preservesLineBreaks: Bool = false) {
+        blocks = Self.parseBlocks(Substring(markdown), preservesLineBreaks: preservesLineBreaks)
+    }
+
+    private static func parseBlocks(_ markdown: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
         let options = AttributedString.MarkdownParsingOptions(
             allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
-        guard let parsed = try? AttributedString(markdown: markdown, options: options) else {
-            self.blocks = markdown.isEmpty ? [] : [.paragraph([InlineRun(text: markdown)])]
-            return
+        guard let parsed = try? AttributedString(markdown: String(markdown), options: options) else {
+            return markdown.isEmpty ? [] : [.paragraph([InlineRun(text: String(markdown))])]
         }
         var builder = TreeBuilder()
         for run in parsed.runs {
             builder.append(text: String(parsed[run.range].characters), run: run, preservesLineBreaks: preservesLineBreaks)
         }
-        self.blocks = builder.root.children.compactMap(\.node).flatMap(Self.blocks(from:))
+        return builder.root.children.compactMap(\.node).flatMap(Self.blocks(from:))
+    }
+
+    // MARK: Streaming
+
+    /// A parse that the next, longer text of a streaming answer extends instead of starting over.
+    /// `stable` is the start of `text` whose blocks (`stableBlocks`) no later text can change.
+    public struct Incremental: Sendable {
+        public let text: String
+        public let document: MarkdownDocument
+        let preservesLineBreaks: Bool
+        let stable: Substring
+        let stableBlocks: [MarkdownBlock]
+    }
+
+    /// Parses `markdown` like `init(parsing:)`, reusing `previous` when `markdown` starts with its
+    /// stable part: only the text after it is parsed, so a token costs the size of the last few
+    /// blocks, not the whole answer. The result always equals a full parse (`MarkdownIncrementalTests`).
+    public static func parse(_ markdown: String, preservesLineBreaks: Bool = false, extending previous: Incremental?) -> Incremental {
+        guard canSplit(markdown) else {
+            let document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
+            return Incremental(text: markdown, document: document, preservesLineBreaks: preservesLineBreaks, stable: "", stableBlocks: [])
+        }
+        var start = markdown.startIndex
+        var stableBlocks: [MarkdownBlock] = []
+        if let previous, previous.preservesLineBreaks == preservesLineBreaks, !previous.stable.isEmpty,
+           markdown.utf8.starts(with: previous.stable.utf8) {
+            start = markdown.utf8.index(markdown.startIndex, offsetBy: previous.stable.utf8.count)
+            stableBlocks = previous.stableBlocks
+        }
+        if let cut = stableCut(markdown[start...]), cut > start {
+            stableBlocks += parseBlocks(markdown[start..<cut], preservesLineBreaks: preservesLineBreaks)
+            start = cut
+        }
+        let tail = parseBlocks(markdown[start...], preservesLineBreaks: preservesLineBreaks)
+        return Incremental(text: markdown, document: MarkdownDocument(blocks: stableBlocks + tail), preservesLineBreaks: preservesLineBreaks,
+                           stable: markdown[..<start], stableBlocks: stableBlocks)
+    }
+
+    /// Link reference definitions and footnotes resolve across blocks, and HTML blocks of CommonMark
+    /// types 1 to 5 run over blank lines: text with any of them always parses whole.
+    static func canSplit(_ text: String) -> Bool {
+        // One pass over the bytes: Foundation's case-insensitive search cost more than the parse it saves.
+        let bytes = Array(text.utf8)
+        func lower(_ i: Int) -> UInt8 { i < bytes.count ? bytes[i] | 0x20 : 0 }
+        func word(_ i: Int, _ w: String) -> Bool { w.utf8.enumerated().allSatisfy { lower(i + $0.offset) == $0.element } }
+        for i in bytes.indices {
+            switch bytes[i] {
+            case UInt8(ascii: "]"):
+                if i + 1 < bytes.count, bytes[i + 1] == UInt8(ascii: ":") { return false }
+            case UInt8(ascii: "<"):
+                guard i + 1 < bytes.count else { break }
+                let next = bytes[i + 1]
+                if next == UInt8(ascii: "!") || next == UInt8(ascii: "?") { return false }
+                if word(i + 1, "pre") || word(i + 1, "script") || word(i + 1, "style") || word(i + 1, "textarea") { return false }
+            default: break
+            }
+        }
+        return true
+    }
+
+    /// The start of the last line in `text` before which the blocks are final: it follows a blank
+    /// line outside any fenced code, and starts at column 0 with a character that opens a new
+    /// top-level block and can't continue a list or a quote (no list marker, digit, `>` or indent).
+    /// Fences follow T3's `splitBufferedAssistantText` (assistantStreaming.ts:36-92): an opener at
+    /// any indent, a closer of the same character, at least as long, indented at most 3 more, alone on its line.
+    static func stableCut(_ text: Substring) -> String.Index? {
+        var cut: String.Index?
+        var openFence: (marker: Character, length: Int, indent: Int)?
+        var previousBlank = false
+        var lineStart = text.startIndex
+        while lineStart < text.endIndex {
+            let newline = text[lineStart...].firstIndex(of: "\n")
+            let line = text[lineStart..<(newline ?? text.endIndex)]
+            if openFence == nil, previousBlank, lineStart > text.startIndex, let first = line.first, startsTopLevelBlock(first, line) {
+                cut = lineStart
+            }
+            guard let newline else { break }
+            let indent = line.prefix { $0 == " " }.count
+            let body = line.dropFirst(indent)
+            if let mark = body.first, mark == "`" || mark == "~" {
+                let length = body.prefix { $0 == mark }.count
+                if length >= 3 {
+                    if let open = openFence {
+                        if mark == open.marker, length >= open.length, indent <= open.indent + 3,
+                           body.dropFirst(length).allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) {
+                            openFence = nil
+                        }
+                    } else if mark == "~" || !body.dropFirst(length).contains("`") {
+                        openFence = (mark, length, indent)
+                    }
+                }
+            }
+            previousBlank = openFence == nil && line.allSatisfy { $0 == " " || $0 == "\t" || $0 == "\r" }
+            lineStart = text.index(after: newline)
+        }
+        return cut
+    }
+
+    private static func startsTopLevelBlock(_ first: Character, _ line: Substring) -> Bool {
+        if first.isLetter || "#`~|![".contains(first) { return true }
+        // `**Bold**` or `__x__` opens a paragraph; `* ` and `*x` may be a list item or a rule.
+        if first == "*" || first == "_" { return line.dropFirst().first == first && line.dropFirst(2).first.map { $0 != first && $0 != " " } == true }
+        return false
     }
 
     // MARK: Tree to blocks
@@ -112,7 +218,8 @@ public struct MarkdownDocument: Sendable, Equatable {
         let info = (info ?? "").trimmingCharacters(in: .whitespaces)
         let language = info.split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
         var title: String?
-        if let match = info.firstMatch(of: /(?:^|\s)(?:title|file(?:name)?)=(?:"([^"]+)"|'([^']+)'|(\S+))/.ignoresCase()) {
+        // The regex compiles on every call; most fences carry no attribute.
+        if info.contains("="), let match = info.firstMatch(of: /(?:^|\s)(?:title|file(?:name)?)=(?:"([^"]+)"|'([^']+)'|(\S+))/.ignoresCase()) {
             title = (match.1 ?? match.2 ?? match.3).map(String.init)
         }
         // T3 renders `gitignore` with the ini grammar; plain fences are `text`.

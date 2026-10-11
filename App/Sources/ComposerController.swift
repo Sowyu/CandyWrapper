@@ -952,6 +952,17 @@ final class ComposerController {
     // MARK: Stream
 
     /// Every thread store update for the open thread.
+    /// A streaming update that only grew an answer's or reasoning text: keeps the projection
+    /// current and refreshes an open find, without the pickers, queue and request passes.
+    func projectionTextChanged(_ projection: ThreadProjection?, threadId: ThreadId) {
+        guard target == .thread(threadId) else { return }
+        self.projection = projection
+        if panel.findOpen, !panel.findBar.input.text.isEmpty {
+            threadFindRefreshPending = true
+            scheduleThreadFindRefresh()
+        }
+    }
+
     func projectionChanged(_ projection: ThreadProjection?, threadId: ThreadId) {
         guard target == .thread(threadId) else { return }
         self.projection = projection

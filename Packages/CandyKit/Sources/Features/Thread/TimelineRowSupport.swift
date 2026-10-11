@@ -17,7 +17,7 @@ enum TL {
     static let relaxed: CGFloat = 14 * 1.625
 
     /// `shouldPreserveAssistantLineBreaks` (packages/shared/src/markdownPipeline.ts:291).
-    static func preservesAssistantLineBreaks(_ text: String) -> Bool { text.contains(/(?m)^★ Insight(?:\s|─)/) }
+    static func preservesAssistantLineBreaks(_ text: String) -> Bool { text.contains("★ Insight") && text.contains(/(?m)^★ Insight(?:\s|─)/) }
 
     /// `formatDayAwareTimestamp` (timestampFormat.ts:175-197) with the `timestampFormat` setting: the
     /// locale's hour cycle, or 12 or 24 hours (`hour12`).
@@ -68,17 +68,28 @@ final class TimelineContext {
     var now: () -> Date = Date.init
 
     private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
+    /// The parse of each answer that is streaming, which the next token extends.
+    private var streamingParses: [String: MarkdownDocument.Incremental] = [:]
 
-    /// Parses once per row and text; recycled views reuse the result.
+    /// Parses once per row and text; recycled views reuse the result. While `streaming`, a longer
+    /// text reparses only what follows its last finished block; the settled text parses whole once.
     // ponytail: unbounded, one entry per message seen; trim to the rows near the viewport if huge threads show it in memory
-    func document(_ key: String, _ text: String, lineBreaks: Bool) -> MarkdownDocument {
+    func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false) -> MarkdownDocument {
         if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks { return hit.document }
-        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks)
+        let document: MarkdownDocument
+        if streaming {
+            let parse = MarkdownDocument.parse(text, preservesLineBreaks: lineBreaks, extending: streamingParses[key])
+            streamingParses[key] = parse
+            document = parse.document
+        } else {
+            streamingParses[key] = nil
+            document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks)
+        }
         documents[key] = (text, lineBreaks, document)
         return document
     }
 
-    func forgetDocuments() { documents.removeAll() }
+    func forgetDocuments() { documents.removeAll(); streamingParses.removeAll() }
 
     /// Fork from an assistant message when `canForkProjectedAssistantItem` allows it. Capabilities come from
     /// the thread's provider session for its own rows; inherited rows have none, which allows the fork.
