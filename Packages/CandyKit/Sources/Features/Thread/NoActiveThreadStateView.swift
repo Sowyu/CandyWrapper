@@ -47,7 +47,7 @@ final class NoActiveThreadHeaderView: TopbarDragView {
 
     override func layout() {
         super.layout()
-        label.frame = NSRect(x: 20, y: ((bounds.height - 16) / 2).rounded(), width: ceil(label.textWidth) + 1, height: 16)
+        label.frame = NSRect(x: contentStart, y: ((bounds.height - 16) / 2).rounded(), width: ceil(label.textWidth) + 1, height: 16)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         line.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
         CATransaction.commit()

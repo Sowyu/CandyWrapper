@@ -324,7 +324,7 @@ public final class UsageHeaderView: TopbarDragView {
             right -= xl ? 8 : 4
             _ = i
         }
-        var x: CGFloat = 20
+        var x = contentStart
         let gap: CGFloat = viewport >= 640 ? 12 : 8
         title.frame = NSRect(x: x, y: 16, width: ceil(title.textWidth) + 1, height: 20)
         x = title.frame.maxX + gap
