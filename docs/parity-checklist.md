@@ -58,7 +58,7 @@ Rows marked `needs webview: ask user` render web content or need a JS runtime in
 | Thread search results inside sidebar (message search, 2+ chars) | comp/Sidebar.tsx, comp/ThreadSearchMatch.tsx | 🟡 | Also in command palette |
 | Thread relationships (fork, subagent, handoff) icons and navigation | comp/chat/ThreadRelationshipIcon.tsx, comp/chat/ThreadRelationshipsControl.tsx | 🟡 | WP7.17 audit: existing ThreadLineageSectionView and ThreadLineageController provide fork/subagent/handoff glyphs, status dots, grouped links and navigation in thread details. ThreadRelationshipIcon.tsx:6-96; ThreadRelationshipsControl.tsx:196-579. No duplicate sidebar control added. |
 | Sidebar footer: settings entry, usage entry, connection status | comp/Sidebar.tsx, comp/ConnectionStatusDot.tsx | 🟡 | Built (audit 2026-10-11): Settings, Pull Requests and Usage buttons in `SidebarContentView`; the Usage button opens the Usage page (WP7.7c). The official Sidebar.tsx does not draw a connection status dot. |
-| Desktop update pill and release notes in sidebar | comp/sidebar/SidebarUpdatePill.tsx, comp/sidebar/SidebarUpdateReleaseNotes.tsx, comp/sidebar/DesktopUpdateStatusIcon.tsx | M9 | Milestone 9: Update pill needs the auto-updater. |
+| Desktop update pill and release notes in sidebar | comp/sidebar/SidebarUpdatePill.tsx, comp/sidebar/SidebarUpdateReleaseNotes.tsx, comp/sidebar/DesktopUpdateStatusIcon.tsx | M9 | M9: T3's pill as is, fed by Sowyu/CandyWrapper GitHub Releases through Sparkle (PROGRESS.md "Milestone 9 plan"). |
 | Provider update pill in sidebar | comp/sidebar/SidebarProviderUpdatePill.tsx, comp/ProviderUpdatesAction.tsx | 🟡 | WP7.9: `SidebarProviderUpdatePillView` above the footer buttons for the primary environment's providers (`getProviderUpdateSidebarPillView`): Updating…, still needs an update, failed (dismissible until the status changes) and updated (3 s draining bar); a click opens Settings > Providers |
 | T3 Connect sign-in in sidebar | comp/clerk/T3ConnectSidebarSignIn.tsx | 🟡 | Clerk sign-in UI; needs webview: ask user; Built (audit 2026-10-11): T3 puts it in the settings sidebar footer. Built in `T3ConnectSignInView` and `T3ConnectController` (native Clerk, email code and password). Stale mark. |
 | Open pull requests entry (PR list page) | web/routes/_chat.pull-requests.tsx | ✅ | Opens the Pull Requests page (WP7.5b) |
@@ -666,10 +666,10 @@ Source: `desk/window/DesktopApplicationMenu.ts`.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| Auto-update (check, download, install on restart, state machine) | desk/updates/DesktopUpdates.ts, desk/updates/updateMachine.ts, desk/electron/ElectronUpdater.ts | M9 | Use Sparkle natively; same channels; Milestone 9: Updater work. |
-| Update channels (stable, nightly) | desk/updates/updateChannels.ts | M9 | Milestone 9: Updater work. |
-| Release notes in sidebar pill | desk/updates/releaseNotes.ts, comp/sidebar/SidebarUpdateReleaseNotes.tsx | M9 | Milestone 9: Updater work. |
-| Update toasts | comp/desktopUpdate.toast.tsx, comp/desktopUpdate.logic.ts | M9 | Milestone 9: Updater work. |
+| Auto-update (check, download, install on restart, state machine) | desk/updates/DesktopUpdates.ts, desk/updates/updateMachine.ts, desk/electron/ElectronUpdater.ts | M9 | M9: Sparkle 2 with T3's state machine; the only feed is https://github.com/Sowyu/CandyWrapper/releases/latest/download/appcast.xml, EdDSA-signed (PROGRESS.md "Milestone 9 plan"). |
+| Update channels (stable, nightly) | desk/updates/updateChannels.ts | M9 | M9: stable = a release, nightly = a pre-release of Sowyu/CandyWrapper (Sparkle channels). |
+| Release notes in sidebar pill | desk/updates/releaseNotes.ts, comp/sidebar/SidebarUpdateReleaseNotes.tsx | M9 | M9: the release notes come from the GitHub release body of Sowyu/CandyWrapper. |
+| Update toasts | comp/desktopUpdate.toast.tsx, comp/desktopUpdate.logic.ts | M9 | M9: T3's toasts over the Sparkle states. |
 | Remote desktop update of a connected machine | desk/updates/DesktopRemoteUpdates.ts, desk/updates/remoteUpdateFlow.ts | M9 | Milestone 9: Updater work. |
 
 ### Deep links and protocols
