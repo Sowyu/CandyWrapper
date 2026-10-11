@@ -28,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
-    private let quitOverlay = QuitHoldOverlayView()
+    /// Built on the first Cmd+Q hold.
+    private var quitOverlay: QuitHoldOverlayView?
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
     private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
@@ -270,21 +271,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Hold-to-quit on Cmd+Q in the main window (`makeQuitShortcutHandler`, DesktopWindow.ts:642-679) and its overlay.
     private func installQuitHold(window: NSWindow, layout: NSView) {
-        let overlay = quitOverlay
-        layout.addSubview(overlay)
         var shownMode: QuitHoldController.Mode?
         let controller = QuitHoldController(
             getMode: { QuitHoldController.Mode(rawValue: ClientSettingsStore.shared.current.string("confirmQuit")) ?? .hold },
-            notify: { [weak overlay, weak layout] hint in
-                guard let overlay else { return }
+            notify: { [weak self, weak layout] hint in
+                guard let self else { return }
                 switch hint {
                 case .down(let mode):
                     shownMode = mode
+                    let overlay = self.quitOverlay ?? QuitHoldOverlayView()
+                    self.quitOverlay = overlay
                     // Keep it above pages added since.
                     if let layout, layout.subviews.last !== overlay { layout.addSubview(overlay) }
                     overlay.show(mode)
                 case .up:
-                    overlay.hide(after: shownMode)
+                    self.quitOverlay?.hide(after: shownMode)
                 }
             },
             // `concealPendingQuitWindow`: leave full screen and go transparent while the keys are still down.
@@ -413,8 +414,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shortcuts.onKey { [weak panel = threads.panel] event in
             guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
                   let panel, panel.panelState.isOpen, panel.panelState.active?.kind == .diff,
-                  let responder = panel.window?.firstResponder as? NSView, responder.isDescendant(of: panel.diffPanel) else { return false }
-            panel.diffPanel.showFind(); return true
+                  let responder = panel.window?.firstResponder as? NSView, let diff = panel.lazyDiffPanel.loaded, responder.isDescendant(of: diff) else { return false }
+            diff.showFind(); return true
         }
         threads.registerShortcuts(shortcuts)
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }

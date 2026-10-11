@@ -44,7 +44,8 @@ final class PullRequestCapabilities {
 /// `pullRequests.filesViewed`; the actions, comments and reviews. Drives a `PullRequestDetailView`.
 @MainActor
 final class PullRequestDetailBinding {
-    let view: PullRequestDetailView
+    let surface: LazyView<PullRequestDetailView>
+    var view: PullRequestDetailView { surface.view }
     private let environments: Environments
     private let capabilities: PullRequestCapabilities
     var toast: (String, String?, ToastQueue.Kind) -> Void = { _, _, _ in }
@@ -69,46 +70,52 @@ final class PullRequestDetailBinding {
     /// The native stack read (`usePullRequestStack`).
     private var stackGeneration = 0
 
-    init(view: PullRequestDetailView, environments: Environments, capabilities: PullRequestCapabilities) {
-        self.view = view
+    init(surface: LazyView<PullRequestDetailView>, environments: Environments, capabilities: PullRequestCapabilities) {
+        self.surface = surface
         self.environments = environments
         self.capabilities = capabilities
-        view.preferredMergeMethod = UserDefaults.standard.string(forKey: Self.mergeMethodKey) ?? "merge"
-        view.onTab = { [weak self] tab in if tab == .code { self?.loadCode() } }
-        view.onRetry = { [weak self] in self?.reload(invalidate: false) }
-        view.onRefresh = { [weak self] in self?.reload(invalidate: true) }
-        view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
-        view.onCopy = { [weak self] text, label in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            self?.toast("\(label) copied", text, .success)
+        // The panel builds the view the first time a pull request tab shows.
+        surface.configure { [weak self] view in
+            // A rebuilt view (the panel released the last one) starts empty: show the target again.
+            self?.environmentId = nil
+            self?.target = nil
+            view.preferredMergeMethod = UserDefaults.standard.string(forKey: Self.mergeMethodKey) ?? "merge"
+            view.onTab = { [weak self] tab in if tab == .code { self?.loadCode() } }
+            view.onRetry = { [weak self] in self?.reload(invalidate: false) }
+            view.onRefresh = { [weak self] in self?.reload(invalidate: true) }
+            view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+            view.onCopy = { [weak self] text, label in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+                self?.toast("\(label) copied", text, .success)
+            }
+            view.onMergeMethod = { m in UserDefaults.standard.set(m, forKey: Self.mergeMethodKey) }
+            view.onAction = { [weak self] action, method in self?.perform(action, mergeMethod: method) }
+            view.onComment = { [weak self] body in self?.comment(body) }
+            view.onReview = { [weak self] verdict, body, comments in self?.review(verdict, body: body, comments: comments) }
+            view.onCommit = { [weak self] oid in self?.commit = oid; self?.patchKey = nil; self?.loadCode() }
+            view.onSetViewed = { [weak self] path, viewed in self?.setViewed(path, viewed) }
+            view.onCheckout = { [weak self] _ in self?.toast("Check out is not in CandyWrapper yet", "Use the copied command from the header.", .info) }
+            view.onCommentAction = { [weak self] body, action in self?.commentAction(body, action) }
+            view.onSaveTitle = { [weak self] title in self?.update(title: title) }
+            view.onSaveBody = { [weak self] body in self?.update(body: body) }
+            view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
+            view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
+            view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
+            view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
+            view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
+            view.onStackAction = { [weak self] action in self?.runStackAction(action) }
+            view.onStackRetry = { [weak self] in self?.loadStack() }
+            view.reviewActions = PullRequestReviewThreadActions(
+                reply: { [weak self] id, body, done in self?.write("pullRequests.replyToThread", { PullRequestPayloads.replyToThread($0, threadId: id, body: body) },
+                                                                   failure: "Reply could not be posted", done: done) },
+                setResolved: { [weak self] id, resolved in self?.write("pullRequests.setThreadResolution", { PullRequestPayloads.setThreadResolution($0, threadId: id, resolved: resolved) },
+                                                                        failure: "The conversation could not be updated", done: { _ in }) },
+                loadMore: { [weak self] id, cursor, done in self?.loadThreadComments(id, cursor, done) },
+                editComment: { [weak self] id, body, done in self?.write("pullRequests.updateComment", { PullRequestPayloads.updateComment($0, commentId: id, kind: "review-comment", body: body) },
+                                                                         failure: "The comment could not be saved", done: done) },
+                react: { [weak self] id, content, reacted, bar in self?.react(id, content, reacted, bar) })
         }
-        view.onMergeMethod = { m in UserDefaults.standard.set(m, forKey: Self.mergeMethodKey) }
-        view.onAction = { [weak self] action, method in self?.perform(action, mergeMethod: method) }
-        view.onComment = { [weak self] body in self?.comment(body) }
-        view.onReview = { [weak self] verdict, body, comments in self?.review(verdict, body: body, comments: comments) }
-        view.onCommit = { [weak self] oid in self?.commit = oid; self?.patchKey = nil; self?.loadCode() }
-        view.onSetViewed = { [weak self] path, viewed in self?.setViewed(path, viewed) }
-        view.onCheckout = { [weak self] _ in self?.toast("Check out is not in CandyWrapper yet", "Use the copied command from the header.", .info) }
-        view.onCommentAction = { [weak self] body, action in self?.commentAction(body, action) }
-        view.onSaveTitle = { [weak self] title in self?.update(title: title) }
-        view.onSaveBody = { [weak self] body in self?.update(body: body) }
-        view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
-        view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
-        view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
-        view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
-        view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
-        view.onStackAction = { [weak self] action in self?.runStackAction(action) }
-        view.onStackRetry = { [weak self] in self?.loadStack() }
-        view.reviewActions = PullRequestReviewThreadActions(
-            reply: { [weak self] id, body, done in self?.write("pullRequests.replyToThread", { PullRequestPayloads.replyToThread($0, threadId: id, body: body) },
-                                                               failure: "Reply could not be posted", done: done) },
-            setResolved: { [weak self] id, resolved in self?.write("pullRequests.setThreadResolution", { PullRequestPayloads.setThreadResolution($0, threadId: id, resolved: resolved) },
-                                                                    failure: "The conversation could not be updated", done: { _ in }) },
-            loadMore: { [weak self] id, cursor, done in self?.loadThreadComments(id, cursor, done) },
-            editComment: { [weak self] id, body, done in self?.write("pullRequests.updateComment", { PullRequestPayloads.updateComment($0, commentId: id, kind: "review-comment", body: body) },
-                                                                     failure: "The comment could not be saved", done: done) },
-            react: { [weak self] id, content, reacted, bar in self?.react(id, content, reacted, bar) })
     }
 
     /// `pullRequestMergeMethod` in T3's UI state store.
@@ -588,19 +595,20 @@ final class ThreadPullRequestsController {
         self.sidebar = sidebar
         self.environments = environments
         self.capabilities = capabilities
-        detail = PullRequestDetailBinding(view: panel.pullRequestView, environments: environments, capabilities: capabilities)
+        detail = PullRequestDetailBinding(surface: panel.lazyPullRequestView, environments: environments, capabilities: capabilities)
         detail.toast = { [weak panel] title, message, kind in panel?.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         detail.onStatus = { [weak self] id, tone in self?.panel.pullRequestStatus[id] = tone }
-        panel.pullRequestView.context = .thread
-        panel.pullRequestView.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() }
+        panel.lazyPullRequestView.set(\.context, .thread)
+        panel.lazyPullRequestView.configure { [weak self] view in view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() } }
         panel.onAddPullRequest = { [weak self] in self?.openCurrentPullRequest() }
-        let list = panel.linkedPullRequestsView
-        list.onOpen = { [weak self] link in self?.open(link) }
-        list.onLink = { [weak self] in self?.openLinkDialog() }
-        list.onUnlink = { [weak self] link in self?.unlink(link) }
-        list.onCopy = { [weak self] url in self?.copy(url, title: "Link copied") }
-        list.onOpenExternal = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
-        list.onWatch = { [weak self] link, watching in self?.watch(link, watching) }
+        panel.lazyLinkedPullRequestsView.configure { [weak self] list in
+            list.onOpen = { [weak self] link in self?.open(link) }
+            list.onLink = { [weak self] in self?.openLinkDialog() }
+            list.onUnlink = { [weak self] link in self?.unlink(link) }
+            list.onCopy = { [weak self] url in self?.copy(url, title: "Link copied") }
+            list.onOpenExternal = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+            list.onWatch = { [weak self] link, watching in self?.watch(link, watching) }
+        }
         MarkdownView.linkHandler = self
     }
 

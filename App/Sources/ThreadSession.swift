@@ -74,7 +74,7 @@ final class ThreadSession {
         historyLoad = nil
         self.shell = shell
         if active {
-            panel?.diffPanel.loader = Self.diffLoader(shell.supervisor)
+            panel?.lazyDiffPanel.set(\.loader, Self.diffLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
         }
         let store = self.store
@@ -412,9 +412,11 @@ final class ThreadController {
             self.browser.openURL(url)
         }
         panel.confirmCloseTerminalTab = { [weak self] surface, close in self?.terminal.confirmCloseSurface(surface, then: close) }
-        panel.diffPanel.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
-        panel.fileSurface.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
-        panel.diffPanel.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
+        panel.lazyDiffPanel.configure { [weak self] diff in
+            diff.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
+            diff.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
+        }
+        panel.lazyFileSurface.configure { [weak self] file in file.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) } }
         terminal.onAddToChat = { [weak self] selection in self?.composer.addTerminalContext(selection) }
         clones.openProject = { [weak self, weak sidebar] id in
             guard let self, let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return }

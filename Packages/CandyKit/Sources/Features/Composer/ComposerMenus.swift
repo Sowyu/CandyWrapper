@@ -500,6 +500,8 @@ public enum ComposerInlineTokens {
     /// `collectComposerPromptInlineTokens`: mentions and skills, minus any that overlap a context
     /// link, plus the links, by position.
     public static func collect(_ text: String) -> [ComposerInlineToken] {
+        // An empty prompt has no tokens; returning early keeps the regexes uncompiled until typing.
+        guard !text.isEmpty else { return [] }
         let ns = text as NSString
         let all = NSRange(location: 0, length: ns.length)
         var tokens: [ComposerInlineToken] = []

@@ -31,7 +31,7 @@ final class ProjectCloneController {
         self.panel = panel
         self.environments = environments
         self.composer = composer
-        panel.noticeBanner.onAction = { [weak self] index in self?.bannerAction(index) }
+        panel.lazyNoticeBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in self?.bannerAction(index) } }
         composer.configObservers.append { [weak self] env in self?.sessionChanged(env) }
     }
 

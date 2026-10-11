@@ -170,6 +170,9 @@ final class SettingsController {
         updateScheduledTaskWatch()
         layout.sidebar.content = threadSidebar
         page.removeFromSuperview()
+        // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
+        page.page = nil
+        general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]
         layout.main.addSubview(threadPanel)
         layout.needsLayout = true
         onRouteChange?()

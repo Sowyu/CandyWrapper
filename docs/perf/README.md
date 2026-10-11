@@ -198,6 +198,20 @@ What stays on the main thread is creating the `WKWebView` and handing WebKit the
 
 Malloc stack logging on (`MallocStackLogging=lite`), so the absolute numbers run high: 62.7 MB before, 85.6 MB with three panes, 114.4 MB after closing them through their confirm dialogs (peak 202.8 MB). `heap` finds no terminal views, buffers or attachments after closing. `malloc_history` names what stays: three 4.1 MB `CFData` blocks from CoreText converting the WOFF2 Symbols Nerd Font to TTF on first terminal use (live for the process), and 25 MB of `Malloc Large (empty)` from the confirm dialogs' backing-scale window snapshots (`ModalHost.blurredSnapshot`), freed but kept dirty by the allocator; `malloc_zone_pressure_relief` returned 0 bytes. PROGRESS.md "Known bugs" has the two possible fixes.
 
+## Idle footprint (WP8.2, 2026-10-11)
+
+Method: Release builds of 35e734e, 8739e4f (`/tmp/cw-perf/dd-*`) and the WP8.2 tree, launched in turn against the sandbox server with `--fake-t3-connect`, `CANDY_THREAD_CACHE=off` and a fresh UserDefaults domain, sampled 15 s after launch with `vmmap --summary` (physical footprint, malloc zone table) and `heap` (live bytes, class counts). Three rounds alternating the builds; other agents were building at the time, so footprint wanders about 1.5 MB within a build while `heap` stays within 0.6 MB.
+
+| Build | Idle footprint | Live heap | Thread open ("Reply with one word: candy") |
+|---|---|---|---|
+| 35e734e | 35.9 to 36.3 MB | 14.5 MB | 37.6 MB |
+| 8739e4f | 40.4 to 40.6 MB | 17.1 MB | 42.3 to 42.7 MB |
+| WP8.2 | 37.1 to 38.7 MB (median 37.4) | 14.5 MB | 40.2 to 41.4 MB |
+
+What held it: about 260 more views at launch than 35e734e, most of them hidden (a view costs 5 to 8 KB of heap with its layer, layout aux, constraints and drawing caches), an ICU number formatter (400 KB) built by the closed pull request surface's diffstat, the composer's file link regex (133 KB) compiled for an empty prompt, the Cmd+Q overlay (290 KB) and the sidebar rename field (330 KB). Found with `MallocStackLogging=lite` and `malloc_history -callTree`, then a view census of the window (518 of 592 views in the thread panel were hidden). These are now built on first use (`LazyView`), and closing the right panel, thread search or Settings releases what they built.
+
+Fragmentation is the rest of the gap and is the same in every build: the default zone holds 9 to 10 MB of free space inside dirty `Malloc Small` pages (40% to 44%). `MallocMaxMagazines=1` brings the WP8.2 build to 34.1 to 34.6 MB, so most of it is launch work allocating on several CPUs' magazines (JSON frames decoded through `JSONSerialization`, then `JSONValue`, then `Codable`, off the main thread). `malloc_zone_pressure_relief` frees 0 bytes, before and after closing surfaces. The same holds for closed surfaces: opening diff, files and linked pull requests, closing the panel and opening and closing Settings left the heap 9 MB higher before the release-on-close changes and 3.4 MB higher after (the diff panel, which keeps its selected turn, plus AppKit and CoreText caches), but the footprint stays near its high point because freed blocks stay in malloc.
+
 ## Milestone 7 wrap-up (2026-10-11)
 
 `2026-10-11-8739e4f-w1` (with `--stream`) against 35e734e, 36 commits apart. Real changes, which M8 picks up:

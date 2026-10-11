@@ -70,7 +70,7 @@ final class PullRequestsPageController {
         sort = prefs["sort"] ?? "ready"
         state = prefs["state"] ?? "open"
         involvement = prefs["involvement"] ?? "all"
-        detail = PullRequestDetailBinding(view: container.detail, environments: environments, capabilities: capabilities)
+        detail = PullRequestDetailBinding(surface: container.lazyDetail, environments: environments, capabilities: capabilities)
         detail.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
         detail.onStatus = { [weak self] id, tone in self?.container.pullRequestStatus[id] = tone }
         detail.onActed = { [weak self] action in

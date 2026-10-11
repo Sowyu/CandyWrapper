@@ -129,9 +129,11 @@ public final class ThreadHeaderView: TopbarDragView {
 ///   `setDraft(projectTitle:)` for the new-thread page (hero headline, centered composer).
 public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
-    public let findBar = ThreadFindBarView()
+    /// Built the first time thread search opens; wire it through `lazyFindBar`.
+    public let lazyFindBar = LazyView { ThreadFindBarView() }
+    public var findBar: ThreadFindBarView { lazyFindBar.view }
     public var findOpen = false { didSet {
-        findBar.isHidden = !findOpen
+        if findOpen { findBar.isHidden = false } else { lazyFindBar.release() }
         if !findOpen { pendingFindMatch = nil; model.closeThreadFind(); timeline.threadFindMatch = nil }
         needsLayout = true
     } }
@@ -161,18 +163,24 @@ public final class ThreadPanelView: DSView {
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
-    public let noticeBanner = ComposerNoticeBannerView()
-    public let goalBanner = ComposerNoticeBannerView()
-    public let recoveryBanner = ComposerNoticeBannerView()
+    /// The notice banners are built the first time they show; wire them through the lazy holders.
+    public let lazyNoticeBanner = LazyView { ComposerNoticeBannerView() }
+    public let lazyGoalBanner = LazyView { ComposerNoticeBannerView() }
+    public let lazyRecoveryBanner = LazyView { ComposerNoticeBannerView() }
+    public var noticeBanner: ComposerNoticeBannerView { lazyNoticeBanner.view }
+    public var goalBanner: ComposerNoticeBannerView { lazyGoalBanner.view }
+    public var recoveryBanner: ComposerNoticeBannerView { lazyRecoveryBanner.view }
     public var showsGoal = false { didSet { if showsGoal != oldValue { needsLayout = true } } }
     public var showsRecovery = false { didSet { if showsRecovery != oldValue { needsLayout = true } } }
     public let tasksView = ThreadTasksView()
-    public let planFollowUpBanner = ComposerNoticeBannerView()
+    public let lazyPlanFollowUpBanner = LazyView { ComposerNoticeBannerView() }
+    public var planFollowUpBanner: ComposerNoticeBannerView { lazyPlanFollowUpBanner.view }
     public var showsPlanFollowUp = false { didSet { if showsPlanFollowUp != oldValue { needsLayout = true } } }
     private let threadFileDrop = ComposerFileDrop()
     private let fileDropOverlay = ThreadFileDropOverlay()
 
-    private let serverUpdateBanner = ComposerNoticeBannerView()
+    private let lazyServerUpdateBanner = LazyView { ComposerNoticeBannerView() }
+    private var serverUpdateBanner: ComposerNoticeBannerView { lazyServerUpdateBanner.view }
     /// Fed by the server updater. Hidden views hold no update task or subscription.
     // ponytail: the M9 updater has no operation state yet; connect its per-environment state here when it lands
     public var serverUpdateNotice: ComposerServerUpdateNotice? {
@@ -265,7 +273,7 @@ public final class ThreadPanelView: DSView {
             responderView = current.superview
         }
         if event.keyCode == 53 {
-            if diffPanel.handleReviewEscape() { return true }
+            if lazyDiffPanel.loaded?.handleReviewEscape() == true { return true }
             mutatePanel { $0.isOpen = false; return [] }
             return true
         }
@@ -293,7 +301,9 @@ public final class ThreadPanelView: DSView {
     let rightPanel = RightPanelView()
     /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
     let maximize = ToggleView(nil, icon: .maximize2, variant: .ghost, size: .sm)
+    /// The diff surface; `diffPanel` builds it. Wire and feed it through `lazyDiffPanel`.
     public var diffPanel: DiffPanelView { rightPanel.diff }
+    public var lazyDiffPanel: LazyView<DiffPanelView> { rightPanel.lazyDiff }
     /// The terminal drawer under the chat column; `TerminalController` fills it.
     public let terminalDrawer = TerminalDrawerView()
     public private(set) var terminalOpen = false
@@ -336,15 +346,10 @@ public final class ThreadPanelView: DSView {
         questionPanel.isHidden = true
         // Back to front: queue, request panel, composer (each slides under the next).
         addSubview(queue)
-        for banner in [goalBanner, recoveryBanner, planFollowUpBanner] { banner.isHidden = true; addSubview(banner) }
         tasksView.isHidden = true; addSubview(tasksView)
         tasksView.onHeightChange = { [weak self] in self?.needsLayout = true }
         environmentBanner.isHidden = true
         addSubview(environmentBanner)
-        serverUpdateBanner.isHidden = true
-        addSubview(serverUpdateBanner, positioned: .below, relativeTo: environmentBanner)
-        noticeBanner.isHidden = true
-        addSubview(noticeBanner, positioned: .below, relativeTo: environmentBanner)
         activityRow.isHidden = true
         addSubview(activityRow)
         stashBadge.isHidden = true
@@ -387,9 +392,19 @@ public final class ThreadPanelView: DSView {
         detailsCard.isHidden = true
         addSubview(detailsCard)
         addSubview(toasts)
-        findBar.isHidden = true
-        addSubview(findBar)
         addSubview(fileDropOverlay); fileDropOverlay.isHidden = true; fileDropOverlay.layer?.zPosition = 40
+        // Each banner goes where it always sat back to front: queue, goal, recovery, plan, tasks;
+        // server update, notice, environment banner.
+        lazyGoalBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
+        lazyRecoveryBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
+        lazyPlanFollowUpBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.tasksView]) }
+        lazyServerUpdateBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyNoticeBanner.loaded, self?.environmentBanner]) }
+        lazyNoticeBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.environmentBanner]) }
+        lazyFindBar.onLoad = { [weak self] bar in
+            guard let self else { return }
+            bar.isHidden = true
+            addSubview(bar, positioned: .below, relativeTo: fileDropOverlay)
+        }
         registerForDraggedTypes([.fileURL])
         threadFileDrop.onFiles = { [weak self] urls in self?.composer.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         threadFileDrop.onHighlight = { [weak self] highlighted in self?.fileDropOverlay.isHidden = !highlighted }
@@ -435,6 +450,12 @@ public final class ThreadPanelView: DSView {
         }
     }
 
+    /// Adds a lazily built accessory, hidden, under the first of `above` that is already a subview.
+    private func insertAccessory(_ view: NSView, under above: [NSView?]) {
+        view.isHidden = true
+        addSubview(view, positioned: .below, relativeTo: above.lazy.compactMap { $0 }.first { $0.superview === self })
+    }
+
     // MARK: Thread details
 
     /// Shows or hides the details card.
@@ -456,8 +477,10 @@ public final class ThreadPanelView: DSView {
     /// The files surfaces, for the app to fill.
     public var filesPanel: FilesPanelView { rightPanel.files }
     public var fileSurface: FileSurfaceView { rightPanel.file }
+    public var lazyFilesPanel: LazyView<FilesPanelView> { rightPanel.lazyFiles }
+    public var lazyFileSurface: LazyView<FileSurfaceView> { rightPanel.lazyFile }
     /// The launcher's letters (`B`, `F`, `D`...) while it shows.
-    public func launcherKey(_ characters: String) -> Bool { rightPanel.launcher.handleKey(characters) }
+    public func launcherKey(_ characters: String) -> Bool { rightPanel.lazyLauncher.loaded?.handleKey(characters) ?? false }
     public var filesAvailable: Bool {
         get { rightPanel.filesAvailable }
         set { rightPanel.filesAvailable = newValue }
@@ -467,6 +490,8 @@ public final class ThreadPanelView: DSView {
     /// The pull request surfaces, for the app to fill.
     public var pullRequestView: PullRequestDetailView { rightPanel.pullRequest }
     public var linkedPullRequestsView: ThreadPullRequestsListView { rightPanel.linkedPullRequests }
+    public var lazyPullRequestView: LazyView<PullRequestDetailView> { rightPanel.lazyPullRequest }
+    public var lazyLinkedPullRequestsView: LazyView<ThreadPullRequestsListView> { rightPanel.lazyLinkedPullRequests }
     /// Whether the + menu and launcher offer "Pull request" and "Linked pull requests"
     /// (`pullRequestSurfaceAvailable`, `pullRequestsSurfaceAvailable`, ChatView.tsx:5453, 7124).
     public var pullRequestAvailable: Bool {
@@ -740,7 +765,7 @@ public final class ThreadPanelView: DSView {
             header.cancelTitleRename()
             if rightPanelMaximized { toggleMaximized() }
         }
-        diffPanel.threadId = projection?.thread.id
+        lazyDiffPanel.set(\.threadId, projection?.thread.id)
         summaries = projection.map(TurnDiffs.summaries) ?? []
         if opensChangedTurnOnLoad, let changed = TurnDiffs.sortedForPanel(summaries).first(where: { !$0.files.isEmpty }) {
             opensChangedTurnOnLoad = false
@@ -843,7 +868,7 @@ public final class ThreadPanelView: DSView {
             top = tasksView.frame.minY
         }
         let planShown = docked && showsPlanFollowUp
-        planFollowUpBanner.isHidden = !planShown
+        if planShown { planFollowUpBanner.isHidden = false } else { lazyPlanFollowUpBanner.loaded?.isHidden = true }
         if planShown {
             let h = ComposerNoticeBannerView.height
             planFollowUpBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
@@ -865,14 +890,14 @@ public final class ThreadPanelView: DSView {
             top = environmentBanner.frame.minY
         }
         let noticeShown = showsNoticeBanner && !composer.isHidden
-        noticeBanner.isHidden = !noticeShown
+        if noticeShown { noticeBanner.isHidden = false } else { lazyNoticeBanner.loaded?.isHidden = true }
         if noticeShown {
             let h = ComposerNoticeBannerView.height
             noticeBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = noticeBanner.frame.minY
         }
         let updateShown = serverUpdateNotice != nil && !composer.isHidden
-        serverUpdateBanner.isHidden = !updateShown
+        if updateShown { serverUpdateBanner.isHidden = false } else { lazyServerUpdateBanner.loaded?.isHidden = true }
         if updateShown {
             let h = ComposerNoticeBannerView.height
             serverUpdateBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
@@ -886,21 +911,21 @@ public final class ThreadPanelView: DSView {
                 top = usage.frame.minY
             }
         }
-        for (banner, shown) in [(goalBanner, showsGoal), (recoveryBanner, showsRecovery)] {
-            banner.isHidden = !docked || !shown
-            if !banner.isHidden {
-                let h = ComposerNoticeBannerView.height
-                banner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-                top = banner.frame.minY
-            }
+        for (lazyBanner, shown) in [(lazyGoalBanner, showsGoal), (lazyRecoveryBanner, showsRecovery)] {
+            guard docked && shown else { lazyBanner.loaded?.isHidden = true; continue }
+            let banner = lazyBanner.view
+            banner.isHidden = false
+            let h = ComposerNoticeBannerView.height
+            banner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = banner.frame.minY
         }
         let queueHeight = docked ? queue.preferredHeight : 0
         queue.isHidden = queueHeight == 0
         queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
         if queueHeight > 0 { top = queue.frame.minY }
         environmentBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil) || noticeShown
-        noticeBanner.joinsAbove = updateShown || queueHeight > 0 || (docked && usageLimitsBanner != nil)
-        serverUpdateBanner.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        lazyNoticeBanner.loaded?.joinsAbove = updateShown || queueHeight > 0 || (docked && usageLimitsBanner != nil)
+        lazyServerUpdateBanner.loaded?.joinsAbove = queueHeight > 0 || (docked && usageLimitsBanner != nil)
         usageLimitsBanner?.joinsAbove = queueHeight > 0
         activityRow.joinsAbove = queueHeight > 0 || bannerShown || noticeShown
         approvalPanel.joinsAbove = queueHeight > 0 || bannerShown || activityShown || noticeShown
@@ -981,11 +1006,13 @@ public final class ThreadPanelView: DSView {
             }
         }
         let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - ThreadHeaderView.height,
-            topInset: findBar.isHidden ? 0 : 48) : nil
+            topInset: lazyFindBar.loaded?.isHidden ?? true ? 0 : 48) : nil
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
-        findBar.frame = NSRect(x: max(12, chat - 396), y: ThreadHeaderView.height + 12, width: max(0, min(384, chat - 24)), height: 36)
-        findBar.layer?.zPosition = 4
+        if let findBar = lazyFindBar.loaded {
+            findBar.frame = NSRect(x: max(12, chat - 396), y: ThreadHeaderView.height + 12, width: max(0, min(384, chat - 24)), height: 36)
+            findBar.layer?.zPosition = 4
+        }
         if detailsOpen {
             if let inlineDetails {
                 detailsCard.frame = NSRect(x: inlineDetails.minX, y: ThreadHeaderView.height + inlineDetails.minY,

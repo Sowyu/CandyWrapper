@@ -68,24 +68,27 @@ final class FilesController {
         self.environments = environments
         load()
         panel.onPanelChange = { [weak self] state, closed in self?.panelChanged(state, closed: closed) }
-        let files = panel.filesPanel
-        files.onLoad = { [weak self] dirs in self?.loadDirectories(dirs) }
-        files.onSearch = { [weak self] query in self?.searchTree(query) }
-        files.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
-        files.onRefresh = { [weak self] in self?.refreshTree() }
-        files.treeView.onContextMenu = { [weak self] path, view, event in self?.showFileMenu(path, from: view, event: event) }
-        files.treeView.onDragPayload = { path in FileMentions.serialize(path) }
-        let surface = panel.fileSurface
-        surface.onEdit = { [weak self] text in self?.edited(text) }
-        surface.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
-        surface.browseDirectory = { [weak self] dir in await self?.listDirectory(dir) }
-        surface.fetchData = { url in
-            guard let (data, response) = try? await URLSession.shared.data(from: url),
-                  ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
-            return data
+        // The panel builds these the first time they show.
+        panel.lazyFilesPanel.configure { [weak self] files in
+            files.onLoad = { [weak self] dirs in self?.loadDirectories(dirs) }
+            files.onSearch = { [weak self] query in self?.searchTree(query) }
+            files.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
+            files.onRefresh = { [weak self] in self?.refreshTree() }
+            files.treeView.onContextMenu = { [weak self] path, view, event in self?.showFileMenu(path, from: view, event: event) }
+            files.treeView.onDragPayload = { path in FileMentions.serialize(path) }
         }
-        surface.onExplorerChange = { [weak self] _ in self?.panel.filesPanel.treeView.selectedPath = self?.activeFilePath }
-        surface.onNeedsReload = { [weak self] in self?.showActiveFile(force: true) }
+        panel.lazyFileSurface.configure { [weak self] surface in
+            surface.onEdit = { [weak self] text in self?.edited(text) }
+            surface.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
+            surface.browseDirectory = { [weak self] dir in await self?.listDirectory(dir) }
+            surface.fetchData = { url in
+                guard let (data, response) = try? await URLSession.shared.data(from: url),
+                      ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
+                return data
+            }
+            surface.onExplorerChange = { [weak self] _ in self?.panel.filesPanel.treeView.selectedPath = self?.activeFilePath }
+            surface.onNeedsReload = { [weak self] in self?.showActiveFile(force: true) }
+        }
     }
 
     /// fileContextMenu.ts:85-170: use the host's capabilities and the existing native menu adapter.
@@ -170,8 +173,10 @@ final class FilesController {
         workspace = Workspace(environmentId: env, threadId: id, cwd: thread.worktreePath ?? project.workspaceRoot, projectName: project.title)
         panel.filesAvailable = true
         if old?.cwd != workspace?.cwd || old?.environmentId != workspace?.environmentId {
-            panel.filesPanel.model = FileTreeModel()
-            panel.filesPanel.searchField.input.text = ""
+            if let files = panel.lazyFilesPanel.loaded {
+                files.model = FileTreeModel()
+                files.searchField.input.text = ""
+            }
             reads = [:]
         }
     }
