@@ -97,7 +97,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
             }
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys)
+                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: ClientSettingsStore.shared.current["providerModelPreferences"])
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // ponytail: every row is a view, rebuilt on each change (about 15 here); recycle rows like the timeline past ~100 models

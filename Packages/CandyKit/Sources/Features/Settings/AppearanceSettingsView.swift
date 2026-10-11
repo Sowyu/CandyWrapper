@@ -224,10 +224,12 @@ public final class AppearanceSettingsView: SettingsPageBase {
     // MARK: Motion
 
     private func motionSection() -> SettingsSectionView {
-        // ponytail: no PanelAnimationsPreview beside the slider; panels don't animate yet, so it would preview nothing
         let r = sliderRow("panel-animations", "Set how fast panels open and close.", key: "panelAnimationDurationMs", range: 0...400, step: 25,
                           reset: "panel animations", unit: "ms", outputWidth: 64)
         (r.control as? SettingsSliderControl)?.slider.setAccessibilityLabel("Panel animation duration")
+        let preview = SettingsPanelAnimationPreview(frame: .zero)
+        preview.frame.size = NSSize(width: 112, height: 40)
+        if let slider = r.control { r.control = SettingsControlGroup([preview, slider], gap: 16) }
         return section("motion", "Motion", [r])
     }
 
@@ -278,7 +280,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let select = settingsSelect(sizes.map { "\($0) px" }, width: 88)
         select.setAccessibilityLabel("\(title ?? SettingsSearch.title(id)) size")
         let r = row(id, title: title, detail: detail, control: SettingsControlGroup([picker, select]))
-        r.footer = SettingsFontPreviewView(family == "fontFamilyTerminal" ? .terminal : family == "fontFamilyCode" ? .code : .prompt)
+        r.footer = SettingsFontPreviewView(family == "fontFamilyTerminal" ? .terminal : family == "fontFamilyCode" ? (title == "Monospace font" ? .codeAndTerminal : .code) : .prompt)
         let slot = ResetSlot(label: reset)
         r.accessories = [slot]
         slot.action = { [weak self] in

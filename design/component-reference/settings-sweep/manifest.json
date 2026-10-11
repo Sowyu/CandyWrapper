@@ -1,0 +1,18 @@
+{
+  "diff-blue-orange" : {
+    "height" : 32,
+    "width" : 160
+  },
+  "diff-default" : {
+    "height" : 32,
+    "width" : 160
+  },
+  "invalid-project" : {
+    "height" : 84,
+    "width" : 640
+  },
+  "motion-preview" : {
+    "height" : 40,
+    "width" : 176
+  }
+}

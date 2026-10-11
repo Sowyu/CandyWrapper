@@ -108,6 +108,12 @@ public final class SidebarLayoutView: DSView {
         rail.isOpen = open
         needsLayout = true
         onOpenChange?(open)
+        if SettingsPanelMotion.duration > 0 {
+            layoutSubtreeIfNeeded()
+            let offset = CGSize(width: open ? -effectiveWidth : effectiveWidth, height: 0)
+            SettingsPanelMotion.reveal(sidebar, offset: offset)
+            SettingsPanelMotion.reveal(main, offset: offset)
+        }
     }
 
     /// `sidebar.toggle` (Mod+B by default; the app's shortcut dispatcher calls it).

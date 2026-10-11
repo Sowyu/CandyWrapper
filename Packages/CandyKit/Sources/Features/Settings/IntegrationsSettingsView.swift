@@ -24,25 +24,20 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
 
     // MARK: Browser defaults (this device)
 
-    // ponytail: these rows store T3's client settings; the built-in browser that reads them comes with WP7.6b.
-    // Custom viewport sizes remain in the browser toolbar work.
     private func browserSection() -> SettingsSectionView {
-        let viewport = settingsSelect(["Fill panel", "Responsive"], width: 176)
-        viewport.setAccessibilityLabel("Default browser viewport")
-        let viewportRow = row("browser-default-viewport", detail: "Tab size for you and agents. Fill fits the panel; other sizes show the device toolbar.",
-                              control: viewport)
+        let viewport = SettingsBrowserViewportControl(frame: .zero)
+        let viewportRow = row("browser-default-viewport", detail: "Tab size for you and agents. Fill fits the panel; other sizes show the device toolbar.", control: viewport)
         let viewportReset = ResetSlot(label: "default browser viewport")
         viewportRow.accessories = [viewportReset]
         viewportReset.action = { [weak self] in self?.context.writeClient?(["browserDefaultViewport": .object(["_tag": .string("fill")])]) }
-        viewport.onChange = { [weak self] i in
-            self?.context.writeClient?(["browserDefaultViewport": i == 0 ? .object(["_tag": .string("fill")])
-                : .object(["_tag": .string("freeform"), "width": .number(1280), "height": .number(800)])])
+        viewport.onChange = { [weak self] value in
+            self?.context.writeClient?(["browserDefaultViewport": value])
+            self?.onHeightChange?()
         }
         binder.add { [weak self, weak viewport] in
             guard let self else { return }
-            let fill = self.client["browserDefaultViewport"]["_tag"]?.stringValue == "fill"
-            viewport?.selectedIndex = fill ? 0 : 1
-            viewportReset.isShown = !fill
+            viewport?.value = client["browserDefaultViewport"]
+            viewportReset.isShown = client["browserDefaultViewport"]["_tag"]?.stringValue != "fill"
         }
 
         let zoomLevels: [Double] = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]

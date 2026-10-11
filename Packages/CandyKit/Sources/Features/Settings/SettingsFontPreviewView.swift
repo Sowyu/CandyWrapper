@@ -3,16 +3,21 @@ import DesignSystem
 
 /// SettingsFontPreviews.tsx:25-77. Use the real editor and diff renderer so the sample follows their metrics.
 final class SettingsFontPreviewView: DSView, SettingsGroupRow {
-    enum Kind { case prompt, code, terminal }
+    enum Kind { case prompt, code, terminal, codeAndTerminal }
     private let kind: Kind
     private var surface: NSView?
     init(_ kind: Kind) { self.kind = kind; super.init(frame: .zero) }
-    func height(forWidth width: CGFloat) -> CGFloat { kind == .prompt ? 100 : 132 }
+    func height(forWidth width: CGFloat) -> CGFloat { kind == .prompt ? 100 : kind == .codeAndTerminal ? 264 : 132 }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { surface?.removeFromSuperview(); surface = nil; return }
         guard surface == nil else { return }
         switch kind {
+        case .codeAndTerminal:
+            let box = DSView()
+            box.addSubview(SettingsFontPreviewView(.code))
+            box.addSubview(SettingsFontPreviewView(.terminal))
+            surface = box
         case .prompt:
             let editor = ComposerEditor()
             editor.setText("Use $frontend-design to fix the flaky test in [surface.test.ts](apps/web/src/terminal/ghostty/surface.test.ts) and align the header with [SettingsPanels.tsx](apps/web/src/components/settings/SettingsPanels.tsx) before shipping.")
@@ -29,7 +34,14 @@ final class SettingsFontPreviewView: DSView, SettingsGroupRow {
         if let surface { addSubview(surface) }
         needsLayout = true
     }
-    override func layout() { super.layout(); surface?.frame = bounds.insetBy(dx: 12, dy: 8) }
+    override func layout() {
+        super.layout(); surface?.frame = bounds.insetBy(dx: 12, dy: 8)
+        if kind == .codeAndTerminal, let surface {
+            for (i, child) in surface.subviews.enumerated() {
+                child.frame = NSRect(x: 0, y: CGFloat(i) * surface.bounds.height / 2, width: surface.bounds.width, height: surface.bounds.height / 2)
+            }
+        }
+    }
     override func updateLayer() {
         super.updateLayer()
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)

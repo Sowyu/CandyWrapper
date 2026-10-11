@@ -155,8 +155,8 @@ public enum ProvidersLogic {
     }
 
     /// Runtime fields per driver (each driver's settings schema, `providerSettingsForm` annotations, in `order`).
-    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false }
-    public static func fields(_ driver: String) -> [Field] {
+    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false; public var options: [(String, String)] = []; public var defaultValue = "" }
+    public static func fields(_ driver: String, config: JSONValue? = nil) -> [Field] {
         func binary(_ name: String, _ detail: String) -> Field { Field(key: "binaryPath", title: "Binary path", detail: detail, placeholder: name) }
         switch driver {
         case "codex": return [binary("codex", "Path to the Codex binary used by this instance."),
@@ -181,7 +181,18 @@ public enum ProvidersLogic {
                                  Field(key: "serverUrl", title: "Server URL", detail: "Leave blank to let T3 Code spawn the server when needed.",
                                        placeholder: "http://127.0.0.1:4096"),
                                  Field(key: "serverPassword", title: "Server password", detail: "Stored in plain text on disk.", placeholder: "Optional", secret: true)]
-        // ponytail: Antigravity's sign-in select and ACP Registry's source fields are not drawn; add them with those drivers' setup flows
+        case "antigravity": return [
+            Field(key: "authMethod", title: "Sign-in method", detail: "Google accounts use your subscription; API keys and Agent Platform bill usage.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
+            Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored in plain text.", placeholder: "Optional", secret: true),
+            Field(key: "gcpProject", title: "GCP project", detail: "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.", placeholder: "my-project-id"),
+            Field(key: "gcpLocation", title: "GCP location", detail: "Region for Gemini Enterprise or Agent Platform.", placeholder: "us-central1"),
+            binary("Automatic", "Custom ACP executable. Leave empty to select automatically.")]
+        case "acpRegistry":
+            let local = config?["source"]?.stringValue == "local"
+            return [Field(key: "source", title: "ACP source", detail: "", placeholder: "", options: [("registry", "ACP Registry"), ("local", "Local command")], defaultValue: "registry"),
+                Field(key: "agentId", title: "Registry agent ID", detail: "Agent identifier from the official ACP Registry, for example 'devin'.", placeholder: "devin"),
+                Field(key: "commandPath", title: "Executable override", detail: "Executable on this environment. For registry agents, this overrides the distribution executable while keeping its arguments and environment.", placeholder: "Registry default"),
+                Field(key: "authMethodId", title: "Authentication method", detail: "Optional ACP authentication method ID. By default, the first agent-managed method is selected.", placeholder: "auto")].filter { !local || ["source", "commandPath"].contains($0.key) }
         default: return []
         }
     }
@@ -191,7 +202,7 @@ public enum ProvidersLogic {
         var o = instance.objectValue ?? [:]
         var config = o["config"]?.objectValue ?? [:]
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { config.removeValue(forKey: key) } else { config[key] = .string(trimmed) }
+        if trimmed.isEmpty && !(o["driver"]?.stringValue == "antigravity" && key == "binaryPath") && !(o["driver"]?.stringValue == "acpRegistry" && key == "agentId") { config.removeValue(forKey: key) } else { config[key] = .string(trimmed) }
         if config.isEmpty { o.removeValue(forKey: "config") } else { o["config"] = .object(config) }
         return .object(o)
     }
@@ -631,12 +642,21 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }))
         }
 
-        let fields = ProvidersLogic.fields(row.driver)
+        let fields = ProvidersLogic.fields(row.driver, config: row.instance["config"])
         if !fields.isEmpty {
             let rows: [any SettingsGroupRow] = fields.map { f in
-                let saved = row.instance["config"]?[f.key]?.stringValue ?? ""
+                let saved = row.instance["config"]?[f.key]?.stringValue ?? f.defaultValue
                 let control: NSView
-                if f.secret {
+                if !f.options.isEmpty {
+                    let select = settingsSelect(f.options.map { $0.1 }, width: 224)
+                    select.selectedIndex = f.options.firstIndex { $0.0 == saved }
+                    select.isEnabled = !readOnly
+                    select.setAccessibilityLabel(f.title)
+                    select.onChange = { [weak self] index in
+                        self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: f.options[index].0), env: env.id)
+                    }
+                    control = select
+                } else if f.secret {
                     let input = SecureInputView(placeholder: f.placeholder)
                     input.text = saved
                     input.frame.size = NSSize(width: 224, height: 32)
@@ -660,6 +680,17 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 return SettingsRowView(title: f.title, detail: f.detail, control: control)
             }
             sections.append(SettingsSectionView(title: "Runtime", rows: rows))
+        }
+
+        if row.driver == "acpRegistry", row.instance["config"]?["source"]?.stringValue == "local" {
+            let args = SettingsProviderArgumentsView((row.instance["config"]?["commandArgs"]?.arrayValue ?? []).compactMap(\.stringValue), enabled: !readOnly) { [weak self] values in
+                var instance = current().objectValue ?? [:]
+                var config = instance["config"]?.objectValue ?? [:]
+                config["commandArgs"] = .array(values.map(JSONValue.string)); instance["config"] = .object(config)
+                self?.upsert(row, .object(instance), env: env.id)
+            }
+            args.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            sections.append(SettingsSectionView(title: "Command", rows: [args]))
         }
 
         // Environment: the generic variables, without the ones a Setup field owns.

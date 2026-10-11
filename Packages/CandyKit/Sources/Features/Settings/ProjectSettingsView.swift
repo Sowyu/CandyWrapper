@@ -302,6 +302,9 @@ public final class ProjectSettingsView: ScopedSettingsPage {
                 rows.append(r)
             }
         }
+        if let contents = projectFileContents, ProjectActionsLogic.validatedFileScripts(contents) == nil {
+            rows.append(SettingsRowView(title: "t3.json is invalid", detail: "A t3.json exists in this checkout but fails to parse, so every action and icon it declares is ignored. Check the JSON syntax and icon values."))
+        }
         importAction.isHidden = ProjectActionsLogic.importableScripts(projectFileContents ?? "", existing: scripts).isEmpty
         importAction.isEnabled = !savingActions && context.scope.canWrite && !targets.isEmpty
         actions.group.rows = rows

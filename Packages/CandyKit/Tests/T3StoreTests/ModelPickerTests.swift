@@ -34,6 +34,21 @@ struct ModelPickerTests {
         }
     }
 
+    @Test func pickerAppliesHiddenModelsAndExplicitOrder() throws {
+        let config = try Self.recordedConfig()
+        let catalog = ProviderCatalog(config.providers)
+        let entry = try #require(catalog.entry("claudeAgent"))
+        let hidden = try #require(entry.models.first?.slug)
+        let promoted = try #require(entry.models.last?.slug)
+        let preferences: JSONValue = .object(["claudeAgent": .object(["hiddenModels": .array([.string(hidden)]), "modelOrder": .array([.string(promoted)])])])
+        let sections = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: hidden, favorites: [], rail: .instance("claudeAgent"), query: "", expandedLegacy: ["claudeAgent"], preferences: preferences)
+        let models = sections.rows.compactMap { row -> String? in if case .model(let item) = row { return item.model.slug }; return nil }
+        #expect(!models.contains(hidden))
+        #expect(models.contains(promoted))
+        let search = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: hidden, favorites: [], rail: .favorites, query: entry.models.first!.name, expandedLegacy: [], preferences: preferences)
+        #expect(!search.rows.contains { if case .model(let item) = $0 { return item.entry.id == "claudeAgent" && item.model.slug == hidden }; return false })
+    }
+
     @Test func decodesRecordedConfig() throws {
         let config = try Self.recordedConfig()
         #expect(config.providers.map(\.instanceId.rawValue) == ["codex", "claudeAgent", "cursor", "grok", "opencode", "antigravity", "muse", "pi"])

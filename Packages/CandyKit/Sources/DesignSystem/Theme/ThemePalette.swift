@@ -64,7 +64,7 @@ public enum ThemePalette {
     public static func isThemeId(_ id: String) -> Bool { id.wholeMatch(of: #/[a-z0-9](?:[a-z0-9-]{0,47})/#) != nil }
 
     /// `isThemeLabel` (114-116).
-    static func isThemeLabel(_ s: String) -> Bool {
+    public static func isThemeLabel(_ s: String) -> Bool {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return !t.isEmpty && t.count <= 48
     }
