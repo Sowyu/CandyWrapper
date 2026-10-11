@@ -20,7 +20,7 @@ Scope: `git diff 06c7db5 79e4504 -- App Packages/CandyKit/Sources`, hunted by ca
 
 ## Left as notes
 
-- `Packages/CandyKit/Sources/Features/Files/FileSurfaceView.swift:433`, security, medium: workspace HTML loads unsandboxed in the main frame at the server's asset origin with no navigation delegate; T3 uses a sandboxed iframe (BrowserDocumentFrame.tsx:58). The fix wants the `ThreadWebFrameView` host page pattern, a design call.
+- `Packages/CandyKit/Sources/Features/Files/FileSurfaceView.swift:433`, security, medium: workspace HTML loads unsandboxed in the main frame at the server's asset origin with no navigation delegate; T3 uses a sandboxed iframe (BrowserDocumentFrame.tsx:58). Fixed 2026-10-11: now in the `ThreadWebFrameView` host page as `Kind.workspaceFile` (see PROGRESS.md, Fixed bugs).
 - `Packages/CandyKit/Sources/Features/Markdown/MermaidDiagrams.swift:100`, main thread, medium: the 3.5 MB Mermaid script is read and lzma-decompressed on the main thread each time the web view starts (it is released after 5 s idle). Move to a background task in M8 with a measurement.
 - `App/Sources/GitController.swift:109`, `TerminalController.swift:102`, `BrowserController.swift:93`, `SettingsPages.swift:92`, leak, low: block observers are never removed, but each controller lives as long as its window and captures `self` weakly.
 - `Packages/CandyKit/Sources/Features/PullRequests/PullRequestDetailView.swift:203`, `PullRequestCodeView.swift:76`, leak, low: same pattern on views that live for the window.

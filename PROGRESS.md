@@ -181,7 +181,6 @@ Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside mil
 
 ## Known bugs to fix before the M7 demo
 
-- Workspace HTML file previews load unsandboxed at the server's address with no limit on navigation (FileSurfaceView.swift, M7 code review); T3 puts them in a sandboxed iframe. Move them to the ThreadWebFrameView host-page approach.
 - M8: the 3.5 MB Mermaid script is decompressed on the main thread each time its web view starts (M7 code review).
 - Closing terminal panes did not lower the footprint (62.8 to 67.6 MB open, 65.2 to 67.3 MB after closing; WP7.11). Check for a retained SwiftTerm view or stream.
   - 2026-10-11 astra-bugs1: no permanent terminal retention reproduced. Fixed a queued redraw retaining SwiftTerm until the next frame and weakened attach/focus captures; immediate deallocation regression passes. Heap after closing all three panes has zero terminal views, buffers or controller attachments. Footprint remains above its pre-dialog level, so the total-footprint concern stays open for allocator/rendering-cache profiling. `leaks` reports only small macOS linkd NSXPC cycles. Measurements and citations: `docs/research/bugs1-2026-10-11.md`.
@@ -190,6 +189,9 @@ Scope: everything in `docs/parity-checklist.md` still `⏳` or `➖` outside mil
 - T3 assets copied into the app (notification sounds in App/Resources/Sounds) need T3's MIT license notice in the bundle by milestone 9. 2026-10-11 Settings sweep: the full notice is now bundled in `native-licenses.json` and shown in Open source licenses.
 
 ## Fixed bugs
+
+- Workspace HTML file previews loaded unsandboxed at the server's address with no limit on navigation (FileSurfaceView.swift, M7 code review).
+  - 2026-10-11 (worktree agent-a370e72ebf80e707b, not committed): `HTMLFileView` now hosts the file in `ThreadWebFrameView` as `Kind.workspaceFile`: T3's file flags `sandbox="allow-scripts allow-forms allow-popups allow-downloads"` (BrowserDocumentFrame.tsx:53-59; the server adds `Content-Security-Policy: sandbox ...` too, http.ts:62), no bridge script or message handler, its own non-persistent store, outside the 3-frame budget, scrolls itself, created while visible and released when hidden. `ThreadWebFrameView.decide` is the policy: host loads once; the frame may only (re)load its own document and fragments; a clicked http(s) link or popup opens in the browser through `SafeExternalURL` (DesktopWindow.ts:620-637); everything else is refused. The host page's frame-src adds `http: https:` for files, because WebKit drops a cross-origin link click before the delegate sees it otherwise. Tests: `WebFrameSandboxTests`. On screen against the sandbox (`scratch/sandbox-check.html`): page rendered with origin null, `window.webkit` undefined, localStorage blocked; `window.location = file:///etc/hosts` (script and button), the file: link and `top.location` all stayed on the page; the https link opened example.com in Safari. Left: `allow-downloads` is set but download links do nothing (no WKDownloadDelegate); nested iframes inside a file page are refused.
 
 - Recycled sidebar rows kept a stale hover look (WP7.9).
   - 2026-10-11 astra-bugs1: reset row and child-button interaction state when pooled or rebound. The 500-row regression failed before the fix and passes after; four recycled/rest fidelity cases differ by 0%. Screen scrolling checked. See `docs/research/bugs1-2026-10-11.md`.

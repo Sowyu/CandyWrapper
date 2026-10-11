@@ -12,14 +12,43 @@ import WebKit
 ///
 /// The web view exists only while `activate` holds it. `ThreadWebFrameBudget` keeps at most a few alive across
 /// the app; the timeline releases a row's view when the row scrolls away or the thread closes.
+///
+/// A workspace HTML file (`Kind.workspaceFile`, BrowserDocumentFrame.tsx:53-59) uses the same host page with T3's
+/// file flags, `allow-scripts allow-forms allow-popups allow-downloads`, no bridge, its own data store and no budget.
 @MainActor
 final class ThreadWebFrameView: NSView, WKNavigationDelegate {
+    enum Kind: Equatable {
+        /// An agent's HTML render or an MCP app: bridge on, one frame load.
+        case agent
+        /// A workspace HTML file preview: no bridge; links the reader clicks open in the browser.
+        case workspaceFile
+
+        /// The iframe `sandbox` attribute; never `allow-same-origin` or `allow-top-navigation`.
+        var sandbox: String {
+            switch self {
+            case .agent: "allow-scripts allow-forms"
+            case .workspaceFile: "allow-scripts allow-forms allow-popups allow-downloads"
+            }
+        }
+    }
+
     struct Page: Equatable {
         var src: URL
         var title: String
         /// The iframe `allow` attribute (an MCP App's permissions).
         var allow: String = ""
         var dark: Bool
+        var kind: Kind = .agent
+    }
+
+    /// Where a navigation would land.
+    enum NavigationTarget { case newWindow, host, frame }
+
+    enum NavigationDecision: Equatable {
+        case allow
+        case cancel
+        /// Cancel here and hand the link to the system browser.
+        case openExternally(URL)
     }
 
     /// A message the framed document posted.
@@ -45,14 +74,20 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         release()
         self.page = page
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = ThreadWebFrameBudget.dataStore
         config.suppressesIncrementalRendering = false
         let controller = WKUserContentController()
-        let world = WKContentWorld.world(name: "t3-host")
-        controller.add(ThreadWebFrameMessageProxy(self), contentWorld: world, name: "t3host")
-        controller.addUserScript(WKUserScript(source: Self.bridgeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world))
+        if page.kind == .agent {
+            config.websiteDataStore = ThreadWebFrameBudget.dataStore
+            let world = WKContentWorld.world(name: "t3-host")
+            controller.add(ThreadWebFrameMessageProxy(self), contentWorld: world, name: "t3host")
+            controller.addUserScript(WKUserScript(source: Self.bridgeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world))
+        } else {
+            // A file tab gets no bridge at all, and nothing the page stores outlives the tab.
+            config.websiteDataStore = .nonPersistent()
+        }
         config.userContentController = controller
         let web = ThreadWebView(frame: bounds, configuration: config)
+        web.forwardsScroll = page.kind == .agent
         web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
@@ -62,7 +97,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         hostLoaded = false
         frameLoads = 0
         web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
-        ThreadWebFrameBudget.add(self)
+        if page.kind == .agent { ThreadWebFrameBudget.add(self) }
     }
 
     /// Tears the web view down; its content process goes when no other view uses it.
@@ -97,22 +132,44 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     // MARK: Navigation
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
-        let main = action.targetFrame?.isMainFrame ?? false
-        if action.targetFrame == nil { decisionHandler(.cancel); return }
-        if main {
-            // The host page loads once, from its string.
-            let ok = !hostLoaded && action.request.url?.absoluteString == "about:blank"
-            hostLoaded = hostLoaded || ok
-            decisionHandler(ok ? .allow : .cancel)
-            return
+        guard let page else { decisionHandler(.cancel); return }
+        let target: NavigationTarget = action.targetFrame.map { $0.isMainFrame ? .host : .frame } ?? .newWindow
+        // `window.open` from a click has no click type of its own; a frame navigation must be a link click.
+        let clicked = userIsActive && (target == .newWindow || action.navigationType == .linkActivated)
+        let decision = Self.decide(kind: page.kind, target: target, url: action.request.url, src: page.src, hostLoaded: hostLoaded, frameLoads: frameLoads, userClicked: clicked)
+        switch target {
+        case .host: hostLoaded = hostLoaded || decision == .allow
+        case .frame: frameLoads += 1
+        case .newWindow: break
         }
-        // The frame loads its document once; a second load would let a page T3 never served pose as it.
-        frameLoads += 1
-        if frameLoads == 1, let src = page?.src, Self.sameDocument(action.request.url, src) {
+        switch decision {
+        case .allow:
             decisionHandler(.allow)
-        } else {
+        case .cancel:
             decisionHandler(.cancel)
-            if frameLoads > 1 { onNavigatedAway?() }
+            if page.kind == .agent, target == .frame, frameLoads > 1 { onNavigatedAway?() }
+        case .openExternally(let url):
+            decisionHandler(.cancel)
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// The navigation policy. The host page loads once, from its string. An agent's frame loads its document once;
+    /// a second load would let a page T3 never served pose as it. A workspace file's frame may reload its own
+    /// document and follow its own fragment links. Anywhere else, a workspace file's link opens in the browser
+    /// only when the reader clicked it and it is http or https (DesktopWindow.ts:620-637, `parseSafeExternalUrl`).
+    /// Everything else is refused.
+    static func decide(kind: Kind, target: NavigationTarget, url: URL?, src: URL, hostLoaded: Bool, frameLoads: Int, userClicked: Bool) -> NavigationDecision {
+        var external = NavigationDecision.cancel
+        if kind == .workspaceFile, userClicked, let url, SafeExternalURL.isSafe(url) { external = .openExternally(url) }
+        switch target {
+        case .newWindow:
+            return external
+        case .host:
+            return !hostLoaded && url?.absoluteString == "about:blank" ? .allow : .cancel
+        case .frame:
+            guard sameDocument(url, src) else { return external }
+            return frameLoads == 0 || kind == .workspaceFile ? .allow : .cancel
         }
     }
 
@@ -135,15 +192,19 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     /// A blank page holding only the sandboxed frame. Its policy forbids every load but the frame's origin.
     static func hostPage(_ page: Page) -> String {
-        let origin = page.src.scheme.map { "\($0)://\(page.src.host ?? "")\(page.src.port.map { ":\($0)" } ?? "")" } ?? "'none'"
-        let scheme = page.dark ? "dark" : "light"
+        var origin = page.src.scheme.map { "\($0)://\(page.src.host ?? "")\(page.src.port.map { ":\($0)" } ?? "")" } ?? "'none'"
+        // A file's link click must reach `decide` to open in the browser; a narrower frame-src would drop it in WebKit
+        // first. `decide` still refuses every frame load but the file itself, so the frame never leaves it.
+        if page.kind == .workspaceFile { origin += " http: https:" }
+        // A file preview sits on white in T3 (`bg-white`, BrowserDocumentFrame.tsx:36) and keeps the page's own scheme.
+        let look = page.kind == .workspaceFile ? "background:#fff" : "color-scheme:\(page.dark ? "dark" : "light")"
         let allow = page.allow.isEmpty ? "" : " allow=\"\(escape(page.allow))\""
         return """
         <!doctype html><html><head><meta charset="utf-8">\
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src \(escape(origin))">\
         <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}\
-        iframe{display:block;border:0;width:100%;height:100%;color-scheme:\(scheme)}</style></head>\
-        <body><iframe id="f" title="\(escape(page.title))" sandbox="allow-scripts allow-forms"\(allow) src="\(escape(page.src.absoluteString))"></iframe></body></html>
+        iframe{display:block;border:0;width:100%;height:100%;\(look)}</style></head>\
+        <body><iframe id="f" title="\(escape(page.title))" sandbox="\(page.kind.sandbox)"\(allow) src="\(escape(page.src.absoluteString))"></iframe></body></html>
         """
     }
 
@@ -165,7 +226,11 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 /// and clicks and keys mark the reader's activity for link opening.
 final class ThreadWebView: WKWebView {
     var onUserActivity: (() -> Void)?
-    override func scrollWheel(with event: NSEvent) { nextResponder?.scrollWheel(with: event) }
+    /// A file preview scrolls its own page; a timeline frame hands the wheel to the timeline.
+    var forwardsScroll = true
+    override func scrollWheel(with event: NSEvent) {
+        if forwardsScroll { nextResponder?.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
+    }
     override func mouseDown(with event: NSEvent) { onUserActivity?(); super.mouseDown(with: event) }
     override func keyDown(with event: NSEvent) { onUserActivity?(); super.keyDown(with: event) }
 }
