@@ -18,6 +18,8 @@ public final class SettingsPageContext {
     public var keybindingsConfigPath: String?
     public var appVersion = ""
 
+    public var setupSnapShot: (() -> Void)?
+    public var snapShotReady: (() -> Bool)?
     public var writeClient: (([String: JSONValue]) -> Void)?
     /// Saves a notification mode after asking for notification permission when it needs it; returns the
     /// row's message when the mode can't be used (the app's `ThreadNotificationCoordinator.choose`).

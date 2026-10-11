@@ -358,6 +358,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var platformOS: String?
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
     public var availableEditors: [String] = []
+    public var remoteOpenTargets: [JSONValue] = []
     /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
     public var revealsInFileManager = false
     /// `scratchWorkspaceRoot`: the folder threads without a project live in, nil when the server offers none.
@@ -375,7 +376,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, shellRevealInFileManager,
+        case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              scratchWorkspaceRoot, newProjectsRoot
     }
 
@@ -389,6 +390,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
+        remoteOpenTargets = (try? c.decodeIfPresent([JSONValue].self, forKey: .remoteOpenTargets)) ?? []
         revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false
         scratchWorkspaceRoot = try? c.decodeIfPresent(String.self, forKey: .scratchWorkspaceRoot)
         newProjectsRoot = try? c.decodeIfPresent(String.self, forKey: .newProjectsRoot)
@@ -403,11 +405,12 @@ public enum ServerConfigEvent: Decodable, Sendable {
     case settingsUpdated(ServerThreadDefaults)
     /// `keybindingsUpdated` (server.ts:791-796): the whole resolved list after keybindings.json changed.
     case keybindingsUpdated([ResolvedKeybindingRule])
+    case keybindingsInvalid([ResolvedKeybindingRule], String)
     /// `usageLimitSourcesUpdated` (server.ts:830-843), sent to subscribers that pass `usageLimitSources: true`.
     case usageLimitSourcesUpdated([UsageLimitSourceSnapshot])
     case other(String)
 
-    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings, sources }
+    private enum CodingKeys: String, CodingKey { case type, config, providers, settings, payload, keybindings, sources, issues }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -423,7 +426,11 @@ public enum ServerConfigEvent: Decodable, Sendable {
             self = .settingsUpdated(try payload.decode(ServerThreadDefaults.self, forKey: .settings))
         case "keybindingsUpdated":
             let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
-            self = .keybindingsUpdated(Keymap.decodeRules(try payload.decodeIfPresent(JSONValue.self, forKey: .keybindings)))
+            let rules = Keymap.decodeRules(try payload.decodeIfPresent(JSONValue.self, forKey: .keybindings))
+            let issues = try payload.decodeIfPresent([JSONValue].self, forKey: .issues) ?? []
+            if let issue = issues.first(where: { $0["kind"]?.stringValue?.hasPrefix("keybindings.") == true }) {
+                self = .keybindingsInvalid(rules, issue["message"]?.stringValue ?? "Invalid keybindings configuration")
+            } else { self = .keybindingsUpdated(rules) }
         case "usageLimitSourcesUpdated":
             let payload = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .payload)
             self = .usageLimitSourcesUpdated(UsageLimitSourceSnapshot.list(try payload.decodeIfPresent(JSONValue.self, forKey: .sources)))

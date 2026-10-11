@@ -11,6 +11,19 @@ final class MainWindow: NSWindow {
     static let topbarHeight: CGFloat = 52
     static let trafficLightX: CGFloat = 16
 
+    private var workspaceZoom: Double = 0
+    func changeWorkspaceZoom(_ delta: Double) { setWorkspaceZoom(workspaceZoom + delta) }
+    func setWorkspaceZoom(_ level: Double) {
+        workspaceZoom = min(5, max(-3, level))
+        applyWorkspaceZoom()
+    }
+    private func applyWorkspaceZoom() {
+        guard let contentView else { return }
+        let scale = pow(1.2, workspaceZoom)
+        contentView.bounds.size = NSSize(width: contentView.frame.width / scale, height: contentView.frame.height / scale)
+        contentView.needsLayout = true
+    }
+
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -24,7 +37,7 @@ final class MainWindow: NSWindow {
         for name in [NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification,
                      NSWindow.didExitFullScreenNotification, NSWindow.didBecomeKeyNotification] {
             NotificationCenter.default.addObserver(forName: name, object: self, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.layoutTrafficLights() }
+                MainActor.assumeIsolated { self?.applyWorkspaceZoom(); self?.layoutTrafficLights() }
             }
         }
     }

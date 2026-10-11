@@ -18,6 +18,7 @@ final class FilesController {
     var openThread: ((ThreadId) -> Void)?
     /// The panel's state or thread changed: the pull request surfaces follow.
     var onSync: (() -> Void)?
+    var serverConfig: ((String) -> ServerProviderConfig?)?
     /// Browser tabs: the page a closing server tab shows (remembered for Mod+Shift+T), the tabs
     /// the user closed (`preview.close`), and a closed tab to open again (`reopenClosedView`).
     var browserURL: ((String) -> String?)?
@@ -72,6 +73,7 @@ final class FilesController {
         files.onSearch = { [weak self] query in self?.searchTree(query) }
         files.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
         files.onRefresh = { [weak self] in self?.refreshTree() }
+        files.treeView.onContextMenu = { [weak self] path, view, event in self?.showFileMenu(path, from: view, event: event) }
         files.treeView.onDragPayload = { path in FileMentions.serialize(path) }
         let surface = panel.fileSurface
         surface.onEdit = { [weak self] text in self?.edited(text) }
@@ -84,6 +86,29 @@ final class FilesController {
         }
         surface.onExplorerChange = { [weak self] _ in self?.panel.filesPanel.treeView.selectedPath = self?.activeFilePath }
         surface.onNeedsReload = { [weak self] in self?.showActiveFile(force: true) }
+    }
+
+    /// fileContextMenu.ts:85-170: use the host's capabilities and the existing native menu adapter.
+    private func showFileMenu(_ path: String, from view: NSView, event: NSEvent) {
+        guard let workspace, let config = serverConfig?(workspace.environmentId) else { return }
+        let absolute = path.hasPrefix("/") ? path : (workspace.cwd as NSString).appendingPathComponent(path)
+        var items: [ThreadMenuItem] = []
+        if config.availableEditors.contains("file-manager") {
+            items.append(ThreadMenuItem("open", "Open"))
+            if config.revealsInFileManager { items.append(ThreadMenuItem("reveal", config.platformOS == "darwin" ? "Reveal in Finder" : "Reveal in File Explorer")) }
+        }
+        let editors = OpenInEditors.options(available: config.availableEditors).filter { $0.id != "file-manager" }
+        if !editors.isEmpty { items.append(ThreadMenuItem("editors", "Open with", children: editors.map { ThreadMenuItem($0.id, $0.label) })) }
+        guard !items.isEmpty else { return }
+        let menu = SidebarCommands.nativeMenu(items) { [weak self] action in
+            guard let self else { return }
+            let editor = action == "open" || action == "reveal" ? "file-manager" : action
+            Task {
+                do { _ = try await environments.request(workspace.environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: absolute, editor: editor, reveal: action == "reveal")) }
+                catch { panel.toasts.show(ToastView(title: action == "reveal" ? "Unable to reveal file" : "Could not open file", message: absolute, kind: .error)) }
+            }
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
 
     // MARK: Persistence

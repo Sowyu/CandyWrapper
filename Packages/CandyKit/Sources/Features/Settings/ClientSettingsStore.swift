@@ -6,17 +6,19 @@ import T3Protocol
 /// every observer once.
 @MainActor
 public final class ClientSettingsStore {
-    public static let shared = ClientSettingsStore()
+    public static let shared = ClientSettingsStore(ephemeral: CommandLine.arguments.contains("--fake-t3-connect"))
 
     static let defaultsKey = "clientSettings.v1"
     private let defaults: UserDefaults
+    private let ephemeral: Bool
     public private(set) var current: ClientSettings
     private var observers: [(id: Int, block: @MainActor (Set<String>) -> Void)] = []
     private var nextId = 0
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, ephemeral: Bool = false) {
         self.defaults = defaults
-        let json = defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
+        self.ephemeral = ephemeral
+        let json = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
         current = ClientSettings(decoding: json)
     }
 
@@ -24,7 +26,7 @@ public final class ClientSettingsStore {
     public func update(_ patch: [String: JSONValue]) {
         let changed = current.apply(patch)
         guard !changed.isEmpty else { return }
-        if let data = try? JSONEncoder().encode(current.encoded) { defaults.set(data, forKey: Self.defaultsKey) }
+        if !ephemeral, let data = try? JSONEncoder().encode(current.encoded) { defaults.set(data, forKey: Self.defaultsKey) }
         for o in observers { o.block(changed) }
     }
 

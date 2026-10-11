@@ -16,7 +16,8 @@ func copyButton() -> ButtonView {
 @MainActor
 func copy(_ text: String, from button: ButtonView) {
     NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
+    let copied = NSPasteboard.general.setString(text, forType: .string)
+    AnchoredCopyToast.show(from: button, success: copied)
     button.icon = .check
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak button] in button?.icon = .copy }
 }

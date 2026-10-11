@@ -89,6 +89,7 @@ public struct ClientSettings: Equatable, Sendable {
         "timestampFormat": SettingSpec(.literals(["locale", "12-hour", "24-hour"]), .string("locale")),
         "wordWrap": SettingSpec(.bool, .bool(true)),
         // Settings > SnapShots (settings.ts:493-505).
+        "onboardingCompletedAt": SettingSpec(.any, .null),
         "snapShotEnabled": SettingSpec(.bool, .bool(false)),
         "snapShotIncludeAccessibility": SettingSpec(.bool, .bool(true)),
         "snapShotShortcut": SettingSpec(.any, .object(["kind": .string("both-shift-keys")])),

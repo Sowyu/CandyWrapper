@@ -102,6 +102,9 @@ public actor RPCConnection {
     /// Unary call. Throws `RPCClientError`, or `CancellationError` after sending `Interrupt`.
     public func request(_ tag: String, payload: JSONValue = .object([:])) async throws -> JSONValue {
         let id = allocateID()
+        let latencyID = UUID()
+        await SlowRPCRequestTracker.shared.start(id: latencyID, method: tag)
+        defer { Task { await SlowRPCRequestTracker.shared.finish(id: latencyID) } }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (c: CheckedContinuation<JSONValue, Error>) in
                 if let closedWith { return c.resume(throwing: closedWith) }

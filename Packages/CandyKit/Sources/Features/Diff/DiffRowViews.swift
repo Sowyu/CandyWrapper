@@ -60,7 +60,8 @@ final class DiffFileHeaderView: DiffRowView {
         copy.action = { [weak self] in
             guard let self else { return }
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(path, forType: .string)
+            let copied = NSPasteboard.general.setString(path, forType: .string)
+            AnchoredCopyToast.show(from: copy, success: copied)
         }
         setAccessibilityRole(.button)
     }

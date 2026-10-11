@@ -37,10 +37,45 @@ final class Shortcuts {
             nonisolated(unsafe) let event = event
             let used = MainActor.assumeIsolated { () -> Bool in
                 guard let self else { return false }
+                self.handleSnapShot(event)
                 if self.quitHoldKey(event) { return true }
                 return event.type == .keyDown && self.handle(event)
             }
             return used ? nil : event
+        }
+    }
+
+    private var snapShotMonitor: Any?
+    private var snapShotState = SnapShotShortcutState()
+    private var snapShotShortcut: JSONValue?
+    private var snapShotAction: (() -> Void)?
+
+    func configureSnapShot(enabled: Bool, shortcut: JSONValue, action: @escaping () -> Void) {
+        if let snapShotMonitor { NSEvent.removeMonitor(snapShotMonitor); self.snapShotMonitor = nil }
+        snapShotState.reset()
+        snapShotShortcut = enabled ? shortcut : nil
+        snapShotAction = enabled ? action : nil
+        guard enabled else { return }
+        snapShotMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            nonisolated(unsafe) let event = event
+            MainActor.assumeIsolated { self?.handleSnapShot(event) }
+        }
+    }
+
+    private func handleSnapShot(_ event: NSEvent) {
+        guard let shortcut = snapShotShortcut, (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing != true else { return }
+        let kind = shortcut["kind"]?.stringValue
+        if kind == "modifier-pair" || kind == "both-shift-keys" {
+            guard event.type == .flagsChanged else { return }
+            if snapShotState.update(flags: UInt64(event.modifierFlags.rawValue), shortcut: shortcut) { snapShotAction?() }
+        } else if event.type == .keyDown, !event.isARepeat {
+            let flags = event.modifierFlags
+            guard event.charactersIgnoringModifiers?.lowercased() == shortcut["key"]?.stringValue?.lowercased(),
+                  flags.contains(.command) == (shortcut["metaKey"]?.boolValue == true || shortcut["modKey"]?.boolValue == true),
+                  flags.contains(.control) == (shortcut["ctrlKey"]?.boolValue == true),
+                  flags.contains(.option) == (shortcut["altKey"]?.boolValue == true),
+                  flags.contains(.shift) == (shortcut["shiftKey"]?.boolValue == true) else { return }
+            snapShotAction?()
         }
     }
 

@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationSignal: DispatchSourceSignal?
     private var notifications: ThreadNotificationCoordinator?
     private var quitHold: QuitHoldController?
+    private var slowRPCObserver: NSObjectProtocol?
+    private var slowRPCToast: Int?
+    private weak var slowRPCViewport: ToastViewport?
+    private var welcomeOnboarding: WelcomeOnboardingController?
+    private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private let quitOverlay = QuitHoldOverlayView()
     private let codexAuth = CodexAuthCallbackReceiver()
@@ -85,7 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .resume(let destination):
             NSApp.activate()
             mainWindow?.makeKeyAndOrderFront(nil)
-            // ponytail: no welcome wizard yet, so /welcome only brings the window forward; /settings opens the page, not the instance
+            if destination.path == "/welcome" { welcomeOnboarding?.show(); return }
+            // ponytail: settings resumes at the page; target the provider instance when the provider editor supports resume ids
             if let section = Self.settingsSection(destination.path) {
                 sidebarCommands?.closeUtilityPage()
                 settings?.open()
@@ -156,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.t3Connect = t3Connect
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
+        threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }
         let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
         window.contentView = layout
@@ -183,15 +190,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keepAlive.retain = { [weak threads] id, store in threads?.retainStore(id, store) }
             threads.keepAlive = keepAlive
         }
+        slowRPCObserver = NotificationCenter.default.addObserver(forName: SlowRPCRequestTracker.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateSlowRPCToast() }
+        }
         installQuitHold(window: window, layout: layout)
         openIn = OpenInController(card: threads.panel.detailsCard, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
+        if let shortcuts, !Self.isPreview {
+            let captures = SnapShotController(window: window, composer: threads.composer, shortcuts: shortcuts)
+            snapShots = captures
+            settings.pageContext.setupSnapShot = { [weak captures] in captures?.showSetup() }
+            settings.pageContext.snapShotReady = { [weak captures] in captures?.ready == true }
+        }
         window.center()
         window.setFrameAutosaveName("MainWindow")
         window.makeKeyAndOrderFront(nil)
         window.layoutTrafficLights()
         mainWindow = window
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
+        let welcome = WelcomeOnboardingController(window: window, environments: environments, composer: threads.composer, settings: settings)
+        welcomeOnboarding = welcome
+        var showedWelcome = false
+        let priorLiveShell = environments.onLiveShell
+        environments.onLiveShell = { [weak welcome, weak environments] env, snapshot in
+            priorLiveShell?(env, snapshot)
+            if !showedWelcome, CommandLine.arguments.contains("--welcome"), env == environments?.primaryId {
+                showedWelcome = true
+                welcome?.show()
+            }
+        }
         startSession(environments, window: window)
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)
@@ -513,8 +540,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "File", action: nil, keyEquivalent: "").submenu = file
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = makeEditMenu()
         // View (DesktopApplicationMenu.ts:236-269).
-        // ponytail: no Reload, Force Reload, Developer Tools or zoom items; they act on Chromium's page, and whole-UI zoom needs a DesignSystem scale factor
         let view = NSMenu(title: "View")
+        view.addItem(withTitle: "Reload", action: #selector(reloadWorkspace(_:)), keyEquivalent: "r")
+        view.addItem(withTitle: "Force Reload", action: #selector(reloadWorkspace(_:)), keyEquivalent: "r").keyEquivalentModifierMask = [.command, .shift]
+        view.addItem(.separator())
+        view.addItem(withTitle: "Actual Size", action: #selector(resetWorkspaceZoom(_:)), keyEquivalent: "0")
+        view.addItem(withTitle: "Zoom In", action: #selector(zoomWorkspaceIn(_:)), keyEquivalent: "=")
+        let plus = view.addItem(withTitle: "Zoom In", action: #selector(zoomWorkspaceIn(_:)), keyEquivalent: "+")
+        plus.isHidden = true
+        plus.allowsKeyEquivalentWhenHidden = true
+        view.addItem(withTitle: "Zoom Out", action: #selector(zoomWorkspaceOut(_:)), keyEquivalent: "-")
+        view.addItem(.separator())
         view.addItem(withTitle: "Toggle Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
             .keyEquivalentModifierMask = [.command, .control]
         main.addItem(withTitle: "View", action: nil, keyEquivalent: "").submenu = view
@@ -549,6 +585,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edit.addItem(withTitle: "Speech", action: nil, keyEquivalent: "").submenu = speech
         return edit
     }
+
+    private func updateSlowRPCToast() {
+        let requests = SlowRPCRequestTracker.shared.slow
+        guard !requests.isEmpty else {
+            if let slowRPCToast { slowRPCViewport?.dismiss(slowRPCToast) }
+            slowRPCToast = nil
+            return
+        }
+        guard let viewport = slowRPCViewport ?? settings?.visibleToasts ?? threads?.panel.toasts else { return }
+        let seconds = Int(requests.map(\.threshold).min() ?? 15)
+        let message = "\(requests.count) request\(requests.count == 1 ? "" : "s") waiting longer than \(seconds)s."
+        if let slowRPCToast { viewport.update(slowRPCToast, title: "Some requests are slow", message: message) }
+        else {
+            slowRPCViewport = viewport
+            slowRPCToast = viewport.show(ToastView(title: "Some requests are slow", message: message, kind: .warning,
+                                                  actionTitle: "Show requests", action: { [weak self] in
+                guard let window = self?.mainWindow else { return }
+                let dialog = DialogView(title: "Some requests are slow", message: SlowRPCRequestTracker.shared.slow.map { "\($0.method) · Started \($0.startedAt.formatted(date: .omitted, time: .standard))" }.joined(separator: "\n"))
+                _ = ModalHost.present(dialog, in: window)
+            }), timeout: 0)
+        }
+    }
+
+    @objc func reloadWorkspace(_ sender: Any?) {
+        guard let environments else { return }
+        for id in environments.environmentIds { environments.reconnect(id) }
+    }
+    @objc func resetWorkspaceZoom(_ sender: Any?) { (mainWindow as? MainWindow)?.setWorkspaceZoom(0) }
+    @objc func zoomWorkspaceIn(_ sender: Any?) { (mainWindow as? MainWindow)?.changeWorkspaceZoom(0.5) }
+    @objc func zoomWorkspaceOut(_ sender: Any?) { (mainWindow as? MainWindow)?.changeWorkspaceZoom(-0.5) }
 
     /// Cmd+Opt+Shift+L: the open thread's timeline report to /tmp/cw-timeline-<pid>.txt and stdout.
     @objc func logTimeline(_ sender: Any?) {

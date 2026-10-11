@@ -1,0 +1,53 @@
+{
+  "component": "desktop-leftovers",
+  "source": "toast.tsx:731-740; ui/wizard.tsx:88-143",
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "states": [
+    "rest"
+  ],
+  "cases": [
+    {
+      "name": "copied",
+      "native": {
+        "kind": "copy",
+        "text": "Copied!"
+      },
+      "html": "<div class=\"dropdown-glass relative overflow-visible text-balance text-popover-foreground text-xs shadow-xl shadow-black/25 rounded-md\"><div class=\"pointer-events-auto px-2 py-1\">Copied!</div></div>"
+    },
+    {
+      "name": "copy-failed",
+      "native": {
+        "kind": "copy",
+        "text": "Failed to copy"
+      },
+      "html": "<div class=\"dropdown-glass relative overflow-visible text-balance text-popover-foreground text-xs shadow-xl shadow-black/25 rounded-md\"><div class=\"pointer-events-auto px-2 py-1\">Failed to copy</div></div>"
+    },
+    {
+      "name": "progress-0",
+      "native": {
+        "kind": "progress",
+        "step": "0"
+      },
+      "html": "<ol style=\"width:528px\" class=\"grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-zinc-25 p-1 ring-1 ring-black/5 dark:bg-white/4 dark:ring-white/5\"><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left bg-card text-foreground shadow-xs ring-1 ring-black/5 dark:shadow-none dark:ring-white/5\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary/10 text-primary ring-primary/30\">1</span><span class=\"min-w-0 truncate text-sm font-medium text-foreground\">Connect</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\">2</span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Agents</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\">3</span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Projects</span></div></li></ol>"
+    },
+    {
+      "name": "progress-1",
+      "native": {
+        "kind": "progress",
+        "step": "1"
+      },
+      "html": "<ol style=\"width:528px\" class=\"grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-zinc-25 p-1 ring-1 ring-black/5 dark:bg-white/4 dark:ring-white/5\"><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary text-primary-foreground ring-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"size-4\"><path d=\"m20 6-11 11-5-5\"/></svg></span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Connect</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left bg-card text-foreground shadow-xs ring-1 ring-black/5 dark:shadow-none dark:ring-white/5\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary/10 text-primary ring-primary/30\">2</span><span class=\"min-w-0 truncate text-sm font-medium text-foreground\">Agents</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-card text-muted-foreground ring-black/10 dark:bg-white/5 dark:ring-white/10\">3</span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Projects</span></div></li></ol>"
+    },
+    {
+      "name": "progress-2",
+      "native": {
+        "kind": "progress",
+        "step": "2"
+      },
+      "html": "<ol style=\"width:528px\" class=\"grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-zinc-25 p-1 ring-1 ring-black/5 dark:bg-white/4 dark:ring-white/5\"><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary text-primary-foreground ring-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"size-4\"><path d=\"m20 6-11 11-5-5\"/></svg></span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Connect</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left \"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary text-primary-foreground ring-primary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" class=\"size-4\"><path d=\"m20 6-11 11-5-5\"/></svg></span><span class=\"min-w-0 truncate text-sm font-medium text-muted-foreground\">Agents</span></div></li><li class=\"min-w-0\"><div class=\"flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left bg-card text-foreground shadow-xs ring-1 ring-black/5 dark:shadow-none dark:ring-white/5\"><span class=\"grid size-5 shrink-0 place-items-center rounded-full text-sm font-medium ring-1 bg-primary/10 text-primary ring-primary/30\">3</span><span class=\"min-w-0 truncate text-sm font-medium text-foreground\">Projects</span></div></li></ol>"
+    }
+  ]
+}
