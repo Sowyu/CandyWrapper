@@ -280,6 +280,15 @@ public final class RunOnControl: ComposerContextControl {
     /// `envLocked`, or nothing to choose between: the static label.
     public var locked = false { didSet { if locked != oldValue { refresh() } } }
     public var onChange: (@MainActor (String) -> Void)?
+    public var offersAutoBalance = false
+    public var autoBalanceLabel: String? { didSet { refresh() } }
+    public var onAutoBalance: (@MainActor () -> Void)?
+    public func autoBalanceMenuItem() -> MenuItem? {
+        guard offersAutoBalance else { return nil }
+        var item = MenuItem.radio("Auto balance", checked: autoBalanceLabel != nil)
+        item.action = { [weak self] in self?.onAutoBalance?() }
+        return item
+    }
     private(set) var openList: MenuPopupView?
 
     public override init() {
@@ -292,7 +301,7 @@ public final class RunOnControl: ComposerContextControl {
 
     private func refresh() {
         glyphs = [EnvironmentMachineIcon.definition(selected?.machine ?? "server")]
-        text = selected?.label ?? "Run on"
+        text = autoBalanceLabel ?? selected?.label ?? "Run on"
         interactive = !locked && options.count > 1
     }
 
@@ -314,12 +323,13 @@ public final class RunOnControl: ComposerContextControl {
 
     func listItems() -> [MenuItem] {
         var items: [MenuItem] = [.label("Run on")]
+        if let item = autoBalanceMenuItem() { items.append(item) }
         for option in options {
-            var item = MenuItem(option.label, kind: .radio(option.environmentId == selectedId))
+            var item = MenuItem(option.label, kind: .radio(autoBalanceLabel == nil && option.environmentId == selectedId))
             item.glyph = EnvironmentMachineIcon.definition(option.machine)
             item.extraBottom = 1
             item.action = { [weak self] in
-                guard let self, option.environmentId != selectedId else { return }
+                guard let self, option.environmentId != selectedId || autoBalanceLabel != nil else { return }
                 onChange?(option.environmentId)
             }
             items.append(item)

@@ -43,6 +43,12 @@ extension SettingsController {
             guard let self else { throw CancellationError() }
             return try await self.environments.request(env, method, payload)
         }
+        c.subscribe = { [weak self] env, method, payload, receive in
+            self?.environments.session(env)?.supervisor.subscribe(method, payload: { payload }, handler: { event in
+                guard case .value(let value) = event else { return }
+                await receive(value)
+            })
+        }
         c.applySettings = { [weak self] env, raw in self?.composer?.applySettings(env, raw) }
         c.confirm = { [weak self] message, _, action in
             let copy = ConfirmCopy.resolve(message)

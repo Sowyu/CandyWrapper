@@ -1,0 +1,14 @@
+{
+  "account.idle" : {
+    "height" : 66,
+    "width" : 592
+  },
+  "account.signed-in" : {
+    "height" : 66,
+    "width" : 592
+  },
+  "wizard.drivers" : {
+    "height" : 56,
+    "width" : 592
+  }
+}

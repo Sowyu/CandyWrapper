@@ -25,6 +25,7 @@ extension ConnectionsPageModel {
             case toggle(HostSwitch)
             /// Muted `text-xs`, like `Up to date`.
             case text(String)
+            case copyCommand(String)
         }
         public var id: String
         public var title: String

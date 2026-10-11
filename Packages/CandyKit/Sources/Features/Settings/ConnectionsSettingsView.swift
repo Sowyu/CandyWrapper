@@ -330,6 +330,10 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             label.text = text
             label.frame.size = NSSize(width: ceil(label.textWidth) + 1, height: 16)
             if row.control !== label { row.control = label }
+        case .copyCommand(let command):
+            let button = ButtonView("Copy relaunch command", variant: .outline, size: .xs)
+            button.action = { [weak self] in self?.actions.copy(command, "Relaunch command copied", "Stop t3 on that machine, then relaunch with the same subcommand and options.") }
+            row.control = button
         case .toggle(let s):
             let view = (row.control as? HostSwitchView) ?? HostSwitchView()
             view.configure(s)

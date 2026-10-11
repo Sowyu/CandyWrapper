@@ -4,7 +4,7 @@ import AppKit
 /// header (title, description), optional panel content, optional footer, and the close button.
 /// Spec: ui-components-a.md sections 17 to 19, desktop (`sm:`) values. Present it with `ModalHost`.
 /// Width comes from the frame (`preferredWidth(in:)` gives T3's); height from `height(forWidth:)`.
-public final class DialogView: DSView {
+open class DialogView: DSView {
     public enum Kind: Equatable, Sendable {
         case dialog, alertDialog
         case sheet(SheetSide)

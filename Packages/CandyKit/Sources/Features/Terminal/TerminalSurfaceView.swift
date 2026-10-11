@@ -46,6 +46,14 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         applyTheme()
     }
 
+    /// ProviderAuthTerminal uses 13px; thread terminals keep their default 12px.
+    public func setFontSize(_ points: CGFloat) {
+        let font = NSFont.monospacedSystemFont(ofSize: points, weight: .regular)
+        terminal.font = font
+        terminal.lineSpacing = Self.lineSpacing(for: font)
+        needsLayout = true
+    }
+
     /// The system monospace face (`"SF Mono"` heads T3's family list) at 12px.
     static var font: NSFont { NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular) }
 
@@ -53,7 +61,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     /// SwiftTerm's is the font's line height times `lineSpacing`.
     static func lineSpacing(for font: NSFont) -> CGFloat {
         let natural = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
-        let target = max((fontSize * 1.35).rounded(), ceil(natural))
+        let target = max((font.pointSize * 1.35).rounded(), ceil(natural))
         return (target - 0.001) / natural
     }
 
