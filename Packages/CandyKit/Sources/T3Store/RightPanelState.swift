@@ -3,10 +3,10 @@ import T3Protocol
 
 /// One surface in a thread's right panel (`RightPanelSurface`, apps/web/src/rightPanelStore.ts:43-87).
 /// Only the kinds this app draws: the diff and files singletons, one tab per workspace file, one
-/// per pull request, the thread's linked pull requests, browser tabs and terminal tabs.
-// ponytail: device surfaces are not modeled; add a case when the device panel is built (id `device`)
+/// per pull request, the thread's linked pull requests, browser tabs, terminal tabs and device tabs.
 public enum RightPanelSurface: Codable, Sendable, Equatable {
     case diff
+    case device
     case files
     /// `file:<path>`: workspace relative, or absolute for a host file. `revealRequestId` counts the
     /// opens of this path so the same line can be revealed again.
@@ -23,6 +23,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
 
     public var id: String {
         switch self {
+        case .device: "device"
         case .diff: "diff"
         case .files: "files"
         case .file(let path, _, _): "file:" + path
@@ -33,9 +34,10 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser, terminal }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser, terminal, device }
     public var kind: Kind {
         switch self {
+        case .device: .device
         case .diff: .diff
         case .files: .files
         case .file: .file
@@ -49,6 +51,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     /// `surfaceTitle` (RightPanelTabs.tsx:582-617).
     public var title: String {
         switch self {
+        case .device: return "Device"
         case .diff: return "Diff"
         case .files: return "Files"
         case .file(let path, _, _):
@@ -155,6 +158,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
     /// `open(ref, kind)` for the singletons.
     public mutating func open(_ kind: RightPanelSurface.Kind) {
         switch kind {
+        case .device: upsert(.device)
         case .diff: upsert(.diff)
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
@@ -382,7 +386,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
     /// Restores the entry into `state` like `reopenClosedView`: a file reopens at its line.
     public static func restore(_ surface: RightPanelSurface, into state: inout RightPanelState) {
         switch surface {
-        case .diff, .files, .pullRequests: state.open(surface.kind)
+        case .diff, .files, .pullRequests, .device: state.open(surface.kind)
         // A closed server tab reopens through `preview.open` in the app (`reopenClosedView`).
         case .browser(let tabId): if tabId == nil { state.openBrowser(nil) }
         case .file(let path, let line, _): state.openFile(path, line: line)

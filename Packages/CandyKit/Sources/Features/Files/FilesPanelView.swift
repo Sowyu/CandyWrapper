@@ -164,6 +164,7 @@ public final class FileTreeView: DSView {
     /// `padding-inline: max(16px - margin, 0)` on the scroll root.
     static let inset: CGFloat = 16 - marginX
 
+    public var changes: [String: UnifiedDiff.Change] = [:] { didSet { reconfigureAll() } }
     public var model = FileTreeModel() { didSet { reload() } }
     var onLoad: (@MainActor ([String]) -> Void)?
     var onOpenFile: (@MainActor (String) -> Void)?
@@ -229,6 +230,7 @@ public final class FileTreeView: DSView {
                                width: max(0, bounds.width - 2 * (Self.inset + Self.marginX)), height: Self.rowHeight)
             let view = visible[i] ?? dequeue()
             view.frame = frame
+            view.change = changes[rows[i].path]
             view.configure(rows[i], selected: rows[i].path == selectedPath, guides: hostHovered)
             visible[i] = view
         }
@@ -277,6 +279,8 @@ public final class FileTreeView: DSView {
 /// selected 12% of the row's text color.
 final class FileTreeRowView: DSView {
     private(set) var row = FileTreeModel.Row(path: "", label: "", depth: 0, isDirectory: false, isExpanded: false, ignored: false, isLoading: false, isSearchMatch: false)
+    private let status = DiffChangeIconView(frame: .zero)
+    var change: UnifiedDiff.Change? { didSet { status.change = change ?? .change; status.isHidden = change == nil; needsLayout = true } }
     private let label = LabelView("", font: DSFont.ui(12))
     private var icon = IconView(definition: FileTreeRowView.chevron, size: 16)
     private var guides: [CALayer] = []
@@ -356,8 +360,10 @@ final class FileTreeRowView: DSView {
         icon.frame = NSRect(x: ix, y: 4 + nudge, width: 16, height: 16)
         // Closed folders turn the chevron -90°.
         if row.isDirectory, !row.isExpanded { icon.frameCenterRotation = -90 }
+        if status.superview == nil { addSubview(status) }
+        status.frame = NSRect(x: bounds.width - 18, y: 5, width: 14, height: 14)
         let tx = ix + 16 + FileTreeView.rowGap
-        label.frame = NSRect(x: tx, y: 0, width: max(0, bounds.width - tx - FileTreeView.paddingX), height: 24)
+        label.frame = NSRect(x: tx, y: 0, width: max(0, bounds.width - tx - FileTreeView.paddingX - (change == nil ? 0 : 18)), height: 24)
     }
 
     override func updateLayer() {

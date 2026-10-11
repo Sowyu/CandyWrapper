@@ -182,7 +182,7 @@ final class FilesController {
         case .file:
             showActiveFile(force: false)
             ensureTree()
-        case .diff, .pullRequest, .pullRequests, .browser, .terminal:
+        case .diff, .pullRequest, .pullRequests, .browser, .terminal, .device:
             break
         }
     }

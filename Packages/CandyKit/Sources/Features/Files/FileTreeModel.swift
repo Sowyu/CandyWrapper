@@ -26,12 +26,20 @@ public struct FileTreeModel: Sendable {
     public private(set) var search: (query: String, entries: [ProjectEntry])?
 
     public init() {}
+    /// Diff trees use patch order, with each folder at its first file (diffFileTree.logic.ts:62-89).
+    public var pathOrder: [String: Int]?
 
     public var ready: Bool { directories[""] != nil }
 
     /// Stores a folder's listing; only direct children count (useDirectoryEntries.ts:56-63).
     public mutating func setChildren(_ entries: [ProjectEntry], of directory: String) {
-        directories[directory] = Self.sorted(entries.filter { $0.parent == directory })
+        let children = entries.filter { $0.parent == directory }
+        if let pathOrder {
+            directories[directory] = children.sorted {
+                let a = pathOrder[$0.path] ?? Int.max, b = pathOrder[$1.path] ?? Int.max
+                return a == b ? $0.path < $1.path : a < b
+            }
+        } else { directories[directory] = Self.sorted(children) }
     }
 
     public mutating func setSearch(_ query: String, entries: [ProjectEntry]?) {

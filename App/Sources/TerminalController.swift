@@ -577,9 +577,10 @@ final class TerminalController {
     /// `handleLinkActivate`: URLs open in the browser, paths in the default app.
     // ponytail: URLs skip T3's built-in preview (WP7.6) and paths open with the default app, not the
     // preferred editor; route both there when the preview panel and editor picker land
+    var openBrowserLink: ((URL) -> Bool)?
     private func openLink(_ link: String, cwd: String) {
         if link.range(of: #"^https?://"#, options: [.regularExpression, .caseInsensitive]) != nil {
-            if let url = URL(string: link) { NSWorkspace.shared.open(url) }
+            if let url = URL(string: link), openBrowserLink?(url) != true { NSWorkspace.shared.open(url) }
             return
         }
         let path = link.hasPrefix("/") ? link : (cwd as NSString).appendingPathComponent(link)

@@ -15,13 +15,12 @@ final class RightPanelView: DSView {
 
     /// The inline width: the default, at most 70% of the viewport and leaving the chat column
     /// 360px, never under 360 (`getPreviewPanelMaxWidth`).
-    // ponytail: no resize handle, so the width is always the default; add the left-edge drag and
-    // T3's `t3code:preview-panel-width` memory when someone wants a wider diff
-    static func width(viewport: CGFloat, container: CGFloat) -> CGFloat {
+    static func width(viewport: CGFloat, container: CGFloat, preferred: CGFloat = defaultWidth) -> CGFloat {
         let maxWidth = max(minWidth, min((viewport * 0.7).rounded(.down), container.rounded(.down) - 360))
-        return min(max(defaultWidth, minWidth), maxWidth)
+        return min(max(preferred, minWidth), maxWidth)
     }
 
+    let device = DevicePanelView()
     let diff = DiffPanelView()
     let files = FilesPanelView()
     let file = FileSurfaceView()
@@ -121,6 +120,7 @@ final class RightPanelView: DSView {
         if active?.kind == .pullRequests { if linkedPullRequests.superview !== self { addSubview(linkedPullRequests) } } else { linkedPullRequests.removeFromSuperview() }
         if active?.kind == .browser { if browser.superview !== self { addSubview(browser) } } else { browser.removeFromSuperview() }
         if active?.kind == .terminal { if terminal.superview !== self { addSubview(terminal) } } else { terminal.removeFromSuperview() }
+        if active?.kind == .device { if device.superview !== self { addSubview(device) } } else { device.removeFromSuperview(); device.viewer.clear() }
         launcher.isHidden = active != nil
         needsLayout = true
     }
@@ -146,6 +146,7 @@ final class RightPanelView: DSView {
 
     static func icon(for surface: RightPanelSurface) -> IconView {
         switch surface {
+        case .device: IconView(name: .smartphone, size: 12, strokeColor: Themed.color(\.foreground))
         case .diff: IconView(name: .fileDiff, size: 12, strokeColor: Themed.color(\.foreground))
         case .files: IconView(name: .files, size: 12, strokeColor: Themed.color(\.foreground))
         case .file(let path, _, _): FileTypeIcon.view(for: path, size: 12)
@@ -220,6 +221,7 @@ final class RightPanelView: DSView {
         linkedPullRequests.frame = content
         browser.frame = content
         terminal.frame = content
+        device.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
         launcher.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
@@ -313,7 +315,6 @@ final class SurfaceLauncherView: DSView {
         var kind: RightPanelSurface.Kind?
     }
 
-    // ponytail: Device stays disabled; enable it when the device panel builds its surface
     static func actions(filesAvailable: Bool, diffAvailable: Bool, pullRequestAvailable: Bool = false, pullRequestsAvailable: Bool = false,
                         browserAvailable: Bool = false, terminalAvailable: Bool = false) -> [Action] {
         [Action(label: "Browser", icon: .globe2, shortcut: "B", kind: browserAvailable ? .browser : nil),
@@ -322,7 +323,7 @@ final class SurfaceLauncherView: DSView {
          Action(label: "Diff", icon: .fileDiff, shortcut: "D", kind: diffAvailable ? .diff : nil),
          Action(label: "Pull request", icon: .gitPullRequestArrow, shortcut: "P", kind: pullRequestAvailable ? .pullRequest : nil),
          Action(label: "Linked pull requests", icon: .link, shortcut: "L", kind: pullRequestsAvailable ? .pullRequests : nil),
-         Action(label: "Device", icon: .smartphone, shortcut: "M", kind: nil)]
+         Action(label: "Device", icon: .smartphone, shortcut: "M", kind: .device)]
     }
 
     var filesAvailable = true { didSet { rebuild() } }

@@ -550,6 +550,7 @@ final class PullRequestDetailBinding {
 /// "Link pull request" dialog, unlinking and watching, the copy shortcuts.
 @MainActor
 final class ThreadPullRequestsController {
+    var openBrowserLink: ((URL) -> Bool)?
     private let panel: ThreadPanelView
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
@@ -868,6 +869,8 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
     }
 
     func openLink(_ url: URL, from markdown: MarkdownView) {
+        let modifiers = NSApp.currentEvent?.modifierFlags ?? []
+        if modifiers.contains(.command) || modifiers.contains(.control) { NSWorkspace.shared.open(url); return }
         // A pull request a project here reads opens in the panel (`useOpenChangeRequestLink`).
         if let target = previewTarget(url) {
             panel.mutatePanel {
@@ -877,7 +880,7 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
             }
             return
         }
-        NSWorkspace.shared.open(url)
+        if openBrowserLink?(url) != true { NSWorkspace.shared.open(url) }
     }
 
     /// `showExternalLinkContextMenu` with Link to thread or Unlink from thread for a pull request URL.

@@ -22,6 +22,8 @@ public final class DiffPanelView: DSView {
             selectedRunId = nil
             requestedRunId = nil
             list.setDiff(UnifiedDiff(""))
+            fileTree.model = FileTreeModel(); fileTree.changes = [:]
+            searchMatches = []; searchIndex = 0
             hasDiff = false
         }
     }
@@ -41,6 +43,12 @@ public final class DiffPanelView: DSView {
 
     public let list = DiffListView()
     private let scroll: ScrollAreaView
+    private let fileTree = FileTreeView()
+    private let treeScroll: ScrollAreaView
+    private let find = InputView(placeholder: "Find", size: .compact)
+    private let findCount = LabelView("", font: DSFont.ui(11))
+    private var searchMatches: [DiffPanelSearch.Match] = []
+    private var searchIndex = 0
     private let scopeButton = ButtonView("Latest turn", variant: .secondary, size: .xs)
     private let totals = DiffStatView()
     private let refreshButton = ButtonView(nil, icon: .refreshCw, variant: .ghost, size: .iconSm)
@@ -64,6 +72,7 @@ public final class DiffPanelView: DSView {
 
     public override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: list)
+        treeScroll = ScrollAreaView(documentView: fileTree)
         super.init(frame: frameRect)
         scopeButton.trailingIcon = .chevronDown
         scopeButton.iconSize = 14
@@ -90,15 +99,35 @@ public final class DiffPanelView: DSView {
         for toggle in [wrapToggle, whitespaceToggle, treeToggle] { toggle.iconSize = 14 }
         wrapToggle.onPressedChange = { [weak self] in self?.wrapLines = $0 }
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
-        // ponytail: the file tree aside (pierre trees) is not built; the toggle only shows state.
-        // Build DiffFileTree when the tree is wanted (T3 keeps it off by default).
+        treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
+        treeScroll.isHidden = true
+        fileTree.onOpenFile = { [weak self] path in self?.fileTree.selectedPath = path; self?.list.reveal(path: path) }
+        find.isHidden = true; findCount.isHidden = true
+        find.onChange = { [weak self] query in
+            guard let self else { return }
+            self.searchMatches = DiffPanelSearch.matches(query, in: self.list.diff)
+            self.searchIndex = 0
+            self.revealSearch()
+        }
+        find.onCommand = { [weak self] selector in
+            guard let self else { return false }
+            if selector == #selector(NSResponder.cancelOperation(_:)) {
+                self.find.isHidden = true; self.findCount.isHidden = true; self.needsLayout = true
+                self.window?.makeFirstResponder(self.list); return true
+            }
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                if !self.searchMatches.isEmpty { self.searchIndex = (self.searchIndex + 1) % self.searchMatches.count; self.revealSearch() }
+                return true
+            }
+            return false
+        }
         list.onCollapsedChange = { [weak self] in self?.updateCollapseButton() }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine].forEach(addSubview)
+        [treeScroll, find, findCount, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine].forEach(addSubview)
         message.isHidden = true
         errorLine.isHidden = true
         totals.isHidden = true
@@ -205,6 +234,10 @@ public final class DiffPanelView: DSView {
         errorLine.isHidden = true
         scroll.isHidden = false
         list.setDiff(diff, collapsedByDefault: collapsed)
+        fileTree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
+        fileTree.model = DiffPanelSearch.tree(diff)
+        searchMatches = DiffPanelSearch.matches(find.text, in: diff)
+        searchIndex = 0
         totals.setInline(additions: diff.additions, deletions: diff.deletions)
         totals.isHidden = diff.files.isEmpty
         updateCollapseButton()
@@ -218,6 +251,9 @@ public final class DiffPanelView: DSView {
 
     private func showMessage(_ text: String, error: String? = nil) {
         hasDiff = false
+        list.setDiff(UnifiedDiff(""))
+        fileTree.model = FileTreeModel(); fileTree.changes = [:]
+        searchMatches = []; searchIndex = 0
         message.text = text
         message.isHidden = false
         errorLine.text = error ?? ""
@@ -258,8 +294,20 @@ public final class DiffPanelView: DSView {
         MenuPopupView.show([latestItem, .submenu("Turn", turns)], from: scopeButton, placement: .dropdown)
     }
 
+    public override var acceptsFirstResponder: Bool { true }
+    public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
+
+    public func showFind() {
+        find.isHidden = false; findCount.isHidden = false; needsLayout = true
+        window?.makeFirstResponder(find)
+    }
+    private func revealSearch() {
+        findCount.text = searchMatches.isEmpty ? "No results" : "\(searchIndex + 1) of \(searchMatches.count)"
+        if !searchMatches.isEmpty { list.revealSearch(searchMatches[searchIndex]) }
+    }
+
     private var headerHeight: CGFloat { inlineHeader ? 28 : 40 }
-    private var bodyTop: CGFloat { (inlineHeader ? 28 + 12 : 40) + bodyOffset }
+    private var bodyTop: CGFloat { (inlineHeader ? 28 + 12 : 40) + bodyOffset + (find.isHidden ? 0 : 36) }
     /// For the fidelity test: the reference captures' tab strip ends at a half pixel and the list
     /// lands on the next whole one, 0.5pt lower than the header row's offset says.
     var bodyOffset: CGFloat = 0
@@ -291,7 +339,11 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
-        scroll.frame = NSRect(x: 0, y: bodyTop, width: bounds.width, height: max(0, bounds.height - bodyTop))
+        find.frame = NSRect(x: 8, y: headerHeight + 4, width: max(0, bounds.width - 110), height: 28)
+        findCount.frame = NSRect(x: bounds.width - 94, y: headerHeight + 8, width: 86, height: 20)
+        let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
+        treeScroll.frame = NSRect(x: 0, y: bodyTop, width: treeWidth, height: max(0, bounds.height - bodyTop))
+        scroll.frame = NSRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop))
         // The error paragraph (`px-3`, `mb-2`) takes its height off the top of the centered area.
         errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)
         let messageTop = bodyTop + (errorLine.isHidden ? 0 : 16.5 + 8)

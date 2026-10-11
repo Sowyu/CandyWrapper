@@ -1,0 +1,10 @@
+{
+  "empty" : {
+    "height" : 360,
+    "width" : 480
+  },
+  "unavailable" : {
+    "height" : 360,
+    "width" : 480
+  }
+}

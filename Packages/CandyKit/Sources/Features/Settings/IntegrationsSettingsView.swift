@@ -93,23 +93,43 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
 
     /// The device hub and agent device access (`DeviceIntegrationControls`). Outside a project scope T3 turns
     /// them on through `device.configure`, which installs the device helpers on the server.
-    // ponytail: the hub switch shows the environment's value but stays off-limits here; device setup, simulator
-    // status and device hosts come with the devices package. At a project scope agent access is a plain override
     private func devicesSection() -> SettingsSectionView {
         let hub = serverSwitch("device-hub", "Enable this environment to open simulators and emulators, whether they run here or on a remote device host.",
                                key: "enableDeviceSupport", reset: nil, label: "Device hub")
         hub.accessories.last.map { ($0 as? ResetSlot)?.isShown = false }
-        (hub.control as? SwitchView)?.isEnabled = false
+        (hub.control as? SwitchView)?.onChange = { [weak self] value in
+            self?.configureDevice(value ? ["enabled": .bool(true)] : ["enabled": .bool(false), "agentAccessEnabled": .bool(false)])
+        }
         let agent = serverSwitch("agent-device-access",
                                  "Allow new agent sessions in this environment to start and control local and remote devices, with required tools set up automatically.",
                                  key: "enableAgentDeviceAccess", reset: nil, label: "Agent device access")
+        let projectAgentChange = (agent.control as? SwitchView)?.onChange
+        (agent.control as? SwitchView)?.onChange = { [weak self] value in
+            guard let self else { return }
+            if self.context.scope.isProjectScope { projectAgentChange?(value) }
+            else { self.configureDevice(["agentAccessEnabled": .bool(value)]) }
+        }
         binder.add { [weak self, weak agent, weak hub] in
             guard let self else { return }
             // Outside a project, agent access writes through `device.configure` too.
-            (agent?.control as? SwitchView)?.isEnabled = self.context.scope.isProjectScope
-            (hub?.control as? SwitchView)?.isEnabled = false
+            (agent?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite
+            (hub?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
         }
         let s = section("devices", "Devices", [hub, agent])
         return s
     }
+    private func configureDevice(_ patch: [String: JSONValue]) {
+        guard context.scope.canWrite, let request = context.request else { return }
+        let targets = context.scope.targets
+        Task { [weak self] in
+            do {
+                for target in targets { _ = try await request(target.environmentId, "device.configure", .object(patch)) }
+                self?.refresh()
+            } catch {
+                self?.context.toast?("Unable to configure devices", String(describing: error), .error)
+                self?.refresh()
+            }
+        }
+    }
+
 }

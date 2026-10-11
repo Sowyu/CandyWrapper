@@ -17,6 +17,8 @@ public final class BrowserMiniPlayerView: DSView {
     /// The user dragged the player; the owner keeps the new origin.
     public var onMove: (@MainActor (CGPoint) -> Void)?
 
+    public var onResize: ((CGSize) -> Void)?
+    private let resize = BrowserMiniPlayerResizeView()
     private let card = DSView()
     private let clip = DSView()
     private let handle = HandleView()
@@ -38,7 +40,8 @@ public final class BrowserMiniPlayerView: DSView {
             guard let self else { return }
             self.onMove?(CGPoint(x: self.frame.minX + delta.x, y: self.frame.minY + delta.y))
         }
-        [card, clip, handle].forEach(addSubview)
+        [card, clip, handle, resize].forEach(addSubview)
+        resize.onResize = { [weak self] size in self?.onResize?(size) }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Floating browser preview")
     }
@@ -62,6 +65,7 @@ public final class BrowserMiniPlayerView: DSView {
 
     public override func layout() {
         super.layout()
+        resize.frame = NSRect(x: bounds.width - 12, y: bounds.height - 12, width: 12, height: 12)
         card.frame = bounds
         clip.frame = bounds
         viewer.frame = clip.bounds

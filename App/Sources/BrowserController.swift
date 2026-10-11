@@ -82,6 +82,7 @@ final class BrowserController {
             self.miniTab[key] = nil
             self.render()
         }
+        panel.miniPlayer.onResize = { [weak self] size in self?.panel.miniPlayerSize = size }
         panel.miniPlayer.onMove = { [weak self] origin in self?.panel.miniPlayerOrigin = origin }
         NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.render() }
@@ -106,6 +107,7 @@ final class BrowserController {
         stopStream(mini: false)
         stopStream(mini: true)
         panel.miniPlayerOrigin = nil
+        panel.miniPlayerSize = nil
         guard let id, let env = id.environmentId else {
             panel.browserAvailable = false
             return
@@ -203,7 +205,7 @@ final class BrowserController {
             let surface = surfaces.first { $0.browserTabId == session.tabId }
             if let surface, requested?.force == true {
                 panel.mutatePanel { $0.activate(surface.id); return [] }
-            } else if surface == nil {
+            } else if surface == nil, ClientSettingsStore.shared.current.bool("browserAutoShowFloatingPreview") {
                 miniTab[key] = session.tabId
             }
         }
@@ -595,6 +597,17 @@ final class BrowserController {
     }
 
     /// `createBrowserSurface`: a new server tab, then the panel shows it.
+    /// browserLinkTarget.ts:32-48. Modified clicks always leave the app.
+    @discardableResult
+    func openLink(_ url: URL) -> Bool {
+        let modifiers = NSApp.currentEvent?.modifierFlags ?? []
+        guard !modifiers.contains(.command), !modifiers.contains(.control),
+              ClientSettingsStore.shared.current.string("browserLinkTarget") == "app",
+              panel.browserAvailable, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        openTab(url: url.absoluteString)
+        return true
+    }
+
     private func createTab() { openTab(url: nil) }
 
     /// A new server tab at `url` (an HTML render's "Open in panel").
