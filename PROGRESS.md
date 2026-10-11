@@ -232,7 +232,7 @@ Milestone 9 started on 2026-10-11 after the M8 demo (v0.1.2). The user chose a s
 - [ ] Draft attachments across relaunch (state restoration), after the richtext task.
 - [ ] Checklist upkeep: the 10 built rows and the 5 stale keybinding lines the research found.
 - [ ] T3 Connect cloud state (reconcileCloudState port): needs half a day on the user's real account, so ask first.
-- [ ] First release through `scripts/release` (main session), then the `appcast` feed tag.
+- [x] First release through `scripts/release` (2026-10-11, main session): v0.1.3 (build 4) at 0c24e78, https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.3, zip and DMG, and the `appcast` release with the signed feed. Checked first with `--dry-run` and the real key: signed by CandyWrapper Release with the hardened runtime and library validation off, the designated requirement pins the certificate, and a copy with a test bundle id launched and rendered with Sparkle loaded. Found: the script's first fetch of the not yet existing feed left a 404 in GitHub's edge cache for the bare feed URL (a query string got 200), so the script now fetches with a query string.
 - [ ] Off-machine backup of the signing identity and EdDSA seed (ask the user).
 
 ## M8 checklist
@@ -482,6 +482,7 @@ Gotchas found so far:
 
 ## Log
 
+- 2026-10-11: v0.1.3 at 0c24e78, the first release that updates itself: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.3. Published with `scripts/release` (docs/release.md): a full release, no longer a pre-release, with a zip and a DMG, plus the `appcast` release that carries the signed feed. Users install it by hand once; later versions arrive through the sidebar's update pill.
 - 2026-10-11: v0.1.2 (pre-release) at 8741c91, the battery and responsiveness pass: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.2. Built and published the v0.1.0 way from a clean worktree (zip 11.6 MB, SHA-256 44ea8cce95f266424221d4091e819cbb4fa086df19de53327d49cb52a7f128c3), checked first in snapshot mode as a copy with a test bundle id, download hash verified. Release notes in the release body.
 - 2026-10-11: v0.1.1 (pre-release) at 6772ffc, the details pass: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.1. Built and published the v0.1.0 way. The combined on-screen check before it caught two bugs the four detail packages only showed together (see the M8 checklist).
 

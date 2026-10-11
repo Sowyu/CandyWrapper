@@ -139,7 +139,9 @@ sig_line=$(edkey | $sparkle_bin/sign_update --ed-key-file - $out/$zip)
 print -r -- "$sig_line" > $out/enclosure.txt
 
 if [[ -n $appcast_in ]]; then cp $appcast_in $out/appcast.old.xml
-elif ! curl -fsSL -o $out/appcast.old.xml $FEED_URL; then print "no published appcast yet, starting a new one"; rm -f $out/appcast.old.xml; fi
+# The query string skips GitHub's edge cache: a cached copy could be a stale feed, or a 404 from before the
+# feed existed, and a fetch of the bare URL can itself leave such a 404 cached for every client.
+elif ! curl -fsSL -o $out/appcast.old.xml "$FEED_URL?fetched=$(date +%s)"; then print "no published appcast yet, starting a new one"; rm -f $out/appcast.old.xml; fi
 
 notes_file=${notes:-$work/notes.md}
 [[ -n $notes ]] || print -r -- "- CandyWrapper $ver" > $notes_file
