@@ -1,0 +1,129 @@
+Building for debugging...
+[Computing dependencies]
+[2 / 6] Features
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:318:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+316 |     }
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:319:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+317 | 
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:320:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+318 |     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:321:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+319 |     nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:322:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+320 |     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:323:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+321 |     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:324:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+322 |     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:325:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+323 |     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:326:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+324 |     nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:327:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+325 |     nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:328:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+326 |     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:329:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+327 |     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+331 | 
+
+/Users/mrm/CandyWrapper/.claude/worktrees/astra-wp712c/Packages/CandyKit/Sources/Features/Markdown/FileLinks.swift:330:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+328 |     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
+329 |     nonisolated(unsafe) static let windowsDrive = regex(#"^[a-zA-Z]:([/\\]|$)"#)
+330 |     nonisolated(unsafe) static let slashDrive = regex(#"^/[A-Za-z]:[\\/]"#)
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSRegularExpression', consider removing it
+331 | 
+332 |     static let posixRoots = ["/Users/", "/home/", "/tmp/", "/var/", "/etc/", "/opt/", "/mnt/", "/Volumes/", "/private/", "/root/",
+[3 / 7] Features
+[7 / 9] Features
+[9 / 10] Features
+[10 / 11] FeaturesTests-product
+[12 / 12] FeaturesTests-product
+Build complete! (5,24 sec)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite PanelLeftoversFidelityTests started.
+◇ Test panelLeftovers() started.
+panel-leftovers review-card.rest.dark 3.76%
+panel-leftovers review-card.rest.light 3.58%
+panel-leftovers review-draft.rest.dark 3.42%
+panel-leftovers review-draft.rest.light 3.09%
+panel-leftovers host-failed.rest.light 1.93%
+panel-leftovers host-failed.rest.dark 1.83%
+panel-leftovers ssh-host-form.rest.dark 1.30%
+panel-leftovers ssh-host-form.rest.light 1.24%
+FIDELITY panel-leftovers: 8 cases, mean differing 2.52%
+✔ Test panelLeftovers() passed after 1.257 seconds.
+✔ Suite PanelLeftoversFidelityTests passed after 1.257 seconds.
+✔ Test run with 1 test in 1 suite passed after 1.258 seconds.

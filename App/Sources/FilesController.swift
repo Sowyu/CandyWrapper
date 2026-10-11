@@ -478,6 +478,7 @@ final class FilesController {
             if !call.isRepeat { self.reopenClosed() }
             return true
         }
+        shortcuts.onKey { [weak self] event in self?.panel.handleRightPanelSheetKey(event) ?? false }
         // The launcher's letters, outside typing contexts (`surfaceShortcutActionForKey`).
         shortcuts.onKey { [weak self] event in
             guard let self, self.panel.rightPanelOpen, self.panel.panelState.activeSurfaceId == nil,

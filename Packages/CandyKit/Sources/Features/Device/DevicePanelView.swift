@@ -11,6 +11,8 @@ public final class DevicePanelView: DSView {
     public private(set) var toolsDrawer: DeviceToolsDrawerView?
     private var toolsDeviceKey: String?
     public func closeTools() { onToolsClosed?(); toolsDrawer?.removeFromSuperview(); toolsDrawer = nil; toolsDeviceKey = nil; needsLayout = true }
+    public var onHostRequest: (([String: JSONValue]) -> Void)?
+    private var hostRows: [DeviceHostStatusView] = []
     public var onRefresh: (() -> Void)?
     public var onConfigure: (([String: JSONValue]) -> Void)?
     public var onOpen: ((DevicePanelDevice) -> Void)?
@@ -46,11 +48,13 @@ public final class DevicePanelView: DSView {
     public func apply(_ state: DevicePanelState?, thread: String, selected: String?) {
         self.state = state
         rows.forEach { $0.removeFromSuperview() }; rows = []
+        hostRows.forEach { $0.removeFromSuperview() }; hostRows = []
         rail.forEach { $0.removeFromSuperview() }; rail = []
         let sessions = state?.sessions.filter { $0.threadId == thread } ?? []
         let opened = state?.devices.filter { device in sessions.contains { $0.key == device.key } } ?? []
         active = opened.first { $0.key == selected } ?? opened.first
         if toolsDeviceKey != nil && toolsDeviceKey != active?.key { closeTools() }
+        if active?.platform != "android" { viewer.setThreeD(false) }
         let setupNeeded = state?.onboardingCompleted == false
         let busy = state?.hostStatus == "installing" || state?.hostStatus == "starting"
         setup.isEnabled = !busy; agent.isEnabled = !busy; done.isEnabled = !busy; refresh.isEnabled = !busy
@@ -69,6 +73,13 @@ public final class DevicePanelView: DSView {
             } else {
                 message.text = state.hostStatusDetail ?? (state.hostStatus == "installing" ? "Installing device support…" : state.devices.isEmpty ? "No simulators or emulators were found on this environment." : "")
             }
+            if active == nil {
+                for host in state.hosts {
+                    let row = DeviceHostStatusView(host: host, state: state)
+                    row.onRequest = { [weak self] in self?.onHostRequest?($0) }
+                    hostRows.append(row); addSubview(row)
+                }
+            }
             if !setupNeeded {
                 for device in state.devices {
                     let isOpen = opened.contains { $0.key == device.key }
@@ -86,6 +97,22 @@ public final class DevicePanelView: DSView {
                 button.action = { [weak self] in self?.onButton?(name) }
                 rail.append(button); addSubview(button)
             }
+            if active.platform == "android" {
+                let threeD = ButtonView(nil, icon: .box, variant: .ghost, size: .iconSm)
+                threeD.setAccessibilityLabel("3D view")
+                threeD.isEnabled = viewer.hasFrame
+                threeD.action = { [weak self] in self?.viewer.setThreeD(true) }
+                rail.append(threeD); addSubview(threeD)
+                let flat = ButtonView(nil, icon: .smartphone, variant: .ghost, size: .iconSm)
+                flat.setAccessibilityLabel("Flat view"); flat.isEnabled = viewer.hasFrame
+                flat.action = { [weak self] in self?.viewer.setThreeD(false) }
+                rail.append(flat); addSubview(flat)
+                viewer.onFrameAvailability = { [weak threeD, weak flat] available in threeD?.isEnabled = available; flat?.isEnabled = available }
+                let reset = ButtonView(nil, icon: .rotateCcw, variant: .ghost, size: .iconSm)
+                reset.setAccessibilityLabel("Restore 3D view")
+                reset.action = { [weak self] in self?.viewer.threeDView?.resetPose() }
+                rail.append(reset); addSubview(reset)
+            }
             let floating = ButtonView(nil, icon: .pictureInPicture2, variant: .ghost, size: .iconSm)
             floating.setAccessibilityLabel("Float device over chat")
             floating.action = { [weak self] in self?.onFloat?() }
@@ -100,6 +127,7 @@ public final class DevicePanelView: DSView {
             empty.detail = state?.hostStatusDetail ?? "No simulators or emulators were found on this environment."
             message.isHidden = true
         }
+        if !hostRows.isEmpty { empty.isHidden = true; message.isHidden = true }
         refresh.isHidden = !empty.isHidden
         if let toolsDrawer { addSubview(toolsDrawer, positioned: .above, relativeTo: nil) }
         needsLayout = true
@@ -119,7 +147,8 @@ public final class DevicePanelView: DSView {
         empty.frame = NSRect(x: 0, y: 40, width: bounds.width, height: max(0, bounds.height - 40))
         heading.frame = NSRect(x: 16, y: 8, width: max(0, bounds.width - 110), height: 24)
         tools.frame = NSRect(x: bounds.width - 70, y: 8, width: 60, height: 24)
-        var y: CGFloat = 44
+        var y: CGFloat = setup.isHidden && agent.isHidden ? 44 : 120
+        for row in hostRows { row.frame = NSRect(x: 16, y: y, width: max(0, bounds.width - 32), height: row.preferredHeight); y += row.preferredHeight + 8 }
         for row in rows { row.frame = NSRect(x: 16, y: y, width: max(0, bounds.width - 32), height: 28); y += 30 }
         viewer.frame = NSRect(x: 16, y: y + 8, width: max(0, bounds.width - 72), height: max(0, bounds.height - y - 58))
         for (i, button) in rail.enumerated() { button.frame = NSRect(x: bounds.width - 44, y: y + 12 + CGFloat(i) * 36, width: 28, height: 28) }
@@ -141,6 +170,24 @@ public final class DevicePanelStreamView: DSView {
     public override var acceptsFirstResponder: Bool { true }
     public override func keyDown(with event: NSEvent) { onKey?(event.keyCode, event.characters, true) }
     public override func keyUp(with event: NSEvent) { onKey?(event.keyCode, event.characters, false) }
+    public var onFrameAvailability: ((Bool) -> Void)?
+    public var hasFrame: Bool { latestImage != nil }
+    public private(set) var threeDView: DeviceThreeDView?
+    public var showsThreeD: Bool { threeDView != nil }
+    public func setThreeD(_ enabled: Bool) {
+        guard enabled != showsThreeD else { return }
+        if enabled {
+            let view = DeviceThreeDView(frame: bounds)
+            view.onTouch = { [weak self] in self?.onTouch?($0, $1, $2) }
+            view.onKey = { [weak self] in self?.onKey?($0, $1, $2) }
+            threeDView = view; addSubview(view)
+            if let image = latestImage { view.present(image) }
+        } else {
+            threeDView?.releaseResources(); threeDView?.removeFromSuperview(); threeDView = nil
+        }
+        screen.isHidden = enabled
+    }
+    private var latestImage: CGImage?
     private let screen = CALayer()
     private var size = CGSize(width: 390, height: 844)
     private var touching = false
@@ -152,12 +199,16 @@ public final class DevicePanelStreamView: DSView {
     }
     public func present(_ image: CGImage) {
         size = CGSize(width: image.width, height: image.height)
+        if latestImage == nil { onFrameAvailability?(true) }
+        latestImage = image
         screen.contents = image
+        threeDView?.present(image)
         needsLayout = true
     }
-    public func clear() { screen.contents = nil; touching = false }
+    public func clear() { setThreeD(false); onFrameAvailability?(false); latestImage = nil; screen.contents = nil; touching = false }
     public override func layout() {
         super.layout()
+        threeDView?.frame = bounds
         let rotate = size.width <= size.height
         let sideways = rotate && orientation.hasPrefix("landscape")
         let shown = sideways ? CGSize(width: size.height, height: size.width) : size

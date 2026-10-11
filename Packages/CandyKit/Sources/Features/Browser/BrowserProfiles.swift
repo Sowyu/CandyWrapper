@@ -14,6 +14,10 @@ public enum BrowserProfiles {
         }
         return profiles
     }
+    /// BrowserProfileReporter.tsx:36-42. The server owns one last-writer-wins report.
+    public static func reportPayload(_ settings: ClientSettings) -> JSONValue {
+        .object(["profiles": .array(Array(resolved(settings).dropFirst(2))), "defaultProfileId": .string(defaultId(settings))])
+    }
     public static func defaultId(_ settings: ClientSettings) -> String {
         let id = settings.string("browserDefaultProfileId")
         return id != "incognito" && resolved(settings).contains { $0["id"]?.stringValue == id } ? id : "default"

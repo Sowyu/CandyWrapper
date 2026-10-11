@@ -355,6 +355,7 @@ final class ThreadController {
         scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
         panel.confirmCloseTerminalTab = { [weak self] surface, close in self?.terminal.confirmCloseSurface(surface, then: close) }
+        panel.diffPanel.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
         panel.diffPanel.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
         terminal.onAddToChat = { [weak self] selection in self?.composer.addTerminalContext(selection) }
         clones.openProject = { [weak self, weak sidebar] id in

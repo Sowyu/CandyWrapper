@@ -24,7 +24,7 @@ public final class DiffPanelView: DSView {
             list.setDiff(UnifiedDiff(""))
             fileTree.model = FileTreeModel(); fileTree.changes = [:]
             searchMatches = []; searchIndex = 0
-            list.annotations = []; reviewDraft = nil; reviewStart = nil
+            list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
             hasDiff = false
         }
     }
@@ -43,8 +43,57 @@ public final class DiffPanelView: DSView {
     public var onOpenFile: (@MainActor (String) -> Void)? { didSet { list.onOpenFile = onOpenFile } }
 
     public var onReviewComment: ((JSONValue) -> Void)?
+    public var onDeleteReviewComment: ((String) -> Void)?
+    public var reviewComments: [JSONValue] = [] { didSet { if reviewComments != oldValue { rebuildReviewAnnotations() } } }
     private var reviewStart: (path: String, line: Int)?
     private var reviewDraft: DiffReviewAnnotationView?
+    private var reviewDraftAnchor: DiffAnnotation?
+    private var editingReviewId: String?
+
+    @discardableResult public func handleReviewEscape() -> Bool {
+        guard reviewDraft != nil else { return false }
+        reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
+        rebuildReviewAnnotations()
+        window?.makeFirstResponder(list)
+        return true
+    }
+    private func rebuildReviewAnnotations() {
+        // Drop cached cards when a record changes, including when editing switches view type.
+        list.annotations = []
+        let section = selectedRunId?.rawValue ?? "diff"
+        let records = reviewComments.filter { $0["sectionId"]?.stringValue == section && $0["contextId"]?.stringValue != editingReviewId }
+        var byId: [String: JSONValue] = [:]
+        var annotations: [DiffAnnotation] = []
+        for record in records {
+            guard let anchor = DiffReviewContext.anchor(record, diff: list.diff) else { continue }
+            annotations.append(anchor); byId[anchor.id] = record
+        }
+        if let reviewDraftAnchor { annotations.append(reviewDraftAnchor) }
+        list.annotationView = { [weak self] annotation in
+            guard let self else { return nil }
+            if annotation.id == self.reviewDraftAnchor?.id { return self.reviewDraft }
+            guard let record = byId[annotation.id] else { return nil }
+            let card = DiffReviewCommentCardView(text: record["text"]?.stringValue ?? "")
+            card.onDelete = { [weak self] in self?.onDeleteReviewComment?(annotation.id) }
+            card.onEdit = { [weak self] in self?.editReview(record, anchor: annotation) }
+            return card
+        }
+        list.annotations = annotations
+    }
+    private func editReview(_ record: JSONValue, anchor: DiffAnnotation) {
+        editingReviewId = anchor.id
+        let draft = DiffReviewAnnotationView(); reviewDraft = draft
+        draft.editor.text = record["text"]?.stringValue ?? ""
+        draft.submit.title = "Save"; draft.submit.isEnabled = true
+        reviewDraftAnchor = DiffAnnotation(path: anchor.path, right: anchor.right, line: anchor.line, id: "editing:" + anchor.id)
+        draft.onCancel = { [weak self] in self?.handleReviewEscape() }
+        draft.onSubmit = { [weak self] text in
+            guard let self, case .object(var values) = record else { return }
+            values["text"] = .string(String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(16000)))
+            self.onReviewComment?(.object(values)); self.handleReviewEscape()
+        }
+        rebuildReviewAnnotations(); window?.makeFirstResponder(draft.editor)
+    }
     private func beginReview(_ target: DiffLineTarget) {
         guard onReviewComment != nil, let file = list.diff.files.first(where: { $0.path == target.path }),
               let index = file.hunks.flatMap({ Array($0.lines) }).first(where: {
@@ -53,16 +102,16 @@ public final class DiffPanelView: DSView {
         if NSApp.currentEvent?.modifierFlags.contains(.shift) != true || reviewStart?.path != target.path { reviewStart = (target.path, index) }
         let start = reviewStart?.line ?? index
         let id = UUID().uuidString.lowercased()
-        let draft = reviewDraft ?? DiffReviewAnnotationView()
-        reviewDraft = draft
-        draft.onCancel = { [weak self] in self?.list.annotations = []; self?.reviewDraft = nil; self?.reviewStart = nil }
-        draft.onSubmit = { [weak self, weak draft] text in
+        let draft = editingReviewId == nil ? reviewDraft ?? DiffReviewAnnotationView() : DiffReviewAnnotationView()
+        editingReviewId = nil; reviewDraft = draft
+        draft.onCancel = { [weak self] in self?.handleReviewEscape() }
+        draft.onSubmit = { [weak self] text in
             guard let self, let record = DiffReviewContext.record(diff: self.list.diff, path: target.path, start: start, end: index,
                 text: text, section: self.selectedRunId?.rawValue ?? "diff", title: self.scopeButton.title ?? "Diff", id: id) else { return }
-            self.onReviewComment?(record); draft?.onCancel?()
+            self.onReviewComment?(record); self.handleReviewEscape()
         }
-        list.annotationView = { [weak self] _ in self?.reviewDraft }
-        list.annotations = [DiffAnnotation(path: target.path, right: target.right, line: target.right ? target.newLine : target.oldLine, id: id)]
+        reviewDraftAnchor = DiffAnnotation(path: target.path, right: target.right, line: target.right ? target.newLine : target.oldLine, id: id)
+        rebuildReviewAnnotations()
         window?.makeFirstResponder(draft.editor)
     }
     public let list = DiffListView()
@@ -267,8 +316,9 @@ public final class DiffPanelView: DSView {
         message.isHidden = true
         errorLine.isHidden = true
         scroll.isHidden = false
-        list.annotations = []; reviewDraft = nil; reviewStart = nil
+        list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
         list.setDiff(diff, collapsedByDefault: collapsed)
+        rebuildReviewAnnotations()
         fileTree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
         fileTree.model = DiffPanelSearch.tree(diff)
         if !find.isHidden { search() }

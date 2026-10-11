@@ -1,4 +1,12 @@
 {
+  "host-failed" : {
+    "height" : 132,
+    "width" : 480
+  },
+  "review-card" : {
+    "height" : 40,
+    "width" : 480
+  },
   "review-draft" : {
     "height" : 114,
     "width" : 480
