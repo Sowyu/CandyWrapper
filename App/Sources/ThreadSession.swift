@@ -313,6 +313,20 @@ final class ThreadController {
             return url
         }
         panel.model.onOpenHtmlRender = { [weak self] url, _ in self?.browser.openURL(url.absoluteString) }
+        panel.model.onOpenThread = { [weak self] local in
+            guard let self, let env = self.openThreadId?.environmentId else { return }
+            self.open(local.scoped(to: env))
+        }
+        panel.model.threadTitle = { [weak self, weak sidebar] local in
+            guard let env = self?.openThreadId?.environmentId,
+                  let shell = sidebar?.snapshot?.threads.first(where: { $0.id == local.scoped(to: env) }) else { return nil }
+            let title = shell.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return title.isEmpty ? nil : title
+        }
+        panel.model.onOpenScheduledTask = { [weak self] taskId in
+            guard let self, let env = self.openThreadId?.environmentId else { return }
+            self.automations.openSettings?(env, taskId)
+        }
         panel.model.mcpApp = McpAppActions(
             request: { [weak self] method, payload in
                 guard let self, let env = self.openThreadId?.environmentId else { throw Environments.CommandError.notConnected }
@@ -513,6 +527,8 @@ final class ThreadController {
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
         self.session = session
+        // composer.showThread fired onTargetChange before the session was set, so sync now.
+        automations.sync()
         terminal.show(id)
         scripts.show(id)
         updateEnvironmentBanner()

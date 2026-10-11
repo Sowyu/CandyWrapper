@@ -100,6 +100,13 @@ public final class ThreadViewModel {
     public var webAssetURL: (@MainActor (_ attachmentId: String, _ fileName: String) async -> URL?)?
     /// "Open in panel" on an HTML render: its URL and file name.
     public var onOpenHtmlRender: (@MainActor (URL, String) -> Void)?
+    /// Opens another thread of this environment by its local id (`onOpenThread`): a created thread's
+    /// "Open chat", a subagent card, a fork divider, "Sent by another agent".
+    public var onOpenThread: (@MainActor (ThreadId) -> Void)?
+    /// A live, unarchived thread's title by local id (`threadReadTargetTitle`): `t3_thread_read` rows name it.
+    public var threadTitle: (@MainActor (ThreadId) -> String?)?
+    /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
+    public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     public var mcpApp: McpAppActions?
     private var webContentHeights: [String: Double] = [:]
     private var closedApps: Set<String> = []

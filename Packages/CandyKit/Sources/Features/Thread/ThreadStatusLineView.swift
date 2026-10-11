@@ -57,9 +57,12 @@ public final class ThreadStatusLineView: DSView {
     }
 }
 
-/// `InlineButton tone="muted"` (button.tsx:103-118): medium, muted, foreground and underlined on hover, 64% disabled.
+/// `InlineButton` (button.tsx:103-118): medium, underlined on hover, 64% disabled. `tone="muted"` is
+/// muted and turns foreground on hover; the default tone stays foreground.
 final class ThreadStatusLineAction: ControlView {
+    enum Tone { case muted, foreground, primary }
     let label = LabelView("", font: DSFont.ui(12, weight: .medium))
+    var tone = Tone.muted { didSet { restyle() } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -76,7 +79,8 @@ final class ThreadStatusLineAction: ControlView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
-        label.color = state.hovered ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
+        label.color = tone == .primary ? Themed.color(\.primary)
+            : state.hovered || tone == .foreground ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
         label.isUnderlined = state.hovered
         setAccessibilityLabel(label.text)
     }

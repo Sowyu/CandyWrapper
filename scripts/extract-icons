@@ -174,9 +174,14 @@ for key, ks in groups.items():
     if len(ks) > 1: print("alias group %s -> %s" % (ks, pick), file=sys.stderr)
     chosen[pick] = lucide[pick]
 
-# ---------- 3. brand icons from Icons.tsx ----------
+# ---------- 3. brand icons from Icons.tsx (plus T3Wordmark and BrowserAppIcon) ----------
 tsx = open(os.path.join(SRC, "components/Icons.tsx"), encoding="utf-8").read()
 blocks = re.split(r"\nexport const (?=\w+)", "\n" + tsx)[1:]
+# Glyphs T3 keeps outside Icons.tsx: the wordmark on T3 tool rows and the agent browser's app icon.
+for rel, fn in (("components/T3Wordmark.tsx", "T3Wordmark"), ("components/chat/MessagesTimeline.tsx", "BrowserAppIcon")):
+    src = open(os.path.join(SRC, rel), encoding="utf-8").read()
+    at = src.index("function " + fn + "(")
+    blocks.append(fn + src[at + len("function " + fn):src.index("</svg>", at) + len("</svg>")])
 ATTR = re.compile(r'([\w-]+)\s*=\s*(?:"([^"]*)"|\{([^{}]*)\})', re.S)
 TAG = re.compile(r"<(/?)(\w+)((?:[^<>{}]|\{[^{}]*\})*?)(/?)>", re.S)
 brand, brand_skipped = {}, {}

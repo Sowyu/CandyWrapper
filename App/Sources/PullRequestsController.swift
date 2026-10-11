@@ -648,18 +648,28 @@ final class ThreadPullRequestsController {
     /// The details card's pull request rows (ThreadDetailsPrRows.tsx, ThreadDetailsPrRow.tsx): the
     /// current link as "#n: title" in its state's glyph and tone, then the rest of the thread's links
     /// while expanded. Each opens its pull request in the right panel.
+    /// A watched link's eye stops the watch (ThreadDetailsPrRows.tsx:77-93); the server ends a watch
+    /// when the pull request closes, so only an open one shows it.
     // ponytail: rows show the linked snapshot only; T3 reads the detail and checks for the second line
-    // (checks, watch, Resolve/Ready/Fix/Merge). Add it when a server here can read a host
+    // (checks, Resolve/Ready/Fix/Merge). Add it when a server here can read a host
     private func updateCardRows(_ thread: ThreadShell) {
         let links = ThreadPullRequests.visible(thread.pullRequests ?? [])
         let current = ThreadPullRequests.current(links)
         let expanded = expandedCards.contains(thread.id)
-        let key = "\(thread.id.rawValue)|\(expanded)|" + links.map { "\($0.key.id):\($0.snapshot?.state.rawValue ?? "-"):\($0.snapshot?.isDraft == true):\($0.snapshot?.title ?? "")" }.joined(separator: ",")
-            + "|\(thread.linkedPullRequest?.url ?? "")"
+        // The capability can arrive after the first rows.
+        let canWatch = thread.id.environmentId.map { capabilities.has($0, "threadPullRequestWatch") } ?? false
+        let key = "\(thread.id.rawValue)|\(expanded)|" + links.map { "\($0.key.id):\($0.snapshot?.state.rawValue ?? "-"):\($0.snapshot?.isDraft == true):\($0.snapshot?.title ?? ""):\($0.watch != nil)" }.joined(separator: ",")
+            + "|\(thread.linkedPullRequest?.url ?? "")|\(canWatch)"
         guard key != cardKey else { return }
         cardKey = key
-        func row(number: Int, title: String?, state: PullRequestState?, isDraft: Bool, open: @escaping @MainActor @Sendable () -> Void) -> DetailsRowControl {
+        func row(number: Int, title: String?, state: PullRequestState?, isDraft: Bool, link: ThreadPullRequestLink? = nil,
+                 open: @escaping @MainActor @Sendable () -> Void) -> DetailsRowControl {
             let r = DetailsRowControl(kind: .row)
+            if let link, canWatch, link.watch != nil, (state ?? .open) == .open {
+                let eye = PullRequestWatchToggle(number: number)
+                eye.action = { [weak self] in self?.watch(link, false) }
+                r.trailing = eye
+            }
             let tone = state.map { PullRequestStateTone(state: $0.rawValue, isDraft: isDraft) }
             r.icons = [(tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow).definition]
             r.iconColor = tone.map(PullRequestStyle.color)
@@ -670,12 +680,12 @@ final class ThreadPullRequestsController {
         }
         var rows: [DetailsRowControl] = []
         if let current {
-            rows.append(row(number: current.number, title: current.snapshot?.title, state: current.snapshot?.state, isDraft: current.snapshot?.isDraft ?? false) { [weak self] in self?.open(current) })
+            rows.append(row(number: current.number, title: current.snapshot?.title, state: current.snapshot?.state, isDraft: current.snapshot?.isDraft ?? false, link: current) { [weak self] in self?.open(current) })
             let rest = ThreadPullRequests.lines(links).map(\.link).filter { $0.key.id != current.key.id }
             if !rest.isEmpty {
                 if expanded {
                     for link in rest {
-                        rows.append(row(number: link.number, title: link.snapshot?.title, state: link.snapshot?.state, isDraft: link.snapshot?.isDraft ?? false) { [weak self] in self?.open(link) })
+                        rows.append(row(number: link.number, title: link.snapshot?.title, state: link.snapshot?.state, isDraft: link.snapshot?.isDraft ?? false, link: link) { [weak self] in self?.open(link) })
                     }
                 }
                 let toggle = DetailsRowControl(kind: .row)

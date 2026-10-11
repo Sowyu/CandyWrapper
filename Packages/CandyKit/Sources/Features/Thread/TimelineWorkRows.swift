@@ -28,8 +28,8 @@ enum WorkIcons {
         case "read": .eye
         case "edit": .squarePen
         case "command": .terminal
-        case "thread-create": .messageSquare
-        case "browser": .globe2
+        case "thread-create": .brandT3Wordmark
+        case "browser": .brandBrowserApp
         case "device": .smartphone
         case "search": .globe
         case "code-search": .search
@@ -41,8 +41,19 @@ enum WorkIcons {
         }
     }
 
+    /// A T3 tool's `icon` (t3McpToolPresentation.ts): the wordmark, the browser app glyph, a phone or a pull request.
+    static func tool(_ icon: String?) -> IconName? {
+        switch icon {
+        case "t3-code": .brandT3Wordmark
+        case "browser": .brandBrowserApp
+        case "device": .smartphone
+        case "pull-request": .gitPullRequestArrow
+        default: nil
+        }
+    }
+
     /// `workEntryIconName` (MessagesTimeline.tsx:5267-5303), first match wins.
-    // ponytail: T3 MCP tool icons, favicons and app icons fall back to lucide glyphs; add the image icons with MCP tools
+    // ponytail: favicons and themed app logos (`ToolActivityIcon`) fall back to lucide glyphs; port them with provider tool sources
     static func entry(_ e: WorkLogEntry) -> IconName {
         if e.itemType == .notification {
             let raw = e.projectedItem?.item
@@ -56,6 +67,7 @@ enum WorkIcons {
             }
         }
         if e.itemType == .userInputRequest || e.itemType == .approvalRequest { return .messageCircle }
+        if let icon = tool(WorkLog.toolPresentation(e)?.icon) { return icon }
         let action = WorkLog.toolGroupAction(e)
         if action != .other { return summary(action.rawValue) }
         if e.itemType == .dynamicTool { return .wrench }
@@ -250,6 +262,12 @@ final class WorkLineView: DSView {
     private let chevron = IconView(name: .chevronRight, size: 12)
     private let chevronOpen = IconView(name: .chevronDown, size: 12)
     private var expanded = false
+    /// "Open chat" after a created thread's label (MessagesTimeline.tsx:5674-5687, `text-sm text-primary`).
+    private var trailingAction: ThreadStatusLineAction?
+    /// A `t3_thread_read` row names its thread: the label holds `Read thread “`, then the linked title
+    /// (`text-foreground`, underlined on hover) and the closing quote (ThreadReadLabel, :3930-3958).
+    private var threadLink: ThreadStatusLineAction?
+    private let threadLinkClose = LabelView("\u{201D}", font: TL.font(14), color: TL.c(\.secondaryLabel))
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
     /// The chevron cell is `invisible` (still 16px) when there is nothing to expand.
@@ -274,7 +292,53 @@ final class WorkLineView: DSView {
         }
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// The row takes clicks (it toggles the entry), except on the line's own buttons.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        for control in [trailingAction, threadLink] {
+            if let control, !control.isHidden, control.frame.contains(local) { return control }
+        }
+        return nil
+    }
+
+    func setTrailingAction(_ title: String?, _ action: (@MainActor () -> Void)?) {
+        if title != nil, trailingAction == nil {
+            let a = ThreadStatusLineAction()
+            a.label.font = TL.font(14)
+            a.label.lineHeight = 24
+            a.tone = .primary
+            addSubview(a)
+            trailingAction = a
+        }
+        trailingAction?.isHidden = title == nil
+        trailingAction?.label.text = title ?? ""
+        trailingAction?.setAccessibilityLabel(title)
+        trailingAction?.action = action
+        needsLayout = true
+    }
+
+    /// Shows `prefix “title”` with the title opening its thread; nil restores the plain label.
+    func setThreadLink(prefix: String?, title: String?, _ action: (@MainActor () -> Void)?) {
+        if let prefix, let title {
+            if threadLink == nil {
+                let l = ThreadStatusLineAction()
+                l.label.font = TL.font(14)
+                l.label.lineHeight = 24
+                l.tone = .foreground
+                threadLinkClose.lineHeight = 24
+                addSubview(l)
+                addSubview(threadLinkClose)
+                threadLink = l
+            }
+            label.text = prefix + " \u{201C}"
+            threadLink?.label.text = title
+            threadLink?.setAccessibilityLabel(title)
+            threadLink?.action = action
+        }
+        threadLink?.isHidden = prefix == nil || title == nil
+        threadLinkClose.isHidden = threadLink?.isHidden ?? true
+        needsLayout = true
+    }
 
     func configure(icon: IconName, text: String, style: Style, failed: Bool = false, time timestamp: T3Timestamp?, expanded: Bool, active: Bool = false, now: Date) {
         if icon != iconName {
@@ -315,8 +379,20 @@ final class WorkLineView: DSView {
         chevronOpen.frame = chevron.frame
         let timeWidth = showsTime ? ceil(time.textWidth) : 0
         time.frame = NSRect(x: chevronX - 6 - timeWidth, y: 4, width: timeWidth, height: 16)
-        let right = showsTime ? time.frame.minX - 6 : chevronX - 6
+        var right = showsTime ? time.frame.minX - 6 : chevronX - 6
+        if let a = trailingAction, !a.isHidden {
+            let w = a.preferredWidth
+            a.frame = NSRect(x: right - w, y: 0, width: w, height: h)
+            right = a.frame.minX - 6
+        }
         label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, right - 30)), height: h)
+        if let link = threadLink, !link.isHidden {
+            // The three runs sit flush, as inline text does.
+            let closeWidth = ceil(threadLinkClose.textWidth) + 1
+            let x = min(label.frame.maxX, 30 + label.textWidth)
+            link.frame = NSRect(x: x, y: 0, width: max(0, min(link.preferredWidth, right - closeWidth - x)), height: h)
+            threadLinkClose.frame = NSRect(x: min(link.frame.maxX, x + link.label.textWidth), y: 0, width: closeWidth, height: h)
+        }
     }
 }
 
@@ -373,6 +449,13 @@ final class WorkRowView: WorkRowBase {
             let l = line(i)
             l.configure(icon: icon, text: label, style: style, failed: failed, time: e.createdAt, expanded: open, now: context.now())
             l.expandable = !detail.isEmpty
+            let model = context.model
+            let created = e.projectedItem?.item.type == .threadCreated ? e.projectedItem?.string("targetThreadId").map { ThreadId($0) } : nil
+            l.setTrailingAction(created == nil ? nil : "Open chat", created.map { id in { model?.onOpenThread?(id) } })
+            let readTarget = WorkLog.threadReadTargetId(e).map { ThreadId($0) }
+            let readTitle = readTarget.flatMap { model?.threadTitle?($0) }
+            l.setThreadLink(prefix: readTitle == nil ? nil : WorkLog.threadReadLabelPrefix(label), title: readTitle,
+                            readTarget.map { id in { model?.onOpenThread?(id) } })
             if pinnedTime.count <= i { pinnedTime.append(false) }
             pinnedTime[i] = severe
             l.showsTime = hovered || severe
@@ -452,8 +535,7 @@ final class WorkToggleRowView: WorkRowBase {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .workToggle(let t) = item.row.kind else { return }
-        let icon: IconName = t.summaryToolIcon == "device" ? .smartphone : t.summaryToolIcon == "pull-request" ? .gitPullRequestArrow
-            : WorkIcons.summary(t.summaryKind)
+        let icon = WorkIcons.tool(t.summaryToolIcon) ?? WorkIcons.summary(t.summaryKind)
         let l = line(0)
         l.configure(icon: icon, text: t.summary, style: .tool, failed: t.hasFailure, time: item.row.createdAt, expanded: false, now: context.now())
         l.expandable = false
