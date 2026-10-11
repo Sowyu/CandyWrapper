@@ -54,6 +54,18 @@ public final class ToastView: DSView {
     public var descriptionButton: ButtonView? {
         didSet { oldValue?.removeFromSuperview(); descriptionButton.map(content.addSubview); needsLayout = true; onHeightChange?() }
     }
+    /// A link that flows inline after the description's last word (`ml-2 inline`), such as the update toast's
+    /// "Read more" (desktopUpdate.toast.tsx:24-47). It wraps to its own line when the last line is full.
+    public func setMessageLink(_ title: String, action: @escaping @MainActor () -> Void) {
+        messageLink?.removeFromSuperview()
+        let link = ToastInlineLinkView(title)
+        link.action = action
+        content.addSubview(link)
+        messageLink = link
+        needsLayout = true
+        onHeightChange?()
+    }
+    private var messageLink: ToastInlineLinkView?
     private let chevron = IconView(name: .chevronDown, size: 14)
     private let chevronOpen = IconView(name: .chevronUp, size: 14)
     private let detailList = ToastDetailListView()
@@ -145,7 +157,7 @@ public final class ToastView: DSView {
 
     private struct Frames {
         var icon = CGRect.zero, title = CGRect.zero, message = CGRect.zero, action = CGRect.zero, secondary = CGRect.zero
-        var chevron = CGRect.zero, details = CGRect.zero, descriptionButton = CGRect.zero
+        var chevron = CGRect.zero, details = CGRect.zero, descriptionButton = CGRect.zero, messageLink = CGRect.zero
         var height: CGFloat = 0
     }
 
@@ -175,7 +187,16 @@ public final class ToastView: DSView {
         let titleHeight = titleText.height(forWidth: right - textX)
         // With details the description shares its row with the chevron (`gap-1.5`, `size-3.5`).
         let messageRight = details == nil ? right : right - 6 - 14
-        let messageHeight = hasMessage ? messageText.height(forWidth: messageRight - left) : 0
+        var messageHeight = hasMessage ? messageText.height(forWidth: messageRight - left) : 0
+        if let messageLink, hasMessage {
+            let lines = messageText.layout(forWidth: messageRight - left)
+            let last = lines.widths.last ?? 0
+            let w = messageLink.intrinsicContentSize.width
+            let fits = last + 8 + w <= messageRight - left
+            if !fits { messageHeight += 20 }
+            f.messageLink = CGRect(x: fits ? left + ceil(last) + 8 : left, y: CGFloat(fits ? lines.lines.count - 1 : lines.lines.count) * 20,
+                                   width: w, height: 20)
+        }
         // `mt-2 max-h-40` under the description while open, after the body column's `gap-0.5`.
         let detailsHeight = expanded ? min(160, detailList.height(forWidth: right - left - 2)) : 0
         let buttonSize = descriptionButton?.intrinsicContentSize ?? .zero
@@ -187,6 +208,7 @@ public final class ToastView: DSView {
         f.icon = CGRect(x: left, y: columnTop + 2, width: 16, height: 16)
         f.title = CGRect(x: textX, y: columnTop, width: right - textX, height: titleHeight)
         f.message = CGRect(x: left, y: columnTop + titleHeight + 2, width: messageRight - left, height: messageHeight)
+        f.messageLink.origin.y += f.message.minY
         f.descriptionButton = CGRect(x: messageRight - buttonSize.width, y: f.message.maxY + 8, width: buttonSize.width, height: buttonSize.height)
         f.chevron = CGRect(x: messageRight + 6, y: f.message.minY + 2, width: 14, height: 14)
         f.details = CGRect(x: left, y: f.message.maxY + buttonRow + 10, width: right - left, height: detailsHeight)
@@ -212,6 +234,7 @@ public final class ToastView: DSView {
         chevron.frame = f.chevron
         chevronOpen.frame = f.chevron
         descriptionButton?.frame = f.descriptionButton
+        messageLink?.frame = f.messageLink
         if expanded {
             detailScroll.frame = f.details
             detailList.frame = CGRect(x: 0, y: 0, width: f.details.width - 2, height: detailList.height(forWidth: f.details.width - 2))
@@ -284,6 +307,59 @@ public final class ToastView: DSView {
             if messageText.frame.union(chevron.frame).insetBy(dx: 0, dy: -2).contains(local) { toggleDetails(); return }
         }
         onSwipe?(CGPoint(x: p.x - start.x, y: start.y - p.y), true)
+    }
+}
+
+/// The inline description link: 14px muted text, dotted underline 4px under the baseline, then a 12px
+/// arrow turned -45deg (`ml-1 inline size-3 -rotate-45`, strokeWidth 2.25); hover turns it foreground.
+final class ToastInlineLinkView: ControlView {
+    private let label: LabelView
+    private let arrow = IconView(name: .arrowRight, size: 12)
+    private let underline = CAShapeLayer()
+
+    init(_ title: String) {
+        label = LabelView(title, font: DSFont.ui(14))
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        transitions = .colors
+        label.lineHeight = 20
+        arrow.strokeWidth = 2.25
+        arrow.setRotation(-45, motion: .none)
+        addSubview(label)
+        addSubview(arrow)
+        underline.fillColor = nil
+        underline.lineWidth = 1
+        underline.lineDashPattern = [1, 1]
+        underline.actions = ["path": NSNull(), "strokeColor": NSNull()]
+        layer?.addSublayer(underline)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+        restyle()
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 4 + 12, height: 20) }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
+
+    private func restyle() {
+        let color = Themed.color(state.hovered ? \.contrastForeground : \.contrastMutedForeground)
+        label.color = color
+        arrow.strokeColor = color
+        underline.strokeColor = color.cgColor(in: self)
+    }
+
+    override func layout() {
+        super.layout()
+        let w = ceil(label.textWidth)
+        label.frame = NSRect(x: 0, y: 0, width: w, height: 20)
+        // `align-[-0.125em]`: the glyph's bottom sits 1.75px under the baseline.
+        arrow.frame = NSRect(x: w + 4, y: 5.5, width: 12, height: 12)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 0, y: 19.5)); path.addLine(to: CGPoint(x: w, y: 19.5))
+        underline.frame = bounds
+        underline.path = path
     }
 }
 

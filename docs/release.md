@@ -27,6 +27,17 @@ security find-generic-password -s dev.candywrapper.sparkle-ed25519 -w "$KC" | si
 
 Losing the EdDSA key can strand every installed copy until its owner reinstalls by hand. The backup folder sits on the same Mac and holds the identity but not the EdDSA seed, so it protects against a damaged keychain at best. An off-machine backup of both is still an open question for the user.
 
+## scripts/release
+
+Since Milestone 9 one command makes a release from a commit: `scripts/release --notes notes.md [--channel nightly] [--dry-run] <commit>`.
+
+1. It unlocks the release keychain, then builds Release (arm64) in a clean worktree of the commit.
+2. It strips the executable, thins Sparkle to arm64 and signs inside-out with `CandyWrapper Release`: Autoupdate, Updater.app, the framework, then the app with App/Resources/CandyWrapper.entitlements. Library validation is off there, or Sparkle does not load under a certificate without a Team ID.
+3. It writes `CandyWrapper-<version>-arm64.zip` (ditto, symlinks kept) and a DMG, signs the zip with `sign_update` (seed on stdin), adds the item to the published appcast with earlier items kept, and signs the appcast. A build number already in the appcast stops it.
+4. Without `--dry-run` it creates the GitHub release `v<version>` (a pre-release on the nightly channel), uploads zip and DMG, checks their downloads, then replaces `appcast.xml` on the `appcast` release, creating that release the first time.
+
+Raise `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in project.yml first: Sparkle compares the build number. The notes file is both the release body and the appcast description, which the app's release notes popover reads. The test options (`--source`, `--bundle-id`, `--version`, `--build`, `--feed-url`, `--public-key`, `--ed-key-file`, `--download-prefix`, `--appcast`) work only with `--dry-run`.
+
 ## Manual release, v0.1.0 to v0.1.2
 
 The Log in PROGRESS.md describes it: a Release build from a clean worktree of the commit, `strip -x -S`, ad-hoc signing with the hardened runtime, a copy with a test bundle id checked in `--snapshot` mode, `ditto -c -k --sequesterRsrc --keepParent`, SHA-256 in the notes, an annotated tag, and the GitHub REST API through `git credential fill` (no `gh` here) to create the release and upload the zip. `/tmp/cw-release3/publish.py` was the v0.1.2 publisher. Milestone 9 replaces this with `scripts/release`.

@@ -73,6 +73,9 @@ public final class SidebarContentView: DSView {
     let undoNotice = SidebarUndoNoticeView()
     /// `SidebarProviderUpdatePill` between the undo notice and the utility buttons.
     public let providerUpdatePill = SidebarProviderUpdatePillView()
+    /// `SidebarUpdatePill` at the end of the utility row (SidebarChrome.tsx:234). T3 renders it only in the
+    /// desktop app (SidebarUpdatePill.tsx:111-113); hidden until the app shows it.
+    public let updatePill = SidebarUpdatePillView()
 
     public var actions = SidebarActions() { didSet { wireActions() } }
     public private(set) var snapshot: ShellSnapshot?
@@ -147,9 +150,10 @@ public final class SidebarContentView: DSView {
         undoNotice.shortcut = undoShortcut
         backButton.isHidden = true
         for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton,
-                  backButton, undoNotice, providerUpdatePill] as [NSView] {
+                  backButton, undoNotice, providerUpdatePill, updatePill] as [NSView] {
             addSubview(v)
         }
+        updatePill.isHidden = true
         providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
@@ -661,7 +665,10 @@ public final class SidebarContentView: DSView {
             fx += 36
         }
         backButton.isHidden = !isOnUtilityPage
-        backButton.frame = NSRect(x: 8, y: menuTop, width: w - 16, height: 32)
+        // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
+        let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
+        backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
+        updatePill.frame = NSRect(x: w - 8 - 32, y: menuTop, width: 32, height: 32)
         scrollArea.frame = NSRect(x: 0, y: 100, width: w, height: max(0, footerTop - 100))
         list.frame.size.width = w
         list.needsLayout = true

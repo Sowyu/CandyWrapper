@@ -382,17 +382,37 @@ public final class GeneralSettingsView: SettingsPageBase {
     }
 
     private func aboutSection() -> SettingsSectionView {
+        // AboutVersionSection (SettingsPanels.tsx:280-496).
         let check = ButtonView("Check for Updates", variant: .outline, size: .sm)
-        // ponytail: CandyWrapper updates itself in milestone 9; the update rows show T3's controls without actions
-        check.isEnabled = false
+        let checkTip = TooltipController.attach(to: check, text: "")
+        check.action = { [weak self] in self?.context.updateButton?() }
         let version = VersionTitleView()
         let versionRow = row(nil, title: "Version", detail: "Current version of the application.", control: check)
         versionRow.accessories = [version]
-        binder.add { [weak self] in version.version = self?.context.appVersion ?? "" }
+        binder.add { [weak self, weak check, weak versionRow] in
+            guard let self, let check, let versionRow else { return }
+            version.version = self.context.appVersion
+            let update = self.context.update
+            let look = DesktopUpdateLogic.settingsButton(update)
+            if check.title != look.label { check.title = look.label; versionRow.needsLayout = true }
+            check.isEnabled = !look.disabled && !self.context.updateActionPending
+            checkTip.text = update.map(DesktopUpdateLogic.buttonTooltip) ?? ""
+            if versionRow.detail != look.description { versionRow.detail = look.description }
+        }
         let track = settingsSelect(["Stable", "Nightly"], width: 160)
         track.setAccessibilityLabel("Update track")
-        track.selectedIndex = 1
-        track.isEnabled = false
+        track.onChange = { [weak self] index in
+            let channel: DesktopUpdateState.Channel = index == 0 ? .latest : .nightly
+            guard let self, channel != self.context.update?.channel else { return }
+            self.context.setUpdateTrack?(channel)
+        }
+        binder.add { [weak self, weak track] in
+            guard let self, let track else { return }
+            // `updateState?.channel ?? "latest"` (:286).
+            let index = (self.context.update?.channel ?? .latest) == .nightly ? 1 : 0
+            if track.selectedIndex != index { track.selectedIndex = index }
+            track.isEnabled = !self.context.changingUpdateTrack
+        }
         let trackRow = row(nil, title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }

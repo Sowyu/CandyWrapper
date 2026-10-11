@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The self-signed release identity has no Team ID, so the hardened runtime's library validation
+	     refuses to map Sparkle.framework ("mapping process and mapped file (non-platform) have different
+	     Team IDs"), checked on a real build on 2026-10-11. A Developer ID build would not need this. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

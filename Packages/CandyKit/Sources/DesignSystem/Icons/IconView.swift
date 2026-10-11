@@ -10,6 +10,10 @@ public final class IconView: NSView {
     /// Fixed-color glyph: unfilled shapes stay unfilled.
     private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
+    /// The glyph's layers, each centered on the icon, for a motion the whole glyph runs (a spin).
+    public var shapeLayers: [CAShapeLayer] { shapes.map(\.layer) }
+    /// lucide's `strokeWidth` prop, in viewBox units; nil keeps the glyph's own (2).
+    public var strokeWidth: CGFloat? { didSet { if strokeWidth != oldValue { relayout() } } }
 
     public var strokeColor: NSColor { didSet { applyColors() } }
     /// Fills `currentColor` fills, and the otherwise unfilled shapes of lucide icons.
@@ -101,7 +105,7 @@ public final class IconView: NSView {
                 s.layer.bounds = bounds
                 s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
-                s.layer.lineWidth = s.element.paint.strokeWidth * scale
+                s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * scale
             }
         }
     }
