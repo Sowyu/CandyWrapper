@@ -39,12 +39,18 @@ public struct ThreadChangeSet: Sendable, Equatable {
     public var historyChanged = false
     public var synchronized = false
     public var deleted = false
+    /// Every projection change in the set only grew the text of a streaming answer or reasoning
+    /// item, so what reads runs, requests, plans or ids can skip it.
+    public var onlyStreamingText = false
 
     public init() {}
 
     public var isEmpty: Bool { !projectionChanged && !reset && !historyChanged && !synchronized && !deleted }
 
     public mutating func merge(_ later: ThreadChangeSet) {
+        if later.projectionChanged {
+            onlyStreamingText = projectionChanged ? onlyStreamingText && later.onlyStreamingText : later.onlyStreamingText
+        }
         projectionChanged = projectionChanged || later.projectionChanged
         reset = reset || later.reset
         historyChanged = historyChanged || later.historyChanged
@@ -338,7 +344,30 @@ public struct ThreadReducer: Sendable {
         }
         projection = next
         changes.projectionChanged = true
+        changes.onlyStreamingText = Self.growsStreamingText(event, in: current)
         return changes
+    }
+
+    /// A `message.updated` or `turn-item.updated` that changes only the text and update time of an
+    /// assistant message or reasoning item that was and still is streaming.
+    static func growsStreamingText(_ event: ThreadEvent, in projection: ThreadProjection) -> Bool {
+        switch event.payload {
+        case .message(let message):
+            guard message.streaming, let old = projection.messages.last(where: { $0.id == message.id }), old.streaming else { return false }
+            var same = old
+            same.text = message.text
+            same.updatedAt = message.updatedAt
+            return same == message
+        case .turnItem(let item):
+            guard item.streaming, item.type == .assistantMessage || item.type == .reasoning,
+                  let old = projection.turnItems.last(where: { $0.id == item.id }), old.streaming, old.type == item.type,
+                  case .object(var x) = old.raw, case .object(var y) = item.raw
+            else { return false }
+            for key in ["text", "updatedAt"] { x[key] = nil; y[key] = nil }
+            return x == y
+        default:
+            return false
+        }
     }
 
     // MARK: Load earlier (threads.ts:637-749)

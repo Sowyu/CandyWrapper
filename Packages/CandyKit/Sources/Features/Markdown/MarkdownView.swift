@@ -25,6 +25,7 @@ public final class MarkdownView: DSView {
             clearAssistantSelection(); unwrappedCode = []; diagramCode = []
             let previous = toggled ? nil : cache[bounds.width]
             invalidate(redraw: previous == nil)
+            reusable = previous
             if let previous { redrawChanges(from: previous, oldBlocks: oldValue.blocks) }
             observeDiagrams()
         }
@@ -100,6 +101,9 @@ public final class MarkdownView: DSView {
     }
     private var unwrappedCode: Set<Int> = []
     private var cache: [CGFloat: MarkdownLayout] = [:]
+    /// The layout before the last document change, whose unchanged leading blocks the next layout
+    /// at its width keeps. Only a document change sets it; any other invalidation drops it.
+    private var reusable: MarkdownLayout?
     private var buttons: [ButtonView] = []
     private var chipViews: [FileChipHitView] = []
     private var imageViews: [AsyncImageView] = []
@@ -143,6 +147,7 @@ public final class MarkdownView: DSView {
 
     private func invalidate(redraw: Bool = true) {
         cache.removeAll()
+        reusable = nil
         invalidateIntrinsicContentSize()
         needsLayout = true
         if redraw { needsDisplay = true }
@@ -173,7 +178,9 @@ public final class MarkdownView: DSView {
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
-                                  unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips)
+                                  unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
+                                  reusing: reusable?.width == width ? reusable : nil)
+        if reusable?.width == width { reusable = nil }
         cache[width] = made
         return made
     }

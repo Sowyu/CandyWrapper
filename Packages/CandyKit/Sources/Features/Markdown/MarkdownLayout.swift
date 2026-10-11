@@ -232,17 +232,46 @@ public final class MarkdownLayout {
     /// The y of each top-level block, so a streaming update can redraw from its first changed block down.
     public private(set) var blockTops: [CGFloat] = []
 
+    /// What a later layout of the same message reuses: its top-level blocks, where the flow stood
+    /// after each, and the inputs every block's layout depends on.
+    fileprivate private(set) var rootBlocks: [MarkdownBlock] = []
+    fileprivate private(set) var rootEnds: [RootEnd] = []
+    private var reuseKey: ReuseKey?
+    /// The flow after one top-level block: the items and controls so far, the y below the block,
+    /// its own bottom margin (before the root zeroes the last one) and the next code block index.
+    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int }
+    private struct ReuseKey: Equatable {
+        var unwrapped: Set<Int>, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
+    }
+    /// How many top-level blocks came from `reusing` instead of being laid out (tests).
+    private(set) var reusedBlocks = 0
+
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
+    /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
+    /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
+    /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil) {
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files)
         builder.contexts = contexts
         builder.diagrams = diagrams
-        let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
+        let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes)
+        var resume: (layout: MarkdownLayout, blocks: Int)?
+        if let previous, previous.width == width, previous.reuseKey == key {
+            let blocks = document.blocks, old = previous.rootBlocks
+            var same = 0
+            while same < min(blocks.count, old.count), blocks[same] == old[same] { same += 1 }
+            if same > 0 { resume = (previous, same) }
+        }
+        reusedBlocks = resume?.blocks ?? 0
+        let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true, resume: resume)
+        reuseKey = key
+        rootBlocks = document.blocks
+        rootEnds = builder.rootEnds
         items = flow.items
         controls = flow.controls
         fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
@@ -285,19 +314,35 @@ private struct Builder {
     var diagrams: MarkdownLayout.Diagrams?
     var contexts: MarkdownContextChips?
     var rootTops: [CGFloat] = []
+    var rootEnds: [MarkdownLayout.RootEnd] = []
 
     init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
 
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
     /// stops them), except at the root, where T3 zeroes them (`.chat-markdown > :first-child`).
+    /// `resume` (root only) takes the first blocks as `layout` placed them and lays out the rest.
     @MainActor
-    mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false) -> Box {
+    mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false,
+                       resume: (layout: MarkdownLayout, blocks: Int)? = nil) -> Box {
         var out = Box()
         var y: CGFloat = 0
         var previousBottom: CGFloat?
-        for (index, block) in blocks.enumerated() {
-            var box = layout(block, width: width, context: context, tight: tight)
+        var first = 0
+        if root, let resume {
+            let end = resume.layout.rootEnds[resume.blocks - 1]
+            out.items = Array(resume.layout.items.prefix(end.items))
+            out.controls = Array(resume.layout.controls.prefix(end.controls))
+            rootTops = Array(resume.layout.blockTops.prefix(resume.blocks))
+            rootEnds = Array(resume.layout.rootEnds.prefix(resume.blocks))
+            codeIndex = end.codeIndex
+            y = end.y
+            previousBottom = end.bottom
+            first = resume.blocks
+        }
+        for index in first..<blocks.count {
+            var box = layout(blocks[index], width: width, context: context, tight: tight)
+            let ownBottom = box.bottom
             if root, index == 0 { box.top = 0 }
             if root, index == blocks.count - 1 { box.bottom = 0 }
             if let previousBottom { y += max(previousBottom, box.top) } else { out.top = box.top }
@@ -305,6 +350,7 @@ private struct Builder {
             out.add(box, at: CGPoint(x: 0, y: y))
             y += box.height
             previousBottom = box.bottom
+            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex)) }
         }
         out.bottom = previousBottom ?? 0
         out.height = y

@@ -68,10 +68,12 @@ public final class PowerState {
 @MainActor
 public final class FramePacer {
     private let apply: () -> Void
+    private let maxRate: Double?
     private var last: CFTimeInterval = -.infinity
     private var scheduled = false
 
-    public init(_ apply: @escaping () -> Void) { self.apply = apply }
+    /// `maxRate`: at most this many runs a second, whatever the screen's refresh rate.
+    public init(maxRate: Double? = nil, _ apply: @escaping () -> Void) { self.maxRate = maxRate; self.apply = apply }
 
     /// The shortest gap between runs: one frame of the fastest screen, or 1/30 s when constrained.
     public static var interval: CFTimeInterval {
@@ -82,7 +84,8 @@ public final class FramePacer {
 
     public func request() {
         guard !scheduled else { return }
-        let wait = Self.delay(now: CACurrentMediaTime(), last: last, interval: Self.interval)
+        let interval = max(Self.interval, maxRate.map { 1 / $0 } ?? 0)
+        let wait = Self.delay(now: CACurrentMediaTime(), last: last, interval: interval)
         if wait <= 0 { run(); return }
         scheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
