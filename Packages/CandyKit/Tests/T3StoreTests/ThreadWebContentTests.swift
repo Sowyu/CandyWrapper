@@ -158,6 +158,29 @@ import Testing
         #expect(byId[10]?["error"]?["code"]?.doubleValue == -32601)
     }
 
+    @Test func threadSweepDisplayModesDownloadsAndQueuedMessageCallbacks() async throws {
+        let posted = Posted()
+        let app = try #require(McpAppReference(json(#"{"attachmentId":"a","server":"maps","tool":"show","resourceUri":"ui://maps"}"#)))
+        var requestedModes: [String] = [], messages: [String] = [], downloads: [ThreadMcpAppDownload] = []
+        let b = McpAppHostBridge(app: app, hostVersion: "1", callbacks: .init(
+            post: { posted.messages.append($0) },
+            hostContext: { .object(["availableDisplayModes": .array([.string("inline"), .string("fullscreen")])]) },
+            callTool: { _, _ in .null }, readResource: { _ in .null }, openLink: { _ in },
+            sendMessage: { messages.append($0) }, updateModelContext: { _, _ in },
+            onSizeChanged: { _, _ in }, onRequestTeardown: {},
+            downloadFiles: { downloads = $0 }, requestDisplayMode: { requestedModes.append($0); return $0 }))
+        b.receive(json(#"{"jsonrpc":"2.0","id":1,"method":"ui/initialize","params":{"appCapabilities":{"availableDisplayModes":["inline"]}}}"#))
+        b.receive(json(#"{"jsonrpc":"2.0","id":2,"method":"ui/request-display-mode","params":{"mode":"fullscreen"}}"#))
+        b.receive(json(#"{"jsonrpc":"2.0","id":3,"method":"ui/request-display-mode","params":{"mode":"inline"}}"#))
+        b.receive(json(#"{"jsonrpc":"2.0","id":4,"method":"ui/download-file","params":{"contents":[{"type":"resource","resource":{"name":"note.txt","text":"hello"}}]}}"#))
+        b.receive(json(#"{"jsonrpc":"2.0","id":5,"method":"ui/message","params":{"role":"user","content":[{"type":"text","text":"Continue"}]}}"#))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(requestedModes.isEmpty)
+        #expect(messages == ["Continue"])
+        #expect(downloads.first?.bytes == Data("hello".utf8))
+        #expect(posted.messages.first { $0["id"]?.doubleValue == 2 }?["result"]?["mode"]?.stringValue == "inline")
+    }
+
     @Test func webContentEntriesBecomeTheirOwnRows() {
         let page = tool("mcp__t3-code__html_render", json(#"{"htmlRender":{"attachmentId":"att-1","title":"Report","height":480}}"#))
         let row = ProjectedTurnItem(position: 0, visibility: "local", sourceThreadId: "t", sourceItemId: page.id, item: page)

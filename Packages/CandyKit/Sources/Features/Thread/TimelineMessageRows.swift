@@ -194,6 +194,8 @@ final class UserMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
+        markdown.revealFileLabel = context.model?.revealFileLabel
+        markdown.onRevealFile = context.model?.revealFile
         markdown.document = context.document(item.id, text, lineBreaks: true)
         attachments.configure(m, model: context.model)
         collapsible = shouldCollapseUserMessage(text)
@@ -314,6 +316,8 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
+        markdown.revealFileLabel = context.model?.revealFileLabel
+        markdown.onRevealFile = context.model?.revealFile
         // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
         markdown.diagramsEnabled = !m.streaming
         markdown.citationSourceID = m.id.rawValue
@@ -509,6 +513,8 @@ final class PlanRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
+        markdown.revealFileLabel = context.model?.revealFileLabel
+        markdown.onRevealFile = context.model?.revealFile
         markdown.document = context.document(item.id + (collapsed ? ":preview" : ""), body, lineBreaks: false)
         toggle.title = item.ui.planExpanded ? "Collapse plan" : "Expand plan"
         toggle.isHidden = !collapsible
@@ -573,17 +579,17 @@ final class PlanRowView: TimelineRowView {
 final class UserMessageAttachmentsView: DSView {
     private struct Image { let attachmentId: String; let name: String; let source: JSONValue? }
     private var images: [Image] = []
-    private var files: [String] = []
+    private var files: [JSONValue] = []
     private var media: [JSONValue] = []
     private var mediaViews: [ThreadMediaAttachmentView] = []
     private var cells: [AsyncImageView] = []
-    private var rows: [(icon: IconView, label: LabelView, eye: IconView?)] = []
+    private var rows: [ThreadSentFileRowView] = []
     private weak var model: ThreadViewModel?
     static let gridWidth: CGFloat = 210, gap: CGFloat = 8, rowHeight: CGFloat = 28
 
     func configure(_ m: ChatMessage, model: ThreadViewModel?) {
         self.model = model
-        var images: [Image] = [], files: [String] = [], media: [JSONValue] = []
+        var images: [Image] = [], files: [JSONValue] = [], media: [JSONValue] = []
         // Files with a chip in the text need no row (`chippedAttachmentIds`).
         var chipped = Set<String>()
         if case .array(let records)? = m.context?["records"] {
@@ -599,7 +605,7 @@ final class UserMessageAttachmentsView: DSView {
             else if type == "image" {
                 if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name, source: a["source"])) }
             } else if !(type == "file" && chipped.contains(id)) {
-                files.append(name)
+                files.append(a)
             }
         }
         guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files || media != self.media else { return }
@@ -616,7 +622,7 @@ final class UserMessageAttachmentsView: DSView {
             addSubview(view); return view
         }
         cells.forEach { $0.removeFromSuperview() }
-        rows.forEach { $0.icon.removeFromSuperview(); $0.label.removeFromSuperview(); $0.eye?.removeFromSuperview() }
+        rows.forEach { $0.removeFromSuperview() }
         let loader = model?.attachmentImage
         cells = images.enumerated().map { i, image in
             let cell = AsyncImageView()
@@ -639,14 +645,10 @@ final class UserMessageAttachmentsView: DSView {
             addSubview(cell)
             return cell
         }
-        rows = files.map { name in
-            let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
-            let (definition, color) = FileChipStyle.icon(for: meta)
-            let icon = IconView(definition: definition, size: 16, color: color)
-            let label = LabelView(name, font: DSFont.ui(14), color: TL.c(\.foreground))
-            label.lineHeight = 20
-            [icon, label].forEach(addSubview)
-            return (icon, label, nil)
+        rows = files.map { file in
+            let row = ThreadSentFileRowView(file: file)
+            row.onOpen = { [weak self] download in self?.model?.onOpenAttachment?(file, download) }
+            addSubview(row); return row
         }
         needsLayout = true
         needsDisplay = true
@@ -674,7 +676,7 @@ final class UserMessageAttachmentsView: DSView {
     }
     /// The widest block: the 210pt grid, or the longest file row.
     var naturalWidth: CGFloat {
-        let fileWidth = rows.map { 16 + 8 + ceil($0.label.textWidth) }.max() ?? 0
+        let fileWidth = rows.map { $0.intrinsicContentSize.width }.max() ?? 0
         return max(images.isEmpty ? 0 : Self.gridWidth, fileWidth, media.isEmpty ? 0 : 320)
     }
 
@@ -708,8 +710,7 @@ final class UserMessageAttachmentsView: DSView {
         }
         var y: CGFloat = (frames.map(\.maxY).max().map { $0 + 8 }) ?? 0
         for row in rows {
-            row.icon.frame = NSRect(x: 0, y: y + 6, width: 16, height: 16)
-            row.label.frame = NSRect(x: 24, y: y + 4, width: max(0, bounds.width - 24), height: 20)
+            row.frame = NSRect(x: 0, y: y, width: bounds.width, height: Self.rowHeight)
             y += Self.rowHeight + 4
         }
         for view in mediaViews {

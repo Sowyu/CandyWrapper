@@ -135,6 +135,7 @@ final class McpAppRowView: TimelineRowView {
     private var loading: Task<Void, Never>?
     private var navigatedAway = false
     private var toolDefinition: JSONValue?
+    private var fullscreen: ThreadMcpFullscreenView?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -187,6 +188,7 @@ final class McpAppRowView: TimelineRowView {
     }
 
     private func teardown() {
+        _ = setDisplayMode("inline")
         loading?.cancel()
         loading = nil
         if let bridge { Task { await bridge.teardown() } }
@@ -228,6 +230,9 @@ final class McpAppRowView: TimelineRowView {
                         throw McpAppHostBridge.Refusal("Declined by the user.")
                     }
                 }
+                guard let self, self.window != nil, self.entry == e, self.context.model?.projection?.thread.id == conversation else {
+                    throw McpAppHostBridge.Refusal("The app was closed.")
+                }
                 var input = target; input["name"] = .string(name); input["arguments"] = args
                 return try await Self.unwrap { try await actions.request("mcpApps.callTool", .object(input)) }
             },
@@ -242,6 +247,9 @@ final class McpAppRowView: TimelineRowView {
             sendMessage: { [weak self] text in
                 guard let send = actions.sendMessage else { throw McpAppHostBridge.Refusal("Messages are not available here.") }
                 guard await self?.ask("Send this message from \(e.app.server)?", text) == true else { throw McpAppHostBridge.Refusal("Declined by the user.") }
+                guard let self, self.window != nil, self.entry == e, self.context.model?.projection?.thread.id == conversation else {
+                    throw McpAppHostBridge.Refusal("The app was closed.")
+                }
                 try await send(text)
             },
             updateModelContext: { content, structured in
@@ -256,8 +264,33 @@ final class McpAppRowView: TimelineRowView {
             },
             onRequestTeardown: { [weak self] in
                 guard let self, let bridge = self.bridge, let id = self.item?.id else { return }
+                if self.fullscreen != nil { _ = self.setDisplayMode("inline"); return }
                 Task { await bridge.teardown(); self.context.model?.setAppClosed(id, true) }
-            }))
+            }, downloadFiles: { [weak self] files in
+                guard let self, await self.ask("Save " + files.map(\.name).joined(separator: ", ") + " from " + e.app.server + "?", "") else {
+                    throw McpAppHostBridge.Refusal("Declined by the user.")
+                }
+                for file in files {
+                    guard self.window != nil, self.entry == e, self.context.model?.projection?.thread.id == conversation else {
+                        throw McpAppHostBridge.Refusal("The app was closed.")
+                    }
+                    var bytes = file.bytes
+                    if let uri = file.uri {
+                        var input = target; input["uri"] = .string(uri)
+                        let reply = try await actions.request("mcpApps.readResource", .object(input))
+                        bytes = reply["contents"]?.arrayValue?.first.flatMap(ThreadMcpAppDownload.resourceBytes)
+                    }
+                    guard let bytes else { throw McpAppHostBridge.Refusal(file.name + " has no contents.") }
+                    guard bytes.count <= ThreadMcpAppDownload.maximumBytes else { throw McpAppHostBridge.Refusal(file.name + " is too large to save.") }
+                    guard let window = self.window else { throw McpAppHostBridge.Refusal("The app was closed.") }
+                    let panel = NSSavePanel(); panel.nameFieldStringValue = file.name
+                    let target: URL? = await withCheckedContinuation { done in
+                        panel.beginSheetModal(for: window) { done.resume(returning: $0 == .OK ? panel.url : nil) }
+                    }
+                    guard let target else { throw McpAppHostBridge.Refusal("Declined by the user.") }
+                    try bytes.write(to: target, options: .atomic)
+                }
+            }, requestDisplayMode: { [weak self] mode in self?.setDisplayMode(mode) ?? "inline" }))
         self.bridge = bridge
         frameView.activate(.init(src: url, title: "\(e.app.server) app", allow: e.app.allowAttribute, dark: effectiveAppearance.isDark))
         // The tool's definition (for `toolInfo` at initialize) and the stored call (arguments and result).
@@ -267,6 +300,21 @@ final class McpAppRowView: TimelineRowView {
             guard let item = await actions.turnItem(e.sourceThreadId, e.itemId), self?.bridge === bridge else { return }
             bridge.setToolCall(arguments: item["input"] ?? .object([:]), result: item["output"]?["result"])
         }
+    }
+
+    private func setDisplayMode(_ mode: String) -> String {
+        if mode == "inline" {
+            if let fullscreen { addSubview(frameView); fullscreen.removeFromSuperview(); self.fullscreen = nil; needsLayout = true }
+        } else if mode == "fullscreen", fullscreen == nil, let content = window?.contentView,
+                  context.model?.projection?.runtimeRequests.contains(where: { $0.status == "pending" }) != true,
+                  !content.subviews.contains(where: { $0 is ModalHost || $0 is ThreadMcpFullscreenView }), window?.attachedSheet == nil {
+            let host = ThreadMcpFullscreenView(content: frameView)
+            host.frame = content.bounds; host.autoresizingMask = [.width, .height]
+            host.onClose = { [weak self] in _ = self?.setDisplayMode("inline") }
+            fullscreen = host; content.addSubview(host)
+        }
+        bridge?.updateHostContext()
+        return fullscreen == nil ? "inline" : "fullscreen"
     }
 
     /// The RPC's failure message reaches the app; anything else reads "Request failed.".
@@ -294,15 +342,15 @@ final class McpAppRowView: TimelineRowView {
         }
     }
 
-    /// `hostContext` (McpAppFrame.tsx:267-296), inline only.
+    /// `hostContext` (McpAppFrame.tsx:267-296).
     private func hostContext() -> JSONValue {
         let theme = HtmlRenderTheme(dark: effectiveAppearance.isDark)
         var o: [String: JSONValue] = [
             "theme": .string(theme.dark ? "dark" : "light"),
             "styles": .object(["variables": .object(McpAppHostBridge.styleVariables(theme.variables).mapValues { .string($0) })]),
-            "displayMode": .string("inline"),
-            "availableDisplayModes": .array([.string("inline")]),
-            "containerDimensions": .object(["width": .number(Double(max(0, bounds.width - 8).rounded())), "maxHeight": .number(McpAppReference.maxHeight)]),
+            "displayMode": .string(fullscreen == nil ? "inline" : "fullscreen"),
+            "availableDisplayModes": .array([.string("inline"), .string("fullscreen")]),
+            "containerDimensions": .object(["width": .number(Double(fullscreen.map { max(0, $0.bounds.width - 16) } ?? max(0, bounds.width - 8)).rounded()), "maxHeight": .number(fullscreen.map { Double(max(0, $0.bounds.height - 56)) } ?? McpAppReference.maxHeight)]),
             "platform": .string("desktop"),
             "locale": .string(Locale.current.identifier.replacingOccurrences(of: "_", with: "-")),
             "timeZone": .string(TimeZone.current.identifier),
@@ -349,7 +397,7 @@ final class McpAppRowView: TimelineRowView {
     override func layout() {
         super.layout()
         let box = NSRect(x: 4, y: 0, width: max(0, bounds.width - 8), height: boxHeight)
-        frameView.frame = box
+        if fullscreen == nil { frameView.frame = box }
         border.frame = box
         note.frame = NSRect(x: box.minX, y: box.midY - 8, width: box.width, height: 16)
         // `rounded-lg border px-3 py-2 text-xs`, Show app at the end.
@@ -358,5 +406,24 @@ final class McpAppRowView: TimelineRowView {
         showApp.frame = NSRect(x: box.maxX - 12 - sw, y: box.midY - 12, width: sw, height: 24)
         closedLabel.frame = NSRect(x: box.minX + 13, y: box.midY - 8, width: max(0, showApp.frame.minX - box.minX - 21), height: 16)
         bridge?.updateHostContext()
+    }
+}
+
+/// Full-window host keeps the same app document alive until it closes or its row is recycled.
+private final class ThreadMcpFullscreenView: DSView {
+    let content: NSView
+    var onClose: (() -> Void)?
+    private let close = ButtonView("Exit full screen", icon: .minimize2, variant: .outline, size: .sm)
+    init(content: NSView) {
+        self.content = content
+        super.init(frame: .zero)
+        addSubview(content); addSubview(close)
+        close.action = { [weak self] in self?.onClose?() }
+    }
+    override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    override func layout() {
+        super.layout()
+        close.frame = NSRect(x: max(8, bounds.width - 160), y: 8, width: 152, height: 32)
+        content.frame = NSRect(x: 8, y: 48, width: max(0, bounds.width - 16), height: max(0, bounds.height - 56))
     }
 }

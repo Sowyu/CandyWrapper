@@ -4,7 +4,7 @@ import QuartzCore
 /// One stacked toast (`toast.tsx:578-690`), inline layout: type icon and title, description below,
 /// an optional `xs` action button on the right, and the close orb on the top-right corner.
 /// Width comes from the frame (T3: 360); `height(forWidth:)` gives the natural height.
-/// ponytail: no copy-error button, expandable details or stacked-end action layout; add them with the thread toasts that use them
+/// ponytail: no copy-error button or expandable details; add them with the thread toasts that use them
 public final class ToastView: DSView {
     public var onDidDismiss: (() -> Void)?
     public let kind: ToastQueue.Kind
@@ -31,14 +31,19 @@ public final class ToastView: DSView {
     private let messageText = TextBlockView()
     private let iconView: IconView?
     private let actionButton: ButtonView?
+    private let secondaryButton: ButtonView?
+    private let stackedActions: Bool
     private let closeOrb = ToastCloseOrb()
 
     /// `data.leadingIcon` (toast.tsx:343-349): replaces the type icon, in its own color (the thread notification toasts).
     private let leadingIconColor: NSColor?
 
     public init(title: String, message: String? = nil, kind: ToastQueue.Kind = .plain, actionTitle: String? = nil,
-                action: (@MainActor () -> Void)? = nil, leadingIcon: (name: IconName, color: NSColor)? = nil) {
+                action: (@MainActor () -> Void)? = nil, secondaryTitle: String? = nil, secondaryAction: (@MainActor () -> Void)? = nil, leadingIcon: (name: IconName, color: NSColor)? = nil) {
         self.kind = kind
+        stackedActions = secondaryTitle != nil
+        secondaryButton = secondaryTitle.map { ButtonView($0, variant: .ghost, size: .xs) }
+        secondaryButton?.action = secondaryAction
         leadingIconColor = leadingIcon?.color
         let typeIcon: IconName? = switch kind {
         case .error: .circleAlert
@@ -67,6 +72,7 @@ public final class ToastView: DSView {
         [titleText, messageText].forEach(content.addSubview)
         iconView.map(content.addSubview)
         actionButton.map(content.addSubview)
+        secondaryButton.map(content.addSubview)
         addSubview(closeOrb)
         closeOrb.setAccessibilityLabel("Dismiss notification")
         setAccessibilityRole(.group)
@@ -87,13 +93,29 @@ public final class ToastView: DSView {
         needsLayout = true
     }
 
-    private struct Frames { var icon = CGRect.zero, title = CGRect.zero, message = CGRect.zero, action = CGRect.zero, height: CGFloat = 0 }
+    private struct Frames { var icon = CGRect.zero, title = CGRect.zero, message = CGRect.zero, action = CGRect.zero, secondary = CGRect.zero, height: CGFloat = 0 }
 
     /// Inline content: `py-3 pl-3.5`, `pr-6` with an action or `pr-10` without, `gap-1.5`, items centered.
     private func frames(width: CGFloat) -> Frames {
         var f = Frames()
         let actionSize = actionButton?.intrinsicContentSize ?? .zero
         let left: CGFloat = 1 + 14
+        if stackedActions {
+            let right = width - left
+            let textX = left + (iconView == nil ? 0 : 24)
+            let th = titleText.height(forWidth: max(1, right - textX))
+            let mh = hasMessage ? messageText.height(forWidth: max(1, right - left)) : 0
+            let top: CGFloat = 11
+            f.icon = CGRect(x: left, y: top + 2, width: 16, height: 16)
+            f.title = CGRect(x: textX, y: top, width: right - textX, height: th)
+            f.message = CGRect(x: left, y: top + th + 2, width: right - left, height: mh)
+            let y = top + th + (hasMessage ? mh + 2 : 0) + 8
+            f.action = CGRect(x: right - actionSize.width, y: y, width: actionSize.width, height: actionSize.height)
+            let secondary = secondaryButton?.intrinsicContentSize ?? .zero
+            f.secondary = CGRect(x: f.action.minX - 6 - secondary.width, y: y, width: secondary.width, height: secondary.height)
+            f.height = y + max(actionSize.height, secondary.height) + 11
+            return f
+        }
         let right = width - 1 - (actionButton == nil ? 40 : 24 + actionSize.width + 6)
         let textX = left + (iconView == nil ? 0 : 16 + 8)
         let titleHeight = titleText.height(forWidth: right - textX)
@@ -125,6 +147,7 @@ public final class ToastView: DSView {
         titleText.frame = f.title
         messageText.frame = f.message
         actionButton?.frame = f.action
+        secondaryButton?.frame = f.secondary
         // `absolute -top-1.5 -right-1.5`, 24px.
         closeOrb.frame = NSRect(x: bounds.width + 6 - 24, y: -6, width: 24, height: 24)
     }

@@ -1,0 +1,21 @@
+.thread-sweep-final-tests.log
+✔ Test run with 263 tests in 34 suites passed after 2.284 seconds.
+✔ Test run with 96 tests in 14 suites passed after 0.278 seconds.
+✔ Test run with 125 tests in 28 suites passed after 12.194 seconds.
+FIDELITY thread-sweep: 8 cases, mean 4.14%, worst 11.28%
+✔ Test run with 404 tests in 94 suites passed after 108.449 seconds.
+✔ Test run with 82 tests in 17 suites passed after 63.823 seconds.
+
+.thread-sweep-final-fidelity.log
+FIDELITY thread-sweep: 8 cases, mean 4.14%, worst 11.28%
+✔ Test run with 50 tests in 38 suites passed after 111.176 seconds.
+✔ Test run with 61 tests in 11 suites passed after 59.939 seconds.
+
+.thread-sweep-focused-final.log
+✔ Test run with 108 tests in 19 suites passed after 0.494 seconds.
+✔ Test run with 7 tests in 1 suite passed after 0.047 seconds.
+FIDELITY thread-sweep: 8 cases, mean 4.14%, worst 11.28%
+✔ Test run with 46 tests in 16 suites passed after 15.251 seconds.
+
+.thread-sweep-build.log
+** BUILD SUCCEEDED **

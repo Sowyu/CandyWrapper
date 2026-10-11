@@ -16,6 +16,7 @@ public final class ThreadHeaderView: TopbarDragView {
     private let titleEditor = InputView(placeholder: "Thread title", size: .inline)
     public var onThreadMenu: ((NSEvent, NSView) -> Void)?
     public var onRenameThread: ((String) -> Void)?
+    public var onEmptyTitle: (() -> Void)?
     public func beginTitleRename() {
         guard onRenameThread != nil else { return }
         titleEditor.text = threadTitle
@@ -28,7 +29,7 @@ public final class ThreadHeaderView: TopbarDragView {
         guard !titleEditor.isHidden else { return }
         let value = titleEditor.text.trimmingCharacters(in: .whitespacesAndNewlines)
         titleEditor.isHidden = true
-        if !value.isEmpty, value != threadTitle { onRenameThread?(value) }
+        if value.isEmpty { onEmptyTitle?() } else if value != threadTitle { onRenameThread?(value) }
     }
     private let title = LabelView("", font: TL.font(14, .medium), color: TL.c(\.foreground))
     /// Thread panel, terminal, right panel (PanelLayoutControls.tsx:76).
@@ -99,8 +100,9 @@ public final class ThreadHeaderView: TopbarDragView {
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
         let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
-        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 20 - reserve - titleX)), height: 20)
-        titleHit.frame = title.frame
+        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 38 - reserve - titleX)), height: 20)
+        titleHit.frame = title.frame.insetBy(dx: 0, dy: 0)
+        titleHit.frame.size.width += 18
         titleEditor.frame = NSRect(x: title.frame.minX - 4, y: midY - 11, width: max(80, title.frame.width + 8), height: 22)
         var x = bounds.width - 12 - 1
         // While the right panel is open, the terminal and panel toggles live on its tab bar.
@@ -167,6 +169,7 @@ public final class ThreadPanelView: DSView {
     public let planFollowUpBanner = ComposerNoticeBannerView()
     public var showsPlanFollowUp = false { didSet { if showsPlanFollowUp != oldValue { needsLayout = true } } }
     private let threadFileDrop = ComposerFileDrop()
+    private let fileDropOverlay = ThreadFileDropOverlay()
 
     private let serverUpdateBanner = ComposerNoticeBannerView()
     /// Fed by the server updater. Hidden views hold no update task or subscription.
@@ -385,6 +388,10 @@ public final class ThreadPanelView: DSView {
         addSubview(toasts)
         findBar.isHidden = true
         addSubview(findBar)
+        addSubview(fileDropOverlay); fileDropOverlay.isHidden = true; fileDropOverlay.layer?.zPosition = 40
+        registerForDraggedTypes([.fileURL])
+        threadFileDrop.onFiles = { [weak self] urls in self?.composer.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
+        threadFileDrop.onHighlight = { [weak self] highlighted in self?.fileDropOverlay.isHidden = !highlighted }
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("chatWidth") { self?.needsLayout = true }
         }
@@ -719,9 +726,10 @@ public final class ThreadPanelView: DSView {
     /// the spacer are centered in the column below the header, with the hero 16px above.
     private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
-        let width = max(0, min(ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), chat - 2 * lane))
+        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), padding: lane, cardLeft: timeline.detailsCardLeft)
+        let width = placement.width
         let height = composer.preferredHeight
-        let x = ((chat - width) / 2).rounded()
+        let x = placement.x.rounded()
         let y: CGFloat
         if isDraft {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
@@ -888,6 +896,7 @@ public final class ThreadPanelView: DSView {
         header.isHidden = chat == 0
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
+        fileDropOverlay.frame = NSRect(x: 8, y: ThreadHeaderView.height + 8, width: max(0, chat - 16), height: max(0, bounds.height - ThreadHeaderView.height - 16))
         // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
         // the column above it keeps at least the header.
         let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - ThreadHeaderView.height)) : 0
@@ -928,17 +937,23 @@ public final class ThreadPanelView: DSView {
                 x -= 4
             }
         }
+        let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - ThreadHeaderView.height,
+            topInset: findBar.isHidden ? 0 : 48) : nil
+        timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         findBar.frame = NSRect(x: max(12, chat - 396), y: ThreadHeaderView.height + 12, width: max(0, min(384, chat - 24)), height: 36)
         findBar.layer?.zPosition = 4
-        // The details card as T3's popover (ThreadDetailsCard.tsx:132-150): under the header, end-aligned
-        // with it, inside the viewport's 8pt padding, 264 wide.
-        // ponytail: always the popover placement over the timeline; T3 pins the card inline at the canvas's top
-        // right (and shifts the chat lane) when 1012pt of chat column fit. Add with a lane-aware timeline layout
         if detailsOpen {
-            let w = ThreadDetailsCardView.width, h = min(detailsCard.preferredHeight, max(0, chatHeight - ThreadHeaderView.height - 16))
-            detailsCard.frame = NSRect(x: max(8, chat - 8 - w), y: ThreadHeaderView.height + 8, width: w, height: h)
-            detailsCard.isHidden = chat < w + 16
+            if let inlineDetails {
+                detailsCard.frame = NSRect(x: inlineDetails.minX, y: ThreadHeaderView.height + inlineDetails.minY,
+                    width: inlineDetails.width, height: min(detailsCard.preferredHeight, inlineDetails.height))
+                detailsCard.isHidden = false
+            } else {
+                let w: CGFloat = 280
+                detailsCard.frame = NSRect(x: max(8, chat - 8 - w), y: ThreadHeaderView.height + 8,
+                    width: w, height: min(detailsCard.preferredHeight, max(0, chatHeight - ThreadHeaderView.height - 16)))
+                detailsCard.isHidden = chat < w + 16
+            }
         }
         // The floating browser keeps to the chat canvas, top right by default (previewMiniPlayerLayout.ts).
         // ponytail: no composer or details-card obstacles and no resize handles; add them from

@@ -26,6 +26,8 @@ public final class ThreadLineageController {
     public var dispatch: ((ThreadId, JSONValue) async throws -> JSONValue)?
     /// Opens a scoped thread id in the panel.
     public var openThread: ((ThreadId) -> Void)?
+    public var localVisit: ((ThreadId) -> T3Timestamp?)?
+    public var acknowledgeWake: ((ThreadId, T3Timestamp) -> Void)?
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
@@ -83,7 +85,7 @@ public final class ThreadLineageController {
     }
 
     /// The timeline footer for a snoozed or settled thread (ChatView.tsx:7613-7646).
-    // ponytail: no "Woke from snooze" line (needs the visit watermark) and no minute tick for the relative time; add both with the sidebar's wake tracking
+    // ponytail: relative times refresh on pushed state and navigation, add a shared visible clock only if idle wakeup measurements allow it
     private func updateStatusLine(_ shell: ThreadShell?) {
         guard let shell, let threadId else { panel.timeline.setFooter(nil, height: 0); return }
         let now = TimestampFormat.nowMs()
@@ -98,6 +100,14 @@ public final class ThreadLineageController {
             statusLine.label = shell.settledAt.map { "Settled " + TimestampFormat.formatRelativeTimeLabel($0.raw, nowMs: now) } ?? "Settled"
             statusLine.actionLabel = busy ? "Un-settling..." : "Un-settle"
             statusLine.onAction = { [weak self] in self?.statusAction(ThreadCommands.unsettle(threadId.localId), "Could not un-settle thread") }
+        } else if let wake = SidebarModel.threadWokeAt(SidebarThread(shell), nowMs: now),
+                  (wake.epochMs ?? 0) > max(
+                    SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt, local: localVisit?(threadId))?.epochMs ?? Int64.min,
+                    SidebarThread(shell).latestRun?.completedAt?.epochMs ?? Int64.min) {
+            statusLine.icon = .alarmClock
+            statusLine.label = "Woke from snooze"
+            statusLine.actionLabel = "Dismiss"
+            statusLine.onAction = { [weak self] in self?.acknowledgeWake?(threadId, wake); self?.sync() }
         } else {
             panel.timeline.setFooter(nil, height: 0)
             return

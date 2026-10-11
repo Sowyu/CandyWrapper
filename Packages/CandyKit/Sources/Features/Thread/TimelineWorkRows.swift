@@ -182,6 +182,7 @@ final class WorkDetailView: DSView {
 
     var detail = WorkDetail() { didSet { if detail != oldValue { cache = nil; needsDisplay = true; needsLayout = true } } }
     private var cache: (width: CGFloat, layouts: [TextBlockLayout])?
+    private var blockScrollers: [NSScrollView] = []
 
     override var wantsUpdateLayer: Bool { false }
     override init(frame frameRect: NSRect) {
@@ -196,6 +197,25 @@ final class WorkDetailView: DSView {
         if diffButton.superview == nil { addSubview(diffButton); diffButton.action = { [weak self] in self?.onOpenDiff?() } }
         diffButton.isHidden = detail.diffPath == nil
         diffButton.frame = NSRect(x: 0, y: max(0, bounds.height - 24), width: 82, height: 24)
+        let blocks = layouts(bounds.width)
+        while blockScrollers.count > blocks.count { blockScrollers.removeLast().removeFromSuperview() }
+        while blockScrollers.count < blocks.count {
+            let scroll = NSScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = true; scroll.documentView = ThreadWorkDetailBlockView()
+            addSubview(scroll); blockScrollers.append(scroll)
+        }
+        var y: CGFloat = 0
+        for (index, block) in blocks.enumerated() {
+            let scroll = blockScrollers[index]
+            let height = min(block.height, Self.maxBlock)
+            scroll.isHidden = block.height <= Self.maxBlock
+            scroll.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
+            if let body = scroll.documentView as? ThreadWorkDetailBlockView {
+                body.textLayout = block
+                body.frame = NSRect(x: 0, y: 0, width: bounds.width, height: block.height)
+            }
+            y += height + 6
+        }
     }
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
@@ -241,11 +261,20 @@ final class WorkDetailView: DSView {
             let h = min(layout.height, Self.maxBlock)
             ctx.saveGState()
             ctx.clip(to: CGRect(x: 0, y: y, width: bounds.width, height: h))
-            // ponytail: long output is clipped at 320px instead of scrolling inside; add a nested scroller if people read long output here
-            layout.draw(in: ctx, origin: CGPoint(x: 0, y: y), width: bounds.width, alignment: .left)
+            if layout.height <= Self.maxBlock { layout.draw(in: ctx, origin: CGPoint(x: 0, y: y), width: bounds.width, alignment: .left) }
             ctx.restoreGState()
             y += h + 6
         }
+    }
+}
+
+/// Only expanded blocks larger than the source's 320pt viewport own a scroller.
+private final class ThreadWorkDetailBlockView: DSView {
+    var textLayout: TextBlockLayout? { didSet { needsDisplay = true } }
+    override var wantsUpdateLayer: Bool { false }
+    override func draw(_ rect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        textLayout?.draw(in: ctx, origin: .zero, width: bounds.width, alignment: .left)
     }
 }
 

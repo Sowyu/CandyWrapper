@@ -13,6 +13,12 @@ public enum ThreadPlanFollowUp {
         guard let latest, latest.status == .completed || latest.status == .interrupted || latest.status == .failed else { return nil }
         let plans = projection.plans.filter { $0.kind == "proposed_plan" }
         let candidates = plans.filter { $0.runId == latest.id }
-        return (candidates.isEmpty ? plans : candidates).last.flatMap { $0.status == "active" && $0.markdown?.isEmpty == false ? $0 : nil }
+        func time(_ plan: PlanArtifact) -> String {
+            projection.turnItems.last { $0.raw["planId"]?.stringValue == plan.id.rawValue }?.updatedAt.raw ?? projection.updatedAt.raw
+        }
+        return (candidates.isEmpty ? plans : candidates).sorted {
+            let lhs = time($0), rhs = time($1)
+            return lhs == rhs ? $0.id.rawValue < $1.id.rawValue : lhs < rhs
+        }.last.flatMap { $0.status == "active" && $0.markdown?.isEmpty == false ? $0 : nil }
     }
 }

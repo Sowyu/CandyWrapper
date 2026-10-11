@@ -80,7 +80,6 @@ final class ProviderUpdateLaunchToast {
 
 /// PermissionUpdateNotice.tsx:20-75. Check once per connected session, never on a clock.
 @MainActor
-// ponytail: the shared toast offers close plus one inline action, add stacked Dismiss when ToastView gains the source action layout.
 final class ThreadPermissionUpdateNotice {
     private let environments: Environments
     private weak var toasts: ToastViewport?
@@ -105,7 +104,8 @@ final class ThreadPermissionUpdateNotice {
             }
             let toast = ToastView(title: "Permissions have changed for \(label)",
                 message: "This connection still uses the old permissions, so some actions may no longer be available. Pair again using a new link with the permissions you need.",
-                actionTitle: "Open Connections", action: { [weak self] in dismiss(); self?.openConnections?() })
+                actionTitle: "Open Connections", action: { [weak self] in dismiss(); self?.openConnections?() },
+                secondaryTitle: "Dismiss", secondaryAction: dismiss)
             toastId = toasts.show(toast, timeout: 0)
             toast.onDidDismiss = { UserDefaults.standard.set(true, forKey: "t3code:permission-update:v1:" + environmentId) }
         }

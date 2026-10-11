@@ -26,6 +26,10 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     private let title = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
     private let detail = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     private var buttons: [ButtonView] = []
+    public var disabledActions: Set<Int> = [] { didSet { updateActionAvailability() } }
+    private func updateActionAvailability() {
+        for (index, button) in buttons.enumerated() { button.isEnabled = !disabledActions.contains(index) }
+    }
     private let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     public private(set) var content: Content?
     /// An action button by its index in `content.actions`, or the X (nil).
@@ -58,6 +62,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             addSubview(b)
             return b
         }
+        updateActionAvailability()
         dismiss.isHidden = content.dismissLabel == nil
         dismiss.setAccessibilityLabel(content.dismissLabel ?? "")
         needsLayout = true
