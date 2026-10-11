@@ -78,6 +78,48 @@ final class UserIntentMarkerView: DSView {
     }
 }
 
+/// The line over a message the user did not type (MessagesTimeline.tsx:2359-2395): `me-1 text-2xs
+/// text-muted-foreground/70`. "Sent by automation" links its scheduled task (`hover:text-muted-foreground
+/// hover:underline`); "Sent by another agent" is an `InlineButton tone="muted"` (medium, muted, foreground
+/// and underlined on hover) when the sending thread is known.
+final class UserMessageAttributionView: ControlView {
+    static let height: CGFloat = 16
+    let label = LabelView("", font: TL.font(11), color: TL.c(\.mutedForeground, 0.7))
+    private var automation = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        label.lineHeight = Self.height
+        addSubview(label)
+    }
+
+    func configure(_ p: UserMessagePresentation, senderThreadId: String?) {
+        automation = p.isAutomation
+        label.text = p.isAutomation ? "Sent by automation" : "Sent by another agent"
+        isEnabled = p.isAutomation ? p.scheduledTaskId != nil : senderThreadId != nil
+        setAccessibilityLabel(p.isAutomation || !isEnabled ? label.text : "Open sending thread")
+        restyle()
+    }
+
+    var fittingWidth: CGFloat { ceil(label.textWidth) + 1 }
+
+    override func layout() { super.layout(); label.frame = bounds }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+
+    private func restyle() {
+        let hovered = isEnabled && state.hovered
+        if automation || !isEnabled {
+            label.font = TL.font(11)
+            label.color = hovered ? TL.c(\.mutedForeground) : TL.c(\.mutedForeground, 0.7)
+        } else {
+            label.font = TL.font(11, .medium)
+            label.color = hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
+        }
+        label.isUnderlined = hovered
+    }
+}
+
 /// `UserTimelineRow` (MessagesTimeline.tsx:2198-2560): a right-aligned bubble at most 80% of the
 /// lane, then a hover row with the time and a copy button that always keeps its 24px. A steered or
 /// queued message gets its intent marker above the bubble (`flex-col gap-1`).
@@ -94,6 +136,7 @@ final class UserMessageRowView: TimelineRowView {
     private let editButton = ButtonView(icon: .pencil, variant: .ghostMuted, size: .xs)
     private let fadeMask = CAGradientLayer()
     private let marker = UserIntentMarkerView(frame: .zero)
+    private let attribution = UserMessageAttributionView()
     private var text = ""
     private var collapsible = false
     /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
@@ -103,6 +146,7 @@ final class UserMessageRowView: TimelineRowView {
         super.init(frame: frameRect)
         bubble.fill = TL.c(\.messageSurface)
         bubble.radius = 18
+        addSubview(attribution)
         addSubview(marker)
         addSubview(bubble)
         // `text-foreground` on the bubble, where assistant markdown sits at 80%.
@@ -130,19 +174,28 @@ final class UserMessageRowView: TimelineRowView {
             guard let self else { return }
             Features.copy(self.text, from: self.copyButton)
         }
+        attribution.action = { [weak self] in
+            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            let p = UserMessagePresentation.resolve(m)
+            if p.isAutomation { if let task = p.scheduledTaskId { self.context.model?.onOpenScheduledTask?(task) } }
+            else if let sender = m.senderThreadId { self.context.model?.onOpenThread?(ThreadId(sender)) }
+        }
         hoverChanged()
     }
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
-        text = m.text
+        let presentation = UserMessagePresentation.resolve(m)
+        text = presentation.text
+        attribution.isHidden = !presentation.isAutomation && m.createdBy != "agent"
+        if !attribution.isHidden { attribution.configure(presentation, senderThreadId: m.senderThreadId) }
         editButton.isHidden = m.inputIntent != .turnStart && m.inputIntent != .queuedTurn
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        markdown.document = context.document(item.id, m.text, lineBreaks: true)
+        markdown.document = context.document(item.id, text, lineBreaks: true)
         attachments.configure(m, model: context.model)
-        collapsible = shouldCollapseUserMessage(m.text)
+        collapsible = shouldCollapseUserMessage(text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
         toggle.isHidden = !collapsible
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
@@ -156,8 +209,9 @@ final class UserMessageRowView: TimelineRowView {
     override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
     override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
 
-    /// The marker line and the 4px gap under it.
-    private var markerSpace: CGFloat { marker.isHidden ? 0 : UserIntentMarkerView.height + 4 }
+    /// The attribution and marker lines, each with the 4px gap under it (`flex-col gap-1`).
+    private var attributionSpace: CGFloat { attribution.isHidden ? 0 : UserMessageAttributionView.height + 4 }
+    private var markerSpace: CGFloat { attributionSpace + (marker.isHidden ? 0 : UserIntentMarkerView.height + 4) }
 
     private func metrics(_ width: CGFloat) -> (bubble: CGFloat, body: CGFloat, full: CGFloat) {
         let maxBubble = width * 0.8
@@ -185,8 +239,10 @@ final class UserMessageRowView: TimelineRowView {
         let footer: CGFloat = collapsible ? 6 + 24 : 0
         let bubbleHeight = m.body + footer + Self.padding * 2
         let top = markerSpace
+        let attributionWidth = attribution.fittingWidth
+        attribution.frame = NSRect(x: width - 4 - attributionWidth, y: 0, width: attributionWidth, height: UserMessageAttributionView.height)
         let markerWidth = marker.fittingWidth
-        marker.frame = NSRect(x: width - 4 - markerWidth, y: 0, width: markerWidth, height: UserIntentMarkerView.height)
+        marker.frame = NSRect(x: width - 4 - markerWidth, y: attributionSpace, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
         let attachmentsHeight = attachments.height(forWidth: m.bubble - Self.padding * 2)
         attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + Self.padding, width: m.bubble - Self.padding * 2, height: attachmentsHeight)

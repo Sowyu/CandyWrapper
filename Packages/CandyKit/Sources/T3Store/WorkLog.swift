@@ -389,6 +389,21 @@ public enum WorkLog {
 
     // MARK: T3 tools
 
+    /// The trimmed thread id a `t3_thread_read` call targets (`threadReadTargetId`, MessagesTimeline.logic.ts:182-190).
+    public static func threadReadTargetId(_ entry: WorkLogEntry) -> String? {
+        guard let item = entry.structuredPayload, item.type == .dynamicTool,
+              T3McpTools.definition(item.toolName)?.summaryAction == "thread-read",
+              let id = item["input"]?["threadId"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty
+        else { return nil }
+        return id
+    }
+
+    /// "Read a T3 thread" becomes "Read thread", then the target's title in quotes (`threadReadLabelPrefix`, :205-209).
+    public static func threadReadLabelPrefix(_ label: String) -> String? {
+        let object = " a T3 thread"
+        return label.hasSuffix(object) ? String(label.dropLast(object.count)) + " thread" : nil
+    }
+
     /// `liveActivityToolStatus` (work-log/presentation.ts:190-196).
     static func liveActivityToolStatus(_ status: ToolLifecycleStatus?, presentTense: Bool) -> ToolLifecycleStatus {
         if let status, [.failed, .declined, .stopped, .idle].contains(status) { return status }

@@ -145,7 +145,11 @@ def main():
 
     # 8. It is listed with the other clients, as a bot named by the agent.
     s, _, raw = call("GET", base + "/api/auth/clients", None, admin)
-    mine = [c for c in json.loads(raw) if (c.get("client") or {}).get("label") == "CandyWrapper smoke agent"]
+    listed = json.loads(raw) if s == 200 else []
+    if not isinstance(listed, list):
+        listed = []
+    step("list authorized clients", s == 200, "needs an owner session with access:read: " + raw[:80] if s != 200 else "")
+    mine = [c for c in listed if (c.get("client") or {}).get("label") == "CandyWrapper smoke agent"]
     step("listed in authorized clients", s == 200 and len(mine) >= 1, ", ".join("%s %s" % (c["client"].get("deviceType"), c["scopes"]) for c in mine[-1:]))
     if a.keep:
         open("/tmp/outside-agent-smoke.token", "w").write(token["access_token"])
