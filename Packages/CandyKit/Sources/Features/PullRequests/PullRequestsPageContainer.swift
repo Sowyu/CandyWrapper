@@ -66,4 +66,8 @@ public final class PullRequestsPageContainer: DSView {
     }
 
     public override var acceptsFirstResponder: Bool { true }
+
+    /// Escape goes back (`useEscapeToGoBack`, _chat.pull-requests.tsx:349) once nothing inside took it.
+    public var onEscape: (() -> Void)?
+    public override func cancelOperation(_ sender: Any?) { onEscape?() }
 }

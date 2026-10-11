@@ -47,6 +47,8 @@ final class SettingsController {
     /// Settings opened, changed page or closed (route history).
     var onOnboardingReturn: (() -> Void)?
     var onRouteChange: (() -> Void)?
+    /// The thread view is back in the window (focus goes to the composer).
+    var onThreadViewReturn: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
     var modal: ModalHost?
@@ -162,7 +164,8 @@ final class SettingsController {
         t3.refreshMachines()
     }
 
-    func close() {
+    /// `record` false leaves the route history to the page that replaces Settings.
+    func close(record: Bool = true) {
         guard isOpen, let layout else { return }
         modal?.close()
         stopHostAccess()
@@ -175,7 +178,8 @@ final class SettingsController {
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]
         layout.main.addSubview(threadPanel)
         layout.needsLayout = true
-        onRouteChange?()
+        if record { onRouteChange?() }
+        onThreadViewReturn()
         let returnToWelcome = onOnboardingReturn; onOnboardingReturn = nil; returnToWelcome?()
     }
 

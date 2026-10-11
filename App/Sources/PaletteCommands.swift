@@ -63,14 +63,16 @@ final class PaletteCommands {
         }
         // `chat.new`: with several projects the palette's project chooser, else a draft for the open
         // thread's project (_chat.tsx:121-140). `chat.newLocal` skips the chooser.
+        // These live in `ChatRouteGlobalShortcuts` (_chat.tsx), so Settings and Usage, which sit outside
+        // the `_chat` layout, ignore them; Pull Requests (`_chat.pull-requests`) keeps them.
         shortcuts.on(["chat.new", "chat.newLocal"]) { [weak self] call in
-            guard let self, self.sidebar?.snapshot?.projects.isEmpty == false else { return false }
+            guard let self, self.onChatRoute, self.sidebar?.snapshot?.projects.isEmpty == false else { return false }
             if call.command == "chat.new", self.projectGroups().count > 1 { self.open(newThreadIn: true) } else { self.newThreadFromContext() }
             return true
         }
         // `chat.newWithoutProject`: a draft in the scratch project of the machine in use (_chat.tsx:116-125).
         shortcuts.on("chat.newWithoutProject") { [weak self] _ in
-            guard let self, let env = self.scratchTargetEnvironmentId else { return false }
+            guard let self, self.onChatRoute, let env = self.scratchTargetEnvironmentId else { return false }
             self.startScratchThread(env)
             return true
         }
@@ -748,9 +750,11 @@ final class PaletteCommands {
     }
 
     private func openUtility(_ page: SidebarCommands.UtilityPage) {
-        settings.close()
         commands.openUtilityPage(page)
     }
+
+    /// A route under T3's `_chat` layout: a thread, a draft or Pull Requests, not Settings or Usage.
+    private var onChatRoute: Bool { !settings.isOpen && !commands.isUsagePageOpen }
 
     // MARK: Appearance
 
