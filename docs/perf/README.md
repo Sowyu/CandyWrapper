@@ -164,6 +164,19 @@ Server. The app starts its own server only when nothing serves the home, from `e
 
 HUD. ⌥⇧⌘P or "hud" in the palette. It reads `proc_pid_rusage` every 0.5 s with 10% tolerance, only while the window is visible. Frame time is the longest main run loop pass, wake to sleep, since the last sample: a frame's layout, drawing and Core Animation commit happen inside one pass, and measuring it needs no display link. Events are server messages decoded by any socket, counted only while the HUD is shown. During a haiku turn it read 12.3% CPU, a 29.6 ms longest pass, 14.5 events/s and 145 MB. Showing it costs about 4 wakeups/s. Hidden it costs nothing beyond one uncontended lock per received frame.
 
+## Font and dialog backdrop memory (2026-10-11, WP8.6)
+
+Release builds of f8362c3 (before) and the WP8.6 working tree (after), both with the bundle id `dev.candywrapper.test.fontblur`, against the shared sandbox server on the thread `fontblur-measure`, run one after the other in one session. A keychain prompt from another app held the focus, so keys went straight to our PID (`CGEvent.postToPid`). Memory from `footprint <pid>` and the `All zones` line of `heap <pid>`; no malloc stack logging, so the numbers sit lower than WP8.5's.
+
+| | Before | After |
+|---|---|---|
+| Terminal open, after printing Nerd Font code points | 70 MB footprint, heap 36.7 MB with three 4096 KB blocks | 58 to 59 MB, heap 24.2 MB, no 4 MB blocks |
+| Five close dialogs opened and cancelled, 8 s later | 70 to 99 MB (+29), Malloc Large 9.4 to 34 MB | 58 to 63 MB (+5), Malloc Large under 1 MB |
+
+The font: T3 ships `SymbolsNerdFontMono-Regular.woff2`, and CoreText decodes WOFF2 into heap that lives as long as the process. We now ship the same font as TTF, rebuilt from the tables CoreText exposes for the WOFF2 (`CTFontCopyAvailableTables`, `CTFontCopyTable`, a new table directory, 4-byte padding, table checksums, `head.checkSumAdjustment`). The result is 2,507,276 bytes, exactly the WOFF2 header's `totalSfntSize`, and rebuilding it again gives the same bytes. All 10,410 mapped code points have the same glyph id, advance and `CTFontCreatePathForGlyph` outline in both files. `vmmap` shows the TTF as a mapped file with 96 KB resident. The bundle grows by 1.3 MB; fonts are outside the spec's 25 MB limit.
+
+The backdrop: `ModalHost.blurredSnapshot` drew the window at backing scale (about 10 MB at 2x) and downscaled it to a quarter of the point size before the sigma 1 blur. It now draws the view at half its point size (1/16 of the pixels) and downscales that to the quarter. Drawing straight at a quarter moved thin text and borders by up to 10 levels under the 60% tint (dark, 0.19% of pixels over the fidelity tolerance); the half-size pass keeps the worst pixel at 2 (light) and 5 (dark) levels, mean 0.03 and 0.27 (`OverlaysFidelityTests.smallSnapshotMatchesFullSize`). On screen the close dialog looks the same in light and dark. The command palette uses the same function.
+
 ## Heavy surfaces (2026-10-11, WP8.5)
 
 Release builds of dc64b72 (before) and the WP8.5 working tree (after), both with the bundle id `dev.candywrapper.test.heavy`, against the shared sandbox server, alternating builds in one session. Three other agents built and tested meanwhile (load average 3 to 37), so the numbers below lean on main-thread samples and memory more than on CPU.

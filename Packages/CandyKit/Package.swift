@@ -29,7 +29,7 @@ let package = Package(
         .target(name: "T3Store", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/mermaid.min.js.lzma"), .copy("Resources/LICENSE-mermaid.txt"), .copy("Resources/native-licenses.json"),
-                         .copy("Resources/SymbolsNerdFontMono-Regular.woff2"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
+                         .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
                 swiftSettings: sizeOptimized),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),

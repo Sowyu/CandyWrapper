@@ -195,24 +195,31 @@ public final class ModalHost: DSView {
 
     /// One blurred snapshot of the window content for `backdrop-filter: blur(4px)`: drawn at a quarter
     /// of the point size and blurred with sigma 1, which is 4pt at full size. Taken once, when the dialog opens.
+    /// The view draws at half its point size and that is halved again: a backing-scale snapshot cost about
+    /// 10 MB per dialog at 2x, and the allocator kept the freed buffers dirty. Drawing straight at a quarter
+    /// moved thin text and borders by up to 10 levels under the tint; the half-size pass keeps them within 5.
     // ponytail: frozen snapshot, content under the backdrop stops updating while the dialog is open; live blur (NSVisualEffectView) if that ever shows
     public static func blurredSnapshot(of view: NSView) -> CGImage? {
-        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        return rep.cgImage.flatMap { blurred($0, pointSize: view.bounds.size) }
+        let size = view.bounds.size
+        guard let half = context(Int(size.width / 2), Int(size.height / 2)) else { return nil }
+        half.scaleBy(x: CGFloat(half.width) / max(1, size.width), y: CGFloat(half.height) / max(1, size.height))
+        view.displayIgnoringOpacity(view.bounds, in: NSGraphicsContext(cgContext: half, flipped: false))
+        return half.makeImage().flatMap { blurred($0, pointSize: size) }
     }
 
     /// `image` drawn at a quarter of `pointSize` and blurred with sigma 1.
-    static func blurred(_ full: CGImage, pointSize: CGSize) -> CGImage? {
-        let w = max(1, Int(pointSize.width / 4)), h = max(1, Int(pointSize.height / 4))
-        guard let small = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
-                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
+    static func blurred(_ image: CGImage, pointSize: CGSize) -> CGImage? {
+        guard let small = context(Int(pointSize.width / 4), Int(pointSize.height / 4)) else { return nil }
         small.interpolationQuality = .medium
-        small.draw(full, in: CGRect(x: 0, y: 0, width: w, height: h))
+        small.draw(image, in: CGRect(x: 0, y: 0, width: small.width, height: small.height))
         guard let downscaled = small.makeImage() else { return nil }
         let input = CIImage(cgImage: downscaled)
         let output = input.clampedToExtent().applyingGaussianBlur(sigma: 1).cropped(to: input.extent)
         return CIContext(options: [.cacheIntermediates: false]).createCGImage(output, from: input.extent)
+    }
+
+    private static func context(_ width: Int, _ height: Int) -> CGContext? {
+        CGContext(data: nil, width: max(1, width), height: max(1, height), bitsPerComponent: 8, bytesPerRow: 0,
+                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
     }
 }

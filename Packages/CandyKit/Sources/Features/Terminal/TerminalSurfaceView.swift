@@ -349,8 +349,10 @@ enum TerminalFontSettings {
     }
 
     /// `ensureTerminalSymbolsFont`: the bundled symbols-only face, registered for this process on first use.
+    /// T3 ships it as WOFF2; ours is the same font rebuilt as TTF from those tables (same cmap and outlines),
+    /// so CoreText maps the file instead of unpacking 12 MB of WOFF2 into heap that never goes away.
     private static let registerSymbols: Void = {
-        guard let url = Bundle.module.url(forResource: "SymbolsNerdFontMono-Regular", withExtension: "woff2") else { return }
+        guard let url = Bundle.module.url(forResource: "SymbolsNerdFontMono-Regular", withExtension: "ttf") else { return }
         CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     }()
 }
