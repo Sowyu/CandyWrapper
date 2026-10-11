@@ -164,6 +164,46 @@ Server. The app starts its own server only when nothing serves the home, from `e
 
 HUD. ⌥⇧⌘P or "hud" in the palette. It reads `proc_pid_rusage` every 0.5 s with 10% tolerance, only while the window is visible. Frame time is the longest main run loop pass, wake to sleep, since the last sample: a frame's layout, drawing and Core Animation commit happen inside one pass, and measuring it needs no display link. Events are server messages decoded by any socket, counted only while the HUD is shown. During a haiku turn it read 12.3% CPU, a 29.6 ms longest pass, 14.5 events/s and 145 MB. Showing it costs about 4 wakeups/s. Hidden it costs nothing beyond one uncontended lock per received frame.
 
+## Battery during runs (2026-10-11)
+
+Task battery, worktree agent-a20c5cd6caf7826c0. The states a user sits in for hours while agents run, each measured with `scripts/procstat` (CPU, interrupt and package idle wakeups) and `sudo powermetrics --samplers tasks --show-process-energy` over the same window. Debug builds against the shared sandbox server, where three other agents built and ran turns: the 1-minute load sat at 2.2 to 5 during the A/B windows and up to 12 during the single runs. A running turn that streams nothing came from a haiku turn told to wait in the foreground on `until [ -f <file> ]; do sleep 2; done` until I touched the file; a raw `sleep` or `ping` wait is refused by the agent's harness. During that wait the server sent the client nothing for 20 s, so every wakeup below is the client's own.
+
+A/B: the HEAD build (before) and this change (after) ran at the same time, windows side by side and both visible, on the same running thread. Same second, same load.
+
+| State | CPU before / after | Interrupt wk/s before / after | Pkg idle wk/s before / after | Energy Impact before / after |
+|---|---|---|---|---|
+| Running thread open, quiet, first minute of the run (50 s) | 1.45% / 0.49% | 3.18 / 3.04 | 1.78 / 1.84 | 6.72 / 0.60 |
+| Running thread open, quiet, after a minute (60 s) | 0.32% / 0.26% | 3.53 / 2.88 | 1.15 / 1.03 | 1.29 / 0.68 |
+| Thread running in the sidebar, another thread open (60 s) | 0.07% / 0.07% | 0.45 / 0.50 | 0.23 / 0.22 | 0.38 / 0.14 |
+| Window minimized during the run (60 s) | 0.01% / 0.02% | 0.52 / 0.50 | 0.22 / 0.17 | 0.07 / 0.09 |
+
+Single runs, one build at a time (load 3 to 12, so read them as bounds):
+
+| State | Before | After |
+|---|---|---|
+| A reply streaming in the open thread (haiku, "1 to 400 as words", 40 s) | 0.51%, 3.35 wk/s | 0.25%, 2.15 wk/s (with `sample` attached) |
+| A reply streaming in a thread that is not open (25 s) | | 0.24%, 1.04 wk/s |
+| Terminal drawer open and idle (60 s) | 0.03%, 0.45 wk/s | |
+| Right panel with Files and Diff tabs, idle (60 s) | 0.04%, 0.53 wk/s | 0.09%, 0.23 wk/s |
+| Running thread open, quiet (three 60 s windows) | 0.17 to 0.60%, 3.0 to 3.65 wk/s | 0.10 to 0.13%, 2.87 wk/s |
+| Window minimized during the run (60 s) | 0.07%, 0.37 wk/s | 0.00%, 0.42 wk/s |
+
+For scale, the official app idles at 2.04% CPU and 74.5 wakeups/s across its processes and streams at 15 to 16% CPU ("Milestone 8 side by side" in docs/benchmarks.md).
+
+What woke the app, per state (`sample` on the main thread, timer callbacks counted):
+
+- Running thread open: the timeline's "Working for 4m 38s" label once a second. T3 does the same: `WorkingTimer` runs a 1 s `setInterval` (MessagesTimeline.tsx:3496-3516) and `formatDuration` always shows seconds (packages/shared/src/orchestrationTiming.ts:36-53), so the label really changes every second. Kept.
+- Every visible sidebar row whose run was under a minute old: the label timer rebuilt the whole sidebar model (sort, shelves, row models) once a second, about 1 ms of main-thread work in Debug each time, out of phase with the timeline's tick. T3 re-renders only the `WorkingDuration` span (Sidebar.tsx:361-372). Now that tick redraws only the working rows; relative times and snooze countdowns still rebuild, because they can move rows between sections.
+- Subagent cards in the timeline ticked once a second for their whole life, though `formatElapsedSeconds` drops the seconds after an hour ("1h 05m"), and kept ticking while the window was covered. The lineage section's compact times ("12m", "1.5h") change once a minute or once every six minutes and ticked once a second, also while hidden. The provider subagent bar ticked whenever it was in a window, covered or minimized. T3 ticks all three with a 1 s `setInterval` regardless (AgentElapsed.tsx:63, ProviderSubagentBar.tsx:51).
+- The tool row's shine and the sidebar's terminal pulse run in the render server through `LoopingAnimation` and wake the app never; both stop while the window is covered. The sidebar's Working icon is static, as T3's `CircleDashedIcon` is (Sidebar.tsx:2060-2061), and its label has no shimmer (Sidebar.tsx:1298-1302).
+- Window minimized, covered or hidden: nothing ticks. Server events of running threads still arrive and update the stores (T3's `RunningThreadKeepAlive` does the same), but a quiet run sends none.
+
+The change. `DesignSystem/Components/LabelClock.swift` is one timer for every live elapsed or relative-time label: each label asks for a tick at the moment its text next changes, the clock rounds that up to the next whole wall-clock second, so every label due in the same second shares one wakeup. It fires only for views in a visible, unoccluded window, and delivers a due tick as soon as the window shows again (occlusion and unhide notifications), so labels are fresh after a hidden stretch. The timeline Working row, the provider subagent bar, subagent cards, the lineage section and the sidebar label refresh all use it. `ThreadRelationships.msUntilElapsedChanges` says when an elapsed text next changes. A label can now lag the exact second by up to one second; T3's `setInterval` labels lag by the same, because their phase is the mount time.
+
+Tried and dropped: drawing the ticking label into a plain `CALayer` (`makeBackingLayer`) instead of AppKit's backing layer. A bare app with one 14 pt label redrawn once a second, 30 s each, alternating: no redraw 1.13 wakeups/s, AppKit layer 2.20 and 2.23, plain layer 3.30 and 3.10, CPU 0.05 to 0.10% either way, and no graphics memory in either (`footprint` shows 16 KB IOAccelerator). At one redraw a second AppKit drawing is the cheaper one.
+
+Seen in passing: the user's own demo app (Release, dc64b72, on the live T3 where several agents ran) read 0.6 to 6% CPU and 1.3 to 22 interrupt wakeups/s in the same powermetrics windows. It was not touched or sampled, so its cause is open: the live home has many running threads and long streaming conversations, which the sandbox runs here did not reproduce.
+
 ## Font and dialog backdrop memory (2026-10-11, WP8.6)
 
 Release builds of f8362c3 (before) and the WP8.6 working tree (after), both with the bundle id `dev.candywrapper.test.fontblur`, against the shared sandbox server on the thread `fontblur-measure`, run one after the other in one session. A keychain prompt from another app held the focus, so keys went straight to our PID (`CGEvent.postToPid`). Memory from `footprint <pid>` and the `All zones` line of `heap <pid>`; no malloc stack logging, so the numbers sit lower than WP8.5's.

@@ -252,7 +252,6 @@ public final class ThreadLineageSectionView: DSView {
     private var rows: [ThreadLineageRowView] = []
     private var showMore: [(button: ThreadLineageShowMoreView, group: String)] = []
     private var layoutItems: [(view: NSView, height: CGFloat)] = []
-    private var timer: Timer?
 
     public var isEmpty: Bool { lineage.isEmpty }
 
@@ -344,26 +343,27 @@ public final class ThreadLineageSectionView: DSView {
         onResize?()
     }
 
-    /// Live agents tick once a second while the section is in a window; nothing runs otherwise.
+    /// Live agents' compact times ("45s", "12m", "1.5h") tick on the shared `LabelClock` when the next
+    /// one changes and the section can be seen; nothing runs otherwise.
     private func updateTimer() {
-        let live = window != nil && rows.contains(where: \.ticks)
-        if live, timer == nil {
-            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    let now = TimestampFormat.nowMs()
-                    self?.rows.forEach { $0.tick(nowMs: now) }
-                }
-            }
-            t.tolerance = 0.25
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
-        } else if !live {
-            timer?.invalidate()
-            timer = nil
+        let now = TimestampFormat.nowMs()
+        let waits = rows.compactMap { row -> Int64? in
+            guard row.ticks, let a = row.row.agent,
+                  let ms = ThreadRelationships.subagentElapsedMs(status: a.status, startedAt: a.startedAt, completedAt: a.completedAt, nowMs: now)
+            else { return nil }
+            return ThreadRelationships.msUntilElapsedChanges(ms, compact: true)
+        }
+        guard let wait = waits.min() else { LabelClock.shared.cancel(self); return }
+        LabelClock.shared.schedule(self, in: Double(wait) / 1000) { [weak self] in
+            guard let self else { return }
+            let now = TimestampFormat.nowMs()
+            self.rows.forEach { $0.tick(nowMs: now) }
+            self.updateTimer()
         }
     }
 
-    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateTimer(); restyle() }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); LabelClock.shared.visibilityChanged(); restyle() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); LabelClock.shared.visibilityChanged() }
 
     /// `border-t`, `px-2 pt-2 pb-2.5`: a 32pt heading with `mb-1`, then the rows.
     public var preferredHeight: CGFloat {

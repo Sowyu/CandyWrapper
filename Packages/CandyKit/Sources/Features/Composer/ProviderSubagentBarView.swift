@@ -6,7 +6,7 @@ import T3Store
 /// `ProviderSubagentBar` (ProviderSubagentBar.tsx:18-93): stands in for the composer on a provider-native
 /// subagent thread. The provider runs that conversation, so nothing can be sent; the bar names the model,
 /// says how long it has worked, and leads back to the parent. `min-h-12 gap-3 py-2 ps-5 pe-2 text-sm`.
-/// A live status ticks once a second (T3 writes the label from an interval, never re-rendering the view).
+/// A live status ticks once a second while it can be seen (T3 writes the label from an interval, never re-rendering the view).
 public final class ProviderSubagentBarView: DSView {
     public var driver: String? { didSet { if driver != oldValue { rebuildIcon() } } }
     public var providerName = "" { didSet { if providerName != oldValue { rebuildIcon() } } }
@@ -24,7 +24,6 @@ public final class ProviderSubagentBarView: DSView {
     private let statusLabel = LabelView("", font: SB.tabular(14))
     private let runsOnItsOwn = LabelView("Runs on its own", font: DSFont.ui(14))
     private let openParent = ButtonView("Open parent", icon: .arrowUpLeft, variant: .ghost, size: .sm)
-    private var timer: Timer?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -54,27 +53,20 @@ public final class ProviderSubagentBarView: DSView {
         let announcement = ThreadRelationships.formatSubagentStatus(status.map { .init(status: $0.status, startedAt: nil, completedAt: $0.completedAt) }, nowMs: 0)
         let description = effortLabel.map { "\(modelLabel), \($0)" } ?? modelLabel
         setAccessibilityLabel("\(description) subagent: \(announcement)")
-        updateTimer()
     }
 
+    /// The live text shows whole seconds since `startedAt`, so it changes once a second; the shared
+    /// `LabelClock` ticks it only while the bar can be seen.
     private func tick() {
-        let text = ThreadRelationships.formatSubagentStatus(status, nowMs: TimestampFormat.nowMs())
+        let now = TimestampFormat.nowMs()
+        let text = ThreadRelationships.formatSubagentStatus(status, nowMs: now)
         if statusLabel.text != text { statusLabel.text = text; needsLayout = true }
+        guard live, let start = status?.startedAt?.epochMs else { LabelClock.shared.cancel(self); return }
+        LabelClock.shared.schedule(self, in: Double(1000 - max(0, now - start) % 1000) / 1000) { [weak self] in self?.tick() }
     }
 
-    private func updateTimer() {
-        if live, window != nil, timer == nil {
-            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
-            t.tolerance = 0.2
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
-        } else if !live || window == nil {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateTimer(); restyle() }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); LabelClock.shared.visibilityChanged(); restyle() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); LabelClock.shared.visibilityChanged() }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {

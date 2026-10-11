@@ -262,6 +262,12 @@ Also in M9: a stable code signing identity instead of ad-hoc, so the Keychain st
   - Connections client dot pings while live; Thinking and compaction use the `live-activity-focus` band; diff bodies fade in 200ms on expand.
   - Found: Tailwind 4's `ease-in-out` is `cubic-bezier(.4,0,.2,1)` and `ease-out` is `(0,0,.2,1)` (compiled CSS). The inventory's `.42,0,.58,1` holds only for raw CSS keywords (index.css), so dialogs already had the right curve.
   - Not done: the banner stack has no peek or expanded stack in Swift and no banner sets a dismiss label, so T3's stack motions have nothing to attach to. The context label fade needs the branch toolbar's compact mode, which Swift lacks. Composer collapse motion is mobile only in T3. The model picker's legacy chevron is rebuilt on toggle and still swaps.
+- [x] Battery during long runs (2026-10-11, worktree agent-a20c5cd6caf7826c0, task battery, not committed). Numbers, method and per-state wakeup sources in docs/perf/README.md "Battery during runs".
+  - New `DesignSystem/Components/LabelClock.swift`: one timer for every ticking label, aimed at the moment a label's text changes, rounded to whole wall-clock seconds so labels due together share one wakeup, held while the window is covered, minimized or hidden and delivered when it shows. Used by the timeline Working row, the provider subagent bar (ticked while covered before), subagent cards and the lineage section (ticked once a second before, though their text changes each minute after an hour, or each minute and six minutes), and the sidebar.
+  - Sidebar: a Working duration tick redraws only the working rows instead of rebuilding the whole sidebar model once a second in the first minute of every visible run (T3 re-renders only `WorkingDuration`, Sidebar.tsx:361-372). Relative times and snooze countdowns still rebuild.
+  - A/B in the same window: running thread open, first minute 1.45% to 0.49% CPU (Energy Impact 6.72 to 0.60); after a minute 0.32% to 0.26%, 3.53 to 2.88 wakeups/s. Sidebar-only, minimized, terminal and right-panel states were already near zero and stay there.
+  - Dropped: a plain `CALayer` for ticking labels costs more wakeups than AppKit drawing at 1 Hz (bare app test).
+  - Open: the user's demo app (dc64b72, live T3 with many runs) read 0.6 to 6% CPU in the same windows; not sampled, cause unknown. Tests: whole `swift test` passed (1,148 tests), new `LabelClockTests`.
 
 ## Known bugs to fix before the M7 demo
 

@@ -178,8 +178,7 @@ final class SubagentCardLinkView: ControlView {
     private let elapsed = LabelView("", font: SB.tabular(12))
     private let chevron = IconView(name: .chevronRight, size: 14)
     private var tooltip: TooltipController?
-    private var timer: Timer?
-    var contentVisible = true { didSet { updateTimer(); if !contentVisible { tooltip?.hide() } } }
+    var contentVisible = true { didSet { if contentVisible { tick() } else { stop() } } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -208,25 +207,23 @@ final class SubagentCardLinkView: ControlView {
         setAccessibilityRole(p.child == nil ? .group : .button)
         setAccessibilityLabel(p.child == nil ? p.title : "Open \(p.title)")
         setAccessibilityHelp(p.statusLabel)
-        tick(); restyle(); updateTimer(); needsLayout = true
+        tick(); restyle(); needsLayout = true
     }
-    func stop() { timer?.invalidate(); timer = nil; tooltip?.hide() }
+    func stop() { LabelClock.shared.cancel(self); tooltip?.hide() }
+    /// Writes the trailing time, then asks the shared `LabelClock` for a tick when that text next changes
+    /// (each second below an hour, then each minute), only for a live card that is scrolled into view.
     private func tick() {
-        elapsed.text = presentation?.trailing(now: TimestampFormat.nowMs()) ?? ""
-        needsLayout = true
+        let now = TimestampFormat.nowMs()
+        let text = presentation?.trailing(now: now) ?? ""
+        if elapsed.text != text { elapsed.text = text; needsLayout = true }
+        guard let p = presentation, p.ticks, contentVisible,
+              let ms = ThreadRelationships.subagentElapsedMs(status: p.liveStatus, startedAt: p.startedAt, completedAt: p.completedAt, nowMs: now)
+        else { LabelClock.shared.cancel(self); return }
+        LabelClock.shared.schedule(self, in: Double(ThreadRelationships.msUntilElapsedChanges(ms, compact: false)) / 1000) { [weak self] in self?.tick() }
     }
-    private func updateTimer() {
-        let live = presentation?.ticks ?? false
-        if live && contentVisible && window != nil && !isHiddenOrHasHiddenAncestor {
-            if timer == nil {
-                let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
-                timer.tolerance = 0.2; RunLoop.main.add(timer, forMode: .common); self.timer = timer
-            }
-        } else { timer?.invalidate(); timer = nil }
-    }
-    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateTimer() }
-    override func viewDidHide() { super.viewDidHide(); stop() }
-    override func viewDidUnhide() { super.viewDidUnhide(); updateTimer() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); LabelClock.shared.visibilityChanged() }
+    override func viewDidHide() { super.viewDidHide(); tooltip?.hide() }
+    override func viewDidUnhide() { super.viewDidUnhide(); LabelClock.shared.visibilityChanged() }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
     override func performAction() { if presentation?.child != nil { super.performAction() } }
