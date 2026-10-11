@@ -9,14 +9,15 @@ import T3Protocol
 /// find the installed binary. Skips when no runtime is installed.
 @Suite(.serialized)
 struct LocalServerIntegrationTests {
+    static let instanceId = UUID().uuidString
     // Parallel worktrees must never join or stop one another's test daemon.
     static let home = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().appending(path: ".build/localserver-\(ProcessInfo.processInfo.processIdentifier)/t3home", directoryHint: .isDirectory)
+        .deletingLastPathComponent().appending(path: ".build/localserver-\(instanceId)/t3home", directoryHint: .isDirectory)
     static let path = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     static let identity = ClientIdentity(appVersion: "0.0.0-candykit-test")
     static let keychain = CredentialStore(service: "dev.candywrapper.test.local-server.\(ProcessInfo.processInfo.processIdentifier)")
 
-    static func configuration() throws -> LocalServerConfiguration {
+    static func configuration(home: URL = Self.home) throws -> LocalServerConfiguration {
         guard let binary = ProcessInfo.processInfo.environment["CANDY_TEST_LOCALSERVER_BINARY"].map({ URL(fileURLWithPath: $0) }) ?? LocalServerDiscovery.resolveBinary(home: LocalServerDiscovery.defaultHome, path: path) else {
             throw LocalServerLaunchError.notReady
         }
@@ -26,6 +27,36 @@ struct LocalServerIntegrationTests {
         config.extraEnvironment = ["T3CODE_TELEMETRY_ENABLED": "false"]
         config.logFile = home.deletingLastPathComponent().appending(path: "server.stderr.log")
         return config
+    }
+
+    @Test(.timeLimit(.minutes(5)))
+    func otherRunningServerDoesNotBecomeOurs() async throws {
+        guard let ownConfig = try? Self.configuration() else { return }
+        let otherHome = Self.home.deletingLastPathComponent().appending(path: "other/t3home")
+        let other = try await LocalServerLauncher.launch(try Self.configuration(home: otherHome),
+                                                        identity: Self.identity, credentials: nil)
+        let lifecycle = LocalServerLifecycle.live(home: ownConfig.home, identity: Self.identity, credentials: nil,
+                                                  configuration: { ownConfig }, remoteAccess: false)
+        do {
+            #expect(await LocalServerDiscovery.findRunning(home: otherHome)?.runtime.pid == other.pid)
+            #expect(await LocalServerDiscovery.findRunning(home: ownConfig.home) == nil)
+            guard case .owned(let ours) = try await lifecycle.ensureRunning() else {
+                Issue.record("joined another test's server")
+                await lifecycle.shutdown()
+                await LocalServerLauncher.stop(other)
+                return
+            }
+            #expect(ours.pid != other.pid)
+            #expect(ours.descriptor.environmentId != other.descriptor.environmentId)
+            await lifecycle.shutdown()
+            #expect(!other.hasExited)
+            #expect(await LocalServerDiscovery.findRunning(home: otherHome)?.runtime.pid == other.pid)
+            await LocalServerLauncher.stop(other)
+        } catch {
+            await lifecycle.shutdown()
+            await LocalServerLauncher.stop(other)
+            throw error
+        }
     }
 
     @Test(.timeLimit(.minutes(5)))

@@ -55,7 +55,9 @@ final class TerminalController {
 
         func end() {
             stream?.cancel()
+            stream = nil
             writer?.cancel()
+            writer = nil
             outbox.finish()
         }
     }
@@ -522,8 +524,8 @@ final class TerminalController {
             self.resize(attachment, cols: cols, rows: rows)
         }
         surface.onLink = { [weak self] link in self?.openLink(link, cwd: launch.cwd) }
-        surface.onFocus = { [weak self] in
-            guard let self else { return }
+        surface.onFocus = { [weak self, weak host] in
+            guard let self, let host else { return }
             if host === self.panelHost { self.activatePanelTerminal(terminalId) } else if self.state.activeTerminalId != terminalId { self.activate(terminalId) }
         }
         surface.onAddToChat = { [weak self] text, start, end in
@@ -539,10 +541,10 @@ final class TerminalController {
             }
         }
         let payload = TerminalRPC.attachInput(threadId: local, terminalId: terminalId, launch: launch)
-        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { payload }, handler: { [weak self, weak host] event in
+        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { payload }, handler: { [weak self, weak host, weak attachment] event in
             guard case .value(let json) = event, let item = TerminalAttachEvent(json: json) else { return }
             await MainActor.run {
-                guard let self, let host else { return }
+                guard let self, let host, let attachment else { return }
                 self.apply(item, to: attachment, in: host)
             }
         })

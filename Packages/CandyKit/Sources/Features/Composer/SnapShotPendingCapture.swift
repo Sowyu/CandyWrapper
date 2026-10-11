@@ -18,6 +18,13 @@ public struct SnapShotPendingCapture: Codable, Equatable, Sendable {
         fileURL = attachment.fileURL; name = attachment.name; mimeType = attachment.mimeType
         sizeBytes = attachment.sizeBytes; self.source = source
     }
+    /// Remove local capture files only after the send succeeds.
+    public static func removeDeliveredFiles(_ attachments: [ComposerAttachment]) {
+        for attachment in attachments where attachment.snapShotSource != nil {
+            try? FileManager.default.removeItem(at: attachment.fileURL)
+        }
+    }
+
     /// Re-upload rather than trusting a pending upload that may have expired while offline.
     public var attachment: ComposerAttachment {
         var result = ComposerAttachment(id: id, kind: .image, name: name, mimeType: mimeType,

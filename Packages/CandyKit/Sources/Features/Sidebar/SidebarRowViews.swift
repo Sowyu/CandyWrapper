@@ -290,7 +290,30 @@ class SidebarRowBase: ControlView {
         super.mouseUp(with: event)
     }
 
-    func configure(_ item: SidebarItem) { self.item = item; refresh() }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        pressPoint = nil
+        isFileDragOver = false
+        isKeyboardFocused = false
+        func reset(_ view: NSView) {
+            if let control = view as? ControlView {
+                var clean = control.state
+                clean.hovered = false
+                clean.active = false
+                clean.popupOpen = false
+                clean.focusVisible = false
+                control.previewState(clean)
+            }
+            for child in view.subviews { reset(child) }
+        }
+        reset(self)
+    }
+
+    func configure(_ item: SidebarItem) {
+        if self.item?.key != item.key { prepareForReuse() }
+        self.item = item
+        refresh()
+    }
     func refresh() {}
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)

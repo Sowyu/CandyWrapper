@@ -22,7 +22,8 @@ CandyWrapper only uses the CoreText renderer, so neither is needed.
   (`setUseMetal` is not called), and without the shader library they would fall back anyway.
 - `SwiftTermBuildInfo.swift` is written by hand with the release's tag and commit, in place of
   the plugin's generated file.
-- No source file is edited.
+- `AppleTerminalView.queuePendingDisplay` captures the view weakly so a queued redraw does not
+  retain a closed pane and its buffer (2026-10-11 bug sweep).
 
 ## Updating
 

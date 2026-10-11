@@ -99,6 +99,23 @@ struct SidebarListTests {
         window.contentView = nil
     }
 
+    @Test func recycledRowsForgetPointerState() throws {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        defer { window.contentView = nil }
+        content.setSnapshot(makeSnapshot(count: 500), animated: false)
+        content.list.layoutSubtreeIfNeeded()
+        let row = try #require(content.list.subviews.compactMap { $0 as? SidebarRowBase }.first { !$0.isHidden })
+        var hot = row.state
+        hot.hovered = true; hot.active = true
+        row.previewState(hot)
+        content.scrollArea.scroll(to: NSPoint(x: 0, y: 20_000))
+        content.list.layoutSubtreeIfNeeded()
+        #expect(!row.state.hovered)
+        #expect(!row.state.active)
+    }
+
     @Test func updatesTouchOnlyChangedRows() {
         let content = SidebarContentView()
         content.now = { SidebarPreview.referenceNow }
