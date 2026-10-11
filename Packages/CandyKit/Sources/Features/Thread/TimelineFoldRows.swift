@@ -211,7 +211,7 @@ final class EventRowView: TimelineRowView {
     }
 
     /// `run_interrupt_result`, fork, handoff, compaction and created threads read as dividers;
-    /// subagents, errors and the rest as cards (G-timeline-data.md 3.8).
+    /// errors and the rest as cards. Subagents use SubagentCardRowView.
     private static func describe(_ p: ProjectedTurnItem, summary: Bool) -> (Look, Tone, IconName, String, String?) {
         let item = p.item
         switch item.type {
@@ -226,18 +226,6 @@ final class EventRowView: TimelineRowView {
             let title = p.string("title") ?? item.title
             return summary ? (.createdCard, .muted, .messageSquare, title ?? "Created thread", nil)
                 : (.line, .muted, .brandT3Wordmark, "Created thread" + (title.map { " · \($0)" } ?? ""), nil)
-        case .subagent:
-            let status = switch item.status.rawValue {
-            case "pending": "Queued"
-            case "running": "Running"
-            case "waiting": "Waiting"
-            case "idle": "Idle · resumable"
-            case "completed": "Completed"
-            case "failed": "Failed"
-            default: "Stopped"
-            }
-            let detail = (p.string("result") ?? p.string("progress")).map { $0.replacingOccurrences(of: "`", with: "") }
-            return (.card, item.status.rawValue == "failed" ? .danger : .muted, .bot, "\(item.title ?? "Subagent") · \(status)", detail)
         case .secretRequest: return (.card, .muted, .lock, item.title ?? "Secret request", nil)
         case .error:
             let (label, detail) = WorkLog.providerErrorPresentation(item)

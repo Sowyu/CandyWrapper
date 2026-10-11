@@ -124,10 +124,13 @@ final class ThreadLineageRowView: ControlView {
         scalesWhenPressed = true
         setAccessibilityLabel("\(row.title) \(ThreadRelationships.statusLabel(row.status))")
         let hint = row.missing ? "This related thread is unavailable" : "Open \(row.relationship.lowercased()) in this chat"
-        // ponytail: agents get T3's hover card as a plain multi-line tooltip; draw `SubagentTooltipContent` if the card's look matters
-        let text = row.agent.map { Self.agentCard(row.title, $0, nowMs: nowMs) } ?? hint
         if !row.isMergeTarget {
-            let t = TooltipController.attach(to: self, text: text)
+            // Agents get the subagent hover card (SubagentTooltipContent), the rest the hint.
+            let t = TooltipController.attach(to: self, text: row.agent == nil ? hint : "")
+            if let agent = row.agent {
+                let title = row.title
+                t.content = { SubagentCardHoverView(SubagentCardPresentation(agent: agent, title: title)) }
+            }
             t.placement = PopupPlacement(side: .left, align: .center, sideOffset: 4)
             t.delay = 0.2
         }
@@ -142,18 +145,6 @@ final class ThreadLineageRowView: ControlView {
             return ThreadRelationships.compactElapsed(seconds: Double(ms) / 1000)
         }
         return row.isMergeTarget ? nil : ThreadRelationships.statusLabel(row.status)
-    }
-
-    /// `SubagentTooltipContent`'s lines: title, model, status with elapsed time, the progress or result preview.
-    static func agentCard(_ title: String, _ a: ProjectedSubagent, nowMs: Int64) -> String {
-        var lines = [title, a.model ?? "Not reported"]
-        let elapsed = ThreadRelationships.subagentElapsedMs(status: a.status, startedAt: a.startedAt, completedAt: a.completedAt, nowMs: nowMs)
-        lines.append(a.status.replacingOccurrences(of: "_", with: " ").capitalized + (elapsed.map { " · " + ThreadRelationships.elapsed(seconds: Double($0) / 1000) } ?? ""))
-        let terminal = ["completed", "failed", "cancelled", "interrupted"].contains(a.status)
-        let detail = ((terminal ? (a.result ?? a.progress) : (a.progress ?? a.result)) ?? "")
-            .replacing(/\s+/, with: " ").trimmingCharacters(in: .whitespaces)
-        if !detail.isEmpty { lines.append(detail.count > 280 ? String(detail.prefix(280)) + "…" : detail) }
-        return lines.joined(separator: "\n")
     }
 
     /// Updates the live elapsed time; returns true while it still ticks.

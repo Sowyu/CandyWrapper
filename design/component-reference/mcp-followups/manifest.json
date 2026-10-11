@@ -1,0 +1,30 @@
+{
+  "completed" : {
+    "height" : 53.875,
+    "width" : 520
+  },
+  "failed" : {
+    "height" : 53.875,
+    "width" : 520
+  },
+  "hover-card" : {
+    "height" : 109,
+    "width" : 320
+  },
+  "notification" : {
+    "height" : 53.875,
+    "width" : 520
+  },
+  "stopped" : {
+    "height" : 53.875,
+    "width" : 520
+  },
+  "waiting" : {
+    "height" : 53.875,
+    "width" : 520
+  },
+  "watch" : {
+    "height" : 32,
+    "width" : 262
+  }
+}

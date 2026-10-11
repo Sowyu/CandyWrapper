@@ -1,0 +1,84 @@
+{
+  "component": "mcp-followups",
+  "states": [
+    "rest"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "cases": [
+    {
+      "name": "completed",
+      "html": "<div class=\"pb-2\"><button class=\"group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left\"><span class=\"relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3.5 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background bg-success\"></span></span><span class=\"min-w-0 flex-1\"><span class=\"flex items-baseline gap-2\"><span class=\"min-w-0 truncate text-xs font-medium text-foreground\">Audit the schema</span></span><span class=\"block text-2xs leading-relaxed text-muted-foreground\">Found two problems</span></span><span class=\"shrink-0 text-xs text-muted-foreground tabular-nums\">1m 05s</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right size-3.5 shrink-0 text-muted-foreground/60\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg></button></div>",
+      "wrapperStyle": "display:block;width:520px",
+      "native": {
+        "status": "completed",
+        "detail": "Found two problems",
+        "notification": false,
+        "seconds": 65,
+        "child": true
+      }
+    },
+    {
+      "name": "notification",
+      "html": "<div class=\"pb-2\"><button class=\"group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left\"><span class=\"relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3.5 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background bg-success\"></span></span><span class=\"min-w-0 flex-1\"><span class=\"flex items-baseline gap-2\"><span class=\"min-w-0 truncate text-xs font-medium text-foreground\">Audit the schema</span><span class=\"shrink-0 text-3xs text-muted-foreground\">Finished</span></span><span class=\"block text-2xs leading-relaxed text-muted-foreground\">Found two problems</span></span><span class=\"shrink-0 text-xs text-muted-foreground tabular-nums\">10:05</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right size-3.5 shrink-0 text-muted-foreground/60\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg></button></div>",
+      "wrapperStyle": "display:block;width:520px",
+      "native": {
+        "status": "completed",
+        "detail": "Found two problems",
+        "notification": true,
+        "seconds": null,
+        "child": true
+      }
+    },
+    {
+      "name": "failed",
+      "html": "<div class=\"pb-2\"><button class=\"group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left\"><span class=\"relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3.5 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background bg-destructive\"></span></span><span class=\"min-w-0 flex-1\"><span class=\"flex items-baseline gap-2\"><span class=\"min-w-0 truncate text-xs font-medium text-foreground\">Audit the schema</span><span class=\"shrink-0 text-3xs text-destructive\">Failed</span></span><span class=\"block text-2xs leading-relaxed text-destructive\">Could not read the index</span></span><span class=\"shrink-0 text-xs text-muted-foreground tabular-nums\">8s</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right size-3.5 shrink-0 text-muted-foreground/60\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg></button></div>",
+      "wrapperStyle": "display:block;width:520px",
+      "native": {
+        "status": "failed",
+        "detail": "Could not read the index",
+        "notification": false,
+        "seconds": 8,
+        "child": true
+      }
+    },
+    {
+      "name": "waiting",
+      "html": "<div class=\"pb-2\"><button class=\"group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left\"><span class=\"relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3.5 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background bg-info\"></span></span><span class=\"min-w-0 flex-1\"><span class=\"flex items-baseline gap-2\"><span class=\"min-w-0 truncate text-xs font-medium text-foreground\">Audit the schema</span></span><span class=\"block text-2xs leading-relaxed text-muted-foreground\">Waiting</span></span><span class=\"shrink-0 text-xs text-muted-foreground tabular-nums\"></span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right size-3.5 shrink-0 text-muted-foreground/60\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg></button></div>",
+      "wrapperStyle": "display:block;width:520px",
+      "native": {
+        "status": "waiting",
+        "detail": "",
+        "notification": false,
+        "seconds": null,
+        "child": true
+      }
+    },
+    {
+      "name": "stopped",
+      "html": "<div class=\"pb-2\"><button class=\"group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left\"><span class=\"relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3.5 text-muted-foreground\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background bg-muted-foreground/60\"></span></span><span class=\"min-w-0 flex-1\"><span class=\"flex items-baseline gap-2\"><span class=\"min-w-0 truncate text-xs font-medium text-foreground\">Audit the schema</span></span><span class=\"block text-2xs leading-relaxed text-muted-foreground\">Stopped</span></span><span class=\"shrink-0 text-xs text-muted-foreground tabular-nums\">12s</span></button></div>",
+      "wrapperStyle": "display:block;width:520px",
+      "native": {
+        "status": "interrupted",
+        "detail": "",
+        "notification": false,
+        "seconds": 12,
+        "child": false
+      }
+    },
+    {
+      "name": "watch",
+      "html": "<div class=\"flex w-full items-center rounded-lg hover:!bg-black/[0.035] data-pressed:!bg-black/[0.035] dark:hover:!bg-white/[0.08] dark:data-pressed:!bg-white/[0.08] has-[[data-popup-open]]:bg-black/[0.035] dark:has-[[data-popup-open]]:bg-white/[0.08]\"><button class=\"relative inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap border outline-none transition-[box-shadow,scale] [&:active:not([aria-haspopup])]:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 disabled:pointer-events-none disabled:opacity-64 aria-disabled:cursor-not-allowed aria-disabled:opacity-64 [&_svg]:shrink-0 h-8 min-w-0 rounded-lg border-transparent gap-2.5 px-2.5 text-left text-[13px] font-medium text-foreground/80 flex-1 justify-start rounded-e-none bg-transparent shadow-none hover:!bg-black/[0.035] data-pressed:!bg-black/[0.035] dark:hover:!bg-white/[0.08] dark:data-pressed:!bg-white/[0.08] data-popup-open:!bg-black/[0.035] dark:data-popup-open:!bg-white/[0.08]\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-git-pull-request-arrow size-4 shrink-0 text-success\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"6\" r=\"3\"></circle> <path d=\"M5 9v12\"></path> <circle cx=\"19\" cy=\"18\" r=\"3\"></circle> <path d=\"m15 9-3-3 3-3\"></path> <path d=\"M12 6h5a2 2 0 0 1 2 2v7\"></path></svg><span class=\"min-w-0 flex-1 truncate text-left\">#1: Improve the queue</span></button><span class=\"h-4 w-px shrink-0 bg-border/65\"></span><button class=\"relative inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap border outline-none transition-[box-shadow,scale] [&:active:not([aria-haspopup])]:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 disabled:pointer-events-none disabled:opacity-64 aria-disabled:cursor-not-allowed aria-disabled:opacity-64 [&_svg]:shrink-0 h-8 min-w-0 rounded-lg border-transparent gap-2.5 px-2.5 text-left text-[13px] font-medium text-foreground/80 w-8 justify-center rounded-s-none px-0 bg-transparent shadow-none hover:!bg-black/[0.035] data-pressed:!bg-black/[0.035] dark:hover:!bg-white/[0.08] dark:data-pressed:!bg-white/[0.08] data-popup-open:!bg-black/[0.035] dark:data-popup-open:!bg-white/[0.08]\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-eye size-4\" aria-hidden=\"true\"><path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"></path> <circle cx=\"12\" cy=\"12\" r=\"3\"></circle></svg></button></div>",
+      "wrapperStyle": "display:block;width:262px",
+      "native": {}
+    },
+    {
+      "name": "hover-card",
+      "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-left rounded-lg text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-xl shadow-black/25 before:hidden max-w-80 wrap-anywhere whitespace-normal leading-snug\" data-slot=\"tooltip-popup\" data-side=\"top\"><div class=\"relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)] data-instant:transition-none\" data-slot=\"tooltip-viewport\"><div class=\"flex min-w-0 max-w-80 flex-col gap-2 px-1 py-2\"><div class=\"min-w-0 truncate text-xs leading-tight font-medium text-foreground\">Audit the schema</div><div class=\"grid gap-1.5 pl-0.5 text-xs text-muted-foreground\"><div class=\"flex min-w-0 items-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bot size-3 shrink-0\" aria-hidden=\"true\"><path d=\"M12 8V4H8\"></path> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\"></rect> <path d=\"M2 14h2\"></path> <path d=\"M20 14h2\"></path> <path d=\"M15 13v2\"></path> <path d=\"M9 13v2\"></path></svg><span class=\"text-foreground/75\">Not reported</span></div><div class=\"flex min-w-0 items-center justify-between gap-4\"><span class=\"inline-flex items-center gap-1 rounded-sm font-medium capitalize text-success\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check size-3 shrink-0\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>Completed</span><span class=\"tabular-nums\">1m 05s</span></div><div class=\"flex min-w-0 items-center gap-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-terminal size-3 shrink-0\" aria-hidden=\"true\"><path d=\"M12 19h8\"></path> <path d=\"m4 17 6-6-6-6\"></path></svg><span>Found two problems</span></div></div></div></div></div>",
+      "wrapperStyle": "display:block;width:320px",
+      "native": {}
+    }
+  ]
+}

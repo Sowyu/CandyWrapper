@@ -458,6 +458,8 @@ final class WorkRowView: WorkRowBase {
     private var details: [WorkDetailView] = []
     private var entries: [(entry: WorkLogEntry, detail: WorkDetail, open: Bool)] = []
     private var isGroupBody = false
+    /// Subagent notification cards by entry index (`SimpleWorkEntryRow`); nil draws the work line.
+    private var cards: [SubagentCardLinkView?] = []
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
@@ -468,7 +470,24 @@ final class WorkRowView: WorkRowBase {
             let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
             return (e, WorkDetail.of(e, label: label, workspaceRoot: root, output: item.ui.outputs[e.id]), item.ui.expandedEntries.contains(e.id))
         }
+        while cards.count < entries.count { cards.append(nil) }
         for (i, (e, detail, open)) in entries.enumerated() {
+            if let card = SubagentCardPresentation.notificationCard(e, records: item.ui.subagentRecords) {
+                let view = cards[i] ?? SubagentCardLinkView()
+                if cards[i] == nil { cards[i] = view; addSubview(view) }
+                view.isHidden = false
+                view.configure(card)
+                view.action = { [weak self] in
+                    guard let child = card.child else { return }
+                    self?.context.model?.onOpenThread?(child)
+                }
+                line(i).isHidden = true
+                entries[i].detail = WorkDetail()
+                entries[i].open = false
+                if details.count > i { details[i].isHidden = true }
+                continue
+            }
+            if let card = cards[i] { card.stop(); card.isHidden = true }
             let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
             let failed = WorkLog.displayIndicatesFailure(e)
             let toolLike = WorkLog.isToolLike(e)
@@ -503,8 +522,21 @@ final class WorkRowView: WorkRowBase {
         }
         hideLines(from: entries.count)
         for d in details.dropFirst(entries.count) { d.isHidden = true }
+        for c in cards.dropFirst(entries.count) { c?.stop(); c?.isHidden = true }
         needsLayout = true
     }
+
+    override func setContentVisible(_ visible: Bool) {
+        super.setContentVisible(visible)
+        cards.forEach { $0?.contentVisible = visible }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        cards.forEach { $0?.stop() }
+    }
+
+    private func isCard(_ i: Int) -> Bool { i < cards.count && cards[i]?.isHidden == false }
 
     /// Failed error rows keep their timestamp visible.
     private var pinnedTime: [Bool] = []
@@ -524,7 +556,7 @@ final class WorkRowView: WorkRowBase {
 
     override func height(forWidth width: CGFloat) -> CGFloat {
         var h: CGFloat = 0
-        for i in entries.indices { h += rowPad * 2 + 24 + detailHeight(i, width) }
+        for i in entries.indices { h += isCard(i) ? SubagentCardLinkView.height : rowPad * 2 + 24 + detailHeight(i, width) }
         return h + (isGroupBody ? 4 : blockPadding)
     }
 
@@ -532,6 +564,11 @@ final class WorkRowView: WorkRowBase {
         super.layout()
         var y: CGFloat = 0
         for i in entries.indices {
+            if isCard(i), let card = cards[i] {
+                card.frame = NSRect(x: 0, y: y, width: bounds.width, height: SubagentCardLinkView.height)
+                y += SubagentCardLinkView.height
+                continue
+            }
             y += rowPad
             lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
             y += 24
@@ -543,7 +580,7 @@ final class WorkRowView: WorkRowBase {
 
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard let i = lines.prefix(entries.count).firstIndex(where: { $0.frame.contains(p) }), !entries[i].detail.isEmpty else {
+        guard let i = lines.prefix(entries.count).firstIndex(where: { !$0.isHidden && $0.frame.contains(p) }), !entries[i].detail.isEmpty else {
             return super.mouseUp(with: event)
         }
         context.model?.toggleEntry(entries[i].entry.id)
