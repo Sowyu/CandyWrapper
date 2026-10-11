@@ -53,9 +53,27 @@ open class DSView: NSView {
 
     open override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let window { HoverSync.install(in: window) }
         if window != nil, fontGeneration != FontRuntime.generation { fontRuntimeDidChange() }
         if window != nil, themeGeneration != ThemeRuntime.generation { viewDidChangeEffectiveAppearance() }
     }
+
+    // A view that leaves, hides or shows changes what lies under the pointer; HoverSync re-checks.
+    open override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow !== window { HoverSync.setNeedsSync(window) }
+    }
+
+    open override func viewDidHide() {
+        super.viewDidHide()
+        HoverSync.setNeedsSync(window)
+    }
+
+    open override func viewDidUnhide() {
+        super.viewDidUnhide()
+        HoverSync.setNeedsSync(window)
+    }
+
 
     /// Runs `body` with the view's appearance current so dynamic NSColors resolve for it.
     public func resolving<T>(_ body: () -> T) -> T {

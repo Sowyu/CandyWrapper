@@ -60,7 +60,7 @@ struct PickerMenuEntry {
 /// The list inside the traits menu (`MenuPopup` with radio groups, TraitsPicker.tsx:371-486) and
 /// the access select (`SelectPopup` items, ChatComposer.tsx:1325-1350). `p-1` list padding, rows
 /// `px-2 py-1 min-h-7 rounded-sm`, checked rows `foreground/8%`, highlighted rows `accent`.
-final class PickerMenuView: DSView, PickerPopupBody {
+final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
     enum Style { case menu, select }
 
     let style: Style
@@ -146,8 +146,10 @@ final class PickerMenuView: DSView, PickerPopupBody {
         tracking = area
     }
 
-    private func row(at event: NSEvent) -> Int? {
-        let p = convert(event.locationInWindow, from: nil)
+    private func row(at event: NSEvent) -> Int? { pressDragRow(at: event.locationInWindow) }
+
+    func pressDragRow(at windowPoint: NSPoint) -> Int? {
+        let p = convert(windowPoint, from: nil)
         return rows.firstIndex { $0.frame.contains(p) }.flatMap { selectable.contains($0) ? $0 : nil }
     }
 

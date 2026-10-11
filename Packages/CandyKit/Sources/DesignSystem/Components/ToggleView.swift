@@ -128,10 +128,16 @@ public final class ToggleView: ControlView {
         label.lineHeight = 20
         disabledOpacity = variant == .ghost ? 1 : 0.64 // ghost: `disabled:opacity-100`
         alphaValue = state.enabled ? 1 : CGFloat(disabledOpacity)
+        // toggle.tsx:9 `transition-shadow` fades the focus ring; the segmented variant's `transition-colors`
+        // (toggle.tsx:34) replaces it through tailwind-merge and fades text, icon and background instead.
+        transitions = variant == .segmented ? .colors : []
+        decoration.transition = variant == .segmented ? [] : [.shadow]
         let look = ToggleStyles.look(variant: variant, state: state, pressed: isPressed, radius: radius)
-        decoration.boxStyle = look.box
-        label.color = look.text
-        iconView?.strokeColor = look.text
+        Motion.transitioning(transitions) {
+            decoration.boxStyle = look.box
+            label.color = look.text
+            iconView?.strokeColor = look.text
+        }
         // `[&_svg]:opacity-80`, as group opacity like CSS. Ghost's `disabled:[&_svg]:opacity-100` loses
         // to it on specificity (the base selector has `:not([class*='opacity-'])`).
         iconView?.alphaValue = 0.8

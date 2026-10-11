@@ -26,6 +26,7 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
     public init(placeholder: String = "") {
         super.init(frame: .zero)
         decoration.host = self
+        decoration.transition = [.shadow, .border] // transition-shadow (input.tsx:68)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         field.isBordered = false

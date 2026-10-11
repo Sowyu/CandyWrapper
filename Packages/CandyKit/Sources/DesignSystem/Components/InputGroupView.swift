@@ -42,6 +42,7 @@ public final class InputGroupView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         decoration.host = self
+        decoration.transition = [.shadow, .border] // transition-shadow (input-group.tsx:10); the border swaps with the ring
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         input.unstyled = true

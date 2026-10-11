@@ -8,8 +8,13 @@ public final class SliderView: DSView {
     public var range: ClosedRange<Double> { didSet { needsDisplay = true } }
     public var step: Double
     public final var onChange: (@MainActor (Double) -> Void)?
-    private var hovering = false { didSet { needsDisplay = true } }
-    private var pressed = false { didSet { needsDisplay = true } }
+    private var hovering = false { didSet { if hovering != oldValue { restyleThumb(animated: true) } } }
+    private var pressed = false { didSet { if pressed != oldValue { restyleThumb(animated: true) } } }
+    /// The thumb lives in its own layers so hover and press scale it on the GPU: `transform 120ms ease,
+    /// box-shadow 120ms ease` (index.css:970-995), scale 1.08 on hover and 0.94 while pressed.
+    private let thumb = CALayer()
+    private let thumbFill = CAShapeLayer()
+    private let thumbRing = CAShapeLayer()
 
     public init(value: Double, range: ClosedRange<Double>, step: Double) {
         self.value = value; self.range = range; self.step = step
@@ -17,6 +22,51 @@ public final class SliderView: DSView {
         setAccessibilityRole(.slider)
         setAccessibilityValue(value)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self))
+        let box = CGRect(x: 0, y: 0, width: 16, height: 16)
+        thumb.bounds = box
+        thumbFill.frame = box
+        thumbFill.path = CGPath(ellipseIn: box, transform: nil)
+        thumbFill.shadowPath = thumbFill.path
+        thumbFill.shadowOpacity = 1
+        thumbFill.shadowOffset = CGSize(width: 0, height: 1)
+        thumbRing.frame = box
+        thumbRing.path = CGPath(ellipseIn: box.insetBy(dx: 1, dy: 1), transform: nil)
+        thumbRing.lineWidth = 2
+        thumbRing.fillColor = nil
+        thumb.addSublayer(thumbFill)
+        thumb.addSublayer(thumbRing)
+        layer?.addSublayer(thumb)
+        restyleThumb(animated: false)
+    }
+
+    /// CSS `ease`.
+    private static let ease = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
+
+    private func restyleThumb(animated: Bool) {
+        let scale: CGFloat = pressed ? 0.94 : hovering ? 1.08 : 1
+        let transform = CATransform3DMakeScale(scale, scale, 1)
+        // `0 1px 2px` at rest, `0 1px 3px` on hover. A CSS blur is twice Core Animation's shadow radius.
+        let radius: CGFloat = hovering ? 1.5 : 1
+        let color = resolving { Themed.color(\.contrastForeground, hovering ? 0.2 : 0.12).cgColor }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if animated, window != nil, !Motion.reduced {
+            Motion.animate(thumb, keyPath: "transform", to: NSValue(caTransform3D: transform), duration: 0.12, timing: Self.ease)
+            Motion.animate(thumbFill, keyPath: "shadowRadius", to: radius, duration: 0.12, timing: Self.ease)
+            Motion.animate(thumbFill, keyPath: "shadowColor", to: color, duration: 0.12, timing: Self.ease)
+        }
+        thumb.transform = transform
+        thumbFill.shadowRadius = radius
+        thumbFill.shadowColor = color
+        CATransaction.commit()
+    }
+
+    public override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        thumb.position = CGPoint(x: 8 + ratio * (bounds.width - 16), y: bounds.height / 2)
+        CATransaction.commit()
     }
 
     public override var wantsUpdateLayer: Bool { false }
@@ -45,22 +95,14 @@ public final class SliderView: DSView {
         let inset = NSBezierPath(roundedRect: track.insetBy(dx: 0.5, dy: 0.5), xRadius: 2.5, yRadius: 2.5)
         inset.lineWidth = 1
         inset.stroke()
-        let scale: CGFloat = pressed ? 0.94 : hovering ? 1.08 : 1
-        let d = 16 * scale
-        let thumb = NSRect(x: thumbX - d / 2, y: midY - d / 2, width: d, height: d)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowOffset = NSSize(width: 0, height: -1)
-        shadow.shadowBlurRadius = hovering ? 3 : 2
-        shadow.shadowColor = Themed.color(\.contrastForeground, hovering ? 0.2 : 0.12)
-        shadow.set()
-        Themed.color(\.background).setFill()
-        NSBezierPath(ovalIn: thumb).fill()
-        NSGraphicsContext.restoreGraphicsState()
-        let ring = NSBezierPath(ovalIn: thumb.insetBy(dx: 1, dy: 1))
-        ring.lineWidth = 2
-        Themed.color(\.primary).setStroke()
-        ring.stroke()
+        // Theme colors resolve here, the pass that runs on appearance changes; the thumb follows the value.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        thumbFill.fillColor = Themed.color(\.background).cgColor
+        thumbRing.strokeColor = Themed.color(\.primary).cgColor
+        thumbFill.shadowColor = Themed.color(\.contrastForeground, hovering ? 0.2 : 0.12).cgColor
+        thumb.position = CGPoint(x: thumbX, y: midY)
+        CATransaction.commit()
     }
 
     private func set(from event: NSEvent) {

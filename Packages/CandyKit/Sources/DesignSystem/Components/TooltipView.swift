@@ -62,7 +62,7 @@ public final class TooltipView: DSView, PopupContent {
 /// (600ms default), close after `closeDelay` (0), and open at once with no motion when another
 /// tooltip closed less than the provider `timeout` (400ms) ago.
 @MainActor
-public final class TooltipController: NSResponder {
+public final class TooltipController: NSResponder, HoverSyncClient {
     public var text: String
     public var variant: TooltipView.Variant
     public var placement: PopupPlacement

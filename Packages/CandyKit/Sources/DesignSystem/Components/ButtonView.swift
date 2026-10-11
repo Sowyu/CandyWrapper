@@ -83,6 +83,7 @@ public final class ButtonView: ControlView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         decoration.host = self
+        decoration.transition = [.shadow] // transition-[box-shadow,scale] (button.tsx:11): the focus ring fades, hover fills snap
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         label.font = DSFont.ui(14, weight: .medium)

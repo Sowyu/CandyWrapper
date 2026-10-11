@@ -356,6 +356,7 @@ final class PinButton: ControlView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        transitions = .colors // transition-colors hover:text-foreground (Sidebar.tsx:1765)
         addSubview(pin)
         addSubview(pinOff)
         setAccessibilityLabel("Unpin thread")

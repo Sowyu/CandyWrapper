@@ -38,6 +38,7 @@ public final class BadgeView: DSView {
         self.size = size
         super.init(frame: .zero)
         decoration.host = self
+        decoration.transition = [.shadow] // transition-shadow (badge.tsx:10)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         label.text = title
