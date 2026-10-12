@@ -24,18 +24,45 @@ final class WelcomeOnboardingController {
     private var step = 0
     private var selected: Set<String> = []
     private var seenComputers: Set<String> = []
-    private var candidates: [(env: String, value: JSONValue)] = []
-    private var selectedPaths: Set<String> = []
-    private var importedProjects: [String: String] = [:]
+    /// One `agentSessions.scan` per computer set up, run together (`useProjectScans`).
+    private struct ProjectScan {
+        var pending = true
+        var error: String?
+        var truncated = false
+        var candidates: [OnboardingProjectCandidate]?
+        /// `orchestration:operate`: nil until the session is read, then whether imports may run.
+        var writable: Bool?
+        var task: Task<Void, Never>?
+    }
+    private var scanIds: [String] = []
+    private var scans: [String: ProjectScan] = [:]
+    /// nil until the user changes it: the recent repositories (`partitionOnboardingProjects`).
+    private var selectedKeys: Set<String>?
+    /// Retries skip what landed: projects whose history came across, and the ids and command ids of
+    /// creations in flight so a retry reuses them (WelcomeWizard.tsx:1218-1224).
+    private var importedProjects: [String: (env: String, projectId: String)] = [:]
+    private var projectsWithHistory: [String: (env: String, projectId: String)] = [:]
+    private var projectAttempts: [String: (projectId: String, commandId: String)] = [:]
+    private var lastImportSelection: [String] = []
+    private var importWarning = ""
+    private var importedThreadCount = 0
+    /// The project to open once its environment's shell lists it.
+    private var landing: (env: String, projectId: String)?
+    private let importList = OnboardingImportListView()
     private var task: Task<Void, Never>?
     private var busy = false
     private var error: String?
+    /// Opens a new thread in a project, by environment and local id; false while the sidebar lacks it.
+    var openProject: ((String, String) -> Bool)?
+    var toasts: ToastViewport?
 
     init(window: NSWindow, environments: Environments, composer: ComposerController, settings: SettingsController) {
         self.window = window; self.environments = environments; self.composer = composer; self.settings = settings
         settings.t3.observe { [weak self] in if self?.step == 0 { self?.render() } }
         environments.observe { [weak self] in self?.evaluateFirstRun(); if self?.step == 0 { self?.render() } }
         composer.configObservers.append { [weak self] _ in self?.evaluateFirstRun(); if self?.step == 1 { self?.render() } }
+        importList.onSelectionChange = { [weak self] keys in self?.selectedKeys = keys; self?.render() }
+        importList.onRetry = { [weak self] env in self?.scan(env) }
     }
     func beginFirstRun() {
         guard let content = window?.contentView else { return }
@@ -66,6 +93,7 @@ final class WelcomeOnboardingController {
     func liveShell(_ env: String, snapshot: ShellSnapshot?) {
         if snapshot == nil { live.remove(env) } else { live.insert(env) }
         evaluateFirstRun()
+        if landing?.env == env { DispatchQueue.main.async { [weak self] in self?.land() } }
     }
     private func evaluateFirstRun() {
         guard gate != nil, gateRoute != .wizard else { return }
@@ -136,7 +164,6 @@ final class WelcomeOnboardingController {
             if gateRoute == .wizard && !suspendingWelcome && ClientSettingsStore.shared.current.string("onboardingCompletedAt").isEmpty { show() }
         }
     }
-    private func key(_ env: String, _ value: JSONValue) -> String { env + ":" + (value["path"]?.stringValue ?? "") }
     private func button(_ title: String, action: @escaping @MainActor () -> Void) -> ButtonView {
         let button = ButtonView(title, variant: .outline, size: .sm)
         button.action = action
@@ -202,79 +229,228 @@ final class WelcomeOnboardingController {
                 settings?.onOnboardingReturn = { [weak self] in self?.show() }
                 settings?.show(.providers)
             })
+        } else if isLoadingProjects {
+            // The first scan is still out on every computer (WelcomeWizard.tsx:1434-1450).
+            content[1] = LabelView("Your projects", font: DSFont.ui(24, weight: .semibold))
+            content.remove(at: 2)
+            content.append(OnboardingProjectsLoadingView())
         } else {
-            content.append(button("Select all") { [weak self] in guard let self else { return }; selectedPaths = Set(candidates.map { key($0.env, $0.value) }); render() })
-            content.append(button("Select none") { [weak self] in self?.selectedPaths = []; self?.render() })
-            if busy { content.append(LabelView("Looking for projects from Claude Code and Codex…", font: DSFont.ui(14))) }
-            for item in candidates {
-                let id = key(item.env, item.value)
-                content.append(OnboardingChoiceRowView(title: item.value["title"]?.stringValue ?? "Project", detail: item.value["path"]?.stringValue ?? "",
-                                                       selected: selectedPaths.contains(id)) { [weak self] on in
-                    if on { self?.selectedPaths.insert(id) } else { self?.selectedPaths.remove(id) }; self?.render()
-                })
-            }
-            if candidates.isEmpty, !busy { content.append(LabelView("No projects found.", font: DSFont.ui(14))) }
+            importList.update(scans: listScans, selected: currentSelection, importing: busy, error: visibleImportError)
+            content.append(importList)
         }
-        if let error { content.append(LabelView(error, font: DSFont.ui(12), color: Themed.color(\.destructive))) }
+        if let error, step != 2 { content.append(LabelView(error, font: DSFont.ui(12), color: Themed.color(\.destructive))) }
         dialog.panelContent = content
         if step == 2 {
-            let skip = button("Do not import projects") { [weak self] in self?.finish() }
-            let run = button("Import \(selectedPaths.count) \(selectedPaths.count == 1 ? "project" : "projects")") { [weak self] in self?.runImport() }
-            run.isEnabled = !busy && !selectedPaths.isEmpty
-            dialog.footerButtons = [skip, run]
+            let skip = ButtonView("Do not import projects", variant: .ghostMuted)
+            skip.isEnabled = !busy
+            skip.action = { [weak self] in
+                guard let self else { return }
+                if isLoadingProjects { complete() } else { finishAfterImport() }
+            }
+            if isLoadingProjects {
+                dialog.footerButtons = [skip]
+            } else {
+                let count = selectedCandidates.count
+                let run = ButtonView(busy ? "Importing…" : "Import \(count) \(count == 1 ? "project" : "projects")")
+                run.isEnabled = canImport && !busy && count > 0
+                run.action = { [weak self] in self?.runImport() }
+                dialog.footerButtons = [skip, run]
+            }
         } else {
-            let next = button("Continue") { [weak self] in guard let self else { return }; step += 1; if step == 2 { scan() }; render() }
+            let next = button("Continue") { [weak self] in guard let self else { return }; step += 1; if step == 2 { scanAll() }; render() }
             next.isEnabled = !busy && !selected.isEmpty && selected.allSatisfy { environments.state($0)?.status == .connected }
             dialog.footerButtons = [next]
         }
     }
-    private func scan() {
-        task?.cancel(); busy = true; candidates = []; error = nil
-        let ids = selected.sorted()
-        task = Task { [weak self] in
-            guard let self else { return }
-            defer { busy = false; render() }
-            for env in ids {
-                do {
-                    let result = try await environments.request(env, "agentSessions.scan", .object([:]))
-                    try Task.checkCancellation()
-                    let values = result["candidates"]?.arrayValue ?? []
-                    candidates += values.map { (env, $0) }
-                } catch is CancellationError { return }
-                catch { self.error = "Could not check projects. \(error)" }
-            }
-            selectedPaths = Set(candidates.filter { $0.value["alreadyImported"]?.boolValue != true }.map { key($0.env, $0.value) })
+
+    // MARK: Step 3: projects (WelcomeWizard.tsx:1194-1567)
+
+    private var allCandidates: [OnboardingProjectCandidate] { scanIds.flatMap { scans[$0]?.candidates ?? [] } }
+    private var isLoadingProjects: Bool {
+        !scanIds.isEmpty && scanIds.allSatisfy { scans[$0]?.candidates == nil } && scanIds.contains { scans[$0]?.pending == true }
+    }
+    private var currentSelection: Set<String> {
+        selectedKeys ?? Set(OnboardingProjectImport.recent(allCandidates, nowMs: TimestampFormat.nowMs()).map(\.key))
+    }
+    private var selectedCandidates: [OnboardingProjectCandidate] {
+        let keys = currentSelection
+        return allCandidates.filter { keys.contains($0.key) }
+    }
+    /// T3 reads the session's scopes; a session not read yet does not block here.
+    private func writable(_ env: String) -> Bool { scans[env]?.writable != false }
+    private var canImport: Bool { selectedCandidates.allSatisfy { writable($0.environmentId) } }
+    private var visibleImportError: String? {
+        if !canImport { return OnboardingProjectImport.permissionMessage }
+        return error == OnboardingProjectImport.permissionMessage ? nil : error
+    }
+    private var listScans: [OnboardingImportListView.Scan] {
+        scanIds.map { env in
+            let s = scans[env] ?? ProjectScan()
+            return .init(environmentId: env, label: environments.label(env) ?? "Computer", pending: s.pending && s.candidates == nil,
+                         error: s.error, truncated: s.truncated, candidates: s.candidates ?? [])
         }
     }
-    private func runImport() {
-        busy = true; error = nil; render()
-        let selection = candidates.filter { selectedPaths.contains(key($0.env, $0.value)) }
-        task = Task { [weak self] in
+
+    /// One scan per computer set up, together; a computer's Retry runs its own again.
+    private func scanAll() {
+        for env in scanIds { scans[env]?.task?.cancel() }
+        scanIds = selected.sorted()
+        scans = [:]
+        selectedKeys = nil
+        error = nil
+        for env in scanIds { scan(env) }
+    }
+
+    private func scan(_ env: String) {
+        var state = scans[env] ?? ProjectScan()
+        state.task?.cancel()
+        state.pending = true
+        state.error = nil
+        let shell = environments.session(env)
+        state.task = Task { [weak self] in
             guard let self else { return }
-            defer { busy = false; render() }
+            async let access = try? shell?.http.session(token: shell?.token)
             do {
-                for item in selection {
-                    try Task.checkCancellation()
-                    guard let path = item.value["path"]?.stringValue else { continue }
-                    let id = key(item.env, item.value)
-                    let projectId: String
-                    if let existing = importedProjects[id] ?? item.value["projectId"]?.stringValue { projectId = existing }
-                    else {
-                        let createdId = ProjectId(UUID().uuidString.lowercased())
-                        let result = try await environments.request(item.env, "projects.mutate", ProjectCommands.create(projectId: createdId, workspaceRoot: path, createWorkspaceRootIfMissing: false, title: item.value["title"]?.stringValue))
-                        projectId = try result.decode(as: ProjectShell.self).id.rawValue
-                        importedProjects[id] = projectId
-                    }
-                    let result = try await environments.request(item.env, "agentSessions.import", .object(["projectId": .string(projectId), "expectedWorkspaceRoot": .string(path)]))
-                    if (result["skippedCount"]?.intValue ?? 0) > 0 { self.error = "Some conversations could not be imported. Try again." }
+                let result = try await environments.request(env, "agentSessions.scan", .object([:]))
+                try Task.checkCancellation()
+                scans[env]?.candidates = (result["candidates"]?.arrayValue ?? []).compactMap { OnboardingProjectCandidate(environmentId: env, json: $0) }
+                scans[env]?.truncated = result["truncated"]?.boolValue == true
+            } catch is CancellationError {
+                return
+            } catch {
+                scans[env]?.error = Self.message(error)
+            }
+            if let session = await access { scans[env]?.writable = session.grants(AuthScopes.orchestrationOperate) }
+            scans[env]?.pending = false
+            scans[env]?.task = nil
+            if step == 2 { render() }
+        }
+        scans[env] = state
+        if step == 2 { render() }
+    }
+
+    private static func message(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? "\(error)"
+    }
+
+    /// `runImport`: creates each missing project (reusing an attempt's ids), imports its history, and
+    /// retries skip what landed. Failures refresh that computer's scan; a warning sums up what did not.
+    private func runImport() {
+        let selection = selectedCandidates
+        guard !busy else { return }
+        guard selection.allSatisfy({ writable($0.environmentId) }) else { error = OnboardingProjectImport.permissionMessage; render(); return }
+        if selection.isEmpty { complete(); return }
+        busy = true; error = nil
+        importWarning = ""
+        importedThreadCount = 0
+        lastImportSelection = selection.map(\.key)
+        render()
+        task = Task { [weak self] in
+            guard let self else { return }
+            var landed = selection.filter { importedProjects[$0.key] != nil }.count
+            var imported = 0, skipped = 0
+            var refresh: Set<String> = []
+            for candidate in selection {
+                guard !Task.isCancelled else { return }
+                guard writable(candidate.environmentId) else {
+                    busy = false; error = OnboardingProjectImport.permissionMessage; render(); return
                 }
-                if error == nil { finish() }
-            } catch is CancellationError { return }
-            catch { self.error = "Could not import projects. \(error)" }
+                let key = candidate.key, env = candidate.environmentId
+                if importedProjects[key] != nil { continue }
+                var projectId = candidate.projectId
+                    ?? environments.snapshot(env).flatMap { ProjectCommands.existing($0.projects, workspaceRoot: candidate.path)?.id.localId.rawValue }
+                if projectId == nil {
+                    let attempt = projectAttempts[key] ?? {
+                        let id = UUID().uuidString.lowercased()
+                        return (id, "onboarding:project:create:\(id)")
+                    }()
+                    projectAttempts[key] = attempt
+                    do {
+                        _ = try await environments.request(env, "projects.mutate", ProjectCommands.create(
+                            projectId: ProjectId(attempt.projectId), workspaceRoot: candidate.path, createWorkspaceRootIfMissing: false,
+                            title: candidate.title, commandId: attempt.commandId))
+                        projectId = attempt.projectId
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        projectAttempts[key] = nil
+                        refresh.insert(env)
+                        continue
+                    }
+                }
+                guard let projectId else { continue }
+                do {
+                    let result = try await environments.request(env, "agentSessions.import", .object([
+                        "projectId": .string(projectId), "expectedWorkspaceRoot": .string(candidate.path)]))
+                    let count = result["importedCount"]?.intValue ?? 0, missed = result["skippedCount"]?.intValue ?? 0
+                    imported += count; skipped += missed
+                    if count > 0 { projectsWithHistory[key] = (env, projectId) }
+                    if missed == 0 { landed += 1; importedProjects[key] = (env, projectId) }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    projectAttempts[key] = nil
+                    refresh.insert(env)
+                }
+            }
+            for env in refresh { scan(env) }
+            busy = false
+            importedThreadCount = imported
+            if landed < selection.count { importWarning = OnboardingProjectImport.warning(imported: imported, skipped: skipped) }
+            finishAfterImport()
         }
     }
-    private func finish() {
+
+    /// `finishAfterImport`: open the selected project with imported history, else one that landed empty.
+    private func finishAfterImport() {
+        guard let project = OnboardingProjectImport.landing(lastImportSelection, withHistory: projectsWithHistory, completed: importedProjects) else {
+            complete()
+            return
+        }
+        landing = project
+        busy = true
+        render()
+        land()
+    }
+
+    /// Waits for the landing project in its computer's shell, then finishes there.
+    private func land() {
+        guard let landing, openProject?(landing.env, landing.projectId) == true else { return }
+        self.landing = nil
+        busy = false
+        complete(opened: true)
+    }
+
+    /// `finish` (WelcomeWizard.tsx:172-219): marks onboarding done, closes, then reports the import.
+    private func complete(opened: Bool = false) {
         ClientSettingsStore.shared.update(["onboardingCompletedAt": .string(ISO8601DateFormatter().string(from: Date()))])
         host?.close()
+        if !importWarning.isEmpty {
+            _ = toasts?.show(ToastView(title: "Some history was not imported", message: importWarning, kind: .warning), timeout: 0)
+        } else if importedThreadCount > 0 {
+            _ = toasts?.show(ToastView(title: "Imported \(importedThreadCount) \(importedThreadCount == 1 ? "thread" : "threads")", kind: .success))
+        }
+        importWarning = ""
+        importedThreadCount = 0
+    }
+}
+
+/// "Looking for projects from Claude Code and Codex…" under a large muted spinner, centered (`min-h-40 py-6 gap-3`).
+private final class OnboardingProjectsLoadingView: DSView {
+    private let spinner = SpinnerView(size: .lg, tone: .muted)
+    private let label = LabelView("Looking for projects from Claude Code and Codex…", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        label.alignment = .center
+        label.lineHeight = 20
+        addSubview(spinner); addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 112) }
+    override func layout() {
+        super.layout()
+        let top = (bounds.height - 20 - 12 - 20) / 2
+        spinner.frame = NSRect(x: (bounds.width - 20) / 2, y: top, width: 20, height: 20)
+        label.frame = NSRect(x: 0, y: top + 32, width: bounds.width, height: 20)
     }
 }

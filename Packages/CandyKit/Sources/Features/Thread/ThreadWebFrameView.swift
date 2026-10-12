@@ -278,6 +278,11 @@ enum ThreadWebFrameBudget {
 
     static func remove(_ frame: ThreadWebFrameView) { live.removeAll { $0 === frame } }
 
+    /// Force Reload: wipes what live frames stored (cache, cookies, web storage). A store with no frames is gone already.
+    static func clearData() {
+        store?.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+    }
+
     /// For tests and the memory report.
     static var count: Int { live.count }
 }

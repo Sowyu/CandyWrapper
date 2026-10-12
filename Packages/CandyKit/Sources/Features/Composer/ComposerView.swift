@@ -40,13 +40,23 @@ public final class ComposerView: DSView {
     private var scrollGesture = ComposerScrollGesture()
     private var scrollCollapsed = false
     public var restingBlocked: (() -> Bool)?
+    /// `shouldUseRestingComposerLayout` and `composerHasExpandedChrome` (ChatComposer.tsx:5184-5204): attachments
+    /// rest too (files above the prompt, images inline after it); a failed image upload, the plan follow-up and
+    /// the open approval or question (the top drawer) keep it expanded.
     public var isResting: Bool {
-        scrollCollapsed && !isDraftRoute && pending == .none && replacement == nil && !prompt.contains("\n")
-            && attachmentCount == 0 && sendDisabledReason == nil && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
+        scrollCollapsed && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
+            && !imageAttention && sendDisabledReason == nil && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
     }
+    /// `hasImageAttachmentAttention`: a failed upload stays actionable in the expanded tray.
+    // ponytail: SnapShot images keep the composer expanded; T3 rests with them in the tray (`expandedComposerImages`). Port it if SnapShot users ask
+    private var imageAttention: Bool {
+        imageShelf.tiles.contains { if case .failed = $0.status { true } else { $0.source != nil } }
+    }
+    /// `hasWrappedPrompt`: a prompt that wraps stays readable, so the gesture does not rest it.
+    private var promptWraps: Bool { editor.contentHeight > ComposerEditor.lineHeight * 1.5 }
     public func recordTimelineScroll(delta: CGFloat, canScroll: Bool, towardEnd: Bool) {
         if scrollGesture.record(now: ProcessInfo.processInfo.systemUptime, delta: delta,
-            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting && restingBlocked?() != true && dropHighlight.isHidden,
+            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting && !promptWraps && restingBlocked?() != true && dropHighlight.isHidden,
             canScroll: canScroll, towardEnd: towardEnd) {
             scrollCollapsed = true
             if isResting { window?.makeFirstResponder(nil); needsLayout = true; onHeightChange?() }
@@ -136,12 +146,16 @@ public final class ComposerView: DSView {
     public let fileList = ComposerFileListView()
     /// The draft's images above the files (`expandedComposerImages`).
     public let imageShelf = ComposerImageShelfView()
+    private let restingImages = ComposerRestingImagesView()
     public var imageTiles: [ComposerImageShelfView.Tile] {
         get { imageShelf.tiles }
         set {
             let before = shelfHeight
+            let wasResting = isResting
             imageShelf.tiles = newValue
             imageShelf.isHidden = newValue.isEmpty
+            restingImages.set(newValue)
+            if wasResting || isResting { needsLayout = true; if wasResting != isResting { onHeightChange?() } }
             if shelfHeight != before { needsLayout = true; onHeightChange?() }
         }
     }
@@ -204,7 +218,8 @@ public final class ComposerView: DSView {
 
     /// Composer box height for the current text: 144 to 274, 66 up with an approval, +8 with a question.
     public var preferredHeight: CGFloat {
-        if isResting { return 50 }
+        // `py-2`, the files at their natural height, then the 32pt prompt row.
+        if isResting { return 50 + fileList.preferredHeight }
         if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
         case .approval: return Self.inset * 2 + Self.pad + editorHeight + Self.pad
@@ -293,6 +308,10 @@ public final class ComposerView: DSView {
         addSubview(fileList)
         imageShelf.isHidden = true
         addSubview(imageShelf)
+        restingImages.isHidden = true
+        restingImages.onExpand = { [weak self] id in self?.imageShelf.onExpand?(id) }
+        restingImages.onOverflow = { [weak self] in self?.focus() }
+        addSubview(restingImages)
         dropHighlight.cornerRadius = Self.radius
         dropHighlight.borderWidth = 1
         dropHighlight.isHidden = true
@@ -670,17 +689,27 @@ public final class ComposerView: DSView {
             return
         }
         if isResting {
-            let textWidth = max(0, w - 110)
-            scroll.frame = NSRect(x: 13, y: 9, width: textWidth, height: 32)
+            // Files keep their rows above the prompt; images move into the prompt row, after the text.
+            let files = fileList.preferredHeight
+            fileList.isHidden = fileList.rows.isEmpty
+            fileList.frame = NSRect(x: Self.inset + Self.pad, y: 9, width: max(0, w - 2 * (Self.inset + Self.pad)),
+                                    height: max(0, files - ComposerFileListView.marginBottom))
+            let rowY = 9 + files
+            let images = ComposerRestingImagesView.width(count: imageShelf.tiles.count)
+            let textWidth = max(0, w - 110 - (images > 0 ? images + 4 : 0))
+            scroll.frame = NSRect(x: 13, y: rowY, width: textWidth, height: 32)
             setEditorGeometry(minSize: NSSize(width: textWidth, height: 32), width: textWidth)
-            placeholder.frame = NSRect(x: 17, y: 13, width: textWidth - 8, height: ComposerEditor.lineHeight)
+            placeholder.frame = NSRect(x: 17, y: rowY + 4, width: textWidth - 8, height: ComposerEditor.lineHeight)
             placeholder.isHidden = !editor.string.isEmpty
-            primary.frame = NSRect(x: w - 49, y: 9, width: 32, height: 32)
-            attach.frame = NSRect(x: w - 85, y: 11, width: 28, height: 28)
+            restingImages.isHidden = images == 0
+            restingImages.frame = NSRect(x: 13 + textWidth, y: rowY, width: images, height: 32)
+            primary.frame = NSRect(x: w - 49, y: h - 41, width: 32, height: 32)
+            attach.frame = NSRect(x: w - 85, y: h - 39, width: 28, height: 28)
             for view in footerControls + separators { view.isHidden = true }
-            [validation, imageShelf, fileList, questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
+            [validation, imageShelf, questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
             return
         }
+        restingImages.isHidden = true
         imageShelf.isHidden = imageShelf.tiles.isEmpty
         fileList.isHidden = fileList.rows.isEmpty
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.

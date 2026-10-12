@@ -304,6 +304,8 @@ final class ThreadController {
     private(set) var lineage: ThreadLineageController!
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
+    /// Runs whose Retry is in flight: one retry per failed run (ChatView.tsx:4047-4058).
+    private var retryingPreparations: Set<RunId> = []
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
     private var session: ThreadSession? {
@@ -400,6 +402,17 @@ final class ThreadController {
             return url
         }
         panel.model.onOpenHtmlRender = { [weak self] url, _ in self?.browser.openURL(url.absoluteString) }
+        panel.model.onRetryWorkspacePreparation = { [weak self] runId in
+            guard let self, let id = self.openThreadId, !self.retryingPreparations.contains(runId) else { return }
+            self.retryingPreparations.insert(runId)
+            Task { [weak self] in
+                // `retryWorkspacePreparation` (client-runtime commands.ts:1011-1020); T3 only logs a failure.
+                _ = try? await self?.environments.dispatch(id, .object([
+                    "type": .string("prepared-run.retry"), "commandId": .string(UUID().uuidString.lowercased()),
+                    "threadId": .string(id.localId.rawValue), "runId": .string(runId.rawValue)]))
+                self?.retryingPreparations.remove(runId)
+            }
+        }
         panel.model.onOpenThread = { [weak self] local in
             guard let self, let env = self.openThreadId?.environmentId else { return }
             self.open(local.scoped(to: env))
@@ -726,6 +739,7 @@ final class ThreadController {
 
     func forceReload() {
         retained.removeAll()
+        files.forceReload()
         guard let id = session?.threadId, !panel.isDraft else { return }
         open(id, force: true)
     }

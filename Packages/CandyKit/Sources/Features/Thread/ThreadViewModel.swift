@@ -25,6 +25,8 @@ struct TimelineRowUI: Hashable {
     /// An MCP App asked to be closed; the row shows "Show app".
     var appClosed = false
     var subagentRecords: [JSONValue] = []
+    /// Runs of this row's preparation failures that a Retry can prepare again.
+    var retryRunIds: Set<RunId> = []
 }
 
 /// What MCP App rows ask of the environment (McpAppFrame.tsx: `mcpAppEnvironment`, `useTurnItemDetail`).
@@ -172,6 +174,8 @@ public final class ThreadViewModel {
 
     /// The plan card's Save to workspace: the export text and the suggested name (ProposedPlanCard.tsx:105-163).
     public var onSavePlanToWorkspace: (@MainActor (_ contents: String, _ filename: String) -> Void)?
+    /// Retry on a failed workspace preparation: dispatches `prepared-run.retry` for the run.
+    public var onRetryWorkspacePreparation: (@MainActor (RunId) -> Void)?
     public var onForkFromRun: (@MainActor (ThreadId, RunId) -> Void)?
 
     /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,
@@ -367,6 +371,7 @@ public final class ThreadViewModel {
                 ui.expandedEntries.insert(e.id)
                 if let state = output(for: e) { ui.outputs[e.id] = state }
             }
+            for e in entries { if let run = retryablePreparationRun(e) { ui.retryRunIds.insert(run) } }
             let children = Set(entries.compactMap(SubagentCardPresentation.notificationChild))
             if !children.isEmpty {
                 ui.subagentRecords = projection?.subagents.filter { children.contains($0["childThreadId"]?.stringValue ?? "") } ?? []
@@ -394,6 +399,16 @@ public final class ThreadViewModel {
         }
         return TimelineItem(row: row, ui: ui)
     }
+    /// `workspacePreparationRetryRunIds` for one entry (turnItemPresentation.ts:27-49): a failed preparation
+    /// error whose run failed there and recorded its preparation. Older servers record none, so no Retry.
+    private func retryablePreparationRun(_ e: WorkLogEntry) -> RunId? {
+        guard let item = e.projectedItem?.item, item.type == .error, item.status == .failed,
+              item["failure"]?["code"]?.stringValue == "workspace_preparation_failed", let runId = item.runId,
+              let run = projection?.runs.first(where: { $0.id == runId }),
+              run.status.rawValue == "failed", run.workspacePreparation != nil else { return nil }
+        return runId
+    }
+
     // MARK: Omitted tool output
 
     /// The output state of an open entry. Starts a fetch when the stream left its output out and

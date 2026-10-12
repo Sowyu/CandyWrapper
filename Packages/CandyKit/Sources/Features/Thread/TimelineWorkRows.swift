@@ -274,9 +274,22 @@ final class WorkRowView: WorkRowBase {
 
     private func hasTrace(_ i: Int) -> Bool { i < traces.count && traces[i]?.isHidden == false }
 
+    /// A failed error's message and Retry, by entry index (MessagesTimeline.tsx:5419-5469).
+    private var failures: [WorkFailureView?] = []
+
+    private func failure(_ i: Int) -> WorkFailureView? { i < failures.count && failures[i]?.isHidden == false ? failures[i] : nil }
+
+    /// A failed error item takes T3's error branch: no inspector, the message below, a usage limit without it.
+    private static func failedError(_ e: WorkLogEntry) -> (message: String?, runId: RunId?)? {
+        guard let item = e.projectedItem?.item, item.type == .error, item.status == .failed else { return nil }
+        let warning = item["failure"]?["class"]?.stringValue == "usage_limit"
+        return (warning ? nil : item["failure"]?["message"]?.stringValue ?? "", item.runId)
+    }
+
     /// The row opens: an inspector to show, or a thought with text (`canExpandProjectedItem`, :5552-5561).
     private func expandable(_ i: Int) -> Bool {
         let e = entries[i].entry
+        if Self.failedError(e) != nil { return false }
         return !entries[i].detail.isEmpty || (e.itemType == .reasoning && !(e.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
     }
 
@@ -302,6 +315,7 @@ final class WorkRowView: WorkRowBase {
             t.set(grouped.map(ReasoningTraceView.Item.init), context: context)
             hideLines(from: 0)
             details.forEach { $0.isHidden = true }
+            failures.forEach { $0?.isHidden = true }
             cards.forEach { $0?.stop(); $0?.isHidden = true }
             traces.forEach { $0?.isHidden = true }
             needsLayout = true
@@ -322,6 +336,7 @@ final class WorkRowView: WorkRowBase {
                 entries[i].detail = WorkDetail()
                 entries[i].open = false
                 if details.count > i { details[i].isHidden = true }
+                if failures.count > i { failures[i]?.isHidden = true }
                 continue
             }
             if let card = cards[i] { card.stop(); card.isHidden = true }
@@ -355,7 +370,23 @@ final class WorkRowView: WorkRowBase {
             }
             details[i].detail = detail
             details[i].onAction = { [weak self] action in self?.context.model?.perform(action) }
-            details[i].isHidden = !open || detail.blocks.isEmpty || thought
+            let failedError = Self.failedError(e)
+            details[i].isHidden = !open || detail.blocks.isEmpty || thought || failedError != nil
+            while failures.count <= i { failures.append(nil) }
+            let retry = failedError?.runId.flatMap { item.ui.retryRunIds.contains($0) ? $0 : nil }
+            if let failedError, failedError.message != nil || retry != nil {
+                let view = failures[i] ?? WorkFailureView()
+                if failures[i] == nil { failures[i] = view; addSubview(view) }
+                view.isHidden = false
+                view.message = failedError.message
+                if let retry {
+                    view.onRetry = { [weak self] in self?.context.model?.onRetryWorkspacePreparation?(retry) }
+                } else {
+                    view.onRetry = nil
+                }
+            } else {
+                failures[i]?.isHidden = true
+            }
             if thought, open, expandable(i) {
                 trace(i).set([ReasoningTraceView.Item(e)], context: context)
             } else if i < traces.count {
@@ -365,6 +396,7 @@ final class WorkRowView: WorkRowBase {
         for t in traces.dropFirst(entries.count) { t?.isHidden = true }
         hideLines(from: entries.count)
         for d in details.dropFirst(entries.count) { d.isHidden = true }
+        for f in failures.dropFirst(entries.count) { f?.isHidden = true }
         for c in cards.dropFirst(entries.count) { c?.stop(); c?.isHidden = true }
         needsLayout = true
     }
@@ -409,7 +441,10 @@ final class WorkRowView: WorkRowBase {
     override func height(forWidth width: CGFloat) -> CGFloat {
         if traceOnly, let t = groupTrace { return t.height(forWidth: ReasoningTraceView.width(in: width)) + 4 }
         var h: CGFloat = 0
-        for i in entries.indices { h += isCard(i) ? SubagentCardLinkView.height : rowPad * 2 + 24 + detailHeight(i, width) }
+        for i in entries.indices {
+            h += isCard(i) ? SubagentCardLinkView.height
+                : rowPad * 2 + 24 + (failure(i)?.height(forWidth: width - 4) ?? 0) + detailHeight(i, width)
+        }
         return h + (isGroupBody ? 4 : blockPadding)
     }
 
@@ -433,6 +468,11 @@ final class WorkRowView: WorkRowBase {
             y += rowPad
             lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
             y += 24
+            if let f = failure(i) {
+                let fh = f.height(forWidth: bounds.width - 4)
+                f.frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: fh)
+                y += fh
+            }
             let dh = detailHeight(i, bounds.width)
             if hasTrace(i), let t = traces[i] {
                 t.frame = NSRect(x: ReasoningTraceView.inset, y: y, width: ReasoningTraceView.width(in: bounds.width), height: dh)
@@ -452,6 +492,43 @@ final class WorkRowView: WorkRowBase {
     }
 
     override func mouseDown(with event: NSEvent) {}
+}
+
+/// Below a failed error's line (MessagesTimeline.tsx:5451-5468): the failure message `ms-7 py-1 text-sm
+/// leading-relaxed text-foreground/80`, then for a failed workspace preparation an outline xs Retry `ms-7 pb-1`.
+final class WorkFailureView: DSView {
+    private let text = TextBlockView("", font: TL.font(14), lineHeight: 22.75, color: TL.c(\.foreground, 0.8))
+    private let retry = ButtonView("Retry", icon: .rotateCcw, variant: .outline, size: .xs)
+    private static let inset: CGFloat = 28
+
+    var message: String? { didSet { text.text = message ?? ""; text.isHidden = message == nil; needsLayout = true } }
+    var onRetry: (@MainActor () -> Void)? {
+        didSet { retry.isHidden = onRetry == nil; retry.action = { [weak self] in self?.onRetry?() }; needsLayout = true }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addSubview(text)
+        addSubview(retry)
+        retry.isHidden = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func textHeight(_ width: CGFloat) -> CGFloat {
+        guard let message else { return 0 }
+        return 4 + (message.isEmpty ? 0 : text.height(forWidth: max(0, width - Self.inset))) + 4
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        textHeight(width) + (onRetry == nil ? 0 : 24 + 4)
+    }
+
+    override func layout() {
+        super.layout()
+        let th = textHeight(bounds.width)
+        text.frame = NSRect(x: Self.inset, y: 4, width: max(0, bounds.width - Self.inset), height: max(0, th - 8))
+        retry.frame = NSRect(x: Self.inset, y: th, width: retry.intrinsicContentSize.width, height: 24)
+    }
 }
 
 /// `ReasoningTraceContent` (MessagesTimeline.tsx:5328-5352) in `WorkLogDetails` (WorkLog.tsx:126-133): each
