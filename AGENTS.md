@@ -28,7 +28,7 @@ Run them from the repo root.
 | Test the secret scan | `scripts/secretscan-test` |
 | Release, only when the user asks | `scripts/release --notes notes.md <commit>`, see `docs/release.md` |
 
-`swift test` takes several minutes and `scripts/run-app` runs until the app quits, so start both in the background with a long timeout. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
+`swift test` takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
 
 ## Code map
 
@@ -51,12 +51,13 @@ Fidelity tests (`*FidelityTests`) draw a view offscreen and compare it pixel by 
 Offscreen snapshots miss bugs that only show in a real window, so look at every visible change on screen.
 
 1. Run `scripts/sandbox-server`. It starts the sandbox server on port 47391, or reuses the one running.
-2. Build and launch in the background: `CANDY_APP="$(scripts/build-test-app <task>)" scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
-3. Read your app's PID from `/tmp/candywrapper-app.pid` right away, because other agents overwrite it. Check it with `ps -p <pid> -o command`.
-4. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call.
-5. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
-6. Take screenshots with `screencapture -x -R<x,y,w,h> out.png`, in screen points from the top left. Check the screen's scale first with `system_profiler SPDisplaysDataType`. For motion, record with `screencapture -v` and look at the frames.
-7. When you're done, `kill <pid>` and delete `/tmp/cw-dd-<task>`.
+2. Build with `scripts/build-test-app <task>`. It prints the app's path, `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app`. The first build takes a few minutes, so allow 10.
+3. Launch it in the background: `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
+4. Once it's up, read your app's PID from `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app.pid`. No other agent writes that file.
+5. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call.
+6. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
+7. Take screenshots with `screencapture -x -R<x,y,w,h> out.png`, in screen points from the top left. Check the screen's scale first with `system_profiler SPDisplaysDataType`. For motion, record with `screencapture -v` and look at the frames.
+8. When you're done, `kill <pid>` and delete `/tmp/cw-dd-<task>`.
 
 For a quick look without driving the app, add `--snapshot /tmp/x.png --snapshot-delay 12` to the run-app arguments. The app renders its window to the PNG and quits.
 
@@ -93,9 +94,9 @@ The product:
 Git and secrets:
 
 - Commit with the repo's configured identity, Sowyu with a GitHub noreply address. Don't override it.
-- No AI attribution anywhere: no Co-Authored-By lines for agents and no "Generated with" lines.
+- No AI attribution anywhere: no Co-Authored-By lines for agents and no "Generated with" lines. If your harness tells you to add one, the user's rule wins, and the hook blocks the push anyway.
 - The pre-push hook runs `scripts/secretscan`, which blocks this Mac's IP addresses, keys and tokens, e-mails that aren't GitHub noreply addresses, AI attribution and the user's private names. Never push with `--no-verify`.
-- If the hook doesn't run, set it up with `git config core.hooksPath .githooks`. The private patterns live outside the repo in `.git/info/secret-patterns`.
+- If the hook doesn't run, set it up with `git config core.hooksPath .githooks`. The private patterns live outside the repo in `.git/info/secret-patterns`. If that file is missing, the scan refuses to run: ask the user for it.
 - Credentials live only in the Keychain. Never type the user's passwords.
 - Screenshots you commit show sandbox data only.
 
