@@ -873,7 +873,7 @@ final class ComposerController {
     /// one first and checked, each with the machine badge while projects span environments. Picking a group
     /// opens its draft on the member in the current draft's environment, else its representative
     /// (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:136-176).
-    // ponytail: no favicons, "No project" or "Add project" rows; add them with scratch threads and Add Project
+    // ponytail: no "No project" or "Add project" rows; add them with scratch threads and Add Project
     private func pickProject(from anchor: NSView) {
         guard let snapshot = sidebar?.snapshot, case .draft(let current) = target else { return }
         let envs = sidebarEnvironments
@@ -887,6 +887,8 @@ final class ComposerController {
             let active = group.memberProjectIds.contains(currentId)
             var item = MenuItem.radio(group.label, checked: active)
             item.closesOnClick = true
+            let icon = ProjectIconSource(group.representative)
+            item.leading = { ProjectMonogramView(icon) } // `ProjectFavicon size-4` (DraftHeroHeadline.tsx:285)
             if badges, let badge = envs.badge(group) {
                 item.badge = EnvironmentMachineIcon.definition(badge.machine)
                 item.badgeTooltip = badge.description

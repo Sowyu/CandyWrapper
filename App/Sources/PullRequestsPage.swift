@@ -321,7 +321,8 @@ final class PullRequestsPageController {
         let projects = self.projects
         let errors = Dictionary((answer?.result.errors ?? []).map { ($0.projectId, $0.message) }, uniquingKeysWith: { a, _ in a })
         m.projects = projects.map { p in
-            PullRequestsPageView.ProjectOption(key: p.id.rawValue, title: p.title, unavailable: errors[p.id.localId.rawValue])
+            PullRequestsPageView.ProjectOption(key: p.id.rawValue, title: p.title, unavailable: errors[p.id.localId.rawValue],
+                                               icon: ProjectIconSource(p))
         }
         // Hosts: the workspace's own, then what the server answered for each (`hostMenuOptions`).
         var expected: [(host: String, kind: String)] = []

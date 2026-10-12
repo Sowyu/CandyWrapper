@@ -33,7 +33,11 @@ public final class PullRequestsPageView: DSView {
         public var key: String
         public var title: String
         public var unavailable: String?
-        public init(key: String, title: String, unavailable: String? = nil) { self.key = key; self.title = title; self.unavailable = unavailable }
+        /// The project's favicon (`PullRequestFilterOptionIcon`, PullRequestListFilters.tsx:64-74).
+        public var icon: ProjectIconSource?
+        public init(key: String, title: String, unavailable: String? = nil, icon: ProjectIconSource? = nil) {
+            self.key = key; self.title = title; self.unavailable = unavailable; self.icon = icon
+        }
     }
 
     /// Everything the page draws. The controller rebuilds it on every change.
@@ -374,7 +378,12 @@ public final class PullRequestsPageView: DSView {
         projectItems.append(all)
         for p in m.projects.sorted(by: { ($0.unavailable != nil ? 1 : 0) < ($1.unavailable != nil ? 1 : 0) }) {
             var item = MenuItem.radio(p.unavailable == nil ? p.title : "\(p.title) · Unavailable", checked: m.projectKey == p.key) { [weak self] _ in self?.onProject?(p.key) }
-            item.icon = .folderGit2
+            if let source = p.icon {
+                item.leading = { ProjectMonogramView(source, size: 14) } // `size-3.5`
+                item.leadingSize = 14
+            } else {
+                item.icon = .folderGit2
+            }
             item.closesOnClick = true
             item.isDisabled = p.unavailable != nil
             item.tooltip = p.unavailable

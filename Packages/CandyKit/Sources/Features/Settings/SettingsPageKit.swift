@@ -271,7 +271,14 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
 
     func refresh() {
         guard let scope = context?.scope else { return }
-        project.title = scope.selection.project.map { key in scope.projects.first { $0.key == key }?.displayName ?? "Unavailable project" } ?? "All projects"
+        let selected = scope.selection.project.flatMap { key in scope.projects.first { $0.key == key } }
+        project.title = selected?.displayName ?? (scope.selection.project == nil ? "All projects" : "Unavailable project")
+        // `ProjectFavicon className="size-3.5"` before the selected project (SettingsScopeSentence.tsx:193).
+        if let icon = selected?.icon {
+            if (project.glyph as? ProjectMonogramView)?.source != icon { project.glyph = ProjectMonogramView(icon, size: 14) }
+        } else if project.glyph != nil {
+            project.glyph = nil
+        }
         let machine = scope.selection.machine ?? (singleEnvironment ? impliedMachine : nil)
         connective.text = machine == nil ? "across" : "on"
         if let id = machine, let e = scope.environments.first(where: { $0.id == id }) {
@@ -320,10 +327,13 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
         }]
         items[0].closesOnClick = true
         items.append(MenuItem("", kind: .separator))
-        // ponytail: rows show names without the project favicon; add the icon if the menu learns custom glyph views
         for p in scope.projects {
             var item = MenuItem.radio(p.displayName, checked: scope.selection.project == p.key) { [weak context] _ in
                 context?.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: p.key))
+            }
+            if let icon = p.icon {
+                item.leading = { ProjectMonogramView(icon, size: 14) } // `size-3.5` (SettingsScopeSentence.tsx:212)
+                item.leadingSize = 14
             }
             item.closesOnClick = true
             items.append(item)

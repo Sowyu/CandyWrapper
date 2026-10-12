@@ -218,6 +218,7 @@ public final class CommandPaletteController {
         item.matchIsUser = entry.matchIsUser
         item.matchHighlights = entry.matchHighlights
         item.glyph = entry.glyph
+        if let source = entry.projectIcon { item.makeIcon = { ProjectMonogramView(source) } }
         item.titleHighlights = entry.titleHighlights
         item.descriptionHighlights = entry.descriptionHighlights
         item.isStatic = entry.isStatic

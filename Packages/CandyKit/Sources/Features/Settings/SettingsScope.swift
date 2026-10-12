@@ -51,7 +51,11 @@ public struct SettingsScopeProject: Equatable, Sendable {
     public var key: String
     public var displayName: String
     public var members: [Member]
-    public init(key: String, displayName: String, members: [Member] = []) { self.key = key; self.displayName = displayName; self.members = members }
+    /// The group's favicon, from its representative project (`ProjectFavicon project={group}`).
+    public var icon: ProjectIconSource?
+    public init(key: String, displayName: String, members: [Member] = [], icon: ProjectIconSource? = nil) {
+        self.key = key; self.displayName = displayName; self.members = members; self.icon = icon
+    }
 }
 
 /// The URL search the settings route keeps (`SettingsScopeSearch`): absent means all.

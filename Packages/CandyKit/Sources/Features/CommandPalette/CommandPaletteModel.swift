@@ -27,6 +27,8 @@ public struct PaletteEntry {
     public var action: Action
     /// The file picker's rows: a file type glyph and fuzzy highlights.
     public var glyph: (IconDefinition, NSColor)?
+    /// A project row's icon in place of `icon` (`projectFaviconIcon`, CommandPalette.tsx:346-348).
+    public var projectIcon: ProjectIconSource?
     public var titleHighlights: [Int]?
     public var descriptionHighlights: [Int]?
     /// A message match (`ThreadSearchMatchExcerpt`): `match` is "You: <snippet>" or "Agent: <snippet>",
