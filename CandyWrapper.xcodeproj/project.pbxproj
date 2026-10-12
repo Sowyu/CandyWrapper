@@ -56,6 +56,7 @@
 		DA045A39A44D87162AAD179E /* DesktopManagedController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */; };
 		E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */; };
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
+		EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0DD18B055E5BF454B9B77F4B /* AppIcon.icon */; };
 		FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 527913F33E671EBA3009A953 /* Shortcuts.swift */; };
 /* End PBXBuildFile section */
 
@@ -63,6 +64,7 @@
 		045DDA2A8C6CDD4119BB7447 /* FilesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesController.swift; sourceTree = "<group>"; };
 		08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexAuthCallbackReceiver.swift; sourceTree = "<group>"; };
 		0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsController.swift; sourceTree = "<group>"; };
+		0DD18B055E5BF454B9B77F4B /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		162121B8686607C8F5B9672C /* notification-input.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "notification-input.mp3"; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
@@ -144,6 +146,7 @@
 		70C64F126126D7C9DEB90F96 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				0DD18B055E5BF454B9B77F4B /* AppIcon.icon */,
 				B48E504B3E2B8BAC36A00639 /* Sounds */,
 			);
 			path = Resources;
@@ -296,6 +299,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */,
 				4F0A678A7750FE0672129144 /* notification-completion.mp3 in Resources */,
 				BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */,
 				BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */,
