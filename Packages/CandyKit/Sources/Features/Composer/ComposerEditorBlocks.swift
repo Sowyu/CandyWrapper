@@ -250,7 +250,10 @@ extension ComposerEditor {
             setSelectedRange(NSRange(location: caret, length: 0))
             return true
         }
-        if let current, isQuote(current), nextMarker == nil, storage.attribute(.composerCodeBlock, at: caret + 1, effectiveRange: nil) == nil {
+        // The line break at the caret can be the draft's last character: then no line follows and the
+        // default delete joins nothing but the break.
+        if let current, isQuote(current), nextMarker == nil, caret + 1 < storage.length,
+           storage.attribute(.composerCodeBlock, at: caret + 1, effectiveRange: nil) == nil {
             // A plain line after a quote moves into it as its next line.
             replaceBlocks(NSRange(location: caret + 1, length: 0), with: current.source)
             setSelectedRange(NSRange(location: caret, length: 0))
