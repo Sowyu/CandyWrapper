@@ -49,6 +49,26 @@ final class MainWindow: NSWindow {
         }
     }
 
+    /// AppKit sends the second and third press of a double or triple click to the view that took the first
+    /// press, even after that view moved away or hid: quick clicks on the sidebar toggle reached the trigger
+    /// that had just left (measured, 2026-10-12) and did nothing. A browser targets whatever is under the
+    /// pointer, so a press that lands on another view than the last one starts a new click there.
+    private weak var lastPressTarget: NSView?
+
+    override func sendEvent(_ event: NSEvent) {
+        guard event.type == .leftMouseDown, let frameView = contentView?.superview else { return super.sendEvent(event) }
+        let target = frameView.hitTest(event.locationInWindow)
+        let moved = target !== lastPressTarget
+        lastPressTarget = target
+        if event.clickCount > 1, moved,
+           let fresh = NSEvent.mouseEvent(with: .leftMouseDown, location: event.locationInWindow, modifierFlags: event.modifierFlags,
+                                          timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil,
+                                          eventNumber: event.eventNumber, clickCount: 1, pressure: event.pressure) {
+            return super.sendEvent(fresh)
+        }
+        super.sendEvent(event)
+    }
+
     override func layoutIfNeeded() {
         super.layoutIfNeeded()
         layoutTrafficLights()

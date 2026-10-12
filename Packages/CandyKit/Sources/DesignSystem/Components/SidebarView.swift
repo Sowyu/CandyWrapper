@@ -72,7 +72,7 @@ public struct SidebarWidth {
 
 /// `SidebarProvider` + `Sidebar` + `SidebarInset`: the sidebar container on the left (1px right border,
 /// `bg-sidebar surface-grain`), the main panel filling the rest, and the rail between them.
-/// Show and hide are instant, like T3 at its default `panelAnimationDurationMs` of 0.
+/// Show and hide are instant at T3's default `panelAnimationDurationMs` of 0 and slide otherwise (`setOpen`).
 public final class SidebarLayoutView: DSView {
     public let sidebar: SidebarContainerView
     public let main: GrainSurfaceView
@@ -104,6 +104,9 @@ public final class SidebarLayoutView: DSView {
         addSubview(rail)
         addSubview(collapsedTrigger)
         collapsedTrigger.isHidden = true
+        gapFill.isHidden = true
+        gapFill.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull(), "backgroundColor": NSNull()]
+        layer?.insertSublayer(gapFill, at: 0)
         collapsedTrigger.action = { [weak self] in self?.toggle() }
         if let sidebarContent { sidebar.content = sidebarContent }
         if let mainContent { main.addSubview(mainContent) }
@@ -111,28 +114,102 @@ public final class SidebarLayoutView: DSView {
         setAccessibilityRole(.group)
     }
 
+    /// Fills the strip on the right that the main panel uncovers while it slides in from the left (opening).
+    private let gapFill = CALayer()
+    /// Bumped by every toggle, so a superseded slide's completion does nothing.
+    private var slideGeneration = 0
+    /// True while a close slide runs: the container keeps its open frame and only its layer moves away.
+    /// AppKit draws nothing for a drawn view whose frame lies outside the window (the art, the brand and
+    /// every label went blank mid-slide), so the frame moves off screen when the slide ends.
+    private var closing = false
+
+    /// Opens or closes at once; with `panelAnimationDurationMs` above 0 the panels then slide there.
+    ///
+    /// T3 transitions the container's `left` and the gap's `width` with `ease-out` over the setting's duration
+    /// (ui/sidebar.tsx:287, :299; AppSidebarLayout.tsx:264). A toggle mid-slide starts from where the panels
+    /// are, and a reversal takes the share of the duration it has left to travel, like a reversed CSS
+    /// transition. Frames only move layers: the main panel takes its final width on the click (one layout,
+    /// as an instant toggle does) and the render server slides both.
     public func setOpen(_ open: Bool) {
         guard open != isOpen else { return }
+        let duration = SettingsPanelMotion.duration
+        let animated = duration > 0 && window != nil && bounds.width > 0
+        // Where the panels show now, mid-slide included.
+        let sidebarFrom = sidebar.frame.minX + Self.slideOffset(sidebar)
+        let mainFrom = main.frame.minX + Self.slideOffset(main)
         isOpen = open
         rail.isOpen = open
         collapsedTrigger.isSidebarOpen = open
-        if !open {
-            collapsedTrigger.isHidden = false
-        } else if SettingsPanelMotion.duration > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + SettingsPanelMotion.duration) { [weak self] in
-                if self?.isOpen == true { self?.collapsedTrigger.isHidden = true }
-            }
-        } else {
-            collapsedTrigger.isHidden = true
-        }
+        slideGeneration += 1
+        closing = animated && !open
+        // The fixed trigger stays up through an open slide, until the sidebar's own trigger is back under it.
+        collapsedTrigger.isHidden = open && !animated
         needsLayout = true
         onOpenChange?(open)
-        if SettingsPanelMotion.duration > 0 {
+        if animated {
             layoutSubtreeIfNeeded()
-            let offset = CGSize(width: open ? -effectiveWidth : effectiveWidth, height: 0)
-            SettingsPanelMotion.reveal(sidebar, offset: offset)
-            SettingsPanelMotion.reveal(main, offset: offset)
+            slide(sidebarFrom: sidebarFrom, mainFrom: mainFrom, duration: duration)
+        } else {
+            for view in [sidebar, main] as [NSView] { view.layer?.removeAnimation(forKey: Self.slideKey) }
+            gapFill.isHidden = true
         }
+        HoverSync.setNeedsSync(window)
+    }
+
+    private static let slideKey = "sidebar-slide"
+
+    private static func slideOffset(_ view: NSView) -> CGFloat {
+        guard view.layer?.animation(forKey: slideKey) != nil else { return 0 }
+        return (view.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat) ?? 0
+    }
+
+    private func slide(sidebarFrom: CGFloat, mainFrom: CGFloat, duration: TimeInterval) {
+        let w = effectiveWidth
+        // The container's frame sits at 0 through any slide; its layer moves from where it shows to 0 or -w.
+        let sidebarStart = sidebarFrom - sidebar.frame.minX, sidebarEnd: CGFloat = isOpen ? 0 : -w
+        let mainOffset = mainFrom - main.frame.minX
+        let share = w > 0 ? min(1, abs(sidebarEnd - sidebarStart) / w) : 1
+        let generation = slideGeneration
+        // Opening narrows the main panel at once and slides it right; the strip it has not reached yet
+        // shows the main background, not the window.
+        // ponytail: the main panel reflows once at the start instead of every frame like T3's width transition; interpolate widths if anyone sees the jump.
+        if mainOffset < 0 {
+            gapFill.backgroundColor = Themed.color(\.background).cgColor(in: self)
+            gapFill.frame = CGRect(x: main.frame.maxX + mainOffset, y: 0, width: -mainOffset, height: bounds.height)
+            gapFill.isHidden = false
+        } else {
+            gapFill.isHidden = true
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            MainActor.assumeIsolated { self?.slideEnded(generation) }
+        }
+        for (view, from, to) in [(sidebar, sidebarStart, sidebarEnd), (main, mainOffset, 0)] as [(NSView, CGFloat, CGFloat)] {
+            let animation = CABasicAnimation(keyPath: "transform.translation.x")
+            animation.fromValue = from
+            animation.toValue = to
+            animation.duration = duration * share
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            // Held at its end until `slideEnded` moves the frame, so nothing flashes in between.
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            view.layer?.add(animation, forKey: Self.slideKey)
+        }
+        CATransaction.commit()
+    }
+
+    private func slideEnded(_ generation: Int) {
+        guard slideGeneration == generation else { return }
+        closing = false
+        gapFill.isHidden = true
+        if isOpen { collapsedTrigger.isHidden = true }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        for view in [sidebar, main] as [NSView] { view.layer?.removeAnimation(forKey: Self.slideKey) }
+        CATransaction.commit()
+        HoverSync.setNeedsSync(window)
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -206,7 +283,7 @@ public final class SidebarLayoutView: DSView {
         super.layout()
         let w = effectiveWidth
         // Offcanvas: the container slides fully off screen to `left: -width`, the gap collapses to 0.
-        sidebar.frame = NSRect(x: isOpen ? 0 : -w, y: 0, width: w, height: bounds.height)
+        sidebar.frame = NSRect(x: isOpen || closing ? 0 : -w, y: 0, width: w, height: bounds.height)
         let gap = isOpen ? w : 0
         main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
         main.subviews.first?.frame = main.bounds
@@ -349,6 +426,7 @@ public final class SidebarTriggerView: ControlView {
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
+
 
     public override func layout() {
         super.layout()
