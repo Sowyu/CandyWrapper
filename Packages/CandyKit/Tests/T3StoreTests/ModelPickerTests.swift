@@ -34,6 +34,20 @@ struct ModelPickerTests {
         }
     }
 
+    /// TraitsPicker.tsx:506-527: Codex's standard tier adds no label; Fast joins the reasoning label.
+    @Test func codexServiceTierLabel() {
+        let effort = ProviderOptionDescriptor(id: "reasoningEffort", label: "Reasoning", type: .select,
+                                              options: [.init(id: "medium", label: "Medium", isDefault: true)])
+        func tier(_ value: String) -> ProviderOptionDescriptor {
+            ProviderOptionDescriptor(id: "serviceTier", label: "Speed", type: .select,
+                                     options: [.init(id: "default", label: "Standard", isDefault: true), .init(id: "fast", label: "Fast")],
+                                     currentValue: .string(value))
+        }
+        #expect(ModelTraits.triggerLabel([effort, tier("default")], provider: "codex") == "Medium")
+        #expect(ModelTraits.triggerLabel([effort, tier("fast")], provider: "codex") == "Medium Fast")
+        #expect(ModelTraits.triggerLabel([effort, tier("default")], provider: "claudeAgent") == "Medium · Standard")
+    }
+
     /// `resolveComposerInteractionMode(...).enabled`, which gates Implement in a new thread.
     @Test func interactionModeEnabled() {
         var provider = ServerProvider(instanceId: "g", driver: "grok", models: [])

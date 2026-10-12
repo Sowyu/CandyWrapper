@@ -54,7 +54,7 @@ public final class DraftHeroView: DSView {
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let (string, range) = pieces()
         let line = TextLine(string)
         let x = ((bounds.width - line.width) / 2).rounded()

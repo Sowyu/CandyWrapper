@@ -120,8 +120,8 @@ final class TrackedLabelView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty else { return }
-        ctx.setShouldSmoothFonts(true)
-        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
+        ctx.setAllowsFontSmoothing(FontRuntime.smoothing)
         let l = line
         ctx.textMatrix = .identity
         ctx.translateBy(x: 0, y: l.baseline(top: (bounds.height - lineHeight) / 2, lineHeight: lineHeight))

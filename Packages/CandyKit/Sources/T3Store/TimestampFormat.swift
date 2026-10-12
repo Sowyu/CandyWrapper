@@ -16,6 +16,11 @@ public enum TimestampFormat {
         case relative(value: String, suffix: String?)
     }
 
+    /// The locale T3 formats wall-clock times with: Electron's `app.getSystemLocale()` (ElectronApp.ts:132,
+    /// timestampFormat.ts:31-50) is language and region only, so a macOS region-format override (`en_US@rg=frzzzz`
+    /// on this Mac) or 24-hour switch never reaches it: T3 shows "7:25 AM" where Locale.current says "07:25".
+    public static let t3Locale = Locale(identifier: Locale.current.identifier.components(separatedBy: "@")[0])
+
     public static func nowMs(_ date: Date = Date()) -> Int64 {
         Int64((date.timeIntervalSince1970 * 1000).rounded(.down))
     }

@@ -107,6 +107,17 @@ final class Environments {
         changed()
     }
 
+    /// The primary's label and machine from its descriptor: T3 labels the local environment with the
+    /// server's label, the host name (environments/primary/context.ts:30, Sidebar.tsx:2503-2509), not "This device".
+    func setPrimaryDescriptor(_ descriptor: EnvironmentDescriptor) {
+        let id = descriptor.environmentId
+        guard entries[id] != nil else { return }
+        entries[id]?.label = descriptor.label
+        entries[id]?.machine = descriptor.platform?.machine
+        publishEnvironments()
+        changed()
+    }
+
     /// The primary's detected machine, from its descriptor.
     func setDetectedMachine(_ environmentId: String, _ machine: String?) {
         guard entries[environmentId] != nil, entries[environmentId]?.machine != machine else { return }
@@ -354,8 +365,7 @@ final class Environments {
                             shellChanged(id, cached)
                             LaunchTiming.mark("cached sidebar")
                         }
-                        entries[id]?.label = descriptor.label
-                        entries[id]?.machine = descriptor.platform?.machine
+                        setPrimaryDescriptor(descriptor)
                         attach(ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: entries[id]?.snapshot), to: id)
                     } else {
                         addRemote(environmentId: id, label: descriptor.label, machine: descriptor.platform?.machine,

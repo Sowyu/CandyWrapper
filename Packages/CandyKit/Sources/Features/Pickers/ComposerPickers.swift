@@ -96,7 +96,7 @@ public final class ComposerPickers {
         }
         modelButton.icon = glyph
         modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
-        let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled)
+        let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled, provider: current.entry?.driver)
         traitsButton.title = label
         traitsButton.toolTip = label
         controlsView.showsTraits = !current.descriptors.isEmpty

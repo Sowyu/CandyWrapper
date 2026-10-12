@@ -58,7 +58,7 @@ public final class CalendarView: DSView {
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let muted72 = Themed.color(\.contrastMutedForeground, 0.72)
         // Caption `text-sm font-medium`, centred between the nav buttons.
         let formatter = DateFormatter()

@@ -62,7 +62,8 @@ public struct TextBlockLayout {
             case .right: x = width - widths[i]
             default: x = 0
             }
-            let baseline = line.baseline(top: origin.y + CGFloat(i) * lineHeight, lineHeight: lineHeight)
+            let baseline = line.baseline(top: origin.y + CGFloat(i) * lineHeight, lineHeight: lineHeight,
+                                         scale: max(1, abs(ctx.userSpaceToDeviceSpaceTransform.a)))
             ctx.saveGState()
             ctx.translateBy(x: origin.x + x, y: baseline)
             ctx.scaleBy(x: 1, y: -1)

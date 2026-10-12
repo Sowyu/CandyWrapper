@@ -58,7 +58,8 @@ enum TL {
         if days <= 0 { return time }
         if days == 1 { return "yesterday at \(time)" }
         let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-        let day = sameYear ? date.formatted(.dateTime.month(.defaultDigits).day()) : date.formatted(.dateTime.month(.defaultDigits).day().year())
+        let day = sameYear ? date.formatted(.dateTime.month(.defaultDigits).day().locale(t3Locale))
+            : date.formatted(.dateTime.month(.defaultDigits).day().year().locale(t3Locale))
         return "\(day) \(time)"
     }
 
@@ -67,18 +68,20 @@ enum TL {
         switch format {
         case "12-hour": return twelveHour.string(from: date)
         case "24-hour": return twentyFourHour.string(from: date)
-        default: return date.formatted(date: .omitted, time: .shortened)
+        default: return localeTime.string(from: date)
         }
     }
 
     private static func formatter(_ template: String) -> DateFormatter {
         let f = DateFormatter()
-        f.locale = .current
-        f.dateFormat = DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: .current)
+        f.locale = t3Locale
+        f.dateFormat = DateFormatter.dateFormat(fromTemplate: template, options: 0, locale: t3Locale)
         return f
     }
     private static let twelveHour = formatter("hmma")
     private static let twentyFourHour = formatter("Hmm")
+    private static let localeTime = formatter("jmm")
+    static var t3Locale: Locale { TimestampFormat.t3Locale }
 
     /// Rounds to device pixels at 2x, as Blink snaps boxes.
     // ponytail: 2x like Text.swift's baselines; pass the backing scale for 1x screens

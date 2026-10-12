@@ -331,7 +331,7 @@ public final class SidebarListView: DSView {
         if window?.contentView?.subviews.contains(where: { $0 is ModalHost || $0 is CommandPaletteOverlay }) == true { return }
         guard let model = hoverCard?(id), let host = row.popupHost else { return }
         closeHoverCard()
-        let popup = host.open(SidebarThreadHoverCardView(model), trigger: row,
+        let popup = host.open(SidebarThreadHoverCardView(model), trigger: row, anchorRect: (row as? SidebarCardRowView)?.surfaceFrame,
                               placement: PopupPlacement(side: .right, align: .start, sideOffset: 4),
                               // `data-instant`: a card that follows another within the provider timeout skips the motion.
                               motion: instant ? .none : .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)

@@ -568,7 +568,7 @@ final class SettingsModelPickerControl: DSView {
             button.icon = nil
         }
         traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || context.scope.connected.isEmpty
-        traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false)
+        traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false, provider: selection?.0.driver)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
     }

@@ -100,6 +100,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         focusRingType = .none
         delegate = self
+        tlm.delegate = self
         applyStyle()
     }
 
@@ -127,6 +128,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             storage.addAttributes(attributes, range: NSRange(location: 0, length: storage.length))
         }
         insertionPointColor = Themed.color(\.foreground)
+        // The editor has no `::selection` rule (ComposerPromptEditorTiptap.tsx:999), so Chromium paints the
+        // system selection color at 80% over the composer (#355272 on #101010 in dark mode) and keeps the text color.
+        selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.8)]
     }
 
     /// Replaces the text with the editor's style (programmatic sets skip the typing attributes).
@@ -1032,5 +1036,25 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let lines = max(1, (bottom / Self.lineHeight).rounded())
         let trailingEmpty = string.hasSuffix("\n") ? 1 : 0
         return (lines + CGFloat(trailingEmpty)) * Self.lineHeight
+    }
+}
+
+extension ComposerEditor: NSTextLayoutManagerDelegate {
+    nonisolated func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: NSTextLocation,
+                           in textElement: NSTextElement) -> NSTextLayoutFragment {
+        GrayscaleTextLayoutFragment(textElement: textElement, range: textElement.elementRange)
+    }
+}
+
+/// T3 draws the prompt with grayscale antialiasing (the composer sits on a composited
+/// `backdrop-blur` layer, and T3's default `fontSmoothing` setting is `-webkit-font-smoothing:
+/// antialiased`, appearanceFonts.ts:129-130). Core Text's smoothing (stem darkening) made typed text
+/// visibly bolder than T3's, so the prompt draws without it, like the composer's own labels.
+final class GrayscaleTextLayoutFragment: NSTextLayoutFragment {
+    override func draw(at point: CGPoint, in context: CGContext) {
+        context.saveGState()
+        context.setShouldSmoothFonts(false)
+        super.draw(at: point, in: context)
+        context.restoreGState()
     }
 }

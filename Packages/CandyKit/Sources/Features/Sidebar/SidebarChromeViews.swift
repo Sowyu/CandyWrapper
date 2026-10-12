@@ -173,7 +173,7 @@ final class SidebarBrandView: DSView {
         ctx.fillPath()
         ctx.restoreGState()
         ctx.saveGState()
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Code", attributes: [
             .font: Self.font, .kern: Self.tracking, .foregroundColor: muted]))
         ctx.textMatrix = .identity

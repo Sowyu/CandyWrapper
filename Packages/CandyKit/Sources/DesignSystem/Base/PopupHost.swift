@@ -53,22 +53,46 @@ public enum PopupPositioner {
 
     public static func place(size: CGSize, anchor: CGRect, in bounds: CGRect, _ p: PopupPlacement) -> Result {
         // Flip: preferred side, its opposite, then (Q2 only) the perpendicular sides. The flip check uses padding + 1.
-        var sides = [p.side, p.side.opposite]
-        if p.fallbackAxisSide == .end { sides += p.side.isVertical ? [.right, .left] : [.bottom, .top] }
+        // base-ui's default `collisionAvoidance.align` is "flip" (flip `crossAxis: 'alignment'`, flipAlignment): a
+        // start or end popup that overflows across its side tries the other alignment first, so a bottom-end
+        // menu near the window's left edge opens bottom-start, as the sidebar's snooze menu does in T3.
+        // Centered popups shift before they flip, so only their side flips.
+        let flipsAlign = p.align != .center
+        func other(_ a: PopupPlacement.Align) -> PopupPlacement.Align { a == .start ? .end : a == .end ? .start : a }
+        var candidates: [(side: PopupPlacement.Side, align: PopupPlacement.Align)] = flipsAlign
+            ? [(p.side, p.align), (p.side, other(p.align)), (p.side.opposite, p.align), (p.side.opposite, other(p.align))]
+            : [(p.side, p.align), (p.side.opposite, p.align)]
+        if p.fallbackAxisSide == .end {
+            for side in (p.side.isVertical ? [PopupPlacement.Side.right, .left] : [.bottom, .top]) {
+                candidates.append((side, p.align))
+                if flipsAlign { candidates.append((side, other(p.align))) }
+            }
+        }
         let flipBounds = bounds.insetBy(dx: p.collisionPadding + 1, dy: p.collisionPadding + 1)
-        var chosen = p.side
-        var best: (side: PopupPlacement.Side, overflow: CGFloat)?
-        for side in sides {
-            let rect = coords(size: size, anchor: anchor, side: side, p)
-            let o = mainOverflow(rect, side: side, flipBounds)
-            if o <= 0 { chosen = side; best = nil; break }
+        var chosen = p.side, chosenAlign = p.align
+        var fits: (side: PopupPlacement.Side, align: PopupPlacement.Align, cross: CGFloat)?
+        var best: (side: PopupPlacement.Side, align: PopupPlacement.Align, overflow: CGFloat)?
+        var done = false
+        for c in candidates {
+            var q = p; q.align = c.align
+            let rect = coords(size: size, anchor: anchor, side: c.side, q)
+            let o = mainOverflow(rect, side: c.side, flipBounds)
+            let cross = c.side.isVertical ? max(flipBounds.minX - rect.minX, rect.maxX - flipBounds.maxX)
+                : max(flipBounds.minY - rect.minY, rect.maxY - flipBounds.maxY)
+            // Cross-axis overflow counts only between alignments of the preferred axis.
+            let checksCross = flipsAlign && c.side.isVertical == p.side.isVertical
+            if o <= 0, !checksCross || cross <= 0 { chosen = c.side; chosenAlign = c.align; done = true; break }
+            if o <= 0, fits == nil || cross < fits!.cross { fits = (c.side, c.align, cross) }
             // bestFit: fewest overflowing points over both axes.
             let total = overflowSum(rect, flipBounds)
-            if best == nil || total < best!.overflow { best = (side, total) }
+            if best == nil || total < best!.overflow { best = (c.side, c.align, total) }
         }
-        if let best { chosen = best.side }
+        if !done, let fits { chosen = fits.side; chosenAlign = fits.align }
+        else if !done, let best { chosen = best.side; chosenAlign = best.align }
 
-        var frame = coords(size: size, anchor: anchor, side: chosen, p)
+        var aligned = p
+        aligned.align = chosenAlign
+        var frame = coords(size: size, anchor: anchor, side: chosen, aligned)
         // Shift along the alignment axis to stay inside the boundary minus collision padding.
         let inner = bounds.insetBy(dx: p.collisionPadding, dy: p.collisionPadding)
         if chosen.isVertical {

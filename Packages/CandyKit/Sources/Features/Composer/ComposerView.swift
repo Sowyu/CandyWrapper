@@ -265,7 +265,7 @@ public final class ComposerView: DSView {
     private let outline = OutlineView()
     let editor = ComposerEditor()
     private let scroll = NSScrollView()
-    let placeholder = LabelView()
+    let placeholder = TextBlockView()
     private let validation = LabelView()
     let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
@@ -309,7 +309,7 @@ public final class ComposerView: DSView {
         scroll.contentView.drawsBackground = false
         scroll.documentView = editor
         addSubview(scroll)
-        // `text-placeholder/75`, first line, leading-relaxed.
+        // `text-placeholder/75`, leading-relaxed, wrapping in the full composer.
         placeholder.font = ComposerEditor.font
         placeholder.lineHeight = ComposerEditor.lineHeight
         placeholder.color = Themed.color(\.placeholder, 0.75)
@@ -463,7 +463,8 @@ public final class ComposerView: DSView {
 
     func refresh() {
         // ChatComposer.tsx:7489-7490.
-        placeholder.text = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
+        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
+        if placeholder.text != placeholderText { placeholder.text = placeholderText; needsLayout = true }
         planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
         planPill.isEnabled = !isBusy && sendDisabledReason == nil && !environmentUnavailable
         implementMenu.isEnabled = planPill.isEnabled
@@ -743,6 +744,7 @@ public final class ComposerView: DSView {
             let textWidth = max(0, w - 110 - (images > 0 ? images + 4 : 0))
             scroll.frame = NSRect(x: 13, y: rowY, width: textWidth, height: 32)
             setEditorGeometry(minSize: NSSize(width: textWidth, height: 32), width: textWidth)
+            placeholder.maxLines = 1
             placeholder.frame = NSRect(x: 17, y: rowY + 4, width: textWidth - 8, height: ComposerEditor.lineHeight)
             placeholder.isHidden = !editor.string.isEmpty
             restingImages.isHidden = images == 0
@@ -771,7 +773,9 @@ public final class ComposerView: DSView {
         let textTop = Self.inset + Self.pad + shelf + fileList.preferredHeight
         scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
         setEditorGeometry(minSize: NSSize(width: textWidth + 8, height: editorHeight + 8), width: textWidth + 8)
-        placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth, height: ComposerEditor.lineHeight)
+        // `absolute inset-0` over the editor (ComposerPromptEditorTiptap.tsx:1791-1798): a long placeholder wraps.
+        placeholder.maxLines = 0
+        placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth, height: placeholder.height(forWidth: textWidth))
         placeholder.isHidden = !editor.string.isEmpty
 
         // ponytail: the length message overlaps the footer's top edge; T3 grows the box for it (ComposerPromptLengthValidation)

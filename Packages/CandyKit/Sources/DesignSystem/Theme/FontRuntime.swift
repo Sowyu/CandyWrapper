@@ -29,6 +29,9 @@ public enum FontRuntime {
     nonisolated(unsafe) public private(set) static var interfaceScale: CGFloat = 1
     nonisolated(unsafe) public private(set) static var codeScale: CGFloat = 1
     nonisolated(unsafe) public private(set) static var promptSize: CGFloat = 14
+    /// Core Text font smoothing (stem darkening), the heavier macOS default. True by default so offscreen
+    /// renders match the fidelity references (Chromium without `-webkit-font-smoothing`); the app sets it from
+    /// T3's `fontSmoothing` setting, whose default `antialiased` turns it off (SettingsFontRuntime).
     nonisolated(unsafe) public private(set) static var smoothing = true
     public static var input: FontRuntimeInput { state.withLock { $0.input } }
     @MainActor public private(set) static var generation = 0
