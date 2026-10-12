@@ -281,6 +281,9 @@ class PerfServer:
         s.close()
         version = open(REPO + "/T3_VERSION").read().strip().lstrip("v")
         binary = os.path.expanduser("~/.t3/runtime/versions/%s/t3" % version)
+        # A Nightly the live T3 hasn't installed comes unpacked from its GitHub release (docs/nightly-catch-up.md).
+        if not os.access(binary, os.X_OK):
+            binary = os.path.expanduser("~/CandyWrapper-research/runtimes/t3-%s-darwin-arm64/t3" % version)
         home = os.environ["HOME"]
         # env -i: the shell inherits the live service's T3 variables, which would make this server try
         # to attach to the live service launcher.
