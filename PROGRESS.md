@@ -7,7 +7,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 - Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`); its side-by-side half is open.
 - The latest release is v0.1.15. The user runs it daily on their MacBook and reports what they see.
 - The app works with T3 servers 0.0.46-nightly.20261009.2861 (pinned in `T3_VERSION`) and 20261011.2994. Its UI is caught up with 2861; task 2 covers 2994.
-- A scheduled T3 task runs `docs/nightly-catch-up.md` every Monday and Thursday at 03:00, Mac time, in a new thread each time.
+- A scheduled T3 task runs `docs/nightly-catch-up.md` around 2am Melbourne time on Monday and Thursday mornings, in a new thread each time.
 
 ## Open tasks
 
