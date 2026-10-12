@@ -21,13 +21,18 @@ public final class MarkdownView: DSView {
 
     public var document = MarkdownDocument(blocks: []) {
         didSet {
-            guard document != oldValue else { return }
+            // T3 reads the wrap setting when a code block mounts (`readInitialWordWrapSetting`, ChatMarkdown.tsx:555-557); a
+            // view shown again after the setting changed counts as mounted again.
+            let wraps = ClientSettingsStore.shared.current.bool("wordWrap")
+            guard document != oldValue || wraps != wrapsCode else { return }
             if fadesNewBlocks, document.blocks.count > oldValue.blocks.count {
                 fadeIn(blocks: oldValue.blocks.count..<document.blocks.count)
             }
             // A reset wrap or diagram toggle changes a block in place; only plain growth redraws in part.
-            let toggled = !unwrappedCode.isEmpty || !diagramCode.isEmpty
-            clearAssistantSelection(); unwrappedCode = []; diagramCode = []
+            // ponytail: a streaming answer remounts its blocks here on every update, so a sideways scroll or wrap toggle on a
+            // block still streaming resets; keep the state per message if users scroll blocks while they stream
+            let toggled = !unwrappedCode.isEmpty || !diagramCode.isEmpty || wraps != wrapsCode
+            clearAssistantSelection(); unwrappedCode = []; diagramCode = []; codeOffsets = [:]; wrapsCode = wraps
             let previous = toggled ? nil : cache[bounds.width]
             invalidate(redraw: previous == nil)
             reusable = previous
@@ -111,7 +116,12 @@ public final class MarkdownView: DSView {
             needsDisplay = true
         }
     }
+    /// Indices of code blocks whose wrap toggle flipped `wrapsCode`.
     private var unwrappedCode: Set<Int> = []
+    private var wrapsCode = true
+    /// `scrollLeft` of each code block body with wrapping off, by code block index. Clamped where it is read, so a
+    /// narrower width or shorter code needs no fix-up.
+    private(set) var codeOffsets: [Int: CGFloat] = [:]
     private var cache: [CGFloat: MarkdownLayout] = [:]
     /// The layout before the last document change, whose unchanged leading blocks the next layout
     /// at its width keeps. Only a document change sets it; any other invalidation drops it.
@@ -195,7 +205,7 @@ public final class MarkdownView: DSView {
         // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
-                                  unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
+                                  wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
@@ -328,7 +338,7 @@ public final class MarkdownView: DSView {
                 button.toolTip = "Run in terminal"
                 button.action = { [weak self] in self?.onRunShellCommand?(command) }
             case .toggleWrap(let index):
-                button.setAccessibilityLabel(unwrappedCode.contains(index) ? "Wrap lines" : "Disable line wrap")
+                button.setAccessibilityLabel(wrapsCode != unwrappedCode.contains(index) ? "Disable line wrap" : "Wrap lines")
                 button.action = { [weak self] in self?.toggleWrap(index) }
             case .toggleDiagram(let index):
                 let label = diagramCode.contains(index) ? "Show diagram" : "Show code"
@@ -620,7 +630,98 @@ public final class MarkdownView: DSView {
 
     private func toggleWrap(_ index: Int) {
         if unwrappedCode.contains(index) { unwrappedCode.remove(index) } else { unwrappedCode.insert(index) }
+        // A wrapped `pre` has nothing to scroll, so Chromium clamps its scrollLeft to 0.
+        codeOffsets[index] = nil
         invalidate()
+    }
+
+    // MARK: Code block scrolling
+
+    /// Code block bodies with wrapping off, in layout order.
+    private var codeScrollers: [(index: Int, viewport: CGRect, contentWidth: CGFloat)] {
+        guard bounds.width > 0 else { return [] }
+        return layout(forWidth: bounds.width).items.compactMap {
+            if case .scroll(let index, let viewport, let width) = $0 { (index, viewport, width) } else { nil }
+        }
+    }
+
+    private func codeOffset(_ index: Int, _ viewport: CGRect, _ contentWidth: CGFloat) -> CGFloat {
+        min(max(0, codeOffsets[index] ?? 0), max(0, contentWidth - viewport.width))
+    }
+
+    /// Sets a block's scroll offset, clamped and snapped to device pixels, and redraws the block when it moved.
+    @discardableResult
+    private func setCodeOffset(_ index: Int, _ value: CGFloat, _ viewport: CGRect, _ contentWidth: CGFloat) -> CGFloat {
+        let old = codeOffset(index, viewport, contentWidth)
+        codeOffsets[index] = min(max(0, contentWidth - viewport.width), (max(0, value) * 2).rounded() / 2)
+        let new = codeOffset(index, viewport, contentWidth)
+        if new != old { setNeedsDisplay(viewport) }
+        return new
+    }
+
+    /// The scrollbar thumb of an overflowing body (index.css:1978-1985): a 7px pill along the bottom lane, as long as the
+    /// visible share of the scroll width and at least as long as it is thick; nil when the code fits.
+    static func codeThumb(_ viewport: CGRect, _ contentWidth: CGFloat, _ offset: CGFloat) -> CGRect? {
+        guard contentWidth > viewport.width else { return nil }
+        let t = MarkdownStyle.codeScrollbar, track = viewport.width
+        let length = min(track, max(t, track * viewport.width / contentWidth))
+        let x = viewport.minX + (track - length) * offset / (contentWidth - viewport.width)
+        return CGRect(x: x, y: viewport.maxY - t, width: length, height: t)
+    }
+
+    /// The code block a trackpad gesture scrolls sideways, from its first event to the end of its momentum.
+    private var scrollLatch: Int?
+
+    /// Chromium scrolls the code block under the pointer sideways and the timeline for everything else: a gesture whose
+    /// first movement is mostly sideways, over a block that overflows, stays with that block; any other gesture goes up the
+    /// responder chain untouched, so vertical scrolling never stops at a code block. A mouse wheel with Shift (which macOS
+    /// already turns sideways) decides per event.
+    public override func scrollWheel(with event: NSEvent) {
+        let precise = event.hasPreciseScrollingDeltas
+        // Chromium scrolls 40px per mouse wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
+        var dx = precise ? event.scrollingDeltaX : event.deltaX * 40
+        var dy = precise ? event.scrollingDeltaY : event.deltaY * 40
+        if !precise, dx == 0, event.modifierFlags.contains(.shift) { swap(&dx, &dy) }
+        let gesture = !event.phase.isEmpty || !event.momentumPhase.isEmpty
+        if !gesture || event.phase.contains(.began) {
+            scrollLatch = nil
+            let point = convert(event.locationInWindow, from: nil)
+            if abs(dx) > abs(dy), let hit = codeScrollers.first(where: { $0.viewport.contains(point) }), hit.contentWidth > hit.viewport.width {
+                scrollLatch = hit.index
+            }
+        }
+        guard let index = scrollLatch, let s = codeScrollers.first(where: { $0.index == index }) else {
+            super.scrollWheel(with: event)
+            return
+        }
+        if !gesture { scrollLatch = nil }
+        setCodeOffset(index, codeOffset(index, s.viewport, s.contentWidth) - dx, s.viewport, s.contentWidth)
+    }
+
+    /// A drag that started on a code block's thumb: the block, the pointer's x and the offset at the start.
+    private var thumbDrag: (index: Int, x: CGFloat, offset: CGFloat)?
+
+    /// A press on a code block's scrollbar lane: the thumb drags, the track pages toward the pointer. True when it hit one.
+    private func pressCodeScrollbar(at point: CGPoint) -> Bool {
+        guard let s = codeScrollers.first(where: { $0.viewport.contains(point) }),
+              let thumb = Self.codeThumb(s.viewport, s.contentWidth, codeOffset(s.index, s.viewport, s.contentWidth)),
+              point.y >= thumb.minY else { return false }
+        let offset = codeOffset(s.index, s.viewport, s.contentWidth)
+        if thumb.contains(point) {
+            thumbDrag = (s.index, point.x, offset)
+        } else {
+            // Chromium's page step is 87.5% of the visible width (ScrollableArea::PageStep).
+            // ponytail: one page per press; Chromium repeats while the button is held, add a timer if that is missed
+            setCodeOffset(s.index, offset + (point.x < thumb.minX ? -1 : 1) * s.viewport.width * 0.875, s.viewport, s.contentWidth)
+        }
+        return true
+    }
+
+    private func dragCodeThumb(to point: CGPoint) {
+        guard let drag = thumbDrag, let s = codeScrollers.first(where: { $0.index == drag.index }),
+              let thumb = Self.codeThumb(s.viewport, s.contentWidth, 0), s.viewport.width > thumb.width else { return }
+        let perPoint = (s.contentWidth - s.viewport.width) / (s.viewport.width - thumb.width)
+        setCodeOffset(drag.index, drag.offset + (point.x - drag.x) * perPoint, s.viewport, s.contentWidth)
     }
 
     // MARK: Assistant selection (AssistantSelectionToolbar.tsx)
@@ -636,11 +737,13 @@ public final class MarkdownView: DSView {
     public override var acceptsFirstResponder: Bool { onCiteSelection != nil }
 
     private var selectionBoxes: [(box: MarkdownTextBox, origin: CGPoint, offset: Int)] {
-        var offset = 0
+        var offset = 0, dx: CGFloat = 0
         return layout(forWidth: bounds.width).items.compactMap { item in
+            if case .scroll(let index, let viewport, let width) = item { dx = codeOffset(index, viewport, width) }
+            if case .endClip = item { dx = 0 }
             guard case .text(let box, let origin) = item else { return nil }
             defer { offset += (box.text as NSString).length + 1 }
-            return (box, origin, offset)
+            return (box, CGPoint(x: origin.x - dx, y: origin.y), offset)
         }
     }
     private var selectionText: String { selectionBoxes.map { $0.box.text }.joined(separator: "\n") }
@@ -658,17 +761,20 @@ public final class MarkdownView: DSView {
         if hadSelection { needsDisplay = true }
     }
     public override func mouseDown(with event: NSEvent) {
+        if pressCodeScrollbar(at: convert(event.locationInWindow, from: nil)) { return }
         guard onCiteSelection != nil else { super.mouseDown(with: event); return }
         window?.makeFirstResponder(self)
         clearAssistantSelection()
         selectionAnchor = selectionIndex(convert(event.locationInWindow, from: nil))
     }
     public override func mouseDragged(with event: NSEvent) {
+        if thumbDrag != nil { dragCodeThumb(to: convert(event.locationInWindow, from: nil)); return }
         guard let anchor = selectionAnchor, let end = selectionIndex(convert(event.locationInWindow, from: nil)) else { return }
         assistantRange = NSRange(location: min(anchor, end), length: abs(end - anchor))
         needsDisplay = true
     }
     public override func mouseUp(with event: NSEvent) {
+        if thumbDrag != nil { thumbDrag = nil; return }
         guard let range = assistantRange, let captured = AssistantSelectionText.capture(selectionText, range: range) else { return }
         let tooLong = captured.text.utf16.count > 8000
         let button = AssistantSelectionToolbar.button(tooLong: tooLong)
@@ -713,13 +819,27 @@ public final class MarkdownView: DSView {
     public func activeFindRect() -> CGRect? {
         guard let active = threadFindOccurrence, !threadFindQuery.isEmpty, bounds.width > 0 else { return nil }
         var seen = 0
+        var scroller: (index: Int, viewport: CGRect, contentWidth: CGFloat)?
         for item in layout(forWidth: bounds.width).items {
             switch item {
+            case .scroll(let index, let viewport, let width): scroller = (index, viewport, width)
+            case .endClip: scroller = nil
             case .text(let box, let origin):
                 let ranges = box.findRanges(threadFindQuery)
                 if active < seen + ranges.count, let span = box.spans(ranges[active - seen]).first {
                     let area = box.contentArea(at: ranges[active - seen].location, baseline: MarkdownTextBox.snappedBaseline(origin.y + span.baseline))
-                    return CGRect(x: origin.x + span.x0, y: area.y, width: max(1, span.x1 - span.x0), height: area.height)
+                    var x = origin.x + span.x0
+                    let w = max(1, span.x1 - span.x0)
+                    if let s = scroller {
+                        // A match in a scrolled code block comes into its viewport with 16px to spare (useThreadFindNavigation.ts:185-193).
+                        let old = codeOffset(s.index, s.viewport, s.contentWidth)
+                        var left = old
+                        if x - left < s.viewport.minX { left += x - left - s.viewport.minX - 16 }
+                        else if x + w - left > s.viewport.maxX { left += x + w - left - s.viewport.maxX + 16 }
+                        left = setCodeOffset(s.index, left, s.viewport, s.contentWidth)
+                        x -= left
+                    }
+                    return CGRect(x: x, y: area.y, width: w, height: area.height)
                 }
                 seen += ranges.count
             case .hiddenText(let code, let index):
@@ -861,6 +981,21 @@ public final class MarkdownView: DSView {
             case .clip(let rect):
                 ctx.saveGState()
                 ctx.clip(to: rect)
+            case .scroll(let index, let viewport, let width):
+                ctx.saveGState()
+                if let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
+                    // The frame's `overflow-hidden rounded-lg` clips the bar at the block's bottom corners.
+                    ctx.saveGState()
+                    ctx.addPath(CGPath(roundedRect: CGRect(x: viewport.minX, y: viewport.minY - 10, width: viewport.width, height: viewport.height + 10),
+                                       cornerWidth: 9, cornerHeight: 9, transform: nil))
+                    ctx.clip()
+                    ctx.setFillColor(Themed.color(\.contrastBorder, 0.78).cgColor(in: self))
+                    ctx.addPath(CGPath(roundedRect: thumb, cornerWidth: thumb.height / 2, cornerHeight: thumb.height / 2, transform: nil))
+                    ctx.fillPath()
+                    ctx.restoreGState()
+                }
+                ctx.clip(to: viewport)
+                ctx.translateBy(x: -codeOffset(index, viewport, width), y: 0)
             case .endClip:
                 ctx.restoreGState()
             case .image(let image, let rect):

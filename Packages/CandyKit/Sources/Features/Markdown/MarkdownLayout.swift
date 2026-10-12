@@ -28,6 +28,8 @@ enum MarkdownStyle {
     static var codeLineHeight: CGFloat { 13 * FontRuntime.codeScale * 1.375 }
     static let codePadding = (x: CGFloat(14.4), y: CGFloat(12.8))
     static let codeHeader: CGFloat = 30
+    /// `.chat-markdown pre::-webkit-scrollbar { height: 7px }` (index.css:1978-1980): the lane an overflowing block adds below its padding.
+    static let codeScrollbar: CGFloat = 7
     static let tableFontSize: CGFloat = 12
     static let tableLineHeight: CGFloat = 12 * 1.625
     static let imageMaxWidth: CGFloat = 480
@@ -243,8 +245,13 @@ public final class MarkdownLayout {
         case favicon(String, CGRect)
         /// Text find counts but nothing draws: a diagram's source beside it (ChatMarkdown.tsx:1074-1079).
         case hiddenText(String, codeIndex: Int)
-        /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
+        /// Clips the items until the matching `.endClip` (wide tables).
         case clip(CGRect)
+        /// A code block body with wrapping off (`.chat-markdown pre`, `overflow-x: auto`, index.css:1961-1985): clips
+        /// the items until the matching `.endClip` and shifts them by the block's horizontal scroll offset, which
+        /// `MarkdownView` keeps. `contentWidth` is the body's scroll width; past `viewport.width` the body overflows and
+        /// its bottom `codeScrollbar` points hold the scrollbar.
+        case scroll(codeIndex: Int, viewport: CGRect, contentWidth: CGFloat)
         case endClip
         /// A rendered Mermaid diagram's bitmap.
         case image(CGImage, CGRect)
@@ -296,30 +303,31 @@ public final class MarkdownLayout {
     /// its own bottom margin (before the root zeroes the last one) and the next code block index.
     fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int }
     private struct ReuseKey: Equatable {
-        var unwrapped: Set<Int>, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
+        var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
 
-    /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
+    /// `wrapsCode`: whether code blocks start wrapped (T3's `wordWrap` client setting, ChatMarkdown.tsx:555-557, 867).
+    /// `unwrappedCode`: indices of code blocks whose wrap toggle flipped that. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
     /// `runsShell`: shell code blocks get "Run in terminal" (an assistant answer that finished, with a project).
     /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
-    public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
+    public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
                 diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
-        var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files,
+        var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
-        let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
+        let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
                            runsShell: runsShell)
         var resume: (layout: MarkdownLayout, blocks: Int)?
         if let previous, previous.width == width, previous.reuseKey == key {
@@ -372,6 +380,7 @@ private struct Context {
 
 private struct Builder {
     let unwrapped: Set<Int>
+    let wrapsCode: Bool
     let files: FileChipResolver?
     var codeIndex = 0
     var diagrams: MarkdownLayout.Diagrams?
@@ -383,7 +392,9 @@ private struct Builder {
 
     let boxes: TextBoxCache
 
-    init(unwrapped: Set<Int>, files: FileChipResolver?, boxes: TextBoxCache) { self.unwrapped = unwrapped; self.files = files; self.boxes = boxes }
+    init(unwrapped: Set<Int>, wrapsCode: Bool, files: FileChipResolver?, boxes: TextBoxCache) {
+        self.unwrapped = unwrapped; self.wrapsCode = wrapsCode; self.files = files; self.boxes = boxes
+    }
 
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
@@ -460,7 +471,7 @@ private struct Builder {
             if mermaid, let diagrams, !diagrams.showingCode.contains(index), !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return diagramBlock(code: code, index: index, dark: diagrams.dark, width: width)
             }
-            var box = codeBlock(language: language, title: title, code: code, width: width, wraps: !unwrapped.contains(index))
+            var box = codeBlock(language: language, title: title, code: code, width: width, wraps: wrapsCode != unwrapped.contains(index))
             if mermaid {
                 // "Show diagram" leads the header's actions, before wrap and copy (`gap-0.5`).
                 box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24 - 2 - 24 - 2 - 24, y: 1 + 6, width: 24, height: 24),
@@ -723,7 +734,10 @@ private struct Builder {
         string.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: string.length))
         let inner = width - 2 - 2 * p.x
         let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
-        let height = 1 + MarkdownStyle.codeHeader + p.y + textBox.height + p.y + 1
+        // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
+        let contentWidth = textBox.usedWidth + 2 * p.x
+        let overflows = !wraps && contentWidth > width - 2 + 1.0 / 64
+        let height = 1 + MarkdownStyle.codeHeader + p.y + textBox.height + p.y + (overflows ? MarkdownStyle.codeScrollbar : 0) + 1
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
@@ -758,7 +772,7 @@ private struct Builder {
                                   variant: wraps ? .secondary : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
         box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
         let body = CGRect(x: 1, y: 1 + MarkdownStyle.codeHeader, width: width - 2, height: height - 2 - MarkdownStyle.codeHeader)
-        if !wraps { box.items.append(.clip(body)) }
+        if !wraps { box.items.append(.scroll(codeIndex: codeIndex - 1, viewport: body, contentWidth: overflows ? contentWidth : body.width)) }
         box.items.append(.text(textBox, CGPoint(x: 1 + p.x, y: 1 + MarkdownStyle.codeHeader + p.y)))
         if !wraps { box.items.append(.endClip) }
         return box
@@ -938,6 +952,7 @@ private extension MarkdownLayout.Item {
             .fileChip(FileChip(frame: chip.frame.offsetBy(dx: p.x, dy: p.y), icon: chip.icon.offsetBy(dx: p.x, dy: p.y), meta: chip.meta, label: chip.label))
         case .contextChip(var chip): { chip.frame = chip.frame.offsetBy(dx: p.x, dy: p.y); return .contextChip(chip) }()
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
+        case .scroll(let index, let r, let w): .scroll(codeIndex: index, viewport: r.offsetBy(dx: p.x, dy: p.y), contentWidth: w)
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
         case .favicon(let host, let r): .favicon(host, r.offsetBy(dx: p.x, dy: p.y))

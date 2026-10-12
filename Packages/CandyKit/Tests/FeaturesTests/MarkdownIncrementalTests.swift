@@ -224,6 +224,7 @@ struct MarkdownIncrementalTests {
             case .contextChip(let c): "context \(c.frame)"
             case .link(let r, let u): "link \(r) \(u)"
             case .clip(let r): "clip \(r)"
+            case .scroll(let i, let r, let w): "scroll \(i) \(r) \(w)"
             case .endClip: "endClip"
             case .image(_, let r): "image \(r)"
             case .remoteImage(let u, _, let r): "remote \(u) \(r)"
