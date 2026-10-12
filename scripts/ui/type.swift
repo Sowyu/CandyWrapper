@@ -4,7 +4,13 @@ import Foundation
 let a = CommandLine.arguments
 guard a.count >= 2 else { print("usage: type <text> [--return]"); exit(2) }
 let src = CGEventSource(stateID: .hidSystemState)
+func stopIfRefused() {
+    guard let why = inputRefusal() else { return }
+    FileHandle.standardError.write(Data((why + " (stopped mid-text)\n").utf8))
+    exit(3)
+}
 for scalar in a[1].utf16 {
+    stopIfRefused()
     var unit = scalar
     for down in [true, false] {
         let e = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: down)!
@@ -19,6 +25,7 @@ for scalar in a[1].utf16 {
 // Return as its own key with "\r" attached; posted bare right after the text, it sometimes never arrived.
 if a.contains("--return") {
     usleep(50000)
+    stopIfRefused()
     var cr: UniChar = 13
     for down in [true, false] {
         let e = CGEvent(keyboardEventSource: src, virtualKey: 36, keyDown: down)!
