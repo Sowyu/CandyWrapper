@@ -79,10 +79,19 @@ public final class SidebarListView: DSView {
                 recycle(view)
             }
         }
-        // Changed rows that stay visible get the new model; nothing else is touched.
+        // Changed rows that stay visible get the new model; nothing else is touched. A row that
+        // changed shape (card to slim on snooze or settle, slim to card on unsnooze) needs the other
+        // view class: its old view goes back to its own pool and `tile` dequeues the right one, which
+        // still slides from the old place. Configuring the old view kept a card drawn in the slim
+        // shelves and put card views in the slim pool.
         for (key, view) in visible {
             guard let i = indexByKey[key] else { continue }
-            if oldItems[key] != items[i] || view.item != items[i] { configure(view, items[i]) }
+            if view.item?.kind != items[i].kind {
+                visible[key] = nil
+                recycle(view)
+            } else if oldItems[key] != items[i] || view.item != items[i] {
+                configure(view, items[i])
+            }
         }
         if sort != nil {
             tile(oldTops: nil)
@@ -201,7 +210,10 @@ public final class SidebarListView: DSView {
                 configure(view, item)
                 visible[item.key] = view
                 changed = true
-                if let oldTops, oldTops[item.key] == nil, entering < Self.maxFadedRows {
+                if let oldTops, let previous = oldTops[item.key] {
+                    // A row that came back in its other shape still travels from its old place.
+                    if previous != target.minY { slide(view, from: previous - target.minY) }
+                } else if oldTops != nil, entering < Self.maxFadedRows {
                     entering += 1
                     fadeIn(view)
                 }

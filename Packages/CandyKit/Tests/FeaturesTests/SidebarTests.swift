@@ -181,4 +181,41 @@ struct SidebarListTests {
         content.setSnapshot(makeSnapshot(count: 5), animated: false)
         #expect(content.pendingLabelRefresh == nil)
     }
+
+    /// Snoozing the open thread turns its card into a slim row in the collapsed shelf, and unsnoozing
+    /// turns it back. Each shape gets its own view class, and no card view lands in the slim pool
+    /// (a card with "Working 1m" stayed at the foot of the user's sidebar).
+    @Test func rowsThatChangeShapeSwapViews() throws {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        defer { window.contentView = nil }
+        let base = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(),
+                                            nowMs: TimestampFormat.nowMs(SidebarPreview.referenceNow))
+        let index = try #require(base.firstIndex { if case .row(let r) = $0 { r.variant == .card } else { false } })
+        guard case .row(let card) = base[index] else { return }
+        var slim = card
+        slim.variant = .slim
+        slim.section = .snoozed
+        var snoozed = base
+        snoozed.remove(at: index)
+        snoozed.append(.row(slim))
+        func check(_ label: String) {
+            for item in content.list.items {
+                guard let view = content.list.rowView(item.key) else { continue }
+                switch item.kind {
+                case .card: #expect(view is SidebarCardRowView, "\(label): \(item.key)")
+                case .slim: #expect(view is SidebarSlimRowView, "\(label): \(item.key)")
+                default: break
+                }
+            }
+        }
+        for (label, items) in [("start", base), ("snoozed", snoozed), ("woken", base), ("snoozed again", snoozed)] {
+            for animated in [false, true] {
+                content.list.setItems(items, animated: animated)
+                content.list.layoutSubtreeIfNeeded()
+                check("\(label) animated \(animated)")
+            }
+        }
+    }
 }
