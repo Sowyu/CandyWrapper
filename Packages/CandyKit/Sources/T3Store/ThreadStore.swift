@@ -23,7 +23,8 @@ public struct ThreadUpdate: Sendable {
 public actor ThreadStore {
     private var reducer: ThreadReducer
     private var pending: ThreadChangeSet?
-    private let onChange: @Sendable () -> Void
+    /// Gets whether the first change only grew a streaming text (`ThreadChangeSet.onlyStreamingText`).
+    private let onChange: @Sendable (_ onlyStreamingText: Bool) -> Void
     private let cache: ThreadCache?
     private let cacheKey: ThreadCache.Key
     private var cacheRead = false
@@ -31,8 +32,14 @@ public actor ThreadStore {
     private var cached: (sequence: Int, history: ThreadHistoryMeta)?
 
     public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onChange: @escaping @Sendable () -> Void) {
+        self.init(threadId: threadId, cache: cache, environmentId: environmentId, onFirstChange: { _ in onChange() })
+    }
+
+    /// `onFirstChange` learns whether the change that starts a window only grew a streaming text, so
+    /// the caller can wait for T3's second message of the pair only while text streams.
+    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onFirstChange: @escaping @Sendable (_ onlyStreamingText: Bool) -> Void) {
         reducer = ThreadReducer(threadId: threadId)
-        self.onChange = onChange
+        self.onChange = onFirstChange
         self.cache = cache
         cacheKey = ThreadCache.Key(environmentId: environmentId, threadId: threadId)
     }
@@ -130,7 +137,7 @@ public actor ThreadStore {
         guard !changes.isEmpty else { return }
         if pending == nil {
             pending = changes
-            onChange()
+            onChange(changes.projectionChanged && changes.onlyStreamingText && !changes.reset)
         } else {
             pending?.merge(changes)
         }

@@ -34,6 +34,18 @@ struct ModelPickerTests {
         }
     }
 
+    /// `resolveComposerInteractionMode(...).enabled`, which gates Implement in a new thread.
+    @Test func interactionModeEnabled() {
+        var provider = ServerProvider(instanceId: "g", driver: "grok", models: [])
+        let off = ComposerSelectionContext(catalog: ProviderCatalog([provider]))
+        let on = ComposerSelectionContext(catalog: ProviderCatalog([provider]), planModeEnabled: true)
+        #expect(!off.interactionModeEnabled(provider))
+        #expect(on.interactionModeEnabled(provider))
+        #expect(!on.interactionModeEnabled(nil))
+        provider.showInteractionModeToggle = false
+        #expect(!on.interactionModeEnabled(provider))
+    }
+
     @Test func pickerAppliesHiddenModelsAndExplicitOrder() throws {
         let config = try Self.recordedConfig()
         let catalog = ProviderCatalog(config.providers)

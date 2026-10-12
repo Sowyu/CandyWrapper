@@ -117,6 +117,12 @@ public final class SidebarListView: DSView {
 
     // MARK: Tiling
 
+    /// A list torn down mid drag stops its sort, and with it the Escape and autoscroll timers.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil, sort != nil { cancelSort() }
+    }
+
     public override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
         if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
@@ -367,6 +373,8 @@ public final class SidebarListView: DSView {
     var sort: SidebarSortSession?
     /// Where the rows stood when a drop released them, until the new order arrives.
     var releasedTops: [String: CGFloat]?
+    /// The AppKit drag that Escape cancelled. It runs on until the release, carrying nothing.
+    weak var cancelledDrag: NSDraggingSession?
     /// The list state the drag preview reads.
     var sortContext = SidebarSortPlanner.Context()
     /// Reads the list state for a drag; called at pickup and when the list changes under it.

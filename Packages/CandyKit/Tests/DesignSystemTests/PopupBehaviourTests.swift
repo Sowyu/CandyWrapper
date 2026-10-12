@@ -173,6 +173,44 @@ struct PopupBehaviourTests {
         #expect(menu.highlightedIndex == 0)
     }
 
+    /// A menu trigger whose press disables it (a menu that loads first) does not stay pressed.
+    @Test func triggerDisabledByItsPressReleases() {
+        let (_, root) = window()
+        let button = ButtonView("Open").menuTrigger()
+        button.frame = NSRect(x: 100, y: 100, width: 80, height: 32)
+        root.addSubview(button)
+        button.action = { [weak button] in button?.isEnabled = false }
+        let at = button.convert(NSPoint(x: 10, y: 10), to: nil)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: 0,
+                                           windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            type == .leftMouseDown ? button.mouseDown(with: event) : button.mouseUp(with: event)
+        }
+        #expect(!button.isEnabled)
+        #expect(!button.state.active)
+    }
+
+    /// floating-ui's `hide`:a scroll that takes the trigger out of the window closes its popup.
+    @Test func popupClosesWhenItsTriggerLeavesOnScroll() throws {
+        let (w, root) = window()
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let doc = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 1000))
+        scroll.documentView = doc
+        root.addSubview(scroll)
+        let button = ButtonView("Open")
+        button.frame = NSRect(x: 20, y: 20, width: 80, height: 32)
+        doc.addSubview(button)
+        let popover = PopoverView(content: popoverTitle("Hi"))
+        popover.show(from: button)
+        let host = PopupHost.host(for: w)
+        #expect(host.popups.count == 1)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 10))
+        #expect(host.popups.count == 1)
+        button.removeFromSuperview()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 20))
+        #expect(host.popups.isEmpty)
+    }
+
     @Test func selectAlignsTheSelectedItemWithTheTrigger() throws {
         let (w, root) = window()
         let select = SelectView(options: ["One", "Two", "Three"], selected: 1)

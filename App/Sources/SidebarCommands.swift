@@ -132,8 +132,10 @@ final class SidebarCommands {
             if source == .pinned && target.pinnedOrder == displayed(.pinned) { return nil }
             guard let assignments = arrange(target.pinnedOrder, pinned: true) else { return nil }
             if source == .pinned { return assignments.isEmpty ? nil : .reorderPinned(assignments) }
-            return .pin(orderKey: assignments.first { $0.id == id }?.key,
-                        extra: thread.pinnedAt != nil ? assignments : assignments.filter { $0.id != id })
+            // A thread already pinned under a snooze or settle keeps its key on `thread.pin` (the server's
+            // re-pin ignores orderKey, Orchestrator.ts:2849-2858), so its key goes out once, as a reorder.
+            if thread.pinnedAt != nil { return .pin(orderKey: nil, extra: assignments) }
+            return .pin(orderKey: assignments.first { $0.id == id }?.key, extra: assignments.filter { $0.id != id })
         case .working, .snoozed:
             return nil
         }
@@ -168,8 +170,10 @@ final class SidebarCommands {
                     if source == .snoozed { try await environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) }
                 case .pin(let orderKey, let extra):
                     writes = extra
-                    let key = orderKey ?? PinOrderKey.topOfPinnedRun(snapshot?.threads ?? [])
+                    let key = thread.pinnedAt != nil ? nil : orderKey ?? PinOrderKey.topOfPinnedRun(snapshot?.threads ?? [])
                     try await environments.dispatch(id, ThreadCommands.pin(id.localId, orderKey: key), optimistic: .pin(orderKey: key))
+                    // ponytail: a failed key write stops the loop with earlier keys landed, as T3 does
+                    // (Sidebar.tsx:4130-4150); each landed key is a valid placement. Roll back if mixed orders show up
                 case .reorderPinned(let assignments):
                     writes = assignments
                 }

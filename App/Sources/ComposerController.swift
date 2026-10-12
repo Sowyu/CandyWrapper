@@ -1459,6 +1459,10 @@ final class ComposerController {
               let shell, let thread = shellThread, let env = sourceId.environmentId,
               let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown else { return }
         guard let selection = pickers.current.modelSelection else { report(.noModel, key: draftKey); return }
+        // `getSendContext()` (ChatView.tsx:10537-10540): no write without a provider entry (a nil
+        // selection above) or with interaction mode off.
+        // ponytail: T3's Antigravity send block (getAntigravitySendBlockReason) is not ported; add it with that driver
+        guard pickers.context.interactionModeEnabled(menuProvider) else { return }
         implementInFlight = true
         let supervisor = shell.supervisor
         let newLocal = UUID().uuidString.lowercased()
@@ -2187,7 +2191,7 @@ extension ComposerController {
             let before = text.substring(to: trigger.rangeStart), after = text.substring(from: trigger.rangeEnd)
             let compact = before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && shellThread?.latestUserMessageAt != nil && !composer.runState.canInterrupt && requests.activeApproval == nil
-            let planMode = provider != nil && pickers.context.planModeEnabled && provider?.showInteractionModeToggle != false
+            let planMode = pickers.context.interactionModeEnabled(provider)
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"), planMode: planMode,

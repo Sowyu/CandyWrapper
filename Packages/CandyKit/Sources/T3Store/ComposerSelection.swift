@@ -59,6 +59,12 @@ public struct ComposerSelectionContext: Sendable {
         self.hasStartedSession = hasStartedSession; self.supportsProviderHandoff = supportsProviderHandoff
         self.planModeEnabled = planModeEnabled
     }
+
+    /// `resolveComposerInteractionMode(...).enabled` (ChatView.logic.ts:626-639): the setting is on and
+    /// the selected provider exists and does not hide the toggle.
+    public func interactionModeEnabled(_ provider: ServerProvider?) -> Bool {
+        planModeEnabled && provider != nil && provider?.showInteractionModeToggle != false
+    }
 }
 
 /// The selection the composer shows and the values its next send carries.

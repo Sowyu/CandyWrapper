@@ -691,12 +691,15 @@ final class ThreadPullRequestsController {
         guard cardDetails[key] == nil, !cardDetailsTried.contains(key), let ref = cardReference(link, env: env) else { return }
         cardDetailsTried.insert(key)
         let checks = capabilities.has(env, "pullRequestChecks")
+        let thread = cardDetailsThread
         Task { [weak self] in
             guard let self else { return }
             var payload = ref.json
             payload["allowStale"] = .bool(false)
             guard var d = try? await self.environments.request(env, "pullRequests.detail", .object(payload)).decode(as: PullRequestDetail.self) else { return }
             if checks, let c = try? await self.environments.request(env, "pullRequests.checks", ref.payload).decode(as: PullRequestChecks.self) { d.apply(c) }
+            // A reply that lands after a thread switch belongs to the old thread's map, which is gone.
+            guard self.cardDetailsThread == thread else { return }
             self.cardDetails[key] = d
             self.cardKey = nil
             self.sync()
@@ -708,11 +711,13 @@ final class ThreadPullRequestsController {
         guard let ref = cardReference(link, env: env), cardActionPending.insert(link.key.id).inserted else { return }
         cardKey = nil
         sync()
+        let thread = cardDetailsThread
         Task { [weak self] in
             guard let self else { return }
             let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
             self.cardActionPending.remove(link.key.id)
             self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action) : PullRequestDetailLogic.actionFailure(action), kind: ok ? .success : .error))
+            guard self.cardDetailsThread == thread else { return }
             self.cardDetails[link.key.id] = nil
             self.cardDetailsTried.remove(link.key.id)
             self.cardKey = nil

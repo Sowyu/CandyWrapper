@@ -161,6 +161,35 @@ struct BannerStackFidelityTests {
         #expect(!stack.hasStack && !stack.expanded && stack.isHidden)
     }
 
+    /// A producer that keeps a dismissed notice gets it back, and a notice that leaves before the exit
+    /// ends (a thread switch) is never dismissed.
+    @Test func dismissKeptOrLeft() async throws {
+        let notice = Self.update, goal = Self.goal
+        var dismissed = 0
+        let kept = [
+            ComposerBannerStackItem(id: "goal", view: goal, priority: .activity, height: { _ in 51 }),
+            ComposerBannerStackItem(id: "notice:a", view: notice, priority: .notice, height: { _ in 51 }, onDismiss: { dismissed += 1 }),
+        ]
+        let stack = ComposerBannerStackView()
+        stack.update(kept)
+        stack.requestDismiss("notice:a")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(dismissed == 1)
+        stack.update(kept)
+        #expect(stack.exitingId == nil)
+        #expect(notice.dismissControl?.isEnabled == true)
+        // The next dismiss is not refused.
+        stack.requestDismiss("notice:a")
+        #expect(stack.exitingId == "notice:a")
+        // The thread switches: the item has another id now, and the pending dismiss never runs.
+        var other = kept
+        other[1] = ComposerBannerStackItem(id: "notice:b", view: notice, priority: .notice, height: { _ in 51 }, onDismiss: { dismissed += 10 })
+        stack.update(other)
+        #expect(stack.exitingId == nil)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(dismissed == 1)
+    }
+
     /// `resolveContextStripLabelsCompact` with its 16pt hysteresis.
     @Test func contextStripCompact() {
         #expect(!ComposerContextStripView.compact(was: false, needed: 300, available: 300))

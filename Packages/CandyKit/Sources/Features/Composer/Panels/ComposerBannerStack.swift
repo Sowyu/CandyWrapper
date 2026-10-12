@@ -61,6 +61,10 @@ public final class ComposerBannerStackView: DSView {
     public private(set) var expanded = false
     /// `exitingItemId`: the notice playing its exit.
     public private(set) var exitingId: String?
+    /// The exit's pending `onDismiss`. Cancelled when the item leaves first (a thread switch).
+    private var pendingDismiss: DispatchWorkItem?
+    /// `onDismiss` ran for `exitingId`; an item still listed after that was kept by its producer.
+    private var dismissFired = false
     private var items: [ComposerBannerStackItem] = []
     private var stacked: [ComposerBannerStackItem] { Array(items.dropFirst()) }
     /// The stack changed size; the owner lays out again.
@@ -89,10 +93,18 @@ public final class ComposerBannerStackView: DSView {
     /// The ordered items; the first is the front, attached outside this view. Reparents the stacked
     /// views into the column and makes them floating.
     public func update(_ ordered: [ComposerBannerStackItem]) {
-        if let exitingId, !ordered.contains(where: { $0.id == exitingId }) {
-            // The dismissed notice is gone: drop its held exit so the view can come back later.
-            for item in items where item.id == exitingId { Self.clearExit(item.view) }
-            self.exitingId = nil
+        if let exitingId {
+            let listed = ordered.contains(where: { $0.id == exitingId })
+            if !listed || dismissFired {
+                // Gone: drop its held exit so the view can come back later, and never dismiss what left
+                // before the delay ran out. Still listed after `onDismiss`: the producer kept it, so it
+                // shows again instead of blocking every later dismiss.
+                for item in items + ordered where item.id == exitingId { Self.clearExit(item.view) }
+                pendingDismiss?.cancel()
+                pendingDismiss = nil
+                dismissFired = false
+                self.exitingId = nil
+            }
         }
         items = ordered
         if ordered.count < 2, expanded { expanded = false }
@@ -184,7 +196,16 @@ public final class ComposerBannerStackView: DSView {
         } else {
             item.view.alphaValue = 0
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + BannerStackMotion.dismiss) { onDismiss() }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.exitingId == id else { return }
+            self.pendingDismiss = nil
+            self.dismissFired = true
+            onDismiss()
+            // A producer that drops the item relays out; one that keeps it gets it back on that pass.
+            self.onLayoutChange?()
+        }
+        pendingDismiss = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + BannerStackMotion.dismiss, execute: work)
     }
 
     /// The front item lost its exit when it stays (a producer kept it) or comes back later.
