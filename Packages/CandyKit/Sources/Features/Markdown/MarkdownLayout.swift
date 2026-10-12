@@ -237,6 +237,12 @@ public final class MarkdownLayout {
     fileprivate private(set) var rootBlocks: [MarkdownBlock] = []
     fileprivate private(set) var rootEnds: [RootEnd] = []
     private var reuseKey: ReuseKey?
+    /// The text boxes this layout made or took over for the blocks it laid out itself. Only a
+    /// layout that reused an earlier one keeps them: that is a streaming answer, whose next update
+    /// lays out its last block again and takes the boxes whose input did not change.
+    fileprivate private(set) var textBoxes: [TextBoxCache.Key: MarkdownTextBox] = [:]
+    /// How many text boxes came from `reusing` instead of TextKit (tests).
+    private(set) var reusedTextBoxes = 0
     /// The flow after one top-level block: the items and controls so far, the y below the block,
     /// its own bottom margin (before the root zeroes the last one) and the next code block index.
     fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int }
@@ -256,7 +262,8 @@ public final class MarkdownLayout {
                 diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
-        var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files)
+        var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files,
+                              boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
         builder.contexts = contexts
         builder.diagrams = diagrams
         let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes)
@@ -270,6 +277,8 @@ public final class MarkdownLayout {
         reusedBlocks = resume?.blocks ?? 0
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true, resume: resume)
         reuseKey = key
+        textBoxes = builder.boxes.made
+        reusedTextBoxes = builder.boxes.hits
         rootBlocks = document.blocks
         rootEnds = builder.rootEnds
         items = flow.items
@@ -316,7 +325,9 @@ private struct Builder {
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
-    init(unwrapped: Set<Int>, files: FileChipResolver?) { self.unwrapped = unwrapped; self.files = files }
+    let boxes: TextBoxCache
+
+    init(unwrapped: Set<Int>, files: FileChipResolver?, boxes: TextBoxCache) { self.unwrapped = unwrapped; self.files = files; self.boxes = boxes }
 
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
@@ -421,8 +432,8 @@ private struct Builder {
               color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil) -> Box {
         let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
                                           headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts, maxChipWidth: width)
-        let textBox = MarkdownTextBox(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
-                                      chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
+        let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
+                                 chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
         for chip in textBox.chips {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
@@ -625,7 +636,7 @@ private struct Builder {
         paragraph.tabStops = []
         string.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: string.length))
         let inner = width - 2 - 2 * p.x
-        let textBox = MarkdownTextBox(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
+        let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
         let height = 1 + MarkdownStyle.codeHeader + p.y + textBox.height + p.y + 1
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
@@ -637,7 +648,7 @@ private struct Builder {
         let label = NSAttributedString(string: title ?? language, attributes: [
             .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72)])
         let labelLine = 11 * 1.375
-        let titleBox = MarkdownTextBox(label, width: width - 2 - 12 - 6 - 50 - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
+        let titleBox = boxes.make(label, width: width - 2 - 12 - 6 - 50 - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
         box.items.append(.text(titleBox, CGPoint(x: 1 + 12, y: 1 + 6 + (24 - labelLine) / 2)))
         let copyX = width - 1 - 6 - 24
         box.controls.append(.init(frame: CGRect(x: copyX - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
@@ -711,7 +722,7 @@ private struct Builder {
             return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment, files: files, contexts: contexts)
         }
         func natural(_ s: NSAttributedString) -> CGFloat {
-            MarkdownTextBox(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
+            boxes.make(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
         }
         var widths = [CGFloat](repeating: 0, count: columns)
         for row in [table.header] + table.rows {
@@ -737,8 +748,8 @@ private struct Builder {
                 let s = inline.string, chips = inline.code
                 // Columns are at least max-content wide, so the cell never wraps; it must still wrap at its width
                 // for TextKit to place centered and right-aligned text inside the column.
-                let textBox = MarkdownTextBox(s, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
-                                              chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
+                let textBox = boxes.make(s, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
+                                         chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
                 var cell = Box(height: textBox.height)
                 for chip in textBox.chips {
                     cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
@@ -801,5 +812,47 @@ private extension MarkdownLayout.Item {
         case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
         case .remoteImage(let url, let alt, let r): .remoteImage(url, alt, r.offsetBy(dx: p.x, dy: p.y))
         }
+    }
+}
+
+/// Text boxes keyed by everything that shapes them, so a streaming answer's next layout takes the
+/// ones whose text did not change (table cells and list items above the growing end) instead of
+/// running TextKit again. A layout that does not record makes boxes as before.
+@MainActor
+final class TextBoxCache {
+    struct Key: Hashable {
+        var string: NSAttributedString
+        var width: CGFloat
+        var lineHeight: CGFloat
+        var strut: NSFont
+        var chipRanges: [NSRange]
+        var chipFont: NSFont?
+        var wraps: Bool
+    }
+
+    private let previous: [Key: MarkdownTextBox]
+    private let records: Bool
+    private(set) var made: [Key: MarkdownTextBox] = [:]
+    private(set) var hits = 0
+
+    init(previous: [Key: MarkdownTextBox]?, records: Bool) {
+        self.previous = previous ?? [:]
+        self.records = records
+    }
+
+    func make(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, strut: NSFont,
+              chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true) -> MarkdownTextBox {
+        guard records else {
+            return MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
+        }
+        let key = Key(string: string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
+        if let box = made[key] ?? previous[key] {
+            hits += 1
+            made[key] = box
+            return box
+        }
+        let box = MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
+        made[key] = box
+        return box
     }
 }

@@ -34,6 +34,18 @@ final class ThreadSession {
     /// arrives (docs/perf/README.md, "Streaming text").
     private lazy var pacer = FramePacer(maxRate: 30) { [weak self] in Task { @MainActor in await self?.pull() } }
 
+    /// The last pull only grew a streaming answer's or reasoning text, so the turn is streaming.
+    private var streamingText = false
+
+    /// T3 sends each streaming update twice, `message.updated` then `turn-item.updated` with the
+    /// same text (assistantStreaming.ts:92-128), as separate stream values. While text streams,
+    /// the first of a pair waits one frame for the second, so the pair costs one render instead of
+    /// two. Any other change still renders at once.
+    // ponytail: a fixed 16 ms window, measured only with a replay proxy that sends the pair in one chunk; widen it or pair by item id if a live Codex stream still renders twice
+    private func requestPull() {
+        pacer.request(settle: streamingText ? 1.0 / 60 : 0)
+    }
+
     /// A closed thread's store and its change relay, kept so a reopen paints at once and resumes
     /// after the store's sequence instead of fetching a new snapshot.
     struct Retained {
@@ -54,7 +66,7 @@ final class ThreadSession {
         self.relay = relay
         let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onChange: { relay.fire() })
         self.store = store
-        relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }
+        relay.set { [weak self] in Task { @MainActor in self?.requestPull() } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
         shown = retained?.shown
         if retained != nil {
@@ -129,7 +141,8 @@ final class ThreadSession {
         guard let update = await store.takeUpdate() else { return }
         OpenTiming.mark("panel pull", "\(update.projection?.visibleTurnItems.count ?? 0) rows")
         let changes = update.changes
-        render(update, onlyStreamingText: changes.projectionChanged && changes.onlyStreamingText && !changes.reset)
+        streamingText = changes.projectionChanged && changes.onlyStreamingText && !changes.reset
+        render(update, onlyStreamingText: streamingText)
     }
 
     private func render(_ update: ThreadUpdate, onlyStreamingText: Bool = false) {
@@ -137,7 +150,7 @@ final class ThreadSession {
         shown = update
         let (projectTitle, workspaceRoot) = place(update.projection)
         OpenTiming.measure("panel setProjection") {
-            panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot)
+            panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot, onlyStreamingText: onlyStreamingText)
         }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
         onProjection?(update.projection, onlyStreamingText)

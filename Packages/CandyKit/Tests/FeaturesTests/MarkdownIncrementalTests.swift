@@ -147,6 +147,28 @@ struct MarkdownIncrementalTests {
         #expect(MarkdownLayout(document: document, width: 640, reusing: base).reusedBlocks == document.blocks.count)
     }
 
+    /// A table that grows a row at a time lays out only the new cells; the rest come from the last
+    /// layout's text boxes, and the result matches a fresh layout.
+    @Test func growingTableReusesItsCells() {
+        var text = "| Case | Before | After |\n|---|---:|:---:|\n"
+        var previous: MarkdownLayout?
+        for row in 0..<6 {
+            text += "| row \(row) | \(row * 3) ms | `\(row)` ms |\n"
+            let document = MarkdownDocument(parsing: text)
+            let incremental = MarkdownLayout(document: document, width: 640, reusing: previous)
+            let fresh = MarkdownLayout(document: document, width: 640)
+            #expect(Self.describe(incremental) == Self.describe(fresh), "\(row + 1) rows")
+            #expect(incremental.height == fresh.height)
+            // From the third layout on (the first has nothing to reuse, so it keeps no boxes): at
+            // least every earlier row's three measured widths, and the placed cells while the column
+            // widths hold.
+            if row > 1 { #expect(incremental.reusedTextBoxes >= row * 3, "\(row + 1) rows") }
+            previous = incremental
+        }
+        // A layout made without an earlier one keeps no boxes.
+        #expect(MarkdownLayout(document: MarkdownDocument(parsing: text), width: 640).reusedTextBoxes == 0)
+    }
+
     /// The streaming row keeps the view's layout across tokens and ends where a fresh view ends.
     @Test func viewReusesLayoutWhileTheDocumentGrows() {
         let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 640, height: 10))

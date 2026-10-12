@@ -40,6 +40,7 @@ public final class ThreadHeaderView: TopbarDragView {
     public var projectTitle: String {
         get { project.text }
         set {
+            guard newValue != project.text else { return }
             project.text = newValue
             if favicon.source?.title != newValue { favicon.source = nil }
             favicon.projectTitle = newValue
@@ -61,7 +62,7 @@ public final class ThreadHeaderView: TopbarDragView {
 
     public var threadTitle: String {
         get { title.text }
-        set { title.text = newValue; needsLayout = true }
+        set { if newValue != title.text { title.text = newValue; needsLayout = true } }
     }
 
     public override init(frame frameRect: NSRect) {
@@ -832,7 +833,15 @@ public final class ThreadPanelView: DSView {
     }
 
     /// Shows a thread. Pass nil to clear.
-    public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?) {
+    /// `onlyStreamingText`: the update only grew a streaming answer's or reasoning text. Nothing the
+    /// panel lays out, the diff summaries or the proactive panels read changed, so only the
+    /// timeline updates.
+    public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?, onlyStreamingText: Bool = false) {
+        if onlyStreamingText, let projection, projection.thread.id == model.projection?.thread.id, !switchingThread, !isDraft,
+           !timeline.isInert, projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot {
+            model.setProjection(projection)
+            return
+        }
         switchingThread = false
         timeline.isInert = false
         applyingProjection = true
