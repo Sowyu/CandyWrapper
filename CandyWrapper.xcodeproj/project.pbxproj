@@ -451,7 +451,6 @@
 				CANDY_UPDATE_FEED_URL = "https://github.com/Sowyu/CandyWrapper/releases/download/appcast/appcast.xml";
 				CANDY_UPDATE_PUBLIC_KEY = "3lPqUDTLuxLA+rq4R0InFIoN6hun/6vy1ElXcGaTnqA=";
 				CANDY_URL_SCHEME = t3code;
-				CODE_SIGN_ENTITLEMENTS = App/Resources/CandyWrapper.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
