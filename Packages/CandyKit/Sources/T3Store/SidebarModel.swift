@@ -512,11 +512,20 @@ public enum SidebarModel {
     /// JS `localeCompare` for ids and titles.
     // ponytail: approximates ICU root collation with Foundation's "en" compare, swap for ICU if titles disagree
     static func localeCompare(_ a: String, _ b: String) -> Int {
-        switch a.compare(b, locale: Locale(identifier: "en")) {
+        switch a.compare(b, locale: english) {
         case .orderedAscending: -1
         case .orderedDescending: 1
         case .orderedSame: 0
         }
+    }
+
+    private static let english = Locale(identifier: "en")
+
+    /// `items` reordered by sorting small keys instead of the items: a `SidebarThread` is a large value, and moving
+    /// 1,400 of them through a sort on every shell change cost more than the comparisons (docs/research/m10-load-2026-10-12.md).
+    static func sortedByKey<T, K>(_ items: [T], key: (T) -> K, by less: (K, K) -> Bool) -> [T] {
+        let keys = items.map(key)
+        return items.indices.sorted { less(keys[$0], keys[$1]) }.map { items[$0] }
     }
 
     static func stableSorted<T>(_ items: [T], by less: (T, T) -> Bool) -> [T] {
@@ -549,17 +558,16 @@ public enum SidebarModel {
     /// newest anchor first; then keyed threads by key. Activity does not reorder.
     public static func sortActiveThreadsByOrderKey(_ threads: [SidebarThread]) -> [SidebarThread] {
         guard threads.count > 1 else { return threads }
-        return threads.sorted { l, r in
-            switch (l.shell.activeOrderKey, r.shell.activeOrderKey) {
+        return sortedByKey(threads, key: { (order: $0.shell.activeOrderKey, anchor: activeThreadAnchorTimestampMs($0.shell), id: $0.id.rawValue) }) { l, r in
+            switch (l.order, r.order) {
             case (nil, _?): return true
             case (_?, nil): return false
             case (let lk?, let rk?) where lk != rk: return lk < rk
             case (nil, nil):
-                let lt = activeThreadAnchorTimestampMs(l.shell), rt = activeThreadAnchorTimestampMs(r.shell)
-                if lt != rt { return lt > rt }
+                if l.anchor != r.anchor { return l.anchor > r.anchor }
             default: break
             }
-            return localeCompare(l.id.rawValue, r.id.rawValue) < 0
+            return localeCompare(l.id, r.id) < 0
         }
     }
 
@@ -580,11 +588,9 @@ public enum SidebarModel {
 
     /// Port of `sortSettledThreads` (threadSort.ts:56-69): newest end of work first, id tiebreak.
     public static func sortSettledThreads(_ threads: [SidebarThread]) -> [SidebarThread] {
-        threads.map { ($0, resolveSettledThreadTimestamp($0)?.epochMs ?? 0) }
-            .sorted { l, r in
-                l.1 != r.1 ? l.1 > r.1 : localeCompare(l.0.id.rawValue, r.0.id.rawValue) < 0
-            }
-            .map(\.0)
+        sortedByKey(threads, key: { (ms: resolveSettledThreadTimestamp($0)?.epochMs ?? 0, id: $0.id.rawValue) }) { l, r in
+            l.ms != r.ms ? l.ms > r.ms : localeCompare(l.id, r.id) < 0
+        }
     }
 
     public enum SortOrder: String, Sendable {

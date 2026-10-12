@@ -37,6 +37,14 @@ public final class HoverSync: NSResponder {
     private var pointerArea: NSTrackingArea?
     private var hovered: [Key: Entry] = [:]
     private var scheduled = false
+    /// The last answer to "which window is under the pointer", a synchronous WindowServer round trip.
+    /// Scrolling and layout run a pass every frame under a still pointer; asking each time cost 0.45 s
+    /// of a 6 s sidebar scroll waiting on a busy WindowServer, and dropped frames. Pointer moves, window
+    /// and app state changes and native menus clear it; it also expires so another app's window that
+    /// slides over a still pointer takes the hover within a quarter second.
+    private var topWindowCache: (screen: NSPoint, inside: Bool, at: CFTimeInterval)?
+    // ponytail: a foreign window sliding over a still pointer takes the hover up to 0.25 s late; watch the window list if that shows
+    private static let topWindowCacheLifetime: CFTimeInterval = 0.25
 
     /// One entered area: its owner, the view it is installed on and its index among that view's
     /// managed areas for the owner, so an area that a view recreates in `updateTrackingAreas` keeps its hover.
@@ -146,14 +154,18 @@ public final class HoverSync: NSResponder {
         NotificationCenter.default.removeObserver(self)
     }
 
-    @objc private func windowStateChanged(_ note: Notification) { setNeedsSync() }
+    @objc private func windowStateChanged(_ note: Notification) { topWindowCache = nil; setNeedsSync() }
+
+    /// Forgets which window was under the pointer, for every window (app activation, native menus).
+    static func forgetTopWindows() { for sync in syncs.values { sync.topWindowCache = nil } }
 
     public override func mouseMoved(with event: NSEvent) {
+        topWindowCache = nil
         sync()
         for entry in hovered.values { (entry.owner as? HoverSyncPointerClient)?.hoverPointerMoved() }
     }
-    public override func mouseEntered(with event: NSEvent) { sync() }
-    public override func mouseExited(with event: NSEvent) { sync() }
+    public override func mouseEntered(with event: NSEvent) { topWindowCache = nil; sync() }
+    public override func mouseExited(with event: NSEvent) { topWindowCache = nil; sync() }
 
     private func setNeedsSync() {
         guard !scheduled else { return }
@@ -228,7 +240,11 @@ public final class HoverSync: NSResponder {
               content.convert(content.bounds, to: nil).contains(point) else { return false }
         // A window, menu or panel above this one at the pointer takes the hover.
         let screen = window.convertPoint(toScreen: point)
-        return NSWindow.windowNumber(at: screen, belowWindowWithWindowNumber: 0) == window.windowNumber
+        let now = CACurrentMediaTime()
+        if let cache = topWindowCache, cache.screen == screen, now - cache.at < Self.topWindowCacheLifetime { return cache.inside }
+        let inside = NSWindow.windowNumber(at: screen, belowWindowWithWindowNumber: 0) == window.windowNumber
+        topWindowCache = (screen, inside, now)
+        return inside
     }
 
     /// Walks the views whose bounds hold the point and gathers their managed areas that hold it too.
@@ -306,6 +322,7 @@ private final class GeometryObserver: NSObject {
     }
 
     @objc func everything(_ note: Notification) {
+        HoverSync.forgetTopWindows()
         for window in NSApp.windows { HoverSync.setNeedsSync(window) }
     }
 }

@@ -503,7 +503,8 @@ final class PaletteCommands {
                                         action: .run({ [weak self] in self?.openProjectSettings(group.key) }, keepOpen: false)))
         }
         var result = [PaletteGroup(value: "actions", label: "Actions", items: actions)]
-        let recent = Array(threadItems(query: nil).prefix(PaletteSearch.recentThreadLimit))
+        // Building all 1,500 entries to keep 12 cost 9 ms a keystroke (docs/research/m10-load-2026-10-12.md).
+        let recent = threadItems(query: nil, limit: PaletteSearch.recentThreadLimit)
         if !recent.isEmpty { result.append(PaletteGroup(value: "recent-threads", label: "Recent Threads", items: recent)) }
         return result
     }
@@ -599,17 +600,23 @@ final class PaletteCommands {
         }
     }
 
-    /// `buildThreadActionItems` over every unarchived thread, newest first, with message matches for `query`.
+    /// `buildThreadActionItems` over every unarchived thread, newest first, with message matches for `query`;
+    /// `limit` keeps the newest only, as its `input.limit` does (CommandPalette.logic.ts:337).
     // ponytail: text description and match line; T3 draws the project favicon, provider icon, status pill and highlighted match
-    private func threadItems(query: String?) -> [PaletteEntry] {
+    private func threadItems(query: String?, limit: Int? = nil) -> [PaletteEntry] {
         guard let snapshot else { return [] }
         let open = threads.openThreadId
         let projects = Dictionary(snapshot.projects.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let matches = query.flatMap { q in search.flatMap { $0.query == q.trimmingCharacters(in: .whitespaces) ? $0.matches : nil } } ?? [:]
         let ms = nowMs
-        return snapshot.threads.filter { $0.archivedAt == nil }
-            .sorted { SidebarModel.getThreadSortTimestamp($0, .updatedAt) > SidebarModel.getThreadSortTimestamp($1, .updatedAt) }
-            .map { thread in
+        // Sort positions, not the large shells themselves.
+        let all = snapshot.threads
+        let live = all.indices.filter { all[$0].archivedAt == nil }
+        let keys = live.map { SidebarModel.getThreadSortTimestamp(all[$0], .updatedAt) }
+        let order = keys.indices.sorted { keys[$0] > keys[$1] }.map { live[$0] }
+        return (limit.map { Array(order.prefix($0)) } ?? order)
+            .map { index in
+                let thread = all[index]
                 let projectTitle = projects[thread.projectId]?.title
                 var parts = [projectTitle, locationLabel(thread.id.environmentId)].compactMap { $0 }
                 if thread.id == open { parts.append("Current thread") }

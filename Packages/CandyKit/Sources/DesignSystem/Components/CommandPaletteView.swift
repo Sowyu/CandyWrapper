@@ -80,7 +80,7 @@ public final class CommandPaletteView: DSView {
     public var content: Content { didSet { rebuild() } }
     /// Flat index over enabled and disabled rows. The app passes `active`, so the row gets `bg-accent`.
     public var highlightedIndex: Int? {
-        didSet { rows.enumerated().forEach { $1.isHighlighted = $0 == highlightedIndex } }
+        didSet { rows.forEach { $1.isHighlighted = $0 == highlightedIndex } }
     }
     public var footerActionLabel: String? { didSet { if footerActionLabel != oldValue { rebuildFooter() } } }
     /// `footerTrailing`: a footer action at the end ("Open in Finder", `CommandFooterAction`).
@@ -121,7 +121,16 @@ public final class CommandPaletteView: DSView {
     // A virtualized list, so a plain overflow scroller (CommandPaletteResults.tsx:147-152).
     private lazy var scroll = ScrollAreaView(documentView: document, scrollFade: true, scrollbars: .native)
     private var panelViews: [NSView] = []
-    private var rows: [CommandRowView] = []
+    /// Every result row, flat, with its top and height in the document (`x` and width come from layout).
+    private var items: [CommandPaletteItem] = []
+    private var rowSlots: [(y: CGFloat, height: CGFloat)] = []
+    /// The group labels' tops in the document.
+    private var labelTops: [CGFloat] = []
+    private var resultsHeight: CGFloat = 0
+    /// Row views exist only near the visible part of the list, as in T3's LegendList (CommandPaletteResults.tsx:121).
+    /// A view per result cost 120 to 160 ms a keystroke with 1,500 threads (docs/research/m10-load-2026-10-12.md).
+    private var rows: [Int: CommandRowView] = [:]
+    private static let overscan: CGFloat = 240
     private var footerGroups: [NSView] = []
     private var pendingHighlightScroll = false
     private var customView: NSView?
@@ -149,6 +158,8 @@ public final class CommandPaletteView: DSView {
         scroll.layer?.masksToBounds = true
         (scroll.scrollView.verticalScroller as? ScrollAreaScroller)?.trackInset = 8 // `[&::-webkit-scrollbar-track]:my-2`
         addSubview(scroll)
+        NotificationCenter.default.addObserver(self, selector: #selector(listScrolled), name: NSView.boundsDidChangeNotification,
+                                               object: scroll.scrollView.contentView)
         rebuild()
         rebuildFooter()
         setAccessibilityRole(.group)
@@ -160,32 +171,33 @@ public final class CommandPaletteView: DSView {
     private func rebuild() {
         panelViews.forEach { $0.removeFromSuperview() }
         panelViews = []
-        rows = []
+        rows.values.forEach { $0.removeFromSuperview() }
+        rows = [:]
+        items = []
+        rowSlots = []
+        labelTops = []
+        resultsHeight = 0
         switch content {
         case .results(let groups):
-            var index = 0
-            for group in groups {
-                var views: [NSView] = []
+            // `py-2` around the groups; a `px-2 py-1.5` 12px label is 28 tall; a label after a group gets `pt-1.5`.
+            var y: CGFloat = 8
+            for (g, group) in groups.enumerated() {
+                if g > 0 { y += 6 }
                 if let label = group.label {
                     let l = LabelView(label, font: DSFont.ui(12, weight: .medium))
                     l.lineHeight = 16
-                    views.append(l)
+                    panelViews.append(l)
+                    labelTops.append(y + 6)
+                    y += 28
                 }
                 for item in group.items {
-                    let row = CommandRowView(item)
-                    let i = index
-                    row.onHover = { [weak self] in
-                        guard !item.isDisabled, !item.isStatic, let self, self.highlightedIndex != i else { return }
-                        self.highlightedIndex = i
-                        self.onHighlight?(i)
-                    }
-                    row.onClick = { [weak self] in if !item.isDisabled, !item.isStatic { self?.onExecute?(i) } }
-                    rows.append(row)
-                    views.append(row)
-                    index += 1
+                    let h = CommandRowView.height(for: item)
+                    items.append(item)
+                    rowSlots.append((y, h))
+                    y += h
                 }
-                panelViews.append(GroupView(views))
             }
+            resultsHeight = groups.isEmpty ? 100 : y + 8
         case .empty(let message, let actionsOnly):
             let l = LabelView(message ?? (actionsOnly ? "No matching actions." : "No matching commands, projects, or threads."),
                               font: DSFont.ui(14))
@@ -208,7 +220,7 @@ public final class CommandPaletteView: DSView {
         }
         scroll.isHidden = customView != nil
         restyle()
-        highlightedIndex = highlightedIndex.flatMap { rows.isEmpty ? nil : min($0, rows.count - 1) }
+        highlightedIndex = highlightedIndex.flatMap { items.isEmpty ? nil : min($0, items.count - 1) }
         invalidateIntrinsicContentSize()
         needsLayout = true
         scroll.scroll(to: .zero)
@@ -235,7 +247,7 @@ public final class CommandPaletteView: DSView {
         needsLayout = true
     }
 
-    public var enabledIndices: [Int] { rows.indices.filter { !rows[$0].item.isDisabled && !rows[$0].item.isStatic } }
+    public var enabledIndices: [Int] { items.indices.filter { !items[$0].isDisabled && !items[$0].isStatic } }
 
     public func moveHighlight(by delta: Int) {
         let enabled = enabledIndices
@@ -247,12 +259,11 @@ public final class CommandPaletteView: DSView {
 
     /// `scrollIntoView({ block: "nearest" })` with the list's `scroll-py-6`.
     public func scrollHighlightIntoView() {
-        guard let i = highlightedIndex, i < rows.count else { return }
+        guard let i = highlightedIndex, i < items.count else { return }
         // Before the first layout there is no visible height to scroll against; layout comes back here.
         guard scroll.frame.height > 0 else { pendingHighlightScroll = true; return }
         layoutSubtreeIfNeeded()
-        let row = rows[i]
-        let frame = document.convert(row.bounds, from: row).insetBy(dx: 0, dy: -24)
+        let frame = NSRect(x: 0, y: rowSlots[i].y, width: 1, height: rowSlots[i].height).insetBy(dx: 0, dy: -24)
         let visible = scroll.scrollView.contentView.bounds
         var y = visible.minY
         if frame.minY < visible.minY { y = frame.minY } else if frame.maxY > visible.maxY { y = frame.maxY - visible.height }
@@ -268,10 +279,7 @@ public final class CommandPaletteView: DSView {
 
     private var panelContentHeight: CGFloat {
         switch content {
-        case .results(let groups):
-            if groups.isEmpty { return 100 }
-            // `py-2` plus groups; a label after a group gets `pt-1.5`.
-            return 16 + panelViews.map { ($0 as! GroupView).contentHeight }.reduce(0, +) + CGFloat(max(0, groups.count - 1)) * 6
+        case .results: return resultsHeight
         case .empty: return 100   // `py-10` around a 20px line
         case .loading: return 44  // `py-3`
         case .custom: return Self.maxHeight
@@ -299,13 +307,8 @@ public final class CommandPaletteView: DSView {
         document.frame = NSRect(x: 0, y: 0, width: width, height: max(scroll.frame.height, panelContentHeight))
         switch content {
         case .results:
-            var y: CGFloat = 8
-            for (i, view) in panelViews.enumerated() {
-                let group = view as! GroupView
-                if i > 0 { y += 6 }
-                group.frame = NSRect(x: 8, y: y, width: width - 16, height: group.contentHeight)
-                y += group.contentHeight
-            }
+            for (label, top) in zip(panelViews, labelTops) { label.frame = NSRect(x: 16, y: top, width: width - 32, height: 16) }
+            realizeRows()
         case .empty:
             panelViews.first?.frame = NSRect(x: 0, y: 40, width: width, height: 20)
         case .loading:
@@ -374,10 +377,7 @@ public final class CommandPaletteView: DSView {
         footerLayer.frame = .zero
         searchIcon.strokeColor = Themed.color(\.contrastIconMuted)
         backIcon.strokeColor = Themed.color(\.contrastForeground)
-        for view in panelViews {
-            (view as? LabelView)?.color = Themed.color(\.contrastMutedForeground)
-            (view as? GroupView)?.restyle()
-        }
+        for view in panelViews { (view as? LabelView)?.color = Themed.color(\.contrastMutedForeground) }
         needsLayout = true
     }
 
@@ -388,31 +388,37 @@ public final class CommandPaletteView: DSView {
         footerLayer.frame.origin = CGPoint(x: inner.minX - footerLayer.outset, y: inner.maxY - footerHeight - footerLayer.outset)
     }
 
-    /// A group label (`px-2 py-1.5 text-xs font-medium text-muted-foreground`) and its rows.
-    final class GroupView: DSView {
-        let views: [NSView]
-        init(_ views: [NSView]) {
-            self.views = views
-            super.init(frame: .zero)
-            views.forEach(addSubview)
-        }
-        var contentHeight: CGFloat { views.reduce(0) { $0 + ($1 is LabelView ? 28 : ($1 as! CommandRowView).height) } }
-        func restyle() { views.compactMap { $0 as? LabelView }.forEach { $0.color = Themed.color(\.contrastMutedForeground) } }
-        override func layout() {
-            super.layout()
-            var y: CGFloat = 0
-            for v in views {
-                if v is LabelView {
-                    v.frame = NSRect(x: 8, y: y + 6, width: bounds.width - 16, height: 16)
-                    y += 28
-                } else {
-                    let h = (v as! CommandRowView).height
-                    v.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
-                    y += h
-                }
+    /// Creates the row views near the visible part of the list and drops the rest.
+    private func realizeRows() {
+        guard case .results = content else { return }
+        let width = document.frame.width
+        let visible = scroll.scrollView.contentView.bounds.insetBy(dx: 0, dy: -Self.overscan)
+        // ponytail: linear scan of the slots, microseconds per 1,000 results; binary search if lists reach 100,000
+        var keep = Set<Int>()
+        for (i, slot) in rowSlots.enumerated() where slot.y < visible.maxY && slot.y + slot.height > visible.minY {
+            keep.insert(i)
+            let frame = NSRect(x: 8, y: slot.y, width: width - 16, height: slot.height)
+            if let row = rows[i] { if row.frame != frame { row.frame = frame }; continue }
+            let item = items[i]
+            let row = CommandRowView(item)
+            row.onHover = { [weak self] in
+                guard !item.isDisabled, !item.isStatic, let self, self.highlightedIndex != i else { return }
+                self.highlightedIndex = i
+                self.onHighlight?(i)
             }
+            row.onClick = { [weak self] in if !item.isDisabled, !item.isStatic { self?.onExecute?(i) } }
+            row.isHighlighted = i == highlightedIndex
+            row.frame = frame
+            document.addSubview(row)
+            rows[i] = row
+        }
+        for (i, row) in rows where !keep.contains(i) {
+            row.removeFromSuperview()
+            rows[i] = nil
         }
     }
+
+    @objc private func listScrolled() { realizeRows() }
 
     /// KbdGroup with trailing text, `gap-1`.
     final class HintView: DSView {
@@ -517,7 +523,8 @@ final class CommandRowView: DSView {
     }
 
     /// One line: 6 + 20 + 6. Each description or match line adds 16.
-    var height: CGFloat { 32 + (item.description == nil ? 0 : 16) + (item.match == nil ? 0 : 16) }
+    var height: CGFloat { Self.height(for: item) }
+    static func height(for item: CommandPaletteItem) -> CGFloat { 32 + (item.description == nil ? 0 : 16) + (item.match == nil ? 0 : 16) }
 
     override func layout() {
         super.layout()

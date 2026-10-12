@@ -118,14 +118,17 @@ final class WelcomeOnboardingController {
         evidence.configAvailable = primary.flatMap { composer.config($0) } != nil
         evidence.primaryId = primary
         evidence.welcome = environments.session(primary)?.welcome
-        for env in ids {
+        // `FirstRunDecision` reads only whether there is more than one project or thread, and the first
+        // of each when there is one. Two of each is enough; encoding every thread on each change cost
+        // 1.8 s of main thread at launch with 1,400 threads in five environments (docs/research/m10-load-2026-10-12.md).
+        for env in ids where evidence.projects.count < 2 || evidence.threads.count < 2 {
             guard let snapshot = environments.snapshot(env) else { continue }
-            for project in snapshot.projects {
+            for project in snapshot.projects.prefix(2 - min(2, evidence.projects.count)) {
                 if var json = (try? JSONValue(parsing: JSONEncoder().encode(project)))?.objectValue {
                     json["environmentId"] = .string(env); evidence.projects.append(.object(json))
                 }
             }
-            for thread in snapshot.threads {
+            for thread in snapshot.threads.prefix(2 - min(2, evidence.threads.count)) {
                 if var json = (try? JSONValue(parsing: JSONEncoder().encode(thread)))?.objectValue {
                     json["environmentId"] = .string(env)
                     json["latestRun"] = thread.latestRunId.map { .string($0.rawValue) } ?? .null

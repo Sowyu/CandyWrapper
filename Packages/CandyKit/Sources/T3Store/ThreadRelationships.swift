@@ -98,6 +98,30 @@ public enum ThreadRelationships {
         }
     }
 
+    /// The shells the lineage can read: the thread, its parent, its children, the projection's subagent and transfer
+    /// threads and its merge target. Only edges that touch the thread make rows (`immediate`), so
+    /// the rest never change the result. Copying every shell of the environment ran on each shell and projection change,
+    /// about 4 ms a time with 1,400 threads (docs/research/m10-load-2026-10-12.md).
+    public static func related(_ all: [ThreadShell], to threadId: ThreadId, projection: ThreadProjection) -> [ThreadShell] {
+        func parent(_ t: ThreadShell) -> ThreadId? { t.forkedFrom?.type == "run" ? t.forkedFrom?.threadId : t.lineage.parentThreadId }
+        var local: Set<ThreadId> = [threadId.localId]
+        if let me = all.first(where: { $0.id == threadId }), let p = parent(me) { local.insert(p.localId) }
+        if let p = projection.thread.lineage?.parentThreadId { local.insert(p.localId) }
+        for s in projection.subagents.compactMap(ProjectedSubagent.init) { if let c = s.childThreadId { local.insert(c.localId) } }
+        for t in projection.contextTransfers {
+            for key in ["sourceThreadId", "targetThreadId"] { if let id = t[key]?.stringValue { local.insert(ThreadId(id).localId) } }
+        }
+        if let target = ThreadRelationships.mergeBackTarget(projection) { local.insert(target.localId) }
+        guard let env = threadId.environmentId else { return all }
+        // Compare whole ids, without splitting each shell's id on every call.
+        let scoped = Set(local.map { $0.scoped(to: env) }), localThread = threadId.localId
+        return all.filter { s in
+            if scoped.contains(s.id) { return true }
+            guard let p = parent(s), p == threadId || p == localThread else { return false }
+            return s.id.environmentId == env
+        }
+    }
+
     /// `resolveMergeBackTargetThreadId` (RT/threadRelationships.ts:35-42).
     public static func mergeBackTarget(_ projection: ThreadProjection?) -> ThreadId? {
         guard let thread = projection?.thread, thread.lineage?.relationshipToParent == .fork else { return nil }

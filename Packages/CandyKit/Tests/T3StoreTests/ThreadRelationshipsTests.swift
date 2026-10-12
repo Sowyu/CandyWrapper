@@ -106,6 +106,31 @@ import Testing
         #expect(order == ["parent", "older", "newer", "tie-a", "tie-b", "lost", "ghost"])
     }
 
+    /// The prefilter keeps every shell the lineage reads, so the lineage over it equals the lineage over all shells.
+    @Test func relatedShellsGiveTheSameLineage() {
+        let p = projection("me", thread: "\"lineage\":{\"parentThreadId\":\"boss\",\"rootThreadId\":\"boss\",\"relationshipToParent\":\"fork\"}",
+                           subagents: """
+            [{"id":"n1","childThreadId":"a1","status":"running","prompt":"x","title":null,"origin":"app_owned",
+              "driver":"codex","providerInstanceId":"codex","model":null,"result":null,"startedAt":null,"completedAt":null}]
+            """, transfers: "[{\"sourceThreadId\":\"me\",\"targetThreadId\":\"t1\",\"status\":\"completed\"}]")
+        func scoped(_ t: ThreadShell, _ env: String = "e1") -> ThreadShell {
+            var s = t
+            s.id = s.id.scoped(to: env)
+            s.lineage.parentThreadId = s.lineage.parentThreadId?.scoped(to: env)
+            return s
+        }
+        let all = [thread("me") { $0.lineage.parentThreadId = "boss"; $0.lineage.relationshipToParent = .fork },
+                   thread("boss") { $0.title = "Boss" }, child("a1", of: "me", .subagent, status: .running),
+                   child("kid", of: "me", .fork), child("sibling", of: "boss", .fork), thread("t1"), thread("other")].map { scoped($0) }
+            + [scoped(child("elsewhere", of: "me", .fork), "e2")]
+        let kept = ThreadRelationships.related(all, to: ThreadId("e1:me"), projection: p)
+        #expect(Set(kept.map(\.id.rawValue)) == ["e1:me", "e1:boss", "e1:a1", "e1:kid", "e1:t1"])
+        let full = ThreadRelationships.lineage(threadId: "me", threads: ThreadRelationships.unscoped(all, environmentId: "e1"), projection: p)
+        let fast = ThreadRelationships.lineage(threadId: "me", threads: ThreadRelationships.unscoped(kept, environmentId: "e1"), projection: p)
+        #expect(full == fast)
+        #expect(!full.related.isEmpty)
+    }
+
     @Test func groupsRelatedActiveAndPreviousAgents() {
         let p = projection("me", runs: """
             [{"id":"r1","threadId":"me","ordinal":1,"status":"completed","requestedAt":"2026-01-01T00:00:00.000Z"}]
