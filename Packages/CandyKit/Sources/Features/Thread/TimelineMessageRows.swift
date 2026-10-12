@@ -217,6 +217,17 @@ final class UserMessageRowView: TimelineRowView {
         needsLayout = true
     }
 
+    /// A match below a collapsed message's fold opens it (`data-thread-find-fold`, MessagesTimeline.tsx:4737-4740).
+    override func activeFindRect() -> CGRect? {
+        guard let rect = markdown.activeFindRect() else { return nil }
+        if collapsible, item?.ui.messageExpanded != true, rect.maxY + markdown.frame.minY - Self.padding > Self.collapsedHeight - Self.fade,
+           case .message(let m, _, _, _, _, _)? = item?.row.kind {
+            context.model?.toggleMessage(m.id.rawValue)
+            return nil
+        }
+        return markdown.convert(rect, to: self)
+    }
+
     override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
     override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
 
@@ -595,6 +606,37 @@ final class PlanRowView: TimelineRowView {
 
     private var collapsed: Bool { collapsible && !(item?.ui.planExpanded ?? false) }
 
+    // MARK: Find (searchablePlanSegments: the title, then the body)
+
+    private let titleFind = FindHighlightView()
+    private var titleMatches = 0
+
+    override func applyThreadFind(query: String, occurrence: Int?) {
+        let ranges = query.isEmpty ? [] : ThreadFindText.occurrences(title.text, query)
+        titleMatches = ranges.count
+        if titleFind.superview == nil { card.addSubview(titleFind, positioned: .below, relativeTo: title) }
+        let text = title.text as NSString
+        func x(_ offset: Int) -> CGFloat {
+            TextLine(NSAttributedString(string: text.substring(to: offset), attributes: [.font: title.font])).width
+        }
+        titleFind.rects = ranges.map { r in (CGRect(x: x(r.location), y: 0, width: x(r.upperBound) - x(r.location), height: 20), false) }
+        if let occurrence, occurrence < ranges.count { titleFind.rects[occurrence].active = true }
+        markdown.threadFindQuery = query
+        markdown.threadFindOccurrence = occurrence.flatMap { $0 >= ranges.count ? $0 - ranges.count : nil }
+    }
+
+    /// A match past the collapsed preview opens the plan (T3 reveals what `data-thread-find-fold` hides).
+    override func activeFindRect() -> CGRect? {
+        if let active = titleFind.rects.first(where: \.active) { return titleFind.convert(active.rect, to: self) }
+        guard let occurrence = markdown.threadFindOccurrence else { return nil }
+        if collapsed, occurrence >= markdown.findMatchCount() || (markdown.activeFindRect().map { $0.maxY > 416 - 28 } ?? false),
+           case .proposedPlan(let p)? = item?.row.kind {
+            context.model?.togglePlan(p.id.rawValue)
+            return nil
+        }
+        return markdown.activeFindRect().map { markdown.convert($0, to: self) }
+    }
+
     private func bodyHeight(_ width: CGFloat) -> CGFloat {
         let h = markdown.height(forWidth: max(0, width - 8 - 42))
         return collapsed ? min(h, 416) : h
@@ -616,6 +658,7 @@ final class PlanRowView: TimelineRowView {
         badge.frame = NSRect(x: 21, y: 21 + (24 - badgeSize.height) / 2, width: badgeSize.width, height: badgeSize.height)
         actionsButton.frame = NSRect(x: 21 + inner - 24, y: 21, width: 24, height: 24)
         title.frame = NSRect(x: badge.frame.maxX + 8, y: 23, width: max(0, actionsButton.frame.minX - 12 - badge.frame.maxX - 8), height: 20)
+        titleFind.frame = title.frame
         markdown.frame = NSRect(x: 21, y: 61, width: inner, height: markdown.height(forWidth: inner))
         card.layer?.masksToBounds = true
         let bodyBox = NSRect(x: 21, y: 61, width: inner, height: body)

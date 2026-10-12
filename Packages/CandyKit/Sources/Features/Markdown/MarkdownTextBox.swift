@@ -32,6 +32,19 @@ final class MarkdownTextBox {
     private let storage: NSTextContentStorage
     private let manager: NSTextLayoutManager
 
+    /// What find in thread matches here and where each unit of it sits in `text` (`ThreadFindText.index`).
+    /// Built on the first search, then kept with the box.
+    private(set) lazy var findIndex: (text: String, sources: [NSRange]) = ThreadFindText.index(storage.textStorage ?? NSAttributedString())
+
+    /// The ranges of `text` that find matches for `query`.
+    func findRanges(_ query: String) -> [NSRange] {
+        let index = findIndex
+        return ThreadFindText.occurrences(index.text, query).map { match in
+            let first = index.sources[match.location], last = index.sources[match.upperBound - 1]
+            return NSRange(location: first.location, length: max(first.upperBound, last.upperBound) - first.location)
+        }
+    }
+
     /// `chipRanges` are inline code runs, `chipFont` their font; both feed the chip rectangles.
     init(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, strut: NSFont,
          chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true) {

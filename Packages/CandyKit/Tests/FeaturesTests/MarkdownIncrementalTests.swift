@@ -109,6 +109,30 @@ struct MarkdownIncrementalTests {
         #expect(reusedSome)
     }
 
+    /// CommonMark fences: a closer indented 4 or more is content, and so is an opener (indented code).
+    @Test func fenceIndentsMatchTheFullParse() {
+        for text in ["Intro\n\n  ```\nfoo\n     ```\n\nText\n```\n", "Intro\n\n    ```\n\nText\n\n```\nfoo\n\nbar\n```\n"] {
+            var previous: MarkdownDocument.Incremental?
+            var index = text.startIndex
+            while true {
+                let prefix = String(text[..<index])
+                previous = MarkdownDocument.parse(prefix, extending: previous)
+                #expect(previous?.document == MarkdownDocument(parsing: prefix), "\(prefix.debugDescription)")
+                if index == text.endIndex { break }
+                index = text.index(after: index)
+            }
+        }
+    }
+
+    /// The settled message parses whole even when its text equals the last streamed text.
+    @Test func settledTextParsesWhole() {
+        let text = "Intro\n\n  ```\nfoo\n     ```\n\nText\n```\n"
+        let context = TimelineContext()
+        var streamed = ""
+        for character in text { streamed.append(character); _ = context.document("m", streamed, lineBreaks: false, streaming: true) }
+        #expect(context.document("m", text, lineBreaks: false) == MarkdownDocument(parsing: text))
+    }
+
     @Test func splitsOnlyAtSafeLines() {
         // A list marker, a digit, a quote or an indent after a blank line can continue the block above.
         for unsafe in ["- a\n\n- b", "1. a\n\n2. b", "> a\n\n> b", "- a\n\n  b", "x\n\n* y"] {
@@ -202,6 +226,8 @@ struct MarkdownIncrementalTests {
             case .endClip: "endClip"
             case .image(_, let r): "image \(r)"
             case .remoteImage(let u, _, let r): "remote \(u) \(r)"
+            case .favicon(let host, let r): "favicon \(host) \(r)"
+            case .hiddenText(let code, let index): "hidden \(index) \(code)"
             }
         } + layout.controls.map { "control \($0.frame) \($0.action)" }
     }

@@ -1,6 +1,13 @@
 import AppKit
 import DesignSystem
 
+extension NSAttributedString.Key {
+    /// What find in thread matches in place of these characters, as T3 indexes the rendered page
+    /// (packages/shared/src/threadFindText.ts): a chip's label, "" for what only draws (favicons, image
+    /// alt text, code block titles), "\u{0}" where T3 starts a new text segment.
+    static let markdownFindText = NSAttributedString.Key("CandyMarkdownFindText")
+}
+
 /// T3's `.chat-markdown` values (`apps/web/src/index.css:1759-2073`, ChatMarkdown.tsx), research note H section 4.
 enum MarkdownStyle {
     static let fontSize: CGFloat = 14
@@ -39,6 +46,15 @@ enum MarkdownStyle {
     /// CSS `font-weight: bolder` from a parent weight.
     static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
 
+    @MainActor private static var noBreakSpaceWidths: [NSFont: CGFloat] = [:]
+    /// A no-break space's advance in `font`, measured once per font.
+    @MainActor static func noBreakSpaceWidth(_ font: NSFont) -> CGFloat {
+        if let width = noBreakSpaceWidths[font] { return width }
+        let width = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: font])).width
+        noBreakSpaceWidths[font] = width
+        return width
+    }
+
     /// Inline text: the attributed string, the inline code ranges and the file chips in it.
     struct Inline {
         var string: NSAttributedString
@@ -48,6 +64,8 @@ enum MarkdownStyle {
         var links: [(range: NSRange, url: URL)] = []
         /// `t3-context://` chips: a placeholder space in the text, drawn by the layout item.
         var contexts: [(range: NSRange, chip: MarkdownContextChip)] = []
+        /// External link favicons: a reserved space before the link's first character.
+        var favicons: [(range: NSRange, host: String)] = []
     }
 
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
@@ -56,9 +74,10 @@ enum MarkdownStyle {
     @MainActor static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
                        alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
                        files: FileChipResolver? = nil, contexts: MarkdownContextChips? = nil,
-                       maxChipWidth: CGFloat = .greatestFiniteMagnitude) -> Inline {
+                       maxChipWidth: CGFloat = .greatestFiniteMagnitude, findable: Bool = true) -> Inline {
         let out = NSMutableAttributedString()
         var contextChips: [(range: NSRange, chip: MarkdownContextChip)] = []
+        var favicons: [(range: NSRange, host: String)] = []
         var chips: [NSRange] = []
         var fileChips: [(range: NSRange, meta: FileLinkMeta, label: String)] = []
         var webLinks: [(range: NSRange, url: URL)] = []
@@ -69,7 +88,10 @@ enum MarkdownStyle {
             let label = files!.label(meta)
             let start = out.length
             out.append(FileChipStyle.string(label: label, size: size, parent: parent, maxWidth: maxChipWidth))
-            fileChips.append((NSRange(location: start, length: out.length - start), meta, label))
+            let range = NSRange(location: start, length: out.length - start)
+            // Find matches the chip's whole label (threadFindText.ts `fileLinkLabel`), not its drawn characters.
+            out.addAttribute(.markdownFindText, value: label, range: range)
+            fileChips.append((range, meta, label))
         }
         var i = 0
         while i < runs.count {
@@ -114,22 +136,41 @@ enum MarkdownStyle {
                 // One no-break space as wide as the chip: the chip never wraps and the layout item draws it.
                 let space = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent])).width
                 let start = out.length
+                // Find skips a user message's context reference and ends the text segment there (threadFindText.ts).
                 out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent, .foregroundColor: color,
-                                                                                .kern: measured.size.width - space]))
+                                                                                .kern: measured.size.width - space, .markdownFindText: "\u{0}"]))
                 contextChips.append((NSRange(location: start, length: 1), chip))
                 continue
             }
+            var findText: String?
             if let url = run.link, let citation = ThreadAssistantCitation.parse(url.absoluteString) {
                 run.text = "❝ " + citation.label
                 run.code = true
+                findText = citation.label
             }
+            let index = i
             i += 1
             if let label = run.skillLabel {
                 let attachment = ComposerChipAttachment(look: ComposerChipLook(kind: .skill, label: label), source: run.text, maxWidth: maxChipWidth)
-                out.append(NSAttributedString(attachment: attachment))
+                let chip = NSMutableAttributedString(attachment: attachment)
+                chip.addAttribute(.markdownFindText, value: label, range: NSRange(location: 0, length: chip.length))
+                out.append(chip)
                 continue
             }
+            // An image's alt text is not page text; a hard break ends the find segment (threadFindText.ts).
+            if run.image != nil { findText = "" }
+            if run.isBreak, run.text == "\n" { findText = "\u{0}" }
             let start = out.length
+            if let url = run.link, findText == nil, index == 0 || runs[index - 1].link != url, let host = MarkdownFavicons.host(url),
+               runs[index...].prefix(while: { $0.link == url }).contains(where: { !$0.text.allSatisfy(\.isWhitespace) }) {
+                // `MarkdownLinkFavicon`: `ms-[0.25em] me-[0.2em] size-[14px]` before the link's first character, which it never
+                // wraps away from (`whitespace-nowrap`, ChatMarkdown.tsx:1880-1930). A kerned no-break space reserves it.
+                let linkFont = run.code ? DSFont.mono(chipFontSize) : font(size, weight: run.bold ? bolder(weight) : weight, italic: run.italic)
+                let space = noBreakSpaceWidth(linkFont)
+                out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: linkFont, .kern: 0.45 * size + 14 - space, .markdownFindText: ""]))
+                favicons.append((NSRange(location: start, length: 1), host))
+            }
+            let textStart = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]
             if run.code {
                 attributes[.font] = DSFont.mono(chipFontSize)
@@ -139,6 +180,7 @@ enum MarkdownStyle {
                 attributes[.foregroundColor] = run.link != nil ? link : color
             }
             if run.strikethrough { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+            if let findText { attributes[.markdownFindText] = findText }
             // An image inside running text shows its alt text, like a broken inline image.
             if run.isBreak, run.text == "\n" { run.text = "\u{2028}" }
             out.append(NSAttributedString(string: run.text, attributes: attributes))
@@ -150,11 +192,11 @@ enum MarkdownStyle {
                     webLinks.append((NSRange(location: start, length: out.length - start), url))
                 }
             }
-            if run.code, out.length > start {
-                chips.append(NSRange(location: start, length: out.length - start))
-                if start > 0 {
-                    let previous = (out.attribute(.kern, at: start - 1, effectiveRange: nil) as? CGFloat) ?? 0
-                    out.addAttribute(.kern, value: previous + pad, range: NSRange(location: start - 1, length: 1))
+            if run.code, out.length > textStart {
+                chips.append(NSRange(location: textStart, length: out.length - textStart))
+                if textStart > 0 {
+                    let previous = (out.attribute(.kern, at: textStart - 1, effectiveRange: nil) as? CGFloat) ?? 0
+                    out.addAttribute(.kern, value: previous + pad, range: NSRange(location: textStart - 1, length: 1))
                 } else {
                     leadingChip = true
                 }
@@ -168,7 +210,8 @@ enum MarkdownStyle {
         paragraph.firstLineHeadIndent = (firstLineIndent ?? headIndent) + (leadingChip ? pad : 0)
         paragraph.headIndent = headIndent
         out.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: out.length))
-        return Inline(string: out, code: chips, files: fileChips, links: webLinks, contexts: contextChips)
+        if !findable { out.addAttribute(.markdownFindText, value: "", range: NSRange(location: 0, length: out.length)) }
+        return Inline(string: out, code: chips, files: fileChips, links: webLinks, contexts: contextChips, favicons: favicons)
     }
 }
 
@@ -194,6 +237,10 @@ public final class MarkdownLayout {
         case contextChip(MarkdownContextChip)
         /// A web link's area on one line (not drawn; hit tested by `MarkdownView`).
         case link(CGRect, URL)
+        /// An external link's favicon box (14pt square) for `host`.
+        case favicon(String, CGRect)
+        /// Text find counts but nothing draws: a diagram's source beside it (ChatMarkdown.tsx:1074-1079).
+        case hiddenText(String, codeIndex: Int)
         /// Clips the items until the matching `.endClip` (code blocks with wrapping off).
         case clip(CGRect)
         case endClip
@@ -266,6 +313,7 @@ public final class MarkdownLayout {
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
         builder.contexts = contexts
         builder.diagrams = diagrams
+        builder.cwd = cwd
         let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes)
         var resume: (layout: MarkdownLayout, blocks: Int)?
         if let previous, previous.width == width, previous.reuseKey == key {
@@ -322,6 +370,7 @@ private struct Builder {
     var codeIndex = 0
     var diagrams: MarkdownLayout.Diagrams?
     var contexts: MarkdownContextChips?
+    var cwd: String?
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -417,10 +466,22 @@ private struct Builder {
             // Preflight's hr: a 1px top border in --border, no margin.
             return Box(height: 1, items: [.box(CGRect(x: 0, y: 0, width: width, height: 1), fill: Themed.color(\.border), border: nil, radius: 0)])
         case .image(let alt, let url):
-            // The loading slot of a standalone image: 16:9, at most 30rem wide, on the paragraph's baseline.
-            let w = min(width, MarkdownStyle.imageMaxWidth), h = w * 9 / 16
+            // A standalone image sits on the paragraph's baseline. Until it decodes it holds the loading slot,
+            // 16:9 and at most 30rem wide, and keeps it if it fails; once its size is known it takes its own box
+            // (ChatMarkdown.tsx:1386-1400). Workspace images keep a 1px frame (`rounded-lg border border-border/40`).
             let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]))
             let below = MarkdownStyle.lineHeight - strut.baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
+            let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+            if let natural = MarkdownImages.sizes[source.key], !MarkdownImages.failed.contains(source.key) {
+                let border: CGFloat = source.framed ? 1 : 0
+                let size = MarkdownImages.displaySize(natural: natural, maxWidth: width, border: border)
+                let rect = CGRect(origin: .zero, size: size)
+                var items: [MarkdownLayout.Item] = []
+                if source.framed { items.append(.box(rect, fill: nil, border: Themed.color(\.border, 0.4), radius: 10)) }
+                items.append(.remoteImage(url, alt, rect.insetBy(dx: border, dy: border)))
+                return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: size.height + below, items: items)
+            }
+            let w = min(width, MarkdownStyle.imageMaxWidth), h = w * 9 / 16
             let rect = CGRect(x: 0, y: 0, width: w, height: h)
             return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: h + below,
                        items: [.box(rect, fill: Themed.color(\.muted, 0.6), border: Themed.color(\.border, 0.4), radius: 10), .remoteImage(url, alt, rect)])
@@ -429,9 +490,11 @@ private struct Builder {
 
     @MainActor
     func text(_ runs: [InlineRun], width: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular, lineHeight: CGFloat,
-              color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil) -> Box {
+              color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
+              findable: Bool = true) -> Box {
         let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
-                                          headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts, maxChipWidth: width)
+                                          headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts,
+                                          maxChipWidth: width, findable: findable)
         let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
                                  chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
@@ -440,17 +503,32 @@ private struct Builder {
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
         box.items += Self.contextChips(inline, in: textBox, size: size, weight: weight)
-        box.items += Self.links(inline, in: textBox, lineHeight: lineHeight)
+        box.items += Self.links(inline, in: textBox, lineHeight: lineHeight, size: size)
         box.items.append(.text(textBox, .zero))
         return box
     }
 
+    /// Each favicon in its reserved space: `ms-[0.25em]`, 14px square, `vertical-align: -0.125em`.
     @MainActor
-    static func links(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, lineHeight: CGFloat) -> [MarkdownLayout.Item] {
+    static func favicons(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat) -> [MarkdownLayout.Item] {
+        inline.favicons.compactMap { favicon in
+            guard let span = textBox.spans(favicon.range).first else { return nil }
+            return .favicon(favicon.host, CGRect(x: span.x0 + 0.25 * size, y: span.baseline + 0.125 * size - 14, width: 14, height: 14))
+        }
+    }
+
+    @MainActor
+    /// Link areas, and the favicon at the start of each external link from the same spans (spans cost a CTLine per line).
+    static func links(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, lineHeight: CGFloat, size: CGFloat) -> [MarkdownLayout.Item] {
         inline.links.flatMap { link in
-            textBox.spans(link.range).map { span in
+            let spans = textBox.spans(link.range)
+            var items = spans.map { span in
                 MarkdownLayout.Item.link(CGRect(x: span.x0, y: span.baseline - lineHeight * 0.75, width: span.x1 - span.x0, height: lineHeight), link.url)
             }
+            if let favicon = inline.favicons.first(where: { $0.range.location == link.range.location }), let span = spans.first {
+                items.append(.favicon(favicon.host, CGRect(x: span.x0 + 0.25 * size, y: span.baseline + 0.125 * size - 14, width: 14, height: 14)))
+            }
+            return items
         }
     }
 
@@ -597,8 +675,9 @@ private struct Builder {
         let indent: CGFloat = 2 + 12
         let titleColor = Themed.base(light, dark: dark)
         // Title: a flex <p> (so 10.4px margins) with a 14px icon, a 6px gap and the medium-weight label.
+        // Find skips the title (`data-thread-find-ignore`, ChatMarkdown.tsx:2837).
         var title = text([InlineRun(text: label)], width: width - indent - 14 - 6, size: MarkdownStyle.fontSize, weight: .medium,
-                         lineHeight: MarkdownStyle.lineHeight, color: titleColor)
+                         lineHeight: MarkdownStyle.lineHeight, color: titleColor, findable: false)
         title.items = title.items.map { $0.moved(by: CGPoint(x: 14 + 6, y: 0)) }
         title.items.append(.icon(icon, CGRect(x: 0, y: (MarkdownStyle.lineHeight - 14) / 2, width: 14, height: 14), titleColor))
         title.top = MarkdownStyle.blockMargin
@@ -645,8 +724,9 @@ private struct Builder {
                               border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         let titleFont = DSFont.mono(11)
+        // Find skips the header (`THREAD_FIND_IGNORE_PROPS`, ChatMarkdown.tsx:746, 959).
         let label = NSAttributedString(string: title ?? language, attributes: [
-            .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72)])
+            .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72), .markdownFindText: ""])
         let labelLine = 11 * 1.375
         let titleBox = boxes.make(label, width: width - 2 - 12 - 6 - 50 - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
         box.items.append(.text(titleBox, CGPoint(x: 1 + 12, y: 1 + 6 + (24 - labelLine) / 2)))
@@ -668,6 +748,9 @@ private struct Builder {
     func diagramBlock(code: String, index: Int, dark: Bool, width: CGFloat) -> Box {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
         var y: CGFloat = 0
+        // Find counts the source, not the diagram's own labels (MermaidDiagram.tsx:195-200).
+        box.items.append(.hiddenText(code, codeIndex: index))
+        let ignored: [NSAttributedString.Key: Any] = [.markdownFindText: ""]
         switch MermaidDiagrams.shared.result(code, dark: dark) {
         case .rendered(let image, let size)?:
             let w = min(size.width, width), h = size.width > 0 ? (size.height * w / size.width).rounded() : 0
@@ -675,7 +758,7 @@ private struct Builder {
             y = h
         case .failed(let message, let retryable)?:
             let font = DSFont.ui(12)
-            let line = NSAttributedString(string: "Unable to render diagram: \(message)", attributes: [.font: font, .foregroundColor: Themed.color(\.destructive)])
+            let line = NSAttributedString(string: "Unable to render diagram: \(message)", attributes: [.font: font, .foregroundColor: Themed.color(\.destructive)].merging(ignored) { $1 })
             let error = MarkdownTextBox(line, width: width - (retryable ? 64 : 0), lineHeight: 16, strut: font)
             box.items.append(.text(error, .zero))
             if retryable {
@@ -683,14 +766,14 @@ private struct Builder {
                                           action: .retryDiagram(code), title: "Retry"))
             }
             let mono = DSFont.mono(12)
-            let source = MarkdownTextBox(NSAttributedString(string: code, attributes: [.font: mono, .foregroundColor: MarkdownStyle.body]),
+            let source = MarkdownTextBox(NSAttributedString(string: code, attributes: [.font: mono, .foregroundColor: MarkdownStyle.body].merging(ignored) { $1 }),
                                          width: width, lineHeight: 16, strut: mono)
             let top = max(error.height, retryable ? 24 : 0) + 8
             box.items.append(.text(source, CGPoint(x: 0, y: top)))
             y = top + source.height
         case nil:
             let font = DSFont.ui(12)
-            let label = MarkdownTextBox(NSAttributedString(string: "Rendering diagram", attributes: [.font: font, .foregroundColor: MarkdownStyle.muted]),
+            let label = MarkdownTextBox(NSAttributedString(string: "Rendering diagram", attributes: [.font: font, .foregroundColor: MarkdownStyle.muted].merging(ignored) { $1 }),
                                         width: width, lineHeight: 16, strut: font, wraps: false)
             let lw = ceil(TextLine(NSAttributedString(string: "Rendering diagram", attributes: [.font: font])).width)
             box.items.append(.text(label, CGPoint(x: ((width - lw) / 2).rounded(), y: 64)))
@@ -756,6 +839,7 @@ private struct Builder {
                 }
                 cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items += Self.contextChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
+                cell.items += Self.favicons(inline, in: textBox, size: size)
                 cell.items.append(.text(textBox, .zero))
                 rowHeight = max(rowHeight, textBox.height)
                 cells.append((cell, x + 12))
@@ -809,6 +893,8 @@ private extension MarkdownLayout.Item {
         case .clip(let r): .clip(r.offsetBy(dx: p.x, dy: p.y))
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
+        case .favicon(let host, let r): .favicon(host, r.offsetBy(dx: p.x, dy: p.y))
+        case .hiddenText: self
         case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
         case .remoteImage(let url, let alt, let r): .remoteImage(url, alt, r.offsetBy(dx: p.x, dy: p.y))
         }

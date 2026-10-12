@@ -128,6 +128,8 @@ public struct MarkdownContextChips: Equatable {
     // ponytail: unbounded, one 32px bitmap per sent image chip seen this session; cap it if threads with hundreds of images show up
     @MainActor static var thumbnails: [String: (image: CGImage, accent: NSColor?)] = [:]
     @MainActor static var loading: Set<String> = []
+    /// Attachments whose thumbnail failed: never asked for again, so relayouts cost no requests.
+    @MainActor static var failed: Set<String> = []
 
     /// `averageImageColor` (contextChipParts.tsx:136-168): the picture drawn at 16x16, each pixel weighted
     /// by its alpha so transparent pixels do not darken the accent. Nil when every pixel is transparent.
