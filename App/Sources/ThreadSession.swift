@@ -988,7 +988,7 @@ final class ThreadController {
     }
 
     /// Like T3's index route: a draft for the most recently active project, else nothing.
-    private func landOnIndex() {
+    func landOnIndex() {
         session?.end()
         session = nil
         lineage.update(threadId: nil, projection: nil)

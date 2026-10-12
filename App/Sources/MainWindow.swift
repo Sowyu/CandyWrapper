@@ -24,6 +24,13 @@ final class MainWindow: NSWindow {
         contentView.needsLayout = true
     }
 
+    /// Escape that no view on the way used, as T3's `useEscapeToGoBack` listens on the window after controls
+    /// had their chance (useNavigateBack.ts:18-40). True when it went somewhere.
+    var onUnhandledEscape: () -> Bool = { false }
+    override func cancelOperation(_ sender: Any?) {
+        if !onUnhandledEscape() { super.cancelOperation(sender) }
+    }
+
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],

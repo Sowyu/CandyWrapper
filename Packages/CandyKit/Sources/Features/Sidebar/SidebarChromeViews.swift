@@ -127,36 +127,92 @@ final class StageBackdropView: DSView {
     }
 }
 
-/// `SidebarBrandMark` (SidebarChrome.tsx:126-142): the T3 wordmark at cap height, `gap-1`, then "Code"
-/// in muted text, `text-sm font-medium tracking-tight`. Over the stage art T3 uses white and white/70;
-/// over the candy art the colors are `StageBackdropView.ink`.
-final class SidebarBrandView: DSView {
+/// `SidebarBrand` (SidebarChrome.tsx:110-123): a link to "/" labelled "Go to threads", `h-7 rounded-md`
+/// with `focus-visible:ring-2 ring-ring`. Inside it `SidebarBrandMark` (126-135): the mark at cap height,
+/// `gap-1`, then the word in muted text, `text-sm font-medium tracking-tight`. CandyWrapper's candy glyph
+/// and "Wrapper" stand in for T3's wordmark and "Code". Over the candy art the colors are `StageBackdropView.ink`.
+final class SidebarBrandView: ControlView {
     var onBackdrop = false { didSet { needsDisplay = true } }
     override var wantsUpdateLayer: Bool { false }
+    static let word = "Wrapper"
+    private let ring = BoxDecorationLayer()
 
-    static let wordmark: CGPath = {
-        // T3Wordmark.tsx, viewBox 15.5309 37 94.3941 56.96.
-        let d = "M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z"
-        return SimplePath.parse(d)
+    /// /tmp/cw-icon-final/glyph.svg (the app icon's white candy) cropped to its bounds, top-left at zero:
+    /// the twisted ends and the body under `rotate(-30) scale(1.02)`, less the gloss stroke.
+    static let glyph: CGPath = {
+        let end: [[CGPoint]] = [[(-196, 0), (-336.5, -156), (-399.7, -50.8)], [(-196, 0), (-403.9, -29.2), (-403.9, 29.2)],
+                                [(-196, 0), (-399.7, 50.8), (-336.5, 156)]].map { $0.map { CGPoint(x: $0.0, y: $0.1) } }
+        var parts = [CGPath(roundedRect: CGRect(x: -150, y: -125, width: 300, height: 250), cornerWidth: 125, cornerHeight: 125, transform: nil)]
+        for var flip in [CGAffineTransform.identity, CGAffineTransform(scaleX: -1, y: 1)] {
+            for tri in end {
+                let p = CGMutablePath()
+                p.addLines(between: tri, transform: flip)
+                p.closeSubpath()
+                parts.append(p)
+            }
+            parts.append(CGPath(roundedRect: CGRect(x: -208, y: -62, width: 44, height: 124), cornerWidth: 22, cornerHeight: 22, transform: &flip))
+        }
+        // `M -96 -40 A 92 80 0 0 1 -20 -92`: centre (-9.601, -12.513), angles -159.904 to -96.490 degrees.
+        let gloss = CGMutablePath()
+        let ellipse = CGAffineTransform(translationX: -9.601027, y: -12.512695).scaledBy(x: 92, y: 80)
+        gloss.addArc(center: .zero, radius: 1, startAngle: -159.904172 * .pi / 180, endAngle: -96.490145 * .pi / 180,
+                     clockwise: false, transform: ellipse)
+        // One union, part by part: the mirrored ends wind the other way and would cancel under nonzero fill.
+        let shape = parts.dropFirst().reduce(parts[0]) { $0.union($1) }.subtracting(gloss.copy(strokingWithWidth: 26, lineCap: .round, lineJoin: .miter, miterLimit: 10))
+        var place = CGAffineTransform(rotationAngle: -.pi / 6).scaledBy(x: 1.02, y: 1.02)
+        let box = shape.copy(using: &place)!.boundingBoxOfPath
+        place = CGAffineTransform(translationX: -box.minX, y: -box.minY).rotated(by: -.pi / 6).scaledBy(x: 1.02, y: 1.02)
+        return shape.copy(using: &place)!
     }()
+    static let glyphSize = glyph.boundingBoxOfPath.size
 
     static var font: NSFont { DSFont.ui(14, weight: .medium) }
     /// `tracking-tight`: -0.025em.
     static let tracking: CGFloat = -0.35
 
-    var markWidth: CGFloat { Self.font.capHeight * 94.3941 / 56.96 }
-    var codeLine: CTLine {
-        CTLineCreateWithAttributedString(NSAttributedString(string: "Code", attributes: [.font: Self.font, .kern: Self.tracking]))
+    var markWidth: CGFloat { Self.font.capHeight * Self.glyphSize.width / Self.glyphSize.height }
+    var wordLine: CTLine {
+        CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [.font: Self.font, .kern: Self.tracking]))
     }
     override var intrinsicContentSize: NSSize {
-        NSSize(width: ceil(markWidth + 4 + CGFloat(CTLineGetTypographicBounds(codeLine, nil, nil, nil))), height: 28)
+        NSSize(width: ceil(markWidth + 4 + CGFloat(CTLineGetTypographicBounds(wordLine, nil, nil, nil))), height: 28)
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        scalesWhenPressed = false // a link, not a button
+        setAccessibilityRole(.link)
+        setAccessibilityLabel("Go to threads")
+        ring.host = self
+        layer?.addSublayer(ring)
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ring.layout(boxSize: bounds.size)
+        CATransaction.commit()
+    }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        var box = BoxStyle()
+        box.radius = 8
+        if state.focusVisible { box.shadows = [BoxShadow(spread: 2, color: Themed.color(\.ring))] }
+        ring.boxStyle = box
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        ring.setNeedsDisplay()
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let cap = Self.font.capHeight
         // `items-baseline` in a 28px box with the 20px line centred: baseline as for the text line.
-        let baseline = TextLine(NSAttributedString(string: "Code", attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
+        let baseline = TextLine(NSAttributedString(string: Self.word, attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
         let fg = onBackdrop ? StageBackdropView.ink() : SB.c(\.foreground)
         let muted = onBackdrop ? StageBackdropView.ink(0.7) : SB.c(\.mutedForeground)
         if onBackdrop {
@@ -165,16 +221,15 @@ final class SidebarBrandView: DSView {
         }
         ctx.saveGState()
         ctx.translateBy(x: 0, y: baseline - cap)
-        let s = cap / 56.96
+        let s = cap / Self.glyphSize.height
         ctx.scaleBy(x: s, y: s)
-        ctx.translateBy(x: -15.5309, y: -37)
-        ctx.addPath(Self.wordmark)
+        ctx.addPath(Self.glyph)
         ctx.setFillColor(fg.cgColor(in: self))
         ctx.fillPath()
         ctx.restoreGState()
         ctx.saveGState()
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Code", attributes: [
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [
             .font: Self.font, .kern: Self.tracking, .foregroundColor: muted]))
         ctx.textMatrix = .identity
         ctx.translateBy(x: markWidth + 4, y: baseline)
@@ -182,39 +237,6 @@ final class SidebarBrandView: DSView {
         ctx.textPosition = .zero
         CTLineDraw(line, ctx)
         ctx.restoreGState()
-    }
-}
-
-/// Minimal SVG path parser for the absolute M, L, H, V, C, Z commands the wordmark uses.
-enum SimplePath {
-    static func parse(_ d: String) -> CGPath {
-        let p = CGMutablePath()
-        var tokens: [String] = []
-        var current = ""
-        for ch in d {
-            if ch.isLetter { if !current.isEmpty { tokens.append(current) }; tokens.append(String(ch)); current = "" }
-            else if ch == " " || ch == "," { if !current.isEmpty { tokens.append(current) }; current = "" }
-            else if ch == "-", !current.isEmpty, current.last != "e" { tokens.append(current); current = "-" }
-            else { current.append(ch) }
-        }
-        if !current.isEmpty { tokens.append(current) }
-        var i = 0, cmd = "M", pt = CGPoint.zero
-        func num() -> CGFloat { defer { i += 1 }; return CGFloat(Double(tokens[i]) ?? 0) }
-        while i < tokens.count {
-            if let c = tokens[i].first, c.isLetter { cmd = tokens[i]; i += 1; if cmd == "Z" { p.closeSubpath(); continue } }
-            switch cmd {
-            case "M": pt = CGPoint(x: num(), y: num()); p.move(to: pt); cmd = "L"
-            case "L": pt = CGPoint(x: num(), y: num()); p.addLine(to: pt)
-            case "H": pt.x = num(); p.addLine(to: pt)
-            case "V": pt.y = num(); p.addLine(to: pt)
-            case "C":
-                let c1 = CGPoint(x: num(), y: num()), c2 = CGPoint(x: num(), y: num())
-                pt = CGPoint(x: num(), y: num())
-                p.addCurve(to: pt, control1: c1, control2: c2)
-            default: i += 1
-            }
-        }
-        return p
     }
 }
 
