@@ -1126,6 +1126,10 @@ public final class ThreadPanelView: DSView {
     public override func updateLayer() {
         let bg = TL.c(\.background).cgColor(in: self)
         fade.colors = [1, 0.9, 0.7, 0.42, 0.18, 0.04, 0].map { bg.copy(alpha: $0)! }
+        // A colored overlay over the Glass theme's translucent surface reads as a band, so Glass drops the fade.
+        // ponytail: hard scroll edge under the header in Glass; a gradient mask on the timeline would match T3
+        // but renders offscreen on every scroll frame, add it if the edge is missed
+        needsLayout = true
     }
 
     public override func layout() {
@@ -1139,6 +1143,7 @@ public final class ThreadPanelView: DSView {
         rightPanelBackdrop.frame = bounds
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
+        rightPanel.isSheet = sheet
         header.isHidden = chat == 0
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
@@ -1242,7 +1247,7 @@ public final class ThreadPanelView: DSView {
         // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
         fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
-        fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden
+        fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || WindowGlass.isActive(for: self)
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
         detailsCard.layer?.zPosition = 2

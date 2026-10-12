@@ -104,7 +104,7 @@ public final class ThemeLibrary {
     /// `getThemeDefinition`: built-ins first, then saved themes.
     public func definition(_ id: String) -> ThemeDefinition? {
         let id = ThemePalette.normalizedId(id)
-        return ThemeDefinition.builtIns.first { $0.id == id } ?? customThemes.first { $0.id == id } ?? environmentThemes.first { $0.id == id }
+        return ThemeDefinition.pickerBuiltIns.first { $0.id == id } ?? customThemes.first { $0.id == id } ?? environmentThemes.first { $0.id == id }
     }
 
     /// useEnvironmentTheme.ts:24-96. Published themes are transient and cannot replace reserved ids.
@@ -181,7 +181,7 @@ public final class ThemeLibrary {
     public func install(_ theme: ThemeDefinition) throws -> ThemeDefinition {
         if ThemePalette.reservedIds.contains(theme.id) { throw ThemePalette.FileError(message: "The theme id \"\(theme.id)\" is reserved.") }
         let stored = storedThemes
-        if ThemeDefinition.builtIns.contains(where: { $0.id == theme.id }) || stored.contains(where: { Self.id(of: $0) == theme.id }) {
+        if ThemeDefinition.pickerBuiltIns.contains(where: { $0.id == theme.id }) || stored.contains(where: { Self.id(of: $0) == theme.id }) {
             throw ThemePalette.FileError(message: "A theme named \"\(theme.label)\" is already installed.")
         }
         save(stored + [ThemePalette.storedObject(theme)])
@@ -307,29 +307,37 @@ public final class ThemeLibrary {
     /// The palettes and window appearance for the stored choice (or the editor's draft), with the contrast
     /// and glass settings.
     public func apply(client: ClientSettings = ClientSettingsStore.shared.current, app: NSApplication? = NSApp) {
-        var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
         SettingsPanelMotion.durationMs = client.int("panelAnimationDurationMs")
-        input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
-        let forced: String
-        if let preview {
-            // `applyThemeColorPreview`: the draft on both sides, in its own appearance.
-            input.light = ThemeRuntimeHalf(colors: preview.colors)
-            input.dark = input.light
-            forced = preview.appearance.rawValue
-        } else {
-            for a in ThemeAppearance.allCases {
-                guard let id = owner(of: a), let d = definition(id) else { continue }
-                // `applyThemePalette` falls back to the base colors for a side the theme lacks.
-                let half = ThemeRuntimeHalf(colors: d.colors(for: a) ?? d.colors, builtInId: d.isBuiltIn ? d.id : nil)
-                if a == .light { input.light = half } else { input.dark = half }
-            }
-            forced = desktopAppearance()
-        }
+        let (input, forced) = runtimeInput(client: client)
         if let app, controlsAppearance {
             let target: NSAppearance? = forced == "light" ? NSAppearance(named: .aqua) : forced == "dark" ? NSAppearance(named: .darkAqua) : nil
             if app.appearance?.name != target?.name { app.appearance = target }
         }
         ThemeRuntime.apply(input)
+    }
+
+    /// What `apply` hands the theme runtime, and the appearance the window must wear ("system" for either).
+    func runtimeInput(client: ClientSettings) -> (ThemeRuntimeInput, forced: String) {
+        var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
+        input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
+        if let preview {
+            // `applyThemeColorPreview`: the draft on both sides, in its own appearance.
+            input.light = ThemeRuntimeHalf(colors: preview.colors)
+            input.dark = input.light
+            return (input, preview.appearance.rawValue)
+        }
+        for a in ThemeAppearance.allCases {
+            guard let id = owner(of: a), let d = definition(id) else { continue }
+            if d.isWindowGlass {
+                // Glass wears the stock palette exactly; only the window changes.
+                if a == .light { input.glassLight = true } else { input.glassDark = true }
+                continue
+            }
+            // `applyThemePalette` falls back to the base colors for a side the theme lacks.
+            let half = ThemeRuntimeHalf(colors: d.colors(for: a) ?? d.colors, builtInId: d.isBuiltIn ? d.id : nil)
+            if a == .light { input.light = half } else { input.dark = half }
+        }
+        return (input, desktopAppearance())
     }
 
     /// The appearance on screen now (T3's `resolvedTheme`).

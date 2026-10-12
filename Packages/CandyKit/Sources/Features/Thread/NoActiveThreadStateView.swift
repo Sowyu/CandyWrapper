@@ -30,7 +30,7 @@ public final class NoActiveThreadStateView: DSView {
         empty.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: y.rounded(), width: w, height: eh - 96)
     }
 
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.inset.cgColor(in: self) }
 }
 
 /// The header bar: label at the 20px gutter, centered on 52, a 1px `border-border` underline.

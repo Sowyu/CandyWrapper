@@ -785,7 +785,7 @@ final class PaletteCommands {
     private func themePage() -> PalettePage {
         let lib = ThemeLibrary.shared
         let current = lib.ownerCard(lib.resolvedAppearance)
-        let cards = [ThemeCardDefinition.standard] + (ThemeDefinition.builtIns + lib.customThemes).map(ThemeCardDefinition.init)
+        let cards = [ThemeCardDefinition.standard] + (ThemeDefinition.pickerBuiltIns + lib.customThemes).map(ThemeCardDefinition.init)
         let items = cards.map { card in
             PaletteEntry(value: card.id.map { "theme:palette:\($0)" } ?? "theme:standard", searchTerms: [card.label, "theme", "appearance"],
                          title: card.label, description: card.previews.count == 1 ? "For \(card.previews[0].mode.rawValue) mode" : nil,

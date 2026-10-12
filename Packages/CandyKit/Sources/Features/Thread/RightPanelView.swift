@@ -277,8 +277,11 @@ final class RightPanelView: DSView {
         lazyLauncher.loaded?.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
 
+    /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
+    var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
+
     override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = (isSheet ? Themed.color(\.background) : WindowGlass.inset).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
     }
 }

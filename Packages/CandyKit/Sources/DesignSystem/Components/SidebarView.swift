@@ -80,6 +80,8 @@ public final class SidebarLayoutView: DSView {
     public let defaults: UserDefaults
 
     public private(set) var isOpen = true
+    /// The Glass theme's frost under everything, present only while it shows.
+    private var glassBackdrop: WindowGlassBackdropView?
     /// Preferred width; the drawn width is this clamped to the window (`effectiveWidth`).
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
@@ -94,7 +96,7 @@ public final class SidebarLayoutView: DSView {
     public init(sidebarContent: NSView? = nil, mainContent: NSView? = nil, defaults: UserDefaults = .standard, viewport: CGFloat = 1100) {
         self.defaults = defaults
         sidebar = SidebarContainerView()
-        main = GrainSurfaceView(fill: Themed.color(\.background))
+        main = GrainSurfaceView(fill: WindowGlass.mainSurface)
         width = SidebarWidth.initial(stored: SidebarWidth.load(defaults), viewport: viewport)
         super.init(frame: .zero)
         addSubview(main)
@@ -130,6 +132,34 @@ public final class SidebarLayoutView: DSView {
             let offset = CGSize(width: open ? -effectiveWidth : effectiveWidth, height: 0)
             SettingsPanelMotion.reveal(sidebar, offset: offset)
             SettingsPanelMotion.reveal(main, offset: offset)
+        }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        let wasGlass = glassBackdrop != nil
+        updateGlass()
+        // Behind a frosted window AppKit leaves box decorations with the old appearance's colors (the
+        // translucent theme cards stayed light in dark mode), so they redraw here.
+        if wasGlass || glassBackdrop != nil { ThemeRuntime.redrawDecorations(in: self) }
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateGlass()
+    }
+
+    /// Adds the frost under the surfaces while the Glass theme shows, and drops it otherwise. The theme runtime
+    /// calls `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
+    private func updateGlass() {
+        let on = window != nil && WindowGlass.isActive(for: self)
+        if on, glassBackdrop == nil {
+            let backdrop = WindowGlassBackdropView(frame: bounds)
+            addSubview(backdrop, positioned: .below, relativeTo: nil)
+            glassBackdrop = backdrop
+        } else if !on, let backdrop = glassBackdrop {
+            backdrop.removeFromSuperview()
+            glassBackdrop = nil
         }
     }
 
@@ -190,7 +220,7 @@ public final class SidebarLayoutView: DSView {
 
 /// The fixed container plus inner: `bg-sidebar surface-grain` and `border-r` in the sidebar's `--contrast-border`.
 public final class SidebarContainerView: DSView {
-    public let surface = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
+    public let surface = GrainSurfaceView(fill: WindowGlass.sidebarSurface)
     private let border = DSView()
     public var content: NSView? {
         didSet { oldValue?.removeFromSuperview(); if let content { addSubview(content) }; needsLayout = true }
