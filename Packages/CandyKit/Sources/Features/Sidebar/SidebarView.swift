@@ -467,6 +467,14 @@ public final class SidebarContentView: DSView {
         state.selectedThreadIds = next
     }
 
+    /// `navigateToThread` (Sidebar.tsx:3144-3158) for opens that don't come from a row click, such as
+    /// `thread.jump.N` and `thread.previous`/`next` (Sidebar.tsx:4881-4889): drops the selection and
+    /// moves the Shift-click anchor to the opened thread.
+    public func navigated(to id: ThreadId) {
+        if !state.selectedThreadIds.isEmpty { state.selectedThreadIds = [] }
+        selectionAnchor = id
+    }
+
     public func clearSelection() {
         guard !state.selectedThreadIds.isEmpty || selectionAnchor != nil else { return }
         state.selectedThreadIds = []

@@ -36,6 +36,10 @@ struct SidebarLeftoverTests {
         // Without an anchor, Shift adds the row and anchors there.
         c.selectRange(to: ThreadId("r6"))
         #expect(c.selectedThreadIds == [ThreadId("r6")] && c.selectionAnchor == ThreadId("r6"))
+        // A keyboard jump navigates like a click: the selection goes and the anchor moves (Sidebar.tsx:3144-3158).
+        c.toggleSelection(ThreadId("r3"))
+        c.navigated(to: ThreadId("r5"))
+        #expect(c.selectedThreadIds.isEmpty && c.selectionAnchor == ThreadId("r5"))
     }
 
     // MARK: Rename
