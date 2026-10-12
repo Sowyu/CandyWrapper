@@ -8,8 +8,8 @@ Shiki (getSharedHighlighter from the installed client's diffRendering chunk, pie
 pierre-dark), through the spec's `prepare` hook, so the token colors are T3's.
 
 Deviations from T3, on both sides of the comparison:
-- Code block titles show the language label. T3 shows a pierre file-type icon for languages that
-  have one; those icons are not extracted yet.
+- Code block titles show the pierre icon of a file in the block's language, or the language's name
+  when no specific icon exists (MarkdownCodeBlockTitleContent, ChatMarkdown.tsx:801-840).
 - Links point at `#fragments`, so T3 draws no favicon (external links get a fetched favicon).
 - The image is the loading slot, which is what MarkdownView draws for every image for now.
 - `--font-size-code` is set to 13px, the default that T3 writes on the root at runtime (appearanceFonts.ts).
@@ -59,6 +59,21 @@ def button(variant, icon, extra=""):
 ROOT_CLASS = ("chat-markdown w-full min-w-0 text-sm leading-relaxed "
               "text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)] [overflow-wrap:anywhere] [word-break:break-word]")
 
+# `syntheticFileNameForLanguageId` (pierre-icons.ts) to the icon token, with PierreEntryIcon.tsx's colors.
+TITLE_ICONS = {"python": ("python", "#1a85d4", "#69b1ff"), "ts": ("typescript", "#1a85d4", "#69b1ff"),
+               "bash": ("bash", "#199f43", "#5ecc71"), "json": ("json", "#d47628", "#ffa359")}
+def code_title(language):
+    if language not in TITLE_ICONS:
+        return f'<span class="truncate">{language}</span>'
+    import re
+    extract_assets()
+    bundle = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()
+    token, light, dark = TITLE_ICONS[language]
+    m = re.search(r'<symbol id="file-tree-builtin-' + token + r'" viewBox="([^"]*)">(.*?)</symbol>', bundle, re.S)
+    return (f'<span class="inline-flex shrink-0 rounded-sm" aria-label="Language: {language}">'
+            f'<svg aria-hidden="true" data-light="{light}" data-dark="{dark}" class="size-3.5 shrink-0" '
+            f'viewBox="{m.group(1)}">{m.group(2)}</svg></span>')
+
 def code_block(language, code):
     """MarkdownCodeBlock with the wrap toggle (on, the wordWrap default) and copy; Shiki fills the pre."""
     actions = (button("secondary", "text-wrap", ' aria-pressed="true" aria-label="Disable line wrap"')
@@ -67,7 +82,7 @@ def code_block(language, code):
         '<div class="chat-markdown-codeblock my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary '
         f'leading-snug dark:border-transparent dark:bg-input/32" data-language="{language}" data-wrap="true">'
         '<div data-thread-find-ignore="true" class="chat-markdown-codeblock-header flex items-center justify-between gap-2 pt-1.5 pr-1.5 pb-0 pl-3 select-none">'
-        f'<span class="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs"><span class="truncate">{language}</span></span>'
+        f'<span class="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs">{code_title(language)}</span>'
         f'<span class="flex items-center gap-0.5" role="toolbar" aria-label="Code block actions">{actions}</span></div>'
         f'<div class="chat-markdown-shiki"><pre data-shiki-lang="{language}" data-code="{html.escape(code + chr(10))}"></pre></div></div>')
 

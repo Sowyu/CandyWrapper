@@ -5,6 +5,7 @@ import T3Protocol
 import T3Store
 
 /// Find matches behind a single-line label, in the colors `MarkdownView` paints them.
+// ponytail: the label's text keeps its own color over the mark; recolor it as MarkdownView.draw does if a plan title match looks off in dark mode
 final class FindHighlightView: DSView {
     var rects: [(rect: CGRect, active: Bool)] = [] {
         didSet { if !rects.elementsEqual(oldValue, by: { $0.rect == $1.rect && $0.active == $1.active }) { needsDisplay = true } }
@@ -14,7 +15,7 @@ final class FindHighlightView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         for (rect, active) in rects {
-            ctx.setFillColor((active ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.32)).cgColor)
+            ctx.setFillColor(SearchMatchColors.background(active: active, dark: effectiveAppearance.isDark).cgColor)
             ctx.fill(rect)
         }
     }

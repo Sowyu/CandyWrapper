@@ -70,6 +70,8 @@ public final class ThreadViewModel {
     public var workspaceRoot: String?
     /// File chip clicks in messages (`MarkdownView.onOpenFile`); nil shows the chip's copy menu.
     public var openFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
+    /// "Run in terminal" on shell code blocks in finished assistant answers (ChatView.tsx:5105-5116, 11385).
+    public var runShellCommand: ((String) -> Void)?
     /// A sent image at a pixel side (`assets.createUrl` for the attachment, decoded at that size).
     public var onOpenAttachment: ((JSONValue, _ download: Bool) -> Void)?
     public var attachmentMediaURL: (@Sendable (_ attachmentId: String) async -> URL?)?

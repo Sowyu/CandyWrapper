@@ -11,7 +11,10 @@ open class TopbarDragView: DSView {
     // ponytail: the content jumps to its inset; T3 eases padding-left over the panel animation. Animate it if the jump shows
     public var contentStart: CGFloat {
         guard window != nil else { return 20 }
-        let x = convert(NSPoint.zero, to: nil).x
+        // T3 measures from the viewport, which is the sidebar layout's frame (the window's content in the app).
+        var layout = superview
+        while let view = layout, !(view is SidebarLayoutView) { layout = view.superview }
+        let x = convert(NSPoint.zero, to: layout).x
         let left = SidebarMetrics.titlebarContentLeft(windowedMac: true)
         return x < left ? max(20, left - x) : 20
     }

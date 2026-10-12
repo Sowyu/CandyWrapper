@@ -34,6 +34,7 @@ struct ThreadFidelityTests {
         let projection = try #require(try ThreadPreview.projection(titled: title))
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
         panel.bottomInset = composerInset
+        panel.model.runShellCommand = { _ in } // a thread with a project: shell blocks show "Run in terminal"
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()

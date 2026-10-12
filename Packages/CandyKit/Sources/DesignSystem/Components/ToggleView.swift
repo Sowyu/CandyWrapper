@@ -31,6 +31,8 @@ public final class ToggleView: ControlView {
     public var isPressed = false { didSet { if isPressed != oldValue { restyle(); setAccessibilityValue(isPressed) } } }
     /// `font-mono` on the label (the content search options).
     public var monospaced = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// `underline decoration-2 underline-offset-2` on the label (the content search's "ab").
+    public var underlinesTitle = false { didSet { label.underlineDecoration = underlinesTitle ? (2, 2) : nil } }
     /// Called after a click flips `isPressed`.
     public final var onPressedChange: (@MainActor (Bool) -> Void)?
 
