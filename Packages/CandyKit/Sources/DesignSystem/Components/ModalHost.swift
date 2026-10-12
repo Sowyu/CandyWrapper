@@ -1,5 +1,5 @@
 import AppKit
-import CoreImage
+import Accelerate
 import QuartzCore
 
 /// Hosts a `DialogView` as a modal overlay inside a window, like T3's dialog viewport:
@@ -262,14 +262,25 @@ public final class ModalHost: DSView {
     }
 
     /// `image` drawn at a quarter of `pointSize` and blurred with sigma 1.
+    ///
+    /// The blur runs on the CPU with vImage. It used Core Image before, and a fresh `CIContext` sets up a
+    /// Metal context each time: the abuse test (docs/research/m10-abuse-2026-10-12.md) measured 120 to
+    /// 255 ms main-thread stalls on every ⌘K. A 7x7 kernel over a quarter-size bitmap takes well under 1 ms.
+    /// It blurs the sRGB-encoded values as Chromium does for `backdrop-filter`; Core Image blurred in linear light.
     static func blurred(_ image: CGImage, pointSize: CGSize) -> CGImage? {
         guard let small = context(Int(pointSize.width / 4), Int(pointSize.height / 4)) else { return nil }
         small.interpolationQuality = .medium
         small.draw(image, in: CGRect(x: 0, y: 0, width: small.width, height: small.height))
-        guard let downscaled = small.makeImage() else { return nil }
-        let input = CIImage(cgImage: downscaled)
-        let output = input.clampedToExtent().applyingGaussianBlur(sigma: 1).cropped(to: input.extent)
-        return CIContext(options: [.cacheIntermediates: false]).createCGImage(output, from: input.extent)
+        guard let out = context(small.width, small.height), let from = small.data, let to = out.data else { return nil }
+        var src = vImage_Buffer(data: from, height: vImagePixelCount(small.height), width: vImagePixelCount(small.width), rowBytes: small.bytesPerRow)
+        var dst = vImage_Buffer(data: to, height: vImagePixelCount(out.height), width: vImagePixelCount(out.width), rowBytes: out.bytesPerRow)
+        // Gaussian, sigma 1, cut at 3 sigma: 64 * exp(-x^2 / 2) for x in -3...3. Edges extend, like
+        // `clampedToExtent()`. Premultiplied channels blur correctly as they are.
+        let taps: [Int16] = [1, 9, 39, 64, 39, 9, 1]
+        let kernel = taps.flatMap { a in taps.map { a * $0 } }
+        let divisor = Int32(taps.reduce(0, +)) * Int32(taps.reduce(0, +))
+        let status = vImageConvolve_ARGB8888(&src, &dst, nil, 0, 0, kernel, 7, 7, divisor, nil, vImage_Flags(kvImageEdgeExtend))
+        return status == kvImageNoError ? out.makeImage() : nil
     }
 
     private static func context(_ width: Int, _ height: Int) -> CGContext? {

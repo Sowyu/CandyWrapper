@@ -101,6 +101,30 @@ struct OverlaysFidelityTests {
         }
     }
 
+    /// The vImage blur matches Core Image's Gaussian (sigma 1, clamped edges), which it replaced to stop a
+    /// Metal context being built on every ⌘K: within 2 levels per channel before the tint. Both blur the
+    /// sRGB-encoded values, as Chromium (Skia) does for CSS filter functions; the old
+    /// Core Image path blurred in linear light, up to 31 levels away at sharp edges.
+    @Test func vImageBlurMatchesCoreImage() throws {
+        let content = ComponentGallery.render(TogglesGallery.sections[0], width: 520, dark: true, scale: 1).cgImage!
+        let size = CGSize(width: content.width, height: content.height)
+        let ours = ModalHost.blurred(content, pointSize: size)!
+        // The same quarter-size bitmap, blurred by Core Image.
+        let small = CGContext(data: nil, width: ours.width, height: ours.height, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        small.interpolationQuality = .medium
+        small.draw(content, in: CGRect(x: 0, y: 0, width: small.width, height: small.height))
+        let input = CIImage(cgImage: small.makeImage()!)
+        let ci = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
+            .createCGImage(input.clampedToExtent().applyingGaussianBlur(sigma: 1).cropped(to: input.extent), from: input.extent)!
+        let a = FidelityTests.pixels(NSBitmapImageRep(cgImage: ours), ours.width, ours.height)
+        let b = FidelityTests.pixels(NSBitmapImageRep(cgImage: ci), ours.width, ours.height)
+        var worst = 0
+        for i in stride(from: 0, to: a.count, by: 4) { worst = max(worst, (0..<3).map { abs(Int(a[i + $0]) - Int(b[i + $0])) }.max()!) }
+        print("BACKDROP vImage vs Core Image: worst channel difference \(worst)")
+        #expect(worst <= 2)
+    }
+
     /// The backdrop drawn at half the point size matches the old path (a full backing-scale snapshot, then
     /// downscaled): under the 60% tint no channel moves by more than the fidelity tolerance.
     @Test func smallSnapshotMatchesFullSize() throws {

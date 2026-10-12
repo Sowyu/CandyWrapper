@@ -50,9 +50,21 @@ public actor RPCConnection {
     private var writeTask: Task<Void, Never>?
     private let outbox: AsyncStream<Data>.Continuation
     private let outboxStream: AsyncStream<Data>
+    /// Liveness while a reply is owed. Effect's client pings every 5 s and drops a socket whose
+    /// Pong misses the next tick (makePinger, effect-smol RpcClient.ts:1205-1227). CandyWrapper
+    /// sends no idle pings (see `ConnectionSupervisor`), so a socket that dies without a close it
+    /// can see would wedge every call and stream for good: a peer that half-closes in the middle
+    /// of a frame leaves URLSession's `receive()` waiting forever. So while a unary call or a
+    /// stream's first answer is outstanding, `livenessInterval` without any inbound frame sends
+    /// a Ping, and a Pong still missing after another interval closes the socket, which makes the
+    /// supervisor reconnect. Nothing runs while nothing is owed.
+    private let livenessInterval: Duration
+    private var lastInbound = ContinuousClock.now
+    private var watchdog: Task<Void, Never>?
 
-    public init(socket: any RPCSocket) {
+    public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
         self.socket = socket
+        self.livenessInterval = livenessInterval
         (outboxStream, outbox) = AsyncStream<Data>.makeStream()
     }
 
@@ -112,6 +124,7 @@ public actor RPCConnection {
                 if Task.isCancelled { return c.resume(throwing: CancellationError()) }
                 unary[id] = c
                 write(.request(RPCRequest(id: id, tag: tag, payload: payload)))
+                armWatchdog()
                 OpenTiming.mark("request sent", tag)
             }
         } onCancel: {
@@ -132,6 +145,7 @@ public actor RPCConnection {
         } else {
             streams[id] = StreamState()
             write(.request(RPCRequest(id: id, tag: tag, payload: payload)))
+            armWatchdog()
             OpenTiming.mark("request sent", tag)
         }
         return RPCStream(handle: StreamHandle(id: id, connection: self))
@@ -227,10 +241,13 @@ public actor RPCConnection {
     }
 
     private func handle(_ messages: [RPCServerMessage]) {
+        lastInbound = ContinuousClock.now
+        defer { if watchdog != nil, !owesReply { watchdog?.cancel(); watchdog = nil } }
         for message in messages {
             switch message {
             case .chunk(let id, let values):
                 guard let state = streams[id], state.end == nil, !values.isEmpty else { continue }
+                state.answered = true
                 state.buffer.append(contentsOf: values)
                 if let w = state.waiter {
                     state.waiter = nil
@@ -257,6 +274,45 @@ public actor RPCConnection {
             case .unknown:
                 continue
             }
+        }
+    }
+
+    // MARK: Liveness
+
+    /// A unary call, or a stream that has had neither a chunk nor its exit yet.
+    private var owesReply: Bool { !unary.isEmpty || streams.values.contains { !$0.answered && $0.end == nil } }
+
+    private func armWatchdog() {
+        guard watchdog == nil, closedWith == nil else { return }
+        let interval = livenessInterval
+        watchdog = Task { [weak self] in
+            while true {
+                do { try await Task.sleep(for: interval) } catch { return }
+                guard let self, await self.livenessTick() else { return }
+            }
+        }
+    }
+
+    /// One watchdog step; false ends the watchdog. Pings only after a quiet interval, so a socket
+    /// that keeps delivering frames, or a slow call on a live socket, costs one Ping per interval.
+    private func livenessTick() async -> Bool {
+        guard closedWith == nil, owesReply else { watchdog = nil; return false }
+        guard ContinuousClock.now - lastInbound >= livenessInterval else { return true }
+        do {
+            try await ping(timeout: livenessInterval)
+            // The socket works. A subscription that stays quiet (a terminal, a status feed) owes
+            // nothing more, so only unary calls keep the watchdog going.
+            for state in streams.values { state.answered = true }
+            if owesReply { return true }
+            watchdog = nil
+            return false
+        } catch RPCTransportError.pingTimedOut {
+            watchdog = nil
+            shutDown(.transport(.pingTimedOut))
+            return false
+        } catch {
+            // Cancelled because the reply arrived, or the socket closed meanwhile.
+            return false
         }
     }
 
@@ -293,6 +349,8 @@ public actor RPCConnection {
         outbox.finish()
         socket.close()
         receiveTask?.cancel()
+        watchdog?.cancel()
+        watchdog = nil
     }
 }
 
@@ -302,6 +360,8 @@ private final class StreamState {
     var head = 0
     var end: Result<Void, RPCClientError>?
     var waiter: CheckedContinuation<JSONValue?, Error>?
+    /// A chunk arrived, so the server has answered the subscription.
+    var answered = false
 }
 
 /// Interrupts the stream when the last reference goes away before the stream ended.

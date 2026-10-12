@@ -717,6 +717,7 @@ final class ThreadController {
                 target = Self.adjacentThread(ids, current: self.openThreadId, previous: call.command == "thread.previous")
             }
             guard let target else { return false }
+            sidebar.navigated(to: target)
             self.open(target)
             return true
         }

@@ -121,4 +121,64 @@ struct RPCConnectionTests {
         try await ping.value
         await #expect(throws: RPCTransportError.pingTimedOut) { try await c.ping(timeout: .milliseconds(30)) }
     }
+
+    // MARK: Liveness while a reply is owed (the abuse test's half-closed socket, 2026-10-12)
+
+    func makeWatchedConnection() async -> (RPCConnection, FakeSocket) {
+        let socket = FakeSocket()
+        let connection = RPCConnection(socket: socket, livenessInterval: .milliseconds(60))
+        await connection.start()
+        return (connection, socket)
+    }
+
+    func pings(_ socket: FakeSocket) -> Int { socket.sent.filter { $0 == .ping }.count }
+
+    @Test func aSilentSocketWithACallOwedIsClosed() async throws {
+        let (c, socket) = await makeWatchedConnection()
+        let call = Task { try await c.request("server.getConfig") }
+        // Nothing comes back: one quiet interval sends a Ping, a second one without a Pong closes.
+        #expect(await eventually { pings(socket) == 1 })
+        #expect(await eventually { await c.isClosed })
+        guard case .failure(let e as RPCClientError) = await call.result, e == .transport(.pingTimedOut) else {
+            Issue.record("expected the call to fail with pingTimedOut"); return
+        }
+    }
+
+    @Test func aSlowCallOnALiveSocketKeepsItOpenAndTheWatchdogEnds() async throws {
+        let (c, socket) = await makeWatchedConnection()
+        let call = Task { try await c.request("git.slowThing") }
+        // Answer two pings, then the call.
+        for n in 1...2 {
+            #expect(await eventually { pings(socket) == n })
+            socket.deliver(.pong)
+        }
+        #expect(await !c.isClosed)
+        socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
+        _ = try await call.value
+        // Nothing is owed any more: no further pings.
+        let after = pings(socket)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(pings(socket) == after)
+        #expect(await !c.isClosed)
+    }
+
+    @Test func aQuietSubscriptionNeedsOnePongThenNothing() async throws {
+        let (c, socket) = await makeWatchedConnection()
+        let stream = await c.stream("terminal.subscribe")
+        let consumer = Task { for try await _ in stream {} }
+        #expect(await eventually { pings(socket) == 1 })
+        socket.deliver(.pong)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(pings(socket) == 1)
+        #expect(await !c.isClosed)
+        // A stream that answers at once never pings at all.
+        let (c2, socket2) = await makeWatchedConnection()
+        let shell = await c2.stream("orchestration.subscribeShell")
+        let consumer2 = Task { for try await _ in shell {} }
+        #expect(await eventually { socket2.sent.count == 1 })
+        socket2.deliver(.chunk(requestId: .string("1"), values: [.object([:])]))
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(pings(socket2) == 0)
+        consumer.cancel(); consumer2.cancel()
+    }
 }
