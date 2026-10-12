@@ -510,6 +510,7 @@ Gotchas found so far:
 
 ## Log
 
+- 2026-10-12: v0.1.5 at 66f00b0, streaming text under 2% of one core on a heavy thread: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.5. Published with `scripts/release`; the feed lists 0.1.5, 0.1.4 and 0.1.3.
 - 2026-10-12: v0.1.4 at a610f67, the first release delivered through the updater: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.4. Published with `scripts/release`; the feed lists 0.1.4 and 0.1.3 and the bare feed URL served the new copy at once. Before it, a combined on-screen check of the merged rich text, timeline, sidebar and streaming work (bundle dev.candywrapper.test.check): a nested list in the composer, a Haiku reply with a heading and list, and a sidebar drag with its Unpin pill and Escape.
 - 2026-10-11: v0.1.3 at 0c24e78, the first release that updates itself: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.3. Published with `scripts/release` (docs/release.md): a full release, no longer a pre-release, with a zip and a DMG, plus the `appcast` release that carries the signed feed. Users install it by hand once; later versions arrive through the sidebar's update pill.
 - 2026-10-11: v0.1.2 (pre-release) at 8741c91, the battery and responsiveness pass: https://github.com/Sowyu/CandyWrapper/releases/tag/v0.1.2. Built and published the v0.1.0 way from a clean worktree (zip 11.6 MB, SHA-256 44ea8cce95f266424221d4091e819cbb4fa086df19de53327d49cb52a7f128c3), checked first in snapshot mode as a copy with a test bundle id, download hash verified. Release notes in the release body.
