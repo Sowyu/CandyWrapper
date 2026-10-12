@@ -211,6 +211,8 @@ open class DialogView: DSView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         var f = frames(width: bounds.width)
+        // Content that grew or shrank after presenting: the host places the dialog again (`ModalHost.panelFrame`).
+        if abs(f.height - bounds.height) > 0.5 { superview?.needsLayout = true }
         headerAccessory?.frame = f.accessory
         titleText.frame = f.title
         messageText.frame = f.message

@@ -78,6 +78,8 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var completedAt: T3Timestamp?
     public var workStartedAt: T3Timestamp?
     public var restartCancelledBackgroundWork: JSONValue?
+    /// The launch's workspace strategy, kept so a failed preparation can be retried (orchestrationV2.ts:583).
+    public var workspacePreparation: JSONValue?
 }
 
 /// `OrchestrationV2RunAttempt` (orchestrationV2.ts:597-619).

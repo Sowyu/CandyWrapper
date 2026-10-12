@@ -390,6 +390,13 @@ final class FilesController {
     }
     private var attachmentShown: String?
 
+    /// Force Reload: file contents and the tree load again from the server.
+    func forceReload() {
+        reads = [:]
+        guard workspace != nil else { return }
+        if panel.lazyFilesPanel.loaded != nil { refreshTree() } else { showActiveFile(force: true) }
+    }
+
     private func showActiveFile(force: Bool) {
         guard case .file(let path, let line, _)? = panel.panelState.active, let ws = workspace else { return }
         let surface = panel.fileSurface

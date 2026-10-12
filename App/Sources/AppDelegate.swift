@@ -251,6 +251,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
         let welcome = WelcomeOnboardingController(window: window, environments: environments, composer: threads.composer, settings: settings)
         welcomeOnboarding = welcome
+        welcome.toasts = threads.panel.toasts
+        // `openNewThread(projectRef)` once the wizard lands on an imported project (routes/welcome.tsx:48-56).
+        welcome.openProject = { [weak threads, weak sidebar] env, local in
+            let id = ProjectId(local).scoped(to: env)
+            guard let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return false }
+            threads?.newThread(in: project)
+            return true
+        }
         var showedWelcome = false
         let priorLiveShell = environments.onLiveShell
         environments.onLiveShell = { [weak welcome, weak environments] env, snapshot in
@@ -717,8 +725,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let environments else { return }
         for id in environments.environmentIds { environments.reconnect(id) }
     }
+    /// T3 reloads the main window ignoring its cache (DesktopWindow.ts:1048): every HTTP response, file read,
+    /// image and favicon loads again. Sent attachment copies on disk go too, as the browser cache would.
     @objc func forceReloadWorkspace(_ sender: Any?) {
         URLCache.shared.removeAllCachedResponses()
+        try? FileManager.default.removeItem(at: ComposerController.attachmentCacheDirectory)
+        ForceReloadCaches.clear()
         threads?.forceReload()
         reloadWorkspace(sender)
     }

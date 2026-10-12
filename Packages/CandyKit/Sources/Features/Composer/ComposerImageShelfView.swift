@@ -247,3 +247,98 @@ private extension NSCursor {
     // ponytail: pointing hand instead of CSS `zoom-in`; draw a magnifier cursor if the difference shows
     static var zoomIn: NSCursor { .pointingHand }
 }
+
+/// The resting composer's images, after the prompt (ChatComposer.tsx:5236-5303): `flex gap-1 ps-1`, the first
+/// three as `size-7 rounded-md border border-border/70 bg-muted/60` thumbnails that open the preview, then a
+/// "+N" tile (`text-xs font-medium text-secondary-label`, `hover:bg-muted`) that expands the composer
+/// (`getRestingComposerImagePreviewCounts`, composerFooterLayout.ts:5-14).
+final class ComposerRestingImagesView: DSView {
+    static let limit = 3, side: CGFloat = 28, gap: CGFloat = 4, leading: CGFloat = 4
+
+    var onExpand: ((String) -> Void)?
+    var onOverflow: (() -> Void)?
+    private var thumbs: [Thumb] = []
+    private let overflow = OverflowTile()
+    private var ids: [String] = []
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        overflow.action = { [weak self] in self?.onOverflow?() }
+        addSubview(overflow)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// The block's width for `count` images; 0 without any.
+    static func width(count: Int) -> CGFloat {
+        guard count > 0 else { return 0 }
+        let tiles = min(count, limit) + (count > limit ? 1 : 0)
+        return leading + CGFloat(tiles) * side + CGFloat(tiles - 1) * gap
+    }
+
+    func set(_ tiles: [ComposerImageShelfView.Tile]) {
+        let shown = Array(tiles.prefix(Self.limit))
+        while thumbs.count > shown.count { thumbs.removeLast().removeFromSuperview() }
+        while thumbs.count < shown.count { let t = Thumb(); addSubview(t); thumbs.append(t) }
+        ids = shown.map(\.id)
+        for (i, (view, tile)) in zip(thumbs, shown).enumerated() {
+            let url = tile.fileURL
+            view.image.set(key: url.path, fallbackText: "") { side in await ComposerImageIO.thumbnail(url, side: side, cover: true) }
+            view.setAccessibilityLabel("Preview \(tile.name)")
+            view.action = { [weak self] in guard let self, i < self.ids.count else { return }; self.onExpand?(self.ids[i]) }
+        }
+        let extra = tiles.count - shown.count
+        overflow.isHidden = extra <= 0
+        overflow.label.text = "+\(extra)"
+        overflow.setAccessibilityLabel("Show \(extra) more image attachments")
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        var x = Self.leading
+        let y = (bounds.height - Self.side) / 2
+        for t in thumbs { t.frame = NSRect(x: x, y: y, width: Self.side, height: Self.side); x += Self.side + Self.gap }
+        overflow.frame = NSRect(x: x, y: y, width: Self.side, height: Self.side)
+    }
+
+    private final class Thumb: ControlView {
+        let image = AsyncImageView()
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            scalesWhenPressed = false
+            layer?.cornerRadius = 6
+            layer?.masksToBounds = true
+            layer?.borderWidth = 1
+            addSubview(image)
+        }
+        @MainActor required init?(coder: NSCoder) { fatalError() }
+        override func updateLayer() {
+            layer?.backgroundColor = Themed.color(\.muted, 0.6).cgColor(in: self)
+            layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
+        }
+        override func layout() { super.layout(); image.frame = bounds.insetBy(dx: 1, dy: 1) }
+        // ponytail: pointing hand instead of CSS `zoom-in`, as the expanded shelf does
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+
+    private final class OverflowTile: ControlView {
+        let label = LabelView("", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.secondaryLabel))
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            scalesWhenPressed = false
+            transitions = .colors
+            layer?.cornerRadius = 6
+            layer?.borderWidth = 1
+            label.alignment = .center
+            label.lineHeight = 16
+            addSubview(label)
+        }
+        @MainActor required init?(coder: NSCoder) { fatalError() }
+        override func updateLayer() {
+            Motion.setBackground(layer, Themed.color(\.muted, state.hovered ? 1 : 0.6).cgColor(in: self))
+            layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
+        }
+        override func layout() { super.layout(); label.frame = NSRect(x: 0, y: (bounds.height - 16) / 2, width: bounds.width, height: 16) }
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+}

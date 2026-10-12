@@ -73,6 +73,9 @@ public enum MarkdownImages {
     static var failed: Set<String> = []
     public static let didMeasure = Notification.Name("MarkdownImages.didMeasure")
 
+    /// Force Reload: images measure and load again.
+    static func clear() { sizes = [:]; failed = [] }
+
     static func record(_ size: CGSize, for key: String) {
         guard size.width > 0, size.height > 0, sizes[key] != size else { return }
         sizes[key] = size
@@ -214,6 +217,9 @@ enum MarkdownFavicons {
     /// `failedFaviconHosts`: hosts whose favicon failed this session go straight to the globe.
     private static var failed: Set<String> = []
     private static var waiting: [String: [@MainActor () -> Void]] = [:]
+
+    /// Force Reload: favicons and failed hosts are asked for again. Loads in flight still land.
+    static func clear() { images = [:]; failed = [] }
 
     /// The host of an http(s) or protocol-relative link (`resolveExternalWebLinkHost`).
     static func host(_ url: URL) -> String? {
