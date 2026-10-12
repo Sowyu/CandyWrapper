@@ -119,7 +119,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
 
     /// `installUpdate()`: quits and relaunches through Sparkle. Returns only when the install did not happen.
     func install() async -> (accepted: Bool, completed: Bool) {
-        guard state.downloadedVersion != nil, let updater = startedUpdater() else { return (false, false) }
+        // A second Restart click while the first is still pending would orphan the first continuation.
+        guard installWaiter == nil, state.downloadedVersion != nil, let updater = startedUpdater() else { return (false, false) }
         phase = .install
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             installWaiter = { c.resume() }
@@ -244,6 +245,9 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         } else {
             reply(.dismiss)
             if wantsDownload { wantsDownload = false; finishDownload(false) }
+            // Restart found a newer release instead of the downloaded one: nothing to install, and a later
+            // Download click must not quit and relaunch without its own Restart click.
+            if wantsInstall { wantsInstall = false; phase = nil; finishInstall() }
         }
         resolveChecks()
     }
