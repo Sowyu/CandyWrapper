@@ -4,10 +4,11 @@
 # `--live` uses ~/.t3 instead, as a Dock launch would. T3's service owns that home, so the app
 # only joins its server, and pairing asks first.
 # Other arguments go to the app: `--snapshot /tmp/x.png --snapshot-delay 12` renders the window
-# to a PNG and quits. The app's pid goes to /tmp/candywrapper-app.pid.
+# to a PNG and quits. The app's pid goes to <app>.pid next to the app, and to /tmp/candywrapper-app.pid,
+# which every run overwrites.
 # CANDY_LAUNCH_TIMING=1, CANDY_THREAD_TIMING=1 and CANDY_THREAD_CACHE (a directory, or `off`) in the
 # caller's environment reach the app (scripts/perf-review).
-# Build first: xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -derivedDataPath /tmp/cw-dd build
+# Build first with scripts/build-test-app <task> and pass the path it prints in CANDY_APP.
 # Usage: scripts/run-app [--live] [app arguments]
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,7 +29,7 @@ mkdir -p "$bin"
 ln -sf "$HOME/.t3/runtime/versions/$version/t3" "$bin/t3"
 user="$(id -un)"
 # launchctl asuser puts the app in the GUI session. env -i drops the live service's T3 variables.
-exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; exec "$@"' sh \
+exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; echo $$ > "$0"; exec "$@"' "$app.pid" \
   env -i HOME="$HOME" USER="$user" LOGNAME="$user" LANG=en_US.UTF-8 T3CODE_TELEMETRY_ENABLED=false \
   "$home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" ${CANDY_LAUNCH_TIMING:+CANDY_LAUNCH_TIMING=1} ${CANDY_THREAD_TIMING:+CANDY_THREAD_TIMING=1} \
   ${CANDY_THREAD_CACHE:+CANDY_THREAD_CACHE="$CANDY_THREAD_CACHE"} \

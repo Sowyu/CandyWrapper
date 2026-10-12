@@ -19,10 +19,10 @@ Do next:
 
 Smaller leftovers:
 
-1. While the sidebar slides open, the main panel reflows once instead of every frame (`SidebarView.swift:175`).
-2. The right panel and the terminal still use the old slide. The sidebar's interruptible slide is the model.
-3. A fresh Debug app holds the main thread 170 to 200 ms on its first thread open. Measure it in Release first.
-4. 267 `// ponytail:` markers name known shortcuts and when to fix them: `grep -rnE '// ?ponytail:' App Packages/CandyKit/Sources`.
+5. While the sidebar slides open, the main panel reflows once instead of every frame (`SidebarView.swift:175`).
+6. The right panel and the terminal still use the old slide. The sidebar's interruptible slide is the model.
+7. A fresh Debug app holds the main thread 170 to 200 ms on its first thread open. Measure it in Release first.
+8. 267 `// ponytail:` markers name known shortcuts and when to fix them: `grep -rnE '// ?ponytail:' App Packages/CandyKit/Sources`.
 
 ## Waiting on the user
 
