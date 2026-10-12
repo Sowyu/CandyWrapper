@@ -647,6 +647,12 @@ public final class SidebarContentView: DSView {
         scheduleLabelTimer()
     }
 
+    /// A sidebar shown again after a collapse catches up a tick it skipped while hidden.
+    public override func viewDidUnhide() {
+        super.viewDidUnhide()
+        LabelClock.shared.visibilityChanged()
+    }
+
     // MARK: Layout
 
     public override func layout() {
