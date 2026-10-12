@@ -257,6 +257,28 @@ final class WorkRowView: WorkRowBase {
     private var isGroupBody = false
     /// Subagent notification cards by entry index (`SimpleWorkEntryRow`); nil draws the work line.
     private var cards: [SubagentCardLinkView?] = []
+    /// An open thought's markdown by entry index (`ReasoningTraceContent`, MessagesTimeline.tsx:5739).
+    private var traces: [ReasoningTraceView?] = []
+    /// A group body of only thoughts draws them as one trace and no lines (MessagesTimeline.tsx:3447-3449).
+    private var groupTrace: ReasoningTraceView?
+    private(set) var traceOnly = false
+
+    private func trace(_ i: Int) -> ReasoningTraceView {
+        while traces.count <= i { traces.append(nil) }
+        if let t = traces[i] { t.isHidden = false; return t }
+        let t = ReasoningTraceView()
+        addSubview(t)
+        traces[i] = t
+        return t
+    }
+
+    private func hasTrace(_ i: Int) -> Bool { i < traces.count && traces[i]?.isHidden == false }
+
+    /// The row opens: an inspector to show, or a thought with text (`canExpandProjectedItem`, :5552-5561).
+    private func expandable(_ i: Int) -> Bool {
+        let e = entries[i].entry
+        return !entries[i].detail.isEmpty || (e.itemType == .reasoning && !(e.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
+    }
 
     override func configure(_ item: TimelineItem) {
         // The same row reconfigured in place: an entry's chevron turns instead of snapping.
@@ -272,6 +294,20 @@ final class WorkRowView: WorkRowBase {
                     item.ui.expandedEntries.contains(e.id))
         }
         while cards.count < entries.count { cards.append(nil) }
+        traceOnly = isGroup && !grouped.isEmpty && grouped.allSatisfy { $0.itemType == .reasoning }
+        if traceOnly {
+            let t = groupTrace ?? ReasoningTraceView()
+            if groupTrace == nil { groupTrace = t; addSubview(t) }
+            t.isHidden = false
+            t.set(grouped.map(ReasoningTraceView.Item.init), context: context)
+            hideLines(from: 0)
+            details.forEach { $0.isHidden = true }
+            cards.forEach { $0?.stop(); $0?.isHidden = true }
+            traces.forEach { $0?.isHidden = true }
+            needsLayout = true
+            return
+        }
+        groupTrace?.isHidden = true
         for (i, (e, detail, open)) in entries.enumerated() {
             if let card = SubagentCardPresentation.notificationCard(e, records: item.ui.subagentRecords) {
                 let view = cards[i] ?? SubagentCardLinkView()
@@ -289,7 +325,10 @@ final class WorkRowView: WorkRowBase {
                 continue
             }
             if let card = cards[i] { card.stop(); card.isHidden = true }
-            let label = (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
+            let thought = e.itemType == .reasoning
+            // An open thought's heading steps back to Thinking or Thought; the trace below holds the text (:5491-5496).
+            let label = thought && open ? (e.toolLifecycleStatus == .inProgress ? "Thinking" : "Thought")
+                : (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
             let failed = WorkLog.displayIndicatesFailure(e)
             let toolLike = WorkLog.isToolLike(e)
             let severe = failed && (e.itemType == .error || !toolLike)
@@ -298,7 +337,7 @@ final class WorkRowView: WorkRowBase {
             let icon: IconName = warning || severe ? .circleAlert : WorkIcons.entry(e)
             let l = line(i)
             l.configure(icon: icon, text: label, style: style, failed: failed, time: e.createdAt, expanded: open, now: context.now(), animated: sameRow)
-            l.expandable = !detail.isEmpty
+            l.expandable = expandable(i)
             let model = context.model
             let created = e.projectedItem?.item.type == .threadCreated ? e.projectedItem?.string("targetThreadId").map { ThreadId($0) } : nil
             l.setTrailingAction(created == nil ? nil : "Open chat", created.map { id in { model?.onOpenThread?(id) } })
@@ -316,8 +355,14 @@ final class WorkRowView: WorkRowBase {
             }
             details[i].detail = detail
             details[i].onAction = { [weak self] action in self?.context.model?.perform(action) }
-            details[i].isHidden = !open || detail.blocks.isEmpty
+            details[i].isHidden = !open || detail.blocks.isEmpty || thought
+            if thought, open, expandable(i) {
+                trace(i).set([ReasoningTraceView.Item(e)], context: context)
+            } else if i < traces.count {
+                traces[i]?.isHidden = true
+            }
         }
+        for t in traces.dropFirst(entries.count) { t?.isHidden = true }
         hideLines(from: entries.count)
         for d in details.dropFirst(entries.count) { d.isHidden = true }
         for c in cards.dropFirst(entries.count) { c?.stop(); c?.isHidden = true }
@@ -356,11 +401,13 @@ final class WorkRowView: WorkRowBase {
 
     /// Detail box `mt-0.5 mb-1.5`, indented like `ms-7` for text (28px) and flush for panels.
     private func detailHeight(_ i: Int, _ width: CGFloat) -> CGFloat {
+        if hasTrace(i), let t = traces[i] { return t.height(forWidth: ReasoningTraceView.width(in: width)) }
         guard entries[i].open, !entries[i].detail.blocks.isEmpty else { return 0 }
         return 2 + details[i].height(forWidth: max(0, width - 4)) + 6
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
+        if traceOnly, let t = groupTrace { return t.height(forWidth: ReasoningTraceView.width(in: width)) + 4 }
         var h: CGFloat = 0
         for i in entries.indices { h += isCard(i) ? SubagentCardLinkView.height : rowPad * 2 + 24 + detailHeight(i, width) }
         return h + (isGroupBody ? 4 : blockPadding)
@@ -370,6 +417,11 @@ final class WorkRowView: WorkRowBase {
         super.layout()
         var y: CGFloat = 0
         spans.removeAll(keepingCapacity: true)
+        if traceOnly, let t = groupTrace {
+            let w = ReasoningTraceView.width(in: bounds.width)
+            t.frame = NSRect(x: ReasoningTraceView.inset, y: 0, width: w, height: t.height(forWidth: w))
+            return
+        }
         for i in entries.indices {
             let start = y
             defer { spans.append(start...max(start, y - 0.001)) }
@@ -382,7 +434,9 @@ final class WorkRowView: WorkRowBase {
             lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
             y += 24
             let dh = detailHeight(i, bounds.width)
-            if dh > 0 { details[i].frame = NSRect(x: 2, y: y + 2, width: bounds.width - 4, height: dh - 8) }
+            if hasTrace(i), let t = traces[i] {
+                t.frame = NSRect(x: ReasoningTraceView.inset, y: y, width: ReasoningTraceView.width(in: bounds.width), height: dh)
+            } else if dh > 0 { details[i].frame = NSRect(x: 2, y: y + 2, width: bounds.width - 4, height: dh - 8) }
             y += dh + rowPad
         }
         // An entry that opened or closed under a still pointer moves the spans.
@@ -391,13 +445,80 @@ final class WorkRowView: WorkRowBase {
 
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        guard let i = lines.prefix(entries.count).firstIndex(where: { !$0.isHidden && $0.frame.contains(p) }), !entries[i].detail.isEmpty else {
+        guard !traceOnly, let i = lines.prefix(entries.count).firstIndex(where: { !$0.isHidden && $0.frame.contains(p) }), expandable(i) else {
             return super.mouseUp(with: event)
         }
         context.model?.toggleEntry(entries[i].entry.id)
     }
 
     override func mouseDown(with event: NSEvent) {}
+}
+
+/// `ReasoningTraceContent` (MessagesTimeline.tsx:5328-5352) in `WorkLogDetails` (WorkLog.tsx:126-133): each
+/// thought as foreground markdown with line breaks kept, `gap-3` apart, in a box `ms-7 px-0.5 py-1` that
+/// scrolls past `max-h-96`.
+final class ReasoningTraceView: DSView {
+    struct Item {
+        var key: String
+        var text: String
+        var streaming: Bool
+        init(_ e: WorkLogEntry) {
+            key = "trace:" + e.id
+            text = e.detail ?? ""
+            streaming = e.toolLifecycleStatus == .inProgress
+        }
+    }
+
+    /// `ms-7` from the row's edge (the lines sit 2pt in).
+    static let inset: CGFloat = 2 + 28
+    static func width(in rowWidth: CGFloat) -> CGFloat { max(0, rowWidth - inset - 2) }
+
+    private let document = DSView()
+    private lazy var scroll = ScrollAreaView(documentView: document)
+    private var views: [MarkdownView] = []
+    private var count = 0
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        addSubview(scroll)
+    }
+
+    func set(_ items: [Item], context: TimelineContext) {
+        while views.count < items.count {
+            let m = MarkdownView(frame: .zero)
+            m.bodyColor = TL.c(\.foreground)
+            document.addSubview(m)
+            views.append(m)
+        }
+        count = items.count
+        for (i, v) in views.enumerated() { v.isHidden = i >= count }
+        for (v, item) in zip(views, items) {
+            v.cwd = context.markdownCwd
+            v.onOpenFile = context.model?.openFile
+            v.document = context.document(item.key, item.text, lineBreaks: true, streaming: item.streaming)
+        }
+        needsLayout = true
+    }
+
+    private func contentHeight(_ width: CGFloat) -> CGFloat {
+        let inner = max(0, width - 4)
+        return 8 + views.prefix(count).reduce(0) { $0 + $1.height(forWidth: inner) } + 12 * CGFloat(max(0, count - 1))
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat { min(384, contentHeight(width)) }
+
+    override func layout() {
+        super.layout()
+        scroll.frame = bounds
+        let inner = max(0, bounds.width - 4)
+        document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: contentHeight(bounds.width))
+        var y: CGFloat = 4
+        for v in views.prefix(count) {
+            let h = v.height(forWidth: inner)
+            v.frame = NSRect(x: 2, y: y, width: inner, height: h)
+            y += h + 12
+        }
+    }
 }
 
 /// `work-toggle`: the header of a settled group (`WorkGroupHeader`, :4114-4151). The whole row toggles it.

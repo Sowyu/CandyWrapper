@@ -187,8 +187,7 @@ public final class UsageChartView: DSView {
         xLabels[0].text = ps.first.map(formatPeriod)?.uppercased() ?? ""
         xLabels[1].text = ps.isEmpty ? "" : formatPeriod(ps[ps.count / 2]).uppercased()
         xLabels[2].text = ps.last.map(formatPeriod)?.uppercased() ?? ""
-        plot.hoverIndex = nil
-        plot.needsDisplay = true
+        plot.dataChanged()
         needsLayout = true
     }
 
@@ -212,19 +211,28 @@ public final class UsageChartView: DSView {
     }
 }
 
-/// The plot itself, with hover.
-final class UsageChartPlotView: DSView {
+/// The plot itself, with hover. The hovered column follows the pointer the way `onMouseMove` does
+/// (UsageProviderChart.tsx:299-315): AppKit stops sending `mouseMoved` to an area it rebuilt under a
+/// still pointer (the page rebuilds its sections on every model change and moves the chart with
+/// them), so HoverSync forwards the moves and the plot reads the pointer itself.
+final class UsageChartPlotView: DSView, HoverSyncPointerClient {
     weak var owner: UsageChartView?
     var columns: [UsageChartLogic.Column] = []
     var scaleMax: Double = 0
     var ticks: [Double] = []
-    var hoverIndex: Int? { didSet { if hoverIndex != oldValue { needsDisplay = true; updateTooltip() } } }
+    var hoverIndex: Int? { didSet { if hoverIndex != oldValue { updateTooltip(); needsLayout = true } } }
     private var hoverPoint: CGPoint = .zero
+    private var pointerInside = false
+    /// The hover line (`stroke-muted-foreground`, 1px, from `PLOT_TOP` down) sits on its own layer, so
+    /// moving it does not redraw the series.
+    private let crosshair = DSView()
     private let tooltip = UsageChartTooltipView()
     private var tracking: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        crosshair.isHidden = true
+        addSubview(crosshair)
         tooltip.isHidden = true
         tooltip.layer?.zPosition = 10
         addSubview(tooltip)
@@ -235,14 +243,20 @@ final class UsageChartPlotView: DSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let t = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let t = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(t)
         tracking = t
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        guard let owner, !owner.model.periods.isEmpty, bounds.width > 0 else { return }
-        let p = convert(event.locationInWindow, from: nil)
+    override func mouseEntered(with event: NSEvent) { pointerInside = true; followPointer() }
+    override func mouseMoved(with event: NSEvent) { if pointerInside { followPointer() } }
+    func hoverPointerMoved() { if pointerInside { followPointer() } }
+    override func mouseExited(with event: NSEvent) { pointerInside = false; hoverIndex = nil }
+
+    /// `handleMove`: the nearest period to the pointer, the readout 12pt off it.
+    private func followPointer() {
+        guard let owner, let window, !owner.model.periods.isEmpty, bounds.width > 0 else { hoverIndex = nil; return }
+        let p = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         let x = min(bounds.width, max(0, p.x)), y = min(bounds.height, max(0, p.y))
         hoverPoint = CGPoint(x: x, y: y)
         let n = owner.model.periods.count
@@ -250,7 +264,12 @@ final class UsageChartPlotView: DSView {
         positionTooltip()
     }
 
-    override func mouseExited(with event: NSEvent) { hoverIndex = nil }
+    /// New figures under a still pointer: the readout stays and shows them (T3 keeps `hoverIndex`).
+    func dataChanged() {
+        if pointerInside { followPointer(); updateTooltip() } else { hoverIndex = nil }
+        needsDisplay = true
+        needsLayout = true
+    }
 
     private func updateTooltip() {
         guard let owner, let i = hoverIndex, i < owner.model.periods.count, i < columns.count else { tooltip.isHidden = true; return }
@@ -272,6 +291,19 @@ final class UsageChartPlotView: DSView {
         let top = hoverPoint.y + gap + s.height <= bounds.height ? hoverPoint.y + gap : hoverPoint.y - gap - s.height
         tooltip.frame = NSRect(x: min(max(0, left), max(0, bounds.width - s.width)), y: min(max(0, top), max(0, bounds.height - s.height)),
                                width: s.width, height: s.height)
+    }
+
+    override func layout() {
+        super.layout()
+        guard let i = hoverIndex, let n = owner?.model.periods.count else { crosshair.isHidden = true; return }
+        let stepX = n < 2 ? 0 : bounds.width / CGFloat(n - 1)
+        // The stroke centred on the column, on the half point the old drawn line used.
+        let x = ((CGFloat(i) * stepX) * 2).rounded() / 2
+        let top = UsageChartLogic.plotTop * bounds.height / UsageChartLogic.viewHeight
+        crosshair.frame = NSRect(x: x - 0.5, y: top, width: 1, height: max(0, bounds.height - top))
+        crosshair.layer?.backgroundColor = Themed.color(\.mutedForeground).cgColor(in: self)
+        crosshair.isHidden = false
+        if !tooltip.isHidden { positionTooltip() }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -322,17 +354,9 @@ final class UsageChartPlotView: DSView {
             ctx.setStrokeColor(UsageStyle.color(s.p).withAlphaComponent(dim).cgColor(in: self))
             ctx.strokePath()
         }
-        if let i = hoverIndex {
-            let x = ((CGFloat(i) * stepX * sx) * 2).rounded() / 2
-            ctx.setLineWidth(1)
-            ctx.setStrokeColor(Themed.color(\.mutedForeground).cgColor(in: self))
-            ctx.move(to: CGPoint(x: x, y: UsageChartLogic.plotTop * sy))
-            ctx.addLine(to: CGPoint(x: x, y: bounds.height))
-            ctx.strokePath()
-        }
     }
 
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true; needsLayout = true }
 }
 
 /// The hover readout: `surface-glass rounded-xl border-border/50 px-2.5 py-2 text-xs shadow-lg`, min 144pt.
@@ -340,6 +364,7 @@ final class UsageChartTooltipView: DSView {
     private let box = BoxView()
     private let title = UsageStyle.label("", 12, color: Themed.color(\.mutedForeground))
     private var rows: [(NSView, LabelView, LabelView)] = []
+    private var providers: [UsageProviderKind] = []
     private let rule = DSView()
     private let totalLabel = UsageStyle.label("Total", 12, color: Themed.color(\.mutedForeground))
     private let totalValue = UsageStyle.label("", 12, tabular: true)
@@ -361,14 +386,22 @@ final class UsageChartTooltipView: DSView {
 
     func set(title t: String, rows data: [(UsageProviderKind, String, Bool)], total: String, partial: Bool) {
         title.text = t
-        rows.forEach { $0.0.removeFromSuperview(); $0.1.removeFromSuperview(); $0.2.removeFromSuperview() }
-        rows = data.map { p, value, loading in
-            let icon = UsageStyle.mark(p, size: 12)
-            let name = UsageStyle.label(p.label, 12, color: Themed.color(\.mutedForeground))
-            let v = UsageStyle.label(value, 12, color: Themed.color(loading ? \.mutedForeground : \.foreground), tabular: true)
-            v.alignment = .right
-            for x in [icon, name, v] as [NSView] { addSubview(x) }
-            return (icon, name, v)
+        // Moving across columns changes only the figures; the provider rows stay.
+        if data.map(\.0) != providers {
+            rows.forEach { $0.0.removeFromSuperview(); $0.1.removeFromSuperview(); $0.2.removeFromSuperview() }
+            providers = data.map(\.0)
+            rows = data.map { p, _, _ in
+                let icon = UsageStyle.mark(p, size: 12)
+                let name = UsageStyle.label(p.label, 12, color: Themed.color(\.mutedForeground))
+                let v = UsageStyle.label("", 12, tabular: true)
+                v.alignment = .right
+                for x in [icon, name, v] as [NSView] { addSubview(x) }
+                return (icon, name, v)
+            }
+        }
+        for (row, (_, value, loading)) in zip(rows, data) {
+            row.2.text = value
+            row.2.color = Themed.color(loading ? \.mutedForeground : \.foreground)
         }
         totalValue.text = total
         totalValue.color = Themed.color(partial ? \.mutedForeground : \.foreground)
