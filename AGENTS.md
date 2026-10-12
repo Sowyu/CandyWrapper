@@ -9,7 +9,7 @@ The user runs it every day and notices small details: hover and click feedback, 
 1. Read `PROGRESS.md` for the state, the open tasks and what waits on the user.
 2. Find your area in the code map below and read only the docs it names.
 3. Before you change behavior that T3 defines, read T3's source for it and cite file:line in your commit or notes.
-4. Before you stop, update `PROGRESS.md`.
+4. Finish one task at a time. Commit it, push it and tick it off in `PROGRESS.md` before you start the next, so a new chat can pick up where you stopped.
 
 ## Commands
 
