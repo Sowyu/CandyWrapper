@@ -21,7 +21,8 @@ public struct ComposerServerUpdateNotice: Equatable {
     @MainActor var content: ComposerNoticeBannerView.Content {
         switch status {
         case .running: .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, priority: .urgent)
-        case .failed: .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail, priority: .notice)
+        case .failed: .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail,
+                            dismissLabel: "Dismiss update notice", priority: .notice)
         }
     }
 }

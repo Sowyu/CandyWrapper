@@ -35,20 +35,42 @@ public final class TooltipView: DSView, PopupContent {
 
     public var text: String {
         get { label.text }
-        set { label.text = newValue; invalidateIntrinsicContentSize() }
+        set { label.text = newValue; wrapped?.text = newValue; invalidateIntrinsicContentSize() }
     }
 
-    // ponytail: one line, truncated at max-w-80 (480 for code); add balanced wrapping when a long tooltip shows up
+    /// `max-w-80` (`max-w-120` for code) less the padding and border.
+    private var maxText: CGFloat { (variant == .code ? 480 : 320) - 18 }
+    /// Text past the max width wraps, balanced (`text-balance wrap-anywhere whitespace-normal`); built only then,
+    /// so one-line tooltips draw exactly as before.
+    private var wrapped: TextBlockView?
+    private var wraps: Bool { label.textWidth > maxText }
+    private func wrappedBlock() -> TextBlockView {
+        if let wrapped { return wrapped }
+        let b = TextBlockView()
+        b.text = label.text
+        b.font = label.font
+        b.color = label.color
+        b.lineHeight = label.lineHeight
+        b.balanced = true
+        addSubview(b)
+        wrapped = b
+        return b
+    }
+
     public override var intrinsicContentSize: NSSize {
-        let maxText: CGFloat = (variant == .code ? 480 : 320) - 18
-        return NSSize(width: min(label.textWidth, maxText) + 18, height: (label.lineHeight ?? 16.5) + 10)
+        guard wraps else { return NSSize(width: label.textWidth + 18, height: (label.lineHeight ?? 16.5) + 10) }
+        // A shrink-to-fit box whose text overflows takes the whole max width; balancing only evens the lines.
+        return NSSize(width: maxText + 18, height: wrappedBlock().height(forWidth: maxText) + 10)
     }
 
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         dropShadow.update(boxSize: bounds.size)
-        label.frame = NSRect(x: 9, y: 5, width: bounds.width - 18, height: bounds.height - 10)
+        let frame = NSRect(x: 9, y: 5, width: bounds.width - 18, height: bounds.height - 10)
+        label.isHidden = wraps
+        wrapped?.isHidden = !wraps
+        if wraps { wrappedBlock().frame = frame } else { label.frame = frame }
     }
 
     public override func viewDidChangeEffectiveAppearance() {

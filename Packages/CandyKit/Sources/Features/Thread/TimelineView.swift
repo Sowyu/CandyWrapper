@@ -127,6 +127,7 @@ public final class TimelineView: DSView {
             if let view { document.addSubview(view) }
         }
         let h = view == nil ? 0 : height
+        layoutEmptyPlaceholder()
         guard h != footerHeight else { return }
         footerHeight = h
         let anchor = captureAnchor()
@@ -144,9 +145,34 @@ public final class TimelineView: DSView {
         let height = worktreeSetup.height(forWidth: lane.width)
         worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: headerHeight + 12, width: lane.width, height: height)
         if setupHeight != height { setupHeight = height; topInset = 24 + headerHeight + height }
+        layoutEmptyPlaceholder()
     }
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
     public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
+
+    /// A loaded server thread (T3's `hideEmptyPlaceholder` is false): with nothing to list, the timeline
+    /// says so (MessagesTimeline.tsx:1541-1562). Drafts and loading threads leave it off.
+    public var allowsEmptyPlaceholder = false { didSet { if allowsEmptyPlaceholder != oldValue { layoutEmptyPlaceholder() } } }
+    /// Built the first time it shows.
+    private var emptyLabel: LabelView?
+    /// No rows, no "Subagent of" link, no setup card and no status line under the list.
+    private var showsEmptyPlaceholder: Bool {
+        allowsEmptyPlaceholder && items.isEmpty && header == nil && footerView == nil && worktreeSetup.isHidden
+    }
+    /// `flex h-full items-center justify-center`, `text-sm text-muted-foreground/30`.
+    private func layoutEmptyPlaceholder() {
+        guard showsEmptyPlaceholder else { emptyLabel?.isHidden = true; return }
+        let label = emptyLabel ?? {
+            let l = LabelView("Send a message to start the conversation.", font: DSFont.ui(14), color: Themed.color(\.mutedForeground, 0.3))
+            l.lineHeight = 20
+            addSubview(l)
+            emptyLabel = l
+            return l
+        }()
+        label.isHidden = false
+        let w = min(ceil(label.textWidth) + 1, bounds.width)
+        label.frame = NSRect(x: ((bounds.width - w) / 2 * 2).rounded() / 2, y: ((bounds.height - 20) / 2 * 2).rounded() / 2, width: w, height: 20)
+    }
     /// True while the viewport is at the end; new content then keeps it there.
     public private(set) var followsEnd = true
     /// The user scrolled within `nearTop` of the first row. Called once per first row, so the
@@ -310,6 +336,7 @@ public final class TimelineView: DSView {
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
+        if new.isEmpty != old.isEmpty { layoutEmptyPlaceholder() }
     }
 
     /// Development (CANDY_THREAD_TIMING): the next display refresh after the rows were placed, so

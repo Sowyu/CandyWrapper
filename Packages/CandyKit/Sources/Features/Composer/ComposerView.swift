@@ -33,8 +33,11 @@ public final class ComposerView: DSView {
     public var runState = ComposerLogic.RunState() { didSet { if runState != oldValue { refresh() } } }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
-    /// Sending is blocked (disconnected, no provider, no project); the reason is the tooltip.
+    /// Sending is blocked (`sendDisabledReason`: loading, rewinding, worktree, clone, uploads); the reason is the tooltip.
     public var sendDisabledReason: String? { didSet { if sendDisabledReason != oldValue { refresh() } } }
+    /// `isEnvironmentUnavailable`: the button is disabled with "Environment disconnected", but Enter still
+    /// reaches `onSend`, which answers with T3's "Not connected" toast (ChatView.tsx:8797-8811).
+    public var environmentUnavailable = false { didSet { if environmentUnavailable != oldValue { refresh() } } }
     public var placeholderInput = ComposerLogic.PlaceholderInput() { didSet { if placeholderInput != oldValue { refresh() } } }
     public var collapseOnScroll = false { didSet { if !collapseOnScroll { expandFromScroll() } } }
     private var scrollGesture = ComposerScrollGesture()
@@ -45,7 +48,7 @@ public final class ComposerView: DSView {
     /// the open approval or question (the top drawer) keep it expanded.
     public var isResting: Bool {
         scrollCollapsed && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
-            && !imageAttention && sendDisabledReason == nil && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
+            && !imageAttention && !environmentUnavailable && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
     }
     /// `hasImageAttachmentAttention`: a failed upload stays actionable in the expanded tray.
     // ponytail: SnapShot images keep the composer expanded; T3 rests with them in the tray (`expandedComposerImages`). Port it if SnapShot users ask
@@ -438,7 +441,7 @@ public final class ComposerView: DSView {
         // ChatComposer.tsx:7489-7490.
         placeholder.text = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
         planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
-        planPill.isEnabled = !isBusy && sendDisabledReason == nil
+        planPill.isEnabled = !isBusy && sendDisabledReason == nil && !environmentUnavailable
         implementMenu.isEnabled = planPill.isEnabled
         if planFollowUp { needsLayout = true }
         if editor.isEditable == editorDisabled { editor.isEditable = !editorDisabled }
@@ -456,23 +459,26 @@ public final class ComposerView: DSView {
             : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
+        let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, sendDisabledReason: sendDisabledReason,
+                                                busy: isBusy, editingQueued: editingQueued)
+        let canSend = sendDisabledReason == nil && !environmentUnavailable
         switch face {
         case .stop:
             primary.isEnabled = true
             primary.tooltip = "Interrupt"
         case .resume:
-            primary.isEnabled = sendDisabledReason == nil
-            primary.tooltip = sendDisabledReason ?? "Resume thread"
+            primary.isEnabled = canSend
+            primary.tooltip = status ?? "Resume thread"
         case .busy:
             primary.isEnabled = false
-            primary.tooltip = "Submitting message"
+            primary.tooltip = status ?? "Submitting message"
         case .update:
-            primary.isEnabled = hasContent && sendDisabledReason == nil && validationMessage == nil
-            primary.tooltip = sendDisabledReason ?? "Update queued message"
+            primary.isEnabled = hasContent && canSend && validationMessage == nil
+            primary.tooltip = status ?? "Update queued message"
         case .send, .queue, .steer:
-            primary.isEnabled = hasContent && sendDisabledReason == nil && validationMessage == nil
-            if let reason = sendDisabledReason {
-                primary.tooltip = reason
+            primary.isEnabled = hasContent && canSend && validationMessage == nil
+            if let status {
+                primary.tooltip = status
             } else if face == .send {
                 primary.tooltip = "Submit message"
             } else {

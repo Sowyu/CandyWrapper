@@ -172,6 +172,51 @@ public enum ComposerLogic {
         }
     }
 
+    /// Why the thread blocks a send, the `sendDisabledReason` ChatView passes the composer
+    /// (ChatView.tsx:11618-11632), in T3's order. "This connection cannot change threads.",
+    /// "Preparing machine" and "Sending feedback" are left out: CandyWrapper has no read-only
+    /// pairings, machine switch or Codex feedback yet.
+    public struct SendBlock: Sendable, Equatable {
+        /// `isRevertingCheckpoint`: a rollback or prompt rewind is running.
+        public var rewinding = false
+        /// `threadDetailLoading`: the thread syncs with no detail yet (`resolveThreadSyncPhase` "loading").
+        public var detailLoading = false
+        /// `worktreeSetupBlocksSend` (ChatView.tsx:4024-4027).
+        public var preparingWorktree = false
+        /// `projectCloneSendBlockReason` (ChatView.tsx:2527-2533).
+        public var projectClone: String?
+        public init(rewinding: Bool = false, detailLoading: Bool = false, preparingWorktree: Bool = false, projectClone: String? = nil) {
+            self.rewinding = rewinding; self.detailLoading = detailLoading
+            self.preparingWorktree = preparingWorktree; self.projectClone = projectClone
+        }
+        public var reason: String? {
+            rewinding ? "Rewinding conversation" : detailLoading ? "Messages loading"
+                : preparingWorktree ? "Preparing worktree" : projectClone
+        }
+    }
+
+    /// `worktreeSetupBlocksSend` (ChatView.tsx:4024-4027 with `resolveWorktreeSetupProgress`,
+    /// ChatView.logic.ts:271-288): a running setup blocks until its agent stage is done; with no
+    /// snapshot, a run still preparing does.
+    public static func worktreeSetupBlocksSend(phase: String?, agentDone: Bool, runPreparing: Bool) -> Bool {
+        guard let phase else { return runPreparing }
+        return phase == "running" && !agentDone
+    }
+
+    /// `projectCloneSendBlockReason` (ChatView.tsx:2527-2533): nil without a clone (`running` nil).
+    public static func projectCloneSendBlockReason(running: Bool?, done: Bool) -> String? {
+        guard let running else { return nil }
+        return running ? "Cloning repository" : done ? nil : "Repository not cloned"
+    }
+
+    /// `submitStatus` (ComposerPrimaryActions.tsx:292-304): the send button's tooltip and label while
+    /// it cannot send. A lost environment wins over every other reason.
+    public static func submitStatus(environmentUnavailable: Bool, sendDisabledReason: String?, busy: Bool, editingQueued: Bool) -> String? {
+        if environmentUnavailable { return "Environment disconnected" }
+        if let sendDisabledReason { return sendDisabledReason }
+        return busy ? (editingQueued ? "Updating queued message" : "Submitting message") : nil
+    }
+
     /// The primary action button's look.
     public enum PrimaryAction: Sendable, Equatable {
         /// `update`: saving an edited queued message (a check).
