@@ -723,7 +723,7 @@ final class GitHubTokenView: DSView, SettingsGroupRow {
     }
 
     private var normalizedHost: String { host.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-    private var tokens: [String: JSONValue] { context.configs[environmentId]?.settings.raw["github"]?["tokens"]?.objectValue ?? [:] }
+    private var tokens: [String: JSONValue] { context.configs[environmentId]?.settings.sourceControlHost("github")?["tokens"]?.objectValue ?? [:] }
 
     private func sync() {
         let isSaved = !(tokens[normalizedHost]?.stringValue ?? "").isEmpty
@@ -744,15 +744,19 @@ final class GitHubTokenView: DSView, SettingsGroupRow {
         write(normalizedHost, draft)
     }
 
-    /// `server.updateSettings {patch: {github: {tokens: {host: token}}}}` on this environment only.
+    /// `server.updateSettings` with the whole tokens map, on this environment only. Saved tokens go
+    /// back as the redaction marker, which both shapes keep. 2994 drops a host left out of the map
+    /// (settings.ts:1600-1604); the old `github` key merged per host.
     private func write(_ target: String, _ value: String) {
-        guard let request = context.request, !saving else { return }
+        guard let request = context.request, !saving, let settings = context.configs[environmentId]?.settings else { return }
         saving = true
         let env = environmentId
+        var next = tokens
+        next[target] = .string(value)
+        let patch = settings.sourceControlHostPatch("github", ["tokens": .object(next)])
         Task { [weak self] in
             do {
-                let result = try await request(env, "server.updateSettings",
-                                               .object(["patch": .object(["github": .object(["tokens": .object([target: .string(value)])])])]))
+                let result = try await request(env, "server.updateSettings", .object(["patch": patch]))
                 self?.context.applySettings?(env, result)
                 self?.token.text = ""
                 self?.onSaved()

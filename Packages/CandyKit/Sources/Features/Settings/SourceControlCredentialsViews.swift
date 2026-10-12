@@ -184,7 +184,7 @@ final class BitbucketCredentialsView: DSView, SettingsGroupRow {
         sync()
     }
 
-    private var saved: BitbucketCredentialsLogic.Saved { .init(context.configs[environmentId]?.settings.raw["bitbucket"]) }
+    private var saved: BitbucketCredentialsLogic.Saved { .init(context.configs[environmentId]?.settings.sourceControlHost("bitbucket")) }
     private var method: BitbucketCredentialsLogic.Method { methodChoice ?? saved.method ?? .accessToken }
     private var patch: BitbucketCredentialsLogic.Saved? {
         BitbucketCredentialsLogic.patch(method: method, saved: saved, accessToken: accessToken.text, email: emailDraft, apiToken: apiToken.text)
@@ -220,14 +220,15 @@ final class BitbucketCredentialsView: DSView, SettingsGroupRow {
 
     private func submit() { if let patch, !saving { write(patch) } }
 
-    /// `server.updateSettings {patch: {bitbucket}}` on this environment only.
+    /// `server.updateSettings` with Bitbucket's fields (`bitbucket` or `sourceControlHosts.bitbucket`) on this environment only.
     private func write(_ next: BitbucketCredentialsLogic.Saved) {
-        guard let request = context.request, !saving else { return }
+        guard let request = context.request, !saving, let settings = context.configs[environmentId]?.settings else { return }
         saving = true
         let env = environmentId
+        let patch = settings.sourceControlHostPatch("bitbucket", next.json.objectValue ?? [:])
         Task { [weak self] in
             do {
-                let result = try await request(env, "server.updateSettings", .object(["patch": .object(["bitbucket": next.json])]))
+                let result = try await request(env, "server.updateSettings", .object(["patch": patch]))
                 self?.context.applySettings?(env, result)
                 self?.accessToken.text = ""
                 self?.apiToken.text = ""
@@ -337,7 +338,7 @@ final class GitHubAccountsView: DSView, SettingsGroupRow {
         sync()
     }
 
-    private var hosts: [String: JSONValue] { context.configs[environmentId]?.settings.raw["github"]?["hosts"]?.objectValue ?? [:] }
+    private var hosts: [String: JSONValue] { context.configs[environmentId]?.settings.sourceControlHost("github")?["hosts"]?.objectValue ?? [:] }
 
     private func shown(_ login: String) -> String { revealed ? login : UsageRedactedTextView.placeholder(login) }
 
@@ -367,15 +368,16 @@ final class GitHubAccountsView: DSView, SettingsGroupRow {
         needsLayout = true
     }
 
-    /// `server.updateSettings {patch: {github: {hosts}}}` with the whole hosts map.
+    /// `server.updateSettings` with GitHub's whole hosts map (`github` or `sourceControlHosts.github`).
     private func write(_ host: String, enabled: Bool? = nil, account: String?? = .none) {
-        guard let request = context.request, !saving else { return }
+        guard let request = context.request, !saving, let settings = context.configs[environmentId]?.settings else { return }
         saving = true
         let env = environmentId
         let next = GitHubAccountsLogic.nextHosts(hosts, host: host, enabled: enabled, account: account)
+        let patch = settings.sourceControlHostPatch("github", ["hosts": .object(next)])
         Task { [weak self] in
             do {
-                let result = try await request(env, "server.updateSettings", .object(["patch": .object(["github": .object(["hosts": .object(next)])])]))
+                let result = try await request(env, "server.updateSettings", .object(["patch": patch]))
                 self?.context.applySettings?(env, result)
                 self?.onSaved()
             } catch {

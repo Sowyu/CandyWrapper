@@ -52,6 +52,12 @@ public final class ComposerPickers {
         onMultipleChange?()
     }
 
+    /// The open environment's favorites and `providerModelPreferences`, from the server when it owns
+    /// them (`ModelPreferences`). The app replaces these; the defaults are this client's own.
+    public var favorites: () -> [ModelFavorite]
+    public var modelPreferences: () -> JSONValue = { ClientSettingsStore.shared.current["providerModelPreferences"] }
+    public var toggleFavorite: (ProviderInstanceId, String) -> Void
+
     private weak var modelPicker: ModelPickerView?
     private var openPopup: OpenPopup?
 
@@ -60,6 +66,8 @@ public final class ComposerPickers {
         self.draftKey = draftKey
         self.context = context
         current = store.resolve(draftKey, context)
+        favorites = { [unowned store] in store.favorites }
+        toggleFavorite = { [unowned store] id, model in store.toggleFavorite(id, model) }
         controlsView = PickerControlsView(model: modelButton, traits: traitsButton, access: accessButton)
         modelButton.tintsIcon = false
         modelButton.minimumWidth = 52
@@ -115,8 +123,8 @@ public final class ComposerPickers {
     public func toggleModelPicker() {
         if closeIfOpen(modelButton) { return }
         guard let host = modelButton.popupHost, let instance = current.instanceId else { return }
-        let view = ModelPickerView(catalog: context.catalog, favorites: store.favorites, active: instance,
-                                   activeModel: current.model?.slug ?? current.modelSlug ?? "")
+        let view = ModelPickerView(catalog: context.catalog, favorites: favorites(), active: instance,
+                                   activeModel: current.model?.slug ?? current.modelSlug ?? "", preferences: modelPreferences())
         view.jumpLabel = { index in
             ActiveKeymap.label(for: Keymap.modelPickerJumpCommands[index], context: KeybindingContext(["modelPickerOpen": true]))
         }
@@ -144,8 +152,8 @@ public final class ComposerPickers {
         }
         view.onToggleFavorite = { [weak self, weak view] id, slug in
             guard let self else { return }
-            self.store.toggleFavorite(id, slug)
-            view?.favorites = self.store.favorites
+            self.toggleFavorite(id, slug)
+            view?.favorites = self.favorites()
         }
         let popup = host.open(PickerPopupView(view), trigger: modelButton,
                               placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end),

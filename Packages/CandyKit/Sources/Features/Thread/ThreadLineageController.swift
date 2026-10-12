@@ -24,6 +24,8 @@ public final class ThreadLineageController {
     public var providers: ((String) -> [ServerProvider])?
     /// `orchestration.dispatchCommand` for a scoped thread id.
     public var dispatch: ((ThreadId, JSONValue) async throws -> JSONValue)?
+    /// One RPC on an environment (environment id, method, payload).
+    public var request: ((String, String, JSONValue) async throws -> JSONValue)?
     /// Opens a scoped thread id in the panel.
     public var openThread: ((ThreadId) -> Void)?
     public var localVisit: ((ThreadId) -> T3Timestamp?)?
@@ -43,6 +45,7 @@ public final class ThreadLineageController {
         section.onOpen = { [weak self] id in self?.open(id) }
         section.onMerge = { [weak self] in self?.merge() }
         section.onStop = { [weak self] id in self?.stop(id) }
+        section.onStopWorkflow = { [weak self] id, coordinator in self?.stopWorkflow(id, coordinator: coordinator) }
         section.onDetach = { [weak self] in self?.detach() }
         panel.model.onForkFromRun = { [weak self] source, run in self?.fork(source: source, run: run) }
     }
@@ -196,6 +199,19 @@ public final class ThreadLineageController {
         section.busy = .stop(child)
         Task { [weak self] in
             do { _ = try await dispatch(scoped, ThreadRelationshipCommands.interrupt(child, runId: run)) } catch { self?.toast("Could not stop subagent") }
+            self?.panel.detailsCard.lineage.busy = nil
+        }
+    }
+
+    /// `stopWorkflow` (ThreadRelationshipsControl.tsx:391-402 in 2994): `orchestration.stopWorkflow` with this
+    /// thread and the coordinator subagent; a failure says "Could not stop workflow".
+    private func stopWorkflow(_ row: ThreadId, coordinator: String) {
+        let section = panel.detailsCard.lineage
+        guard let threadId, let env = threadId.environmentId, section.busy == nil, let request else { return }
+        section.busy = .stop(row)
+        let payload: JSONValue = .object(["threadId": .string(threadId.localId.rawValue), "subagentId": .string(coordinator)])
+        Task { [weak self] in
+            do { _ = try await request(env, "orchestration.stopWorkflow", payload) } catch { self?.toast("Could not stop workflow") }
             self?.panel.detailsCard.lineage.busy = nil
         }
     }

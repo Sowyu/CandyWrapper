@@ -89,7 +89,8 @@ struct UsageLogicTests {
         #expect(UsageBreakdown.share(unknown, tokens: false) == nil)
         #expect(UsageBreakdown.costSegments(UsageCategorySplit(unsplit: 0.004)).last?.value == 0)
         #expect(UsageHubLogic.sourceId("https://Hub.example.ts.net:8318/x") == "cliproxy-hub.example.ts.net-8318")
-        #expect(UsagePageOptions.providerFilterLabel(hidden: [.cursor]) == "5 providers")
+        // Seven providers since 2994 added Pi (usage.ts:41).
+        #expect(UsagePageOptions.providerFilterLabel(hidden: [.cursor]) == "6 providers")
         #expect(UsagePageOptions.Preferences(json: nil).metric == "limits")
         #expect(UsageRedactedTextView.placeholder("ab@c.d").count == 6)
     }

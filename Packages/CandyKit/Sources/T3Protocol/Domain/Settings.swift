@@ -218,6 +218,24 @@ public struct ServerSettingsValues: Equatable, Sendable {
     public func isDefault(_ key: String) -> Bool { self[key] == (Self.fields[key]?.defaultValue ?? .null) }
 }
 
+extension ServerThreadDefaults {
+    /// Servers from 2994 on keep `github` and `bitbucket` under `sourceControlHosts.<kind>` and drop
+    /// the old top-level keys (4f63275ac, contracts settings.ts:1304). Each server sends the key
+    /// it has with a decoding default, so its presence tells the shapes apart.
+    public var usesSourceControlHosts: Bool { raw.objectValue?["sourceControlHosts"] != nil }
+
+    /// One host kind's saved settings, `{hosts, tokens}` for GitHub and `{email, accessToken, apiToken}` for Bitbucket.
+    public func sourceControlHost(_ kind: String) -> JSONValue? {
+        usesSourceControlHosts ? raw["sourceControlHosts"]?[kind] : raw[kind]
+    }
+
+    /// The `server.updateSettings` patch for some of one host kind's fields. 2994 replaces each
+    /// patched field and keeps the others (settings.ts:1600-1605), like the old per-kind keys did.
+    public func sourceControlHostPatch(_ kind: String, _ fields: [String: JSONValue]) -> JSONValue {
+        usesSourceControlHosts ? .object(["sourceControlHosts": .object([kind: .object(fields)])]) : .object([kind: .object(fields)])
+    }
+}
+
 /// T3's background activity profiles (packages/shared/src/backgroundActivitySettings.ts and
 /// apps/web/src/components/settings/SettingsPanels.logic.ts:172-330). Durations are milliseconds,
 /// as `Schema.DurationFromMillis` puts them on the wire.

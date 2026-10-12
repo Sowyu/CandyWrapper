@@ -188,6 +188,9 @@ final class ComposerController {
             menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
         }
         applyClientSettings()
+        pickers.favorites = { [unowned self] in self.modelPreferences(self.targetEnvironmentId).favorites }
+        pickers.modelPreferences = { [unowned self] in self.modelPreferences(self.targetEnvironmentId).providers }
+        pickers.toggleFavorite = { [unowned self] id, model in self.toggleModelFavorite(self.targetEnvironmentId, id, model) }
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
@@ -389,6 +392,7 @@ final class ComposerController {
             ThemeLibrary.shared.setEnvironmentThemes(config.environmentThemes)
         }
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
+        switch event { case .snapshot, .settingsUpdated: migrateModelPreferences(environmentId); default: break }
         if environmentId == targetEnvironmentId { refresh() }
         onConfigChange?(environmentId)
         configObservers.forEach { $0(environmentId) }
@@ -429,6 +433,76 @@ final class ComposerController {
     func applySettings(_ environmentId: String, _ raw: JSONValue) {
         guard serverConfigs[environmentId] != nil, let settings = try? raw.decode(as: ServerThreadDefaults.self) else { return }
         configChanged(.settingsUpdated(settings), environmentId: environmentId)
+    }
+
+    // MARK: Model preferences
+
+    /// Favorites and `providerModelPreferences` for an environment: the server's from 2994 on
+    /// (f84589527), else this client's UserDefaults favorites and client setting.
+    func modelPreferences(_ environmentId: String?) -> (favorites: [ModelFavorite], providers: JSONValue) {
+        let raw = environmentId.flatMap { serverConfigs[$0]?.settings.raw } ?? .null
+        let local = pickers.store.favorites, localPrefs = ClientSettingsStore.shared.current["providerModelPreferences"]
+        return (ModelPreferences.favorites(raw, local: local), ModelPreferences.providerPreferences(raw, local: localPrefs))
+    }
+
+    func toggleModelFavorite(_ environmentId: String?, _ provider: ProviderInstanceId, _ model: String) {
+        guard let env = environmentId, let raw = serverConfigs[env]?.settings.raw, ModelPreferences.serverOwned(raw) else {
+            pickers.store.toggleFavorite(provider, model)
+            return
+        }
+        let (patch, next) = ModelPreferences.favoritePatch(raw, local: pickers.store.favorites,
+                                                           localPreferences: ClientSettingsStore.shared.current["providerModelPreferences"],
+                                                           provider: provider, model: model)
+        writeModelPreferences(env, patch, shown: ModelPreferences.applying(raw, favorites: next), failure: "Favorites not saved")
+    }
+
+    func writeModelPreferences(_ environmentId: String, instanceId: String, hidden: [String], order: [String]) {
+        let localPrefs = ClientSettingsStore.shared.current["providerModelPreferences"]
+        guard let raw = serverConfigs[environmentId]?.settings.raw, ModelPreferences.serverOwned(raw) else {
+            // Before 2994: this client's setting, the instance dropped when both lists are empty.
+            var all = localPrefs.objectValue ?? [:]
+            if hidden.isEmpty && order.isEmpty { all.removeValue(forKey: instanceId) } else {
+                all[instanceId] = .object(["hiddenModels": .array(hidden.map(JSONValue.string)), "modelOrder": .array(order.map(JSONValue.string))])
+            }
+            ClientSettingsStore.shared.update(["providerModelPreferences": .object(all)])
+            return
+        }
+        let patch = ModelPreferences.preferencesPatch(raw, local: pickers.store.favorites, localPreferences: localPrefs,
+                                                      instanceId: instanceId, hidden: hidden, order: order)
+        writeModelPreferences(environmentId, patch, shown: ModelPreferences.applying(raw, instanceId: instanceId, hidden: hidden, order: order,
+                                                                                    localPreferences: localPrefs),
+                              failure: "Model preferences not saved")
+    }
+
+    /// Shows `shown` at once, then sends the patch; the reply (or the next `settingsUpdated`) replaces it.
+    private func writeModelPreferences(_ env: String, _ patch: JSONValue, shown: JSONValue, failure: String) {
+        applySettings(env, shown)
+        Task { [weak self] in
+            do {
+                let result = try await self?.environments.request(env, "server.updateSettings", .object(["patch": patch]))
+                if let result { self?.applySettings(env, result) }
+            } catch {
+                self?.toast(.error, failure, "\(error)")
+            }
+        }
+    }
+
+    private var migratingModelPreferences: Set<String> = []
+
+    /// `useMigrateModelPreferences` (useSettings.ts:335-358): copies this client's favorites and
+    /// model preferences to a 2994 server that has none yet, once. The local copies stay.
+    private func migrateModelPreferences(_ env: String) {
+        guard !migratingModelPreferences.contains(env), let raw = serverConfigs[env]?.settings.raw,
+              let patch = ModelPreferences.migrationPatch(raw, local: pickers.store.favorites,
+                                                          localPreferences: ClientSettingsStore.shared.current["providerModelPreferences"])
+        else { return }
+        migratingModelPreferences.insert(env)
+        Task { [weak self] in
+            if let result = try? await self?.environments.request(env, "server.updateSettings", .object(["patch": .object(patch)])) {
+                self?.applySettings(env, result)
+            }
+            self?.migratingModelPreferences.remove(env)
+        }
     }
 
     /// Applies the rules a keybinding upsert or removal returned.
@@ -683,9 +757,13 @@ final class ComposerController {
             guard case .draft(let current) = self.target, current.draftId == session.draftId,
                   current.projectId == session.projectId, current.envMode == nil else { return }
             let settings = ServerSettingsValues(self.serverConfigs[environment]?.settings.raw)
-            let mode = SettingsProjectWorkspaceDefaults.resolve(settings: settings, projectId: project.id.localId.rawValue,
+            let configured = SettingsProjectWorkspaceDefaults.resolveWithSource(settings: settings, projectId: project.id.localId.rawValue,
                 legacy: .init(defaultThreadEnvMode: project.defaultThreadEnvMode),
                 contents: reply?["truncated"]?.boolValue == true ? nil : reply?["contents"]?.stringValue)
+            let mode = SettingsProjectWorkspaceDefaults.newThreadEnvMode(
+                configured: configured.mode, source: configured.source, workspaceRoot: project.workspaceRoot,
+                newProjectsRoot: self.serverConfigs[environment]?.newProjectsRoot,
+                projectHasThreads: self.sidebar?.snapshot?.threads.contains { $0.projectId == project.id } ?? false)
             self.updateDraft { $0.envMode = mode == "worktree" ? .worktree : .local }
         }
     }
@@ -4211,7 +4289,8 @@ extension ComposerController {
         composer.keepFullHistory = draftKey.map(fullHistoryThreadKeys.contains) ?? false
         // Not due yet: one wakeup at the moment it is.
         let due = tokens == nil && !dismissed
-            ? ComposerCompaction.offerStart(driver: provider?.driver, usedTokens: contextWindow?.used, updatedAt: contextWindow?.updatedAt).flatMap { $0 > now ? $0 : nil }
+            ? ComposerCompaction.offerStart(driver: provider?.driver, usedTokens: contextWindow?.used, updatedAt: contextWindow?.updatedAt,
+                                            promptCacheTtlMs: contextWindow?.promptCacheTtlMs).flatMap { $0 > now ? $0 : nil }
             : nil
         if resumeOfferWork?.due != due {
             resumeOfferWork?.work.cancel()

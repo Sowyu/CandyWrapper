@@ -54,7 +54,11 @@ extension SettingsController {
             let copy = ConfirmCopy.resolve(message)
             self?.confirm(copy.title, copy.description ?? "", then: action)
         }
-        c.toggleFavorite = { [weak self] id, model in self?.composer?.pickers.store.toggleFavorite(id, model) }
+        c.modelPreferences = { [weak self] env in self?.composer?.modelPreferences(env) ?? ([], .object([:])) }
+        c.toggleFavorite = { [weak self] env, id, model in self?.composer?.toggleModelFavorite(env, id, model) }
+        c.writeModelPreferences = { [weak self] env, instanceId, hidden, order in
+            self?.composer?.writeModelPreferences(env, instanceId: instanceId, hidden: hidden, order: order)
+        }
         c.openSection = { [weak self] section in self?.show(section) }
         c.chooseNotificationMode = { [weak self] mode in await self?.chooseNotificationMode?(mode) }
         c.closeSettings = { [weak self] in self?.close() }
@@ -221,7 +225,6 @@ extension SettingsController {
         loadProjectFiles(c.scope.members)
         c.providers = c.scope.representative.flatMap { composer?.config($0.id)?.providers } ?? []
         c.configs = Dictionary(uniqueKeysWithValues: ids.compactMap { id in composer?.config(id).map { (id, $0) } })
-        c.favorites = composer?.pickers.store.favorites ?? []
         let primary = environments.primaryId.flatMap { composer?.config($0) }
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath

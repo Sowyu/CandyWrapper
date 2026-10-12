@@ -350,6 +350,8 @@ public enum ThreadRelationships {
             public let child: ThreadShell?
             /// "Subagent", "Parent agent", "Fork", "Parent thread" or "Context transfer".
             public let relationship: String
+            /// A workflow coordinator's phases and members (2994 servers), which the row unfolds into.
+            public var workflow: SubagentWorkflowGroup? = nil
             public var failed: Bool { status == "failed" || status == "error" }
             /// Stop shows on hover for an app-owned task that started and still works.
             public var canStop: Bool {
@@ -364,6 +366,8 @@ public enum ThreadRelationships {
         public var mergeTarget: ThreadId?
         public var mergeRunId: RunId?
         public var canDetach = false
+        /// Workflow members' threads that exist here, so their rows can open them.
+        public var availableMembers: Set<ThreadId> = []
         public var isEmpty: Bool { related.isEmpty && active.isEmpty && previous.isEmpty && runningCount == 0 }
         /// "Lineage" or "Lineage · N running".
         public var title: String { runningCount > 0 ? "Lineage · \(runningCount) running" : "Lineage" }
@@ -387,6 +391,8 @@ public enum ThreadRelationships {
         let agents = (projection?.subagents ?? []).compactMap(ProjectedSubagent.init)
         var byChild: [ThreadId: ProjectedSubagent] = [:]
         for a in agents { if let c = a.childThreadId { byChild[c] = a } }
+        let workflows = Dictionary((projection?.subagents ?? []).compactMap(SubagentWorkflowGroup.init(coordinator:)).map { ($0.coordinatorId, $0) },
+                                   uniquingKeysWith: { a, _ in a })
         var out = Lineage()
         out.mergeTarget = mergeTarget
         out.mergeRunId = projection.flatMap(latestMergeBackRun)?.id
@@ -395,12 +401,26 @@ public enum ThreadRelationships {
             let node = g.nodes[r.threadId]
             let isSubagent = r.edge.kind == .subagent
             let parent = isParent(r.edge, threadId)
-            let agent = isSubagent && !parent ? byChild[r.threadId]?.following(node?.thread) : nil
-            let raw = node?.thread?.title ?? agent?.title ?? r.threadId.rawValue
-            let row = Lineage.Row(threadId: r.threadId, edge: r.edge, status: rowStatus(g, r), isParent: parent, isSubagent: isSubagent,
+            let projected = isSubagent && !parent ? byChild[r.threadId] : nil
+            // A workflow row takes the coordinator's status and name, and its agent does not follow the child's run
+            // (ThreadRelationshipsControl.tsx:296-306, 457-481 in 2994).
+            let workflow = projected.flatMap { workflows[$0.id] }
+            var r = r
+            if let workflow {
+                r = ThreadRelationshipRow(threadId: r.threadId, fromThreadId: r.fromThreadId, depth: r.depth,
+                                          edge: ThreadRelationshipEdge(sourceThreadId: r.edge.sourceThreadId, targetThreadId: r.edge.targetThreadId,
+                                                                       kind: r.edge.kind, status: workflow.status))
+            }
+            let agent = workflow != nil ? projected : projected?.following(node?.thread)
+            let raw = workflow?.name ?? node?.thread?.title ?? agent?.title ?? r.threadId.rawValue
+            var row = Lineage.Row(threadId: r.threadId, edge: r.edge, status: rowStatus(g, r), isParent: parent, isSubagent: isSubagent,
                                   isMergeTarget: r.threadId == mergeTarget, missing: node?.missing ?? true,
                                   title: isSubagent ? subagentDisplayTitle(raw) : raw, agent: agent, child: node?.thread,
                                   relationship: relationshipLabel(r.edge, threadId))
+            row.workflow = workflow
+            for m in (workflow?.phases.flatMap(\.members) ?? []) + (workflow?.unphased ?? []) {
+                if let c = m.childThreadId, g.nodes[c]?.missing == false { out.availableMembers.insert(c) }
+            }
             if !isSubagent || parent { out.related.append(row) }
             else if settledStatuses.contains(r.edge.status ?? "") { out.previous.append(row) }
             else { out.active.append(row) }

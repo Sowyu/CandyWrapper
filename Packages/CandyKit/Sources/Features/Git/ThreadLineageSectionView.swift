@@ -70,11 +70,15 @@ final class ThreadLineageRowView: ControlView {
     private(set) var merge: ButtonView?
     private var mergeStatus: LabelView?
     private(set) var stop: ButtonView?
+    /// A workflow row's disclosure: the split's 32pt secondary half and its chevron (ThreadLineageWorkflowRow.tsx:192-210).
+    private(set) var disclosure: ButtonView?
+    private var chevron: CAShapeLayer?
     private var tooltip: TooltipController?
     private var hoverInside = false
 
     init(_ row: ThreadRelationships.Lineage.Row, driver: String?, providerName: String, nowMs: Int64,
-         mergeEnabled: Bool, mergeBusy: Bool, mergeTooltip: String, mergeLabel: String, stopping: Bool) {
+         mergeEnabled: Bool, mergeBusy: Bool, mergeTooltip: String, mergeLabel: String, stopping: Bool,
+         workflowExpanded: Bool = false, canStopWorkflow: Bool = false) {
         self.row = row
         super.init(frame: .zero)
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -110,12 +114,40 @@ final class ThreadLineageRowView: ControlView {
             addSubview(s)
             mergeStatus = s
         }
-        if row.canStop {
+        if row.workflow != nil {
+            let rule = CALayer()
+            rule.actions = fill.actions
+            layer?.addSublayer(rule)
+            self.rule = rule
+            let b = ButtonView(nil, variant: .ghost, size: .iconSm)
+            b.setAccessibilityLabel("\(workflowExpanded ? "Collapse" : "Expand") \(row.title)")
+            b.setAccessibilityExpanded(workflowExpanded)
+            addSubview(b)
+            disclosure = b
+            // `ChevronDownIcon size-3.5 text-muted-foreground transition-transform`, `rotate-180` while open.
+            let c = CAShapeLayer()
+            c.actions = ["position": NSNull(), "bounds": NSNull(), "strokeColor": NSNull(), "transform": NSNull(), "path": NSNull()]
+            c.fillColor = nil
+            c.lineWidth = 14.0 / 12
+            c.lineCap = .round
+            c.lineJoin = .round
+            let path = CGMutablePath()
+            path.addLines(between: [CGPoint(x: 3.5, y: 5.25), CGPoint(x: 7, y: 8.75), CGPoint(x: 10.5, y: 5.25)])
+            c.path = path
+            c.bounds = CGRect(x: 0, y: 0, width: 14, height: 14)
+            c.transform = CATransform3DMakeRotation(workflowExpanded ? .pi : 0, 0, 0, 1)
+            layer?.addSublayer(c)
+            chevron = c
+            // A workflow row's trailing item is its elapsed time only; the status is screen-reader text (:542-561).
+            if trailing.text == ThreadRelationships.statusLabel(row.status) { trailing.text = ""; trailing.isHidden = true }
+        }
+        if row.canStop || canStopWorkflow {
+            let workflow = row.workflow != nil
             let b = ButtonView(nil, icon: stopping ? .loaderCircle : .square, variant: .ghostDestructive, size: .iconXs)
             b.iconSize = 12
             b.isEnabled = !stopping
-            b.setAccessibilityLabel("Stop subagent \(row.title)")
-            _ = TooltipController.attach(to: b, text: "Stop subagent")
+            b.setAccessibilityLabel(workflow ? "Stop workflow \(row.title)" : "Stop subagent \(row.title)")
+            _ = TooltipController.attach(to: b, text: workflow ? "Stop entire workflow" : "Stop subagent")
             b.alphaValue = 0
             addSubview(b)
             stop = b
@@ -174,8 +206,22 @@ final class ThreadLineageRowView: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
+    /// Turns the chevron to the open or closed side over 150ms (`transition-transform`).
+    func setWorkflowExpanded(_ open: Bool) {
+        guard let chevron else { return }
+        let angle: CGFloat = open ? .pi : 0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if window != nil, !Motion.reduced { Motion.animate(chevron, keyPath: "transform.rotation.z", to: angle, duration: Motion.Durations.default) }
+        chevron.transform = CATransform3DMakeRotation(angle, 0, 0, 1)
+        CATransaction.commit()
+        disclosure?.setAccessibilityLabel("\(open ? "Collapse" : "Expand") \(row.title)")
+        disclosure?.setAccessibilityExpanded(open)
+    }
+
     private func restyle() {
         title.color = Themed.color(\.contrastForeground, 0.85)
+        chevron?.strokeColor = Themed.color(\.contrastMutedForeground).cgColor(in: self)
         arrow.strokeColor = Themed.color(\.contrastMutedForeground)
         trailing.color = row.failed ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground)
         mergeStatus?.color = Themed.color(\.contrastMutedForeground)
@@ -203,6 +249,14 @@ final class ThreadLineageRowView: ControlView {
             merge.frame = NSRect(x: mergeStatus.frame.minX - 5 - 32, y: midY - 16, width: 32, height: 32)
             rule.frame = CGRect(x: merge.frame.minX - 1, y: midY - 8, width: 1, height: 16)
             right = rule.frame.minX - 11
+        } else if let disclosure, let rule {
+            disclosure.frame = NSRect(x: bounds.width - 32, y: midY - 16, width: 32, height: 32)
+            rule.frame = CGRect(x: disclosure.frame.minX - 1, y: midY - 8, width: 1, height: 16)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            chevron?.position = CGPoint(x: disclosure.frame.midX, y: midY)
+            CATransaction.commit()
+            right = rule.frame.minX - 11
         }
         if !trailing.isHidden {
             let w = ceil(trailing.textWidth)
@@ -214,7 +268,8 @@ final class ThreadLineageRowView: ControlView {
             right -= 12 + 10
         }
         title.frame = NSRect(x: 37, y: midY - 8, width: max(0, right - 37), height: 16)
-        stop?.frame = NSRect(x: bounds.width - 4 - 24, y: midY - 12, width: 24, height: 24)
+        // A workflow's Stop sits `right-9` in the split group, left of the disclosure.
+        stop?.frame = NSRect(x: bounds.width - (disclosure == nil ? 4 : 36) - 24, y: midY - 12, width: 24, height: 24)
     }
 }
 
@@ -232,6 +287,8 @@ public final class ThreadLineageSectionView: DSView {
     public var onOpen: ((ThreadId) -> Void)?
     public var onMerge: (() -> Void)?
     public var onStop: ((ThreadId) -> Void)?
+    /// Stops a workflow: the row's thread and the coordinator subagent's id (`orchestration.stopWorkflow`).
+    public var onStopWorkflow: ((ThreadId, String) -> Void)?
     public var onDetach: (() -> Void)?
     /// Called when the section's height changes.
     public var onResize: (() -> Void)?
@@ -249,9 +306,19 @@ public final class ThreadLineageSectionView: DSView {
         didSet { if previousExpanded != oldValue { previousHeader.isExpanded = previousExpanded; rebuild() } }
     }
     private var visible: [String: Int] = [:]
+    /// Open workflow rows, and phases opened or closed by hand (a running phase opens itself until then).
+    private var workflowsOpen: Set<ThreadId> = []
+    private var phaseOpen: [String: Bool] = [:]
+    /// The workflow row whose chevron turns on the next rebuild.
+    private var turningWorkflow: ThreadId?
+    private var members: [ThreadLineageWorkflowMemberView] = []
+    private var phaseAccessories: [ThreadLineageWorkflowPhaseAccessory] = []
     private var rows: [ThreadLineageRowView] = []
     private var showMore: [(button: ThreadLineageShowMoreView, group: String)] = []
-    private var layoutItems: [(view: NSView, height: CGFloat)] = []
+    /// Each item's view and height, and how far it sits in (`ps-6.5` under an open workflow).
+    private var layoutItems: [(view: NSView, height: CGFloat, indent: CGFloat)] = []
+    /// A workflow's phase headers, members and empty line, dropped on every rebuild.
+    private var workflowViews: [NSView] = []
 
     public var isEmpty: Bool { lineage.isEmpty }
 
@@ -289,9 +356,15 @@ public final class ThreadLineageSectionView: DSView {
     private func rebuild() {
         rows.forEach { $0.removeFromSuperview() }
         showMore.forEach { $0.button.removeFromSuperview() }
+        workflowViews.forEach { $0.removeFromSuperview() }
         rows = []
         showMore = []
         layoutItems = []
+        workflowViews = []
+        members = []
+        phaseAccessories = []
+        let turning = turningWorkflow
+        turningWorkflow = nil
         heading.text = lineage.title
         more.isHidden = !lineage.canDetach
         more.isEnabled = busy != .merge && busy != .detach
@@ -306,15 +379,33 @@ public final class ThreadLineageSectionView: DSView {
                 let p = r.agent.flatMap { provider?($0.providerInstanceId) } ?? r.child.flatMap { provider?($0.providerInstanceId.rawValue) }
                 let driver = r.agent?.driver.isEmpty == false ? r.agent?.driver : p?.driver
                 let stopping: Bool = if case .stop = busy { true } else { false }
+                let open = workflowsOpen.contains(r.threadId)
+                // ThreadRelationshipsControl.tsx:491-495 in 2994: a running Claude workflow the provider owns.
+                let canStopWorkflow = r.workflow?.status == "running" && r.agent?.origin == "provider_native" && driver == "claudeAgent"
                 let v = ThreadLineageRowView(r, driver: driver, providerName: p?.name ?? driver ?? "", nowMs: nowMs,
                                              mergeEnabled: canMerge && busy == nil, mergeBusy: busy == .merge,
-                                             mergeTooltip: mergeTooltip, mergeLabel: mergeLabel, stopping: stopping)
+                                             mergeTooltip: mergeTooltip, mergeLabel: mergeLabel, stopping: stopping,
+                                             workflowExpanded: turning == r.threadId ? !open : open, canStopWorkflow: canStopWorkflow)
                 v.action = { [weak self] in self?.onOpen?(r.threadId) }
                 v.merge?.action = { [weak self] in self?.onMerge?() }
-                v.stop?.action = { [weak self] in self?.onStop?(r.threadId) }
+                if let workflow = r.workflow {
+                    v.stop?.action = { [weak self] in self?.onStopWorkflow?(r.threadId, workflow.coordinatorId) }
+                    v.disclosure?.action = { [weak self] in
+                        guard let self else { return }
+                        if open { self.workflowsOpen.remove(r.threadId) } else { self.workflowsOpen.insert(r.threadId) }
+                        self.turningWorkflow = r.threadId
+                        self.rebuild()
+                    }
+                } else {
+                    v.stop?.action = { [weak self] in self?.onStop?(r.threadId) }
+                }
                 addSubview(v)
+                if turning == r.threadId { v.setWorkflowExpanded(open) }
                 rows.append(v)
-                layoutItems.append((v, 32))
+                layoutItems.append((v, 32, 0))
+                if let workflow = r.workflow, let agent = r.agent, open {
+                    addWorkflow(workflow, row: r, coordinator: agent, driver: driver, providerName: p?.name ?? driver ?? "", nowMs: nowMs)
+                }
             }
             let hidden = list.count - min(count, list.count)
             if hidden > 0 {
@@ -322,7 +413,7 @@ public final class ThreadLineageSectionView: DSView {
                 b.action = { [weak self] in self?.visible[group] = count + Self.pageCount; self?.rebuild() }
                 addSubview(b)
                 showMore.append((b, group))
-                layoutItems.append((b, 32))
+                layoutItems.append((b, 32, 0))
             }
         }
         add("related", lineage.related)
@@ -334,13 +425,51 @@ public final class ThreadLineageSectionView: DSView {
             failedBadge.text = failed > 0 ? "\(failed) failed" : ""
             failedBadge.isHidden = failed == 0
             previousHeader.accessory = failed > 0 ? failedBadge : nil
-            layoutItems.append((previousHeader, 32))
+            layoutItems.append((previousHeader, 32, 0))
             if previousExpanded { add("previous", lineage.previous) }
         }
         updateTimer()
         restyle()
         needsLayout = true
         onResize?()
+    }
+
+    /// An open workflow's phases (each a section header that a running phase opens by itself), their
+    /// members, then the members with no phase (ThreadLineageWorkflowRow.tsx:212-262 in 2994).
+    private func addWorkflow(_ workflow: SubagentWorkflowGroup, row: ThreadRelationships.Lineage.Row, coordinator: ProjectedSubagent,
+                             driver: String?, providerName: String, nowMs: Int64) {
+        let available = lineage.availableMembers
+        func member(_ m: SubagentWorkflowGroup.Member) {
+            let v = ThreadLineageWorkflowMemberView(m, coordinator: coordinator, driver: driver, providerName: providerName,
+                                                    available: m.childThreadId.map(available.contains) ?? false, nowMs: nowMs)
+            if let child = m.childThreadId { v.action = { [weak self] in self?.onOpen?(child) } }
+            addSubview(v)
+            workflowViews.append(v)
+            members.append(v)
+            layoutItems.append((v, 32, 26))
+        }
+        let phases = workflow.phases.filter { !$0.members.isEmpty }
+        for phase in phases {
+            let key = "\(row.threadId.rawValue):\(phase.index)"
+            let open = phaseOpen[key] ?? (phase.state == "running")
+            let header = CollapsibleSectionHeaderView(phase.title, tone: phase.state == "running" ? .emphasized : .muted, expanded: open)
+            let accessory = ThreadLineageWorkflowPhaseAccessory(phase, nowMs: nowMs)
+            header.accessory = accessory
+            header.setAccessibilityLabel("\(open ? "Collapse" : "Expand") \(phase.title) phase, \(phase.statusLabel)")
+            header.onToggle = { [weak self] on in self?.phaseOpen[key] = on; self?.rebuild() }
+            addSubview(header)
+            workflowViews.append(header)
+            phaseAccessories.append(accessory)
+            layoutItems.append((header, 32, 26))
+            if open { phase.members.forEach(member) }
+        }
+        workflow.unphased.forEach(member)
+        if phases.isEmpty && workflow.unphased.isEmpty {
+            let empty = ThreadLineageWorkflowEmptyView()
+            addSubview(empty)
+            workflowViews.append(empty)
+            layoutItems.append((empty, 28, 26))
+        }
     }
 
     /// Live agents' compact times ("45s", "12m", "1.5h") tick on the shared `LabelClock` when the next
@@ -353,11 +482,18 @@ public final class ThreadLineageSectionView: DSView {
             else { return nil }
             return ThreadRelationships.msUntilElapsedChanges(ms, compact: true)
         }
-        guard let wait = waits.min() else { LabelClock.shared.cancel(self); return }
+        // An open workflow's live members and running phases show the long form ("12m 05s").
+        let long = members.compactMap { $0.ticks ? $0.elapsedMs(now) : nil }
+            + phaseAccessories.compactMap { $0.ticks ? $0.elapsedMs(now) : nil }
+        guard let wait = (waits + long.map { ThreadRelationships.msUntilElapsedChanges($0, compact: false) }).min() else {
+            LabelClock.shared.cancel(self); return
+        }
         LabelClock.shared.schedule(self, in: Double(wait) / 1000) { [weak self] in
             guard let self else { return }
             let now = TimestampFormat.nowMs()
             self.rows.forEach { $0.tick(nowMs: now) }
+            self.members.forEach { $0.tick(nowMs: now) }
+            self.phaseAccessories.forEach { $0.tick(nowMs: now) }
             self.updateTimer()
         }
     }
@@ -377,8 +513,8 @@ public final class ThreadLineageSectionView: DSView {
         heading.frame = NSRect(x: 8 + 6, y: 1 + 8 + 8, width: max(0, inner - 12 - 28), height: 16)
         more.frame = NSRect(x: bounds.width - 8 - 6 - 24, y: 1 + 8 + 4, width: 24, height: 24)
         var y: CGFloat = 1 + 8 + 32 + 4
-        for (v, h) in layoutItems {
-            v.frame = NSRect(x: 8, y: y, width: inner, height: h)
+        for (v, h, indent) in layoutItems {
+            v.frame = NSRect(x: 8 + indent, y: y, width: inner - indent, height: h)
             y += h
         }
     }

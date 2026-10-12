@@ -63,6 +63,7 @@ enum WorkIcons {
             case "command": return .terminal
             case "monitor": return .eye
             case "background_task": return .zap
+            case "system": return .brandT3Wordmark // MessagesTimeline.tsx:5325-5326 in 2994
             default: break
             }
         }
