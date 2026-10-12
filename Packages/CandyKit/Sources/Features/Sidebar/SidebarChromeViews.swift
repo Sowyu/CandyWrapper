@@ -170,12 +170,15 @@ final class SidebarBrandView: ControlView {
     /// `tracking-tight`: -0.025em.
     static let tracking: CGFloat = -0.35
 
-    var markWidth: CGFloat { Self.font.capHeight * Self.glyphSize.width / Self.glyphSize.height }
+    /// The candy stands taller than T3's cap-height wordmark (the user: "way bigger"), centred on the word.
+    static let markHeight: CGFloat = 22
+    static let gap: CGFloat = 6
+    var markWidth: CGFloat { Self.markHeight * Self.glyphSize.width / Self.glyphSize.height }
     var wordLine: CTLine {
         CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [.font: Self.font, .kern: Self.tracking]))
     }
     override var intrinsicContentSize: NSSize {
-        NSSize(width: ceil(markWidth + 4 + CGFloat(CTLineGetTypographicBounds(wordLine, nil, nil, nil))), height: 28)
+        NSSize(width: ceil(markWidth + Self.gap + CGFloat(CTLineGetTypographicBounds(wordLine, nil, nil, nil))), height: 28)
     }
 
     override init(frame: NSRect) {
@@ -220,8 +223,8 @@ final class SidebarBrandView: ControlView {
             ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(srgbRed: 20 / 255, green: 6 / 255, blue: 30 / 255, alpha: 0.35))
         }
         ctx.saveGState()
-        ctx.translateBy(x: 0, y: baseline - cap)
-        let s = cap / Self.glyphSize.height
+        ctx.translateBy(x: 0, y: baseline - cap / 2 - Self.markHeight / 2)
+        let s = Self.markHeight / Self.glyphSize.height
         ctx.scaleBy(x: s, y: s)
         ctx.addPath(Self.glyph)
         ctx.setFillColor(fg.cgColor(in: self))
@@ -232,7 +235,7 @@ final class SidebarBrandView: ControlView {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [
             .font: Self.font, .kern: Self.tracking, .foregroundColor: muted]))
         ctx.textMatrix = .identity
-        ctx.translateBy(x: markWidth + 4, y: baseline)
+        ctx.translateBy(x: markWidth + Self.gap, y: baseline)
         ctx.scaleBy(x: 1, y: -1)
         ctx.textPosition = .zero
         CTLineDraw(line, ctx)
