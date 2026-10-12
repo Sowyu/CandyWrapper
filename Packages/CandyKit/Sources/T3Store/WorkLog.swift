@@ -195,6 +195,15 @@ public enum WorkLog {
         }
     }
 
+    /// `workEntryViewedImagePath` (client-runtime/src/work-log/presentation.ts:477-493): the item's viewed image,
+    /// else a read whose detail is one image path.
+    public static func viewedImagePath(_ e: WorkLogEntry) -> String? {
+        if let path = e.viewedImagePath { return path }
+        guard let detail = e.detail?.jsTrimmed, !detail.isEmpty, !detail.contains(where: \.isNewline),
+              toolGroupAction(e) == .read, isWorkspaceImagePath(detail) else { return nil }
+        return detail
+    }
+
     /// `isWorkspaceImagePreviewPath` (packages/shared/src/filePreview.ts:76-85,182-184).
     static func isWorkspaceImagePath(_ path: String) -> Bool {
         let lower = path.lowercased()

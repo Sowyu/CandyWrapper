@@ -606,9 +606,13 @@ final class ThreadController {
         }
         // Media and browser documents in chat Markdown (ChatMarkdown.tsx:2545-2590, 3270-3290): host files load
         // through signed asset URLs on the open thread's environment.
+        // Tool output images (`tool-output-image`, V2ItemInspector.tsx:149-158) sign the same way.
         MarkdownImages.assetURL = { [weak self] path in
-            guard let self, let id = self.openThreadId, let env = id.environmentId, let shell = self.environments.session(env) else { return nil }
-            let resource: JSONValue = .object(["_tag": .string("media-file"), "threadId": .string(id.localId.rawValue), "path": .string(path)])
+            guard let id = self?.openThreadId else { return nil }
+            return await MarkdownImages.signedURL(resource: .object(["_tag": .string("media-file"), "threadId": .string(id.localId.rawValue), "path": .string(path)]))
+        }
+        MarkdownImages.resourceURL = { [weak self] resource in
+            guard let self, let env = self.openThreadId?.environmentId, let shell = self.environments.session(env) else { return nil }
             guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
                   let relative = reply["relativeUrl"]?.stringValue,
                   let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { return nil }
