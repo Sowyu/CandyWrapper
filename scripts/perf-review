@@ -147,7 +147,10 @@ def build_app(src, sha, osize=False):
         rc = subprocess.call(["xcodebuild", "-project", src + "/CandyWrapper.xcodeproj", "-scheme", "CandyWrapper",
                               "-configuration", "Release", "-derivedDataPath", dd, "PRODUCT_BUNDLE_IDENTIFIER=" + PERF_BUNDLE_ID,
                               # Release registers t3code://; a perf build must never take the user's T3 links.
-                              "CANDY_URL_SCHEME=candywrapper-perf"]
+                              "CANDY_URL_SCHEME=candywrapper-perf",
+                              # No updater: its one check 15 s after launch falls inside the idle window and
+                              # read as 0.17% idle CPU on 2026-10-12, while the app itself idles at 0.001%.
+                              "CANDY_UPDATE_FEED_URL="]
                              + (["SWIFT_OPTIMIZATION_LEVEL=-Osize"] if osize else []) + ["build"],
                              stdout=f, stderr=subprocess.STDOUT)
     if rc != 0:
