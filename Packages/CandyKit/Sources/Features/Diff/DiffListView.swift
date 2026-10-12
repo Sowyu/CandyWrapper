@@ -149,7 +149,16 @@ public final class DiffListView: DSView {
 
     // MARK: Geometry
 
-    private var viewportHeight: CGFloat { enclosingScrollView?.contentView.bounds.height ?? bounds.height }
+    private var viewportHeight: CGFloat { hostScrollView?.contentView.bounds.height ?? bounds.height }
+
+    /// The scroll view this list is the document of. A list placed inside some other scrolling page (the
+    /// settings font preview) sizes itself to its own bounds and mounts every row: it took that page's
+    /// viewport for its own, tiled once while the preview sat below the fold, and never tiled again as
+    /// the page scrolled, so the preview stayed blank.
+    private var hostScrollView: NSScrollView? {
+        guard let scroll = enclosingScrollView, scroll.documentView === self else { return nil }
+        return scroll
+    }
 
     /// Annotation heights changed (a card expanded, a reply box opened): lay out again.
     public func reloadAnnotations() { relayoutKeepingAnchor() }
@@ -161,7 +170,7 @@ public final class DiffListView: DSView {
     }
 
     private func relayout() {
-        let width = enclosingScrollView?.contentView.bounds.width ?? bounds.width
+        let width = hostScrollView?.contentView.bounds.width ?? bounds.width
         var anchors: [Int: [DiffLayout.Anchor]] = [:]
         var live: [String: DiffAnnotationContent] = [:]
         if !annotations.isEmpty, annotationView != nil {
@@ -229,7 +238,7 @@ public final class DiffListView: DSView {
     /// Width follows the clip view; a change re-wraps every line.
     public override func layout() {
         super.layout()
-        let width = enclosingScrollView?.contentView.bounds.width ?? bounds.width
+        let width = hostScrollView?.contentView.bounds.width ?? bounds.width
         if width != rowLayout.width || frame.height < viewportHeight { relayout() } else { tile() }
     }
 
@@ -251,7 +260,8 @@ public final class DiffListView: DSView {
             visible = [:]
             return
         }
-        let rect = visibleRect
+        // Outside its own scroll view nothing re-tiles as the page scrolls, so every row mounts (a short sample).
+        let rect = hostScrollView == nil ? bounds : visibleRect
         let lo = rowLayout.rowIndex(at: max(0, rect.minY - Self.overscan))
         var hi = lo
         while hi < rows.count, rows[hi].top < rect.maxY + Self.overscan { hi += 1 }
@@ -353,9 +363,9 @@ public final class DiffListView: DSView {
     }
 
     private func scrollTo(_ point: NSPoint) {
-        guard let clip = enclosingScrollView?.contentView else { return }
+        guard let clip = hostScrollView?.contentView else { return }
         clip.scroll(to: point)
-        enclosingScrollView?.reflectScrolledClipView(clip)
+        hostScrollView?.reflectScrolledClipView(clip)
     }
 
     /// Horizontal wheel deltas scroll unwrapped code; vertical ones go to the scroll view.

@@ -350,7 +350,7 @@ public enum SnoozePresets {
             calendar.date(bySettingHour: hour, minute: 0, second: 0, of: base) ?? base
         }
         func preset(_ id: String, _ label: String, _ date: Date, weekdayPrefix: Bool = false) -> SnoozePreset {
-            let when = time.string(from: date)
+            let when = time.string(from: date).replacingOccurrences(of: "\u{202F}", with: " ") // Chromium's plain space
             return SnoozePreset(id: id, label: label, whenLabel: weekdayPrefix ? "\(weekday.string(from: date)) \(when)" : when,
                                 snoozedUntil: date)
         }

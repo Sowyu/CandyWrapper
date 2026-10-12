@@ -58,9 +58,11 @@ struct McpFollowupsTests {
         #expect(after.ui.subagentRecords.first?["status"]?.stringValue == "completed")
         #expect(before != after)
     }
-    static func notification(outcome: String, kind: String = "delegated_task") throws -> WorkLogEntry {
+    static func notification(outcome: String, kind: String = "delegated_task", work: String? = nil) throws -> WorkLogEntry {
+        var source: [String: Any] = ["kind": kind, "childThreadId": "child"]
+        if let work { source["work"] = work }
         let fields: [String: Any] = ["id": "note", "threadId": "parent", "type": "notification", "ordinal": 2, "status": "completed",
-                                     "outcome": outcome, "source": ["kind": kind, "childThreadId": "child"], "updatedAt": "2026-10-11T10:05:00Z"]
+                                     "outcome": outcome, "source": source, "updatedAt": "2026-10-11T10:05:00Z"]
         let item = ProjectedTurnItem(local: try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: fields)))
         return WorkLogEntry(id: "note", createdAt: "2026-10-11T10:05:00Z", label: "Delegated task finished", tone: .info,
                             itemType: .notification, projectedItem: item)
@@ -89,6 +91,13 @@ struct McpFollowupsTests {
         #expect(SubagentCardPresentation.notificationCard(e, records: []) == nil)
         #expect(SubagentCardPresentation.notificationCard(e, records: [Self.record])?.status == "failed")
         #expect(SubagentCardPresentation.notificationChild(try Self.notification(outcome: "completed", kind: "command")) == nil)
+        // The wire shape of a subagent source (orchestrationV2.ts:1072-1090), as a real Claude subagent sends it.
+        let wire = try Self.notification(outcome: "completed", kind: "background_task", work: "subagent")
+        #expect(SubagentCardPresentation.notificationChild(wire) == "child")
+        #expect(WorkIcons.entry(wire) == .bot)
+        #expect(SubagentCardPresentation.notificationChild(try Self.notification(outcome: "completed", kind: "background_task")) == nil)
+        #expect(NotificationSource.kind(.object(["kind": .string("background_command")])) == "command")
+        #expect(NotificationSource.kind(.object(["kind": .string("newer_kind")])) == "background_task")
 
         let row = TimelineRow(id: "work", createdAt: nil, kind: .work(groupedEntries: [e], isExpandedToolGroup: false, displayLabel: nil))
         var ui = TimelineRowUI(); ui.subagentRecords = [Self.record]

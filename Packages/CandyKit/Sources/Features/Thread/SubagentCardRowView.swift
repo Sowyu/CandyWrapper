@@ -118,7 +118,7 @@ extension SubagentCardPresentation {
     /// delegated-task notification reports on.
     static func notificationChild(_ e: WorkLogEntry) -> String? {
         guard let item = e.projectedItem?.item, item.type == .notification,
-              let source = item["source"], ["subagent", "delegated_task"].contains(source["kind"]?.stringValue ?? "") else { return nil }
+              let source = item["source"], ["subagent", "delegated_task"].contains(NotificationSource.kind(source)) else { return nil }
         return source["childThreadId"]?.stringValue
     }
 
