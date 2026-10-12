@@ -1,0 +1,121 @@
+import Foundation
+import T3Protocol
+import T3Store
+
+/// Manual compaction rules: who may compact, why not, and the resume offer that compacts a stale
+/// Claude session before the next send. Ported from ContextWindowMeter.logic.ts:12-83,
+/// ChatView.tsx:7661-7726 and packages/shared/src/claudeCompaction.ts.
+public enum ComposerCompaction {
+    /// `CLAUDE_RESUME_COMPACTION_MINUTES` and `_TOKENS` (ContextWindowMeter.logic.ts:12-13).
+    public static let resumeMinutes: Double = 70
+    public static let resumeTokens: Double = 100_000
+    /// `CLAUDE_RESUME_COMPACTION_NEVER_ANSWER` (claudeCompaction.ts:8).
+    public static let neverAnswer = "Don't ask again"
+
+    /// `providerSupportsManualCompaction` (ContextWindowMeter.logic.ts:15-19).
+    public static func supportsManualCompaction(_ provider: ServerProvider?) -> Bool {
+        provider?.slashCommands.contains { $0.name == "compact" } ?? false
+    }
+
+    /// `hasAvailableCompactionProvider` (ContextWindowMeter.logic.ts:21-43): the driver's instances,
+    /// narrowed to the locked instance's continuation group, then the selectable pick.
+    public static func hasAvailableProvider(_ providers: [ServerProvider], driver: String?,
+                                            instanceId: ProviderInstanceId?, lockedInstanceId: ProviderInstanceId?) -> Bool {
+        let sameDriver = providers.filter { $0.driver == driver }
+        let group = lockedInstanceId.flatMap { id in sameDriver.first { $0.instanceId == id }?.continuationGroupKey }
+        let compatible = group.map { g in sameDriver.filter { $0.continuationGroupKey == g } } ?? sameDriver
+        return supportsManualCompaction(ProviderCatalog(compatible).resolveInstance([instanceId])?.provider)
+    }
+
+    /// `CLAUDE_RESUME_COMPACTION_QUESTION_PATTERN` (claudeCompaction.ts:21-26).
+    public static func isResumeQuestion(_ question: String) -> Bool {
+        question.wholeMatch(of: /This session is (?:\d+h \d+m|\d+m) old and uses \d{1,3}(?:,\d{3})* tokens\. Compact it before continuing\?/) != nil
+    }
+
+    /// `hasDismissedResumeCompaction` over resolved user-input requests (ChatView.tsx:4185-4196): the
+    /// server's resume question answered "Don't ask again".
+    public static func hasDismissedResume(_ requests: [RuntimeRequest]) -> Bool {
+        requests.contains { request in
+            guard request.kind == .userInput, request.status == "resolved", case .object(let answers)? = request.answers else { return false }
+            return answers.contains { isResumeQuestion($0.key) && $0.value == .string(neverAnswer) }
+        }
+    }
+
+    /// The localStorage key T3 keeps the dismissal under (ChatView.tsx:4179-4184); here a UserDefaults key.
+    public static func dismissalKey(environmentId: String, instanceId: ProviderInstanceId?) -> String {
+        "t3code:resume-compaction-dismissed:\(environmentId):\(instanceId?.rawValue ?? "claudeAgent")"
+    }
+
+    /// `shouldOfferResumeCompaction` (ContextWindowMeter.logic.ts:63-83): a Claude thread at 100k tokens
+    /// or more whose usage last changed 70 minutes or more ago.
+    public static func shouldOfferResume(driver: String?, usedTokens: Double?, updatedAt: Date?, now: Date) -> Bool {
+        guard let start = offerStart(driver: driver, usedTokens: usedTokens, updatedAt: updatedAt) else { return false }
+        return now >= start
+    }
+
+    /// When the offer starts for this usage, or nil when it never will. T3 re-checks every minute;
+    /// the app waits for this moment once instead.
+    public static func offerStart(driver: String?, usedTokens: Double?, updatedAt: Date?) -> Date? {
+        guard driver == "claudeAgent", (usedTokens ?? 0) >= resumeTokens, let updatedAt else { return nil }
+        return updatedAt.addingTimeInterval(resumeMinutes * 60)
+    }
+
+    /// A bare `/compact` turn (`isCompactCommandMessage`, ChatView.tsx:820-823).
+    public static func isCompactCommand(_ text: String, attachments: Int = 0) -> Bool {
+        attachments == 0 && text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
+    }
+
+    /// `activeThreadHasCompactableConversation` (ChatView.tsx:7661-7665): a user message other than a bare `/compact`.
+    public static func hasCompactableConversation(_ projection: ThreadProjection?) -> Bool {
+        projection?.visibleTurnItems.contains { row in
+            row.item.type == .userMessage && !isCompactCommand(row.item.text, attachments: row.item["attachments"]?.arrayValue?.count ?? 0)
+        } ?? false
+    }
+
+    /// `compactThreadUnavailable` and `compactDisabledReason` (ChatView.tsx:7666-7691).
+    public struct Gate: Sendable, Equatable {
+        public var canOperateThread = true
+        /// An open server thread (not a draft) whose detail has loaded.
+        public var isServerThread = false
+        public var hasCompactableConversation = false
+        public var hasProject = false
+        /// `hasAvailableCompactionProvider`.
+        public var providerAvailable = false
+        /// Working, reverting a checkpoint, preparing a worktree, environment unavailable, an approval or
+        /// question open, or the plan follow-up showing.
+        public var busy = false
+        public init() {}
+
+        public var disabled: Bool {
+            !canOperateThread || !isServerThread || !hasCompactableConversation || !hasProject || !providerAvailable || busy
+        }
+
+        public var reason: String? {
+            guard disabled else { return nil }
+            if !canOperateThread { return "This connection cannot change threads." }
+            if !hasProject { return "Choose a project before compacting" }
+            if !providerAvailable { return "Compaction is unavailable for this provider" }
+            return "Compacting is unavailable right now"
+        }
+    }
+
+    /// `resumeCompactionTokens` (ChatView.tsx:7692-7710): the tokens a stale session would re-read,
+    /// while the offer stands. Held queues and multi-model sends never compact first.
+    public static func resumeTokens(usage: ThreadContextWindowUsage?, driver: String?, dismissed: Bool, compactDisabled: Bool,
+                                    hasHeldQueuedRuns: Bool, multipleModels: Bool, now: Date) -> Double? {
+        guard let usage, !dismissed, !compactDisabled, !hasHeldQueuedRuns, !multipleModels,
+              shouldOfferResume(driver: driver, usedTokens: usage.used, updatedAt: usage.updatedAt, now: now) else { return nil }
+        return usage.used
+    }
+
+    /// `compactBeforeSend` (ChatView.tsx:9270-9273): the offer is on and the message is not itself `/compact`.
+    public static func compactsBeforeSend(resumeTokens: Double?, keepFullHistory: Bool, text: String) -> Bool {
+        resumeTokens != nil && !keepFullHistory && text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "/compact"
+    }
+
+    /// `shouldReserveContextWindowMeter` (ContextWindowMeter.logic.ts:124-137): hold the meter's slot while a
+    /// started thread's detail loads, unless its provider is known not to report usage.
+    public static func reservesMeter(meterEnabled: Bool, detailLoading: Bool, threadStarted: Bool, providerReportsContextWindow: Bool?) -> Bool {
+        meterEnabled && detailLoading && threadStarted && providerReportsContextWindow != false
+    }
+}

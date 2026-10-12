@@ -12,6 +12,12 @@ import T3Protocol
 public final class ComposerView: DSView {
     public let contextWindowMeter = ThreadContextWindowMeterView()
     public var planFollowUp = false { didSet { if planFollowUp != oldValue { refresh(); needsLayout = true } } }
+    /// Tokens a stale Claude session would re-read (`compactBeforeSendTokens`, ComposerPrimaryActions.tsx:53-58).
+    /// While set, the Compact chip shows the count and a send compacts first unless the chip is off.
+    public var compactBeforeSendTokens: Double? { didSet { if compactBeforeSendTokens != oldValue { refresh(); needsLayout = true } } }
+    /// The chip is off: the next send keeps full history.
+    public var keepFullHistory = false { didSet { if keepFullHistory != oldValue { refresh(); needsLayout = true } } }
+    public var onToggleKeepFullHistory: (() -> Void)?
     private let planPill = MessageActionPill()
     /// The Implement split's chevron and its one item (ComposerPrimaryActions.tsx:233-258).
     private let implementMenu = MessageActionPill().menuTrigger()
@@ -237,6 +243,14 @@ public final class ComposerView: DSView {
     /// `data-chat-composer-footer-compact`: the footer gap drops from 0 (`gap-2 sm:gap-0`) to `gap-1.5`.
     // ponytail: no plan follow-up, so only a question counts as wide actions; add it with plan mode
     private var compactFooter: Bool { ComposerFooterLayout.isCompact(width: bounds.width, hasWideActions: questionFooter != nil) }
+    /// The chip shows beside the round send button (ComposerPrimaryActions.tsx:274-277, 355): not for
+    /// Stop, Resume, a queued edit, the plan pills or a question.
+    private var showsCompactPill: Bool {
+        guard compactBeforeSendTokens != nil, questionFooter == nil, pending != .approval, !planFollowUp, !editingQueued else { return false }
+        return [.send, .queue, .steer, .busy].contains(primary.face)
+    }
+    /// The next send compacts first: Enter and the button read "Compact and send".
+    public var compactsBeforeSend: Bool { compactBeforeSendTokens != nil && !keepFullHistory }
     private var questionFooter: QuestionFooter? {
         if case .question(let footer) = pending { return footer }
         return nil
@@ -255,6 +269,7 @@ public final class ComposerView: DSView {
     private let validation = LabelView()
     let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
+    let compactPill = ComposerCompactPill()
     let questionPill = MessageActionPill()
     /// "Previous" (`Button outline sm`), or the chevron (`outline icon-sm`) when compact.
     let previousFull = ButtonView("Previous", variant: .outline, size: .sm)
@@ -347,6 +362,9 @@ public final class ComposerView: DSView {
         contextWindowMeter.isHidden = true
         primary.action = { [weak self] in self?.primaryPressed() }
         addSubview(primary)
+        compactPill.isHidden = true
+        compactPill.action = { [weak self] in self?.onToggleKeepFullHistory?() }
+        addSubview(compactPill)
         questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
         previousCompact.iconSize = 14
         previousCompact.setAccessibilityLabel("Previous question")
@@ -479,6 +497,9 @@ public final class ComposerView: DSView {
             primary.isEnabled = hasContent && canSend && validationMessage == nil
             if let status {
                 primary.tooltip = status
+            } else if compactsBeforeSend, let tokens = compactBeforeSendTokens {
+                primary.tooltip = "Summarize \(ThreadContextWindowUsage.tokens(tokens)) tokens of history, then send"
+                primary.setAccessibilityLabel("Compact and send")
             } else if face == .send {
                 primary.tooltip = "Submit message"
             } else {
@@ -486,6 +507,10 @@ public final class ComposerView: DSView {
                 let action = steerByDefault ? "steer" : "queue", other = steerByDefault ? "queue" : "steer"
                 primary.tooltip = "Click to \(action), Ctrl/⌘-click to \(other)"
             }
+        }
+        if let tokens = compactBeforeSendTokens {
+            compactPill.tokens = ThreadContextWindowUsage.tokens(tokens)
+            compactPill.keepFullHistory = keepFullHistory
         }
         if validation.text != (validationMessage ?? "") || validation.isHidden != (validationMessage == nil) {
             validation.text = validationMessage ?? ""
@@ -780,6 +805,13 @@ public final class ComposerView: DSView {
             primary.frame = NSRect(x: right - 32, y: rowY, width: 32, height: 32)
             actionsLeft = primary.frame.minX
         }
+        compactPill.isHidden = !showsCompactPill || !footerShown
+        if !compactPill.isHidden {
+            // `flex items-center gap-2` with the send button.
+            let pw = compactPill.intrinsicContentSize.width
+            compactPill.frame = NSRect(x: actionsLeft - 8 - pw, y: midY - 14, width: pw, height: 28)
+            actionsLeft = compactPill.frame.minX
+        }
         planPill.isHidden = !planFollowUp || !footerShown || questionFooter != nil
         let implementing = !planPill.isHidden && planPill.title == "Implement"
         implementMenu.isHidden = !implementing
@@ -799,7 +831,7 @@ public final class ComposerView: DSView {
             planPill.frame = NSRect(x: x - w, y: midY - 16, width: w, height: 32)
             actionsLeft = planPill.frame.minX
         }
-        contextWindowMeter.isHidden = contextWindowMeter.usage == nil || !footerShown || questionFooter != nil
+        contextWindowMeter.isHidden = (contextWindowMeter.usage == nil && !contextWindowMeter.reserved) || !footerShown || questionFooter != nil
         if !contextWindowMeter.isHidden {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX

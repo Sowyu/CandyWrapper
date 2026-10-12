@@ -119,6 +119,16 @@ final class ComposerController {
     private var questionRequestId: String?
     /// Thread errors by draft key and their session dismissals (the banner over the timeline).
     private var threadErrors = ThreadErrorState()
+    /// Threads whose Compact chip is off (`fullHistoryThreadKeys`, ChatView.tsx:7711-7726), in memory like T3's.
+    /// A send that starts its turn clears its thread's entry; a failed send keeps it.
+    private var fullHistoryThreadKeys: Set<String> = []
+    /// One wakeup at the moment the open thread's resume compaction offer becomes due. T3 re-renders on a
+    /// minute clock; this waits for that one moment and nothing ticks before or after.
+    private var resumeOfferWork: (due: Date, work: DispatchWorkItem)?
+    /// The open thread's context window (`activeContextWindow`), whether or not the meter shows.
+    private var contextWindow: ThreadContextWindowUsage?
+    /// `compactThreadUnavailable` as the last refresh found it; the `/compact` slash item reads it.
+    private var compactUnavailable = true
     /// The `/`, `@`, `$` and `#` menus' searches and the chips' context records (extension below).
     private var menuState = MenuState()
 
@@ -192,11 +202,17 @@ final class ComposerController {
             self?.composer.recordTimelineScroll(delta: delta, canScroll: canScroll, towardEnd: towardEnd)
         }
         composer.onSend = { [weak self] text, mode, background in self?.send(text, mode: mode, background: background) }
+        // `compactThreadContext` (ChatComposer.tsx:4315-4330) then `onCompactContext` (ChatView.tsx:8651-8654):
+        // `/compact` runs as its own turn and the draft stays.
         composer.contextWindowMeter.onCompact = { [weak self] in
-            guard let self, self.composer.contextWindowMeter.compactDisabledReason == nil, !self.composer.runState.canInterrupt, !self.composer.isBusy else { return }
-            let saved = self.composer.text
-            self.sendThreadStandalone("/compact")
-            self.composer.text = saved; self.remember(saved)
+            guard let self, !self.composer.contextWindowMeter.compactDisabled, self.requests.isEmpty,
+                  !self.composer.runState.canInterrupt, !self.composer.isBusy else { return }
+            self.sendThreadStandalone("/compact", failure: "Failed to compact context.")
+        }
+        composer.onToggleKeepFullHistory = { [weak self] in
+            guard let self, let key = self.draftKey else { return }
+            if self.fullHistoryThreadKeys.remove(key) == nil { self.fullHistoryThreadKeys.insert(key) }
+            self.refresh()
         }
         composer.onStop = { [weak self] in self?.stop() }
         composer.onImplementInNewThread = { [weak self] in self?.implementPlanInNewThread() }
@@ -243,7 +259,9 @@ final class ComposerController {
         composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
         panel.lazyGoalBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in
             guard let self, let goal = self.shellThread?.goal, let index else { return }
-            self.sendThreadStandalone(index == 0 && ThreadGoalPresentation.canResume(goal) ? "/goal resume" : "/goal clear")
+            let resume = index == 0 && ThreadGoalPresentation.canResume(goal)
+            // ChatView.tsx:7526, 7534.
+            self.sendThreadStandalone(resume ? "/goal resume" : "/goal clear", failure: resume ? "Failed to resume goal." : "Failed to clear goal.")
         } }
         panel.lazyRecoveryBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in self?.updateThreadRecovery(index) } }
         panel.model.onEditPrompt = { [weak self] message in self?.editEarlierPrompt(message) }
@@ -1022,8 +1040,8 @@ final class ComposerController {
 
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
-        composer.contextWindowMeter.modelDisplayName = pickers.current.modelSelection?.model
-        composer.contextWindowMeter.usage = ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") ? ThreadContextWindowUsage.derive(projection) : nil
+        contextWindow = ThreadContextWindowUsage.derive(projection)
+        composer.contextWindowMeter.usage = ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") ? contextWindow : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
         var runState = ComposerLogic.RunState(runs: runs)
@@ -1054,8 +1072,7 @@ final class ComposerController {
         let plan = ThreadPlanFollowUp.activePlan(projection)
         let showPlan = pickers.current.interactionMode == .plan && plan != nil && requests.isEmpty && currentAttachments.isEmpty && !composer.isBusy
         composer.planFollowUp = showPlan
-        composer.contextWindowMeter.compactDisabledReason = menuProvider?.slashCommands.contains(where: { $0.name == "compact" }) != true
-            ? "This provider does not support manual compaction." : composer.runState.canInterrupt || composer.isBusy || !requests.isEmpty || showPlan ? "Wait for the current turn to finish." : nil
+        updateCompaction(showPlan: showPlan)
         panel.showsPlanFollowUp = showPlan
         if let markdown = plan?.markdown, showPlan {
             let title = markdown.components(separatedBy: .newlines).first(where: { $0.hasPrefix("# ") }).map { String($0.dropFirst(2)) }
@@ -1309,6 +1326,14 @@ final class ComposerController {
         }
         // The send goes ahead: the thread's local error clears (ChatView.tsx:9782).
         if let picksKey { threadErrors.set(picksKey, nil) }
+        // A stale Claude session compacts first and the message queues behind the `/compact` run, since
+        // steering into it is rejected (`compactBeforeSend`, ChatView.tsx:9267-9276).
+        var compactFirst = false
+        if case .thread = target {
+            compactFirst = ComposerCompaction.compactsBeforeSend(resumeTokens: composer.compactBeforeSendTokens,
+                                                                 keepFullHistory: composer.keepFullHistory, text: trimmed)
+        }
+        let mode: ComposerLogic.SendMode = compactFirst ? .queue : mode
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).
         let intent: InputIntent? = mode == .queue ? .queuedTurn : mode == .steer ? .steer : nil
         // Every attachment rides as a record bound to its upload (`buildMessageContext`).
@@ -1416,7 +1441,15 @@ final class ComposerController {
                             "type": .string("thread.interaction-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
                             "threadId": .string(threadId.localId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
+                    if compactFirst {
+                        // ChatView.tsx:9859-9873: `/compact` starts its own turn with the same model and modes.
+                        _ = try await supervisor.request("orchestration.dispatchCommand", payload: Self.standaloneCommand(
+                            threadId: threadId, messageId: MessageId(UUID().uuidString.lowercased()), text: "/compact",
+                            selection: selection, queue: false))
+                    }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
+                    // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
+                    if let picksKey { self?.fullHistoryThreadKeys.remove(picksKey) }
                     self?.sentSnapShots(attachments)
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
@@ -2253,12 +2286,13 @@ extension ComposerController {
         let cwd = menuCwd
         switch trigger.kind {
         case .slashCommand:
-            // `/compact` only when the prompt is the command alone on an idle thread that has a
-            // conversation (`compactSlashCommandAvailable`, ChatView.tsx:7661-7680).
+            // `/compact` only when the prompt is the command alone, with no attachments, on a thread that can
+            // compact (`compactSlashCommandAvailable`, ChatComposer.tsx:2576-2585). Inline contexts live in
+            // the prompt, so an otherwise empty prompt has none.
             let text = composer.displayText as NSString
             let before = text.substring(to: trigger.rangeStart), after = text.substring(from: trigger.rangeEnd)
             let compact = before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && shellThread?.latestUserMessageAt != nil && !composer.runState.canInterrupt && requests.activeApproval == nil
+                && !compactUnavailable && currentAttachments.isEmpty
             let planMode = pickers.context.interactionModeEnabled(provider)
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
@@ -3277,6 +3311,7 @@ extension ComposerController {
         }
         updateSyncPhase(phase, key: threadId.rawValue)
         syncSendBlock()
+        updateMeterSlot()
     }
 
     private func updateSyncPhase(_ phase: ComposerActivityRowView.Phase?, key: String) {
@@ -3859,23 +3894,39 @@ extension ComposerController {
 
 
 extension ComposerController {
-    private func sendThreadStandalone(_ text: String) {
+    /// `sendStandaloneCommand` (ChatView.tsx:7419-7500): the command runs as its own turn with an optimistic
+    /// echo; the draft stays. A failure drops the echo and shows the server's message, else `failure`, in
+    /// the thread's error banner. Transport errors stay silent.
+    private func sendThreadStandalone(_ text: String, failure: String) {
+        guard let key = draftKey else { return }
+        threadErrors.set(key, nil)
         Task { [weak self] in
-            do { try await self?.dispatchThreadStandalone(text, queue: false) }
-            catch { self?.toast(.error, "Failed to send command.", error.localizedDescription) }
+            do { try await self?.dispatchThreadStandalone(text, queue: false, echo: true) }
+            catch {
+                guard let self else { return }
+                if let rpc = error as? RPCClientError, rpc.isTransport { return }
+                self.threadErrors.set(key, Self.message(error) ?? failure)
+                self.refresh()
+            }
         }
     }
     func sendAppMessage(_ text: String) async throws { try await dispatchThreadStandalone(text, queue: true) }
 
-    private func dispatchThreadStandalone(_ text: String, queue: Bool) async throws {
+    private func dispatchThreadStandalone(_ text: String, queue: Bool, echo: Bool = false) async throws {
         guard let id = openThreadId, let supervisor = shell?.supervisor, let selection = pickers.current.modelSelection,
               !threadRewindBusy, pendingMessageId == nil, queue || !composer.runState.canInterrupt else {
             throw RewindPreparationError("Messages from apps need an available started thread.")
         }
         let picks = pickers.current, picksKey = draftKey
         let messageId = MessageId(UUID().uuidString.lowercased())
+        if echo { optimistic.append(ChatMessage(id: messageId, role: .user, text: text, createdAt: T3Timestamp(Date()))) }
         pendingMessageId = messageId; refresh()
-        defer { if pendingMessageId == messageId { pendingMessageId = nil }; refresh() }
+        var sent = false
+        defer {
+            if pendingMessageId == messageId { pendingMessageId = nil }
+            if !sent { optimistic.removeAll { $0.id == messageId } }
+            refresh()
+        }
         if let mode = picks.runtimeModeToPersist {
             _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
                 "type": .string("thread.runtime-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
@@ -3886,13 +3937,24 @@ extension ComposerController {
                 "type": .string("thread.interaction-mode.set"), "commandId": .string(UUID().uuidString.lowercased()),
                 "threadId": .string(id.localId.rawValue), "interactionMode": .string(mode.rawValue)]))
         }
-        _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object([
-            "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
-            "threadId": .string(id.localId.rawValue), "messageId": .string(messageId.rawValue),
-            "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
-            "attachments": .array([]), "dispatchMode": .object(["type": .string(queue ? "queue_after_active" : "start_immediately")]),
-            "modelSelection": ThreadSession.encode(selection)]))
+        _ = try await supervisor.request("orchestration.dispatchCommand", payload: Self.standaloneCommand(
+            threadId: id, messageId: messageId, text: text, selection: selection, queue: queue))
+        sent = true
         if let picksKey { pickers.store.didSend(picksKey) }
+    }
+
+    /// `startThreadTurn` with no dispatch mode for a standalone command (commands.ts:752-776): `auto`,
+    /// which the server resolves (`start_immediately` plus `deliveryIntent: auto`); queued app messages
+    /// go behind the active run.
+    static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool) -> JSONValue {
+        let (dispatchMode, deliveryIntent) = ComposerLogic.dispatch(queue ? .queue : .auto)
+        var command: [String: JSONValue] = [
+            "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
+            "threadId": .string(threadId.localId.rawValue), "messageId": .string(messageId.rawValue),
+            "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
+            "attachments": .array([]), "dispatchMode": dispatchMode, "modelSelection": ThreadSession.encode(selection)]
+        if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
+        return .object(command)
     }
 
 }
@@ -4032,5 +4094,87 @@ extension ComposerController {
                 }
             }
         }
+    }
+}
+
+// MARK: - Compaction
+
+/// Manual compaction and the resume offer (ComposerCompaction): who may compact and why not, the
+/// meter's popup state and slot, and the Compact chip that compacts a stale Claude session first.
+extension ComposerController {
+    fileprivate func updateCompaction(showPlan: Bool) {
+        let meter = composer.contextWindowMeter
+        let provider = menuProvider
+        let thread = shellThread
+        var gate = ComposerCompaction.Gate()
+        gate.isServerThread = openThreadId != nil && projection != nil
+        gate.hasCompactableConversation = ComposerCompaction.hasCompactableConversation(projection)
+        gate.hasProject = menuProject != nil
+        // The locked instance's continuation group bounds the choice once the thread has started.
+        let started = ComposerLogic.QueueState.hasStartedSession(projection) || thread?.latestRunId != nil
+        gate.providerAvailable = ComposerCompaction.hasAvailableProvider(
+            serverConfig.providers, driver: provider?.driver, instanceId: pickers.current.instanceId,
+            lockedInstanceId: started ? thread?.modelSelection.instanceId : nil)
+        // Working (a run, a send, a rewind), the environment gone, a request open or the plan follow-up.
+        gate.busy = composer.runState.canInterrupt || composer.isBusy || shell == nil || !requests.isEmpty || showPlan
+        compactUnavailable = gate.disabled
+        // ChatComposer.tsx:2154-2155, 7669-7673: no provider at all, a send or a connect also disable the button.
+        let noProvider = provider == nil
+        let selection = thread?.modelSelection ?? pickers.current.modelSelection
+        // `resolveContextWindowModelDisplayName` (ContextWindowMeter.logic.ts:85-98).
+        let modelName = selection.map { s in
+            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map(ModelNames.trigger) ?? s.model
+        }
+        meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
+                              disabled: gate.disabled || noProvider || composer.isBusy,
+                              reason: gate.reason ?? (noProvider ? "Compacting is unavailable right now" : nil), model: modelName)
+        updateMeterSlot()
+
+        // The resume offer (ChatView.tsx:7692-7710). A "Don't ask again" answer to the server's own resume
+        // question turns it off for this environment and provider, like the local dismissal (:4185-4204).
+        var dismissed = false
+        if let environmentId = targetEnvironmentId {
+            let key = ComposerCompaction.dismissalKey(environmentId: environmentId, instanceId: pickers.current.instanceId)
+            dismissed = UserDefaults.standard.bool(forKey: key)
+            if !dismissed, let projection, ComposerCompaction.hasDismissedResume(projection.runtimeRequests) {
+                UserDefaults.standard.set(true, forKey: key)
+                dismissed = true
+            }
+        }
+        let now = Date()
+        let held = projection?.runs.contains { $0.status == .queued && $0.queueHeld == true } ?? false
+        let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed,
+                                                     compactDisabled: gate.disabled, hasHeldQueuedRuns: held,
+                                                     multipleModels: pickers.currentMultiple != nil, now: now)
+        composer.compactBeforeSendTokens = tokens
+        composer.keepFullHistory = draftKey.map(fullHistoryThreadKeys.contains) ?? false
+        // Not due yet: one wakeup at the moment it is.
+        let due = tokens == nil && !dismissed
+            ? ComposerCompaction.offerStart(driver: provider?.driver, usedTokens: contextWindow?.used, updatedAt: contextWindow?.updatedAt).flatMap { $0 > now ? $0 : nil }
+            : nil
+        if resumeOfferWork?.due != due {
+            resumeOfferWork?.work.cancel()
+            resumeOfferWork = nil
+            if let due {
+                let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.resumeOfferWork = nil; self?.refresh() } }
+                resumeOfferWork = (due, work)
+                DispatchQueue.main.asyncAfter(wallDeadline: .now() + due.timeIntervalSince(now) + 1, execute: work)
+            }
+        }
+    }
+
+    /// `shouldReserveContextWindowMeter` (ChatComposer.tsx:2385-2392): the meter's slot stays while a started
+    /// thread's detail loads.
+    fileprivate func updateMeterSlot() {
+        let meter = composer.contextWindowMeter
+        let thread = shellThread
+        let loading = openThreadId.map { syncStatus.key == $0.rawValue && syncStatus.value == .loading } ?? false
+        let reserved = ComposerCompaction.reservesMeter(
+            meterEnabled: ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled"), detailLoading: loading,
+            threadStarted: thread?.latestRunId != nil || thread?.latestUserMessageAt != nil,
+            providerReportsContextWindow: menuProvider.map { $0.reportsContextWindow == true })
+        guard reserved != meter.reserved else { return }
+        meter.reserved = reserved
+        composer.needsLayout = true
     }
 }

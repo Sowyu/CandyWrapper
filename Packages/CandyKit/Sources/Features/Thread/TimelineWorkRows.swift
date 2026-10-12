@@ -682,10 +682,12 @@ final class WorkLiveRowView: WorkRowBase {
 
 /// `thinking`: "Thinking" with the brain icon and the shine, while the run has no visible activity.
 final class ThinkingRowView: WorkRowBase {
+    private var blank = false
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         onClick = { [weak self] in
-            guard let self, case .thinking(let groupId?, _)? = self.item?.row.kind else { return }
+            guard let self, case .thinking(let groupId?, _, _)? = self.item?.row.kind else { return }
             self.context.model?.toggleGroup(groupId)
         }
     }
@@ -693,7 +695,10 @@ final class ThinkingRowView: WorkRowBase {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         let l = line(0)
-        l.configure(icon: .brain, text: "Thinking", style: .tool, time: nil, expanded: false, active: true, now: context.now())
+        // While a `/compact` waits for its row, the slot stays at its height with nothing in it (:3793-3795).
+        if case .thinking(_, _, let compacting) = item.row.kind { blank = compacting } else { blank = false }
+        l.isHidden = blank
+        l.configure(icon: .brain, text: "Thinking", style: .tool, time: nil, expanded: false, active: !blank, now: context.now())
         l.label.style = .focus // `LiveActivityRow ... shimmer` (MessagesTimeline.tsx:3796)
         l.expandable = false
     }
@@ -702,21 +707,36 @@ final class ThinkingRowView: WorkRowBase {
 
     override func layout() {
         super.layout()
-        line(0).frame = NSRect(x: 2, y: 2, width: bounds.width - 4, height: 24)
+        // `line(0)` shows the line it hands out, so the blank state goes back on after.
+        let l = line(0)
+        l.frame = NSRect(x: 2, y: 2, width: bounds.width - 4, height: 24)
+        l.isHidden = blank
     }
 }
 
 /// `WorkingTimelineRow` (:3705-3743): "Working for 4s" over a hairline. The seconds tick on the
-/// shared `LabelClock`, only while the row is on screen in a visible window.
+/// shared `LabelClock`, only while the row is on screen in a visible window. While a `/compact`
+/// waits for its compaction row it reads "Compacting…" after the minimize icon, with the shimmer
+/// (`CompactingLabel`, :3782-3789), and nothing ticks.
 final class WorkingRowView: TimelineRowView {
     private let label = LabelView("", font: TL.tabular(14), color: TL.c(\.mutedForeground))
+    private let compactingIcon = IconView(name: .minimize2, size: 12, strokeColor: TL.c(\.mutedForeground))
+    private let compactingLabel = ShineLabelView()
     private let rule = FillView()
     private var startMs: Int64?
+    private var compacting = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.lineHeight = TL.relaxed
         addSubview(label)
+        compactingLabel.base.font = TL.tabular(14)
+        compactingLabel.base.lineHeight = TL.relaxed
+        compactingLabel.base.color = TL.c(\.mutedForeground)
+        compactingLabel.style = .focus
+        compactingLabel.text = "Compacting…"
+        addSubview(compactingIcon)
+        addSubview(compactingLabel)
         rule.fill = TL.c(\.border, 0.6)
         addSubview(rule)
     }
@@ -724,11 +744,18 @@ final class WorkingRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         startMs = item.row.createdAt?.epochMs
+        if case .working(let c) = item.row.kind { compacting = c } else { compacting = false }
+        label.isHidden = compacting
+        compactingIcon.isHidden = !compacting
+        compactingLabel.isHidden = !compacting
+        compactingLabel.shining = compacting
+        needsLayout = true
         tick()
     }
 
     /// `formatWorkingTimer` (:3477-3490). The text shows whole seconds, so it changes once a second.
     private func tick() {
+        if compacting { LabelClock.shared.cancel(self); return }
         guard let startMs else { label.text = "Working..."; LabelClock.shared.cancel(self); return }
         let elapsedMs = max(0, Int64(context.now().timeIntervalSince1970 * 1000) - startMs)
         let seconds = elapsedMs / 1000
@@ -744,6 +771,11 @@ final class WorkingRowView: TimelineRowView {
     override func layout() {
         super.layout()
         label.frame = NSRect(x: 4, y: 4 + (24 - TL.relaxed) / 2, width: bounds.width - 8, height: TL.relaxed)
+        if compacting {
+            // `inline-flex items-center gap-1.5`: the 12pt icon centered on the line, then the text.
+            compactingIcon.frame = NSRect(x: 4, y: 10, width: 12, height: 12)
+            compactingLabel.frame = NSRect(x: 4 + 12 + 6, y: label.frame.minY, width: ceil(compactingLabel.textWidth), height: TL.relaxed)
+        }
         rule.frame = NSRect(x: 0, y: 36, width: bounds.width, height: 1)
     }
 }

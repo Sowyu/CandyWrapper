@@ -24,8 +24,9 @@ public final class PopoverView: DSView, PopupContent {
     public var onKey: (@MainActor (PopupKey) -> Bool)?
     public func popupHandleKey(_ key: PopupKey) -> Bool { onKey?(key) ?? false }
 
-    /// `beforeLine` false is `before:hidden` (the model picker, Select popups).
-    public init(content: NSView, padding: Padding = .default, width: Width = .auto, beforeLine: Bool = true) {
+    /// `beforeLine` false is `before:hidden` (the model picker, Select popups). `tooltipStyle` is
+    /// `PopoverPopup tooltipStyle` (popover.tsx:89-90): `rounded-md` and `shadow-md/5` in place of the deep shadow.
+    public init(content: NSView, padding: Padding = .default, width: Width = .auto, beforeLine: Bool = true, tooltipStyle: Bool = false) {
         self.content = content
         self.padding = padding
         self.width = width
@@ -35,10 +36,13 @@ public final class PopoverView: DSView, PopupContent {
         layer?.addSublayer(dropShadow)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
-        let look = PopupSurface.glass.split(radius: 10, beforeLine: beforeLine)
+        let radius: CGFloat = tooltipStyle ? 8 : 10
+        let look = PopupSurface.glass.split(radius: radius, beforeLine: beforeLine)
         decoration.boxStyle = look.box
-        dropShadow.radius = 10
-        dropShadow.shadows = look.shadows
+        dropShadow.radius = radius
+        dropShadow.shadows = tooltipStyle
+            ? [BoxShadow(y: 4, blur: 6, spread: -1, color: Themed.black(0.05)), BoxShadow(y: 2, blur: 4, spread: -2, color: Themed.black(0.05))]
+            : look.shadows
         addSubview(content)
     }
 
