@@ -1,6 +1,6 @@
 # Nightly catch-up
 
-A scheduled T3 task runs this every Monday and Thursday at 03:00, Mac time, and any agent can run it by hand. The goal is that CandyWrapper matches the newest T3 Code Nightly, still works with the Nightly before it, and got no worse.
+A scheduled T3 task runs this early on Monday and Thursday mornings in Melbourne, while the user sleeps, and any agent can run it by hand. The scheduler only knows the Mac's clock, which is on Paris time, so the task is set to 17:00 on Sundays and Wednesdays. That's 2am in Melbourne now, 3am from late October to late March and 1am from April to early October. The goal is that CandyWrapper matches the newest T3 Code Nightly, still works with the Nightly before it, and got no worse.
 
 Nobody watches the scheduled run, so don't wait for answers. Put questions for the user under "Waiting on the user" in `PROGRESS.md` and carry on with whatever doesn't depend on them. Never publish a release.
 
