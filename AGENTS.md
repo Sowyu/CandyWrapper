@@ -9,7 +9,7 @@ The user runs it every day and notices small details: hover and click feedback, 
 1. Read `PROGRESS.md` for the state, the open tasks and what waits on the user.
 2. Find your area in the code map below and read only the docs it names.
 3. Before you change behavior that T3 defines, read T3's source for it and cite file:line in your commit or notes.
-4. Finish one task at a time. Commit it, push it and tick it off in `PROGRESS.md` before you start the next, so a new chat can pick up where you stopped.
+4. Finish one task at a time. When you start one, add "(taken YYYY-MM-DD)" to it in `PROGRESS.md` and push that, so other agents pick a different task. Commit it, push it and tick it off before you start the next, so a new chat can pick up where you stopped.
 
 ## Commands
 
@@ -139,6 +139,7 @@ Git and secrets:
 - `docs/spec.md` is the user's original brief, for scope and targets.
 - `docs/parity-checklist.md` lists every T3 feature and its state here.
 - `docs/decisions.md` records what the user decided and why.
+- `docs/nightly-catch-up.md` is the procedure the scheduled Nightly catch-up runs.
 - `docs/gotchas.md` lists traps earlier agents hit in AppKit, memory, performance, the Keychain and notifications.
 - `docs/benchmarks.md` and `docs/perf/` hold measurements.
 - `docs/research/` holds raw notes with file:line citations into T3. Prefer `docs/protocol.md` where they disagree, and check the source.
