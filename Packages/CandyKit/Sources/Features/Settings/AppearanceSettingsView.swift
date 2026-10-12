@@ -227,9 +227,14 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let r = sliderRow("panel-animations", "Set how fast panels open and close.", key: "panelAnimationDurationMs", range: 0...400, step: 25,
                           reset: "panel animations", unit: "ms", outputWidth: 64)
         (r.control as? SettingsSliderControl)?.slider.setAccessibilityLabel("Panel animation duration")
-        let preview = SettingsPanelAnimationPreview(frame: .zero)
-        preview.frame.size = NSSize(width: 112, height: 40)
-        if let slider = r.control { r.control = SettingsControlGroup([preview, slider], gap: 16) }
+        // `grid-cols-[7rem_13rem] gap-4` (SettingsPanels.tsx:1466): the preview, then the output and slider.
+        let preview = SettingsPanelAnimationPreview(frame: NSRect(x: 0, y: 0, width: 112, height: 40))
+        if let slider = r.control {
+            // Detach the slider first: the row's `control` setter removes the old control from its superview,
+            // which would take the slider back out of the group (the empty row the user saw).
+            r.control = nil
+            r.control = SettingsControlGroup([preview, slider], gap: 16)
+        }
         return section("motion", "Motion", [r])
     }
 

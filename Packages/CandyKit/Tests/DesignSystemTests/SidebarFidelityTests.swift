@@ -236,6 +236,34 @@ struct SidebarBehaviourTests {
         #expect(layout.collapsedTrigger.isHidden)
     }
 
+    /// With panel animations on, every toggle lands at once in the model and the panels slide there;
+    /// rapid toggles neither queue nor leave a stale end hiding the collapsed trigger.
+    @Test func animatedTogglesRetarget() {
+        let previous = SettingsPanelMotion.durationMs
+        defer { SettingsPanelMotion.durationMs = previous }
+        SettingsPanelMotion.durationMs = 200
+        let layout = SidebarLayoutView(defaults: defaults(), viewport: 1100)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780), styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView = layout
+        layout.layoutSubtreeIfNeeded()
+        for _ in 0..<3 { layout.toggle() }
+        #expect(!layout.isOpen)
+        // Mid close slide the container keeps its frame (so AppKit still draws it) and its layer moves away.
+        #expect(layout.sidebar.frame.minX == 0 && layout.main.frame.minX == 0)
+        #expect(!layout.collapsedTrigger.isHidden && layout.rail.isHidden)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            #expect(layout.sidebar.layer?.animation(forKey: "sidebar-slide") != nil)
+            #expect(layout.main.layer?.animation(forKey: "sidebar-slide") != nil)
+        }
+        // Off again: the next toggle is instant and drops the slide.
+        SettingsPanelMotion.durationMs = 0
+        layout.toggle()
+        layout.layoutSubtreeIfNeeded()
+        #expect(layout.isOpen && layout.sidebar.frame.minX == 0 && layout.main.frame.minX == 256)
+        #expect(layout.collapsedTrigger.isHidden)
+        #expect(layout.sidebar.layer?.animation(forKey: "sidebar-slide") == nil)
+    }
+
     /// `COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS`: a header under the window controls starts its content at 130.
     @Test func headersClearTheWindowControls() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780), styleMask: [.titled], backing: .buffered, defer: true)
