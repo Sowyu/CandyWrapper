@@ -386,6 +386,47 @@ What is left and why. The 2% target holds for T3's real cut (1.74 to 1.96%), not
 - Growing the document in steps was not done: the scroll that follows the end would still move every row each update, and that scroll invalidates the same visible rects and tracking areas as the resize.
 - Decoding the text twice costs 0.5 ms per update in all, off the main thread; not worth a change to the wire path.
 
+## Redraws on scroll and resize (2026-10-12, task redraw)
+
+Mechanism, from the disassembly of AppKit on macOS 27. `NSViewHierarchyInvalidateVisibleRect` walks into every subtree whose views remembered a visible rect (the `_hasCachedVisibleRect` and `_descendantHasCachedVisibleRect` bits) and calls `-[CALayer(NSViewVisibleRect) NS_viewVisibleRectDidChange]` on each one. That method checks only whether the layer's contents are AppKit's (`NSViewBackingLayerContents`), and if they are it calls `setNeedsDisplayInRect:`. It does not compare the old rect with the new one and does not check whether the view is hidden. A view remembers its visible rect whenever `-[NSView visibleRect]` runs, and AppKit calls that while it draws the view. Each scroll step, document resize and window resize starts the walk.
+
+What it costs, counted with dtrace on Release builds (`/tmp/cw-redraw/*.sh`, not kept). Thread "Seeded 2000 messages" with 30 heavy runs, through the streamcpu2 replay proxy:
+
+| Event | Visible-rect calls | Layer invalidations | Layer displays | `draw(_:)` calls |
+|---|---|---|---|---|
+| 31 streamed updates (`stream 2.5 20`) | 916 | 360 | 465 | 31 MarkdownView, 1 label, 1 minimap |
+| 30 wheel scrolls of 40 px | 766 | 142 | 176 | 16 MarkdownView, 2 labels |
+| 40 window resize steps of 5 pt | 21,400 | 10,693 | 11,280 | about 17 each for minimap, sidebar brand and project monogram |
+
+The streamcpu2 notes said every visible label redraws on each update. That is not what happens. The invalidated layers get displayed, but AppKit calls `draw(_:)` only where something new became visible, so a clipped label mostly costs a display with no draw, about 6 µs each. Unclipped drawn views are the exception. Their visible rect reaches to the nearest clipping ancestor, so the 40x344 minimap gets an 844x780 dirty rect, and they redraw in full whenever that ancestor's area changes. A window resize is the worst case, at about 280 layer displays per step. An lldb sample by delegate class found 183 of 217 were `LabelView`, and 118 of those were hidden. Big markdown views redraw only the newly exposed strip; a test app scrolling 10 pt per step drew 21 pt strips.
+
+Fix. `DSView.drawsWholeBounds` (true for truncating `LabelView`) answers `visibleRect` with `bounds` whenever the view is in a window. It never calls AppKit's version, so AppKit never remembers a rect for these views and never invalidates them. A label that is partly scrolled out draws its whole box, which the layer clip shows exactly as before. A hidden label draws too. A first version answered `.zero` for hidden labels, and on screen the composer's "Full access" and "Stash 1" and the header's "/" came up blank: they were displayed while hidden, and with no remembered rect nothing displayed them again when they showed. The offscreen tests don't reproduce that, so check it in the real window. The fidelity suite's output images are byte-identical with and without the change.
+
+After, same rig, Release builds, three rounds each (before and after counts as above):
+
+| Event | Layer displays before | Layer displays after |
+|---|---|---|
+| 31 streamed updates | 420 to 465 | 132 to 147 |
+| 40 window resize steps | 10,400 to 11,280 | 2,200 to 2,240 |
+| 30 wheel scrolls | 172 to 178 | 67 to 69 |
+| `--perf-scroll` on "Numbers 1 to 1000" (perf workload) | 1,686 to 1,687 | 979 |
+
+App CPU did not move beyond the noise of this shared screen. Streams at T3's cut measured 1.47 and 1.60% before, and 0.59 and 1.87% after. Resize and `--perf-scroll` CPU overlapped as well: 0.35 to 0.37 s before and 0.37 to 0.40 s after for the scroll. A layer display that doesn't draw costs about 6 µs, so 10 fewer per update is 0.06 ms. The gain is fewer layer commits and wakeups during a window resize, not a CPU number this rig can see. Idle footprint was unchanged at 47 to 49 MB.
+
+`VisibleRectRedrawTests` scrolls an offscreen window. It fails without the change, because the clipped and hidden labels get marked for display, and it checks that an unclipped label still does. In the test app, 100 labels over 600 scroll steps gave these results:
+- Unclipped labels made 10,000 label draws.
+- Clipped labels made 66 draws but still had 4,040 invalidations and 4,240 displays.
+- Answering `visibleRect` gave 0 draws, 40 invalidations and 240 displays, and process CPU fell from 479 to 355 ms and from 935 to 488 ms in two rounds.
+
+Not changed:
+- `TextBlockView`, `MarkdownView` and the minimap stay as they are because they don't clip, have subviews outside their bounds, or are taller than the screen, so AppKit has to keep drawing only their visible part.
+- Drawing into our own `layer.contents` also stops the invalidation, since the contents are no longer AppKit's. It costs a bitmap per label and its font smoothing would need the fidelity tests re-pinned, so I didn't use it.
+- `preparedContentRect` doesn't affect any of this.
+
+Hidden views in layout walks. The window has 908 views, 608 of them hidden: the details card 81, terminal drawer 28, context strip 28, stash menu 25, error banner 22, question panel 20, parked rows 33, and smaller groups. `_findAnySubviewNeedingAutoLayoutEngine` walks all of them, but only on layout passes after a subview was added. That was 13 walks in 31 streamed updates, and Time Profiler put the walk at 3 ms in 15 s of streaming (about 0.1 ms a walk, under 0.02% of a core at T3's rate). Hidden labels now also drop out of the visible-rect displays, which was most of what they cost. Making the other surfaces lazy needs their state moved off the views first. The details card alone has 44 call sites pushing version control, lineage, scripts and pull request state into it. That refactor is worth about 2 to 4 MB of idle footprint at 5 to 8 KB a view, so I left it as a follow-up.
+
+Scroll on the big thread ("Numbers 1 to 1000", `--perf-scroll`, before the change) used 260 ms on the main thread over 280 steps. `MarkdownView.draw` took 42 ms, all of it newly exposed strips. `TimelineView.tile` took 49 ms, mostly reconfiguring recycled rows and rebuilding their `MarkdownLayout` (16 ms). Window layout took 19 ms. None of that is the visible-rect redraw. The layout rebuild on row reuse belongs to the timeline and markdown work.
+
 ## Baseline: median of the last three runs (2026-10-10)
 
 The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.

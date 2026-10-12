@@ -29,6 +29,21 @@ open class DSView: NSView {
     /// at its bottom; redrawing all of it per delta is what the spec forbids).
     open var redrawsOnResize: Bool { true }
 
+    /// True for small drawn views that clip to their box and always draw all of it. AppKit remembers
+    /// the visible rect it clipped a drawn view to, and whenever an ancestor's visible rect changes
+    /// (each scroll step, document resize and window resize) it displays every such layer again,
+    /// hidden ones included (`-[CALayer(NSViewVisibleRect) NS_viewVisibleRectDidChange]`, which
+    /// only checks that the contents are AppKit's): 280 layer displays per window resize step, 183
+    /// of them labels. These views answer `visibleRect` without asking AppKit, so it never
+    /// remembers one for them. A view that is partly scrolled out then draws its whole box, which
+    /// the layer's clip shows exactly as before. A hidden one draws too: nothing would mark it for
+    /// display when it shows (labels displayed while hidden came up blank).
+    open var drawsWholeBounds: Bool { false }
+
+    open override var visibleRect: NSRect {
+        drawsWholeBounds && window != nil ? bounds : super.visibleRect
+    }
+
     /// Subclasses that only set layer properties override `updateLayer` and keep this true.
     /// Subclasses that draw text or paths return false and override `draw(_:)`.
     open override var wantsUpdateLayer: Bool { true }
