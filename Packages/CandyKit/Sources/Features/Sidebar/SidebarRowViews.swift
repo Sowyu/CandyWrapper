@@ -379,6 +379,11 @@ class SidebarRowBase: ControlView {
         refresh()
     }
     func refresh() {}
+    // The row surface is a CGColor, so it re-resolves here; it kept the old appearance's fill before.
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refresh()
+    }
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
         refresh()

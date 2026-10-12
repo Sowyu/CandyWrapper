@@ -42,6 +42,9 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var contrast: Int
     public var glassOpacity: Int
     public var blueOrangeDiff = false
+    /// CandyWrapper's Glass theme on each side: stock colors over a frosted window (`WindowGlass`).
+    public var glassLight = false
+    public var glassDark = false
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -62,6 +65,10 @@ public enum ThemeRuntime {
     /// `--glass-opacity` as a fraction (0.4...1).
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
     public private(set) static var input = ThemeRuntimeInput()
+    /// Whether the Glass theme frosts the window in each appearance.
+    nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
+
+    public nonisolated static func isGlass(dark: Bool) -> Bool { dark ? glass.dark : glass.light }
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -71,7 +78,8 @@ public enum ThemeRuntime {
         let old = input
         input = next
         var changed = false
-        if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff {
+        if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
+            || next.glassLight != old.glassLight || next.glassDark != old.glassDark {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -80,6 +88,10 @@ public enum ThemeRuntime {
         }
         if next.glassOpacity != old.glassOpacity {
             glassOpacity = CGFloat(min(max(next.glassOpacity, 40), 100)) / 100
+            changed = true
+        }
+        if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
+            glass = (next.glassLight, next.glassDark)
             changed = true
         }
         guard changed else { return }
@@ -96,6 +108,12 @@ public enum ThemeRuntime {
         view.needsDisplay = true
         view.layer.map(redrawDecorations)
         for sub in view.subviews { refresh(sub) }
+    }
+
+    /// Redraws the box decorations in a view tree, for an appearance change AppKit doesn't pass on to them.
+    static func redrawDecorations(in view: NSView) {
+        view.layer.map(redrawDecorations)
+        for sub in view.subviews { redrawDecorations(in: sub) }
     }
 
     /// Box decorations keep their style when the colors behind it change, so they redraw here.
@@ -123,8 +141,14 @@ public enum ThemeRuntime {
                 }
             })
         }
-        return ThemePalettes(light: diff(light?.0 ?? Tokens.light, dark: false), dark: diff(dark?.0 ?? Tokens.dark, dark: true),
-                             sidebarLight: diff(light?.1 ?? Tokens.sidebarLight, dark: false), sidebarDark: diff(dark?.1 ?? Tokens.sidebarDark, dark: true))
+        func glass(_ palette: Palette, dark: Bool) -> Palette {
+            guard dark ? input.glassDark : input.glassLight else { return palette }
+            return WindowGlass.readableMuted(palette, dark: dark)
+        }
+        return ThemePalettes(light: glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false),
+                             dark: glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true),
+                             sidebarLight: glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false),
+                             sidebarDark: glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }

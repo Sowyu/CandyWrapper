@@ -28,6 +28,8 @@ public struct ThemeCardDefinition: Equatable, Sendable {
     public init(_ theme: ThemeDefinition) {
         id = theme.id
         label = theme.label
+        // Glass wears the stock colors, so its circles are the T3 Code card's.
+        if theme.isWindowGlass { previews = Self.standard.previews; return }
         previews = theme.modes.map { mode in
             let c = theme.colors(for: mode) ?? theme.colors
             return Preview(mode: mode, colors: c.filter { Self.previewRoles.contains($0.key) })

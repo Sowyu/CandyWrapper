@@ -48,13 +48,25 @@ public struct ThemeDefinition: Equatable, Sendable {
     public var singleAppearance: ThemeAppearance? { modes.count == 1 ? modes[0] : nil }
 
     public var isBuiltIn: Bool { Self.builtIns.contains { $0.id == id } }
+
+    /// CandyWrapper's own theme, not in T3: T3 Code's stock colors over a window the system frosts with a
+    /// behind-window blur (`WindowGlass`). Its id can't clash with a theme saved in T3, whose ids never
+    /// carry this prefix by convention, and the runtime paints it with the stock tokens, not these colors.
+    public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
+                                              colors: standardLightColors, variants: [.dark: standardDarkColors])
+
+    /// The theme picker's fixed cards: T3's built-ins, then Glass.
+    public static let pickerBuiltIns = builtIns + [glass]
+
+    public var isWindowGlass: Bool { id == Self.glass.id }
 }
 
 /// The theme library's rules and color math.
 public enum ThemePalette {
     public static let fileVersion = 1
     public static let reservedIds: Set<String> = ["system", "light", "dark", "t3-chat", "grove", "ocean", "ember", "iris",
-                                                  "t3-chat-dark", "t3-grove", "t3-ocean", "t3-ember", "t3-iris"]
+                                                  "t3-chat-dark", "t3-grove", "t3-ocean", "t3-ember", "t3-iris",
+                                                  "candywrapper-glass"]
     static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris"]
 
     /// `normalizeThemeId` (308-310).
