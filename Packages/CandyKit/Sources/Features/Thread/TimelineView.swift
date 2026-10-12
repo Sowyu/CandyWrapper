@@ -227,8 +227,14 @@ public final class TimelineView: DSView {
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasure(containing: "mermaid") } }
         }
         // An image decoded and takes its own size instead of the loading slot: the same for messages with images.
-        imageObserver = NotificationCenter.default.addObserver(forName: MarkdownImages.didMeasure, object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasure(containing: "![") } }
+        // A tool output image measures the open work row that shows it.
+        imageObserver = NotificationCenter.default.addObserver(forName: MarkdownImages.didMeasure, object: nil, queue: .main) { [weak self] note in
+            let key = note.userInfo?["key"] as? String ?? ""
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.remeasure { $0.row.message?.text.contains("![") == true || Self.showsImage($0, key: key) }
+                }
+            }
         }
     }
 
@@ -248,13 +254,27 @@ public final class TimelineView: DSView {
     }
 
     private func remeasure(containing marker: String) {
+        remeasure { $0.row.message?.text.contains(marker) == true }
+    }
+
+    /// An open work row whose entry shows the image: its tool output, or the file it viewed.
+    private static func showsImage(_ item: TimelineItem, key: String) -> Bool {
+        guard case .work(let entries, _, _) = item.row.kind else { return false }
+        return entries.contains { e in
+            guard item.ui.expandedEntries.contains(e.id) else { return false }
+            if key.hasPrefix("tool-output-image:") { return e.projectedItem.map { key.contains(":" + $0.sourceItemId.rawValue + ":") } == true }
+            return key.hasPrefix("media-file:") && WorkLog.viewedImagePath(e).map { key.hasSuffix($0) } == true
+        }
+    }
+
+    private func remeasure(where affected: (TimelineItem) -> Bool) {
         var changed = false
         for item in items {
-            guard let text = item.row.message?.text, text.contains(marker), measured.removeValue(forKey: item.id) != nil else { continue }
+            guard affected(item), measured.removeValue(forKey: item.id) != nil else { continue }
             changed = true
         }
         guard changed else { return }
-        for view in visible.values { if let item = view.item, item.row.message?.text.contains(marker) == true { view.configure(item); applyFindHighlight(view); view.needsLayout = true } }
+        for view in visible.values { if let item = view.item, affected(item) { view.configure(item); applyFindHighlight(view); view.needsLayout = true } }
         heights = items.map { height(of: $0) }
         relayout()
     }

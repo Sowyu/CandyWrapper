@@ -63,6 +63,9 @@ public enum MarkdownImages {
     /// A signed URL for a host file (`assets.createUrl`, resource `media-file` on the open thread) and the
     /// pixel size the server read from its header. Set by the app; nil without an open thread.
     public static var assetURL: ((_ path: String) async -> (url: URL, size: CGSize?)?)?
+    /// A signed URL and pixel size for any `assets.createUrl` resource on the open thread's environment
+    /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41). Set by the app.
+    public static var resourceURL: ((_ resource: JSONValue) async -> (url: URL, size: CGSize?)?)?
     /// Opens a workspace-relative file in the right panel's file viewer ("Open in file viewer").
     public static var openInFileViewer: ((_ relativePath: String) -> Void)?
 
@@ -84,9 +87,10 @@ public enum MarkdownImages {
 
     /// The image's box: its natural size scaled down to at most 30rem and the message's width, ratio kept.
     /// `border` is added around the picture inside those limits (the workspace frame).
-    static func displaySize(natural: CGSize, maxWidth: CGFloat, border: CGFloat) -> CGSize {
+    /// `maxHeight` is a caller's height cap (`maxHeightRem`, ChatMarkdown.tsx:1608-1617).
+    static func displaySize(natural: CGSize, maxWidth: CGFloat, border: CGFloat, maxHeight: CGFloat = MarkdownStyle.imageMaxWidth) -> CGSize {
         let boxWidth = min(maxWidth, MarkdownStyle.imageMaxWidth)
-        let scale = min(1, max(0, boxWidth - 2 * border) / natural.width, (MarkdownStyle.imageMaxWidth - 2 * border) / natural.height)
+        let scale = min(1, max(0, boxWidth - 2 * border) / natural.width, (maxHeight - 2 * border) / natural.height)
         return CGSize(width: natural.width * scale + 2 * border, height: natural.height * scale + 2 * border)
     }
 
@@ -114,8 +118,24 @@ public enum MarkdownImages {
         }
     }
 
+    /// Decodes an asset `resource` (a tool output image) for a pixel side, recording its size under `key`:
+    /// first the size the server read from the header, then the decoded one.
+    nonisolated static func assetLoader(key: String, resource: JSONValue) -> AsyncImageView.Loader {
+        { side in
+            guard let asset = await signedURL(resource: resource) else { return nil }
+            if let size = asset.size { await record(size, for: key) }
+            guard let decoded = await download(asset.url, side: side) else { return nil }
+            await record(decoded.natural, for: key)
+            return decoded.image
+        }
+    }
+
     static func signedURL(_ path: String) async -> (url: URL, size: CGSize?)? {
         await assetURL?(path)
+    }
+
+    public static func signedURL(resource: JSONValue) async -> (url: URL, size: CGSize?)? {
+        await resourceURL?(resource)
     }
 
     nonisolated static func download(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {

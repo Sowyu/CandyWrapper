@@ -106,6 +106,30 @@ struct ToolOutputFetchTests {
         #expect(blocks(.fetched(.output(nil))) == [command, "No output."])
         #expect(blocks(.fetched(.output("a\nb"))) == [command, "a\nb"])
         #expect(blocks(.fetched(.mismatch)) == [command])
+        // Images draw above the text, and an output of only images is not "No output." (V2ItemInspector.tsx:149-175).
+        let row = try #require(entry.projectedItem)
+        let images = WorkDetail.of(entry, label: "", workspaceRoot: nil, output: .fetched(.output("a", images: 2))).blocks.map(\.kind)
+        #expect(images == [.mono(.command), .image(.toolOutput(.init(threadId: row.sourceThreadId, itemId: row.sourceItemId, index: 0))),
+                           .image(.toolOutput(.init(threadId: row.sourceThreadId, itemId: row.sourceItemId, index: 1))), .mono(.output)])
+        #expect(blocks(.fetched(.output(nil, images: 1))) == [command, ""])
         #expect(WorkDetail.of(entry, label: "", workspaceRoot: nil, output: .loading).blocks.last?.kind == .mono(.note))
+    }
+
+    /// A read's viewed image sits first (`mt-1`), in a 16:9 slot at most 16rem tall until its size is known,
+    /// then in its own framed box (MessagesTimeline.tsx:5723-5734, ChatMarkdown.tsx:1391-1520).
+    @Test func aViewedImageTakesTheSlotThenItsOwnBox() {
+        let path = "/tmp/demo-repo/viewed-\(UUID().uuidString).png"
+        let e = WorkLogEntry(id: "r", createdAt: T3Timestamp("2026-10-12T00:00:00.000Z"), label: "Read", detail: path,
+                             tone: .tool, viewedImagePath: path, requestKind: "file-read", itemType: .dynamicTool)
+        let detail = WorkDetail.of(e, label: "Read", workspaceRoot: "/tmp/demo-repo")
+        #expect(detail.blocks.first?.kind == .image(.file(path, workspaceRoot: "/tmp/demo-repo")))
+        #expect(detail.blocks.first?.gap == 2)
+        let view = WorkDetailView()
+        view.detail = detail
+        let slot = view.height(forWidth: 600)
+        MarkdownImages.record(CGSize(width: 240, height: 160), for: "media-file:" + path)
+        // 480 x 256 (16:9 capped at 16rem), then 240 x 160 inside the 1px frame.
+        let settled = view.height(forWidth: 600)
+        #expect(abs(slot - settled - (256 - 162)) < 0.01, "slot \(slot), settled \(settled)")
     }
 }

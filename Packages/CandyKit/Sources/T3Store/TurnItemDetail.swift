@@ -30,8 +30,9 @@ public enum TurnItemDetail {
 
     /// What a fetch resolves to, ready to draw.
     public enum Fetched: Hashable, Sendable {
-        /// The fetched item's output text, nil when it has none ("No output.").
-        case output(String?)
+        /// The fetched item's output text, nil when it has none ("No output." unless it has images),
+        /// and how many images its output holds (`turnItemOutputImages`).
+        case output(String?, images: Int = 0)
         /// `item: null`: "Output is no longer available." (V2ItemInspector.tsx:131-132).
         case gone
         /// The fetched item has another type; T3 keeps the wire item and shows nothing more (:120).
@@ -48,7 +49,37 @@ public enum TurnItemDetail {
     public static func resolve(_ result: GetTurnItemResult, wireType: TurnItemType) -> Fetched {
         guard let item = result.item else { return .gone }
         guard item.type == wireType else { return .mismatch }
-        return .output(outputText(item).map(prefix))
+        return .output(outputText(item).map(prefix), images: outputImageCount(item))
+    }
+
+    /// `turnItemOutputImages` (itemDetail.ts:207-221): the images of a dynamic tool's output, which load
+    /// by index as `tool-output-image` assets.
+    public static func outputImageCount(_ item: TurnItem) -> Int {
+        guard item.type == .dynamicTool, !item.outputOmitted, let output = item.output else { return 0 }
+        return toolOutputImageCount(output)
+    }
+
+    /// `toolOutputImages` (packages/shared/src/toolOutput.ts:256-293): the readable images of a block, a
+    /// list of blocks or an MCP result's `content`, at most 8. The order is the asset index.
+    static func toolOutputImageCount(_ value: JSONValue) -> Int {
+        let blocks: [JSONValue] = value.arrayValue ?? value["content"]?.arrayValue ?? [value]
+        return min(8, blocks.filter { readableImageMimeType($0) != nil }.count)
+    }
+
+    /// `readToolOutputImage` (toolOutput.ts:236-247): an MCP `{data, mimeType}` or Anthropic
+    /// `{source: {type: "base64", media_type}}` image of a raster type a provider turn accepts
+    /// (`PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES`, contracts/src/chatAttachment.ts:18-23).
+    static func readableImageMimeType(_ block: JSONValue) -> String? {
+        guard case .object(let o) = block, o["type"]?.stringValue == "image" else { return nil }
+        let source: [String: JSONValue]?
+        switch o["source"] {
+        case .object(let s)?: source = s
+        default: source = nil
+        }
+        if let source, source["type"]?.stringValue != "base64" { return nil }
+        guard let mime = (source == nil ? o["mimeType"] : source?["media_type"])?.stringValue?.lowercased(),
+              ["image/gif", "image/jpeg", "image/png", "image/webp"].contains(mime) else { return nil }
+        return mime
     }
 
     static func prefix(_ text: String) -> String {
@@ -103,8 +134,8 @@ public enum TurnItemDetail {
         return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    /// `textFromBlocks` (itemDetail.ts:16-45). Images show as "[image]"; T3 loads them as assets.
-    // ponytail: no tool output images; add with the image work (tool-output-image assets)
+    /// `textFromBlocks` (itemDetail.ts:16-45). Readable images draw on their own as assets, so they leave
+    /// no text; the rest show as "[image]".
     static func textFromBlocks(_ value: JSONValue, depth: Int) -> String? {
         guard depth <= 4 else { return nil }
         switch value {
@@ -119,7 +150,7 @@ public enum TurnItemDetail {
         case .object(let o):
             let type = o["type"]?.stringValue
             if type == "text", let t = o["text"]?.stringValue { return t }
-            if type == "image" { return "[image]" }
+            if type == "image" { return readableImageMimeType(value) == nil ? "[image]" : "" }
             if type == "resource_link", let uri = o["uri"]?.stringValue { return uri }
             if type == "resource", case .object(let r)? = o["resource"] {
                 if let t = r["text"]?.stringValue { return t }
@@ -134,5 +165,29 @@ public enum TurnItemDetail {
             return nil
         default: return nil
         }
+    }
+}
+
+/// One image of a tool's output, addressed as T3's `tool-output-image` asset (contracts/src/assets.ts:44-50).
+/// The server reads the bytes from the stored item by index and signs a URL for them (AssetAccess.ts:710-728).
+public struct ToolOutputImage: Hashable, Sendable {
+    public var threadId: ThreadId
+    public var itemId: TurnItemId
+    public var index: Int
+    public init(threadId: ThreadId, itemId: TurnItemId, index: Int) {
+        self.threadId = threadId; self.itemId = itemId; self.index = index
+    }
+
+    /// The `assets.createUrl` resource.
+    public var resource: JSONValue {
+        .object(["_tag": .string("tool-output-image"), "threadId": .string(threadId.rawValue),
+                 "itemId": .string(itemId.rawValue), "index": .number(Double(index))])
+    }
+
+    /// The image's identity, for the size cache and the decoded image's key.
+    public var key: String { "tool-output-image:\(threadId.rawValue):\(itemId.rawValue):\(index)" }
+
+    public static func list(threadId: ThreadId, itemId: TurnItemId, count: Int) -> [ToolOutputImage] {
+        (0..<count).map { ToolOutputImage(threadId: threadId, itemId: itemId, index: $0) }
     }
 }

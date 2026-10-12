@@ -63,10 +63,23 @@ import Testing
         #expect(TurnItemDetail.resolve(mcp, wireType: .dynamicTool) == .output("one\ntwo"))
     }
 
+    /// itemDetail.ts:24-29, 207-221 and toolOutput.ts:236-293: readable images leave the text and load as assets.
+    @Test func outputImagesLoadAsAssets() {
+        let claude = turnItem(#"{"id":"i","type":"dynamic_tool","toolName":"Read","input":{},"output":[{"type":"image","source":{"type":"base64","media_type":"image/PNG"}},{"type":"text","text":"done"},{"type":"image","mimeType":"image/svg+xml"},{"type":"image","mimeType":"image/webp","data":"AA=="}]}"#)
+        #expect(TurnItemDetail.resolve(GetTurnItemResult(item: claude), wireType: .dynamicTool) == .output("done\n[image]", images: 2))
+        let only = turnItem(#"{"id":"i","type":"dynamic_tool","toolName":"t","input":{},"output":{"content":[{"type":"image","mimeType":"image/png"}]}}"#)
+        #expect(TurnItemDetail.resolve(GetTurnItemResult(item: only), wireType: .dynamicTool) == .output(nil, images: 1))
+        let url = turnItem(#"{"id":"i","type":"dynamic_tool","toolName":"t","input":{},"output":[{"type":"image","source":{"type":"url","url":"x"},"mimeType":"image/png"}]}"#)
+        #expect(TurnItemDetail.resolve(GetTurnItemResult(item: url), wireType: .dynamicTool) == .output("[image]", images: 0))
+        let image = ToolOutputImage(threadId: ThreadId("t"), itemId: TurnItemId("i"), index: 1)
+        #expect(image.resource == .object(["_tag": .string("tool-output-image"), "threadId": .string("t"), "itemId": .string("i"), "index": .number(1)]))
+        #expect(String(data: try! JSONEncoder().encode(image.resource["index"]), encoding: .utf8) == "1")
+    }
+
     @Test func longOutputKeepsOnlyWhatTheBoxCanShow() {
         let long = (1...20000).map(String.init).joined(separator: "\n") + "\n… output truncated for transport"
         let item = turnItem(#"{"id":"i","type":"command_execution","input":"seq 1 20000","output":\#(String(data: try! JSONEncoder().encode(long), encoding: .utf8)!)}"#)
-        guard case .output(let text?) = TurnItemDetail.resolve(GetTurnItemResult(item: item), wireType: .commandExecution) else {
+        guard case .output(let text?, _) = TurnItemDetail.resolve(GetTurnItemResult(item: item), wireType: .commandExecution) else {
             Issue.record("no output"); return
         }
         #expect(text.hasPrefix("1\n2\n3\n"))

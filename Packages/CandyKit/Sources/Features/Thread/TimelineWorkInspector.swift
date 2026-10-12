@@ -3,6 +3,44 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
+/// An image in an open work row, loaded through a signed asset URL on the open thread's environment.
+enum WorkImage: Hashable {
+    /// A tool's output image (`ToolOutput`, V2ItemInspector.tsx:149-158), alt "Tool output image".
+    case toolOutput(ToolOutputImage)
+    /// The host file a read viewed (`resolveViewedImageAsset`, presentation.ts:501-523), a `media-file`.
+    case file(String, workspaceRoot: String?)
+
+    /// The cache key: a file shares its measured size with Markdown images of the same path.
+    var key: String {
+        switch self {
+        case .toolOutput(let image): image.key
+        case .file(let path, _): MarkdownImageSource.workspaceFile(path).key
+        }
+    }
+
+    /// `media.name` is the file's basename (mediaSource.ts:68-88).
+    var alt: String {
+        switch self {
+        case .toolOutput: "Tool output image"
+        case .file(let path, _): (path as NSString).lastPathComponent
+        }
+    }
+
+    var reference: MediaReference? {
+        switch self {
+        case .toolOutput: nil
+        case .file(let path, let root): MediaReference.file(path, workspaceRoot: root)
+        }
+    }
+
+    var loader: AsyncImageView.Loader {
+        switch self {
+        case .toolOutput(let image): MarkdownImages.assetLoader(key: image.key, resource: image.resource)
+        case .file(let path, _): MarkdownImages.loader(.workspaceFile(path))
+        }
+    }
+}
+
 /// What an expanded entry shows: `V2ItemInspector` (V2ItemInspector.tsx:222-424) for projected items, the
 /// plain expanded body for the rest. Blocks stack top to bottom; `gap` is the space above each one
 /// (`space-y-2` between the inspector's parts, `space-y-1.5` inside a tool call, `space-y-1` in lists).
@@ -52,6 +90,8 @@ struct WorkDetail: Hashable {
         case preview
         /// A web result's title: `font-medium text-foreground`, a link with the external icon when the URL is safe.
         case link(String?)
+        /// An image in a `ChatMarkdownAssetImage` box at most 16rem tall.
+        case image(WorkImage)
     }
 
     struct Block: Hashable {
@@ -81,30 +121,50 @@ struct WorkDetail: Hashable {
     /// `checkpointStatus` reads `useV2ItemSupport`'s checkpoint for its id.
     static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState? = nil,
                    checkpointStatus: ((String) -> String?)? = nil) -> WorkDetail {
+        var d = body(e, label: label, workspaceRoot: workspaceRoot, output: output, checkpointStatus: checkpointStatus)
+        // The image a read viewed sits above the rest in `WorkLogDetails kind="media"` (`mt-1`, MessagesTimeline.tsx:5504-5520,
+        // :5723-5734); the panel below keeps its `mt-0.5`. The detail box starts 2pt below the line.
+        if let path = WorkLog.viewedImagePath(e), case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: workspaceRoot) {
+            if !d.blocks.isEmpty { d.blocks[0].gap = 2 }
+            d.blocks.insert(Block(text: "", kind: .image(.file(file, workspaceRoot: workspaceRoot)), gap: 2), at: 0)
+        }
+        return d
+    }
+
+    private static func body(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState?,
+                             checkpointStatus: ((String) -> String?)?) -> WorkDetail {
         if let read = WorkLog.readOutput(e, workspaceRoot: workspaceRoot), WorkLog.toolGroupAction(e) == .read {
             // A read expands to its plain text, then the output fetched for it (MessagesTimeline.tsx:5512-5517, :5764-5770).
             var d = WorkDetail()
             d.fetches = e.projectedItem.map { TurnItemDetail.needsFetch($0.item) } ?? false
             if !read.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { d.mono(read, .output) }
-            if d.fetches { d.addFetched(output) }
+            if d.fetches, let row = e.projectedItem { d.addFetched(output, row: row) }
             return d
         }
         if let item = e.projectedItem?.item ?? e.structuredPayload, e.projectedItem != nil {
-            return inspector(item, workspaceRoot: workspaceRoot, output: output, checkpointStatus: checkpointStatus)
+            return inspector(item, row: e.projectedItem, workspaceRoot: workspaceRoot, output: output, checkpointStatus: checkpointStatus)
         }
         return plain(e, label: label, workspaceRoot: workspaceRoot)
     }
 
-    /// `ToolOutput` (V2ItemInspector.tsx:149-175): the text, else loading, error or empty.
-    mutating func addFetched(_ output: ToolOutputState?) {
+    /// `ToolOutput` (V2ItemInspector.tsx:149-175): the images, then the text, else loading, error or empty.
+    /// The images are the fetched item's (`useFetchedTurnItem`, :103-137), which the row's source ids name.
+    mutating func addFetched(_ output: ToolOutputState?, row: ProjectedTurnItem) {
+        if case .fetched(.output(_, let count))? = output {
+            images(ToolOutputImage.list(threadId: row.sourceThreadId, itemId: row.sourceItemId, count: count))
+        }
         switch output {
         case .loading: mono("Loading output…", .note)
         case .failed(let message): mono("Couldn't load output: " + message, .error)
         case .fetched(.gone): mono("Couldn't load output: Output is no longer available.", .error)
-        case .fetched(.output(let text?)) where !text.isEmpty: mono(text, .output)
-        case .fetched(.output): mono("No output.", .note)
+        case .fetched(.output(let text?, _)) where !text.isEmpty: mono(text, .output)
+        case .fetched(.output(_, let count)): if count == 0 { mono("No output.", .note) }
         case .fetched(.mismatch), nil: break
         }
+    }
+
+    mutating func images(_ images: [ToolOutputImage]) {
+        for image in images { blocks.append(Block(text: "", kind: .image(.toolOutput(image)), gap: blocks.isEmpty ? 0 : 6)) }
     }
 
     /// `formatToolValue`: a string as is, else pretty JSON (`{}` and `[]` show nothing).
@@ -123,7 +183,8 @@ struct WorkDetail: Hashable {
         return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 
-    static func inspector(_ item: TurnItem, workspaceRoot: String?, output: ToolOutputState?, checkpointStatus: ((String) -> String?)?) -> WorkDetail {
+    static func inspector(_ item: TurnItem, row: ProjectedTurnItem? = nil, workspaceRoot: String?, output: ToolOutputState?,
+                          checkpointStatus: ((String) -> String?)?) -> WorkDetail {
         var d = WorkDetail()
         d.fetches = TurnItemDetail.needsFetch(item)
         func structured(_ text: String?) {
@@ -140,7 +201,12 @@ struct WorkDetail: Hashable {
             } else if let text = toolValue(args) {
                 d.mono(text, .json)
             }
-            if d.fetches { d.addFetched(output) } else if let text = toolValue(item.output), !text.isEmpty { d.mono(text, .output) }
+            if d.fetches, let row {
+                d.addFetched(output, row: row)
+            } else {
+                d.images(ToolOutputImage.list(threadId: item.threadId, itemId: item.id, count: TurnItemDetail.outputImageCount(item)))
+                if let text = toolValue(item.output), !text.isEmpty { d.mono(text, .output) }
+            }
             if let code = exitCode, code != 0 { d.mono("exit \(code)", .error) }
         }
         switch item.type {
@@ -262,8 +328,15 @@ final class WorkDetailView: DSView {
         var icon: CGRect?
         var height: CGFloat = 0
         var capped = false
+        /// A tool output image's box, and whether it holds the decoded image's own size.
+        var image: CGRect?
+        var settled = false
     }
-    private var cache: (width: CGFloat, laid: [Laid])?
+    /// `images` is what the image boxes were laid from: each one's measured size and whether it failed.
+    private var cache: (width: CGFloat, images: [String], laid: [Laid])?
+    /// Tool output images by key, while the view is shown. Hiding or closing the row releases them.
+    private var imageViews: [String: AsyncImageView] = [:]
+    private var imageTooltips: [String: TooltipController] = [:]
     private var blockScrollers: [Int: NSScrollView] = [:]
     private var buttons: [Int: ButtonView] = [:]
     private var icons: [Int: IconView] = [:]
@@ -330,7 +403,128 @@ final class WorkDetailView: DSView {
             var attributes: [NSAttributedString.Key: Any] = [.font: DSFont.ui(12, weight: .medium), .foregroundColor: TL.c(\.foreground)]
             if underline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
             return (NSAttributedString(string: block.text, attributes: attributes), captionLineHeight)
+        case .image:
+            return (NSAttributedString(), captionLineHeight)
         }
+    }
+
+    // MARK: Images
+
+    /// `maxHeightRem={16}`.
+    static let imageMaxHeight: CGFloat = 256
+
+    /// What the image boxes depend on besides the width.
+    private func imageSignature() -> [String] {
+        detail.blocks.compactMap { block in
+            guard case .image(let image) = block.kind else { return nil }
+            let size = MarkdownImages.sizes[image.key].map { "\($0.width)x\($0.height)" } ?? "?"
+            return size + (MarkdownImages.failed.contains(image.key) ? "!" : "")
+        }
+    }
+
+    /// `ChatMarkdownImage` (ChatMarkdown.tsx:1391-1520): a `bg-muted/60` 16:9 slot in the workspace frame until the
+    /// size is known, then the image's own box at most 30rem wide and 16rem tall. A failure keeps the slot.
+    private static func imageBox(_ image: WorkImage, width: CGFloat) -> (rect: CGRect, settled: Bool) {
+        if let natural = MarkdownImages.sizes[image.key], !MarkdownImages.failed.contains(image.key) {
+            let size = MarkdownImages.displaySize(natural: natural, maxWidth: width, border: 1, maxHeight: imageMaxHeight)
+            return (CGRect(origin: .zero, size: size), true)
+        }
+        let w = min(width, MarkdownStyle.imageMaxWidth)
+        return (CGRect(x: 0, y: 0, width: w, height: min(w * 9 / 16, imageMaxHeight)), false)
+    }
+
+    private func imageItem(_ image: WorkImage) -> ExpandedImagePreviewView.Item {
+        .init(key: image.key, name: image.alt, load: image.loader, reference: image.reference)
+    }
+
+    private func placeImages(_ laid: [Laid]) {
+        guard !isHiddenOrHasHiddenAncestor else { releaseImages(); return }
+        var y: CGFloat = 0, kept: Set<String> = []
+        for (block, l) in zip(detail.blocks, laid) {
+            y += block.gap
+            defer { y += l.height }
+            guard case .image(let image) = block.kind, let rect = l.image else { continue }
+            kept.insert(image.key)
+            let view = imageViews[image.key] ?? makeImageView(image)
+            imageViews[image.key] = view
+            view.frame = (l.settled ? rect.insetBy(dx: 1, dy: 1) : rect).offsetBy(dx: 0, dy: y)
+            view.layer?.cornerRadius = l.settled ? 9 : 10
+            // Decode for the largest box the image can take: 30rem wide or 16rem tall.
+            view.requestedSide = Int((max(min(bounds.width, MarkdownStyle.imageMaxWidth), Self.imageMaxHeight) * (window?.backingScaleFactor ?? 2)).rounded(.up))
+            let failed = MarkdownImages.failed.contains(image.key)
+            view.set(key: image.key, fallbackText: failed ? MarkdownImages.unavailableLabel(image.alt) : "", loader: image.loader)
+            view.setAccessibilityLabel("Preview " + image.alt)
+            imageTooltips[image.key]?.text = image.reference?.tooltip ?? ""
+        }
+        for (key, view) in imageViews where !kept.contains(key) {
+            view.removeFromSuperview(); imageViews[key] = nil; imageTooltips[key] = nil
+        }
+        window?.invalidateCursorRects(for: self)
+    }
+
+    private func makeImageView(_ image: WorkImage) -> AsyncImageView {
+        let view = AsyncImageView()
+        view.cover = false
+        // `text-xs text-muted-foreground`
+        view.fallback.color = Themed.color(\.mutedForeground)
+        view.fallback.font = DSFont.ui(12)
+        view.setAccessibilityRole(.button)
+        // The file's path in a code tooltip (MediaActions.tsx), as Markdown images do.
+        if image.reference != nil { imageTooltips[image.key] = TooltipController.attach(to: view, text: "", variant: .code) }
+        view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandImage(_:))))
+        view.onLoad = { [weak self, weak view] in
+            // A failed load keeps its slot and says so (ChatMarkdown.tsx:1497-1520).
+            guard let self, let view, let key = view.key, self.imageViews[key] === view else { return }
+            guard view.image == nil else { self.window?.invalidateCursorRects(for: self); return }
+            MarkdownImages.failed.insert(key)
+            self.cache = nil
+            self.needsLayout = true
+            self.needsDisplay = true
+        }
+        view.onContextMenu = { [weak self, weak view] event, source in
+            guard let self, let key = view?.key, let image = self.image(for: key) else { return }
+            let item = self.imageItem(image)
+            var openFile: (() -> Void)?
+            if case .file(_, let relative?)? = image.reference, let open = MarkdownImages.openInFileViewer { openFile = { open(relative) } }
+            MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: source, reference: image.reference, openFile: openFile)
+        }
+        addSubview(view)
+        return view
+    }
+
+    private func image(for key: String) -> WorkImage? {
+        for block in detail.blocks { if case .image(let image) = block.kind, image.key == key { return image } }
+        return nil
+    }
+
+    private func releaseImages() {
+        imageViews.values.forEach { $0.removeFromSuperview() }
+        imageViews = [:]
+        imageTooltips = [:]
+    }
+
+    /// The tool output is not in a Markdown gallery, so the preview holds this one image (markdownImageGallery.ts:11-50).
+    @objc private func expandImage(_ gesture: NSClickGestureRecognizer) {
+        guard let window, let view = gesture.view as? AsyncImageView, view.image != nil, let key = view.key, let image = image(for: key) else { return }
+        ExpandedImagePreviewView(items: [imageItem(image)], index: 0).present(in: window)
+    }
+
+    /// `cursor-zoom-in` on a loaded image.
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        var cursor = NSCursor.pointingHand
+        if #available(macOS 15, *) { cursor = .zoomIn }
+        for view in imageViews.values where view.image != nil { addCursorRect(view.frame, cursor: cursor) }
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        releaseImages()
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        needsLayout = true
     }
 
     /// `+n -n` in `text-xs`: success then destructive.
@@ -344,7 +538,8 @@ final class WorkDetailView: DSView {
     }
 
     private func laid(_ width: CGFloat) -> [Laid] {
-        if let cache, cache.width == width { return cache.laid }
+        let images = imageSignature()
+        if let cache, cache.width == width, cache.images == images { return cache.laid }
         var out: [Laid] = []
         for (i, block) in detail.blocks.enumerated() {
             var l = Laid()
@@ -358,6 +553,11 @@ final class WorkDetailView: DSView {
                 if l.capped { text = TextBlockLayout(string, width: width - ScrollAreaScroller.laneWidth, lineHeight: lineHeight) }
                 l.text = text
                 l.height = min(text.height, Self.maxBlock)
+            case .image(let image):
+                let box = Self.imageBox(image, width: width)
+                l.image = box.rect
+                l.settled = box.settled
+                l.height = box.rect.height
             case .link(let url):
                 let iconRoom: CGFloat = url == nil ? 0 : 16
                 let text = TextBlockLayout(string, width: max(1, width - iconRoom), lineHeight: lineHeight)
@@ -409,7 +609,9 @@ final class WorkDetailView: DSView {
             }
             out.append(l)
         }
-        cache = (width, out)
+        // An image measured or failed: its box moves even when the row keeps its height.
+        if let cache, cache.images != images { needsLayout = true; needsDisplay = true }
+        cache = (width, images, out)
         return out
     }
 
@@ -446,6 +648,7 @@ final class WorkDetailView: DSView {
             y += l.height
         }
         for (i, scroll) in blockScrollers where i >= laid.count { scroll.isHidden = true }
+        placeImages(laid)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -454,6 +657,19 @@ final class WorkDetailView: DSView {
         var y: CGFloat = 0
         for (block, l) in zip(detail.blocks, laid(bounds.width)) {
             y += block.gap
+            if let rect = l.image {
+                // The slot's `bg-muted/60` until the size is known, the `border-border/40` frame always.
+                let box = rect.offsetBy(dx: 0, dy: y)
+                if !l.settled {
+                    ctx.setFillColor(TL.c(\.muted, 0.6).cgColor)
+                    ctx.addPath(CGPath(roundedRect: box, cornerWidth: 10, cornerHeight: 10, transform: nil))
+                    ctx.fillPath()
+                }
+                ctx.setStrokeColor(TL.c(\.border, 0.4).cgColor)
+                ctx.setLineWidth(1)
+                ctx.addPath(CGPath(roundedRect: box.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 9.5, cornerHeight: 9.5, transform: nil))
+                ctx.strokePath()
+            }
             if !l.capped {
                 l.text?.draw(in: ctx, origin: CGPoint(x: l.textOrigin.x, y: y + l.textOrigin.y), width: bounds.width, alignment: .left)
                 l.counts?.draw(in: ctx, origin: CGPoint(x: l.countsOrigin.x, y: y + l.countsOrigin.y), width: bounds.width, alignment: .left)
