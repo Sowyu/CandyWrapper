@@ -100,7 +100,9 @@ public enum ProcessTools {
 }
 
 /// Watches a child we spawned and reaps it. Event driven (kqueue via a dispatch process
-/// source), so waiting costs nothing.
+/// source), so waiting costs nothing. An adopted server (one a previous app process started and
+/// handed over for an update) is launchd's child, not ours: its exit event is the exit, with
+/// status -1, and launchd reaps it.
 final class ChildExitWatcher: Sendable {
     let pid: pid_t
     private struct State {
@@ -117,6 +119,14 @@ final class ChildExitWatcher: Sendable {
         source.resume()
         // The child may have exited before the source was armed.
         reap()
+    }
+
+    init(adopting identity: ProcessIdentity) {
+        pid = identity.pid
+        source = DispatchSource.makeProcessSource(identifier: identity.pid, eventMask: .exit, queue: .global(qos: .utility))
+        source.setEventHandler { [weak self] in self?.finish(-1) }
+        source.resume()
+        if !identity.isAlive { finish(-1) }
     }
 
     deinit { source.cancel() }
@@ -150,12 +160,17 @@ final class ChildExitWatcher: Sendable {
     private func reap() {
         var raw: Int32 = 0
         guard waitpid(pid, &raw, WNOHANG) == pid else { return }
-        let exit = (raw & 0x7f) == 0 ? (raw >> 8) & 0xff : -(raw & 0x7f)
-        let waiters = state.withLock { s in
+        finish((raw & 0x7f) == 0 ? (raw >> 8) & 0xff : -(raw & 0x7f))
+    }
+
+    private func finish(_ exit: Int32) {
+        let waiters: [UUID: CheckedContinuation<Bool, Never>]? = state.withLock { s in
+            guard s.status == nil else { return nil }
             s.status = exit
             defer { s.waiters = [:] }
             return s.waiters
         }
+        guard let waiters else { return }
         source.cancel()
         for w in waiters.values { w.resume(returning: true) }
     }

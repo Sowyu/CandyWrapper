@@ -42,15 +42,18 @@ extension Duration {
 /// A server the lifecycle started and may stop.
 public protocol OwnedLocalServer: AnyObject, Sendable {
     func waitForExit() async
+    var hasExited: Bool { get }
 }
 
 extension LaunchedLocalServer: OwnedLocalServer {}
 
 /// Decides when the local server runs (product rules 1 to 6 in PROGRESS.md and the M3 brief):
 ///
-/// 1. Reuse a server already running for the home; never stop or reprioritize it.
+/// 1. Reuse a server already running for the home; never stop or reprioritize it. A server our
+///    previous process handed off for an update is adopted instead: it is ours again.
 /// 2. Otherwise start one on demand.
-/// 3. Stop ours on quit (ask first if a run or request is active) and after `idleTimeout` with
+/// 3. Stop ours on quit (ask first if a run or request is active), except a quit that installs an
+///    update, which hands it off (`handOff()`) so its runs go on; and after `idleTimeout` with
 ///    no visible or key window, no runs, no pending requests and no running terminals.
 /// 4. `ensureRunning()` restarts it when the user acts.
 /// 5. With remote access on, never idle-stop.
@@ -106,9 +109,13 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
         /// Nil means nobody else runs a server, so start ours. Throws when one exists but can't
         /// be used; starting ours then would mean two servers on one home.
         public var discover: @Sendable () async throws -> RunningLocalServer?
+        /// The server a previous app process handed off, now ours. Runs before `discover`.
+        public var adopt: @Sendable () async -> Owned?
         public var launch: @Sendable () async throws -> Owned
         public var stop: @Sendable (Owned) async -> Void
         public var setBackground: @Sendable (Owned, Bool) -> Void
+        /// Leaves the server running for the next launch to adopt.
+        public var handOff: @Sendable (Owned) -> Void
         public var scheduler: any LifecycleScheduler
         public var onPhase: @Sendable (Phase) -> Void
 
@@ -116,12 +123,16 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
                     launch: @escaping @Sendable () async throws -> Owned,
                     stop: @escaping @Sendable (Owned) async -> Void,
                     setBackground: @escaping @Sendable (Owned, Bool) -> Void,
+                    adopt: @escaping @Sendable () async -> Owned? = { nil },
+                    handOff: @escaping @Sendable (Owned) -> Void = { _ in },
                     scheduler: any LifecycleScheduler = DispatchLifecycleScheduler(),
                     onPhase: @escaping @Sendable (Phase) -> Void = { _ in }) {
             self.discover = discover
+            self.adopt = adopt
             self.launch = launch
             self.stop = stop
             self.setBackground = setBackground
+            self.handOff = handOff
             self.scheduler = scheduler
             self.onPhase = onPhase
         }
@@ -194,11 +205,27 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
         await stopOwned()
     }
 
+    /// App quit to install an update: leaves our server and its runs going and records the handoff
+    /// for the next launch, which adopts it. A reused server is simply left alone.
+    public func handOff() async {
+        // ponytail: a handed-off server runs until the next launch however long that takes (the user's
+        // ask); give it its own idle stop if people leave it running for days after an install on quit
+        cancelIdleTimer()
+        if let startTask { _ = try? await startTask.value }
+        // An idle stop already under way finishes: nothing was running.
+        if let stopTask { await stopTask.value; return }
+        if case .owned(let owned) = server, !owned.hasExited { deps.handOff(owned) }
+        server = nil
+        isBackground = nil
+        phase = .stopped
+    }
+
     // MARK: - Internals
 
     private func start() async throws -> Server {
         if let stopTask { await stopTask.value }
         phase = .starting
+        if let adopted = await deps.adopt() { return own(adopted) }
         let found: RunningLocalServer?
         do {
             found = try await deps.discover()
@@ -219,6 +246,10 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
             phase = .stopped
             throw error
         }
+        return own(owned)
+    }
+
+    private func own(_ owned: Owned) -> Server {
         server = .owned(owned)
         isBackground = nil
         phase = .running(owned: true)
@@ -319,6 +350,17 @@ extension ServerLifecycle where Owned == LaunchedLocalServer {
                 if let ownerRecord { try? FileManager.default.removeItem(at: ownerRecord) }
             },
             setBackground: { LocalServerLauncher.setBackground($1, server: $0) },
+            adopt: {
+                guard let ownerRecord,
+                      let server = await LocalServerLauncher.adopt(recordedAt: ownerRecord, home: home, identity: identity,
+                                                                   credentials: credentials, configuration: configuration)
+                else { return nil }
+                LocalServerLauncher.recordOwnership(of: server, at: ownerRecord)
+                return server
+            },
+            handOff: { server in
+                if let ownerRecord { LocalServerLauncher.recordOwnership(of: server, at: ownerRecord, handoff: true) }
+            },
             onPhase: onPhase),
             idleTimeout: idleTimeout, remoteAccess: remoteAccess)
     }

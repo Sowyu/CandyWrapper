@@ -22,10 +22,12 @@ final class ServerController {
     private var environmentId: String?
     /// The newest shell for `environmentId`, from the disk cache or the last session.
     private var latest: ShellSnapshot?
+    /// `latest` came from the live session, not the disk cache.
+    private var latestIsLive = false
     private var reported: LocalServerLifecycle.Activity?
     private var activityUpdate: Task<Void, Never>?
     private var connecting = false
-    /// Mirrors the lifecycle phase for the synchronous quit check.
+    /// Mirrors the lifecycle phase for the synchronous quit check: our own server is up.
     private var ownsServer = false
     private var pairingDeclined = false
     private var observers: [NSObjectProtocol] = []
@@ -34,8 +36,11 @@ final class ServerController {
         self.environments = environments
         self.window = window
         // Development: CANDY_T3_HOME points at a sandbox home instead of ~/.t3.
-        home = ProcessInfo.processInfo.environment["CANDY_T3_HOME"].map { URL(filePath: $0, directoryHint: .isDirectory) }
-            ?? LocalServerDiscovery.defaultHome
+        // A test build relaunched by its updater gets no environment; its own defaults can name the home
+        // (`defaults write <test bundle id> CandyT3Home <path>`), so it never falls back to ~/.t3.
+        let development = ProcessInfo.processInfo.environment["CANDY_T3_HOME"]
+            ?? (AppDelegate.isTestBuild ? UserDefaults.standard.string(forKey: "CandyT3Home") : nil)
+        home = development.map { URL(filePath: $0, directoryHint: .isDirectory) } ?? LocalServerDiscovery.defaultHome
         identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
     }
 
@@ -50,6 +55,7 @@ final class ServerController {
     private func showCached(_ id: String) {
         environmentId = id
         latest = cache.load(environmentId: id)?.snapshot
+        latestIsLive = false
         environments.showCachedPrimary(id, latest)
         if latest != nil { LaunchTiming.mark("cached sidebar") }
     }
@@ -134,6 +140,7 @@ final class ServerController {
 
     private func shellChanged(_ snapshot: ShellSnapshot) {
         latest = snapshot
+        latestIsLive = true
         LaunchTiming.mark("live sidebar")
         if let environmentId { Task { await cache.noteChanged(snapshot, environmentId: environmentId) } }
         reportActivity()
@@ -143,8 +150,9 @@ final class ServerController {
     /// server that isn't coming back. The sidebar keeps the last state until the next wake.
     private func phaseChanged() async {
         let phase = await lifecycle.phase
-        ownsServer = phase == .starting || phase == .running(owned: true) || phase == .stopping
+        ownsServer = phase == .running(owned: true)
         guard phase == .stopping || phase == .stopped, !connecting else { return }
+        latestIsLive = false
         session?.stop()
         session = nil
         sessionKey = nil
@@ -210,8 +218,13 @@ final class ServerController {
     /// AppKit may call this from inside a main-queue block (a Task, or `asyncAfter`), where
     /// main-actor work can't run until we return. So the decision is synchronous, the shutdown
     /// runs off the main actor, and the reply goes through the run loop.
-    func shouldTerminate() -> NSApplication.TerminateReply {
-        if ownsServer, let activity = reported, activity.activeRuns > 0 || activity.pendingRequests > 0 {
+    ///
+    /// A quit that installs an update (`installingUpdate`) hands our server off instead of stopping
+    /// it: its runs go on, and the next launch adopts it. A normal quit stops it, and asks first only
+    /// when that would stop something: our own server (not one we reused) with a run or a request
+    /// on this Mac's environment. Remote and T3 Connect environments never count.
+    func shouldTerminate(installingUpdate: Bool = false) -> NSApplication.TerminateReply {
+        if !installingUpdate, quitStopsLocalWork {
             let alert = NSAlert()
             alert.messageText = "Quit while an agent is working?"
             alert.informativeText = "Quitting stops T3 Code's server on this Mac, which interrupts the running work."
@@ -223,14 +236,19 @@ final class ServerController {
         let cache = self.cache, lifecycle = self.lifecycle
         Task.detached {
             await cache.flush()
-            // Stops our server; leaves a reused one alone.
-            await lifecycle.shutdown()
+            // Stops our server, or hands it off for an update; leaves a reused one alone.
+            if installingUpdate { await lifecycle.handOff() } else { await lifecycle.shutdown() }
             CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
                 MainActor.assumeIsolated { NSApp.reply(toApplicationShouldTerminate: true) }
             }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }
         return .terminateLater
+    }
+
+    private var quitStopsLocalWork: Bool {
+        guard ownsServer, latestIsLive, let threads = latest?.threads else { return false }
+        return threads.contains { $0.activeRunId != nil || $0.pendingRuntimeRequest != nil }
     }
 
     // MARK: Setup
@@ -250,7 +268,8 @@ final class ServerController {
     private func makeLifecycle() -> LocalServerLifecycle {
         let home = self.home, path = Self.userPath, notInstalled = Self.notInstalled
         let log = URL.libraryDirectory.appending(path: "Logs/CandyWrapper/t3-server.log")
-        let record = URL.applicationSupportDirectory.appending(path: "CandyWrapper/owned-server.json")
+        // One record per home, so test builds on other homes never adopt or stop each other's server.
+        let record = URL.applicationSupportDirectory.appending(path: "CandyWrapper/" + Self.ownerRecordName(home: home))
         // The server's environment is built from scratch; pass T3's telemetry switch through.
         let telemetry = ProcessInfo.processInfo.environment["T3CODE_TELEMETRY_ENABLED"]
         return .live(home: home, identity: identity, credentials: credentials, configuration: {
@@ -264,6 +283,13 @@ final class ServerController {
         }, remoteAccess: remoteAccess.isOn, ownerRecord: record, onPhase: { [weak self] _ in
             Task { @MainActor in await self?.phaseChanged() }
         })
+    }
+
+    static func ownerRecordName(home: URL) -> String {
+        guard home.standardizedFileURL.path != LocalServerDiscovery.defaultHome.standardizedFileURL.path else { return "owned-server.json" }
+        // FNV-1a of the path: stable across launches, unlike `hashValue`.
+        let hash = home.standardizedFileURL.path.utf8.reduce(UInt64(0xcbf29ce484222325)) { ($0 ^ UInt64($1)) &* 0x100000001b3 }
+        return "owned-server-\(String(hash, radix: 16)).json"
     }
 
     private func present(_ error: Error) {

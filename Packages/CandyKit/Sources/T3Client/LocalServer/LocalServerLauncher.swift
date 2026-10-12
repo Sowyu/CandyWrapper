@@ -150,26 +150,62 @@ public enum LocalServerLauncher {
     /// Which app process started which server. Written after a launch and deleted after a stop,
     /// so the next start can stop a server whose app crashed or was force-quit. Without it the
     /// orphan looks like someone else's server and gets reused forever, never idle-stopped.
+    /// `handoff` marks a server the app left running when it quit to install an update: the next
+    /// launch, of whichever version and from whichever path, adopts it instead of stopping it.
     public struct OwnerRecord: Codable, Sendable, Equatable {
         public var server: ProcessIdentity
         public var owner: ProcessIdentity
+        public var handoff: Bool?
     }
 
-    public static func recordOwnership(of server: LaunchedLocalServer, at url: URL) {
+    public static func recordOwnership(of server: LaunchedLocalServer, at url: URL, handoff: Bool = false) {
         guard let owner = ProcessIdentity.of(getpid()) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? JSONEncoder().encode(OwnerRecord(server: server.identity, owner: owner)).write(to: url, options: .atomic)
+        let record = OwnerRecord(server: server.identity, owner: owner, handoff: handoff ? true : nil)
+        try? JSONEncoder().encode(record).write(to: url, options: .atomic)
     }
 
-    /// Stops the recorded server if the app process that started it is gone. Signals only the
-    /// exact recorded process: a pid reused since then has a different start time.
+    /// Takes over the server a previous app process handed off for an update: finds it through the
+    /// home's runtime file (the exact recorded process, not a pid reused since), and authenticates
+    /// with the token saved in the Keychain at its launch. Without one it pairs, as this is our own
+    /// server. Nil when there's no handoff or the server is gone (the record goes too), or when it
+    /// can't be reached; the record then stays, and `stopOrphan` leaves it alone.
+    public static func adopt(recordedAt url: URL, home: URL, identity: ClientIdentity, credentials: CredentialStore?,
+                             configuration: () throws -> LocalServerConfiguration,
+                             wait: Duration = .seconds(20)) async -> LaunchedLocalServer? {
+        guard let data = try? Data(contentsOf: url),
+              let record = try? JSONDecoder().decode(OwnerRecord.self, from: data), record.handoff == true else { return nil }
+        guard record.server.isAlive else {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        // A server that is up but busy may answer late; discovery waits for it rather than give up.
+        guard let running = try? await LocalServerDiscovery.discover(home: home, wait: wait),
+              running.runtime.pid == record.server.pid else { return nil }
+        let environmentId = running.descriptor.environmentId
+        var token = try? credentials?.load(environmentId: environmentId)
+        if token == nil, let config = try? configuration(),
+           let code = try? await mintPairingCode(binary: config.binary, home: home, path: config.path),
+           let (_, result) = try? await EnvironmentHTTP(baseURL: running.origin).pair(code: code, identity: identity) {
+            token = result.accessToken
+            try? credentials?.save(token: result.accessToken, environmentId: environmentId)
+        }
+        guard let token, record.server.isAlive else { return nil }
+        return LaunchedLocalServer(pid: record.server.pid, identity: record.server, origin: running.origin, home: home,
+                                   descriptor: running.descriptor, accessToken: token,
+                                   watcher: ChildExitWatcher(adopting: record.server))
+    }
+
+    /// Stops the recorded server if the app process that started it is gone, unless it was handed
+    /// off for an update. Signals only the exact recorded process: a pid reused since then has a
+    /// different start time.
     public static func stopOrphan(recordedAt url: URL, timeout: Duration = .seconds(10)) async {
         guard let data = try? Data(contentsOf: url) else { return }
         guard let record = try? JSONDecoder().decode(OwnerRecord.self, from: data) else {
             try? FileManager.default.removeItem(at: url)
             return
         }
-        guard !record.owner.isAlive else { return }
+        guard !record.owner.isAlive, record.handoff != true else { return }
         try? FileManager.default.removeItem(at: url)
         guard record.server.signal(SIGTERM) else { return }
         let deadline = ContinuousClock.now + timeout
