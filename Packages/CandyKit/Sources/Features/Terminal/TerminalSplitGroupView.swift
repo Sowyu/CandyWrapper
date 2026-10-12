@@ -178,9 +178,7 @@ public final class TerminalListAsideView: DSView {
             addSubview(button)
         }
         scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.scrollerStyle = .overlay
+        scroll.useT3Scrollbars(.native) // `overflow-y-auto` (ThreadTerminalDrawer.tsx:1747)
         scroll.documentView = content
         addSubview(scroll)
         setAccessibilityRole(.group)
@@ -252,7 +250,10 @@ public final class TerminalListAsideView: DSView {
                 lastGroupEnd = true
             }
         }
-        content.frame = NSRect(x: 0, y: 0, width: scroll.frame.width, height: max(scroll.frame.height, y + 4))
+        // An overflowing list gives the scrollbar its 6px lane.
+        let lane: CGFloat = y + 4 > scroll.frame.height ? ScrollAreaScroller.laneWidth : 0
+        if lane > 0 { for view in content.subviews where view is GroupHeader || view is Row { view.frame.size.width -= lane } }
+        content.frame = NSRect(x: 0, y: 0, width: scroll.frame.width - lane, height: max(scroll.frame.height, y + 4))
     }
 
     public override func updateLayer() {

@@ -166,9 +166,7 @@ final class DelimitedTableView: NSView {
         truncated = parsed.truncated
         super.init(frame: .zero)
         scroll.documentView = document
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = true
-        scroll.autohidesScrollers = true
+        scroll.useT3Scrollbars(.native, vertical: true, horizontal: true) // `overflow-auto` (DelimitedTablePreview.tsx:25)
         scroll.drawsBackground = false
         addSubview(scroll)
         canvas.table = self
@@ -214,9 +212,19 @@ final class DelimitedTableView: NSView {
     override func layout() {
         super.layout()
         scroll.frame = bounds
-        canvas.frame = bounds
-        if laidOutWidth != bounds.width { measure(width: bounds.width) }
-        document.frame = NSRect(x: 0, y: 0, width: max(bounds.width, columnWidths.reduce(0, +)), height: rowHeights.reduce(0, +))
+        // Each overflowing axis gives its scrollbar a 6px lane, which can make the other axis overflow.
+        let lane = ScrollAreaScroller.laneWidth
+        var width = bounds.width
+        if laidOutWidth != width { measure(width: width) }
+        let wide = columnWidths.reduce(0, +) > width
+        if rowHeights.reduce(0, +) > bounds.height - (wide ? lane : 0) {
+            width -= lane
+            if laidOutWidth != width { measure(width: width) }
+        }
+        document.frame = NSRect(x: 0, y: 0, width: max(width, columnWidths.reduce(0, +)), height: rowHeights.reduce(0, +))
+        scroll.tile()
+        // The table draws over the scroll view, so it stops at the clip view and leaves the lanes to the scrollbars.
+        canvas.frame = scroll.contentView.frame
         canvas.needsDisplay = true
     }
 

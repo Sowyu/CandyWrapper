@@ -51,9 +51,8 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
         scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.scrollerStyle = .overlay
+        // `file-preview-virtualizer overflow-auto` (FilePreviewPanel.tsx:911, ReadOnlySourcePreview.tsx:28).
+        scrollView.useT3Scrollbars(.native, vertical: true, horizontal: true)
         scrollView.drawsBackground = false
         scrollView.verticalRulerView = gutter
         scrollView.hasVerticalRuler = true

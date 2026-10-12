@@ -79,7 +79,7 @@ public final class ToastView: DSView {
     private let chevron = IconView(name: .chevronDown, size: 14)
     private let chevronOpen = IconView(name: .chevronUp, size: 14)
     private let detailList = ToastDetailListView()
-    private lazy var detailScroll = ScrollAreaView(documentView: detailList)
+    private lazy var detailScroll = ScrollAreaView(documentView: detailList, scrollbars: .native) // toast.tsx:142
     /// The natural height changed (details opened or closed); the viewport lays the stack out again.
     var onHeightChange: (@MainActor () -> Void)?
 

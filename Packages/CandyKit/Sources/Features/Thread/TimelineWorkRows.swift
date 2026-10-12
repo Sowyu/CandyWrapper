@@ -551,7 +551,7 @@ final class ReasoningTraceView: DSView {
     static func width(in rowWidth: CGFloat) -> CGFloat { max(0, rowWidth - inset - 2) }
 
     private let document = DSView()
-    private lazy var scroll = ScrollAreaView(documentView: document)
+    private lazy var scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `max-h-96 overflow-auto` (WorkLog.tsx:130)
     private var views: [MarkdownView] = []
     private var count = 0
 

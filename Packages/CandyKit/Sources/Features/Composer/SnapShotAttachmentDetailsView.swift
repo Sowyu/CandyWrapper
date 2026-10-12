@@ -76,7 +76,9 @@ private final class SnapShotAccessibilityDetailsBody: DSView {
         view.textContainerInset = NSSize(width: 10, height: 10)
         view.isVerticallyResizable = true
         view.textContainer?.widthTracksTextView = true
-        scroll.documentView = view; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
+        view.autoresizingMask = [.width]
+        scroll.documentView = view; scroll.drawsBackground = false
+        scroll.useT3Scrollbars(.native) // `overflow-auto` (SnapShotAttachmentDetails.tsx:43)
         addSubview(title); addSubview(scroll)
     }
     override var intrinsicContentSize: NSSize { NSSize(width: 286, height: bodyHeight + 26) }

@@ -117,7 +117,7 @@ public final class PullRequestsPageView: DSView {
     public var contentInsetRight: CGFloat = 0 { didSet { needsLayout = true } }
 
     public override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: document)
+        scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `scrollbar-gutter-both overflow-y-auto` (_chat.pull-requests.tsx:2671)
         super.init(frame: frameRect)
         header.plainTitle = "Pull Requests"
         addSubview(scroll)

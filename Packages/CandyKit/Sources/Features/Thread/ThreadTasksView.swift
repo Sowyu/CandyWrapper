@@ -47,7 +47,7 @@ public final class ThreadTasksView: ComposerBannerView {
         super.init(variant: .neutral)
         addSubview(summary); addSubview(count); addSubview(scroller); addSubview(segments); addSubview(chevron)
         scroller.documentView = body; scroller.drawsBackground = false
-        scroller.hasVerticalScroller = true; scroller.autohidesScrollers = true
+        scroller.useT3Scrollbars(.overlay) // ComposerBanner.Scroll is a ScrollArea (ComposerTasksBadge.tsx:162)
         summary.action = { [weak self] in
             guard let self else { return }
             expanded.toggle(); chevron.icon = expanded ? .chevronUp : .chevronDown; rebuild(); needsLayout = true; onHeightChange?()

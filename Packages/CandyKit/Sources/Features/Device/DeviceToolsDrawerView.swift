@@ -9,7 +9,7 @@ public final class DeviceToolsDrawerView: DSView {
     private let title = LabelView("Tools", font: DSFont.ui(14, weight: .medium))
     private let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
     private let content = DSView()
-    private lazy var scroll = ScrollAreaView(documentView: content)
+    private lazy var scroll = ScrollAreaView(documentView: content, scrollbars: .native) // DeviceToolsPanel.tsx:116
     private var rows: [(NSView, NSView?, CGFloat)] = []
     private var controls: [ControlView] = []
     private var fields: [FieldView] = []

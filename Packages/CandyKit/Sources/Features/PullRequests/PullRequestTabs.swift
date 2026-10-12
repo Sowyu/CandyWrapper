@@ -74,7 +74,7 @@ final class StackScrollView: DSView {
     private let scroll: ScrollAreaView
     let watcher: PullRequestScrollWatcher
     override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: document)
+        scroll = ScrollAreaView(documentView: document, scrollbars: .native) // PullRequestTimelineTab.tsx:580, PullRequestSummaryTab.tsx:711
         watcher = PullRequestScrollWatcher(scroll)
         super.init(frame: frameRect)
         addSubview(scroll)

@@ -16,6 +16,10 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     public static let scrollbackRows = 10_000
 
     let terminal: InputTerminalView
+    /// The terminal's own scrollbar (surface.ts:694-700, :1835-1853): a 6px lane 1px from the right edge and 4px from
+    /// the top and bottom, drawn while there is scrollback. SwiftTerm's scroller stays hidden and reserves no columns,
+    /// like T3's grid, which only subtracts the padding (surface.ts:725).
+    private let scrollbar = ScrollAreaScroller(style: .terminal)
     /// Keys and pasted text, already encoded for the PTY.
     public var onInput: ((String) -> Void)?
     /// The grid changed (or `resendSize` asked again).
@@ -41,8 +45,30 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         terminal.optionAsMetaKey = false
         terminal.lineSpacing = Self.lineSpacing(for: terminal.font)
         terminal.installColors(Self.palette)
+        terminal.hidesScroller = true
+        terminal.onScrollerUpdate = { [weak self] in self?.syncScrollbar() }
         addSubview(terminal)
+        scrollbar.target = self
+        scrollbar.action = #selector(scrollbarMoved)
+        addSubview(scrollbar)
+        syncScrollbar()
         applyTheme()
+    }
+
+    private func syncScrollbar() {
+        scrollbar.isHidden = !terminal.canScroll
+        scrollbar.isEnabled = terminal.canScroll
+        scrollbar.knobProportion = terminal.scrollThumbsize
+        scrollbar.doubleValue = terminal.scrollPosition
+    }
+
+    @objc private func scrollbarMoved() {
+        switch scrollbar.hitPart {
+        case .knob, .knobSlot: terminal.scroll(toPosition: scrollbar.doubleValue)
+        case .decrementPage: terminal.pageUp()
+        case .incrementPage: terminal.pageDown()
+        default: break
+        }
     }
 
     /// ProviderAuthTerminal uses 13px in the default face (ProviderAuthTerminal.tsx:19-59); thread terminals follow the
@@ -141,6 +167,8 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
             frame.size.height = fit + 0.01
         }
         if terminal.frame != frame { terminal.frame = frame }
+        let lane = ScrollAreaScroller.laneWidth
+        scrollbar.frame = NSRect(x: bounds.maxX - 1 - lane, y: Self.padding, width: lane, height: max(0, bounds.height - 2 * Self.padding))
     }
 
     /// Output that creates or clears scrollback moves the grid between the edges.

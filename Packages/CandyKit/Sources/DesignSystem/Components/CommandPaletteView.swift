@@ -116,7 +116,8 @@ public final class CommandPaletteView: DSView {
     }
     private let backIcon = IconView(name: .arrowLeft)
     private let document = DSView()
-    private lazy var scroll = ScrollAreaView(documentView: document, scrollFade: true)
+    // A virtualized list, so a plain overflow scroller (CommandPaletteResults.tsx:147-152).
+    private lazy var scroll = ScrollAreaView(documentView: document, scrollFade: true, scrollbars: .native)
     private var panelViews: [NSView] = []
     private var rows: [CommandRowView] = []
     private var footerGroups: [NSView] = []
@@ -144,6 +145,7 @@ public final class CommandPaletteView: DSView {
         backIcon.alphaValue = 0.8 // the addon's `opacity-80`; the button's arrow takes the foreground color
         addSubview(backIcon)
         scroll.layer?.masksToBounds = true
+        (scroll.scrollView.verticalScroller as? ScrollAreaScroller)?.trackInset = 8 // `[&::-webkit-scrollbar-track]:my-2`
         addSubview(scroll)
         rebuild()
         rebuildFooter()

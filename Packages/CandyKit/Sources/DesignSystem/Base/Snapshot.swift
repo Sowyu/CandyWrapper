@@ -32,8 +32,17 @@ public enum Snapshot {
         // The context already maps points to pixels (rep.size); flip y so the top-left origin lands at the top.
         ctx.translateBy(x: 0, y: size.height)
         ctx.scaleBy(x: 1, y: -1)
+        // The references come from chrome-headless-shell with `--hide-scrollbars` (capture-reference.swift:39), so the
+        // always-drawn bars stay out of the picture. ScrollArea's bars rest hidden and the gallery shows them on purpose.
+        let bars = scrollbars(in: view).filter { $0.style != .overlay && !$0.isHidden }
+        bars.forEach { $0.isHidden = true }
         view.layer?.render(in: ctx)
+        bars.forEach { $0.isHidden = false }
         return rep
+    }
+
+    private static func scrollbars(in view: NSView) -> [ScrollAreaScroller] {
+        (view as? ScrollAreaScroller).map { [$0] } ?? view.subviews.flatMap(scrollbars)
     }
 
     /// Runs layout top-down; outside a window nothing else triggers it.
