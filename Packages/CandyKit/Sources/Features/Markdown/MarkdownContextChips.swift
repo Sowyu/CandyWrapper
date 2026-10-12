@@ -214,7 +214,7 @@ final class TerminalContextDetailsView: DSView {
 
     init(record: JSONValue) {
         text = PreformattedTextView(record["text"]?.stringValue ?? "")
-        scroll = ScrollAreaView(documentView: text)
+        scroll = ScrollAreaView(documentView: text, scrollbars: .native) // `max-h-80 overflow-auto` (TerminalContextInlineChip.tsx:38)
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 100))
         frameLayer.host = self
         layer?.addSublayer(frameLayer)

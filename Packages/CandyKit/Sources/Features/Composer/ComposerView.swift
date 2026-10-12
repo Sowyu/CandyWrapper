@@ -287,10 +287,10 @@ public final class ComposerView: DSView {
 
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.hasVerticalScroller = true
+        // No scrollbar at all, at the user's request: T3 would draw its thumb on `max-h-52 overflow-y-auto`
+        // (ComposerPromptEditorTiptap.tsx:999). The wheel and the caret still scroll the clip view.
+        scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = false
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
         scroll.contentView.drawsBackground = false
         scroll.documentView = editor
         addSubview(scroll)

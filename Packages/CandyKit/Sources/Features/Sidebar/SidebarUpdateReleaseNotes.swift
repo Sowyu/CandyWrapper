@@ -12,7 +12,7 @@ public final class SidebarUpdateReleaseNotesView: DSView, PopupContent {
 
     private let decoration = BoxDecorationLayer()
     private let body = DSView()
-    private lazy var scroll = ScrollAreaView(documentView: body)
+    private lazy var scroll = ScrollAreaView(documentView: body, scrollbars: .native) // SidebarUpdateReleaseNotes.tsx:77
     /// Wraps like T3's header `div`: a long status line ("Update 0.1.3 downloaded. Click to...") takes two lines.
     private let title = TextBlockView()
     private let version = LabelView("", font: DSFont.ui(12), color: Themed.color(\.contrastMutedForeground))

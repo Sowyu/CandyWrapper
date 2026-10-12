@@ -67,7 +67,7 @@ public final class TextareaView: FieldView {
         let content = NSRect(x: m.border + m.paddingX, y: m.border + m.paddingY,
                              width: max(0, bounds.width - 2 * m.border - 2 * m.paddingX),
                              height: max(0, bounds.height - 2 * m.border - 2 * m.paddingY))
-        placeEditor(in: content)
+        placeEditor(in: content, trailingPadding: m.paddingX)
     }
 
     override func restyle() {

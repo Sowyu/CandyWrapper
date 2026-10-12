@@ -9,7 +9,7 @@ final class ThemeEditorPanelView: DSView {
     private let decoration = BoxDecorationLayer()
     private let header = ThemeEditorHeaderView()
     let body = ThemeEditorBodyView()
-    private lazy var scroll = ScrollAreaView(documentView: body)
+    private lazy var scroll = ScrollAreaView(documentView: body, scrollbars: .native) // ThemeEditorPanel.tsx:1251
     private let footer = ThemeEditorFooterView()
     private let grip = ThemeEditorResizeGripView()
     private var lines: [CALayer] = [CALayer(), CALayer()]

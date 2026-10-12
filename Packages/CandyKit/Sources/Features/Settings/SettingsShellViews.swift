@@ -444,7 +444,7 @@ public final class SettingsPageView: DSView {
     }
 
     public override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: document)
+        scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `scrollbar-gutter-both overflow-y-auto` (settingsLayout.tsx:574)
         super.init(frame: frameRect)
         addSubview(scroll)
         addSubview(header)

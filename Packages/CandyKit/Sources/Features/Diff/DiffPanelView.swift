@@ -241,7 +241,7 @@ public final class DiffPanelView: DSView {
     private var hasDiff = false
 
     public override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: list)
+        scroll = ScrollAreaView(documentView: list, scrollbars: .native) // `overflow-auto` (DiffPanel.tsx:1178)
         treeScroll = ScrollAreaView(documentView: fileTree)
         super.init(frame: frameRect)
         scopeButton.trailingIcon = .chevronDown

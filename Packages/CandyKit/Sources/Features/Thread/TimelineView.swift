@@ -193,9 +193,9 @@ public final class TimelineView: DSView {
         super.init(frame: frameRect)
         scrollView.drawsBackground = false
         scrollView.contentView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay
-        scrollView.autohidesScrollers = true
+        // LegendList is a plain overflow scroller with `scrollbar-gutter-both` (MessagesTimeline.tsx:1620): the bar
+        // stays drawn while the thread overflows, in the right padding the rows already keep clear.
+        scrollView.useT3Scrollbars(.native, reservesLane: false)
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.verticalScrollElasticity = .allowed
         scrollView.documentView = document

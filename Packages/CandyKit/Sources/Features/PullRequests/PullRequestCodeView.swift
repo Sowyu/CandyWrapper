@@ -52,8 +52,9 @@ public final class PullRequestCodeView: DSView {
     private(set) lazy var scrollTarget = PullRequestScrollWatcher(scroll)
 
     public override init(frame frameRect: NSRect) {
-        scroll = ScrollAreaView(documentView: list)
-        orphanScroll = ScrollAreaView(documentView: orphanDocument)
+        // `overflow-auto [scrollbar-gutter:stable]` and `max-h-64 overflow-auto` (PullRequestCodeTab.tsx:1572, :1503).
+        scroll = ScrollAreaView(documentView: list, scrollbars: .native)
+        orphanScroll = ScrollAreaView(documentView: orphanDocument, scrollbars: .native)
         super.init(frame: frameRect)
         for l in [toolbarFill, rule, orphanRule] { l.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]; layer?.addSublayer(l) }
         scope.trailingIcon = .chevronDown

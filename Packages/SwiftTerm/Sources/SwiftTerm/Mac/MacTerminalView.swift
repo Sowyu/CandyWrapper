@@ -1009,7 +1009,17 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         scroller.isEnabled = canScroll
         scroller.doubleValue = scrollPosition
         scroller.knobProportion = scrollThumbsize
+        onScrollerUpdate?()
     }
+
+    /// CandyWrapper: hides the built-in scroller, which then reserves no width, for a host that draws its own.
+    public var hidesScroller: Bool {
+        get { scroller?.isHidden ?? false }
+        set { scroller?.isHidden = newValue }
+    }
+
+    /// CandyWrapper: called after the scroll position or the thumb size changes, for a host-drawn scroller.
+    public var onScrollerUpdate: (() -> Void)?
     
     var userScrolling = false
 

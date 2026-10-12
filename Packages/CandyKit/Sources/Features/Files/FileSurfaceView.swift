@@ -567,8 +567,7 @@ final class MarkdownFileView: NSView {
         markdown.setMarkdown(text)
         document.addSubview(markdown)
         scroll.documentView = document
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
+        scroll.useT3Scrollbars(.overlay) // a ScrollArea (FilePreviewPanel.tsx:989)
         scroll.drawsBackground = false
         addSubview(scroll)
     }

@@ -13,7 +13,8 @@ final class ComposerCodeLanguagePickerView: DSView, PickerPopupBody {
         super.init(frame: .zero)
         search.unstyled = true
         search.setAccessibilityLabel("Search languages")
-        scroll.drawsBackground = false; scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.useT3Scrollbars(.overlay) // ComboboxList is a ScrollArea (combobox.tsx:229)
         addSubview(search); addSubview(scroll)
         search.onChange = { [weak self] _ in self?.reload() }
         reload()

@@ -56,9 +56,7 @@ public final class QueuedRunsView: ComposerBannerView {
         addSubview(header)
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.hasVerticalScroller = true
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
+        scroll.useT3Scrollbars(.overlay) // ComposerBanner.Scroll is a ScrollArea (QueuedRunsControl.tsx:272)
         scroll.contentView.drawsBackground = false
         scroll.documentView = list
         addSubview(scroll)

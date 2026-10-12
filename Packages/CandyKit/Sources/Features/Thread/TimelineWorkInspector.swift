@@ -352,9 +352,11 @@ final class WorkDetailView: DSView {
             let buttonSize = buttons[i].map { CGSize(width: $0.intrinsicContentSize.width, height: 24) }
             switch block.kind {
             case .mono:
-                let text = TextBlockLayout(string, width: width, lineHeight: lineHeight)
-                l.text = text
+                var text = TextBlockLayout(string, width: width, lineHeight: lineHeight)
                 l.capped = text.height > Self.maxBlock
+                // The scrollbar takes its 6px lane from the text.
+                if l.capped { text = TextBlockLayout(string, width: width - ScrollAreaScroller.laneWidth, lineHeight: lineHeight) }
+                l.text = text
                 l.height = min(text.height, Self.maxBlock)
             case .link(let url):
                 let iconRoom: CGFloat = url == nil ? 0 : 16
@@ -426,8 +428,9 @@ final class WorkDetailView: DSView {
             if let rect = l.icon { icons[i]?.frame = rect.offsetBy(dx: 0, dy: y) }
             if l.capped, let text = l.text {
                 let scroll = blockScrollers[i] ?? {
-                    let s = NSScrollView(); s.drawsBackground = false; s.hasVerticalScroller = true
-                    s.autohidesScrollers = true; s.documentView = ThreadWorkDetailBlockView()
+                    let s = NSScrollView(); s.drawsBackground = false
+                    s.useT3Scrollbars(.native) // `max-h-80 overflow-auto` (V2ItemInspector.tsx:85, :161)
+                    s.documentView = ThreadWorkDetailBlockView()
                     addSubview(s); blockScrollers[i] = s
                     return s
                 }()
@@ -435,7 +438,7 @@ final class WorkDetailView: DSView {
                 scroll.frame = NSRect(x: 0, y: y, width: bounds.width, height: l.height)
                 if let body = scroll.documentView as? ThreadWorkDetailBlockView {
                     body.textLayout = text
-                    body.frame = NSRect(x: 0, y: 0, width: bounds.width, height: text.height)
+                    body.frame = NSRect(x: 0, y: 0, width: bounds.width - ScrollAreaScroller.laneWidth, height: text.height)
                 }
             } else {
                 blockScrollers[i]?.isHidden = true

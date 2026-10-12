@@ -73,10 +73,9 @@ public class FieldView: DSView {
 
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.hasVerticalScroller = multiline
+        // A textarea gets Chromium's styled scrollbar (index.css:1744-1760); an input never shows one.
+        if multiline { scroll.useT3Scrollbars(.native, reservesLane: false) } else { scroll.hasVerticalScroller = false }
         scroll.hasHorizontalScroller = false
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
         scroll.contentView.drawsBackground = false
         scroll.documentView = editor
         addSubview(scroll)
@@ -172,9 +171,11 @@ public class FieldView: DSView {
     public override func mouseEntered(with event: NSEvent) { state.hovered = true }
     public override func mouseExited(with event: NSEvent) { state.hovered = false }
 
-    /// Places the editor's line box at `rect` (CSS content box, top-left origin).
-    func placeEditor(in rect: NSRect) {
-        scroll.frame = rect
+    /// Places the editor's line box at `rect` (CSS content box, top-left origin). `trailingPadding` lets the clip view
+    /// reach the padding box's trailing edge, where Chromium draws a textarea's scrollbar; the text keeps its width.
+    func placeEditor(in rect: NSRect, trailingPadding: CGFloat = 0) {
+        // ponytail: the text keeps its width while the bar shows, Chromium's narrows by 6px; move the padding into the clip view if wraps must match
+        scroll.frame = NSRect(x: rect.minX, y: rect.minY, width: rect.width + trailingPadding, height: rect.height)
         let width = editor.isMultiline ? rect.width : max(rect.width, editor.usedWidth + 2)
         editor.minSize = NSSize(width: rect.width, height: rect.height)
         editor.frame = NSRect(x: 0, y: 0, width: width, height: max(rect.height, editor.usedHeight))
