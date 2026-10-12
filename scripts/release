@@ -236,7 +236,14 @@ def upload(release, name, ctype, as_name=None):
         if a["name"] == as_name: call(api + "/releases/assets/%d" % a["id"], method="DELETE")
     data = open(out + "/" + name, "rb").read()
     asset = call("https://uploads.github.com/repos/%s/releases/%d/assets?name=%s" % (repo, release["id"], as_name), data, ctype)
-    with urllib.request.urlopen(asset["browser_download_url"]) as r: got = r.read()
+    # A fresh asset can 404 for a few seconds until GitHub's download host sees it (v0.1.11's first run).
+    for attempt in range(8):
+        try:
+            with urllib.request.urlopen(asset["browser_download_url"]) as r: got = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 404 or attempt == 7: raise
+            time.sleep(2 + 2 * attempt)
     if hashlib.sha256(got).digest() != hashlib.sha256(data).digest(): sys.exit("download of %s does not match" % name)
     print("uploaded", asset["browser_download_url"])
     return asset
