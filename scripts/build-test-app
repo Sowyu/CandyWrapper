@@ -1,0 +1,16 @@
+#!/bin/sh
+# Builds a Debug app into /tmp/cw-dd-<task> with its own bundle id and URL scheme, so it shares no
+# settings, drafts or URL handling with the user's app or other agents' apps. Prints the app's path;
+# build output goes to stderr. Delete /tmp/cw-dd-<task> when the task is done.
+# Usage: CANDY_APP="$(scripts/build-test-app <task>)" scripts/run-app ...
+set -eu
+task="${1-}"
+case "$task" in
+  '' | *[!a-z0-9-]*) echo "usage: scripts/build-test-app <task>, a short name in lowercase letters, digits and dashes" >&2; exit 2 ;;
+esac
+cd "$(dirname "$0")/.."
+scripts/preflight >&2
+xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
+  -derivedDataPath "/tmp/cw-dd-$task" PRODUCT_BUNDLE_IDENTIFIER="dev.candywrapper.test.$task" \
+  CANDY_URL_SCHEME="candywrapper-$task" build -quiet >&2
+echo "/tmp/cw-dd-$task/Build/Products/Debug/CandyWrapper.app"

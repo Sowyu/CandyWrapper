@@ -6,3 +6,6 @@ scripts/procstat
 Packages/CandyKit/.build/
 Packages/CandyKit/.swiftpm/
 .claude/worktrees/
+
+# Fidelity tests write their diff images here.
+/.*-fidelity/

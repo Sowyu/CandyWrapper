@@ -4,6 +4,8 @@
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 sandbox="$here/../CandyWrapper-research/sandbox"
+# Worktrees that live elsewhere, like the ones T3 makes, use the research folder in the home folder.
+[ -d "$sandbox" ] || sandbox="$HOME/CandyWrapper-research/sandbox"
 version="${1:-$(cat "$here/T3_VERSION" | sed 's/^v//')}"
 bin="$HOME/.t3/runtime/versions/$version/t3"
 mkdir -p "$sandbox/t3home"
