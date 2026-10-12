@@ -106,6 +106,4 @@ targets:
         Release:
           ONLY_ACTIVE_ARCH: NO
           CANDY_URL_SCHEME: t3code
-          # Library validation off, or Sparkle.framework does not load under the self-signed identity (scripts/release).
-          CODE_SIGN_ENTITLEMENTS: App/Resources/CandyWrapper.entitlements
           CANDY_UPDATE_FEED_URL: https://github.com/Sowyu/CandyWrapper/releases/download/appcast/appcast.xml

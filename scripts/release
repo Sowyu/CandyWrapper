@@ -123,7 +123,9 @@ entitlements=()
 [[ -f $src/App/Resources/CandyWrapper.entitlements ]] && entitlements=(--entitlements $src/App/Resources/CandyWrapper.entitlements)
 sign "${entitlements[@]}" $app
 codesign --verify --deep --strict $app
-codesign -dv $app 2>&1 | grep -q "^TeamIdentifier=$TEAM\$" || { print -u2 "the app is not signed by team $TEAM"; exit 1 }
+# Read codesign's output whole: with pipefail, grep -q closing the pipe early makes codesign fail on SIGPIPE.
+signature=$(codesign -dv $app 2>&1)
+[[ $signature == *$'\n'"TeamIdentifier=$TEAM"$'\n'* ]] || { print -u2 "the app is not signed by team $TEAM"; exit 1 }
 
 # 5. The update archive (symlinks kept) and a DMG for first installs.
 zip=CandyWrapper-$ver-arm64.zip
