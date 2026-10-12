@@ -64,9 +64,10 @@ public enum AttachmentPreviewText {
         guard let data else { return .failure("The attachment is unavailable.", attemptedPath: nil, cwd: nil) }
         let truncated = data.count >= maxBytes && (sizeBytes == 0 || sizeBytes > maxBytes)
         var bytes = data.prefix(maxBytes)
-        // A cut can split a UTF-8 sequence; drop the partial tail.
+        let cut = bytes.count
+        // A cut can split a UTF-8 sequence, leaving at most 3 of its bytes; drop that partial tail.
         var text = String(data: bytes, encoding: .utf8)
-        while text == nil, truncated, !bytes.isEmpty, data.count - bytes.count < 4 {
+        while text == nil, truncated, !bytes.isEmpty, cut - bytes.count < 3 {
             bytes = bytes.dropLast()
             text = String(data: bytes, encoding: .utf8)
         }

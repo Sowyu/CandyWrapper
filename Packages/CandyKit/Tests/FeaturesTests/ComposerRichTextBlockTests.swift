@@ -175,6 +175,15 @@ import Testing
         #expect(storedDraft(editor) == expected)
     }
 
+    /// The review's crash: a quote line whose break is the draft's last character read one past the end.
+    @Test func deleteAtTheEndOfAQuoteBeforeTheLastBreak() {
+        let editor = makeEditor()
+        editor.setText("> a\n")
+        placeCaret(editor, "a", 1)
+        editor.deleteForward(nil)
+        #expect(storedDraft(editor) == "> a")
+    }
+
     @Test(arguments: ["- a\n```\nl1\n```", "a\n```\nl1\n```"])
     func deleteLeavesAFenceAlone(_ value: String) {
         let editor = makeEditor()
