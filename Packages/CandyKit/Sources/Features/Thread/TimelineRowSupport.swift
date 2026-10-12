@@ -4,6 +4,22 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
+/// Find matches behind a single-line label, in the colors `MarkdownView` paints them.
+final class FindHighlightView: DSView {
+    var rects: [(rect: CGRect, active: Bool)] = [] {
+        didSet { if !rects.elementsEqual(oldValue, by: { $0.rect == $1.rect && $0.active == $1.active }) { needsDisplay = true } }
+    }
+    override var wantsUpdateLayer: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        for (rect, active) in rects {
+            ctx.setFillColor((active ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.32)).cgColor)
+            ctx.fill(rect)
+        }
+    }
+}
+
 /// Main-panel colors and type for the timeline (H-timeline-visuals.md section 3 conventions).
 @MainActor
 enum TL {
@@ -85,7 +101,9 @@ final class TimelineContext {
     /// text reparses only what follows its last finished block; the settled text parses whole once.
     // ponytail: unbounded, one entry per message seen; trim to the rows near the viewport if huge threads show it in memory
     func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false) -> MarkdownDocument {
-        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks { return hit.document }
+        // A settled message whose last streamed text was the same still parses whole once: the hit must not
+        // come from the incremental parse.
+        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, streaming || streamingParses[key] == nil { return hit.document }
         let document: MarkdownDocument
         if streaming {
             let parse = MarkdownDocument.parse(text, preservesLineBreaks: lineBreaks, extending: streamingParses[key])
@@ -148,6 +166,30 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
     }
 
     func setContentVisible(_ visible: Bool) {}
+
+    /// Paints find in thread's matches in this row's Markdown; `occurrence` is the active match's index in the row,
+    /// numbered as the server numbers them. Only messages and plans are searchable (`data-thread-find-text`).
+    func applyThreadFind(query: String, occurrence: Int?) {
+        func walk(_ view: NSView) {
+            if let markdown = view as? MarkdownView {
+                markdown.threadFindQuery = query
+                markdown.threadFindOccurrence = occurrence
+            }
+            view.subviews.forEach(walk)
+        }
+        walk(self)
+    }
+
+    /// The active match in this row's coordinates, nil when the row has none on screen. A row that folds the match
+    /// away opens first and returns nil; the timeline asks again after it lays out.
+    func activeFindRect() -> CGRect? {
+        func walk(_ view: NSView) -> CGRect? {
+            if let markdown = view as? MarkdownView, let rect = markdown.activeFindRect() { return markdown.convert(rect, to: self) }
+            for child in view.subviews { if let rect = walk(child) { return rect } }
+            return nil
+        }
+        return walk(self)
+    }
 
     func hoverChanged() {}
 

@@ -107,6 +107,7 @@ public final class MarkdownView: DSView {
     private var buttons: [ButtonView] = []
     private var chipViews: [FileChipHitView] = []
     private var imageViews: [AsyncImageView] = []
+    private var imageTooltips: [TooltipController] = []
     private var imageItems: [ExpandedImagePreviewView.Item] = []
     private var linkViews: [MarkdownLinkHitView] = []
 
@@ -121,6 +122,10 @@ public final class MarkdownView: DSView {
     public static var onOpenFileInEditor: ((FileLinkMeta) -> Void)?
     /// "Reveal in Finder": the chip's file in the server's file manager (`revealMarkdownFileInFileManager`).
     public static var onRevealFile: ((FileLinkMeta) -> Void)?
+    /// Whether the open thread can show a browser tab (`canOperatePreview && isPreviewAvailableFor`).
+    public static var canOpenFileInBrowser: (() -> Bool)?
+    /// "Open in integrated browser": an HTML or PDF file as a signed asset URL in a new tab (`openFileInPreview`).
+    public static var onOpenFileInBrowser: ((FileLinkMeta) -> Void)?
     public static weak var linkHandler: MarkdownLinkHandler?
     private var hoveredChip: Int? {
         didSet {
@@ -365,12 +370,13 @@ public final class MarkdownView: DSView {
     /// Loads each image chip's thumbnail once, then redraws with the picture and its average color.
     private func loadContextThumbnails(_ chips: [MarkdownContextChip]) {
         guard let loader = contextImageLoader else { return }
-        for id in chips.compactMap(\.imageAttachmentId) where MarkdownContextChips.thumbnails[id] == nil && !MarkdownContextChips.loading.contains(id) {
+        for id in chips.compactMap(\.imageAttachmentId) where MarkdownContextChips.thumbnails[id] == nil
+            && !MarkdownContextChips.loading.contains(id) && !MarkdownContextChips.failed.contains(id) {
             MarkdownContextChips.loading.insert(id)
             Task { [weak self] in
                 let image = await loader(id, 32)
                 MarkdownContextChips.loading.remove(id)
-                guard let image else { return }
+                guard let image else { MarkdownContextChips.failed.insert(id); return }
                 MarkdownContextChips.thumbnails[id] = (image, MarkdownContextChips.averageColor(image))
                 self?.needsDisplay = true
             }
@@ -406,38 +412,91 @@ public final class MarkdownView: DSView {
         }
     }
 
-    /// ChatMarkdown.tsx:1320-1347 and MermaidDiagram.tsx:204-216: images share the gallery.
+    /// ChatMarkdown.tsx:1320-1347, 3180-3297 and MermaidDiagram.tsx:204-216: images share the gallery. Web and
+    /// `data:` sources load directly, host paths through a signed asset URL (`media-file`), others never load.
+    /// A decoded image reports its natural size, and the message lays out again around its own box.
     private func layoutImages() {
         imageItems = []
-        var frames: [CGRect] = []
+        var placed: [(frame: CGRect, radius: CGFloat, fallback: String, tooltip: String?)] = []
+        imageKeys = []
         if bounds.width > 0 {
             for item in layout(forWidth: bounds.width).items {
                 switch item {
                 case .remoteImage(let url, let alt, let rect):
-                    guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
-                    imageItems.append(.init(key: url.absoluteString, name: alt.isEmpty ? "image" : alt,
-                        load: { side in await ThreadMarkdownImageLoader.load(url, side: side) }))
-                    frames.append(rect)
+                    let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+                    let key = source.key
+                    let reference: MediaReference? = switch source {
+                    case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: cwd)
+                    case .direct(let uri): MediaReference.link(uri)
+                    case .blocked: nil
+                    }
+                    let failed = source == .blocked || MarkdownImages.failed.contains(key)
+                    imageItems.append(.init(key: key.isEmpty ? "blocked-\(imageItems.count)" : key, name: alt.isEmpty ? "image" : alt,
+                                            load: MarkdownImages.loader(source), reference: reference))
+                    imageKeys.insert(key)
+                    let sized = MarkdownImages.sizes[key] != nil && !failed
+                    placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt) : "", reference?.tooltip ?? (alt.isEmpty ? "image" : alt)))
                 case .image(let image, let rect):
                     imageItems.append(.init(key: "diagram-\(imageItems.count)-\(ObjectIdentifier(image))", name: "Diagram", load: { _ in image }))
-                    frames.append(rect)
+                    placed.append((rect, 10, "Image unavailable. The file may have been moved or deleted.", nil))
                 default: break
                 }
             }
         }
-        while imageViews.count > frames.count { imageViews.removeLast().removeFromSuperview() }
-        while imageViews.count < frames.count {
-            let view = AsyncImageView(); view.cover = false; view.layer?.cornerRadius = 10
+        observeImageSizes()
+        while imageViews.count > placed.count { imageViews.removeLast().removeFromSuperview(); imageTooltips.removeLast() }
+        while imageViews.count < placed.count {
+            let view = AsyncImageView(); view.cover = false
+            // `text-xs text-muted-foreground`
+            view.fallback.color = Themed.color(\.mutedForeground)
+            view.fallback.font = DSFont.ui(12)
+            imageTooltips.append(TooltipController.attach(to: view, text: "", variant: .code))
             view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandMarkdownImage(_:))))
+            view.onLoad = { [weak self, weak view] in
+                // A failed source keeps its slot and says so (ChatMarkdown.tsx:1455-1475).
+                guard let self, let view, view.image == nil, let key = view.key, self.imageKeys.contains(key), !key.hasPrefix("diagram-") else { return }
+                MarkdownImages.failed.insert(key)
+                self.needsLayout = true
+            }
             addSubview(view); imageViews.append(view)
         }
         for (index, view) in imageViews.enumerated() {
-            let item = imageItems[index]
-            view.frame = frames[index]
-            view.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.", loader: item.load)
+            let item = imageItems[index], place = placed[index]
+            view.frame = place.frame
+            view.layer?.cornerRadius = place.radius
+            view.set(key: item.key, fallbackText: place.fallback, loader: item.load)
             view.setAccessibilityLabel("Preview " + item.name)
-            view.onContextMenu = { event, source in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: source) }
+            imageTooltips[index].text = place.tooltip ?? ""
+            view.onContextMenu = { [weak self] event, source in
+                MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: source,
+                                                reference: item.reference, openFile: self?.openInFileViewer(item.reference))
+            }
         }
+    }
+
+    /// Sources of the images this message shows, to relayout when one of them reports its size.
+    private var imageKeys: Set<String> = []
+    private var imageSizeObserver: NSObjectProtocol?
+
+    private func observeImageSizes() {
+        guard !imageKeys.isEmpty else {
+            if let imageSizeObserver { NotificationCenter.default.removeObserver(imageSizeObserver); self.imageSizeObserver = nil }
+            return
+        }
+        guard imageSizeObserver == nil else { return }
+        imageSizeObserver = NotificationCenter.default.addObserver(forName: MarkdownImages.didMeasure, object: nil, queue: .main) { [weak self] note in
+            let key = note.userInfo?["key"] as? String
+            MainActor.assumeIsolated {
+                guard let self, let key, self.imageKeys.contains(key) else { return }
+                self.invalidate()
+            }
+        }
+    }
+
+    /// "Open in file viewer" for a workspace image (MediaActions.tsx `onOpenFile`).
+    private func openInFileViewer(_ reference: MediaReference?) -> (() -> Void)? {
+        guard case .file(_, let relative?)? = reference, let open = MarkdownImages.openInFileViewer else { return nil }
+        return { open(relative) }
     }
     @objc private func expandMarkdownImage(_ gesture: NSClickGestureRecognizer) {
         guard let window, let index = imageViews.firstIndex(where: { $0 === gesture.view }) else { return }
@@ -448,27 +507,71 @@ public final class MarkdownView: DSView {
         if inside { hoveredChip = index } else if hoveredChip == index { hoveredChip = nil }
     }
 
+    /// A chip's primary action (ChatMarkdown.tsx:2197-2245): Cmd-click opens the preferred editor; a PDF, or any
+    /// browser document nothing else opens, goes to the integrated browser; else the files panel, else the media
+    /// preview, else the editor. With none of them the click shows the menu.
     fileprivate func chipClicked(_ chip: FileChip, event: NSEvent, view: NSView) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if let onOpenFile {
-            onOpenFile(chip.meta, modifiers.contains(.command) && !modifiers.contains(.control))
+        let actions = chipActions(chip.meta)
+        guard actions.editor || actions.browser || actions.panel || actions.media else { chipMenu(chip, event: event, view: view); return }
+        if modifiers.contains(.command), !modifiers.contains(.control), actions.editor {
+            if let onOpenFile { onOpenFile(chip.meta, true) } else { Self.onOpenFileInEditor?(chip.meta) }
+            return
+        }
+        if actions.browser, chip.meta.filePath.lowercased().hasSuffix(".pdf") || (!actions.editor && !actions.panel) {
+            Self.onOpenFileInBrowser?(chip.meta)
+        } else if actions.panel {
+            onOpenFile?(chip.meta, false)
+        } else if actions.media {
+            previewMedia(chip.meta)
         } else {
-            chipMenu(chip, event: event, view: view)
+            Self.onOpenFileInEditor?(chip.meta)
         }
     }
 
-    /// T3's native file menu (ChatMarkdown.tsx:2115-2160 `showFileContextMenu`): "Open in <editor>" and the reveal item
-    /// where the environment runs shell actions, then the two copies.
-    // ponytail: no "Preview media" or "Open in integrated browser" items; add them when chips open media and local preview tabs
+    /// Which of T3's file actions this chip has (`fileLinkChip`, ChatMarkdown.tsx:2639-2690). A thread is open
+    /// when the owner handles clicks (`onOpenFile`).
+    private func chipActions(_ meta: FileLinkMeta) -> (editor: Bool, browser: Bool, panel: Bool, media: Bool) {
+        let thread = onOpenFile != nil
+        let kind = FilePreviewKind.of(meta.filePath)
+        return (Self.fileChipShell?().openLabel != nil,
+                thread && (kind == .html || kind == .pdf) && Self.canOpenFileInBrowser?() == true && Self.onOpenFileInBrowser != nil,
+                thread && meta.panelPath != nil,
+                thread && FileLinks.isMedia(meta.basename))
+    }
+
+    /// "Preview media" (`openMarkdownMedia`): an image in the media preview through a signed asset URL. A video
+    /// opens in the file viewer, which plays it.
+    // ponytail: the preview shows images only; videos outside the workspace do nothing. Add video to ExpandedImagePreviewView when T3's player lands
+    private func previewMedia(_ meta: FileLinkMeta) {
+        if FilePreviewKind.of(meta.filePath) == .video {
+            if meta.panelPath != nil { onOpenFile?(meta, false) }
+            return
+        }
+        guard let window else { return }
+        let reference = MediaReference.file(meta.filePath, workspaceRoot: cwd)
+        let item = ExpandedImagePreviewView.Item(key: "media-file:" + meta.filePath, name: meta.basename,
+                                                 load: MarkdownImages.loader(.workspaceFile(meta.filePath)), reference: reference)
+        ExpandedImagePreviewView(items: [item], index: 0).present(in: window)
+    }
+
+    /// T3's native file menu (ChatMarkdown.tsx:2115-2160 `showFileContextMenu`): "Preview media" for images and video,
+    /// "Open in <editor>" where the environment runs shell actions, "Open in integrated browser" for HTML and PDF,
+    /// the reveal item, then the two copies.
     fileprivate func chipMenu(_ chip: FileChip, event: NSEvent, view: NSView) {
         let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) } ?? chip.meta.targetPath
         let shell = Self.fileChipShell?()
+        let actions = chipActions(chip.meta)
         var items: [ThreadMenuItem] = []
+        if actions.media { items.append(ThreadMenuItem("preview-media", "Preview media")) }
         if let open = shell?.openLabel { items.append(ThreadMenuItem("open", open)) }
+        if actions.browser { items.append(ThreadMenuItem("open-in-browser", "Open in integrated browser")) }
         if let reveal = shell?.revealLabel { items.append(ThreadMenuItem("reveal", reveal)) }
         items += [ThreadMenuItem("relative", "Copy relative path"), ThreadMenuItem("full", "Copy full path")]
-        let menu = NativeItemContextMenu.make(items) { [weak view] action in
+        let menu = NativeItemContextMenu.make(items) { [weak self, weak view] action in
+            if action == "preview-media" { self?.previewMedia(chip.meta); return }
             if action == "open" { Self.onOpenFileInEditor?(chip.meta); return }
+            if action == "open-in-browser" { Self.onOpenFileInBrowser?(chip.meta); return }
             if action == "reveal" { Self.onRevealFile?(chip.meta); return }
             NSPasteboard.general.clearContents()
             let copied = NSPasteboard.general.setString(action == "relative" ? relative : chip.meta.targetPath, forType: .string)
@@ -588,6 +691,46 @@ public final class MarkdownView: DSView {
         if window == nil { clearAssistantSelection() }
     }
 
+    /// The active find match's first line box, counted as `draw` counts. A match in a diagram's source switches the
+    /// block to its code first (`revealSource`, ChatMarkdown.tsx:1029-1031).
+    public func activeFindRect() -> CGRect? {
+        guard let active = threadFindOccurrence, !threadFindQuery.isEmpty, bounds.width > 0 else { return nil }
+        var seen = 0
+        for item in layout(forWidth: bounds.width).items {
+            switch item {
+            case .text(let box, let origin):
+                let ranges = box.findRanges(threadFindQuery)
+                if active < seen + ranges.count, let span = box.spans(ranges[active - seen]).first {
+                    return CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                                  width: max(1, span.x1 - span.x0), height: box.lineHeight)
+                }
+                seen += ranges.count
+            case .hiddenText(let code, let index):
+                let count = ThreadFindText.count(code, threadFindQuery)
+                if active < seen + count, !diagramCode.contains(index) {
+                    toggleDiagram(index)
+                    layoutSubtreeIfNeeded()
+                    return activeFindRect()
+                }
+                seen += count
+            default: break
+            }
+        }
+        return nil
+    }
+
+    /// How many find matches this message shows (the plan card's preview decides whether to open).
+    public func findMatchCount() -> Int {
+        guard !threadFindQuery.isEmpty, bounds.width > 0 else { return 0 }
+        return layout(forWidth: bounds.width).items.reduce(0) { sum, item in
+            switch item {
+            case .text(let box, _): sum + box.findRanges(threadFindQuery).count
+            case .hiddenText(let code, _): sum + ThreadFindText.count(code, threadFindQuery)
+            default: sum
+            }
+        }
+    }
+
     // MARK: Drawing
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -614,18 +757,14 @@ public final class MarkdownView: DSView {
                 }
                 selectionOffset += (box.text as NSString).length + 1
                 if !threadFindQuery.isEmpty {
-                    let text = box.text as NSString
-                    var remaining = NSRange(location: 0, length: text.length)
-                    while remaining.length > 0 {
-                        let range = text.range(of: threadFindQuery, options: [.caseInsensitive], range: remaining)
-                        if range.location == NSNotFound { break }
+                    // T3 indexes the rendered text: chip labels, not code block titles or image alt text (threadFindText.ts).
+                    for range in box.findRanges(threadFindQuery) {
                         ctx.setFillColor((findOccurrence == threadFindOccurrence ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.32)).cgColor)
                         findOccurrence += 1
                         for span in box.spans(range) {
                             ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
                                             width: span.x1 - span.x0, height: box.lineHeight))
                         }
-                        remaining = NSRange(location: range.upperBound, length: text.length - range.upperBound)
                     }
                 }
                 if origin.y <= dirtyRect.maxY, origin.y + box.height >= dirtyRect.minY { box.draw(in: ctx, at: origin) }
@@ -673,6 +812,26 @@ public final class MarkdownView: DSView {
                 break
             case .link:
                 break
+            case .hiddenText(let code, _):
+                if !threadFindQuery.isEmpty { findOccurrence += ThreadFindText.count(code, threadFindQuery) }
+            case .favicon(let host, let rect):
+                guard rect.intersects(dirtyRect) else { break }
+                let color = MarkdownStyle.link.cgColor(in: self)
+                switch MarkdownFavicons.face(host, ready: { [weak self] in self?.needsDisplay = true }) {
+                case .brand(let icon): Self.drawIcon(icon.definition, in: rect, color: color, ctx: ctx)
+                case .globe: Self.drawIcon(IconName.globe.definition, in: rect, color: color, ctx: ctx)
+                case .loading: break
+                case .image(let image):
+                    // `rounded-sm` (6px).
+                    ctx.saveGState()
+                    ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
+                    ctx.clip()
+                    ctx.translateBy(x: rect.minX, y: rect.maxY)
+                    ctx.scaleBy(x: 1, y: -1)
+                    ctx.interpolationQuality = .high
+                    ctx.draw(image, in: CGRect(origin: .zero, size: rect.size))
+                    ctx.restoreGState()
+                }
             case .clip(let rect):
                 ctx.saveGState()
                 ctx.clip(to: rect)

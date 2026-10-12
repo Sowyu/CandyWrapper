@@ -70,14 +70,36 @@ public final class TimelineView: DSView {
     public var threadFindQuery = "" {
         didSet { if threadFindQuery != oldValue { visible.values.forEach(applyFindHighlight) } }
     }
-    private func applyFindHighlight(_ view: NSView) {
-        if let markdown = view as? MarkdownView {
-            markdown.threadFindQuery = threadFindQuery
-            var row: NSView? = markdown
-            while row != nil, !(row is TimelineRowView) { row = row?.superview }
-            markdown.threadFindOccurrence = (row as? TimelineRowView)?.item?.id == threadFindMatch?.entryId ? threadFindMatch?.occurrence : nil
+    /// T3 searches and paints only message and plan text (ThreadFind.ts `searchableRows`, MessagesTimeline.tsx:2753, 4737,
+    /// ProposedPlanCard.tsx:170-198), never tool output.
+    private func applyFindHighlight(_ view: TimelineRowView) {
+        guard let item = view.item else { return }
+        let searchable: Bool = if case .proposedPlan = item.row.kind { true } else { item.row.message != nil }
+        view.applyThreadFind(query: searchable ? threadFindQuery : "",
+                             occurrence: searchable && item.id == threadFindMatch?.entryId ? threadFindMatch?.occurrence : nil)
+    }
+
+    /// Scrolls the least that brings the active match inside the viewport, 96pt from its edges and clear of the
+    /// composer (`reveal`, useThreadFindNavigation.ts:185-230). False when its row is not on screen.
+    private func revealActiveFindMatch(_ entryId: String, retry: Bool = true) -> Bool {
+        guard threadFindMatch?.entryId == entryId, let row = visible[entryId] else { return false }
+        row.layoutSubtreeIfNeeded()
+        guard let local = row.activeFindRect() else {
+            // A fold opened: ask again once the row has its new height.
+            if retry { DispatchQueue.main.async { [weak self] in _ = self?.revealActiveFindMatch(entryId, retry: false) } }
+            return true
         }
-        view.subviews.forEach(applyFindHighlight)
+        let rect = row.convert(local, to: document)
+        let viewport = scrollView.contentView.bounds
+        let margin = min(96, max(0, (viewport.height - bottomInset - rect.height) / 2))
+        let top = viewport.minY + margin, bottom = viewport.maxY - margin - bottomInset
+        let delta = rect.minY < top ? rect.minY - top : rect.maxY > bottom ? rect.maxY - bottom : 0
+        if abs(delta) >= 1 {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, viewport.minY + delta))))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            tile()
+        }
+        return true
     }
 
 
@@ -176,11 +198,16 @@ public final class TimelineView: DSView {
         // A Mermaid diagram finished or toggled: the messages with diagrams measure again (their Markdown views
         // drop their own layouts first, so this waits a turn of the run loop).
         diagramObserver = NotificationCenter.default.addObserver(forName: MermaidDiagrams.didRender, object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasureDiagrams() } }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasure(containing: "mermaid") } }
+        }
+        // An image decoded and takes its own size instead of the loading slot: the same for messages with images.
+        imageObserver = NotificationCenter.default.addObserver(forName: MarkdownImages.didMeasure, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.remeasure(containing: "![") } }
         }
     }
 
     private var diagramObserver: NSObjectProtocol?
+    private var imageObserver: NSObjectProtocol?
 
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
@@ -194,14 +221,14 @@ public final class TimelineView: DSView {
         relayout()
     }
 
-    private func remeasureDiagrams() {
+    private func remeasure(containing marker: String) {
         var changed = false
         for item in items {
-            guard let text = item.row.message?.text, text.contains("mermaid"), measured.removeValue(forKey: item.id) != nil else { continue }
+            guard let text = item.row.message?.text, text.contains(marker), measured.removeValue(forKey: item.id) != nil else { continue }
             changed = true
         }
         guard changed else { return }
-        for view in visible.values { if let item = view.item, item.row.message?.text.contains("mermaid") == true { view.configure(item); applyFindHighlight(view); view.needsLayout = true } }
+        for view in visible.values { if let item = view.item, item.row.message?.text.contains(marker) == true { view.configure(item); applyFindHighlight(view); view.needsLayout = true } }
         heights = items.map { height(of: $0) }
         relayout()
     }
@@ -307,9 +334,11 @@ public final class TimelineView: DSView {
     public func revealFindEntry(_ entryId: String) -> Bool {
         guard let i = indexById[entryId], i < tops.count else { return false }
         followsEnd = false
+        if revealActiveFindMatch(entryId) { return true }
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, tops[i] - 60))))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         tile()
+        _ = revealActiveFindMatch(entryId)
         return true
     }
 

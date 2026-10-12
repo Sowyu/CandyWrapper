@@ -583,6 +583,38 @@ final class ThreadController {
             guard let self, let env = self.openThreadId?.environmentId else { return }
             self.shellOpen(env, OpenInEditors.launchInput(cwd: meta.filePath, editor: "file-manager", reveal: true), failure: "Unable to reveal file")
         }
+        // Media and browser documents in chat Markdown (ChatMarkdown.tsx:2545-2590, 3270-3290): host files load
+        // through signed asset URLs on the open thread's environment.
+        MarkdownImages.assetURL = { [weak self] path in
+            guard let self, let id = self.openThreadId, let env = id.environmentId, let shell = self.environments.session(env) else { return nil }
+            let resource: JSONValue = .object(["_tag": .string("media-file"), "threadId": .string(id.localId.rawValue), "path": .string(path)])
+            guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+                  let relative = reply["relativeUrl"]?.stringValue,
+                  let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { return nil }
+            let size = reply["imageDimensions"].flatMap { d in
+                d["width"]?.doubleValue.flatMap { w in d["height"]?.doubleValue.map { CGSize(width: w, height: $0) } }
+            }
+            return (url, size)
+        }
+        MarkdownImages.openInFileViewer = { [weak self] relative in self?.files.openFile(relative, line: nil) }
+        MarkdownView.canOpenFileInBrowser = { [weak self] in self?.openThreadId != nil && self?.panel.browserAvailable == true }
+        // `openFileInPreview` (browser/openFileInPreview.ts:117-160): inside the workspace the page may load its siblings.
+        MarkdownView.onOpenFileInBrowser = { [weak self] meta in
+            guard let self, let id = self.openThreadId, let env = id.environmentId, let shell = self.environments.session(env) else { return }
+            let tag = meta.workspaceRelativePath != nil ? "workspace-file" : "media-file"
+            let resource: JSONValue = .object(["_tag": .string(tag), "threadId": .string(id.localId.rawValue), "path": .string(meta.filePath)])
+            Task { [weak self] in
+                guard let self else { return }
+                if let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+                   let relative = reply["relativeUrl"]?.stringValue,
+                   let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL {
+                    guard self.openThreadId == id else { return }
+                    self.browser.openURL(url.absoluteString)
+                } else {
+                    self.panel.toasts.show(ToastView(title: "Unable to open file in browser", message: "An error occurred.", kind: .error))
+                }
+            }
+        }
         MarkdownView.onOpenCitation = { [weak self] citation in
             self?.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
             self?.panel.timeline.revealFindEntry(citation.messageId)

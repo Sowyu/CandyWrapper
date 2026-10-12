@@ -88,8 +88,8 @@ public struct MarkdownDocument: Sendable, Equatable {
     /// The start of the last line in `text` before which the blocks are final: it follows a blank
     /// line outside any fenced code, and starts at column 0 with a character that opens a new
     /// top-level block and can't continue a list or a quote (no list marker, digit, `>` or indent).
-    /// Fences follow T3's `splitBufferedAssistantText` (assistantStreaming.ts:36-92): an opener at
-    /// any indent, a closer of the same character, at least as long, indented at most 3 more, alone on its line.
+    /// Fences follow CommonMark, as the full parse does: an opener indented 0 to 3 spaces, a closer of the same
+    /// character, at least as long, indented 0 to 3 spaces, alone on its line. A line indented 4 or more is content.
     static func stableCut(_ text: Substring) -> String.Index? {
         var cut: String.Index?
         var openFence: (marker: Character, length: Int, indent: Int)?
@@ -104,11 +104,11 @@ public struct MarkdownDocument: Sendable, Equatable {
             guard let newline else { break }
             let indent = line.prefix { $0 == " " }.count
             let body = line.dropFirst(indent)
-            if let mark = body.first, mark == "`" || mark == "~" {
+            if indent <= 3, let mark = body.first, mark == "`" || mark == "~" {
                 let length = body.prefix { $0 == mark }.count
                 if length >= 3 {
                     if let open = openFence {
-                        if mark == open.marker, length >= open.length, indent <= open.indent + 3,
+                        if mark == open.marker, length >= open.length,
                            body.dropFirst(length).allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) {
                             openFence = nil
                         }
