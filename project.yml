@@ -32,6 +32,10 @@ targets:
       # T3's notification clips (apps/web/src/assets, MIT).
       - path: App/Resources/Sounds
         buildPhase: resources
+      # Icon Composer icon, built like T3's assets/prod/app-icon.icon. actool also writes the flat
+      # renditions and AppIcon.icns that macOS 14 and 15 show.
+      - path: App/Resources/AppIcon.icon
+        buildPhase: resources
     dependencies:
       - package: CandyKit
         product: DesignSystem
