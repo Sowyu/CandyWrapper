@@ -6,10 +6,10 @@
 #   --dry-run            do every local step, publish nothing
 #   --notes FILE         release notes (markdown): the GitHub release body and the appcast item's description
 #   --channel nightly    tag the appcast item `nightly` (only the Nightly track sees it); default: Sparkle's default channel
-#   --out DIR            work folder (default /tmp/cw-release-<version>)
-#   --appcast FILE       start from this appcast instead of the published one
+#   --out DIR            work folder, which must be yours (default: a new mktemp folder /tmp/cw-release-<version>.XXXXXX)
 #
 # Test builds only (scripts/release refuses to publish with any of these):
+#   --appcast FILE       start from this appcast instead of the published one
 #   --feed-url URL --public-key KEY --ed-key-file FILE --bundle-id ID --version X.Y.Z --build N
 #   --download-prefix URL  the folder the appcast's enclosure points at, such as a local test server
 #   --source DIR         build this checkout as it is (uncommitted work) in place of <commit>
@@ -50,7 +50,7 @@ done
 [[ -n $commit || -n $source ]] || { print -u2 "usage: scripts/release [--dry-run] [--notes FILE] [--channel nightly] <commit>"; exit 2 }
 [[ -z $channel || $channel == nightly ]] || { print -u2 "--channel takes only nightly"; exit 2 }
 testing=0
-[[ -n "$feed$pubkey$edfile$bundle_id$version$build$source$dlprefix" ]] && testing=1
+[[ -n "$feed$pubkey$edfile$bundle_id$version$build$source$dlprefix$appcast_in" ]] && testing=1
 if (( testing && !dry )); then print -u2 "test options need --dry-run"; exit 2; fi
 if (( !dry )) && [[ -z $notes ]]; then print -u2 "--notes is required to publish"; exit 2; fi
 
@@ -96,8 +96,10 @@ minos=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' $plist)
 sparkle_bin=$dd/SourcePackages/artifacts/sparkle/Sparkle/bin
 [[ -x $sparkle_bin/sign_update ]] || { print -u2 "Sparkle's sign_update is missing from $sparkle_bin"; exit 1 }
 
-out=${out:-/tmp/cw-release-$ver}
-mkdir -p $out
+# A fresh private folder: a predictable /tmp path could be made by another account first and the app
+# swapped between codesign and the zip. A given --out must belong to this user.
+if [[ -z $out ]]; then out=$(mktemp -d /tmp/cw-release-$ver.XXXXXX)
+else mkdir -p $out; [[ -O $out && ! -L $out ]] || { print -u2 "$out is not a folder owned by $USER"; exit 1 }; fi
 rm -rf $out/CandyWrapper.app
 ditto $built $out/CandyWrapper.app
 app=$out/CandyWrapper.app

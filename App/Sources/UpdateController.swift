@@ -47,8 +47,13 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
+    /// The Info.plist feed. Sparkle reads a `SUFeedURL` user default before Info.plist; `feedURLString(for:)`
+    /// returns this so a stray default cannot point the updater at another host.
+    private let feed: String
+
     override init() {
         let feed = (Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String ?? "").trimmingCharacters(in: .whitespaces)
+        self.feed = feed
         disabledReason = feed.isEmpty ? "Automatic updates are not available because no update feed is configured." : nil
         // CandyWrapper mirrors T3 Code Nightly, so it starts on the nightly track (updateChannels.ts:16-18).
         let channel = DesktopUpdateState.Channel(rawValue: UserDefaults.standard.string(forKey: Self.channelKey) ?? "") ?? .nightly
@@ -150,11 +155,13 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         defaults.set(channel.rawValue, forKey: Self.channelKey)
         state = DesktopUpdateState(currentVersion: currentVersion, channel: channel, enabled: state.enabled)
         guard state.enabled, let updater = startedUpdater() else { return state }
-        // A held download belongs to the old track; dismissing keeps it for Sparkle's install on quit.
+        // A held download belongs to the old track. Skip cancels its installer; a dismiss would leave it
+        // for Sparkle's install on quit. A resumed one is also marked skipped, which only background
+        // checks honor, so the version still shows on a check after switching back.
         let held = installReply ?? resumedReply
         installReply = nil
         resumedReply = nil
-        if let held { checkAfterSession = true; held(.dismiss) } else if updater.sessionInProgress { checkAfterSession = true } else { updater.checkForUpdates() }
+        if let held { checkAfterSession = true; held(.skip) } else if updater.sessionInProgress { checkAfterSession = true } else { updater.checkForUpdates() }
         return state
     }
 
@@ -166,6 +173,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         state.channel == .nightly ? ["nightly"] : []
     }
+
+    func feedURLString(for updater: SPUUpdater) -> String? { feed.isEmpty ? nil : feed }
 
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         appcastItems = appcast.items
@@ -192,6 +201,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         }
         if state.status == .downloading || wantsDownload {
             wantsDownload = false
+            // The Download click joined this session; with it failed, no check is owed unless one waits.
+            if checkWaiters.isEmpty, !wantsInstall { checkAfterSession = false }
             state = state.onDownloadFailure(noUpdate ? "The update is no longer available." : message(ns))
             finishDownload(false)
         }
@@ -333,9 +344,13 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func dismissUpdateInstallation() {
         installReply = nil
         resumedReply = nil
-        if checkAfterSession {
-            checkAfterSession = false
-            DispatchQueue.main.async { [weak self] in self?.updater?.checkForUpdates() }
+        guard checkAfterSession else { return }
+        // Sparkle ends the cycle right after this (`didFinishUpdateCycleFor`), which may drop the owed
+        // check, so read the flag once that has run.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.checkAfterSession else { return }
+            self.checkAfterSession = false
+            self.updater?.checkForUpdates()
         }
     }
 

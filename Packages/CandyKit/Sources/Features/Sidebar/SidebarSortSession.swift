@@ -151,7 +151,16 @@ extension SidebarListView: NSDraggingSource {
     static let sortDuration: CFTimeInterval = 0.2
 
     public func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .withinApplication ? [.copy, .move] : []
+        session === cancelledDrag || context != .withinApplication ? [] : [.copy, .move]
+    }
+
+    /// Escape, or the list leaving its window: the rows glide home and the AppKit drag, which has no
+    /// cancel, goes on with an empty pasteboard and no operation, so no view takes the threads.
+    func cancelSort() {
+        guard let s = sort else { return }
+        cancelledDrag = s.session
+        s.session.draggingPasteboard.clearContents()
+        endSort(commit: false)
     }
 
     /// A row left its press: lift it in the list, and drag it (or the whole selection it belongs to) as
@@ -184,9 +193,11 @@ extension SidebarListView: NSDraggingSource {
         guard sortable else { return }
         // AppKit's drag loop keeps key events from the app, so Escape is read off the keyboard state,
         // only while a sort runs.
-        let escape = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        let escape = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
+            // A list torn down without `endSort` leaves nothing ticking.
+            guard self != nil else { return timer.invalidate() }
             MainActor.assumeIsolated {
-                if CGEventSource.keyState(.combinedSessionState, key: 53) { self?.endSort(commit: false) }
+                if CGEventSource.keyState(.combinedSessionState, key: 53) { self?.cancelSort() }
             }
         }
         RunLoop.main.add(escape, forMode: .common)
@@ -461,7 +472,8 @@ extension SidebarListView: NSDraggingSource {
             s.autoscroll = nil
         } else if s.autoscroll == nil {
             s.lastTick = CACurrentMediaTime()
-            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+                guard self != nil else { return timer.invalidate() }
                 MainActor.assumeIsolated { self?.autoscrollTick() }
             }
             RunLoop.main.add(timer, forMode: .common)

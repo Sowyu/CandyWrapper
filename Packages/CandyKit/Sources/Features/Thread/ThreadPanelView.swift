@@ -239,13 +239,16 @@ public final class ThreadPanelView: DSView {
                                                      if let self, usageLimitsBanner === usage { usageLimitsBanner = nil }
                                                  }))
         }
-        if showsNoticeBanner && composerVisible { items.append(notice("project-clone", noticeBanner)) }
+        // Thread-scoped ids, like T3's `goal:${threadId}`: a thread switch drops the old item, which
+        // cancels a dismiss still playing instead of running it against the new thread's banner.
+        let thread = model.projection?.thread.id.rawValue ?? ""
+        if showsNoticeBanner && composerVisible { items.append(notice("project-clone:" + thread, noticeBanner)) }
         if docked && showsEnvironmentBanner {
             items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,
                                                  height: { _ in EnvironmentBannerView.height }))
         }
         if serverUpdateNotice != nil && composerVisible { items.append(notice("server-version", serverUpdateBanner)) }
-        if docked && showsGoal { items.append(notice("goal", goalBanner)) }
+        if docked && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
         return items
     }
 

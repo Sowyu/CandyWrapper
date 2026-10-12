@@ -339,6 +339,12 @@ public final class PopupHost: DSView {
                 [weak self, weak popup] _ in
                 MainActor.assumeIsolated {
                     guard let self, let popup, self.popups.contains(where: { $0 === popup }) else { return }
+                    // floating-ui's `hide` middleware: a trigger that scrolled out of the window (a recycled
+                    // or removed row) takes its popup with it instead of leaving it at the host's corner.
+                    guard let trigger = popup.trigger, trigger.window === self.window else {
+                        self.close(popup, returnFocus: false)
+                        return
+                    }
                     let old = popup.container.layer.map { ($0.presentation() ?? $0).position }
                     self.reposition(popup)
                     guard popup.motion == .tooltip, !Motion.reduced, let old, let layer = popup.container.layer, layer.position != old else { return }

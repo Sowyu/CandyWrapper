@@ -34,16 +34,14 @@ final class ThreadSession {
     /// arrives (docs/perf/README.md, "Streaming text").
     private lazy var pacer = FramePacer(maxRate: 30) { [weak self] in Task { @MainActor in await self?.pull() } }
 
-    /// The last pull only grew a streaming answer's or reasoning text, so the turn is streaming.
-    private var streamingText = false
-
     /// T3 sends each streaming update twice, `message.updated` then `turn-item.updated` with the
     /// same text (assistantStreaming.ts:92-128), as separate stream values. While text streams,
     /// the first of a pair waits one frame for the second, so the pair costs one render instead of
-    /// two. Any other change still renders at once.
+    /// two. A change that opens the window with anything else (a turn ending, a send, an approval)
+    /// renders at once, also right after a stream.
     // ponytail: a fixed 16 ms window, measured only with a replay proxy that sends the pair in one chunk; widen it or pair by item id if a live Codex stream still renders twice
-    private func requestPull() {
-        pacer.request(settle: streamingText ? 1.0 / 60 : 0)
+    private func requestPull(streaming: Bool) {
+        pacer.request(settle: streaming ? 1.0 / 60 : 0)
     }
 
     /// A closed thread's store and its change relay, kept so a reopen paints at once and resumes
@@ -64,9 +62,9 @@ final class ThreadSession {
         self.sidebar = sidebar
         let relay = retained?.relay ?? ShellSession.ChangeRelay()
         self.relay = relay
-        let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onChange: { relay.fire() })
+        let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onFirstChange: { relay.fire(streaming: $0) })
         self.store = store
-        relay.set { [weak self] in Task { @MainActor in self?.requestPull() } }
+        relay.setStreaming { [weak self] streaming in Task { @MainActor in self?.requestPull(streaming: streaming) } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
         shown = retained?.shown
         if retained != nil {
@@ -143,8 +141,7 @@ final class ThreadSession {
         guard let update = await store.takeUpdate() else { return }
         OpenTiming.mark("panel pull", "\(update.projection?.visibleTurnItems.count ?? 0) rows")
         let changes = update.changes
-        streamingText = changes.projectionChanged && changes.onlyStreamingText && !changes.reset
-        render(update, onlyStreamingText: streamingText)
+        render(update, onlyStreamingText: changes.projectionChanged && changes.onlyStreamingText && !changes.reset)
     }
 
     private func render(_ update: ThreadUpdate, onlyStreamingText: Bool = false) {
@@ -860,6 +857,8 @@ final class ThreadController {
     func syncVisit() {
         visitTimer?.cancel()
         visitTimer = nil
+        // In a window counts as shown, minimized or covered too: T3's visit effect has no visibility
+        // gate (ChatView.tsx:2938-3000), so the open thread is visited as activity lands in either app.
         let shown = panel.window != nil
         // Settings and Usage unmount ChatView in T3, so its per-watermark dedupe starts over on the way back.
         if shown, !visitViewShown { visits.reset() }

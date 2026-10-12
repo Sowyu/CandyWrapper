@@ -154,7 +154,15 @@ open class ControlView: DSView {
     }
 
     open override func mouseUp(with event: NSEvent) {
-        guard state.enabled else { return }
+        guard state.enabled else {
+            // The press's own action disabled the control (a menu that loads first): drop the press,
+            // or it keeps its pressed style until the next one.
+            state.active = false
+            pressOpenedAt = nil
+            pressPerformed = false
+            pressClosedPopup = false
+            return
+        }
         let inside = bounds.contains(convert(event.locationInWindow, from: nil))
         state.active = false
         // The press closed this control's open popup (PopupHost swallowed it); the release must not reopen it.

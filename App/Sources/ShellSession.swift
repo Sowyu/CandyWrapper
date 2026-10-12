@@ -136,9 +136,11 @@ final class ShellSession {
     /// Lets the store's Sendable change callback reach a session created after the store.
     final class ChangeRelay: @unchecked Sendable {
         private let lock = NSLock()
-        private var action: (@Sendable () -> Void)?
-        func set(_ action: @escaping @Sendable () -> Void) { lock.withLock { self.action = action } }
-        func fire() { lock.withLock { action }?() }
+        private var action: (@Sendable (Bool) -> Void)?
+        func set(_ action: @escaping @Sendable () -> Void) { lock.withLock { self.action = { _ in action() } } }
+        /// The action gets whether the change only grew a streaming text.
+        func setStreaming(_ action: @escaping @Sendable (Bool) -> Void) { lock.withLock { self.action = action } }
+        func fire(streaming: Bool = false) { lock.withLock { action }?(streaming) }
     }
 
     nonisolated static func decode(_ json: JSONValue) -> ShellStreamItem? {

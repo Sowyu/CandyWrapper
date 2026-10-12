@@ -181,6 +181,29 @@ private func ids(_ p: ThreadProjection?) -> [String] { p?.visibleTurnItems.map(\
         #expect(input.afterSequence == 2 && input.acceptBoundedSnapshot == true)
     }
 
+    /// The window's first change says whether it only grew a streaming text, so the session waits for
+    /// T3's pair only while text streams, never for the change after a stream.
+    @Test func storeReportsStreamingFirstChange() async {
+        final class Flags: @unchecked Sendable {
+            let lock = NSLock()
+            var values: [Bool] = []
+            func add(_ v: Bool) { lock.withLock { values.append(v) } }
+        }
+        let flags = Flags()
+        let answer = { (text: String, streaming: Bool) in
+            turnItem("""
+                {"id":"a","type":"assistant_message","ordinal":2,"messageId":"m-a","text":"\(text)","streaming":\(streaming)}
+                """)
+        }
+        let store = ThreadStore(threadId: "thread-1", onFirstChange: { flags.add($0) })
+        await store.apply([snapshot(projection([message("q", ordinal: 1), answer("He", true)]), sequence: 1), .synchronized])
+        _ = await store.takeUpdate()
+        await store.apply([.event(sequence: 2, event: event(.turnItemUpdated, .turnItem(answer("Hello", true))))])
+        _ = await store.takeUpdate()
+        await store.apply([.event(sequence: 3, event: event(.turnItemUpdated, .turnItem(answer("Hello", false))))])
+        #expect(flags.values == [false, true, false])
+    }
+
     // MARK: Recorded streams
 
     @Test func replayingEventsReachesTheServersOwnSnapshot() throws {
