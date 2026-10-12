@@ -157,6 +157,33 @@ private func ids(_ p: ThreadProjection?) -> [String] { p?.visibleTurnItems.map(\
         #expect(reducer.history.error != nil && !reducer.history.loading && reducer.history.showsLoadEarlierControl)
     }
 
+    /// Stress regression (seed 2 of the bounded run): a page request cancelled when the app moved the
+    /// thread to a new connection left `loading` set, so the control spun and no older page ever
+    /// loaded again. Like T3's interrupt path (threadHistoryMerge.ts:38-50) the cancel clears it
+    /// without an error, and only for the cursor it started from.
+    @Test func aCancelledPageRequestFreesTheControl() {
+        var reducer = ThreadReducer(threadId: "thread-1")
+        reducer.apply([snapshot(projection([message("c", ordinal: 3)]), sequence: 1, cursor: "c1", more: true, watermark: 3)])
+        let request = reducer.beginLoadEarlier()
+        #expect(request != nil && reducer.beginLoadEarlier() == nil)
+        #expect(reducer.cancelHistoryLoad(requestCursor: "stale").isEmpty)
+        #expect(reducer.history.loading)
+        #expect(reducer.cancelHistoryLoad(requestCursor: "c1").historyChanged)
+        #expect(!reducer.history.loading && reducer.history.error == nil)
+        #expect(reducer.beginLoadEarlier()?.cursor == "c1")
+    }
+
+    /// Stress regression: an optimistic prompt whose row arrived without its message (a bounded
+    /// snapshot or an older page carries rows but not every message, and a message event can be
+    /// lost to a reconnect) stayed pending and showed twice. T3 counts the row as acknowledged.
+    @Test func aUserRowAcknowledgesItsOptimisticMessage() {
+        var p = projection([message("a", ordinal: 1)])
+        #expect(TimelineEntries.acknowledgedUserMessageIds(p) == ["m-a"])
+        p.visibleTurnItems = []
+        #expect(TimelineEntries.acknowledgedUserMessageIds(p).isEmpty)
+        #expect(TimelineEntries.acknowledgedUserMessageIds(nil).isEmpty)
+    }
+
     @Test func hiddenLiveItemsStayHiddenWhenAPageRepeatsThem() {
         let hidden = message("q", ordinal: 1, runId: "r1", intent: "queued_turn")
         var p = projection([message("c", ordinal: 3)], runs: [run("r1", "cancelled")])

@@ -1016,7 +1016,7 @@ final class ComposerController {
         if !requests.isEmpty { pendingMessageId = nil }
         // Only while something waits for confirmation: a long thread has thousands of messages.
         if !optimistic.isEmpty || pendingMessageId != nil {
-            let confirmed = Set(projection?.messages.map(\.id) ?? [])
+            let confirmed = TimelineEntries.acknowledgedUserMessageIds(projection)
             optimistic.removeAll { confirmed.contains($0.id) }
             if let id = pendingMessageId, confirmed.contains(id) { pendingMessageId = nil }
         }

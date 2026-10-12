@@ -183,6 +183,7 @@ final class ThreadSession {
             }
             do {
                 let start = ContinuousClock.now
+                try Task.checkCancellation()
                 let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
                 if OpenTiming.enabled {
                     // History pages come after first paint; they print on their own clock.
@@ -190,11 +191,17 @@ final class ThreadSession {
                         format: "thread-timing history page %.1f ms (fetch and decode), %d rows, more %@\n",
                         OpenTiming.ms(ContinuousClock.now - start), page.items.count, page.hasMoreHistory ? "yes" : "no").utf8))
                 }
-                guard self?.store === store, !Task.isCancelled else { return }
+                try Task.checkCancellation()
                 self?.historyLoad = nil
                 await store.applyHistoryPage(page, requestCursor: request.cursor)
             } catch {
-                if self?.store === store { self?.historyLoad = nil }
+                // `attach` cancelled the request and already let go of it. Like T3's interrupt path
+                // (threads.ts:733-741), the control becomes usable again, with no error and no stuck spinner.
+                if Task.isCancelled {
+                    await store.cancelHistoryLoad(requestCursor: request.cursor)
+                    return
+                }
+                self?.historyLoad = nil
                 await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns.")
             }
         }
