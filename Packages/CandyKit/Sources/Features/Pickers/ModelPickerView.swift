@@ -90,6 +90,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     // MARK: Model
 
     private func reload() {
+        syncSharing()
         let visible = catalog.entries.filter(\.isVisibleInPicker)
         if railButtons.map(\.entryId) != visible.map(\.id) {
             railButtons.forEach { $0.removeFromSuperview() }
@@ -199,11 +200,31 @@ final class ModelPickerView: DSView, PickerPopupBody {
         sections.rows.isEmpty ? 0 : CGFloat(sections.rows.count) * Self.rowHeight + CGFloat(sections.rows.count - 1) * Self.rowGap
     }
 
-    /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36).
+    /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
         if let frozenHeight { return CGSize(width: Self.width, height: frozenHeight) }
         let list = sections.rows.isEmpty ? 36 : listContentHeight + 20
-        return CGSize(width: Self.width, height: min(Self.maxHeight, Self.searchHeight + list))
+        return CGSize(width: Self.width, height: min(Self.maxHeight, Self.searchHeight + list) + footerHeight)
+    }
+
+    /// `ChatGptSharingControl` (ProviderModelPicker.tsx:317-319): under the picker while the composer's instance
+    /// uses a ChatGPT plan, and not while the draft fans out to several models.
+    var showsSharing: Bool {
+        selectedKeys == nil && catalog.entry(active).map { UsageLimitsLogic.usesChatGptSharing($0.provider) } == true
+    }
+    private var footerHeight: CGFloat { showsSharing ? ChatGptSharingControlView.height : 0 }
+    private var bodyHeight: CGFloat { bounds.height - footerHeight }
+    private var sharing: ChatGptSharingControlView?
+
+    private func syncSharing() {
+        if showsSharing, sharing == nil {
+            let s = ChatGptSharingControlView { NSWorkspace.shared.open($0) }
+            addSubview(s)
+            sharing = s
+        } else if !showsSharing {
+            sharing?.removeFromSuperview()
+            sharing = nil
+        }
     }
 
     private func resizePopup() {
@@ -217,10 +238,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
         let railShown = sections.showsRail
         let mainX = railShown ? Self.railWidth : 0
         railFill.isHidden = !railShown
-        railFill.frame = CGRect(x: 0, y: 0, width: Self.railWidth, height: bounds.height)
-        mainFill.frame = CGRect(x: mainX, y: 0, width: bounds.width - mainX, height: bounds.height)
+        railFill.frame = CGRect(x: 0, y: 0, width: Self.railWidth, height: bodyHeight)
+        sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
+        mainFill.frame = CGRect(x: mainX, y: 0, width: bounds.width - mainX, height: bodyHeight)
         mainBorder.isHidden = !railShown
-        mainBorder.frame = CGRect(x: mainX, y: 0, width: 1, height: bounds.height)
+        mainBorder.frame = CGRect(x: mainX, y: 0, width: 1, height: bodyHeight)
 
         // Rail: `p-1 gap-1`, 36pt buttons, a divider under Favorites.
         favoritesButton.isHidden = !railShown
@@ -250,7 +272,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
         // List: `px-1 py-1` plus LegendList `py-1.5 pl-2 pr-px`, 6pt scrollbar gutter, outer `pr-px`.
         list.frame = NSRect(x: mainX + (railShown ? 1 : 0), y: Self.searchHeight, width: bounds.width - mainX - (railShown ? 1 : 0),
-                            height: max(0, bounds.height - Self.searchHeight))
+                            height: max(0, bodyHeight - Self.searchHeight))
         scrollOffset = min(scrollOffset, maxScroll)
         var y = 10 - scrollOffset
         for row in rowViews {

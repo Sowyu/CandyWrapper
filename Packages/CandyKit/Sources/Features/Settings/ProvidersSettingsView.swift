@@ -225,6 +225,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private var updatingInstances: Set<String> = []
     /// The instance the editor was built for.
     private var editorInstance: String?
+    /// The managed Codex setup and Runtime fold of the open editor, kept across rebuilds so a sign-in in
+    /// progress and the fold's state survive each provider snapshot (React keeps them by key).
+    private var codexViews: (key: String, setup: CodexSetupView, runtime: FoldedSettingsSectionView, fields: CodexManagedRuntimeFields)?
     private let usageProviders = SettingsSectionView(title: "Usage providers", rows: [])
     private let addHub = ButtonView("Add hub", icon: .plus, variant: .outline, size: .xs)
     private var updatingCursor = false
@@ -323,6 +326,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let host = ModalHost.present(dialog, in: window)
         dialog.close = { [weak host] in host?.close() }
         dialog.onCreated = { [weak self] id in self?.selected = id; self?.refresh() }
+        dialog.onAddChatGptAccount = { [weak self, weak host] in host?.close(animated: false); self?.openAddChatGptAccount(env.id) }
     }
 
     // MARK: Usage providers (UsageProviderSettings.tsx)
@@ -518,6 +522,55 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         }
     }
 
+    // MARK: Managed Codex
+
+    private func codexViews(_ row: ProvidersLogic.Row, provider: ServerProvider?, env: String, readOnly: Bool,
+                            current: @escaping @MainActor () -> JSONValue) -> (setup: CodexSetupView, runtime: FoldedSettingsSectionView, fields: CodexManagedRuntimeFields) {
+        let key = env + "\u{0}" + row.instanceId
+        if let views = codexViews, views.key == key {
+            views.setup.update(provider: provider, enabled: row.enabled, readOnly: readOnly)
+            views.fields.update(provider: provider)
+            views.runtime.alphaValue = readOnly ? 0.5 : 1
+            return (views.setup, views.runtime, views.fields)
+        }
+        codexViews?.setup.stop()
+        let setup = CodexSetupView(context: context, environment: env, instance: row.instanceId, provider: provider, enabled: row.enabled, readOnly: readOnly)
+        setup.onHeightChange = { [weak self] in self?.onHeightChange?() }
+        // `onModeChange`: the instance enabled, in the chosen setup mode.
+        setup.onModeChange = { [weak self] mode in
+            var o = current().objectValue ?? [:]
+            var config = o["config"]?.objectValue ?? [:]
+            config["enabled"] = .bool(true); config["setupMode"] = .string(mode)
+            o["enabled"] = .bool(true); o["config"] = .object(config)
+            self?.upsert(row, .object(o), env: env)
+        }
+        let fields = CodexManagedRuntimeFields(context: context, environment: env, instance: row.instanceId, provider: provider)
+        let runtime = FoldedSettingsSectionView(title: "Runtime", rows: fields.rows)
+        runtime.alphaValue = readOnly ? 0.5 : 1
+        runtime.onHeightChange = { [weak self] in self?.onHeightChange?() }
+        codexViews = (key, setup, runtime, fields)
+        return (setup, runtime, fields)
+    }
+
+    private func codexSetup(_ row: ProvidersLogic.Row, provider: ServerProvider?, env: String, readOnly: Bool,
+                            current: @escaping @MainActor () -> JSONValue) -> CodexSetupView {
+        codexViews(row, provider: provider, env: env, readOnly: readOnly, current: current).setup
+    }
+
+    private func codexRuntime(_ row: ProvidersLogic.Row, provider: ServerProvider?, env: String, readOnly: Bool) -> FoldedSettingsSectionView {
+        codexViews?.runtime ?? FoldedSettingsSectionView(title: "Runtime", rows: [])
+    }
+
+    /// `AddProviderInstanceDialog`'s "Continue with ChatGPT" (AddProviderInstanceDialog.tsx:365-372, 682-686)
+    /// swaps the wizard for `AddManagedCodexAccountDialog`.
+    private func openAddChatGptAccount(_ env: String) {
+        guard let window else { return }
+        let dialog = ProviderCodexAccountDialog(context: context, environment: env)
+        let host = ModalHost.present(dialog, in: window)
+        dialog.close = { [weak host] in host?.close() }
+        dialog.onCreated = { [weak self] id in self?.selected = id; self?.refresh() }
+    }
+
     // MARK: Editor
 
     private func editor(_ row: ProvidersLogic.Row, provider: ServerProvider?, env: SettingsScopeEnvironment) -> ProviderEditorView {
@@ -597,24 +650,12 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         header.group.rows = [nameRow]
         var sections: [NSView & SettingsGroupRow] = [header]
 
-        if row.driver == "codex" {
-            let addAccount = ButtonView("Add ChatGPT account", variant: .outline, size: .sm)
-            addAccount.isEnabled = !readOnly
-            addAccount.action = { [weak self] in
-                guard let self, let window = self.window else { return }
-                let dialog = ProviderCodexAccountDialog(context: self.context, environment: env.id)
-                let host = ModalHost.present(dialog, in: window)
-                dialog.close = { [weak host] in host?.close() }
-                dialog.onCreated = { [weak self] id in self?.selected = id; self?.refresh() }
-            }
-            sections.append(SettingsSectionView(title: "ChatGPT", rows: [SettingsRowView(title: "Accounts", control: addAccount)]))
-            if row.instance["config"]?["setupMode"]?.stringValue == "managed" {
-                let runtime = ProviderCodexRuntimeView(context: context, environment: env.id, instance: row.instanceId, readOnly: readOnly)
-                runtime.onHeightChange = { [weak self] in self?.onHeightChange?() }
-                sections.append(SettingsSectionView(title: "Runtime", rows: [runtime]))
-            }
-        }
-        if provider?.setup?["canAuthenticate"]?.boolValue == true || row.driver == "acpRegistry" {
+        // ProviderSettingsPanel.tsx:970-1014: a managed Codex instance gets the ChatGPT setup and its own
+        // folded Runtime card instead of the generic sign-in and config fields.
+        let managedCodex = row.driver == "codex" && CodexSetupLogic.setupMode(row.instance["config"]) == "managed"
+        if managedCodex {
+            sections.append(SettingsSectionView(title: "Setup", rows: [codexSetup(row, provider: provider, env: env.id, readOnly: readOnly, current: current)]))
+        } else if provider?.setup?["canAuthenticate"]?.boolValue == true || row.driver == "acpRegistry" {
             let auth = ProviderAuthenticationView(context: context, environment: env.id, label: env.label,
                 instance: row.instanceId, provider: provider, readOnly: readOnly)
             auth.onHeightChange = { [weak self] in self?.onHeightChange?() }
@@ -643,7 +684,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }))
         }
 
-        let fields = ProvidersLogic.fields(row.driver, config: row.instance["config"])
+        let fields = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"])
+        if managedCodex { sections.append(codexRuntime(row, provider: provider, env: env.id, readOnly: readOnly)) }
         if !fields.isEmpty {
             let rows: [any SettingsGroupRow] = fields.map { f in
                 let saved = row.instance["config"]?[f.key]?.stringValue ?? f.defaultValue

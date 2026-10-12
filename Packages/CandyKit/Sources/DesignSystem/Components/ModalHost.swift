@@ -111,11 +111,18 @@ public final class ModalHost: DSView {
 
     // MARK: Dismissal
 
-    public func close() {
+    /// `animated` false removes the dialog at once, as React does when a component swaps one dialog for
+    /// another (AddProviderInstanceDialog.tsx:365-372).
+    public func close(animated: Bool = true) {
         guard !isClosing else { return }
         isClosing = true
         parentHost?.nestedDialogsChanged(by: -1)
         if let previousResponder, let window { window.makeFirstResponder(previousResponder) }
+        guard animated else {
+            removeFromSuperview()
+            onDismiss?()
+            return
+        }
         animate(entering: false) { [weak self] in
             self?.removeFromSuperview()
             self?.onDismiss?()
