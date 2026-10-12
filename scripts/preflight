@@ -1,0 +1,11 @@
+#!/bin/zsh -f
+# Exits 1 when building would eat disk the user needs: under 40 GB free, or over 25 GB of CandyWrapper
+# builds in /tmp. Warns while a Zen browser build (mach) runs, since both then build slower.
+# Run it before building and before launching agents. scripts/build-test-app runs it.
+free=$(df -g /System/Volumes/Data | awk 'NR==2 {print $4}')
+ours=$(du -sk /tmp/cw-* 2>/dev/null | awk '{s+=$1} END {printf "%d", s/1048576}')
+mach=$(ps -axo command | grep -E '(^|/)mach (build|package)|/mach build' | grep -v grep | wc -l | tr -d ' ')
+print "free ${free} GB, CandyWrapper builds in /tmp ${ours} GB, Zen builds running ${mach}"
+(( mach )) && print "a Zen build is running: build one CandyWrapper app at a time"
+(( free >= 40 )) || { print "under 40 GB free: don't build, tell the user"; exit 1 }
+(( ours <= 25 )) || { print "over 25 GB in /tmp/cw-*: delete finished builds (your own /tmp/cw-dd-<task>) first"; exit 1 }
