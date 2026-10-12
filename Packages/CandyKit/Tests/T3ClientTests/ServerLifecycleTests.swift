@@ -48,6 +48,8 @@ final class FakeServer: OwnedLocalServer, @unchecked Sendable {
     private var waiters: [CheckedContinuation<Void, Never>] = []
     init(id: Int) { self.id = id }
 
+    var hasExited: Bool { lock.lock(); defer { lock.unlock() }; return exited }
+
     func waitForExit() async {
         await withCheckedContinuation { c in
             lock.lock()
@@ -69,6 +71,11 @@ final class FakeServer: OwnedLocalServer, @unchecked Sendable {
 
 actor Recorder {
     var launches = 0
+    var handedOff: [Int] = []
+    var adoptable: FakeServer?
+    func handOff(_ s: FakeServer) { handedOff.append(s.id) }
+    func set(adoptable: FakeServer?) { self.adoptable = adoptable }
+    func adopt() -> FakeServer? { defer { adoptable = nil }; return adoptable }
     var stops: [Int] = []
     var priority: [(Int, Bool)] = []
     var running: RunningLocalServer?
@@ -103,7 +110,32 @@ struct ServerLifecycleTests {
             launch: { try await rec.launch() },
             stop: { await rec.stop($0) },
             setBackground: { s, bg in Task { await rec.setBackground(s, bg) } },
+            adopt: { await rec.adopt() },
+            handOff: { s in Task { await rec.handOff(s) } },
             scheduler: scheduler), idleTimeout: idle, remoteAccess: remote)
+    }
+
+    // An update quit hands the server off; the next launch adopts it and the idle rules apply again.
+    @Test func updateQuitHandsOffAndTheNextLaunchAdopts() async throws {
+        let old = make()
+        guard case .owned(let server) = try await old.ensureRunning() else { Issue.record("not owned"); return }
+        await old.update(.init(windowVisible: true, activeRuns: 1))
+        await old.handOff()
+        #expect(await eventually { await rec.handedOff == [server.id] })
+        #expect(await rec.stops.isEmpty)
+        #expect(!server.hasExited)
+        #expect(await old.phase == .stopped)
+
+        await rec.set(adoptable: server)
+        let new = make()
+        let adopted = try await new.ensureRunning()
+        guard case .owned(let same) = adopted else { Issue.record("not adopted"); return }
+        #expect(same === server)
+        #expect(await rec.launches == 1, "no second server")
+        await new.update(.init(activeRuns: 0))
+        #expect(await new.idleTimerArmed)
+        scheduler.advance(by: .seconds(600))
+        #expect(await eventually { await rec.stops == [server.id] })
     }
 
     static func liveLookingServer() throws -> RunningLocalServer {
@@ -346,5 +378,49 @@ struct ServerLifecycleTests {
         sleeper.waitUntilExit()
         #expect(sleeper.terminationReason == .uncaughtSignal)
         #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func leavesAHandedOffServerRunning() async throws {
+        let sleeper = Process()
+        sleeper.executableURL = URL(filePath: "/bin/sleep")
+        sleeper.arguments = ["60"]
+        try sleeper.run()
+        defer { if sleeper.isRunning { sleeper.terminate() } }
+        let server = try #require(ProcessIdentity.of(sleeper.processIdentifier))
+        let url = FileManager.default.temporaryDirectory.appending(path: "owner-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let gone = ProcessIdentity(pid: getpid(), startTime: 1)
+        try JSONEncoder().encode(LocalServerLauncher.OwnerRecord(server: server, owner: gone, handoff: true)).write(to: url)
+        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(2))
+        #expect(server.isAlive)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+
+        // The handed-off server died before anyone came back: the record goes, nothing is adopted.
+        sleeper.terminate()
+        sleeper.waitUntilExit()
+        let home = FileManager.default.temporaryDirectory.appending(path: "home-\(UUID().uuidString)")
+        let adopted = await LocalServerLauncher.adopt(recordedAt: url, home: home, identity: ClientIdentity(appVersion: "0"),
+                                                      credentials: nil, configuration: { throw CancellationError() })
+        #expect(adopted == nil)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    /// An adopted server is launchd's child: no waitpid, its exit event is the exit.
+    @Test func watchesAServerItDidNotSpawn() async throws {
+        let shell = Process()
+        shell.executableURL = URL(filePath: "/bin/sh")
+        shell.arguments = ["-c", "/bin/sleep 60 >/dev/null 2>&1 & echo $!"]
+        let out = Pipe()
+        shell.standardOutput = out
+        try shell.run()
+        shell.waitUntilExit()
+        let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let pid = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        let identity = try #require(ProcessIdentity.of(pid))
+        defer { identity.signal(SIGKILL) }
+        let watcher = ChildExitWatcher(adopting: identity)
+        #expect(watcher.exitStatus == nil)
+        identity.signal(SIGTERM)
+        #expect(await watcher.waitForExit(timeout: .seconds(5)))
     }
 }

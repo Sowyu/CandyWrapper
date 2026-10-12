@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
     private var updates: UpdateUI?
+    private var updater: UpdateController?
     private let codexAuth = CodexAuthCallbackReceiver()
     private var chatGptWelcome: ChatGptWelcomeCoordinator?
     /// URLs that arrived before the window existed (a cold launch from a link).
@@ -148,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let server else { environments?.stopAll(); return .terminateNow }
-        return server.shouldTerminate()
+        return server.shouldTerminate(installingUpdate: updater?.quitInstallsUpdate ?? false)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -213,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         let updater = UpdateController()
+        self.updater = updater
         updates = UpdateUI(updater: updater, window: window, pill: sidebar.updatePill, settings: settings,
                            toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                            showWindow: { [weak window] in window?.makeKeyAndOrderFront(nil) })

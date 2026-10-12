@@ -64,7 +64,8 @@ public final class HoverSync: NSResponder {
     /// Installs hover sync for `window`. DSView calls it whenever it joins a window; repeat calls are cheap.
     public static func install(in window: NSWindow) {
         let id = ObjectIdentifier(window)
-        if let existing = syncs[id] {
+        // A window freed without closing leaves its entry behind, and a new window can reuse its address.
+        if let existing = syncs[id], existing.window === window {
             existing.ensurePointerArea()
             return
         }
@@ -207,7 +208,19 @@ public final class HoverSync: NSResponder {
         for (key, entry) in now { hovered[key] = entry }
         for key in exits.keys { hovered[key] = nil }
         for entry in exits.values { deliver(.mouseExited, entry) }
+        closeStrandedPopups()
         for entry in enters.values { deliver(.mouseEntered, entry) }
+    }
+
+    /// A tooltip or hover card whose trigger left the window, hid, or was freed with its owner (a row
+    /// rebuilt under a still pointer) gets no exit, so it closes here. Before the enters, so a replacement
+    /// trigger's card opens on the instant path in its place.
+    private func closeStrandedPopups() {
+        guard let host = window?.contentView?.subviews.lazy.compactMap({ $0 as? PopupHost }).first else { return }
+        for popup in host.popups where popup.isPassive {
+            if let trigger = popup.trigger, trigger.window === window, !trigger.isHiddenOrHasHiddenAncestor { continue }
+            host.close(popup, returnFocus: false)
+        }
     }
 
     private func pointerIsInside(_ window: NSWindow, at point: NSPoint) -> Bool {

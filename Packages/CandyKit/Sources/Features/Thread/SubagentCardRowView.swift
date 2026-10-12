@@ -140,7 +140,7 @@ final class SubagentCardRowView: TimelineRowView {
         super.configure(item)
         guard case .event(let p, let group, _) = item.row.kind else { return }
         let agents = group ?? [p]
-        while links.count > agents.count { links.removeLast().removeFromSuperview() }
+        while links.count > agents.count { let gone = links.removeLast(); gone.stop(); gone.removeFromSuperview() }
         while links.count < agents.count { let link = SubagentCardLinkView(); links.append(link); addSubview(link) }
         for (link, agent) in zip(links, agents) {
             let live = item.ui.subagentRecords.first { $0["id"]?.stringValue == agent.string("subagentId") }

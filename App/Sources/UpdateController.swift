@@ -41,6 +41,14 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private var appcastItems: [SUAppcastItem] = []
     private var expectedLength: UInt64 = 0
     private var receivedLength: UInt64 = 0
+    /// Sparkle is about to quit the app to install and relaunch (Restart).
+    private var relaunching = false
+    /// A downloaded update whose installer waits for the app to quit: Sparkle installs it on any quit.
+    private var installsOnQuit = false
+
+    /// Quitting now installs an update, so the local server is handed off rather than stopped
+    /// (`ServerController.shouldTerminate`).
+    var quitInstallsUpdate: Bool { relaunching || installsOnQuit }
 
     static let channelKey = "desktopUpdate.channel"
     private let defaults = UserDefaults.standard
@@ -161,6 +169,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         let held = installReply ?? resumedReply
         installReply = nil
         resumedReply = nil
+        installsOnQuit = false
         if let held { checkAfterSession = true; held(.skip) } else if updater.sessionInProgress { checkAfterSession = true } else { updater.checkForUpdates() }
         return state
     }
@@ -186,6 +195,15 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
             phase = .check
             state = state.onCheckStart(Date())
         }
+    }
+
+    /// Called right before Sparkle quits the app to install and relaunch.
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) { relaunching = true }
+
+    /// An automatic download set to install silently on quit. Sparkle keeps its own schedule (`false`).
+    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock: @escaping () -> Void) -> Bool {
+        installsOnQuit = true
+        return false
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
@@ -247,6 +265,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         if stage == .downloaded || stage == .installing {
             // A download from an earlier session: install is one click away, as after `update-downloaded`.
             state = state.onDownloadComplete(version)
+            // Its installer already runs and waits for the app to quit.
+            if stage == .installing { installsOnQuit = true }
             if wantsInstall || wantsDownload {
                 wantsDownload = false
                 finishDownload(true)
@@ -281,6 +301,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
             finishDownload(false)
         case .install?:
             wantsInstall = false
+            relaunching = false
+            installsOnQuit = false
             state = state.onInstallFailure(text)
             finishInstall()
         default:
@@ -315,6 +337,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
         let version = state.availableVersion ?? state.downloadedVersion ?? ""
         state = state.onDownloadComplete(version)
+        // The installer is staged: from now on any quit installs the update.
+        installsOnQuit = true
         if wantsInstall {
             phase = .install
             return reply(.install)
@@ -327,6 +351,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
         // The quit was refused (the quit-while-working alert): the next Restart click asks again.
         if !applicationTerminated {
+            relaunching = false
             retryTerminate = retryTerminatingApplication
             wantsInstall = false
             phase = nil
