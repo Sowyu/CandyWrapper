@@ -62,6 +62,10 @@ public final class FileSurfaceView: DSView {
     public weak var explorer: FilesPanelView? { didSet { needsLayout = true } }
 
     public var onReviewComment: ((JSONValue) -> Void)?
+    /// A file comment's Delete, by context id.
+    public var onDeleteReviewComment: ((String) -> Void)?
+    /// An edit moved a file comment: its record with the new lines.
+    public var onUpdateReviewComment: ((JSONValue) -> Void)?
     public var onEdit: (@MainActor (String) -> Void)?
     public var onOpenFile: (@MainActor (String) -> Void)?
     /// Lists a folder for a breadcrumb menu.
@@ -72,7 +76,6 @@ public final class FileSurfaceView: DSView {
 
     // Chrome
     private let crumbs = FileBreadcrumbsView()
-    private let commentButton = ButtonView(nil, icon: .messageCircle, variant: .ghost, size: .iconSm)
     private let renderToggle = ToggleView(nil, icon: .eye, variant: .ghost, size: .sm)
     private let wrapToggle = ToggleView(nil, icon: .textWrap, variant: .ghost, size: .sm, pressed: true)
     private let explorerToggle = ToggleView(nil, icon: .folderTree, variant: .ghost, size: .sm, pressed: true)
@@ -90,6 +93,8 @@ public final class FileSurfaceView: DSView {
     // Bodies, made on demand and dropped when the mode changes.
     private var body: NSView?
     private var code: CodeFileView?
+    /// The file the current code body's comments belong to.
+    private var commentsPath: String?
     private var pendingReveal: Int?
     private var loadTask: Task<Void, Never>?
 
@@ -112,9 +117,6 @@ public final class FileSurfaceView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for t in [renderToggle, wrapToggle, explorerToggle] { t.iconSize = 14 }
-        commentButton.setAccessibilityLabel("Comment on selected lines")
-        commentButton.toolTip = "Comment on selected lines"
-        commentButton.action = { [weak self] in self?.commentOnSelection() }
         renderToggle.onPressedChange = { [weak self] on in self?.setRendered(on) }
         wrapToggle.onPressedChange = { [weak self] on in self?.wrap = on }
         wrapToggle.setAccessibilityLabel("Disable word wrap")
@@ -130,7 +132,7 @@ public final class FileSurfaceView: DSView {
         notice.isHidden = true
         noticeBar.isHidden = true
         for l in [noticeBar, asideBorder] { l.actions = ["frame": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
-        [crumbs, renderToggle, wrapToggle, explorerToggle, notice, commentButton].forEach(addSubview)
+        [crumbs, renderToggle, wrapToggle, explorerToggle, notice].forEach(addSubview)
         attachmentCrumbs.isHidden = true
         addSubview(attachmentCrumbs)
         for (b, label) in [(copyButton, "Copy contents"), (saveButton, "Save file"), (removeButton, "Remove from draft"), (closeButton, "Close")] {
@@ -231,6 +233,9 @@ public final class FileSurfaceView: DSView {
 
     private func rebuildBody() {
         loadTask?.cancel()
+        // Sent comments stay on their lines when the same file reloads (T3 keeps `lineAnnotations` across an
+        // external change, FilePreviewPanel.tsx:710-718).
+        let keptComments = commentsPath == path ? code?.comments ?? [] : []
         body?.removeFromSuperview()
         body = nil
         code = nil
@@ -270,6 +275,9 @@ public final class FileSurfaceView: DSView {
                 code.setText(text, path: path)
                 code.isEditable = editable
                 code.onChange = { [weak self] text in self?.onEdit?(text) }
+                wireComments(code, editable: editable && !truncated)
+                if !keptComments.isEmpty { code.restoreComments(keptComments) }
+                commentsPath = path
                 self.code = code
                 view = code
             }
@@ -365,26 +373,28 @@ public final class FileSurfaceView: DSView {
         saveButton.isHidden = attachment?.onSave == nil
         removeButton.isHidden = attachment?.onRemove == nil
         closeButton.isHidden = attachment?.onClose == nil
-        commentButton.isHidden = code == nil || onReviewComment == nil || attachmentMode
         let explorerLabel = explorerOpen ? "Hide file explorer" : "Show file explorer"
         explorerToggle.setAccessibilityLabel(explorerLabel)
         explorerToggle.toolTip = explorerLabel
         needsLayout = true
     }
 
-    // ponytail: file comments use the shared editor in a dialog; inline cards and edit remapping need the source annotation layout
-    private func commentOnSelection() {
-        guard let code, let window else { return }
-        let text = code.textView.string, selection = code.textView.selectedRange(), path = self.path
-        let annotation = DiffReviewAnnotationView()
-        annotation.frame.size = NSSize(width: 400, height: 114)
-        let dialog = DialogView(title: "File comment")
-        dialog.panelContent = [annotation]
-        let host = ModalHost.present(dialog, in: window)
-        annotation.onCancel = { [weak host] in host?.close() }
-        annotation.onSubmit = { [weak self, weak host] comment in
-            guard let record = FileCommentContext.record(path: path, contents: text, selection: selection, text: comment) else { return }
-            self?.onReviewComment?(record); host?.close()
+    /// Inline comments on an editable file (`EditableFileSurface`, FilePreviewPanel.tsx:677-960): a sent comment
+    /// becomes a review-comment record, Delete takes it out of the composer, and an edit that moves it rewrites
+    /// its record (`handleEditChange`).
+    private func wireComments(_ code: CodeFileView, editable: Bool) {
+        code.commentsEnabled = editable && onReviewComment != nil && !attachmentMode
+        let path = self.path
+        code.onSubmitComment = { [weak self, weak code] c in
+            guard let code else { return }
+            self?.onReviewComment?(FileCommentContext.record(path: path, contents: code.text, startLine: c.startLine, endLine: c.endLine, text: c.text, id: c.id))
+        }
+        code.onDeleteComment = { [weak self] c in self?.onDeleteReviewComment?(ComposerContext.kindScopedId("review-comment", c.id)) }
+        code.onCommentsMoved = { [weak self, weak code] moved in
+            guard let code else { return }
+            for c in moved {
+                self?.onUpdateReviewComment?(FileCommentContext.record(path: path, contents: code.text, startLine: c.startLine, endLine: c.endLine, text: c.text, id: c.id))
+            }
         }
     }
 
@@ -417,9 +427,6 @@ public final class FileSurfaceView: DSView {
         for t in [closeButton, removeButton, saveButton, copyButton, explorerToggle, wrapToggle, renderToggle] as [NSView] where !t.isHidden {
             t.frame = NSRect(x: right - 28, y: buttonY, width: 28, height: 28)
             right -= 28 + 8
-        }
-        if !commentButton.isHidden {
-            commentButton.frame = NSRect(x: right - 28, y: buttonY, width: 28, height: 28); right -= 36
         }
         crumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12 + 8 - 8), height: h)
         attachmentCrumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12), height: h)

@@ -101,6 +101,29 @@ public enum ComposerAttachmentRules {
         return "pasted-text-\(n).txt"
     }
 
+    /// The send button's tooltip for a draft's attachments: files that lost their upload across a relaunch
+    /// first (ChatComposer.tsx:1964-1981), then `attachmentUploadBlockReason`.
+    public static func uploadBlockReason(_ attachments: [ComposerAttachment]) -> String? {
+        let reattach = attachments.filter(\.needsReattach).count
+        if reattach > 0 {
+            return reattach == 1 ? "Attach the interrupted file again or remove it" : "Attach the interrupted files again or remove them"
+        }
+        return uploadBlockReason(attachments.map(\.status))
+    }
+
+    /// `composerFileMatchesReattachMarker` (composerDraftStore.ts:906-917): same name and size, and the same
+    /// type unless the marker's was empty or generic and both are videos.
+    public static func matchesReattachMarker(_ marker: ComposerAttachment, name: String, mimeType: String, sizeBytes: Int) -> Bool {
+        guard marker.name == name, marker.sizeBytes == sizeBytes else { return false }
+        if marker.mimeType == mimeType { return true }
+        let markerType = marker.mimeType.lowercased()
+        func isVideo(_ name: String, _ type: String) -> Bool {
+            type.lowercased().hasPrefix("video/")
+                || UTType(filenameExtension: (name as NSString).pathExtension)?.conforms(to: .movie) == true
+        }
+        return (markerType.isEmpty || markerType == "application/octet-stream") && isVideo(marker.name, markerType) && isVideo(name, mimeType)
+    }
+
     /// `attachmentUploadBlockReason`: why the send waits (the send button's tooltip).
     public static func uploadBlockReason(_ statuses: [ComposerFileRow.Status]) -> String? {
         var pending = 0, failed = 0
@@ -165,6 +188,9 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
     /// Clipboard text folded into a file (`PastedTextAttachmentSource`).
     public var pastedText = false
     public var snapShotSource: JSONValue?
+    /// A file whose upload did not survive a relaunch (`composerFileNeedsReattach`): no server copy,
+    /// so its chip asks for the file again and the send waits.
+    public var needsReattach = false
 
     public init(id: String = UUID().uuidString.lowercased(), kind: Kind, name: String, mimeType: String, sizeBytes: Int,
                 fileURL: URL, status: ComposerFileRow.Status = .uploading(0), attachmentId: String? = nil, environmentId: String) {

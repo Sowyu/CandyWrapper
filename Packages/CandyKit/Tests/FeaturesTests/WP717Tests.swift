@@ -41,6 +41,27 @@ struct WP717Tests {
         #expect(record["sectionId"]?.stringValue == "file:src/main.swift")
         #expect(record["fenceLanguage"]?.stringValue == "swift")
     }
+    /// FilePreviewPanel.tsx:735-860: a comment sits under its last line, follows the line when lines are added
+    /// above it, keeps its span (`remapFileCommentAnnotations`), and reports the move.
+    @Test func inlineFileCommentsFollowTheirLines() throws {
+        let code = CodeFileView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+        code.setText("one\ntwo\nthree\nfour\n", path: "notes.txt")
+        code.commentsEnabled = true
+        code.restoreComments([CodeFileView.LineComment(id: "c", startLine: 2, endLine: 3, text: "fix", isDraft: false)])
+        #expect(code.comments.first?.rangeLabel == "L2 to L3")
+        var moved: [CodeFileView.LineComment] = []
+        code.onCommentsMoved = { moved = $0 }
+        code.textView.setSelectedRange(NSRange(location: 0, length: 0))
+        code.textView.insertText("zero\n", replacementRange: NSRange(location: 0, length: 0))
+        #expect(code.comments.first.map { [$0.startLine, $0.endLine] } == [3, 4])
+        #expect(moved.map(\.id) == ["c"])
+        #expect(code.canPickLines)
+        code.beginComment(0...0)
+        #expect(!code.canPickLines)
+        let record = FileCommentContext.record(path: "notes.txt", contents: code.text, startLine: 3, endLine: 4, text: " fix ", id: "c")
+        #expect(record["diff"]?.stringValue == "two\nthree")
+        #expect(record["fenceLanguage"]?.stringValue == "txt")
+    }
     @Test func dropVerbsAndWireCommands() {
         #expect(SidebarReorderDropBadge.verb(from: .snoozed, to: .active) == "Wake")
         #expect(SidebarReorderDropBadge.verb(from: .settled, to: .active) == "Un-settle")

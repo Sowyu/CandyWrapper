@@ -283,6 +283,8 @@ public final class ThreadPanelView: DSView {
     public var proactiveRepositoryIsGit: Bool? { didSet { if proactiveRepositoryIsGit != oldValue { evaluateProactivePanels() } } }
     public var proactiveLinkedPullRequestKey: String? { didSet { if proactiveLinkedPullRequestKey != oldValue { evaluateProactivePanels() } } }
     public var onProactivePullRequest: (() -> Void)?
+    /// A timeline click opens the diff on its own turn, not on Changes.
+    private var explicitDiffOpen = false
 
     public func evaluateProactivePanels() {
         guard !applyingProjection, !switchingThread, window != nil, !isDraft, let projection = model.projection else { return }
@@ -291,7 +293,8 @@ public final class ThreadPanelView: DSView {
         let summary = summaries.first { $0.runId == latest?.id }
         let action = proactivePanels.update(thread: projection.thread.id.rawValue, running: running?.id.rawValue,
             settled: latest?.id.rawValue, completed: latest?.status == .completed, linkedTarget: proactiveLinkedPullRequestKey,
-            revision: panelActionRevision, enabled: ClientSettingsStore.shared.current.bool("proactivePanelsEnabled"),
+            // The plan sheet layout (a window up to 980 wide) turns proactive panels off (ChatView.tsx:5763).
+            revision: panelActionRevision, enabled: ClientSettingsStore.shared.current.bool("proactivePanelsEnabled") && viewportWidth > 980,
             checkpointStatus: summary?.status, fileCount: summary?.files.count ?? 0,
             changedLines: summary?.files.reduce(0) { $0 + ($1.additions ?? 0) + ($1.deletions ?? 0) } ?? 0,
             isRepository: proactiveRepositoryIsGit, activeSurface: panelState.active?.kind.rawValue)
@@ -299,10 +302,12 @@ public final class ThreadPanelView: DSView {
         case .none: break
         case .pullRequest: onProactivePullRequest?()
         case .diff:
-            // ponytail: the diff panel has turn scopes only, switch to the branch scope when it supports git scopes.
+            // The panel opens on Changes (`selectGitScope(activeThreadRef, "branch")`, ChatView.tsx:5828-5833);
+            // without git scopes, on the finished turn.
             var next = panelState; next.open(.diff)
             setPanelState(next); onPanelChange?(next, [])
-            if let run = latest?.id { diffPanel.open(runId: run, filePath: nil) }
+            if diffPanel.selectsGitScopes { diffPanel.selectGitScope(.branch) }
+            else if let run = latest?.id { diffPanel.open(runId: run, filePath: nil) }
         }
     }
     private let fade = CAGradientLayer()
@@ -501,7 +506,9 @@ public final class ThreadPanelView: DSView {
         }
         model.onOpenTurnDiff = { [weak self] run, path in
             guard let self else { return }
+            explicitDiffOpen = true
             mutatePanel { $0.open(.diff); return [] }
+            explicitDiffOpen = false
             diffPanel.open(runId: run, filePath: path)
         }
     }
@@ -647,6 +654,7 @@ public final class ThreadPanelView: DSView {
     /// Shows `state` without telling `onPanelChange` (restoring a thread's state).
     public func setPanelState(_ state: RightPanelState) {
         let wasOpen = rightPanel.isHidden == false
+        let diffWasShown = wasOpen && panelState.active?.kind == .diff
         panelState = state
         let open = state.isOpen
         if !open { setMaximized(false) }
@@ -663,8 +671,12 @@ public final class ThreadPanelView: DSView {
                 toggle.isHidden = !open && model.projection == nil
             }
         }
-        // The panel asks for a diff only while it shows.
-        if open, state.active?.kind == .diff { diffPanel.setSummaries(summaries) }
+        // The panel asks for a diff only while it shows. Generic openings show Changes; a timeline click
+        // opens its own turn instead (ChatView.tsx:2304-2313).
+        if open, state.active?.kind == .diff {
+            if !diffWasShown, !explicitDiffOpen { diffPanel.selectGitScope(.branch) }
+            diffPanel.setSummaries(summaries)
+        }
         needsLayout = true
         header.needsLayout = true
         if open && !wasOpen && SettingsPanelMotion.duration > 0 {
@@ -682,6 +694,10 @@ public final class ThreadPanelView: DSView {
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : Double(ClientSettingsStore.shared.current.int("panelAnimationDurationMs")) / 1000
         let animateSheet = viewportWidth <= 980 && !rightPanelMaximized && next.isOpen != panelState.isOpen && duration > 0
         if animateSheet, !next.isOpen { animateClosingSheet(duration: duration) }
+        // The inline panel slides back out when the panel animation setting is on.
+        if !animateSheet, !next.isOpen, panelState.isOpen, !rightPanel.isHidden {
+            SettingsPanelMotion.dismiss(rightPanel, offset: CGSize(width: rightPanel.bounds.width, height: 0))
+        }
         setPanelState(next)
         if animateSheet, next.isOpen {
             layoutSubtreeIfNeeded()
@@ -727,6 +743,10 @@ public final class ThreadPanelView: DSView {
     public func setTerminal(open: Bool, height: CGFloat) {
         guard open != terminalOpen || height != terminalHeight else { return }
         let wasOpen = terminalOpen
+        // Closing slides the drawer down out of view; a thread switch shows the new state at once.
+        if wasOpen, !open, !switchingThread {
+            SettingsPanelMotion.dismiss(terminalDrawer, offset: CGSize(width: 0, height: terminalDrawer.bounds.height))
+        }
         terminalOpen = open
         terminalHeight = height
         terminalDrawer.isHidden = !open
@@ -860,13 +880,16 @@ public final class ThreadPanelView: DSView {
             header.cancelTitleRename()
             if maximizeRequested { setMaximized(false) }
         }
+        lazyDiffPanel.set(\.workspaceRoot, workspaceRoot)
         lazyDiffPanel.set(\.threadId, projection?.thread.id)
         summaries = projection.map(TurnDiffs.summaries) ?? []
         if opensChangedTurnOnLoad, let changed = TurnDiffs.sortedForPanel(summaries).first(where: { !$0.files.isEmpty }) {
             opensChangedTurnOnLoad = false
             var next = panelState
             next.open(.diff)
+            explicitDiffOpen = true
             setPanelState(next)
+            explicitDiffOpen = false
             diffPanel.open(runId: changed.runId, filePath: nil)
         }
         if rightPanelOpen, panelState.active?.kind == .diff { diffPanel.setSummaries(summaries) }

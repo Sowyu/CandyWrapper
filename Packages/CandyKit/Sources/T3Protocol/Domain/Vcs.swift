@@ -293,6 +293,12 @@ public enum VcsRPC {
         return .object(o)
     }
 
+    /// The diff panel's comparison targets: one kind of ref with the matching remotes (DiffPanel.tsx:416-449).
+    public static func baseRefsInput(cwd: String, remote: Bool) -> JSONValue {
+        .object(["cwd": .string(cwd), "includeMatchingRemoteRefs": .bool(true), "refKind": .string(remote ? "remote" : "local"),
+                 "limit": .number(Double(refPageLimit))])
+    }
+
     public static func switchRefInput(cwd: String, refName: String) -> JSONValue {
         .object(["cwd": .string(cwd), "refName": .string(refName)])
     }

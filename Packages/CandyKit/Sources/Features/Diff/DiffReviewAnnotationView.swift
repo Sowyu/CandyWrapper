@@ -116,7 +116,7 @@ final class DiffReviewCommentCardView: DSView, DiffAnnotationContent, FocusWithi
     override func rightMouseDown(with event: NSEvent) {
         var edit = MenuItem("Edit comment"); edit.action = { [weak self] in self?.onEdit?() }
         var delete = MenuItem("Delete comment"); delete.action = { [weak self] in self?.onDelete?() }
-        MenuPopupView.show([edit, delete], from: self, placement: .dropdown)
+        MenuPopupView.show(onEdit == nil ? [delete] : [edit, delete], from: self, placement: .dropdown)
     }
     func height(forWidth width: CGFloat) -> CGFloat {
         let rect = (message.text as NSString).boundingRect(with: NSSize(width: max(1, width - 76), height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: DSFont.ui(14)])

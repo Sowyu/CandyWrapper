@@ -102,6 +102,8 @@ final class ThreadSession {
         self.shell = shell
         if active {
             panel?.lazyDiffPanel.set(\.loader, Self.diffLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
         }
         let store = self.store
@@ -231,6 +233,38 @@ final class ThreadSession {
     }
 
     struct DiffLoadError: LocalizedError { var errorDescription: String? }
+
+    /// `review.getDiffPreview` for the diff panel's Changes and Uncommitted scopes.
+    /// A checkout outside the server's workspace root is refused; T3 then asks again at the server's own cwd
+    /// (`shouldRetryBranchDiffAtEnvironmentCwd`, DiffPanel.tsx:354-374).
+    nonisolated static func gitDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.GitLoader {
+        { cwd, baseRef, ignoreWhitespace in
+            func preview(_ cwd: String) async throws -> ReviewDiffPreview {
+                let json = try await supervisor.request(ReviewDiffPreview.method,
+                                                        payload: ReviewDiffPreview.input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
+                return try JSONDecoder().decode(ReviewDiffPreview.self, from: JSONEncoder().encode(json))
+            }
+            do {
+                return try await preview(cwd)
+            } catch let error as RPCClientError {
+                if error.description.contains("configured workspace root"),
+                   let serverCwd = try? await supervisor.request("server.getConfig")["cwd"]?.stringValue, serverCwd != cwd,
+                   let fallback = try? await preview(serverCwd) {
+                    return fallback
+                }
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    /// `vcs.listRefs` for the Changes scope's comparison target menu; nothing on failure.
+    nonisolated static func baseRefLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.RefLoader {
+        { cwd, remote in
+            guard let json = try? await supervisor.request(VcsRPC.listRefs, payload: VcsRPC.baseRefsInput(cwd: cwd, remote: remote)),
+                  let result = try? JSONDecoder().decode(VcsListRefsResult.self, from: JSONEncoder().encode(json)) else { return [] }
+            return result.refs
+        }
+    }
 
     /// `orchestration.getTurnItem` on the shell's socket for an open row whose output the stream
     /// left out. Decoding and trimming run here, off the main thread; the row gets only the text.
@@ -412,7 +446,14 @@ final class ThreadController {
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
         automations.openThreadId = { [weak self] in self?.openThreadId }
-        prCapabilities.onChange = { [weak self] in self?.pullRequests.sync() }
+        prCapabilities.onChange = { [weak self] in
+            guard let self else { return }
+            pullRequests.sync()
+            // A deferred proactive link goes ahead once the capabilities are known.
+            if let id = openThreadId, let thread = sidebar.snapshot?.threads.first(where: { $0.id == id }) {
+                panel.proactiveLinkedPullRequestKey = pullRequests.proactiveKey(thread)
+            }
+        }
         browser = BrowserController(panel: panel, sidebar: sidebar, environments: environments, files: files)
         panel.timeline.worktreeSetup.onOpenTerminal = { [weak self] in
             guard let self, let id = self.panel.timeline.worktreeSetup.snapshot?.terminalId else { return }
@@ -450,7 +491,11 @@ final class ThreadController {
             diff.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
             diff.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
         }
-        panel.lazyFileSurface.configure { [weak self] file in file.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) } }
+        panel.lazyFileSurface.configure { [weak self] file in
+            file.onReviewComment = { [weak self] record in self?.composer.addReviewComment(record) }
+            file.onDeleteReviewComment = { [weak self] id in self?.composer.deleteReviewComment(id) }
+            file.onUpdateReviewComment = { [weak self] record in self?.composer.updateReviewComment(record) }
+        }
         terminal.onAddToChat = { [weak self] selection in self?.composer.addTerminalContext(selection) }
         clones.openProject = { [weak self, weak sidebar] id in
             guard let self, let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return }
@@ -679,6 +724,7 @@ final class ThreadController {
         // Held rows keep their lineage header and footer; the first projection resets them.
         if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil) }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
+        var observedLink: ThreadLinkedPullRequest?
         session.onProjection = { [weak self] projection, onlyStreamingText in
             // A token changes no run, request, plan or relationship: only find needs the new text.
             if onlyStreamingText {
@@ -688,8 +734,10 @@ final class ThreadController {
             if let self {
                 let thread = self.sidebar?.snapshot?.threads.first { $0.id == id }
                 let link = thread?.linkedPullRequest ?? thread?.branchPullRequest
-                self.panel.onProactivePullRequest = { [weak self] in self?.pullRequests.openCurrentPullRequest() }
-                self.panel.proactiveLinkedPullRequestKey = link.map { "\($0.projectId):\($0.repository):\($0.number)" }
+                self.pullRequests.followLink(from: observedLink, to: link)
+                observedLink = link
+                self.panel.onProactivePullRequest = { [weak self] in self?.pullRequests.openProactive() }
+                self.panel.proactiveLinkedPullRequestKey = thread.flatMap { self.pullRequests.proactiveKey($0) }
             }
             self?.composer.projectionChanged(projection, threadId: id)
             self?.lineage.update(threadId: id, projection: projection)

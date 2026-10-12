@@ -198,6 +198,43 @@ struct DiffTests {
         #expect(await requests.all.last == .turn(GetTurnDiffInput(threadId: "t1", fromTurnCount: 1, toTurnCount: 2, ignoreWhitespace: true)))
     }
 
+    /// T3's git scopes (DiffPanel.tsx:289-412): with a git loader the panel opens on Changes (the branch range),
+    /// Uncommitted reads the working tree, a turn open leaves the git scopes, and a generic open comes back.
+    @Test func panelShowsGitScopes() async throws {
+        actor Calls { var all: [(String, String?)] = []; func add(_ c: (String, String?)) { all.append(c) } }
+        let calls = Calls()
+        let file: @Sendable (String) -> String = { name in "diff --git a/\(name) b/\(name)\n--- a/\(name)\n+++ b/\(name)\n@@ -1 +1 @@\n-a\n+b\n" }
+        let panel = DiffPanelView(frame: NSRect(x: 0, y: 0, width: 460, height: 600))
+        panel.workspaceRoot = "/repo"
+        panel.gitLoader = { cwd, baseRef, _ in
+            await calls.add((cwd, baseRef))
+            return ReviewDiffPreview(cwd: cwd, sources: [
+                .init(id: "w", kind: "working-tree", title: "Uncommitted", baseRef: nil, headRef: nil, diff: file("dirty.txt"), diffHash: "1", truncated: false),
+                .init(id: "b", kind: "branch-range", title: "Changes", baseRef: "origin/main", headRef: "feature", diff: file("branch.txt"), diffHash: "2", truncated: false),
+            ])
+        }
+        panel.threadId = "t1"
+        #expect(panel.gitScope == .branch)
+        panel.setSummaries([])
+        for _ in 0..<100 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(panel.list.diff.files.map(\.path) == ["branch.txt"])
+        #expect(await calls.all.first?.0 == "/repo")
+        panel.selectGitScope(.unstaged)
+        for _ in 0..<100 where panel.list.diff.files.first?.path != "dirty.txt" { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(panel.list.diff.files.map(\.path) == ["dirty.txt"])
+        panel.open(runId: nil, filePath: nil)
+        #expect(panel.gitScope == nil)
+        panel.selectGitScope(.branch)
+        #expect(panel.gitScope == .branch)
+        let local = VcsRef(name: "main"), origin = VcsRef(name: "origin/main", isRemote: true, remoteName: "origin")
+        let fork = VcsRef(name: "fork/main", isRemote: true, remoteName: "fork"), only = VcsRef(name: "origin/release", isRemote: true, remoteName: "origin")
+        let choices = DiffBaseRefChoice.build(local: [local], remote: [fork, origin, only])
+        #expect(choices.map(\.label) == ["main", "fork/main", "origin/release"])
+        #expect(choices[0].remote == origin)
+        #expect(choices[0].value(selected: "origin/main") == "origin/main")
+        #expect(choices[0].value(selected: nil) == "main")
+    }
+
     /// A 20,000-line diff in one expanded file: layout is a flat array, and the list only builds
     /// views for rows near the viewport.
     @Test func largeDiffStaysVirtual() throws {
