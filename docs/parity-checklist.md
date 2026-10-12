@@ -402,7 +402,7 @@ See the "Scheduled tasks" section.
 
 | Feature | Official source (file path) | Status | Notes |
 |---|---|---|---|
-| This machine: environment name, icon, version, update | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentIconPicker.tsx, comp/settings/LocalEnvironmentSetting.tsx | ➖ | Settings sweep 2026-10-11: Updater actions belong to M9. Local row menu parity remains a native UI gap. Sources, validation and limits: `docs/research/settings-sweep.md`. |
+| This machine: environment name, icon, version, update | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentIconPicker.tsx, comp/settings/LocalEnvironmentSetting.tsx | ➖ | Settings sweep 2026-10-11; the updater came with M9 (17995d6). Local row menu parity remains a native UI gap. Sources, validation and limits: `docs/research/settings-sweep.md`. |
 | Environments list (add backend, SSH, remote link, route, remove, reconnect status) | comp/settings/ConnectionsSettings.tsx, comp/settings/EnvironmentRow.tsx, comp/settings/EnvironmentRoutesList.tsx | ➖ | Settings sweep 2026-10-11: SSH ownership/password flow, route drag ordering and complete permissions UI remain. Existing pairing/reconnect behavior retained. Sources, validation and limits: `docs/research/settings-sweep.md`. |
 | Network access toggle; Tailscale HTTPS; pairing link with QR | comp/settings/ConnectionsSettings.tsx, comp/ui/qr-code.tsx | ➖ | Settings sweep 2026-10-11: Network/Tailscale switches require the desktop server-restart bridge, absent from this RPC client. Pairing and QR retained; no live daemon was modified. Sources, validation and limits: `docs/research/settings-sweep.md`. |
 | Authorized clients list, revoke one/others | comp/settings/ConnectionsSettings.tsx, comp/settings/SessionPermissions.tsx | 🟡 | Built (audit 2026-10-11): `AuthorizedClientsSectionView`, `ClientSessionRowView`, revoke and revoke others. Stale mark. |
@@ -492,9 +492,9 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | 🟡 |
 | thread.editQueuedMessage | alt+arrowup | composerFocus | 🟡 |
 | composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 |
-| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | ➖ resolved; sends in the foreground until start-in-background lands |
-| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | ➖ resolved; sends in the foreground until start-in-background lands |
-| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | ➖ resolved; sends without opening a new thread yet |
+| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11) |
+| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11) |
+| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | 🟡 resolved; sends, then opens a new thread in the same project (ComposerController.swift, ChatView.tsx:10020-10027) |
 | chat.new | mod+n | !terminalFocus | 🟡 |
 | chat.new | mod+shift+o | !terminalFocus | 🟡 |
 | chat.newLocal | mod+shift+n | !terminalFocus | 🟡 |
@@ -513,7 +513,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | editor.openFavorite | mod+o | (none) | ⏳ WP7.8 |
 | thread.previous | mod+shift+[ | (none) | 🟡 |
 | thread.next | mod+shift+] | (none) | 🟡 |
-| thread.copyReference | mod+shift+c | !terminalFocus | ➖ thread ID only, PR link with WP7.5 |
+| thread.copyReference | mod+shift+c | !terminalFocus | 🟡 copies the pull request link when the thread has one, else the thread ID (PullRequestsController.copyReferenceTarget, SidebarCommands.swift) |
 | thread.settle | mod+shift+s | !terminalFocus | 🟡 |
 | thread.pin | mod+shift+p | !terminalFocus | 🟡 |
 | thread.undo | mod+z | !terminalFocus && !editableFocus | 🟡 |
@@ -529,7 +529,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | Fixed, not configurable: diff find | mod+f inside a diff | diff focused | 🟡 WP7.12: Cmd+F routed through the sole App/Sources/Shortcuts dispatcher when the diff is focused. WP7.12b adds full find controls and match painting; see the diff find row. |
 | Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | 🟡 beside a thread; the Pull Requests page has no copy shortcut yet |
 | Fixed: quit | mod+q (hold 1.2 s, or double press within 500 ms) | desktop | ⏳ WP7.8 |
-| When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | ➖ composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop, isWeb set; terminal and preview keys read false until WP7.4 and WP7.6 |
+| When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | 🟡 composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop, isWeb set; terminalFocus and previewFocus come from the terminal and browser focus (AppDelegate.swift) |
 
 Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread.copyReference`; the app picks the PR URL when a PR is the selected context.
 
