@@ -33,6 +33,16 @@ struct PopupBehaviourTests {
         #expect(flips.side == .top)
     }
 
+    /// base-ui flips the alignment before shifting: the sidebar's bottom-end snooze menu opens bottom-start.
+    @Test func flipsAlignmentAtTheLeftEdge() {
+        let end = PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none)
+        let r = PopupPositioner.place(size: size, anchor: CGRect(x: 140, y: 100, width: 20, height: 20), in: bounds, end)
+        #expect(r.side == .bottom)
+        #expect(r.frame.minX == 140)
+        let room = PopupPositioner.place(size: size, anchor: CGRect(x: 400, y: 100, width: 20, height: 20), in: bounds, end)
+        #expect(room.frame.maxX == 420)
+    }
+
     @Test func shiftsInsideCollisionPadding() {
         let right = PopupPositioner.place(size: size, anchor: CGRect(x: 770, y: 100, width: 28, height: 28), in: bounds, .menu)
         #expect(right.frame.maxX == 795)

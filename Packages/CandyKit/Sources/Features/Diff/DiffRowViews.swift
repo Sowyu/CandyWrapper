@@ -163,7 +163,7 @@ final class DiffTitleView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let color = hovered ? Self.hoverColor : DiffStyle.codeForeground
         let line = line(color: color)
         var ctLine = line.line
@@ -283,7 +283,7 @@ final class DiffStatView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         for part in parts {
             let line = TextLine(NSAttributedString(string: part.text, attributes: [.font: font, .foregroundColor: part.color]))
             // pierre's counts are a `line-height: 1` box centered in the header; DiffStatLabel's sit
@@ -517,8 +517,8 @@ final class DiffCodeTextView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
-        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
+        ctx.setAllowsFontSmoothing(FontRuntime.smoothing)
         let metrics = TextLine(NSAttributedString(string: "0", attributes: [.font: DiffStyle.codeFont]))
         let baselineOffset = metrics.baseline(top: 0, lineHeight: DiffStyle.lineHeight)
         ctx.textMatrix = .identity

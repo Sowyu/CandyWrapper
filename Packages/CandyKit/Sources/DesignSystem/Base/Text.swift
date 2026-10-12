@@ -53,7 +53,8 @@ public struct TextLine {
     /// (FontMetrics and NGLineHeightMetrics::AddLeading). It lays out in device pixels (zoom for DSF),
     /// so at 2x the rounding is to half points: 12px text in a 16px line sits 0.5pt lower than a
     /// 1x calculation says (Kbd fidelity test).
-    // ponytail: assumes the 2x backing store the references use; pass the window's scale for 1x screens
+    // ponytail: defaults to the 2x backing store the references use; LabelView passes its context's scale, other callers
+    // (TextBlock, markdown, timeline) still assume 2x and sit up to 1pt off on a 1x screen, pass the scale when that shows
     public func baseline(top: CGFloat, lineHeight: CGFloat, scale: CGFloat = 2) -> CGFloat {
         let a = (ascent * scale).rounded(), d = (descent * scale).rounded()
         return top + (((lineHeight * scale - (a + d)) / 2).rounded(.down) + a) / scale
@@ -200,7 +201,8 @@ public final class LabelView: DSView {
         case .right: x = bounds.width - line.width
         default: x = 0
         }
-        let baseline = line.baseline(top: (bounds.height - resolvedLineHeight) / 2, lineHeight: resolvedLineHeight)
+        let baseline = line.baseline(top: (bounds.height - resolvedLineHeight) / 2, lineHeight: resolvedLineHeight,
+                                     scale: max(1, abs(ctx.userSpaceToDeviceSpaceTransform.a)))
         ctx.saveGState()
         // Core Text draws in a y-up space; flip around the baseline.
         ctx.textMatrix = .identity

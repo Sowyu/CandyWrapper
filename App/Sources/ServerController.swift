@@ -64,7 +64,8 @@ final class ServerController {
         Task {
             defer { connecting = false }
             do {
-                guard let (origin, id, token) = try await resolveServer() else { return }
+                guard let (origin, descriptor, token) = try await resolveServer() else { return }
+                let id = descriptor.environmentId
                 let key = origin.absoluteString + " " + token
                 guard key != sessionKey || session == nil else { return }
                 if id != environmentId {
@@ -72,6 +73,7 @@ final class ServerController {
                     showCached(id)
                 }
                 startSession(origin: origin, token: token, key: key)
+                environments.setPrimaryDescriptor(descriptor)
                 if remoteAccess.userChoice == nil { refreshRemoteAccess(origin: origin, token: token) }
             } catch {
                 present(error)
@@ -79,18 +81,18 @@ final class ServerController {
         }
     }
 
-    private func resolveServer() async throws -> (URL, String, String)? {
+    private func resolveServer() async throws -> (URL, EnvironmentDescriptor, String)? {
         switch try await lifecycle.ensureRunning() {
         case .owned(let server):
-            return (server.origin, server.descriptor.environmentId, server.accessToken)
+            return (server.origin, server.descriptor, server.accessToken)
         case .reused(let server):
             let id = server.descriptor.environmentId, credentials = self.credentials
             // Off the main thread: a Keychain access prompt blocks the caller until it's answered.
             if let token = await Task.detached(operation: { try? credentials.load(environmentId: id) }).value {
-                return (server.origin, id, token)
+                return (server.origin, server.descriptor, token)
             }
             guard let token = await pair(with: server) else { return nil }
-            return (server.origin, id, token)
+            return (server.origin, server.descriptor, token)
         }
     }
 

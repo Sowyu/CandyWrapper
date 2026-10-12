@@ -334,7 +334,7 @@ public enum SnoozePresets {
     /// `resolveSnoozePresets` with the web's time labels (apps/web/src/components/Sidebar.snooze.ts):
     /// in 1 hour, in 3 hours, this evening (only while 18:00 is more than an hour away), tomorrow
     /// 9:00, next Monday 9:00 (dropped when it is tomorrow).
-    public static func resolve(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> [SnoozePreset] {
+    public static func resolve(now: Date, calendar: Calendar = .current, locale: Locale = TimestampFormat.t3Locale) -> [SnoozePreset] {
         let time = DateFormatter()
         time.locale = locale
         time.calendar = calendar

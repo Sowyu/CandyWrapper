@@ -168,7 +168,7 @@ final class ProjectMonogramView: DSView {
         let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         let target: CGFloat = identity.monogram.count == 1 ? 6 : 12 // `textLength` with spacingAndGlyphs
         ctx.saveGState()
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         ctx.textMatrix = .identity
         ctx.translateBy(x: 8 - target / 2, y: 10.8)
         ctx.scaleBy(x: width > 0 ? target / width : 1, y: -1)
@@ -457,6 +457,8 @@ struct SidebarRowActions {
 /// content `px-2.5 py-2`: project line (h-5), title (`mt-1`), branch line (`mt-0.5`).
 final class SidebarCardRowView: SidebarRowBase {
     private let surface = CALayer()
+    /// The visible card, 2pt below the row's top: the hover card's trigger in T3 (aligned to its top edge).
+    var surfaceFrame: CGRect { surface.frame }
     private let monogram = ProjectMonogramView()
     private let project = LabelView()
     let pin = PinButton()

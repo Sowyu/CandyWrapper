@@ -175,6 +175,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }
         let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
+        // Every T3 main route covers the inset's grain with a flat `bg-background` (ChatView.tsx:11246,
+        // settings.tsx:122, _chat.index.tsx:128), so the official main panel is flat #0a0a0a in dark mode.
+        layout.main.showsGrain = false
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,

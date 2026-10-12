@@ -326,7 +326,7 @@ final class SearchExcerptView: DSView {
         }
         let baseline = full.baseline(top: 0, lineHeight: 16)
         ctx.saveGState()
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         ctx.textMatrix = .identity
         ctx.translateBy(x: 0, y: baseline)
         ctx.scaleBy(x: 1, y: -1)

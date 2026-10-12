@@ -391,8 +391,8 @@ public enum ModelTraits {
 
     /// `buildTraitsTriggerDisplay`: labels joined by " · ", Fast merged into the reasoning label.
     /// `ultrathink` is true when the prompt carries the Ultrathink prefix or word.
-    // ponytail: the Codex `serviceTier` speed rule is skipped; add it when a Codex instance is ready
-    public static func triggerLabel(_ descriptors: [ProviderOptionDescriptor], ultrathink: Bool = false) -> String {
+    /// `provider` is the driver: Codex's `serviceTier` folds into the speed (TraitsPicker.tsx:506-527).
+    public static func triggerLabel(_ descriptors: [ProviderOptionDescriptor], ultrathink: Bool = false, provider: String? = nil) -> String {
         var fastFallback: String?, speed: String?, reasoningIndex = -1
         var labels: [String] = []
         let primary = descriptors.first { $0.type == .select }?.id
@@ -401,6 +401,16 @@ public enum ModelTraits {
                 speed = d.currentValue?.bool == true ? "Fast" : nil
                 fastFallback = speed ?? "Normal"
                 continue
+            }
+            if provider == "codex", d.id == "serviceTier", d.type == .select {
+                let value = currentValue(d)?.string
+                let fast = d.options.first { $0.label == "Fast" }, ultrafast = d.options.first { $0.label == "Ultrafast" }
+                let isFast = fast != nil && value == fast?.id, isUltrafast = ultrafast != nil && value == ultrafast?.id
+                if ((fast != nil || ultrafast != nil) && value == "default") || isFast || isUltrafast {
+                    speed = isUltrafast ? "Ultrafast" : isFast ? "Fast" : nil
+                    fastFallback = d.options.first { $0.id == value }?.label ?? "Normal"
+                    continue
+                }
             }
             let label = ultrathink && d.id == primary ? "Ultrathink"
                 : d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")" : currentLabel(d)

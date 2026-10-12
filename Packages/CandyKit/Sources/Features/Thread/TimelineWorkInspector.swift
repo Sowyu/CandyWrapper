@@ -653,7 +653,7 @@ final class WorkDetailView: DSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         var y: CGFloat = 0
         for (block, l) in zip(detail.blocks, laid(bounds.width)) {
             y += block.gap

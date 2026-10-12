@@ -872,8 +872,8 @@ public final class MarkdownView: DSView {
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, bounds.width > 0, !document.blocks.isEmpty else { return }
-        ctx.setShouldSmoothFonts(true)
-        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
+        ctx.setAllowsFontSmoothing(FontRuntime.smoothing)
         let dark = effectiveAppearance.isDark
         var chipIndex = -1
         var contextIndex = -1

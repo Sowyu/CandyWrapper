@@ -28,7 +28,7 @@ enum UsageText {
         let x: CGFloat = align == .right ? rect.maxX - width : align == .center ? rect.midX - width / 2 : rect.minX
         let baseline = full.baseline(top: rect.minY, lineHeight: lineHeight)
         ctx.saveGState()
-        ctx.setShouldSmoothFonts(true)
+        ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         ctx.textMatrix = .identity
         ctx.translateBy(x: x, y: baseline)
         ctx.scaleBy(x: 1, y: -1)
