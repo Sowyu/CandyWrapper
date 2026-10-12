@@ -20,7 +20,10 @@ set -euo pipefail
 umask 022 # the app and archives are public; no secret is ever written to a file here
 
 REPO_SLUG=Sowyu/CandyWrapper
-IDENTITY="CandyWrapper Release"
+# The user's Apple Development certificate (free personal team) in the login keychain. A Team ID makes macOS
+# key keychain items and privacy permissions to `teamid:` instead of each build's cdhash, so updates keep both.
+IDENTITY="Apple Development"
+TEAM=8Q677AYRU7
 KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
 FEED_URL=https://github.com/$REPO_SLUG/releases/download/appcast/appcast.xml
 here=${0:A:h:h}
@@ -112,7 +115,7 @@ strip -x -S $app/Contents/MacOS/CandyWrapper
 for b in $fw/Sparkle $fw/Autoupdate $fw/Updater.app/Contents/MacOS/Updater; do
   lipo -archs $b | grep -q x86_64 && lipo -thin arm64 $b -output $b.thin && mv $b.thin $b
 done
-sign() { codesign --force --sign $IDENTITY --keychain $KC --options runtime --timestamp=none "$@" }
+sign() { codesign --force --sign $IDENTITY --options runtime --timestamp=none "$@" }
 sign $fw/Autoupdate
 sign $fw/Updater.app
 sign $fw
@@ -120,7 +123,7 @@ entitlements=()
 [[ -f $src/App/Resources/CandyWrapper.entitlements ]] && entitlements=(--entitlements $src/App/Resources/CandyWrapper.entitlements)
 sign "${entitlements[@]}" $app
 codesign --verify --deep --strict $app
-codesign -dr - $app 2>&1 | grep -q 'certificate root' || { print -u2 "designated requirement does not pin the certificate"; exit 1 }
+codesign -dv $app 2>&1 | grep -q "^TeamIdentifier=$TEAM\$" || { print -u2 "the app is not signed by team $TEAM"; exit 1 }
 
 # 5. The update archive (symlinks kept) and a DMG for first installs.
 zip=CandyWrapper-$ver-arm64.zip
@@ -132,7 +135,7 @@ mkdir -p $stage
 ditto $app $stage/CandyWrapper.app
 ln -s /Applications $stage/Applications
 hdiutil create -quiet -volname CandyWrapper -srcfolder $stage -fs HFS+ -format UDZO -ov $out/$dmg
-codesign --force --sign $IDENTITY --keychain $KC --timestamp=none $out/$dmg
+codesign --force --sign $IDENTITY --timestamp=none $out/$dmg
 shasum -a 256 $out/$zip $out/$dmg | sed "s|$out/||" > $out/sha256.txt
 
 # 6. EdDSA: the archive, then the appcast. The seed goes to sign_update on stdin.
