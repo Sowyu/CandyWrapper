@@ -141,12 +141,22 @@ public final class ThreadMinimapView: DSView {
         }
     }
     public override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        // The strip redraws whenever the current turn changes while scrolling. With 2,500 turns, a themed color and an
+        // NSBezierPath per mark took 18% of the main thread in a long scroll; resolve the three colors once and fill
+        // each mark straight into the context, in the same order, so overlapping marks blend as before.
+        let current = Themed.color(\.foreground, 0.9).cgColor
+        let near = Themed.color(\.mutedForeground, 0.75).cgColor
+        let base = Themed.color(\.mutedForeground, 0.35).cgColor
+        let span = max(0, bounds.height - 2), last = CGFloat(max(1, items.count - 1))
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
             let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8
-            Themed.color(i == currentIndex ? \.foreground : \.mutedForeground, i == currentIndex ? 0.9 : distance == 0 ? 0.75 : 0.35).setFill()
-            let y = CGFloat(i) / CGFloat(max(1, items.count - 1)) * max(0, bounds.height - 2)
-            NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: width, height: 2), xRadius: 1, yRadius: 1).fill()
+            let rect = CGRect(x: 0, y: CGFloat(i) / last * span, width: width, height: 2)
+            guard rect.intersects(dirtyRect) else { continue }
+            ctx.setFillColor(i == currentIndex ? current : distance == 0 ? near : base)
+            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil))
+            ctx.fillPath()
         }
     }
 }

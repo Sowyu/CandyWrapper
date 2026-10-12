@@ -897,7 +897,7 @@ public final class MarkdownView: DSView {
                 // Matches paint as CSS highlights (index.css:376-394): a background behind the font's content area
                 // and the text inside it in the highlight's foreground.
                 let visible = origin.y <= dirtyRect.maxY && origin.y + box.height >= dirtyRect.minY
-                if visible { box.draw(in: ctx, at: origin) }
+                if visible { box.draw(in: ctx, at: origin, clip: dirtyRect) }
                 if !threadFindQuery.isEmpty {
                     for range in box.findRanges(threadFindQuery) {
                         let active = findOccurrence == threadFindOccurrence

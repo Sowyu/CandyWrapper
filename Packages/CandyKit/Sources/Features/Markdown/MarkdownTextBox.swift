@@ -184,8 +184,18 @@ final class MarkdownTextBox {
     /// Blink paints each baseline on the nearest whole device pixel, ties going up the page (measured on wrapped paragraphs, list items
     /// and code blocks), so the snap uses the position in the view, not in the box.
     // ponytail: 2x device pixels, as in TextLine.baseline; pass the window's scale for 1x screens
-    func draw(in ctx: CGContext, at origin: CGPoint) {
-        for line in lines {
+    /// `clip` limits drawing to the lines near it: every line box is `lineHeight` tall, so the range is plain arithmetic.
+    /// An 18,000 line code block drew every line on each display and held the main thread for 0.8 s.
+    func draw(in ctx: CGContext, at origin: CGPoint, clip: CGRect? = nil) {
+        var range = lines.indices
+        if let clip, lineHeight > 0, !lines.isEmpty {
+            // One line of slack each side: glyphs can reach past their line box.
+            let first = max(0, Int(((clip.minY - origin.y) / lineHeight).rounded(.down)) - 1)
+            let last = min(lines.count - 1, Int(((clip.maxY - origin.y) / lineHeight).rounded(.up)) + 1)
+            guard first <= last else { return }
+            range = first..<(last + 1)
+        }
+        for line in lines[range] {
             let baseline = Self.snappedBaseline(origin.y + line.baseline)
             line.fragment.draw(at: CGPoint(x: origin.x + line.origin.x, y: baseline - line.fragment.glyphOrigin.y), in: ctx)
         }

@@ -110,4 +110,29 @@ struct MarkdownTests {
             #expect(rep.pixelsHigh > 1000)
         }
     }
+
+    /// A clipped draw paints the same pixels inside the clip as a full draw, and nothing far outside it.
+    @Test func clippedTextBoxDrawMatchesFullDraw() {
+        let text = (1...300).map { "let value\($0) = compute(\($0)) // line \($0)" }.joined(separator: "\n")
+        let box = MarkdownTextBox(NSAttributedString(string: text, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)]),
+                                  width: 400, lineHeight: 20, strut: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), wraps: false)
+        #expect(box.lines.count == 300)
+        func render(_ clip: CGRect?) -> [UInt8] {
+            let w = 400, h = 6000
+            var pixels = [UInt8](repeating: 0, count: w * h * 4)
+            pixels.withUnsafeMutableBytes { raw in
+                let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
+                box.draw(in: ctx, at: .zero, clip: clip)
+            }
+            return pixels
+        }
+        let full = render(nil), clipped = render(CGRect(x: 0, y: 2000, width: 400, height: 300))
+        func rows(_ p: [UInt8], _ ys: Range<Int>) -> ArraySlice<UInt8> { p[(ys.lowerBound * 1600)..<(ys.upperBound * 1600)] }
+        #expect(rows(full, 2000..<2300) == rows(clipped, 2000..<2300))
+        #expect(rows(clipped, 0..<1900).allSatisfy { $0 == 0 })
+        #expect(rows(clipped, 2400..<6000).allSatisfy { $0 == 0 })
+        #expect(rows(full, 0..<1900).contains { $0 != 0 })
+    }
 }

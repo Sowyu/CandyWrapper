@@ -69,7 +69,7 @@ public final class ThreadLineageController {
             return
         }
         let all = shells?() ?? []
-        let local = ThreadRelationships.unscoped(all, environmentId: env)
+        let local = ThreadRelationships.unscoped(ThreadRelationships.related(all, to: threadId, projection: projection), environmentId: env)
         let lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection)
         let byId = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         section.mergeTargetTitle = lineage.mergeTarget.flatMap { byId[$0]?.title }
