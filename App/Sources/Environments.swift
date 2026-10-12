@@ -116,6 +116,18 @@ final class Environments {
     }
     /// The session's connection state; nil when no session runs.
     func state(_ environmentId: String) -> ConnectionState? { entries[environmentId]?.state }
+
+    /// This client's session per environment (`GET /api/auth/session`), read once per connected session.
+    private var authSessions: [String: AuthSessionState] = [:]
+    func setAuthSession(_ session: AuthSessionState?, for environmentId: String) { authSessions[environmentId] = session }
+
+    /// `readEnvironmentScope(id, orchestration:operate)`: whether this connection may change threads.
+    // ponytail: a session not read yet (or a failed read) counts as allowed, where T3 blocks until it reads
+    // one; block as T3 does if scoped pairings ever send before the read lands
+    func canOperate(_ environmentId: String?) -> Bool {
+        guard let environmentId, let session = authSessions[environmentId] else { return true }
+        return session.grants(AuthScopes.orchestrationOperate)
+    }
     /// The route the session uses.
     func routeInUse(_ environmentId: String) -> URL? { entries[environmentId]?.session?.http.baseURL }
 

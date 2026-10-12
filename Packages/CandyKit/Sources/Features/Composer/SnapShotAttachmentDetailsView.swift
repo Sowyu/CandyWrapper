@@ -13,9 +13,8 @@ public final class SnapShotAttachmentDetailsView: DSView {
     private let contents: ButtonView
     public init(source: JSONValue) {
         self.source = source
-        contents = ButtonView(nil, icon: SnapShotSource.details(source) == nil ? .image : .text, variant: .overlay, size: .iconMicro)
+        contents = SnapShotContents.button(source)
         super.init(frame: .zero)
-        contents.iconSize = 12
         gradient.colors = [NSColor.clear.cgColor, NSColor.black.withAlphaComponent(0.55).cgColor, NSColor.black.withAlphaComponent(0.85).cgColor]
         gradient.locations = [0, 0.5, 1]
         layer?.addSublayer(gradient)
@@ -30,16 +29,6 @@ public final class SnapShotAttachmentDetailsView: DSView {
            let data = Data(base64Encoded: String(raw[raw.index(after: comma)...])) { icon.image = NSImage(data: data) }
         monogram.isHidden = icon.image != nil
         [icon, monogram, app, title, contents].forEach(addSubview)
-        let hasData = source["accessibility"] != nil || SnapShotSource.details(source) != nil
-        contents.toolTip = hasData ? "Accessibility data" : "No accessibility data"
-        contents.setAccessibilityLabel(hasData ? "View accessibility data" : "No accessibility data")
-        contents.action = { [weak self] in self?.showContents() }
-    }
-    private func showContents() {
-        let details = SnapShotSource.details(source)
-        let body = SnapShotAccessibilityDetailsBody(text: details
-            ?? "The app or capture backend did not provide verified accessibility data.", hasData: details != nil, isJSON: source["accessibility"]?["format"]?.stringValue == "element-tree")
-        _ = PopoverView(content: body, width: .md).show(from: contents, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
     }
     public override func layout() {
         super.layout()
@@ -54,6 +43,35 @@ public final class SnapShotAttachmentDetailsView: DSView {
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         return hit === contents || hit?.isDescendant(of: contents) == true ? hit : nil
+    }
+}
+
+/// `SnapShotContentsButton` (SnapShotAttachmentDetails.tsx:74-134): a micro overlay button whose popover
+/// shows the capture's accessibility data.
+public enum SnapShotContents {
+    /// `snapShotIncludesAccessibility`.
+    public static func includesAccessibility(_ source: JSONValue) -> Bool {
+        if let tree = source["accessibility"], tree != JSONValue.null { return true }
+        return source["accessibleText"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    @MainActor public static func button(_ source: JSONValue) -> ButtonView {
+        let included = includesAccessibility(source)
+        let button = ButtonView(nil, icon: included ? .text : .image, variant: .overlay, size: .iconMicro)
+        button.iconSize = 12
+        button.toolTip = included ? "Accessibility data" : "No accessibility data"
+        button.setAccessibilityLabel(included ? "View accessibility data" : "No accessibility data")
+        button.action = { [weak button] in if let button { showPopover(source, from: button) } }
+        return button
+    }
+
+    @MainActor static func showPopover(_ source: JSONValue, from anchor: NSView) {
+        let details = SnapShotSource.details(source)
+        let text = details ?? (includesAccessibility(source)
+            ? "Structured accessibility elements were included, but they have no readable names or values."
+            : "The app or capture backend did not provide verified accessibility data.")
+        let body = SnapShotAccessibilityDetailsBody(text: text, hasData: details != nil, isJSON: source["accessibility"]?["format"]?.stringValue == "element-tree")
+        _ = PopoverView(content: body, width: .md).show(from: anchor, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
     }
 }
 

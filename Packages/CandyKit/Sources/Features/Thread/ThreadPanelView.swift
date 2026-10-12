@@ -60,20 +60,69 @@ public final class ThreadHeaderView: TopbarDragView {
     }
     public func cancelTitleRename() { titleEditor.isHidden = true; titleHit.cancelPendingMenu() }
 
+    private var toggleTips: [TooltipController] = []
+
+    /// PanelLayoutControls.tsx:61-127: each toggle's words and its shortcut. Every thread and draft here has a project, so T3's "is unavailable"
+    /// texts (`activeProject === null`) never apply.
+    private func refreshToggleTooltips() {
+        func tip(_ text: String, _ command: String) -> String {
+            ActiveKeymap.label(for: command).map { "\(text) (\($0))" } ?? text
+        }
+        guard toggleTips.count == 3 else { return }
+        toggleTips[0].text = tip("Toggle thread details", "threadPanel.toggle")
+        toggleTips[1].text = tip("Toggle terminal drawer", "terminal.toggle")
+        toggleTips[2].text = tip("Toggle right panel", "rightPanel.toggle")
+    }
+
     public var threadTitle: String {
         get { title.text }
-        set { if newValue != title.text { title.text = newValue; needsLayout = true } }
+        set {
+            guard newValue != title.text else { return }
+            title.text = newValue
+            titleHit.setAccessibilityLabel("Thread actions for \(newValue)")
+            needsLayout = true
+        }
+    }
+
+    /// The `nav` named "Thread breadcrumb" (ChatHeader.tsx:262-264): the project, then the title button
+    /// ("Thread actions for ...", :325-327).
+    private let breadcrumb = NSAccessibilityElement()
+    private let projectElement = NSAccessibilityElement()
+
+    public override func accessibilityChildren() -> [Any]? {
+        // The header itself is ignored, so its own children are its unignored descendants.
+        let others = NSAccessibility.unignoredChildren(from: subviews.filter { $0 !== titleHit && !$0.isHidden })
+        guard !title.isHidden, let window else { return others }
+        func screen(_ rect: NSRect) -> NSRect { window.convertToScreen(convert(rect, to: nil)) }
+        projectElement.setAccessibilityLabel(project.text)
+        projectElement.setAccessibilityFrame(screen(project.frame))
+        breadcrumb.setAccessibilityFrame(screen(project.frame.union(titleHit.frame)))
+        let crumbs: [Any] = project.text.isEmpty ? [titleHit] : [projectElement, titleHit]
+        breadcrumb.setAccessibilityChildren(crumbs)
+        return [breadcrumb] + others
     }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for label in [project, slash, title] { label.lineHeight = 20; addSubview(label) }
         addSubview(favicon)
-        toggles[0].setAccessibilityLabel("Thread panel")
-        toggles[1].setAccessibilityLabel("Toggle terminal")
+        toggles[0].setAccessibilityLabel("Toggle thread details panel")
+        toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
         toggles.forEach(addSubview)
+        toggleTips = toggles.map { TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4)) }
+        refreshToggleTooltips()
+        // The header lives as long as the window: the observer is never removed.
+        ActiveKeymap.observe { [weak self] in self?.refreshToggleTooltips() }
         addSubview(titleHit)
+        breadcrumb.setAccessibilityRole(.group)
+        breadcrumb.setAccessibilityLabel("Thread breadcrumb")
+        breadcrumb.setAccessibilityParent(self)
+        projectElement.setAccessibilityRole(.staticText)
+        projectElement.setAccessibilityParent(breadcrumb)
+        titleHit.setAccessibilityElement(true)
+        titleHit.setAccessibilityRole(.button)
+        titleHit.accessibilityGroup = breadcrumb
         titleHit.onMenu = { [weak self] event, view in self?.onThreadMenu?(event, view) }
         titleHit.onRename = { [weak self] in self?.beginTitleRename() }
         addSubview(titleEditor)

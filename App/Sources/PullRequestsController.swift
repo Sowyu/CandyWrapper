@@ -150,6 +150,11 @@ final class PullRequestDetailBinding {
             ProjectSettings.resolve($0, projectId: target.projectId).settings["pullRequestMergeMethod"].stringValue
         }
         view.showLoading(number: target.number)
+        // An old server has no pull request reads (ChatView.tsx:11005-11011).
+        if capabilities.known(environmentId), !capabilities.has(environmentId, "pullRequests") {
+            view.showFailure(title: "Pull requests unavailable", message: "Update this environment's T3 Code server to browse pull requests.", retry: false)
+            return
+        }
         reload(invalidate: false)
     }
 

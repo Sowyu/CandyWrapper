@@ -262,6 +262,11 @@ private final class QueuedRowView: DSView {
         layer?.cornerRadius = 6
         cancel.smoothsFont = false
         cancel.setAccessibilityLabel("Cancel editing queued message")
+        text.setAccessibilityElement(true)
+        text.setAccessibilityRole(.staticText)
+        saving.setAccessibilityElement(true)
+        saving.setAccessibilityRole(.image)
+        saving.setAccessibilityLabel("Saving queued message") // QueuedRunsControl.tsx:369-372
         [grip, saving, text, edit, steer, remove, cancel].forEach(addSubview)
         TooltipController.attach(to: remove, text: "Remove from queue")
         grip.onDrag = { [weak self] event in guard let self else { return }; owner?.dragMoved(index, event: event) }
@@ -280,6 +285,8 @@ private final class QueuedRowView: DSView {
         self.editTip.text = editTip
         text.text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         textTip.text = text.text
+        // The `sr-only` "Editing queued message: " before the text (QueuedRunsControl.tsx:367).
+        text.setAccessibilityLabel((editing ? "Editing queued message: " : "") + text.text)
         text.color = editing ? Themed.color(\.accentForeground) : Themed.color(\.foreground, 0.8)
         saving.isHidden = item.runId != nil
         grip.isHidden = !canReorder

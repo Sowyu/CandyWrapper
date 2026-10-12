@@ -13,6 +13,9 @@ public final class ComposerControlView: ControlView {
         didSet { oldValue?.removeFromSuperview(); if let icon { addSubview(icon) }; restyle(); invalidateIntrinsicContentSize() }
     }
     public var tintsIcon = true { didSet { restyle() } }
+    /// A plain lucide icon in `ComposerControl` keeps `[&_svg]:-mx-0.5`: it takes 2 less on each side
+    /// in the flow. `ComposerControlIcon` glyphs (`data-composer-control-icon`) reset it to 0.
+    public var iconOverhang: CGFloat = 0 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// `min-w-13` on the model trigger: the label shrinks first, down to this width.
     public var minimumWidth: CGFloat = 0
     /// False for an icon-only block at narrow widths: the label leaves the flow (ChatComposer.tsx:5604).
@@ -62,7 +65,7 @@ public final class ComposerControlView: ControlView {
 
     /// The width with or without the label, for the footer's fit decision.
     public func width(showingLabel: Bool) -> CGFloat {
-        let parts = [icon == nil ? nil : CGFloat(16), showingLabel ? label.textWidth : nil, showsChevron ? CGFloat(10) : nil].compactMap { $0 }
+        let parts = [icon == nil ? nil : 16 - 2 * iconOverhang, showingLabel ? label.textWidth : nil, showsChevron ? CGFloat(10) : nil].compactMap { $0 }
         return 2 + 2 * Self.padding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
     }
 
@@ -74,8 +77,8 @@ public final class ComposerControlView: ControlView {
         ring.frame = bounds.insetBy(dx: -3, dy: -3)
         var x = 1 + Self.padding
         if let icon {
-            icon.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
-            x += 16 + Self.gap
+            icon.frame = NSRect(x: x - iconOverhang, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            x += 16 - 2 * iconOverhang + Self.gap
         }
         guard showsLabel else {
             chevron.frame = NSRect(x: x - 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
@@ -85,7 +88,7 @@ public final class ComposerControlView: ControlView {
         let chevronBox = bounds.width - 1 - Self.padding - 10
         chevron.frame = NSRect(x: chevronBox - 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
         // Frames snap to device pixels; a label that misses by less than that still fits, as in CSS.
-        let room = chevronBox - Self.gap - x
+        let room = showsChevron ? chevronBox - Self.gap - x : bounds.width - 1 - Self.padding - x
         label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, label.textWidth <= room + 0.5 ? label.textWidth : room), height: 20)
     }
 

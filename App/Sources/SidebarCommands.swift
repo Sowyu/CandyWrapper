@@ -266,6 +266,13 @@ final class SidebarCommands {
     func shell(_ id: ThreadId) -> ThreadShell? { snapshot?.threads.first { $0.id == id } }
     private var nowMs: Int64 { TimestampFormat.nowMs() }
 
+    /// `checkThreadOperations` (Sidebar.tsx:315-326): every thread must be on a connection that may change it.
+    private func checkThreadOperations(_ threads: [ThreadShell]) -> Bool {
+        if threads.allSatisfy({ environments.canOperate($0.id.environmentId) }) { return true }
+        toast("Thread action unavailable", "This connection cannot change one or more selected threads.", .error)
+        return false
+    }
+
     private func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
         threads.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
     }
@@ -539,6 +546,7 @@ final class SidebarCommands {
         }
         let presets = SnoozePresets.resolve(now: Date())
         var state = ThreadActionMenu.State()
+        state.canOperate = environments.canOperate(thread.id.environmentId)
         // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
         state.branch = thread.branch
         state.projectFilter = rename == nil ? group.map { (label: $0.label, isActive: sidebar.state.projectScopeKey == $0.key) } : nil
@@ -559,6 +567,7 @@ final class SidebarCommands {
     }
 
     private func perform(_ choice: String, id: ThreadId, thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) {
+        if ThreadActionMenu.requiresOperate(choice), !checkThreadOperations([thread]) { return }
         if choice == "snooze:custom" {
             requestCustomSnooze { [weak self] wake in self?.snooze(id, until: wake) }
             return
@@ -721,6 +730,7 @@ final class SidebarCommands {
         let items = ThreadActionMenu.bulkItems(count: selected.count, pinnedCount: pinned.count, settlingCount: settling.count,
                                                canSnooze: selected.allSatisfy { SidebarModel.canSnooze(SidebarThread($0), nowMs: ms) },
                                                titleSupportedCount: selected.count, titleActionableCount: regeneratable.count,
+                                               canOperate: selected.allSatisfy { environments.canOperate($0.id.environmentId) },
                                                snoozePresets: presets)
         let menu = Self.nativeMenu(items) { [weak self] choice in
             self?.performBulk(choice, selected: selected, pinned: pinned, settling: settling, regeneratable: regeneratable, presets: presets)
@@ -731,6 +741,7 @@ final class SidebarCommands {
     private func performBulk(_ choice: String, selected: [ThreadShell], pinned: [ThreadShell], settling: [ThreadShell],
                              regeneratable: [ThreadShell], presets: [SnoozePreset]) {
         let ids = selected.map(\.id)
+        if choice != "mark-unread", !checkThreadOperations(choice == "settle" ? settling : selected) { return }
         if choice.hasPrefix("snooze:") {
             let snoozeAll: @MainActor (Date) -> Void = { [weak self] wake in
                 guard let self else { return }

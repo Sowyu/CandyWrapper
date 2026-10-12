@@ -36,4 +36,7 @@ final class ThreadHeaderTitleView: DSView {
     override func rightMouseDown(with event: NSEvent) { pending?.cancel(); onMenu?(event, self) }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { pending?.cancel() } }
+    /// The breadcrumb group VoiceOver reads this button in (ThreadHeaderView).
+    weak var accessibilityGroup: NSAccessibilityElement?
+    override func accessibilityParent() -> Any? { accessibilityGroup ?? super.accessibilityParent() }
 }

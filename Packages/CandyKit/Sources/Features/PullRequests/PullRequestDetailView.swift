@@ -21,6 +21,7 @@ public final class PullRequestDetailView: DSView {
 
     public var context: Context = .thread { didSet { rebuild() } }
     public private(set) var phase: Phase = .loading(number: 0)
+    private var failureRetry = true
     public private(set) var detail: PullRequestDetail?
     public var activityPending = true { didSet { if activityPending != oldValue { rebuildTabs() } } }
     public var activityError: String? { didSet { if activityError != oldValue { rebuildTabs() } } }
@@ -284,8 +285,10 @@ public final class PullRequestDetailView: DSView {
         rebuild()
     }
 
-    public func showFailure(title: String, message: String) {
+    /// `retry` false drops the Retry button, for a state no retry can fix (an old server).
+    public func showFailure(title: String, message: String, retry: Bool = true) {
         phase = .failed(title: title, message: message)
+        failureRetry = retry
         detail = nil
         rebuild()
     }
@@ -345,9 +348,11 @@ public final class PullRequestDetailView: DSView {
             ghost = g
         case .failed(let title, let message):
             let e = EmptyView(title: title, message: message, icon: .gitPullRequestArrow)
-            let retry = ButtonView("Retry", icon: .refreshCw, variant: .outline, size: .sm)
-            retry.action = { [weak self] in self?.onRetry?() }
-            e.content = ButtonRow([retry])
+            if failureRetry {
+                let retry = ButtonView("Retry", icon: .refreshCw, variant: .outline, size: .sm)
+                retry.action = { [weak self] in self?.onRetry?() }
+                e.content = ButtonRow([retry])
+            }
             addSubview(e)
             failure = e
         case .loaded:

@@ -369,6 +369,16 @@ public final class PickerControlsView: DSView {
     public private(set) var fit = ComposerFooterLayout.Fit()
     /// The blocks in the overflow menu changed; ComposerPickers closes a popup whose trigger hid.
     var onFitChange: (() -> Void)?
+    /// No enabled provider: one plain button replaces the cluster (ChatComposer.tsx:5473-5487).
+    public let unavailable = ComposerControlView(icon: IconView(name: .circleAlert, size: 16))
+    /// "Open provider settings" or "No provider available"; nil shows the pickers.
+    public var unavailableTitle: String? {
+        didSet {
+            guard unavailableTitle != oldValue else { return }
+            unavailable.title = unavailableTitle ?? ""
+            invalidateIntrinsicContentSize(); needsLayout = true
+        }
+    }
 
     init(model: ComposerControlView, traits: ComposerControlView, access: ComposerControlView) {
         self.model = model; self.traits = traits; self.access = access
@@ -377,7 +387,14 @@ public final class PickerControlsView: DSView {
         // The traits menu, the access select and the overflow menu open on press (TraitsPicker.tsx, CompactComposerControlsMenu.tsx).
         for trigger in [traits, access, overflow] { trigger.opensPopupOnPress = true; trigger.scalesWhenPressed = false }
         overflow.setAccessibilityLabel("More composer controls")
-        for v in [model, separators[0], traits, separators[1], access, overflow] as [NSView] { addSubview(v) }
+        // A plain button, not a popup trigger: no chevron, and it scales when pressed. Its lucide
+        // icon keeps the `-mx-0.5` margins the model glyph drops.
+        unavailable.showsChevron = false
+        unavailable.iconOverhang = 2
+        unavailable.scalesWhenPressed = true
+        unavailable.setAccessibilityRole(.button)
+        unavailable.isHidden = true
+        for v in [model, separators[0], traits, separators[1], access, overflow, unavailable] as [NSView] { addSubview(v) }
     }
 
     /// The trailing blocks in order: separator and trigger each.
@@ -399,6 +416,7 @@ public final class PickerControlsView: DSView {
     }
 
     public override var intrinsicContentSize: NSSize {
+        if unavailableTitle != nil { return NSSize(width: unavailable.naturalWidth, height: 28) }
         let m = measurement
         return NSSize(width: ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 0), height: 28)
     }
@@ -411,6 +429,14 @@ public final class PickerControlsView: DSView {
 
     public override func layout() {
         super.layout()
+        unavailable.isHidden = unavailableTitle == nil
+        model.isHidden = unavailableTitle != nil
+        if unavailableTitle != nil {
+            for v in [separators[0], traits, separators[1], access, overflow] as [NSView] { v.isHidden = true }
+            let w = min(unavailable.naturalWidth, bounds.width)
+            unavailable.frame = NSRect(x: 0, y: (bounds.height - 28) / 2, width: (w * 2).rounded() / 2, height: 28)
+            return
+        }
         let old = fit
         // The expanded footer never hides the cluster; the model keeps shrinking and then clips.
         fit = ComposerFooterLayout.resolve(measurement, hostWidth: bounds.width, previous: fit)

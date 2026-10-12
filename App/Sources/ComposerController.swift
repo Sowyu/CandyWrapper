@@ -249,6 +249,9 @@ final class ComposerController {
         let question = panel.questionPanel
         question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
         composer.onAttach = { [weak self] in self?.attachPressed() }
+        composer.onInsertRejected = { [weak self] in
+            self?.toast(.error, "Unable to add to chat", "The composer is busy; try again once it is ready.")
+        }
         composer.fileList.onRemove = { [weak self] id in self?.removeQuestionFile(id) }
         composer.fileList.onOpen = { [weak self] id in self?.expandQuestionFile(id) }
         composer.fileList.onRetry = { [weak self] id in self?.retryQuestionFile(id) }
@@ -418,6 +421,9 @@ final class ComposerController {
     var allConfigs: [String: ServerProviderConfig] { serverConfigs }
     /// An environment's last `server.getConfig` snapshot with its updates.
     func config(_ environmentId: String) -> ServerProviderConfig? { serverConfigs[environmentId] }
+
+    /// An environment's grants arrived: the send button may now say it can't change threads.
+    func grantsChanged() { refreshAfterCommit() }
 
     /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.
     func applySettings(_ environmentId: String, _ raw: JSONValue) {
@@ -1052,7 +1058,9 @@ final class ComposerController {
         composer.isDraftRoute = panel.isDraft
         // A rewind is no busy spinner in T3: the arrow stays, disabled with "Rewinding conversation".
         composer.isBusy = pendingMessageId != nil || resuming || draftKey.map { fanoutInFlight.contains($0) } == true
+        updatePickers()
         var placeholder = ComposerLogic.PlaceholderInput()
+        placeholder.noProvider = pickers.controlsView.unavailableTitle != nil
         // T3's `phase === "disconnected"` means the thread has no runtime (`derivePhase(activeRuntime)`,
         // session-logic.ts:1069-1078), not a lost connection: drafts and unstarted threads get it.
         // ponytail: ignores the PR-watch background work that also creates a runtime; add it with PR watches
@@ -1068,7 +1076,6 @@ final class ComposerController {
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic)
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.isBusy = queueBusy
-        updatePickers()
         let plan = ThreadPlanFollowUp.activePlan(projection)
         let showPlan = pickers.current.interactionMode == .plan && plan != nil && requests.isEmpty && currentAttachments.isEmpty && !composer.isBusy
         composer.planFollowUp = showPlan
@@ -1221,9 +1228,27 @@ final class ComposerController {
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.update(draftKey: draftKey ?? "", context: context)
+        // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
+        // is known one button replaces the cluster (:5473-5487). It opens setup for the requested
+        // instance, else (on an unstarted thread) for the first instance that can install or sign in.
+        noProviderAvailable = target != nil && pickers.current.entry == nil && pickers.currentMultiple == nil
+        let catalogKnown = targetEnvironmentId.map { serverConfigs[$0] != nil } == true
+        let requested = [draftKey.flatMap { pickers.store.drafts[$0]?.activeInstance }, thread?.providerInstanceId,
+                         thread?.modelSelection.instanceId, project?.defaultModelSelection?.instanceId].compactMap { $0 }.first
+        let canSetUp = requested != nil || (!context.hasStartedSession && serverConfig.providers.contains(where: ProviderStatusBannerLogic.hasSetup))
+        let controls = pickers.controlsView
+        controls.unavailableTitle = noProviderAvailable && catalogKnown ? (canSetUp ? "Open provider settings" : "No provider available") : nil
+        controls.unavailable.isEnabled = canSetUp
+        if controls.unavailable.action == nil { controls.unavailable.action = { [weak self] in self?.openProviderSetup?() } }
+        var placeholder = composer.placeholderInput
+        placeholder.noProvider = controls.unavailableTitle != nil
+        composer.placeholderInput = placeholder
         // A new label (config arrived, thread switched) changes the controls' width.
         composer.needsLayout = true
     }
+
+    /// `noProviderAvailable`, the catalog still loading included: the send button is blocked.
+    private var noProviderAvailable = false
 
     // MARK: Commands
 
@@ -1236,6 +1261,11 @@ final class ComposerController {
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !threadRewindBusy else { return }
+        // A send now would leave a still-compressing pasted image behind (ChatComposer.tsx:4222-4237).
+        if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
+            toast(.info, "Still compressing a pasted image.", "Send again once its thumbnail appears.")
+            return
+        }
         if case .draft(let draft) = target, draft.envMode == nil, let task = settingsWorkspaceTask {
             guard !settingsWorkspaceSendPending else { return }
             settingsWorkspaceSendPending = true
@@ -1265,7 +1295,9 @@ final class ComposerController {
         }
         var text = text
         var implementationPlan: PlanArtifact?
+        var planFollowUp = false
         if composer.planFollowUp, let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown, let key = draftKey {
+            planFollowUp = true
             let next = ThreadPlanFollowUp.submission(draft: text, markdown: markdown)
             text = next.text
             if next.mode == .default { implementationPlan = plan }
@@ -1311,6 +1343,30 @@ final class ComposerController {
                 showFanoutRetry(retryKey, thread: thread, model: selection.model)
                 return
             }
+        }
+        // Models picked on a server that bootstraps worktrees, sent where it can't (ChatView.tsx:8826-8832).
+        if case .draft = target, let picksKey, pickers.multipleSelections[picksKey] != nil, !pickers.supportsMultipleModels {
+            threadErrors.set(picksKey, "Update this server before starting multiple models.")
+            refresh()
+            return
+        }
+        // `/feedback` to Codex needs a started provider thread (ChatView.tsx:9043-9062).
+        // ponytail: only the guard; on a started thread the command goes out as a message where T3 uploads feedback
+        // (`submitCodexFeedback`). Port the upload if Codex users ask for it
+        if pickers.current.entry?.driver == "codex", attachments.isEmpty, ComposerContext.referencedIds(trimmed).isEmpty,
+           pickers.currentMultiple == nil, ComposerLogic.isCodexFeedbackCommand(trimmed),
+           shellThread?.activeProviderThreadId == nil {
+            toast(.warning, "Start a Codex thread first", "Send a message before you submit feedback.")
+            return
+        }
+        // The draft's project was removed (ChatView.tsx:9205-9214).
+        let sendProjectId: ProjectId? = switch target {
+        case .draft(let d): ProjectId(d.projectId)
+        case .thread: shellThread?.projectId
+        }
+        if let sendProjectId, let projects = sidebar?.snapshot?.projects, !projects.contains(where: { $0.id == sendProjectId }) {
+            toast(.warning, "Choose a project first", "This draft no longer points to an available project.")
+            return
         }
         // In worktree mode a base branch is required (ChatView.tsx:9223-9230).
         if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
@@ -1458,7 +1514,7 @@ final class ComposerController {
                     if background, self?.target == .thread(threadId) { self?.onNewThread?() }
                 } catch {
                     self?.restoreAttachments(attachments, key: picksKey)
-                    self?.sendFailed(error, messageId: messageId, text: text, draft: nil, key: picksKey)
+                    self?.sendFailed(error, messageId: messageId, text: text, draft: nil, key: picksKey, planFollowUp: planFollowUp)
                 }
             }
         }
@@ -1698,7 +1754,8 @@ final class ComposerController {
 
     /// I-composer-flow 1.7: drop the optimistic row, restore the text if the composer is still
     /// empty, and show the server's message (transport errors stay silent).
-    private func sendFailed(_ error: Error, messageId: MessageId, text: String, draft: DraftSession?, key: String?) {
+    /// `planFollowUp`: the plan card's refine or implement send (`onSubmitPlanFollowUp`, ChatView.tsx:10508-10516).
+    private func sendFailed(_ error: Error, messageId: MessageId, text: String, draft: DraftSession?, key: String?, planFollowUp: Bool = false) {
         optimistic.removeAll { $0.id == messageId }
         if pendingMessageId == messageId { pendingMessageId = nil }
         if let draft, target == .draft(draft) || target == nil {
@@ -1711,7 +1768,7 @@ final class ComposerController {
         if let restore { composer.text = restore; remember(restore) }
         refresh()
         if let rpc = error as? RPCClientError, rpc.isTransport { return }
-        report(.send(Self.message(error)), key: key)
+        report(planFollowUp ? .command(Self.message(error), fallback: "Failed to send plan follow-up.") : .send(Self.message(error)), key: key)
     }
 
     /// A background start failed after a fresh draft took the composer (ChatView.tsx:10029-10101): the
@@ -3239,7 +3296,7 @@ extension ComposerController {
         guard let index = images.firstIndex(where: { $0.id == id }) else { return }
         let items = images.map { image in
             let url = image.fileURL
-            return ExpandedImagePreviewView.Item(key: url.path, name: image.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }
+            return ExpandedImagePreviewView.Item(key: url.path, name: image.name, source: image.snapShotSource) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }
         }
         presentPreview(items, index: index)
     }
@@ -3278,7 +3335,8 @@ extension ComposerController {
     /// The send button's blocks (ChatView.tsx:11618-11632 and ChatComposer.tsx:2188-2193): the thread's
     /// reason, else the attachment upload's. A lost environment is separate (`isEnvironmentUnavailable`).
     private func syncSendBlock() {
-        composer.environmentUnavailable = shell == nil
+        // `isEnvironmentUnavailable` covers a missing provider too (ChatComposer.tsx:7651-7655, ComposerPrimaryActions.tsx:290-291).
+        composer.environmentUnavailable = shell == nil || noProviderAvailable
         var block = ComposerLogic.SendBlock(rewinding: threadRewindBusy, projectClone: projectCloneSendBlock)
         if case .thread(let id) = target {
             block.detailLoading = syncStatus.key == id.rawValue && syncStatus.value == .loading
@@ -3286,8 +3344,8 @@ extension ComposerController {
             block.preparingWorktree = ComposerLogic.worktreeSetupBlocksSend(phase: setup?.phase, agentDone: setup?.agentStarted == true,
                                                                             runPreparing: projection?.runs.last?.status == .preparing)
         }
-        composer.sendDisabledReason = block.reason
-            ?? (questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil)
+        composer.sendDisabledReason = !environments.canOperate(targetEnvironmentId) ? "This connection cannot change threads." // ChatView.tsx:11619-11620
+            : block.reason ?? (questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil)
     }
 
     /// Enter while the environment is down (ChatView.tsx:8797-8811): a warning toast in one of three
@@ -3905,6 +3963,7 @@ extension ComposerController {
             catch {
                 guard let self else { return }
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
+                if error is RewindPreparationError { return } // a thread that can't send stays quiet
                 self.threadErrors.set(key, Self.message(error) ?? failure)
                 self.refresh()
             }
