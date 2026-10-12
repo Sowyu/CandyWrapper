@@ -31,7 +31,7 @@ public final class SidebarMenuButtonView: ControlView {
     public var variant: Variant = .default { didSet { restyle() } }
     public let kind: Kind
     /// `data-active=true`: the selected row.
-    public var isActive = false { didSet { restyle() } }
+    public var isActive = false { didSet { restyle(); setAccessibilitySelected(isActive) } } // `data-active`, read as selected
     public var accessory: NSView? {
         didSet { oldValue?.removeFromSuperview(); if let accessory { addSubview(accessory) }; needsLayout = true }
     }
@@ -64,6 +64,7 @@ public final class SidebarMenuButtonView: ControlView {
         updateIcon()
         restyle()
         setAccessibilityLabel(title)
+        setAccessibilitySelected(active)
     }
 
     var isSub: Bool { if case .sub = kind { return true } else { return false } }

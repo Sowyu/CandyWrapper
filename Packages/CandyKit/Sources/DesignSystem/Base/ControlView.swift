@@ -60,6 +60,7 @@ open class ControlView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
 
@@ -71,6 +72,7 @@ open class ControlView: DSView {
             window?.invalidateCursorRects(for: self)
         }
         if old.active != state.active, scalesWhenPressed { animatePressScale(state.active) }
+        if old.popupOpen != state.popupOpen { setAccessibilityExpanded(state.popupOpen) } // `aria-expanded`
         if old.focusVisible != state.focusVisible {
             var ancestor = superview
             while let view = ancestor {
@@ -106,7 +108,12 @@ open class ControlView: DSView {
     /// Set it where a menu trigger is built (`menuTrigger()`), so the first press opens too.
     /// Popover triggers keep opening on release.
     public var opensPopupOnPress = false {
-        didSet { if opensPopupOnPress { scalesWhenPressed = false } } // `aria-haspopup` triggers do not shrink (button.tsx:11)
+        didSet {
+            guard opensPopupOnPress else { return }
+            scalesWhenPressed = false // `aria-haspopup` triggers do not shrink (button.tsx:11)
+            // and are menu buttons, unless a subclass picked a role (a select's pop-up button).
+            if accessibilityRole() == .button { setAccessibilityRole(.menuButton) }
+        }
     }
 
     /// Sets `transitions` where the control is declared: `ButtonView(...).transitioning(.colors)`.
@@ -211,10 +218,88 @@ open class ControlView: DSView {
     /// Controls in the window's top bar take their clicks instead of dragging the window.
     open override var mouseDownCanMoveWindow: Bool { false }
 
+    // MARK: Accessibility
+    // T3 exposes every control through ARIA. Each value is computed when an assistive app asks, so
+    // nothing runs while nobody asks.
+
     open override func accessibilityPerformPress() -> Bool {
         guard state.enabled else { return false }
         performAction()
         return true
+    }
+
+    /// What VoiceOver calls a control with no explicit label: the text it draws.
+    open var accessibilityText: String? { Self.drawnText(in: self) }
+
+    /// The visible text, like a native button's title. Explicit titles win; an explicit label replaces the
+    /// drawn text, as `aria-label` replaces a button's content in its accessible name.
+    open override func accessibilityTitle() -> String? {
+        if let explicit = super.accessibilityTitle(), !explicit.isEmpty { return explicit }
+        if let label = super.accessibilityLabel(), !label.isEmpty { return nil }
+        return accessibilityText
+    }
+
+    /// `aria-label`, else the tooltip when the control shows no text (an icon button).
+    open override func accessibilityLabel() -> String? {
+        if let explicit = super.accessibilityLabel(), !explicit.isEmpty { return explicit }
+        guard accessibilityTitle()?.isEmpty ?? true else { return nil }
+        return TooltipController.text(for: self) ?? toolTip
+    }
+
+    open override func isAccessibilityEnabled() -> Bool { state.enabled }
+
+    /// A select's value is the option it shows, which an explicit label would otherwise hide. Toggles that were
+    /// never switched on have set no value yet: they read as off (`aria-checked="false"`, `aria-pressed="false"`).
+    open override func accessibilityValue() -> Any? {
+        if let explicit = super.accessibilityValue() { return explicit }
+        switch accessibilityRole() {
+        case .popUpButton?: return accessibilityText
+        case .checkBox?, .radioButton?: return 0
+        default: return nil
+        }
+    }
+
+    /// VoiceOver's "show menu" opens the context menu a right click opens, on controls that have one.
+    open override func accessibilityPerformShowMenu() -> Bool {
+        let nsViewImp = class_getMethodImplementation(NSView.self, #selector(rightMouseDown(with:)))
+        guard let window, class_getMethodImplementation(type(of: self), #selector(rightMouseDown(with:))) != nsViewImp,
+              let event = NSEvent.mouseEvent(with: .rightMouseDown, location: convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil),
+                                             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        else { return false }
+        rightMouseDown(with: event)
+        return true
+    }
+
+    private static let namedByContentRoles: Set<NSAccessibility.Role> = [.button, .menuButton, .popUpButton, .checkBox, .radioButton, .menuItem, .link, .staticText]
+
+    /// True inside a control that VoiceOver reads as one element: its labels are its name, not separate text.
+    public static func isInsideControlElement(_ view: NSView) -> Bool {
+        var ancestor = view.superview
+        while let v = ancestor {
+            if v.isAccessibilityElement(), let role = v.accessibilityRole(), namedByContentRoles.contains(role) { return true }
+            ancestor = v.superview
+        }
+        return false
+    }
+
+    /// The text of the labels this control draws, skipping nested controls and hidden views.
+    public static func drawnText(in view: NSView) -> String? {
+        var parts: [String] = []
+        func collect(_ v: NSView) {
+            for sub in v.subviews where !sub.isHidden && sub.alphaValue > 0 && !(sub is ControlView) {
+                if let label = sub as? LabelView {
+                    if !label.text.isEmpty { parts.append(label.text + (label.emphasizedSuffix ?? "")) }
+                } else if let block = sub as? TextBlockView {
+                    if !block.text.isEmpty { parts.append(block.text) }
+                } else {
+                    collect(sub)
+                }
+            }
+        }
+        collect(view)
+        let text = parts.joined(separator: " ")
+        return text.isEmpty ? nil : text
     }
 
     // MARK: Keyboard focus

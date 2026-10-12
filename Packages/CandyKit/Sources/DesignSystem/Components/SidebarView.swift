@@ -200,8 +200,7 @@ public final class SidebarContainerView: DSView {
         super.init(frame: frameRect)
         addSubview(surface)
         addSubview(border)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("Threads")
+        // The content names itself, "Threads" or "Settings" (AppSidebarLayout.tsx:322); this box stays transparent.
     }
 
     public override func layout() {

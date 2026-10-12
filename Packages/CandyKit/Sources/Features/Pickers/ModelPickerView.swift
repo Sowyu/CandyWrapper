@@ -416,8 +416,19 @@ final class RailButtonView: ControlView {
         layer?.addSublayer(fill)
         addSubview(glyph)
         action = { [weak self] in if self?.isDisabled == false { self?.onPress?() } }
+        // ModelPickerSidebar.tsx:130 "Favorites", :191 the instance's name (a tooltip replaces it when unavailable).
+        switch kind {
+        case .favorites: setAccessibilityLabel("Favorites")
+        case .instance(let e): setAccessibilityTitle(badge == nil ? e.displayName : "\(e.displayName), new")
+        }
         restyle()
     }
+
+    /// `aria-pressed` on the selected rail entry.
+    override func isAccessibilitySelected() -> Bool {
+        (superview as? ModelPickerView)?.isRailSelected(entryId.map { .instance($0) } ?? .favorites) == true
+    }
+    override func isAccessibilityEnabled() -> Bool { !isDisabled }
 
     override var acceptsFirstResponder: Bool { false }
     override func resetCursorRects() { if !isDisabled { addCursorRect(bounds, cursor: .pointingHand) } }
@@ -519,11 +530,20 @@ final class ModelRowView: DSView {
             let c = IconView(name: expanded ? .chevronDown : .chevronRight, size: 16)
             addSubview(c)
             chevron = c
+            setAccessibilityExpanded(expanded) // ModelPickerContent.tsx:1001
         }
         restyle()
     }
 
     private var isSelected: Bool { if case .model(let item) = row { item.isSelected } else { false } }
+
+    // A `ComboboxItem` option: the model name, its provider line as help, selected and (legacy) expanded state.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .menuItem }
+    override func accessibilityTitle() -> String? { newBadge == nil ? name.text : "\(name.text), New model" } // ModelListRow.tsx:75
+    override func accessibilityHelp() -> String? { secondary.text }
+    override func isAccessibilitySelected() -> Bool { isSelected }
+    override func accessibilityPerformPress() -> Bool { picker.activate(index); return true }
 
     override func layout() {
         super.layout()

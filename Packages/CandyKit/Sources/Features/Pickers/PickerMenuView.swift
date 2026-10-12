@@ -85,6 +85,11 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
     }
 
     func entry(_ i: Int) -> PickerMenuEntry { entries[i] }
+    func isHighlighted(_ i: Int) -> Bool { highlightedIndex == i }
+
+    // `role="menu"` (traits) or a select's listbox; the rows are its items.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .menu }
 
     var naturalSize: CGSize {
         let w = (max(minimumWidth, (rows.map(\.naturalWidth).max() ?? 0) + 8) * 2).rounded(.up) / 2
@@ -217,6 +222,28 @@ final class PickerMenuRowView: DSView {
             alphaValue = e.disabled ? 0.64 : 1
         }
         restyle()
+    }
+
+    // `menuitemradio` with `aria-checked`, or a group label read as text.
+    override func isAccessibilityElement() -> Bool { owner.entry(index).kind != .separator }
+    override func accessibilityRole() -> NSAccessibility.Role? { owner.entry(index).kind == .label ? .staticText : .menuItem }
+    override func accessibilityTitle() -> String? {
+        let e = owner.entry(index)
+        guard e.kind == .option else { return nil }
+        return e.badge.map { "\(e.title), \($0)" } ?? e.title
+    }
+    override func accessibilityValue() -> Any? { owner.entry(index).kind == .label ? owner.entry(index).title : nil }
+    override func accessibilityHelp() -> String? { owner.entry(index).description }
+    override func isAccessibilityEnabled() -> Bool { !owner.entry(index).disabled }
+    override func isAccessibilitySelected() -> Bool { owner.isHighlighted(index) }
+    override func accessibilityPerformPress() -> Bool {
+        guard owner.entry(index).kind == .option, !owner.entry(index).disabled else { return false }
+        owner.pick(index)
+        return true
+    }
+    override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+        guard attribute.rawValue == "AXMenuItemMarkChar" else { return super.accessibilityAttributeValue(attribute) }
+        return owner.entry(index).checked ? "\u{2713}" : nil
     }
 
     /// Traits descriptions wrap inside `max-w-56`; select descriptions stay on one line.

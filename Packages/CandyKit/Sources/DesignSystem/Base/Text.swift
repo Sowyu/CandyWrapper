@@ -108,6 +108,11 @@ public final class LabelView: DSView {
         didSet { if prefixColor?.count != oldValue?.count || prefixColor?.color != oldValue?.color { needsDisplay = true } }
     }
 
+    // Static text for VoiceOver, except inside a control, which reads it as its name.
+    public override func isAccessibilityElement() -> Bool { !text.isEmpty && !ControlView.isInsideControlElement(self) }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    public override func accessibilityValue() -> Any? { text + (emphasizedSuffix ?? "") }
+
     public override var wantsUpdateLayer: Bool { false }
     /// A truncating label clips to its box and draws one line in it.
     public override var drawsWholeBounds: Bool { truncates }

@@ -160,6 +160,23 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
     func configure(_ item: TimelineItem) { self.item = item }
     func height(forWidth width: CGFloat) -> CGFloat { 0 }
 
+    // A row that is one button (a fold, a work group header) is one element for VoiceOver; other rows stay
+    // transparent so their text and controls are reachable.
+    override func isAccessibilityElement() -> Bool { onClick != nil }
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        let role = super.accessibilityRole()
+        return onClick != nil && (role == nil || role == .group || role == .unknown) ? .button : role
+    }
+    override func accessibilityLabel() -> String? {
+        if let explicit = super.accessibilityLabel(), !explicit.isEmpty { return explicit }
+        return onClick != nil ? ControlView.drawnText(in: self) : nil
+    }
+    override func accessibilityPerformPress() -> Bool {
+        guard let onClick else { return false }
+        onClick()
+        return true
+    }
+
     /// Resets hover when the view is recycled.
     override func prepareForReuse() {
         super.prepareForReuse()

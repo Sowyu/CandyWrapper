@@ -228,6 +228,26 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 }
 
+extension MarkdownBlock {
+    /// What a screen reader reads: the text without markup, one line per block.
+    var plainText: String {
+        func runs(_ r: [InlineRun]) -> String { r.map { $0.image != nil && $0.text.isEmpty ? "image" : $0.text }.joined() }
+        switch self {
+        case .paragraph(let r), .heading(_, let r): return runs(r)
+        case .list(let list):
+            return list.items.enumerated().map { i, item in
+                let mark = item.task.map { $0 ? "checked, " : "unchecked, " } ?? (list.ordered ? "\(list.start + i). " : "")
+                return mark + item.blocks.map(\.plainText).joined(separator: "\n")
+            }.joined(separator: "\n")
+        case .blockquote(let blocks), .alert(_, let blocks): return blocks.map(\.plainText).joined(separator: "\n")
+        case .code(_, let title, let code): return [title, code].compactMap { $0 }.joined(separator: "\n")
+        case .table(let t): return ([t.header] + t.rows).map { $0.map(runs).joined(separator: ", ") }.joined(separator: "\n")
+        case .rule: return ""
+        case .image(let alt, _): return alt.isEmpty ? "image" : alt
+        }
+    }
+}
+
 public indirect enum MarkdownBlock: Sendable, Equatable {
     case paragraph([InlineRun])
     case heading(level: Int, [InlineRun])
