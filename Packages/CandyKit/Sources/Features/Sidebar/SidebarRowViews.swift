@@ -586,7 +586,8 @@ final class SidebarCardRowView: SidebarRowBase {
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
-        setAccessibilityLabel([r.title, r.statusLabel, r.projectLabel].compactMap { $0 }.joined(separator: ", "))
+        setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil, r.statusLabel, r.projectLabel]
+            .compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
 
@@ -745,6 +746,7 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
+        title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1 // `opacity-55` (Sidebar.tsx:1691)
         pin.isHidden = !showsPin(r)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
@@ -786,7 +788,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         } else if time.isHidden {
             time.isHidden = false
         }
-        setAccessibilityLabel(r.title)
+        // The `sr-only` "Regenerating title" status (Sidebar.tsx:1838-1842).
+        setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
 

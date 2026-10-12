@@ -179,13 +179,19 @@ final class ThreadPermissionUpdateNotice {
     private var shown: Set<String> = []
     private var tasks: [String: Task<Void, Never>] = [:]
     init(environments: Environments, toasts: ToastViewport) { self.environments = environments; self.toasts = toasts }
+    /// The session's grants arrived (`Environments.canOperate`).
+    var onGrants: ((String) -> Void)?
     func sessionChanged(_ environmentId: String) {
         tasks.removeValue(forKey: environmentId)?.cancel()
-        guard !shown.contains(environmentId), !UserDefaults.standard.bool(forKey: key(environmentId)),
-              let shell = environments.session(environmentId) else { return }
+        environments.setAuthSession(nil, for: environmentId)
+        guard let shell = environments.session(environmentId) else { return }
+        // The same read gives the session's grants, which thread actions check (T3's `sessionStateAtom`).
         tasks[environmentId] = Task { [weak self] in
-            guard let session = try? await shell.http.session(token: shell.token), !Task.isCancelled,
-                  session.hasLegacyPermissions, let self, !shown.contains(environmentId), let toasts else { return }
+            guard let session = try? await shell.http.session(token: shell.token), !Task.isCancelled, let self else { return }
+            environments.setAuthSession(session, for: environmentId)
+            onGrants?(environmentId)
+            guard session.hasLegacyPermissions, !shown.contains(environmentId), !UserDefaults.standard.bool(forKey: key(environmentId)),
+                  let toasts else { return }
             shown.insert(environmentId)
             let label = environments.label(environmentId) ?? environmentId
             var toastId: Int?

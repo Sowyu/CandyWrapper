@@ -8,7 +8,7 @@ import T3Protocol
 public final class UsageLimitsBannerView: ComposerBannerView {
     private let icon = IconView(name: .gauge, size: 12)
     private let title: LabelView
-    private let detail: LabelView
+    private let detail: NSView
     public let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     public override var dismissControl: ButtonView? { dismiss }
     private var blocks: [(view: NSView, height: CGFloat, gap: CGFloat)] = []
@@ -19,8 +19,8 @@ public final class UsageLimitsBannerView: ComposerBannerView {
     public init(report: UsageLimitsReport) {
         self.report = report
         title = glassLabel("Usage limits", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
-        let summary: String = report.accounts.count == 1 ? Self.accountSummary(report.accounts[0]) : "\(report.accounts.count) accounts"
-        detail = glassLabel(summary, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
+        detail = report.accounts.count == 1 ? UsageAccountSummaryView(report.accounts[0], lineHeight: 24)
+            : glassLabel("\(report.accounts.count) accounts", font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
         super.init(variant: .neutral)
         icon.strokeColor = Themed.color(\.mutedForeground)
         dismiss.setAccessibilityLabel("Dismiss usage limits")
@@ -29,7 +29,7 @@ public final class UsageLimitsBannerView: ComposerBannerView {
         let nowMs = T3Timestamp.parseEpochMs(report.createdAt) ?? 0
         for a in report.accounts {
             if report.accounts.count > 1 {
-                add(glassLabel(Self.accountSummary(a), font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16), 16, gap: blocks.isEmpty ? 0 : 8)
+                add(UsageAccountSummaryView(a, lineHeight: 16), 16, gap: blocks.isEmpty ? 0 : 8)
             }
             if let notice = UsageLimitsLogic.notice(a.limits) {
                 add(glassLabel(notice, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16), 16, gap: report.accounts.count > 1 ? 4 : (blocks.isEmpty ? 0 : 8))
@@ -52,13 +52,6 @@ public final class UsageLimitsBannerView: ComposerBannerView {
         for n in report.notices { add(glassLabel(n, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16), 16, gap: 8) }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Usage limits")
-    }
-
-    /// `AccountSummary`: the account label then the plan; labels with an email stay masked.
-    static func accountSummary(_ a: UsageLimitsReport.Account) -> String {
-        let label = UsageLimitsLogic.reportAccountLabel(a, driverLabel: UsageProviderLabels.driverLabel(a.driver))
-        let shown = label.contains("@") ? UsageRedactedTextView.placeholder(label) : label
-        return shown + (a.plan.map { " · \($0)" } ?? "")
     }
 
     private func add(_ v: NSView, _ h: CGFloat, gap: CGFloat) {
@@ -104,5 +97,38 @@ final class UsageLeadingButton: DSView {
         super.layout()
         let s = button.intrinsicContentSize
         button.frame = NSRect(x: 0, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
+    }
+}
+
+/// `AccountSummary` (ComposerUsageLimits.tsx:26-44): the account label then " · plan". A label with an
+/// email is a `RedactedSensitiveText` in `font-sans text-xs` that reveals on click.
+final class UsageAccountSummaryView: DSView {
+    private let account: NSView
+    private let plan: LabelView?
+
+    init(_ a: UsageLimitsReport.Account, lineHeight: CGFloat) {
+        let label = UsageLimitsLogic.reportAccountLabel(a, driverLabel: UsageProviderLabels.driverLabel(a.driver))
+        let color = Themed.color(\.mutedForeground)
+        if label.contains("@") {
+            let redacted = UsageRedactedTextView(label, font: DSFont.ui(12), lineHeight: lineHeight, glass: true,
+                                                 revealTooltip: "Click to reveal account", hideTooltip: "Click to hide account")
+            redacted.setAccessibilityLabel("Toggle account label visibility")
+            account = redacted
+            plan = a.plan.map { glassLabel(" · \($0)", font: DSFont.ui(12), color: color, lineHeight: lineHeight) }
+        } else {
+            account = glassLabel(label + (a.plan.map { " · \($0)" } ?? ""), font: DSFont.ui(12), color: color, lineHeight: lineHeight)
+            plan = nil
+        }
+        super.init(frame: .zero)
+        addSubview(account)
+        if let plan { addSubview(plan) }
+    }
+
+    override func layout() {
+        super.layout()
+        // `max-w-full truncate`: the account label takes what it needs, the plan follows in the rest.
+        let w = min(account.intrinsicContentSize.width, bounds.width)
+        account.frame = NSRect(x: 0, y: 0, width: account is UsageRedactedTextView ? w : bounds.width, height: bounds.height)
+        plan?.frame = NSRect(x: w, y: 0, width: max(0, bounds.width - w), height: bounds.height)
     }
 }

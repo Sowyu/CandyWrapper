@@ -89,6 +89,12 @@ public enum ComposerLogic {
 
     // MARK: Text
 
+    /// `parseCodexFeedbackCommand` (client-runtime threadFeedback.ts:22-29): `/feedback`, then optionally a reason.
+    public static func isCodexFeedbackCommand(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .range(of: #"^/feedback(?:\s+[\s\S]*)?$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// `PROVIDER_SEND_TURN_MAX_INPUT_CHARS` (contracts chatAttachment.ts:13).
     public static let maxInputCharacters = 120_000
 

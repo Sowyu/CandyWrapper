@@ -22,15 +22,23 @@ enum UsageTime {
 
 /// `RedactedSensitiveText`: a stable scramble of the value in 11pt mono, blurred, that reveals the value on click.
 final class UsageRedactedTextView: ControlView {
-    private let label = LabelView("", font: DSFont.mono(11), color: Themed.color(\.mutedForeground))
+    private let label: LabelView
     private let value: String
+    private let revealTooltip: String, hideTooltip: String
     private var revealed = false { didSet { update() } }
     private var tip: TooltipController?
 
-    init(_ value: String) {
+    /// The defaults are the email form (`text-2xs font-mono`); the composer's account label passes
+    /// `font-sans text-xs` and its own words (ComposerUsageLimits.tsx:30-37).
+    init(_ value: String, font: NSFont = DSFont.mono(11), lineHeight: CGFloat = 16, glass: Bool = false,
+         revealTooltip: String = "Click to reveal email", hideTooltip: String = "Click to hide email") {
         self.value = value
+        self.revealTooltip = revealTooltip
+        self.hideTooltip = hideTooltip
+        label = glass ? glassLabel(font: font, color: Themed.color(\.mutedForeground), lineHeight: lineHeight)
+            : LabelView("", font: font, color: Themed.color(\.mutedForeground))
         super.init(frame: .zero)
-        label.lineHeight = 16
+        label.lineHeight = lineHeight
         addSubview(label)
         layerUsesCoreImageFilters = true
         tip = TooltipController.attach(to: self, text: "")
@@ -53,12 +61,12 @@ final class UsageRedactedTextView: ControlView {
 
     private func update() {
         label.text = revealed ? value : Self.placeholder(value)
-        tip?.text = revealed ? "Click to hide email" : "Click to reveal email"
+        tip?.text = revealed ? hideTooltip : revealTooltip
         label.layer?.filters = revealed ? nil : [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 2])].compactMap { $0 }
         invalidateIntrinsicContentSize()
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1, height: 16) }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1, height: label.lineHeight ?? 16) }
     override func performAction() { revealed.toggle() }
     override func layout() { super.layout(); label.frame = bounds }
 }

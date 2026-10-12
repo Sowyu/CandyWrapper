@@ -25,6 +25,8 @@ public enum ComposerFeedback {
         case queueCommand
         /// A failed `queued-run.edit` (ChatView.tsx:9007-9009).
         case queuedEditSave
+        /// A command whose failure shows the server's message, else T3's fallback text for it.
+        case command(String?, fallback: String)
         /// No usable model at send time. T3 disables the send instead; this is our guard's text.
         case noModel
         /// `getStartedThreadModelChangeBlockReason` refused a pick; the value is its title.
@@ -52,6 +54,7 @@ public enum ComposerFeedback {
         case .resume(let m): return banner(m, "Could not resume thread.")
         case .queueCommand: return .none
         case .queuedEditSave: return .banner("Could not save the edited queued message.")
+        case .command(let m, let fallback): return banner(m, fallback)
         case .noModel: return .banner("No model is available. Enable a provider in T3 Code's settings.")
         case .modelChangeBlocked(let title):
             // ChatView.tsx:10760-10765, texts from ChatView.logic.ts:1069-1091.
@@ -139,7 +142,8 @@ public struct ThreadErrorState: Sendable {
         let fromShell = localError == nil && shell != nil
         // A usage limit on a failed run shows the usage-limit recovery banner instead.
         if fromShell, shell?.status == .failed, shell?.lastErrorClass == .usageLimit, shell?.latestRunId != nil { return nil }
-        // ponytail: no ChatGPT usage-limit face (OpenAI logo and usage button); add it with Codex usage limits
+        // ThreadErrorBanner's ChatGPT usage-limit face (ThreadErrorBanner.tsx:55-66) is never turned on:
+        // ChatView passes no `chatGptUsageLimit` (ChatView.tsx:11362-11374). Port it when T3 does.
         let variant: Variant = fromShell && shell?.lastErrorClass == .usageLimit ? .warning : .error
         return Banner(message: error, variant: variant)
     }

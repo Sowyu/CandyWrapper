@@ -342,6 +342,8 @@ public final class SidebarContentView: DSView {
             searchOrderKey = ""
             list.setItems(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms), animated: animated)
         }
+        // The results `ul` is a listbox named "Thread search results" (Sidebar.tsx:5151-5156).
+        list.setAccessibilityLabel(isSearching ? "Thread search results" : nil)
         updateScopeTrigger()
         scheduleLabelTimer()
     }

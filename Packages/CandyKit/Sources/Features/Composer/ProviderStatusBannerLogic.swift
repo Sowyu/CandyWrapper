@@ -32,7 +32,7 @@ public enum ProviderStatusBannerLogic {
     }
 
     /// `hasProviderSetup`.
-    static func hasSetup(_ p: ServerProvider) -> Bool {
+    public static func hasSetup(_ p: ServerProvider) -> Bool {
         if p.driver == "antigravity" { return true }
         if case .bool(true)? = p.setup?["canAuthenticate"] { return true }
         if case .bool(true)? = p.setup?["canInstall"] { return true }

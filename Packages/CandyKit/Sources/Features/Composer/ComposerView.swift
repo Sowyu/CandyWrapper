@@ -449,6 +449,12 @@ public final class ComposerView: DSView {
         ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault)
     }
 
+    /// `insertComposerText` refuses outside text while an approval or any question is open, or no
+    /// project is chosen (ChatComposer.tsx:6149-6160).
+    public var acceptsInsertion: Bool { !editorDisabled && placeholderInput.questionChoiceOnly == nil }
+    /// A dropped file mention was refused: T3's "Unable to add to chat" toast (ChatComposer.tsx:6236-6243).
+    public var onInsertRejected: (() -> Void)?
+
     /// Editor disabled for approvals, choice-only questions and a missing project (ChatComposer.tsx:7500-7506).
     private var editorDisabled: Bool {
         placeholderInput.approvalPending || placeholderInput.questionChoiceOnly == true || placeholderInput.projectRequired
@@ -484,6 +490,7 @@ public final class ComposerView: DSView {
         case .stop:
             primary.isEnabled = true
             primary.tooltip = "Interrupt"
+            primary.setAccessibilityLabel("Stop generation") // ComposerPrimaryActions.tsx:149
         case .resume:
             primary.isEnabled = canSend
             primary.tooltip = status ?? "Resume thread"
@@ -506,6 +513,8 @@ public final class ComposerView: DSView {
                 // ponytail: no shortcut label after "Ctrl/⌘-click"; add it with the keybindings settings
                 let action = steerByDefault ? "steer" : "queue", other = steerByDefault ? "queue" : "steer"
                 primary.tooltip = "Click to \(action), Ctrl/⌘-click to \(other)"
+                // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
+                primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }
         }
         if let tokens = compactBeforeSendTokens {
@@ -643,7 +652,11 @@ public final class ComposerView: DSView {
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
     public override func draggingExited(_ sender: (any NSDraggingInfo)?) { fileDrop.exited() }
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        if let mention = Self.mention(in: sender) { return insertMentionAtEnd(mention) }
+        if let mention = Self.mention(in: sender) {
+            if insertMentionAtEnd(mention) { return true }
+            onInsertRejected?()
+            return false
+        }
         if let threads = SidebarThreadDrag.threads(sender.draggingPasteboard), let onThreadsDropped {
             dropHighlight.isHidden = true
             return onThreadsDropped(threads)
@@ -659,7 +672,7 @@ public final class ComposerView: DSView {
     /// `insertMentionAtEnd("<mention> ")`: appended with a leading boundary, caret after it.
     @discardableResult
     public func insertMentionAtEnd(_ mention: String) -> Bool {
-        guard !editorDisabled else { return false }
+        guard acceptsInsertion else { return false }
         let end = (editor.string as NSString).length
         editor.setSelectedRange(NSRange(location: end, length: 0))
         insertAtCaret(mention + " ")

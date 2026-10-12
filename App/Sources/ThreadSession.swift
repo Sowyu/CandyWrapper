@@ -542,6 +542,12 @@ final class ThreadController {
             guard let self, let id = self.openThreadId, let env = id.environmentId else { return }
             let citation = ThreadAssistantCitation.selection(environmentId: env, threadId: id.localId.rawValue, messageId: messageId, selection: selection)
             let composer = self.panel.composer
+            // A composer that takes no text gets no chip and no comment (ChatView.tsx:1849-1862).
+            guard composer.acceptsInsertion else {
+                self.panel.toasts.show(ToastView(title: "The composer is not ready",
+                                                 message: "Try citing the selection after the connection or pending input is resolved.", kind: .warning))
+                return
+            }
             composer.insertAtCaret(citation.markdown + " ")
             var current = citation.markdown
             func replace(_ with: String) {
@@ -956,7 +962,9 @@ final class ThreadController {
             do {
                 try await environments.setEnabled(environmentId, false)
             } catch {
-                panel.toasts.show(ToastView(title: "Could not disconnect server", message: "\(error)", kind: .error))
+                // ChatView.tsx:2730-2744: the error's message, else T3's fallback.
+                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+                panel.toasts.show(ToastView(title: "Could not disconnect server", message: message ?? "Failed to disconnect.", kind: .error))
                 return
             }
             if session?.environmentId == environmentId { landOnIndex() }
@@ -1014,7 +1022,11 @@ final class ThreadController {
         return hero
     }()
     /// The legacy thread migration toast on the primary environment.
-    lazy var permissionNotice = ThreadPermissionUpdateNotice(environments: environments, toasts: panel.toasts)
+    lazy var permissionNotice: ThreadPermissionUpdateNotice = {
+        let notice = ThreadPermissionUpdateNotice(environments: environments, toasts: panel.toasts)
+        notice.onGrants = { [weak self] _ in self?.composer.grantsChanged() }
+        return notice
+    }()
     private lazy var migrationToast = LegacyThreadMigrationToast(environments: environments, toasts: panel.toasts)
     /// Whether an environment offers threads without a project, for the hero's second button.
     var offersScratch: () -> Bool = { false }
