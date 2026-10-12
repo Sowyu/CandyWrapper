@@ -261,7 +261,7 @@ extension SettingsController {
                     scripts: p.scripts.compactMap(ProjectScript.init),
                     legacy: ProjectSettings.Legacy(defaultModelSelection: p.defaultModelSelection.flatMap { try? JSONValue(encoding: $0) },
                                                    defaultThreadEnvMode: p.defaultThreadEnvMode))
-            })
+            }, icon: ProjectIconSource(g.representative))
         }.sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
     }
 

@@ -52,6 +52,10 @@ public struct MenuItem {
     public var iconColor: NSColor?
     /// A full-color leading mark in the icon's slot, for brand logos an `IconDefinition` cannot draw.
     public var image: NSImage?
+    /// A view of `leadingSize` points in the icon's slot with an 8pt gap (`flex items-center gap-2`), made when
+    /// the row is built: a project's favicon (`ProjectFavicon size-4` or `size-3.5`).
+    public var leading: (@MainActor () -> NSView)?
+    public var leadingSize: CGFloat = 16
     /// Muted 12pt tabular text at the row's end, 20pt after the title (`justify-between gap-5`, the browser
     /// device presets' sizes, BrowserDeviceToolbar.tsx:200-211). Takes the shortcut's place.
     public var trailingDetail: String?
@@ -506,6 +510,7 @@ final class MenuRowView: DSView {
     private var check: CAShapeLayer?
     private var shortcut: TrackedLabelView?
     private var accessoryView: NSView?
+    private var leadingView: NSView?
 
     init(item: MenuItem, style: MenuPopupView.Style) {
         self.item = item
@@ -569,6 +574,7 @@ final class MenuRowView: DSView {
         var w = paddingLeading + paddingTrailing + label.textWidth
         if isCheckbox { w += 16 + 8 }
         if iconView != nil || imageView != nil { w += 12 + 8 }
+        if leadingView != nil { w += item.leadingSize + 8 }
         if glyphView != nil { w += 12 + 6 }
         if badgeView != nil { w += 8 + 14 }
         if let shortcut { w += (item.trailingDetail != nil ? 20 : 8) + shortcut.intrinsicContentSize.width }
@@ -586,6 +592,8 @@ final class MenuRowView: DSView {
         shortcut?.removeFromSuperview(); shortcut = nil
         accessoryView?.removeFromSuperview(); accessoryView = item.accessory?()
         accessoryView.map(addSubview)
+        leadingView?.removeFromSuperview(); leadingView = isLabel || isSeparator ? nil : item.leading?()
+        leadingView.map(addSubview)
         check?.removeFromSuperlayer(); check = nil
         note?.removeFromSuperview(); note = nil
         subtitleLabel?.removeFromSuperview(); subtitleLabel = nil
@@ -751,6 +759,11 @@ final class MenuRowView: DSView {
         if let leading = iconView ?? imageView {
             leading.frame = NSRect(x: x - 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 12 + 8
+        }
+        if let leadingView {
+            let size = item.leadingSize
+            leadingView.frame = NSRect(x: x, y: (bounds.height - item.extraBottom - size) / 2, width: size, height: size)
+            x += size + 8
         }
         if let glyphView {
             // With a subtitle the glyph sits at the title (`items-start`, `mt-1`).

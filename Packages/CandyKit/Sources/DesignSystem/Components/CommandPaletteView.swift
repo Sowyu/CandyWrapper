@@ -21,6 +21,8 @@ public struct CommandPaletteItem: Sendable {
     public var isDisabled = false
     /// A colored glyph in place of `icon` (a file type icon in the file picker).
     public var glyph: (IconDefinition, NSColor)?
+    /// A 16px view in place of `icon`, made when the row is built (a project's favicon, `ProjectFavicon size-4`).
+    public var makeIcon: (@MainActor @Sendable () -> NSView)?
     /// Fuzzy match positions (UTF-16): set, the text is muted with these characters semibold.
     public var titleHighlights: [Int]?
     public var descriptionHighlights: [Int]?
@@ -446,6 +448,7 @@ final class CommandRowView: DSView {
     private let noteLabel = LabelView()
     private let shortcut = TrackedLabelView("", font: DSFont.ui(12, weight: .medium), tracking: 1.2, color: .clear, lineHeight: 16)
     private var iconView: IconView?
+    private var customIcon: NSView?
     private var chevron: IconView?
     private var trailingGlyph: IconView?
     private var checkbox: CheckboxView?
@@ -483,7 +486,10 @@ final class CommandRowView: DSView {
             noteLabel.text = n; noteLabel.font = DSFont.ui(12); noteLabel.lineHeight = 16; noteLabel.truncates = false
             addSubview(noteLabel)
         }
-        if let (definition, color) = item.glyph {
+        if let make = item.makeIcon {
+            customIcon = make()
+            addSubview(customIcon!)
+        } else if let (definition, color) = item.glyph {
             iconView = IconView(definition: definition, size: 16, color: color)
             addSubview(iconView!)
         } else if let icon = item.icon { iconView = IconView(name: icon); addSubview(iconView!) }
@@ -516,8 +522,8 @@ final class CommandRowView: DSView {
     override func layout() {
         super.layout()
         var x: CGFloat = 8
-        if let iconView {
-            iconView.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        if let icon = customIcon ?? iconView {
+            icon.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 16 + 8
         }
         var right = bounds.width - 8

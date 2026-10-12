@@ -516,7 +516,7 @@ final class PaletteCommands {
         let groups = all.filter { !isScratch($0.representative) }
         let current = threads.composer.activeProjectId
         var items = groups.map { group in
-            PaletteEntry(value: "new-thread-in:\(group.key)", searchTerms: [group.label, group.representative.title, group.representative.workspaceRoot]
+            var entry = PaletteEntry(value: "new-thread-in:\(group.key)", searchTerms: [group.label, group.representative.title, group.representative.workspaceRoot]
                             + group.members.flatMap { [$0.title, $0.workspaceRoot] } + [locationLabel(group.representative.id.environmentId)],
                          title: group.label, description: projectDescription(group), icon: .folder,
                          action: .run({ [weak self] in
@@ -524,6 +524,8 @@ final class PaletteCommands {
                              let member = current.flatMap { id in group.members.first { $0.id == id } } ?? group.representative
                              self?.newThread(in: member)
                          }, keepOpen: false))
+            entry.projectIcon = ProjectIconSource(group.representative)
+            return entry
         }
         items = PaletteSearch.enumerate(items)
         if let env = scratchTargetEnvironmentId {
@@ -589,9 +591,11 @@ final class PaletteCommands {
     /// `projectSearchItems`: opens the group's latest thread, else a draft (`openProjectFromSearch`).
     private func projectSearchItems() -> [PaletteEntry] {
         projectGroups().map { group in
-            PaletteEntry(value: "project:\(group.key)", searchTerms: projectSearchTerms(group), title: group.label,
-                         description: projectDescription(group), icon: .folder,
-                         action: .run({ [weak self] in self?.openProject(group) }, keepOpen: false))
+            var entry = PaletteEntry(value: "project:\(group.key)", searchTerms: projectSearchTerms(group), title: group.label,
+                                     description: projectDescription(group), icon: .folder,
+                                     action: .run({ [weak self] in self?.openProject(group) }, keepOpen: false))
+            entry.projectIcon = ProjectIconSource(group.representative)
+            return entry
         }
     }
 

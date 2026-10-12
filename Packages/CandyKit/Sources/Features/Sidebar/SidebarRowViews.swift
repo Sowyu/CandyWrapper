@@ -65,10 +65,10 @@ enum SB {
 /// in the project (`ProjectIconStore`), else `ProjectMonogram` (ProjectMonogram.tsx) with the generated
 /// identity from projectIdentity.ts: a 16px tile, 25% radius, the color at 14% behind 8.25px bold
 /// monospace text squeezed to 6 or 12 units. The monogram also shows while the icon loads.
-final class ProjectMonogramView: DSView {
+public final class ProjectMonogramView: DSView {
     var projectTitle = "" { didSet { if projectTitle != oldValue { updateIdentity() } } }
     /// The whole project, for its chosen icon and its icon file. Without it only the title's monogram shows.
-    var source: ProjectIconSource? {
+    public var source: ProjectIconSource? {
         didSet {
             guard source != oldValue else { return }
             if let source { projectTitle = source.title }
@@ -77,12 +77,22 @@ final class ProjectMonogramView: DSView {
     }
     var dimmed = false { didSet { if dimmed != oldValue { needsDisplay = true } } }
     /// Draws the 16px favicon at another size (`size-3` in the hover card is 0.75).
-    var scale: CGFloat = 1 { didSet { if scale != oldValue { needsDisplay = true } } }
+    public var scale: CGFloat = 1 { didSet { if scale != oldValue { needsDisplay = true } } }
     private var identity = (monogram: "PR", color: "blue")
     private var observing = false
 
-    override var wantsUpdateLayer: Bool { false }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// A `size`-point favicon for `source` (`ProjectFavicon` with `size-3.5` is 14, `size-4` 16).
+    public convenience init(_ source: ProjectIconSource, size: CGFloat = 16) {
+        self.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        // Observers do not run inside an initializer, so this sets up what they would.
+        self.source = source
+        projectTitle = source.title
+        scale = size / 16
+        updateIdentity()
+    }
+
+    public override var wantsUpdateLayer: Bool { false }
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     private func updateIdentity() {
         if case .monogram(let text, let color)? = source?.override {
@@ -119,7 +129,7 @@ final class ProjectMonogramView: DSView {
         return (monogram, colors[index])
     }
 
-    override func draw(_ dirtyRect: NSRect) {
+    public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         if scale != 1 { ctx.scaleBy(x: scale, y: scale) }
         let tileRect = CGRect(x: 0, y: 0, width: 16, height: 16)
