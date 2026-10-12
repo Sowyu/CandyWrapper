@@ -323,8 +323,8 @@ final class ThreadController {
             let history = (thread.providerInstanceHistory ?? []).filter { $0 != instance }.map { catalog.entry($0)?.displayName ?? $0.rawValue }
             guard let entry = catalog.entry(instance) else { return nil }
             let model = entry.model(thread.modelSelection.model).map(ModelNames.trigger) ?? thread.modelSelection.model
-            let badge = entry.provider.accentColor != nil || catalog.entries.filter { $0.driver == entry.driver }.count > 1
-            return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history)
+            let badge = ProviderBadge.shows(entry, in: catalog)
+            return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history, badge ? ProviderBadge.accent(entry) : nil)
         }
         checkoutStatus = SidebarCheckoutStatus(environments: environments) { [weak sidebar] in sidebar?.checkoutBranchChanged() }
         sidebar.actions.checkoutBranch = { [weak self] env, cwd in self?.checkoutStatus.branch(environmentId: env, cwd: cwd) }

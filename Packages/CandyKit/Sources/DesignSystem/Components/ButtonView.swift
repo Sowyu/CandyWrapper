@@ -40,6 +40,8 @@ public final class ButtonView: ControlView {
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
+    /// A leading glyph outside the generated set (T3's inline SVG components), used when `icon` is nil.
+    public var iconDefinition: IconDefinition? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
     /// `justify-between`: the label at the start, the trailing icon at the end.
     public var justifiesBetween = false { didSet { needsLayout = true } }
@@ -166,7 +168,7 @@ public final class ButtonView: ControlView {
     private func updateIcons() {
         leadingIconView?.removeFromSuperview()
         trailingIconView?.removeFromSuperview()
-        leadingIconView = icon.map { IconView(name: $0) }
+        leadingIconView = icon.map { IconView(name: $0) } ?? iconDefinition.map { IconView(definition: $0) }
         trailingIconView = trailingIcon.map { IconView(name: $0) }
         [leadingIconView, trailingIconView].compactMap { $0 }.forEach(addSubview)
         restyle()

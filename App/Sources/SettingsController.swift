@@ -56,6 +56,9 @@ final class SettingsController {
     // Host access (SettingsHostAccess.swift).
     var hosts: [String: HostInfo] = [:]
     var hostLoads: Set<String> = []
+    /// Each project scope member's decoded t3.json by physical key, read once per Settings visit.
+    var projectFiles: [String: T3ProjectFile?] = [:]
+    var projectFileLoads: Set<String> = []
     var linkState: CloudLinkState?
     var linkLoading = false
     var linkBusy = false
@@ -176,6 +179,7 @@ final class SettingsController {
         // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
         page.page = nil
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]
+        projectFiles = [:]; projectFileLoads = []
         layout.main.addSubview(threadPanel)
         layout.needsLayout = true
         if record { onRouteChange?() }

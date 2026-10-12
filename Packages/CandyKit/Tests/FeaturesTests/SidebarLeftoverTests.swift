@@ -66,7 +66,7 @@ struct SidebarLeftoverTests {
         let c = content()
         c.state.environments = SidebarEnvironments(primaryId: nil, labels: [:], machines: [:])
         c.state.terminalProcesses = [ThreadId("r1"): 2]
-        c.actions.hoverProvider = { _ in ("claudeAgent", "Claude Haiku 5.5", ["Codex"]) }
+        c.actions.hoverProvider = { _ in ("claudeAgent", "Claude Haiku 5.5", ["Codex"], nil) }
         let card = try #require(c.hoverCardModel(ThreadId("r1")))
         #expect(card.title == "Ship the sidebar virtualization")
         #expect(card.projectLabel == "candywrapper" && card.branch == "m3-skeleton")

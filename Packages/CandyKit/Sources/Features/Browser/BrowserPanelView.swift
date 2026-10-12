@@ -11,6 +11,8 @@ public final class BrowserPanelView: DSView {
     public let viewer = ServerBrowserView()
     public let empty = BrowserEmptyStateView()
     public let unreachable = BrowserUnreachableView()
+    /// Over the viewer while the server tab has a fixed viewport (PreviewView.tsx:1055-1069).
+    public let deviceToolbar = BrowserDeviceToolbarView()
 
     public enum Body: Equatable {
         /// `shouldShowPreviewEmptyState`: no tab yet, or a tab that never navigated.
@@ -26,11 +28,18 @@ public final class BrowserPanelView: DSView {
     public var body: Body = .empty { didSet { applyBody() } }
     /// Whether a server tab backs this surface (the viewer and its control bar show).
     public var hasServerTab = false { didSet { applyBody() } }
+    /// The tab's viewport setting when it is not `fill`: the device toolbar shows and the viewer moves below it.
+    public var fixedViewport: JSONValue? {
+        didSet {
+            if let fixedViewport { deviceToolbar.setting = fixedViewport }
+            if (fixedViewport == nil) != (oldValue == nil) { applyBody() }
+        }
+    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         clipsToBounds = true
-        [viewer, empty, unreachable, chrome].forEach(addSubview)
+        [viewer, empty, unreachable, deviceToolbar, chrome].forEach(addSubview)
         applyBody()
     }
 
@@ -39,6 +48,8 @@ public final class BrowserPanelView: DSView {
         viewer.contentHidden = body != .page
         empty.isHidden = body != .empty
         unreachable.isHidden = body != .unreachable
+        deviceToolbar.isHidden = !(hasServerTab && body == .page && fixedViewport != nil)
+        if deviceToolbar.isHidden, fixedViewport == nil { deviceToolbar.aspectLocked = false }
         needsLayout = true
     }
 
@@ -48,11 +59,13 @@ public final class BrowserPanelView: DSView {
         chrome.frame = NSRect(x: 0, y: 0, width: bounds.width, height: BrowserChromeRowView.height)
         let top = BrowserChromeRowView.height + 12
         let content = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
-        viewer.frame = content
+        let deviceTop = hasServerTab && fixedViewport != nil ? BrowserViewport.toolbarHeight : 0
+        deviceToolbar.frame = NSRect(x: 0, y: top, width: bounds.width, height: BrowserViewport.toolbarHeight)
+        viewer.frame = NSRect(x: 0, y: top + deviceTop, width: bounds.width, height: max(0, content.height - deviceTop))
         // The control bar overlays the top of the empty state (z-20); the unreachable page sits
         // under it too.
         let barH = hasServerTab ? (viewer.controlButton.isHidden ? 25 : ServerBrowserView.barHeight) : 0
-        let below = NSRect(x: 0, y: top + barH, width: bounds.width, height: max(0, content.height - barH))
+        let below = NSRect(x: 0, y: top + deviceTop + barH, width: bounds.width, height: max(0, content.height - deviceTop - barH))
         empty.frame = hasServerTab ? below : content
         unreachable.frame = hasServerTab ? below : content
     }
@@ -310,9 +323,9 @@ public enum BrowserMoreMenu {
         var items: [MenuItem] = []
         var hard = MenuItem("Hard reload", disabled: !enabled); hard.action = actions.hardReload
         items.append(hard)
-        // ponytail: the device toolbar (fixed viewport presets and rails) is not built, so the
-        // toggle shows disabled; add BrowserDeviceToolbar when someone tests responsive layouts
-        items.append(MenuItem(deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar", disabled: true))
+        var device = MenuItem(deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar", disabled: !enabled || actions.toggleDeviceToolbar == nil)
+        device.action = actions.toggleDeviceToolbar
+        items.append(device)
         let schemes = [("system", "System"), ("light", "Light"), ("dark", "Dark")].map { value, label in
             var item = MenuItem.radio(label, checked: colorScheme == value) { _ in actions.setColorScheme(value) }
             item.closesOnClick = false

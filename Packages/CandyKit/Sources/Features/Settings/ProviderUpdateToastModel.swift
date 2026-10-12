@@ -13,14 +13,60 @@ public struct ProviderUpdateToastModel: Equatable, Sendable {
         provider.enabled && !["broken", "unsupported"].contains(provider.compatibilityAdvisory?["latestVersionStatus"]?.stringValue ?? "")
             && provider.versionAdvisory?["status"]?.stringValue == "behind_latest" && provider.latestVersion != nil
     }
+    /// `collectProviderUpdateCandidates`: one per driver.
+    public static func candidates(_ providers: [ServerProvider]) -> [ServerProvider] {
+        SidebarProviderUpdatePillModel.dedupe(providers.filter(candidate))
+    }
+
+    /// `canOneClickUpdateProviderCandidate` (logic.ts:176-213): not already updating, the server can run its
+    /// update command, and every outdated instance of the driver shares that one command.
+    public static func canOneClick(_ c: ServerProvider, among providers: [ServerProvider]) -> Bool {
+        guard !["queued", "running"].contains(c.updateState?.status ?? "") else { return false }
+        func command(_ p: ServerProvider) -> String? {
+            guard p.versionAdvisory?["canUpdate"]?.boolValue == true else { return nil }
+            return p.versionAdvisory?["updateCommand"]?.stringValue
+        }
+        guard command(c) != nil else { return false }
+        var commands = Set<String>()
+        for p in providers where p.driver == c.driver && candidate(p) {
+            guard let cmd = command(p) else { return false }
+            commands.insert(cmd)
+        }
+        return commands.count == 1
+    }
+
+    /// `getProviderUpdateInitialToastView`: with one-click candidates the prompt offers to install.
     public static func initial(_ providers: [ServerProvider]) -> Self? {
-        let candidates = SidebarProviderUpdatePillModel.dedupe(providers.filter(candidate))
+        let candidates = candidates(providers)
         guard let first = candidates.first else { return nil }
         let name = SidebarProviderUpdatePillModel.name(first.driver)
         let version = SidebarProviderUpdatePillModel.version(first.latestVersion ?? "")
+        let oneClick = candidates.contains { canOneClick($0, among: providers) }
         return .init(key: candidates.map { $0.driver + ":" + ($0.latestVersion ?? "") }.sorted().joined(separator: "|"),
                      title: candidates.count == 1 ? "Update Available: \(name) \(version)" : "Updates Available: \(candidates.count) providers",
-                     message: "\(SidebarProviderUpdatePillModel.list(candidates)) can be updated from provider settings.", phase: "initial")
+                     message: oneClick ? "Install the update now or review provider settings."
+                        : "\(SidebarProviderUpdatePillModel.list(candidates)) can be updated from provider settings.", phase: "initial")
+    }
+
+    /// `getProviderUpdateRejectedToastView`.
+    public static func rejected(count: Int, message: String) -> Self {
+        .init(key: "rejected:" + message, title: count == 1 ? "Provider update failed" : "Provider updates failed", message: message, phase: "failed")
+    }
+
+    /// `t3code:provider-update-dismissals:v1` (providerUpdateDismissal.ts): prompts closed with X stay closed.
+    public static let dismissalsKey = "t3code:provider-update-dismissals:v1"
+    public static func isDismissed(_ key: String, in defaults: UserDefaults = .standard) -> Bool { dismissed(defaults).contains(key) }
+    public static func dismiss(_ key: String, in defaults: UserDefaults = .standard) {
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        var keys = dismissed(defaults)
+        guard !k.isEmpty, !keys.contains(k) else { return }
+        keys.append(k)
+        if let data = try? JSONSerialization.data(withJSONObject: ["keys": keys]) { defaults.set(String(decoding: data, as: UTF8.self), forKey: dismissalsKey) }
+    }
+    static func dismissed(_ defaults: UserDefaults) -> [String] {
+        guard let text = defaults.string(forKey: dismissalsKey), let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              let keys = object["keys"] as? [String] else { return [] }
+        return keys
     }
     public static func progress(_ values: [ServerProvider], count: Int) -> Self {
         let providers = SidebarProviderUpdatePillModel.dedupe(values)

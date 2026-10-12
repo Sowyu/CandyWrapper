@@ -529,7 +529,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let current: @MainActor () -> JSONValue = { [weak self] in self?.liveInstance(row.instanceId) ?? row.instance }
         // Header: title, icon, version, reset (dirty default) or delete (other instances).
         let header = SettingsSectionView(title: displayName, rows: [])
-        header.icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8))
+        header.icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8),
+                                        badge: ProviderBadge.settingsCard(row, displayName: displayName))
         var actions: [NSView] = []
         if let v = ProvidersLogic.versionLabel(provider?.version) {
             let code = LabelView(v, font: DSFont.mono(12), color: Themed.color(\.mutedForeground))
@@ -992,7 +993,8 @@ final class ProviderListRow: ControlView {
 
     init(row: ProvidersLogic.Row, provider: ServerProvider?) {
         let displayName = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
-        icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8))
+        icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8),
+                                 badge: ProviderBadge.settingsCard(row, displayName: displayName))
         enabled = row.enabled
         let key = row.enabled ? provider?.status.rawValue ?? "warning" : "disabled"
         showsDot = key == "warning" || key == "error"
@@ -1430,6 +1432,17 @@ final class UsageHubFormView: DSView {
             l.frame = NSRect(x: 0, y: y, width: bounds.width, height: 16)
             v.frame = NSRect(x: 0, y: y + 22, width: bounds.width, height: 32)
             y += 70
+        }
+    }
+}
+
+extension ProviderBadge {
+    /// `titleIconNode` (ProviderInstanceCard.tsx:732-750): the badge only with an accent color, `size-5`
+    /// around the 16pt glyph and two more points out, ringed in `card`.
+    @MainActor
+    static func settingsCard(_ row: ProvidersLogic.Row, displayName: String) -> ProviderBadge? {
+        ProviderEnvironmentLogic.accentColor(row.instance["accentColor"]?.stringValue).map {
+            ProviderBadge(initials: ProviderIcon.initials(displayName), accent: $0, size: .small, overhang: 4, ring: Themed.color(\.card))
         }
     }
 }

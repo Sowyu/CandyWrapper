@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import T3Protocol
 
 /// "Open in" for a workspace: the editor list, the preferred editor and the `shell.openInEditor` input.
@@ -45,6 +45,20 @@ public enum OpenInEditors {
 
     /// `t3code:last-editor` in T3's localStorage.
     public static let lastEditorKey = "t3code:last-editor"
+    /// `t3code:remote-open-hint-seen` (remoteOpen.ts:195-201): set by the first remote open the OS accepted.
+    public static let remoteHintSeenKey = "t3code:remote-open-hint-seen"
+
+    /// The full-color marks of `resolveOpenInOptions` that a tinted icon cannot draw (VS Code, VS Code Insiders,
+    /// VSCodium, Antigravity and the JetBrains IDEs), rendered from T3's SVGs and kept once made.
+    // ponytail: CoreSVG skips the VS Code marks' inner drop shadows (feGaussianBlur filters); bake PNGs if that ever shows at 16pt
+    @MainActor
+    public static func image(_ id: String) -> NSImage? {
+        if let cached = imageCache[id] { return cached }
+        guard let svg = EditorIconSVG.documents[id], let image = NSImage(data: Data(svg.utf8)) else { return nil }
+        imageCache[id] = image
+        return image
+    }
+    @MainActor private static var imageCache: [String: NSImage] = [:]
 
     /// `usePreferredEditor`: the last editor used if the server still has it, else the first available.
     public static func preferred(available: [String], last: String?) -> String? {

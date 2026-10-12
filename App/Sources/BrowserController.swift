@@ -294,6 +294,10 @@ final class BrowserController {
         if snapshot == nil { chrome.onMore = nil } else { chrome.onMore = { [weak self] anchor in self?.showMoreMenu(anchor) } }
 
         view.hasServerTab = isServer
+        view.fixedViewport = isServer && snapshot?.hasFixedViewport == true ? snapshot?.viewport : nil
+        if let tabId {
+            view.deviceToolbar.onChange = { [weak self] setting in try await self?.resize(tabId, setting) }
+        }
         switch nav {
         case .idle: view.body = .empty
         case .loadFailed(let url, _, let code, let description, let download):
@@ -633,7 +637,7 @@ final class BrowserController {
         guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
         Task { [weak self] in
             do {
-                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url, profileId: profileId ?? BrowserProfiles.defaultId(ClientSettingsStore.shared.current)))
+                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url, profileId: profileId ?? BrowserProfiles.defaultId(ClientSettingsStore.shared.current), viewport: ClientSettingsStore.shared.current["browserDefaultViewport"]))
                 let snapshot = try JSONValueDecoder().decode(PreviewSessionSnapshot.self, from: reply)
                 guard let self else { return }
                 self.mutateState(id) { $0.applyOpened(snapshot) }
@@ -703,7 +707,8 @@ final class BrowserController {
                 self.adjust(tab, ["zoomFactor": .number(next)])
             },
             clearCookies: { [weak self] in self?.adjust(tab, ["clear": .string("cookies")]) },
-            clearCache: { [weak self] in self?.adjust(tab, ["clear": .string("cache")]) })
+            clearCache: { [weak self] in self?.adjust(tab, ["clear": .string("cache")]) },
+            toggleDeviceToolbar: { [weak self] in self?.toggleDeviceToolbar(tab) })
         var items = BrowserMoreMenu.items(enabled: true, zoomFactor: zoom, colorScheme: snapshot.colorScheme ?? "system",
                                           deviceToolbarVisible: snapshot.hasFixedViewport, profileName: BrowserProfiles.resolved(ClientSettingsStore.shared.current).first { $0["id"]?.stringValue == (snapshot.profileId ?? "default") }?["name"]?.stringValue ?? "Default", actions: actions, zoomLabel: cluster)
         items.append(.submenu("Open in profile", BrowserProfiles.resolved(ClientSettingsStore.shared.current).map { profile in
@@ -712,6 +717,31 @@ final class BrowserController {
             return item
         }))
         MenuPopupView.show(items, from: anchor, placement: .dropdown)
+    }
+
+    /// `handleToggleDeviceToolbar` (PreviewView.tsx:414-430): back to fill, or the Settings default, else the
+    /// panel's device area at the tab's zoom.
+    private func toggleDeviceToolbar(_ tab: String) {
+        guard let snapshot = currentState?.sessions[tab] else { return }
+        let next = snapshot.hasFixedViewport ? BrowserViewport.fill
+            : BrowserViewport.toggleOn(defaultViewport: ClientSettingsStore.shared.current["browserDefaultViewport"],
+                                       panel: view.bounds.height > 0 ? NSSize(width: view.bounds.width, height: view.bounds.height - BrowserChromeRowView.height - 12) : nil,
+                                       zoom: snapshot.zoomFactor ?? 1)
+        Task { [weak self] in try? await self?.resize(tab, next) }
+    }
+
+    /// `handleViewportChange`: `preview.resize`, the snapshot it returns, or T3's error toast.
+    private func resize(_ tab: String, _ viewport: JSONValue) async throws {
+        guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
+        do {
+            let reply = try await shell.supervisor.request(PreviewRPC.resize, payload: .object([
+                "threadId": .string(id.localId.rawValue), "tabId": .string(tab), "viewport": viewport]))
+            let snapshot = try JSONValueDecoder().decode(PreviewSessionSnapshot.self, from: reply)
+            mutateState(id) { $0.update(snapshot) }
+        } catch {
+            panel.toasts.show(ToastView(title: "Unable to resize browser viewport", message: "\(error)", kind: .error))
+            throw error
+        }
     }
 
     private func adjust(_ tab: String, _ change: [String: JSONValue]) {

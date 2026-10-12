@@ -258,6 +258,10 @@ public final class DetailsSplitPart: ControlView {
     var isChevron = false { didSet { rebuild() } }
     var onStateChange: (@MainActor () -> Void)?
     public var icon: IconDefinition? { didSet { if icon != oldValue { rebuild() } } }
+    /// A full-color mark drawn instead of `icon` (the Open in editor's brand logos).
+    public var image: NSImage? { didSet { if image !== oldValue { rebuild() } } }
+    /// The idle icon's color; nil is `muted-foreground` (`THREAD_DETAILS_PANEL_ICON_CLASS`).
+    public var iconColor: NSColor? { didSet { restyle() } }
     public var text = "" { didSet { label.text = text; needsLayout = true } }
     public var mode = Mode.idle { didSet { if mode != oldValue { rebuild() } } }
     /// `aria-disabled`: drawn at 64% but still hoverable for its reason.
@@ -268,6 +272,7 @@ public final class DetailsSplitPart: ControlView {
 
     private let fill = BoxDecorationLayer()
     private var iconView: IconView?
+    private var imageView: ImageGlyphView?
     private let label = LabelView()
     private let detail = LabelView()
     private var spinner: SpinnerView?
@@ -294,6 +299,7 @@ public final class DetailsSplitPart: ControlView {
 
     private func rebuild() {
         iconView?.removeFromSuperview(); iconView = nil
+        imageView?.removeFromSuperview(); imageView = nil
         spinner?.removeFromSuperview(); spinner = nil
         label.isHidden = isChevron
         detail.isHidden = true
@@ -303,7 +309,8 @@ public final class DetailsSplitPart: ControlView {
         } else {
             switch mode {
             case .idle:
-                if let icon { let v = IconView(definition: icon, size: 16); addSubview(v); iconView = v }
+                if let image { let v = ImageGlyphView(image: image); addSubview(v); imageView = v }
+                else if let icon { let v = IconView(definition: icon, size: 16); addSubview(v); iconView = v }
                 label.text = text
             case .running(let status, let output):
                 let s = SpinnerView(size: .md)
@@ -341,7 +348,7 @@ public final class DetailsSplitPart: ControlView {
         if let spinner {
             spinner.frame = NSRect(x: x - 2, y: titleY + (titleH - 16) / 2, width: 16, height: 16)
             x += 12 + 12
-        } else if let iconView {
+        } else if let iconView = iconView ?? imageView {
             let s: CGFloat = mode == .idle ? 16 : 14
             iconView.frame = NSRect(x: x, y: titleY + (titleH - s) / 2, width: s, height: s)
             x += s + (multi ? 12 : 10)
@@ -371,7 +378,7 @@ public final class DetailsSplitPart: ControlView {
         fill.boxStyle = box
         label.color = Themed.color(\.contrastForeground, 0.8)
         detail.color = Themed.color(\.contrastMutedForeground)
-        if case .success = mode { iconView?.strokeColor = Themed.color(\.success) } else { iconView?.strokeColor = Themed.color(\.contrastMutedForeground) }
+        if case .success = mode { iconView?.strokeColor = Themed.color(\.success) } else { iconView?.strokeColor = iconColor ?? Themed.color(\.contrastMutedForeground) }
         spinner?.color = Themed.color(\.contrastForeground, 0.8)
         needsDisplay = true
     }

@@ -89,7 +89,11 @@ public final class ComposerPickers {
                 context.catalog.entry(s.instanceId)?.model(s.model).map(ModelNames.trigger) ?? s.model
             })
         }
-        let glyph = current.entry.map { ProviderIcon.make(driver: $0.driver, displayName: $0.displayName, size: 16, color: Themed.color(\.contrastMutedForeground)) }
+        // ProviderModelPicker.tsx:95-96, 248-262: the `h-3` badge two points past the 16pt glyph, ringed in `contrast-input`.
+        let glyph = current.entry.map { e in
+            ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 16, color: Themed.color(\.contrastMutedForeground),
+                              badge: ProviderBadge.make(e, in: context.catalog, size: .small, overhang: 2, ring: Themed.color(\.contrastInput)))
+        }
         modelButton.icon = glyph
         modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
         let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled)
@@ -113,6 +117,9 @@ public final class ComposerPickers {
         guard let host = modelButton.popupHost, let instance = current.instanceId else { return }
         let view = ModelPickerView(catalog: context.catalog, favorites: store.favorites, active: instance,
                                    activeModel: current.model?.slug ?? current.modelSlug ?? "")
+        view.jumpLabel = { index in
+            ActiveKeymap.label(for: Keymap.modelPickerJumpCommands[index], context: KeybindingContext(["modelPickerOpen": true]))
+        }
         view.onSelect = { [weak self] id, slug in
             guard let self else { return }
             if self.currentMultiple != nil { self.setMultiple(nil, for: self.draftKey) }

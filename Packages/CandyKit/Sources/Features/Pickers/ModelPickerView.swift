@@ -29,6 +29,10 @@ final class ModelPickerView: DSView, PickerPopupBody {
     /// The fan-out's models (`instance:slug`), each drawn selected.
     var selectedKeys: Set<String>? { didSet { if selectedKeys != oldValue { reload() } } }
     var onToggleFavorite: (@MainActor (ProviderInstanceId, String) -> Void)?
+    /// The `modelPicker.jump.N` key label for the Nth model (0-based), drawn as a `Kbd` on its row
+    /// (ModelPickerContent.tsx:669-687, 751-767; ModelListRow.tsx:107). Nil draws none, as T3's web
+    /// build does (the bindings need `isDesktop`), which the web reference captures show.
+    var jumpLabel: (@MainActor (Int) -> String?)? { didSet { reload() } }
 
     let search = InputView(placeholder: "Search models...", size: .sm)
     private let railFill = CALayer()
@@ -90,7 +94,10 @@ final class ModelPickerView: DSView, PickerPopupBody {
         if railButtons.map(\.entryId) != visible.map(\.id) {
             railButtons.forEach { $0.removeFromSuperview() }
             railButtons = visible.map { e in
-                let b = RailButtonView(kind: .instance(e))
+                // ModelPickerSidebar.tsx:161, 196-216: `size-6` box, `h-3` badge only with an accent.
+                let badge = ProviderBadge.make(e, in: catalog, size: ProviderBadge.accent(e) != nil ? .small : .regular,
+                                               overhang: 2, ring: Themed.color(\.muted, 0.3))
+                let b = RailButtonView(kind: .instance(e), badge: badge)
                 b.onPress = { [weak self] in self?.selectRail(.instance(e.id)) }
                 addSubview(b)
                 return b
@@ -102,7 +109,15 @@ final class ModelPickerView: DSView, PickerPopupBody {
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // ponytail: every row is a view, rebuilt on each change (about 15 here); recycle rows like the timeline past ~100 models
         rowViews.forEach { $0.removeFromSuperview() }
-        rowViews = sections.rows.indices.map { ModelRowView(picker: self, row: sections.rows[$0], index: $0) }
+        var modelIndex = 0
+        rowViews = sections.rows.indices.map { i in
+            var label: String?
+            if case .model = sections.rows[i] {
+                if modelIndex < 9 { label = jumpLabel?(modelIndex) }
+                modelIndex += 1
+            }
+            return ModelRowView(picker: self, row: sections.rows[i], index: i, jumpLabel: label)
+        }
         rowViews.forEach(list.addSubview)
         emptyLabel.isHidden = !sections.rows.isEmpty
         if let h = highlightedRow, h >= rowViews.count { highlightedRow = nil }
@@ -158,7 +173,6 @@ final class ModelPickerView: DSView, PickerPopupBody {
     }
 
     /// `modelPicker.jump.N`: picks the Nth model in the list (ModelPickerContent.tsx:797-811).
-    // ponytail: no jump hint labels on the rows while the modifier is held; add them with the picker's hint overlay
     public func jump(_ index: Int) {
         let models = sections.rows.indices.filter { if case .model = sections.rows[$0] { true } else { false } }
         if index < models.count { activate(models[index]) }
@@ -366,11 +380,11 @@ final class RailButtonView: ControlView {
 
     var entryId: ProviderInstanceId? { if case .instance(let e) = kind { e.id } else { nil } }
 
-    init(kind: Kind) {
+    init(kind: Kind, badge: ProviderBadge? = nil) {
         self.kind = kind
         switch kind {
         case .favorites: glyph = IconView(name: .star, size: 20)
-        case .instance(let e): glyph = ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 20)
+        case .instance(let e): glyph = ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 20, badge: badge)
         }
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -409,6 +423,11 @@ final class RailButtonView: ControlView {
         let picker = superview as? ModelPickerView
         let lit = !isDisabled && (state.hovered || picker?.isRailFocused(self) == true)
         Motion.setBackground(fill, lit ? Themed.color(\.foreground, 0.1).cgColor(in: self) : nil)
+        // The badge's ring takes the surface under it (ModelPickerSidebar.tsx:206-212).
+        if let badged = glyph as? ProviderBadgedIconView {
+            let selected = picker?.isRailSelected(entryId.map { .instance($0) } ?? .favorites) == true
+            badged.ring = state.hovered && !isDisabled ? Themed.color(\.muted) : selected ? Themed.color(\.background) : Themed.color(\.muted, 0.3)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -430,8 +449,9 @@ final class ModelRowView: DSView {
     private var providerIcon: NSView?
     private var star: StarButtonView?
     private var chevron: IconView?
+    private var kbd: KbdView?
 
-    init(picker: ModelPickerView, row: ModelPickerRow, index: Int) {
+    init(picker: ModelPickerView, row: ModelPickerRow, index: Int, jumpLabel: String? = nil) {
         self.picker = picker
         self.row = row
         self.index = index
@@ -459,6 +479,12 @@ final class ModelRowView: DSView {
             let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: 12, color: Themed.color(\.contrastMutedForeground))
             addSubview(icon)
             providerIcon = icon
+            if let jumpLabel {
+                let k = KbdView(jumpLabel)
+                k.smoothsFont = false
+                addSubview(k)
+                kbd = k
+            }
             let s = StarButtonView(favorite: item.isFavorite)
             s.toolTip = item.isFavorite ? "Remove from favorites" : "Add to favorites"
             s.action = { [weak picker] in picker?.toggleFavorite(item) }
@@ -480,7 +506,9 @@ final class ModelRowView: DSView {
     override func layout() {
         super.layout()
         fill.frame = bounds
-        let trailing: CGFloat = star != nil ? 24 - 4 + 6 : 16 + 8
+        // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
+        let kbdWidth = kbd.map { $0.intrinsicContentSize.width + 6 } ?? 0
+        let trailing: CGFloat = (star != nil ? 24 - 4 + 6 : 16 + 8) + kbdWidth
         let nameW = min(name.textWidth, bounds.width - 16 - trailing - (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0))
         name.frame = NSRect(x: 8, y: 4, width: max(0, nameW), height: 16.5)
         if let newBadge {
@@ -495,6 +523,10 @@ final class ModelRowView: DSView {
         secondary.frame = NSRect(x: x, y: 24.5, width: max(0, bounds.width - x - 8 - trailing), height: 16.5)
         // `icon-xs` star button with `-mr-1`; the legacy chevron sits at the end of the content box.
         star?.frame = NSRect(x: bounds.width - 8 + 4 - 24, y: (bounds.height - 24) / 2, width: 24, height: 24)
+        if let kbd, let star {
+            let w = kbd.intrinsicContentSize.width
+            kbd.frame = NSRect(x: star.frame.minX - 6 - w, y: (bounds.height - 20) / 2, width: w, height: 20)
+        }
         if let chevron {
             chevron.frame = NSRect(x: bounds.width - 8 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
         }

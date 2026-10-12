@@ -107,8 +107,10 @@ public class SettingsPageBase: SettingsStackView {
             inheritance.isHidden = scope.connected.isEmpty
             let inert = scope.inertReason(for: keys)
             if scope.isProjectScope, !scoped.isEmpty {
-                // `SettingResetButton tooltip="Reset to inherited value"` while the project overrides it.
-                slot.isShown = scope.source(scoped) != .environment && inert == nil
+                // `SettingResetButton tooltip="Reset to inherited value"` while the project overrides it or the
+                // targets disagree (settingsLayout.tsx:361); a t3.json value has no override to clear.
+                let source = scope.source(scoped)
+                slot.isShown = (source == nil || source == .project) && inert == nil
                 slot.tooltip = "Reset to inherited value"
             } else {
                 let changed = !(isDefault?() ?? keys.allSatisfy { self.server.isDefault($0) })
@@ -178,15 +180,22 @@ public class SettingsPageBase: SettingsStackView {
         let scope = context.scope
         for t in scope.targets {
             guard let e = scope.environments.first(where: { $0.id == t.environmentId }), let s = e.settings else { continue }
-            // `settingInheritanceLayers`: the project override, the environment's value, the built-in default.
+            // `settingInheritanceLayers` (SettingInheritance.tsx:80-136): the project override, the environment's
+            // value, the checkout's t3.json for file-backed keys, the built-in default.
             let source = ProjectSettings.isScoped(key) ? t.sources[key] ?? .environment : .environment
             let set = !s.isDefault(key)
+            let fileBacked = ProjectSettings.fileBacked[key]
             var layers: [(label: String, value: String, effective: Bool, set: Bool)] = []
             if t.projectId != nil, ProjectSettings.isScoped(key) {
                 layers.append(("Project", source == .project ? Self.format(key, t.settings[key]) : "Inherits", source == .project, source == .project))
             }
             layers.append((t.label, set ? Self.format(key, s[key]) : "Inherits", source == .environment && set, set))
-            layers.append(("Default", Self.format(key, ServerSettingsValues.fields[key]?.defaultValue ?? .null), source == .environment && !set, true))
+            if fileBacked != nil, t.projectId != nil {
+                layers.append(("t3.json", source == .t3json ? Self.format(key, t.settings[key]) : "Inherits", source == .t3json, source == .t3json))
+            }
+            // A file-backed key's built-in is what the resolver fills in, not the null the schema decodes to.
+            let builtIn = fileBacked.map { JSONValue.string($0) } ?? ServerSettingsValues.fields[key]?.defaultValue ?? .null
+            layers.append(("Default", Self.format(key, builtIn), source == .environment && !set, true))
             stack.add(header: scope.environmentLabel(e), machine: e.machine, layers: layers)
         }
         let pop = PopoverView(content: stack, padding: .none, width: .md)

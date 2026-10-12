@@ -199,12 +199,11 @@ public enum PreviewRPC {
         return next == current ? nil : next
     }
 
-    /// `preview.open` for a new server tab (openPreviewSession.ts): the configured default viewport
-    /// (`fill`) and profile (`default`).
-    // ponytail: T3's browser settings (default viewport, zoom, profile) are not built; the schema
-    // defaults are sent. Read them from client settings once Settings > Integrations > Browser exists
-    public static func openPayload(threadId: String, url: String? = nil, profileId: String = "default") -> JSONValue {
-        var p: [String: JSONValue] = ["threadId": .string(threadId), "viewport": .object(["_tag": .string("fill")]),
+    /// `preview.open` for a new server tab (openPreviewSession.ts:50-56): the configured default viewport
+    /// (`browserDefaultOpenViewport`) and profile.
+    public static func openPayload(threadId: String, url: String? = nil, profileId: String = "default",
+                                   viewport: JSONValue = .object(["_tag": .string("fill")])) -> JSONValue {
+        var p: [String: JSONValue] = ["threadId": .string(threadId), "viewport": viewport,
                                       "profileId": .string(profileId), "runtime": .string("server")]
         if let url { p["url"] = .string(url) }
         return .object(p)
