@@ -23,6 +23,8 @@ public struct SidebarActions {
     public var undo: () -> Void = {}
     /// The footer's Back on a utility page (SidebarChrome.tsx:203-210).
     public var back: () -> Void = {}
+    /// The brand, a link to "/" (SidebarChrome.tsx:110-123): the index route's draft landing.
+    public var goHome: () -> Void = {}
     public var toggleSidebar: () -> Void = {}
     /// `orchestration.searchThreads {query}`; nil when the request failed or there is no connection, which
     /// leaves title search on its own (threadSearch.ts:58-62).
@@ -279,6 +281,7 @@ public final class SidebarContentView: DSView {
             contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
+        brand.action = { [weak self] in self?.actions.goHome() }
         list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }
         list.onAddProject = { [weak self] in self?.actions.addProject() }
         list.onFileDrop = { [weak self] id, urls in self?.actions.dropFiles(id, urls) }

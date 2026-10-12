@@ -8,6 +8,9 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
 
+    /// The page Escape goes back to: General for the pages reached from it.
+    public var parent: SettingsSection? { self == .diagnostics || self == .licenses ? .general : nil }
+
     public var label: String {
         switch self {
         case .projects: "Project"
@@ -99,6 +102,8 @@ public final class SettingsSidebarView: DSView {
     }
     public var onSelect: ((SettingsSection) -> Void)?
     public var onBack: (() -> Void)?
+    /// The brand's link to "/" (SidebarChrome.tsx:110-123).
+    public var onHome: (() -> Void)?
     public var onToggleSidebar: (() -> Void)?
     /// A search result was chosen (`handleSearchResultClick`): the page opens at its anchor.
     public var onSearchResult: ((SettingsSearchItem) -> Void)?
@@ -142,6 +147,7 @@ public final class SettingsSidebarView: DSView {
         }
         // T3 Connect's sidebar sign-in sits above the utility row (SettingsSidebarNav.tsx:352-362), WP6.4.
         back.action = { [weak self] in self?.onBack?() }
+        brand.action = { [weak self] in self?.onHome?() }
         addSubview(back)
         signIn.action = { [weak self] in self?.onSignIn?() }
         signIn.isHidden = true

@@ -435,6 +435,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.onRouteChange = record
         settings.onRouteChange = record
         commands.onRouteChange = record
+        // The brand links to "/" (SidebarChrome.tsx:110-123), which lands on a draft for the most recent
+        // project (_chat.index.tsx `IndexDraftLanding`), from the thread view, Settings or a utility page.
+        let goHome = { [weak settings, weak commands, weak threads] in
+            commands?.closeUtilityPage(record: false)
+            settings?.close(record: false)
+            threads?.landOnIndex()
+            record()
+        }
+        sidebar.actions.goHome = goHome
+        settings.onHome = goHome
+        (window as? MainWindow)?.onUnhandledEscape = { [weak settings, weak window] in
+            guard let settings, settings.isOpen, settings.modal == nil else { return false }
+            // Only from Settings itself: an overlay or dialog elsewhere in the window keeps its Escape.
+            if let focus = window?.firstResponder as? NSView, focus !== window?.contentView,
+               !focus.isDescendant(of: settings.nav), !focus.isDescendant(of: settings.page) { return false }
+            settings.escape()
+            return true
+        }
         history.apply = { [weak settings, weak commands, weak threads, weak sidebar] route in
             guard let settings, let commands, let threads, let sidebar else { return false }
             switch route {

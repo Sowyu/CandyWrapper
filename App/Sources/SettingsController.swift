@@ -47,6 +47,8 @@ final class SettingsController {
     /// Settings opened, changed page or closed (route history).
     var onOnboardingReturn: (() -> Void)?
     var onRouteChange: (() -> Void)?
+    /// The nav's brand link to "/".
+    var onHome: () -> Void = {}
     /// The thread view is back in the window (focus goes to the composer).
     var onThreadViewReturn: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).
@@ -93,12 +95,13 @@ final class SettingsController {
     private func buildViews() {
         guard !built else { return }
         built = true
-        page.onEscape = { [weak self] in self?.close() }
+        page.onEscape = { [weak self] in self?.escape() }
         nav.onSelect = { [weak self] section in self?.show(section) }
         nav.onSearchResult = { [weak self] item in self?.jump(to: item) }
         page.header.restore.action = { [weak self] in self?.confirmRestoreDefaults() }
         setUpPageContext()
         nav.onBack = { [weak self] in self?.close() }
+        nav.onHome = { [weak self] in self?.onHome() }
         nav.onToggleSidebar = { [weak layout = self.layout] in layout?.toggle() }
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
@@ -165,6 +168,19 @@ final class SettingsController {
         loadPrimaryDescriptor()
         // Connections refreshes the account's machines each time it opens (CloudEnvironmentConnectRows).
         t3.refreshMachines()
+    }
+
+    /// Escape (`useEscapeToGoBack`): T3 leaves Settings for the last main app screen from any page
+    /// (routes/settings.tsx:115-116). Diagnostics and Open source licenses, reached from General, go back to
+    /// General first, as the user asked. A held key does nothing more (`event.repeat`).
+    func escape() {
+        guard isOpen, NSApp.currentEvent?.isARepeat != true else { return }
+        if let parent = section.parent {
+            show(parent)
+            window?.makeFirstResponder(page)
+        } else {
+            close()
+        }
     }
 
     /// `record` false leaves the route history to the page that replaces Settings.
