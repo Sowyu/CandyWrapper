@@ -89,6 +89,10 @@ public final class LabelView: DSView {
     public var truncation: CTLineTruncationType = .end { didSet { if truncation != oldValue { needsDisplay = true } } }
     /// `underline` with T3's `underline-offset-4`.
     public var isUnderlined = false { didSet { if isUnderlined != oldValue { needsDisplay = true } } }
+    /// An underline with its own `underline-offset-*` and `decoration-*` (top edge below the baseline, thickness).
+    public var underlineDecoration: (offset: CGFloat, thickness: CGFloat)? {
+        didSet { if underlineDecoration?.offset != oldValue?.offset || underlineDecoration?.thickness != oldValue?.thickness { needsDisplay = true } }
+    }
     /// CSS `letter-spacing` in points, added after every character like Chromium.
     public var tracking: CGFloat = 0 { didSet { if tracking != oldValue { invalidate() } } }
     /// Core Text font smoothing (stem darkening). Chromium draws text on transparent composited
@@ -204,6 +208,10 @@ public final class LabelView: DSView {
             let thickness = max(1, (font.underlineThickness * 2).rounded() / 2)
             ctx.setFillColor(color.cgColor(in: self))
             ctx.fill(CGRect(x: x, y: baseline + 4 - thickness / 2, width: line.width, height: thickness))
+        }
+        if let underlineDecoration {
+            ctx.setFillColor(color.cgColor(in: self))
+            ctx.fill(CGRect(x: x, y: baseline + underlineDecoration.offset, width: line.width, height: underlineDecoration.thickness))
         }
     }
 }

@@ -219,6 +219,7 @@ struct MarkdownIncrementalTests {
             case .symbol(let k, let r, _): "symbol \(k) \(r)"
             case .checkbox(let r, let c): "checkbox \(r) \(c)"
             case .icon(let i, let r, _): "icon \(i) \(r)"
+            case .fileIcon(let path, let r): "fileIcon \(path) \(r)"
             case .fileChip(let c): "file \(c.frame) \(c.meta.filePath)"
             case .contextChip(let c): "context \(c.frame)"
             case .link(let r, let u): "link \(r) \(u)"

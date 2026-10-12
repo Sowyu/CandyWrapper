@@ -253,6 +253,7 @@ public final class ContentSearchView: DSView {
             layer?.borderWidth = 1
             for (i, (t, label)) in zip(toggles, ["Match case", "Match whole word", "Use regular expression"]).enumerated() {
                 t.monospaced = true
+                t.underlinesTitle = i == 1 // "Match whole word" (ProjectContentSearchDialog.tsx:191)
                 t.toolTip = label
                 t.setAccessibilityLabel(label)
                 t.onPressedChange = { [weak self] on in
@@ -414,13 +415,16 @@ public final class ContentSearchView: DSView {
                 line = CTLineCreateTruncatedLine(line, Double(bounds.width), .end, ellipsis) ?? line
             }
             let baseline = metrics.baseline(top: 0, lineHeight: bounds.height)
+            // The inline `<mark>` paints the font's content area, its metrics rounded to device pixels as Blink does.
+            let ascent = (font.ascender * 2).rounded() / 2, descent = (-font.descender * 2).rounded() / 2
             ctx.saveGState()
             ctx.setFillColor(Themed.color(\.primary, 0.25).cgColor(in: self))
             for r in match.normalizedRanges {
                 let x0 = CTLineGetOffsetForStringIndex(line, r.start, nil)
                 let x1 = CTLineGetOffsetForStringIndex(line, r.end, nil)
                 guard x1 > x0 else { continue }
-                ctx.addPath(CGPath(roundedRect: CGRect(x: x0, y: 0, width: x1 - x0, height: bounds.height), cornerWidth: 2, cornerHeight: 2, transform: nil))
+                ctx.addPath(CGPath(roundedRect: CGRect(x: x0, y: baseline - ascent, width: x1 - x0, height: ascent + descent),
+                                   cornerWidth: 2, cornerHeight: 2, transform: nil))
                 ctx.fillPath()
             }
             ctx.textMatrix = .identity

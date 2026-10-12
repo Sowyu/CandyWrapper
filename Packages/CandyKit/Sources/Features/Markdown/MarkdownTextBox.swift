@@ -122,6 +122,39 @@ final class MarkdownTextBox {
         }
     }
 
+    /// The box a CSS highlight paints behind the text at `index` on a line whose baseline sits at `baseline`: the
+    /// font's content area, its ascent above the baseline and its descent below, each rounded to device pixels as Blink rounds them.
+    func contentArea(at index: Int, baseline: CGFloat) -> (y: CGFloat, height: CGFloat) {
+        let font = (storage.textStorage?.length ?? 0) > index ? storage.textStorage?.attribute(.font, at: index, effectiveRange: nil) as? NSFont : nil
+        // Blink sizes the font in device pixels (2x, as `draw` assumes) and rounds its metrics there.
+        let ascent = ((font?.ascender ?? lineHeight * 0.75) * 2).rounded() / 2, descent = ((-(font?.descender ?? -lineHeight * 0.25)) * 2).rounded() / 2
+        return (baseline - ascent, ascent + descent)
+    }
+
+    /// Draws `range` again in `color` over the box's own glyphs: a CSS highlight's foreground.
+    func draw(_ range: NSRange, color: NSColor, in ctx: CGContext, at origin: CGPoint) {
+        guard let text = storage.textStorage else { return }
+        for line in lines {
+            let lo = max(range.location, line.start), hi = min(range.upperBound, line.start + line.length, text.length)
+            guard lo < hi else { continue }
+            let x = Self.glyphOffsets(line.fragment)(lo - (line.start - line.fragment.characterRange.location))
+            let piece = NSMutableAttributedString(attributedString: text.attributedSubstring(from: NSRange(location: lo, length: hi - lo)))
+            let all = NSRange(location: 0, length: piece.length)
+            piece.addAttribute(.foregroundColor, value: color, range: all)
+            piece.addAttribute(NSAttributedString.Key(kCTForegroundColorAttributeName as String), value: color.cgColor, range: all)
+            ctx.saveGState()
+            ctx.textMatrix = .identity
+            ctx.translateBy(x: origin.x + line.x + x, y: Self.snappedBaseline(origin.y + line.baseline))
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.textPosition = .zero
+            CTLineDraw(CTLineCreateWithAttributedString(piece), ctx)
+            ctx.restoreGState()
+        }
+    }
+
+    /// Blink's baseline snap for a box drawn at `y` (see `draw`).
+    static func snappedBaseline(_ y: CGFloat) -> CGFloat { (y * 2 - 0.5).rounded(.up) / 2 }
+
     /// Glyph origins by string index within a line fragment. `locationForCharacter(at:)` splits a kerned
     /// character's extra advance around the caret, so it misplaces the edges the kerning reserves.
     private static func glyphOffsets(_ line: NSTextLineFragment) -> (Int) -> CGFloat {
@@ -149,7 +182,7 @@ final class MarkdownTextBox {
     // ponytail: 2x device pixels, as in TextLine.baseline; pass the window's scale for 1x screens
     func draw(in ctx: CGContext, at origin: CGPoint) {
         for line in lines {
-            let baseline = ((origin.y + line.baseline) * 2 - 0.5).rounded(.up) / 2
+            let baseline = Self.snappedBaseline(origin.y + line.baseline)
             line.fragment.draw(at: CGPoint(x: origin.x + line.origin.x, y: baseline - line.fragment.glyphOrigin.y), in: ctx)
         }
     }

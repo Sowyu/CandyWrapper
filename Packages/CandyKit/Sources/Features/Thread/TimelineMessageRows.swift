@@ -382,6 +382,8 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.onOpenFile = context.model?.openFile
         // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
         markdown.diagramsEnabled = !m.streaming
+        // A streaming answer has no Run buttons (ChatMarkdown.tsx:3368-3372).
+        markdown.onRunShellCommand = m.streaming ? nil : context.model?.runShellCommand
         markdown.citationSourceID = m.id.rawValue
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)

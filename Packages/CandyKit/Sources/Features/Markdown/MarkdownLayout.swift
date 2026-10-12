@@ -231,6 +231,8 @@ public final class MarkdownLayout {
         case symbol(Int, CGRect, NSColor)
         case checkbox(CGRect, checked: Bool)
         case icon(IconName, CGRect, NSColor)
+        /// A pierre file icon for a path, in its theme color (`PierreEntryIcon`).
+        case fileIcon(String, CGRect)
         /// A file path chip's box and icon; its label is part of the text item drawn after it.
         case fileChip(FileChip)
         /// A `t3-context://` chip, drawn whole over its placeholder space.
@@ -250,7 +252,7 @@ public final class MarkdownLayout {
     }
 
     struct Control {
-        enum Action { case copy(String), toggleWrap(Int), toggleTable, toggleDiagram(Int), retryDiagram(String) }
+        enum Action { case copy(String), toggleWrap(Int), toggleTable, toggleDiagram(Int), retryDiagram(String), runShell(String) }
         var frame: CGRect
         var icon: IconName?
         var variant: ButtonView.Variant
@@ -295,6 +297,7 @@ public final class MarkdownLayout {
     fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int }
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
+        var runsShell: Bool
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
@@ -302,11 +305,12 @@ public final class MarkdownLayout {
     /// `unwrappedCode`: indices of code blocks whose wrap toggle is off. `bodyColor` replaces the
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
+    /// `runsShell`: shell code blocks get "Run in terminal" (an assistant answer that finished, with a project).
     /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, reusing previous: MarkdownLayout? = nil) {
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, files: files.isEmpty ? nil : files,
@@ -314,7 +318,9 @@ public final class MarkdownLayout {
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
-        let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes)
+        builder.runsShell = runsShell
+        let key = ReuseKey(unwrapped: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
+                           runsShell: runsShell)
         var resume: (layout: MarkdownLayout, blocks: Int)?
         if let previous, previous.width == width, previous.reuseKey == key {
             let blocks = document.blocks, old = previous.rootBlocks
@@ -371,6 +377,7 @@ private struct Builder {
     var diagrams: MarkdownLayout.Diagrams?
     var contexts: MarkdownContextChips?
     var cwd: String?
+    var runsShell = false
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -723,15 +730,31 @@ private struct Builder {
         box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
                               border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
+        // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
+        // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),
+        // or the language's name when no specific icon exists.
         let titleFont = DSFont.mono(11)
+        let iconPath = title ?? Self.syntheticFileName(language: language)
+        let showsIcon = title != nil || FileTypeIcon.token(for: iconPath) != "default"
+        if showsIcon { box.items.append(.fileIcon(iconPath, CGRect(x: 1 + 12, y: 1 + 6 + 5, width: 14, height: 14))) }
+        let labelX: CGFloat = title != nil ? 1 + 12 + 14 + 6 : 1 + 12
         // Find skips the header (`THREAD_FIND_IGNORE_PROPS`, ChatMarkdown.tsx:746, 959).
-        let label = NSAttributedString(string: title ?? language, attributes: [
+        let label = NSAttributedString(string: title ?? (showsIcon ? "" : language), attributes: [
             .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72), .markdownFindText: ""])
         let labelLine = 11 * 1.375
-        let titleBox = boxes.make(label, width: width - 2 - 12 - 6 - 50 - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
-        box.items.append(.text(titleBox, CGPoint(x: 1 + 12, y: 1 + 6 + (24 - labelLine) / 2)))
+        let command = runsShell ? Self.runnableCommand(language: language, code: code) : nil
+        let actions: CGFloat = command == nil ? 50 : 76
+        if label.length > 0 {
+            let titleBox = boxes.make(label, width: width - labelX - 6 - actions - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
+            box.items.append(.text(titleBox, CGPoint(x: labelX, y: 1 + 6 + (24 - labelLine) / 2)))
+        }
         let copyX = width - 1 - 6 - 24
-        box.controls.append(.init(frame: CGRect(x: copyX - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
+        // Wrap, "Run in terminal", copy (ChatMarkdown.tsx:960-1010), 24px buttons 2px apart.
+        if let command {
+            box.controls.append(.init(frame: CGRect(x: copyX - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .play, variant: .ghostMuted,
+                                      action: .runShell(command)))
+        }
+        box.controls.append(.init(frame: CGRect(x: copyX - (command == nil ? 1 : 2) * 26, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
                                   variant: wraps ? .secondary : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
         box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
         let body = CGRect(x: 1, y: 1 + MarkdownStyle.codeHeader, width: width - 2, height: height - 2 - MarkdownStyle.codeHeader)
@@ -739,6 +762,29 @@ private struct Builder {
         box.items.append(.text(textBox, CGPoint(x: 1 + p.x, y: 1 + MarkdownStyle.codeHeader + p.y)))
         if !wraps { box.items.append(.endClip) }
         return box
+    }
+
+    /// `syntheticFileNameForLanguageId` (pierre-icons.ts:123-169).
+    static func syntheticFileName(language: String) -> String {
+        let id = language.lowercased()
+        if id == "dockerfile" { return "Dockerfile" }
+        let aliases = ["bash": "sh", "csharp": "cs", "elixir": "ex", "haskell": "hs", "javascript": "js", "jsx": "jsx", "kotlin": "kt",
+                       "markdown": "md", "mdx": "mdx", "plaintext": "txt", "powershell": "ps1", "python": "py", "ruby": "rb", "rust": "rs",
+                       "shell": "sh", "shellscript": "sh", "swift": "swift", "typescript": "ts", "tsx": "tsx", "yaml": "yml"]
+        return "file." + (aliases[id] ?? id)
+    }
+
+    /// `canRun` (ChatMarkdown.tsx:872-881): a shell fence whose trimmed text is not empty, does not end in a line
+    /// continuation and holds no control or invisible format characters (so one line: `\n` is a control character).
+    /// `code` here has lost the fence's final newline, which T3 checks for and then leaves out of the test.
+    // ponytail: T3 also requires a closed fence (isClosedCodeFence); a finished answer ending in an unclosed shell fence shows Run here
+    static func runnableCommand(language: String, code: String) -> String? {
+        guard ["sh", "bash", "zsh", "fish", "shell", "powershell", "pwsh"].contains(language) else { return nil }
+        let command = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty, !command.hasSuffix("\\"),
+              !code.unicodeScalars.contains(where: { $0.properties.generalCategory == .control || $0.properties.generalCategory == .format })
+        else { return nil }
+        return command
     }
 
     /// The diagram face of `MarkdownCodeBlock` (ChatMarkdown.tsx:928-938): `my-[0.65rem]`, the diagram centered at
@@ -887,6 +933,7 @@ private extension MarkdownLayout.Item {
         case .symbol(let kind, let r, let color): .symbol(kind, r.offsetBy(dx: p.x, dy: p.y), color)
         case .checkbox(let r, let checked): .checkbox(r.offsetBy(dx: p.x, dy: p.y), checked: checked)
         case .icon(let name, let r, let color): .icon(name, r.offsetBy(dx: p.x, dy: p.y), color)
+        case .fileIcon(let path, let r): .fileIcon(path, r.offsetBy(dx: p.x, dy: p.y))
         case .fileChip(let chip):
             .fileChip(FileChip(frame: chip.frame.offsetBy(dx: p.x, dy: p.y), icon: chip.icon.offsetBy(dx: p.x, dy: p.y), meta: chip.meta, label: chip.label))
         case .contextChip(var chip): { chip.frame = chip.frame.offsetBy(dx: p.x, dy: p.y); return .contextChip(chip) }()

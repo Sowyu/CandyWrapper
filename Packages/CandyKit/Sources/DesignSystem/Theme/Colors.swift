@@ -94,3 +94,27 @@ extension NSColor {
         factor == 1 ? self : withAlphaComponent(alphaComponent * factor)
     }
 }
+
+/// Find in thread's match paint (index.css:376-394): the theme's `--app-theme-search-match-*` colors, else T3's
+/// fallbacks. The compiled stylesheet turns the fallbacks' `@variant dark` block into `:is()`, which never
+/// matches, so the stock look paints the light colors in both appearances (design/reference/43-find-in-thread).
+@MainActor
+public enum SearchMatchColors {
+    public static func background(active: Bool, dark: Bool) -> NSColor {
+        color(active ? .searchMatchActiveBackground : .searchMatchBackground, dark: dark,
+              fallback: active ? activeBackground : background)
+    }
+
+    public static func foreground(active: Bool, dark: Bool) -> NSColor {
+        color(active ? .searchMatchActiveForeground : .searchMatchForeground, dark: dark, fallback: foreground)
+    }
+
+    private static func color(_ role: ThemeColorRole, dark: Bool, fallback: NSColor) -> NSColor {
+        let half = dark ? ThemeRuntime.input.dark : ThemeRuntime.input.light
+        return half?.colors[role].flatMap(ThemeCSSColor.parse)?.token.nsColor ?? fallback
+    }
+
+    private static let background = ThemeCSSColor.parse("oklch(91.5% .11 85)")!.token.nsColor
+    private static let activeBackground = ThemeCSSColor.parse("oklch(77.4202% .151946 74.331)")!.token.nsColor
+    private static let foreground = ThemeCSSColor.parse("oklch(21.6164% .028283 77.423)")!.token.nsColor
+}

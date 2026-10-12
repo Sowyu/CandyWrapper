@@ -1,0 +1,18 @@
+{
+  "find" : {
+    "height" : 55.8984375,
+    "width" : 480
+  },
+  "go-to-file" : {
+    "height" : 326,
+    "width" : 576
+  },
+  "project-search" : {
+    "height" : 420,
+    "width" : 576
+  },
+  "sidebar-collapsed" : {
+    "height" : 52,
+    "width" : 640
+  }
+}

@@ -13,6 +13,11 @@ public final class MarkdownView: DSView {
     /// Search changes only the paint of visible rows, never their Markdown layout.
     public var threadFindOccurrence: Int? { didSet { if threadFindOccurrence != oldValue { needsDisplay = true } } }
     public var threadFindQuery = "" { didSet { if threadFindQuery != oldValue { needsDisplay = true } } }
+    /// "Run in terminal" on shell code blocks (`onRunShellCommand`, ChatView.tsx:5105-5116): set for a finished assistant
+    /// answer in a thread with a project, nil elsewhere.
+    public var onRunShellCommand: ((String) -> Void)? {
+        didSet { if (oldValue == nil) != (onRunShellCommand == nil) { invalidate() } }
+    }
 
     public var document = MarkdownDocument(blocks: []) {
         didSet {
@@ -184,7 +189,7 @@ public final class MarkdownView: DSView {
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
-                                  reusing: reusable?.width == width ? reusable : nil)
+                                  runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
         return made
@@ -306,10 +311,15 @@ public final class MarkdownView: DSView {
             if button.title != control.title { button.title = control.title }
             if copiedResets[i] == nil, button.icon != control.icon { button.icon = control.icon }
             if button.variant != control.variant { button.variant = control.variant }
+            button.toolTip = nil
             switch control.action {
             case .copy(let text):
                 button.setAccessibilityLabel("Copy")
                 button.action = { [weak self] in self?.copy(text, button: i) }
+            case .runShell(let command):
+                button.setAccessibilityLabel("Run in terminal")
+                button.toolTip = "Run in terminal"
+                button.action = { [weak self] in self?.onRunShellCommand?(command) }
             case .toggleWrap(let index):
                 button.setAccessibilityLabel(unwrappedCode.contains(index) ? "Wrap lines" : "Disable line wrap")
                 button.action = { [weak self] in self?.toggleWrap(index) }
@@ -701,8 +711,8 @@ public final class MarkdownView: DSView {
             case .text(let box, let origin):
                 let ranges = box.findRanges(threadFindQuery)
                 if active < seen + ranges.count, let span = box.spans(ranges[active - seen]).first {
-                    return CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
-                                  width: max(1, span.x1 - span.x0), height: box.lineHeight)
+                    let area = box.contentArea(at: ranges[active - seen].location, baseline: MarkdownTextBox.snappedBaseline(origin.y + span.baseline))
+                    return CGRect(x: origin.x + span.x0, y: area.y, width: max(1, span.x1 - span.x0), height: area.height)
                 }
                 seen += ranges.count
             case .hiddenText(let code, let index):
@@ -756,18 +766,24 @@ public final class MarkdownView: DSView {
                     }
                 }
                 selectionOffset += (box.text as NSString).length + 1
+                // T3 indexes the rendered text: chip labels, not code block titles or image alt text (threadFindText.ts).
+                // Matches paint as CSS highlights (index.css:376-394): a background behind the font's content area
+                // and the text inside it in the highlight's foreground.
+                let visible = origin.y <= dirtyRect.maxY && origin.y + box.height >= dirtyRect.minY
+                if visible { box.draw(in: ctx, at: origin) }
                 if !threadFindQuery.isEmpty {
-                    // T3 indexes the rendered text: chip labels, not code block titles or image alt text (threadFindText.ts).
                     for range in box.findRanges(threadFindQuery) {
-                        ctx.setFillColor((findOccurrence == threadFindOccurrence ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.32)).cgColor)
+                        let active = findOccurrence == threadFindOccurrence
                         findOccurrence += 1
+                        guard visible else { continue }
+                        ctx.setFillColor(SearchMatchColors.background(active: active, dark: dark).cgColor)
                         for span in box.spans(range) {
-                            ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
-                                            width: span.x1 - span.x0, height: box.lineHeight))
+                            let area = box.contentArea(at: range.location, baseline: MarkdownTextBox.snappedBaseline(origin.y + span.baseline))
+                            ctx.fill(CGRect(x: origin.x + span.x0, y: area.y, width: span.x1 - span.x0, height: area.height))
                         }
+                        box.draw(range, color: SearchMatchColors.foreground(active: active, dark: dark), in: ctx, at: origin)
                     }
                 }
-                if origin.y <= dirtyRect.maxY, origin.y + box.height >= dirtyRect.minY { box.draw(in: ctx, at: origin) }
             case .box(let rect, let fill, let border, let radius):
                 drawBox(rect, fill: fill, border: border, radius: radius, in: ctx)
             case .glyphs(let string, let point):
@@ -792,6 +808,9 @@ public final class MarkdownView: DSView {
                 drawCheckbox(rect, checked: checked, dark: dark, in: ctx)
             case .icon(let name, let rect, let color):
                 Self.drawIcon(name.definition, in: rect, color: color.cgColor(in: self), ctx: ctx)
+            case .fileIcon(let path, let rect):
+                let (icon, color) = FileTypeIcon.icon(for: path)
+                Self.drawIcon(icon, in: rect, color: color.cgColor(in: self), ctx: ctx)
             case .fileChip(let chip):
                 chipIndex += 1
                 let hovered = hoveredChip == chipIndex

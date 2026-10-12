@@ -6,6 +6,7 @@ import T3Protocol
 
 /// The thread details card at each density and the context chips in a sent message, against T3's markup in
 /// Chromium (spec from scripts/gen-threadview-spec.py, references in design/component-reference/threadview).
+/// The full card is the thread details panel of design/reference/44-thread-details-panel.
 /// Writes ref, ours and diff PNGs plus /tmp/candywrapper-fidelity/report-threadview.html.
 @MainActor
 struct ThreadViewFidelityTests {
