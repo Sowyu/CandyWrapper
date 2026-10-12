@@ -121,7 +121,7 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 ## Known gaps
 
 - Pixel snapping assumes a 2x backing store, as on every Retina Mac. On a 1x screen (this Mac mini's virtual display) edges can be half a point off. Use the window's backing scale where the code says `ponytail: 2x`.
-- Tooltips are single-line, truncated at max width.
+- Tooltips past their max width wrap with balanced lines; Core Text balancing can break a line differently from Chromium.
 - Collapsibles animate through `CollapseMotion.run(in:)` (DesignSystem/Base/CollapseMotion.swift); `CollapsibleView` itself still jumps its siblings and is used only by the gallery. The color plane thumb skips its 80ms transition. The sidebar trigger swaps its icon instead of T3's path morph.
 - Group is horizontal only. The joined outline toggle bar (one settings screen) is not built.
 - Toasts lack the copy-error button and the loading spinner.

@@ -39,6 +39,10 @@ final class ComposerController {
     private var fanoutInFlight: Set<String> = []
     private var resuming = false
     private var threadRewindBusy = false
+    /// `projectCloneSendBlockReason` for the open thread's or draft's project, set by the clone controller.
+    var projectCloneSendBlock: String? { didSet { if projectCloneSendBlock != oldValue { syncSendBlock() } } }
+    /// The "Not connected" toasts on screen, at most three (`ENVIRONMENT_UNAVAILABLE_SEND_TOAST_TRAIL_SIZE`).
+    private var environmentToastIds: [Int] = []
     private var recoveryPending: Set<ThreadId> = []
     private var recoveryErrors: [ThreadId: String] = [:]
     private var recoveryResetWork: DispatchWorkItem?
@@ -65,6 +69,10 @@ final class ComposerController {
     var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
     /// The target changed (a thread or draft opened, or the draft's workspace changed).
     var onTargetChange: (() -> Void)?
+    /// After each refresh (a keystroke, a projection, a target change): the branch change notice follows the prompt.
+    var onRefresh: (() -> Void)?
+    /// `composerDraftHasUserContent` (composerDraftStore.ts:426-441): typed text or an attachment.
+    var hasUserContent: Bool { !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !currentAttachments.isEmpty }
 
     /// The open draft, if the panel shows one.
     var currentDraft: DraftSession? { if case .draft(let s) = target { s } else { nil } }
@@ -1024,7 +1032,8 @@ final class ComposerController {
         }
         composer.runState = runState
         composer.isDraftRoute = panel.isDraft
-        composer.isBusy = pendingMessageId != nil || resuming || threadRewindBusy || draftKey.map { fanoutInFlight.contains($0) } == true
+        // A rewind is no busy spinner in T3: the arrow stays, disabled with "Rewinding conversation".
+        composer.isBusy = pendingMessageId != nil || resuming || draftKey.map { fanoutInFlight.contains($0) } == true
         var placeholder = ComposerLogic.PlaceholderInput()
         // T3's `phase === "disconnected"` means the thread has no runtime (`derivePhase(activeRuntime)`,
         // session-logic.ts:1069-1078), not a lost connection: drafts and unstarted threads get it.
@@ -1033,8 +1042,7 @@ final class ComposerController {
         placeholder.approvalPending = requests.activeApproval != nil
         composer.placeholderInput = placeholder
         updateRequests()
-        composer.sendDisabledReason = shell == nil ? "Environment disconnected"
-            : questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil
+        syncSendBlock()
         syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
@@ -1078,6 +1086,7 @@ final class ComposerController {
             panel.needsLayout = true
         }
         panel.updateComposerShown()
+        onRefresh?()
     }
 
     // MARK: Requests
@@ -1232,6 +1241,11 @@ final class ComposerController {
             }
             return
         }
+        // `activeEnvironmentUnavailable` (ChatView.tsx:8797-8811).
+        if shell == nil, target != nil, pendingMessageId == nil {
+            toastEnvironmentUnavailable()
+            return
+        }
         var text = text
         var implementationPlan: PlanArtifact?
         if composer.planFollowUp, let plan = ThreadPlanFollowUp.activePlan(projection), let markdown = plan.markdown, let key = draftKey {
@@ -1360,9 +1374,12 @@ final class ComposerController {
                         openThread?(ThreadId(session.threadId))
                     }
                 } catch {
-                    // ponytail: a failed background start puts its text back into the fresh draft; T3 restores
-                    // the failed draft as its own sidebar draft (restoreFailedBackgroundDraftThread). Port it if that bites
                     guard let self else { return }
+                    // A fresh draft took the composer (`backgroundDraftOpened`), so the failed one comes back on its own.
+                    if background, self.target != .draft(session) {
+                        backgroundSendFailed(error, session: session, key: sessionKey, text: text, attachments: attachments)
+                        return
+                    }
                     // The draft comes back with another thread id: the server may have created this one.
                     let restored = NewThreadDraftLaunch.restore(session, key: sessionKey, in: &sessions)
                     if let restored, self.target == .draft(session) { self.target = .draft(restored) }
@@ -1579,15 +1596,47 @@ final class ComposerController {
             }
             fanoutInFlight.remove(key)
             if !failed.isEmpty {
-                restoreAttachments(attachments, key: key)
-                pickers.setMultiple(failed, for: key)
-                if target == .draft(session), composer.text.isEmpty { composer.text = text; remember(text) }
+                // `restoreFailedDraft` (ChatView.tsx:9653-9680): the failed models, the text and the attachments.
+                let restore = { [weak self] in
+                    guard let self else { return }
+                    pickers.setMultiple(failed, for: key)
+                    if draftKey == key { composer.text = text; remember(text) } else { prompts[key] = text; scheduleSave() }
+                    restoreAttachments(attachments, key: key)
+                    syncSidebarDrafts()
+                    refresh()
+                }
+                // `canRestoreDraft` (:9494-9498): still on the draft, which nothing changed since the send.
+                if draftKey == key, composer.text.isEmpty, currentAttachments.isEmpty, pickers.currentMultiple == selections {
+                    restore()
+                } else {
+                    showFailedPromptRecovery(key: key, restore: restore)
+                }
             } else if started > 0 {
                 sentSnapShots(attachments)
                 pickers.setMultiple(nil, for: key)
             }
             refresh()
         }
+    }
+
+    /// ChatView.tsx:9684-9712: the failed prompt waits behind a toast until its draft is empty again.
+    private func showFailedPromptRecovery(key: String, restore: @escaping () -> Void) {
+        var id = 0
+        id = panel.toasts.show(ToastView(title: "A background prompt could not be sent",
+            message: "Your newer draft is unchanged. Restore the failed prompt when this composer is empty.", kind: .error,
+            actionTitle: "Restore prompt", action: { [weak self] in
+                guard let self else { return }
+                let prompt = draftKey == key ? composer.text : prompts[key] ?? ""
+                let hasContent = !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(draftAttachments[key] ?? []).isEmpty
+                if !hasDraft(key) || fanoutInFlight.contains(key) || hasContent {
+                    panel.toasts.update(id, title: "A background prompt could not be sent",
+                                        message: "Return to the original draft and send or clear its current prompt before restoring.")
+                    return
+                }
+                restore()
+                openDraft(key)
+                panel.toasts.dismiss(id)
+            }), timeout: 0)
     }
 
     private func fanoutRetryKey(_ draft: String, _ selection: ModelSelection) -> String {
@@ -1630,6 +1679,25 @@ final class ComposerController {
         refresh()
         if let rpc = error as? RPCClientError, rpc.isTransport { return }
         report(.send(Self.message(error)), key: key)
+    }
+
+    /// A background start failed after a fresh draft took the composer (ChatView.tsx:10029-10101): the
+    /// failed draft comes back as its own draft (`restoreFailedBackgroundDraftThread`) with its prompt
+    /// if it has none, its error banner, and a "Background task failed" toast that opens it.
+    private func backgroundSendFailed(_ error: Error, session: DraftSession, key: String?, text: String, attachments: [ComposerAttachment]) {
+        // The group's key usually holds the fresh draft by now; the failed one then keeps its own id as key.
+        let restored = NewThreadDraftLaunch.restore(session, key: key, in: &sessions)
+            ?? NewThreadDraftLaunch.restore(session, key: session.draftId, in: &sessions)
+        let draftId = session.draftId
+        if (prompts[draftId] ?? "").isEmpty { prompts[draftId] = text }
+        restoreAttachments(attachments, key: draftId)
+        scheduleSave()
+        syncSidebarDrafts()
+        let message = Self.message(error)
+        if !((error as? RPCClientError)?.isTransport ?? false) { report(.send(message), key: draftId) }
+        guard restored != nil else { return }
+        panel.toasts.show(ToastView(title: "Background task failed", message: message ?? "Failed to send message.", kind: .error,
+                                    actionTitle: "Open draft", action: { [weak self] in _ = self?.openDraft(draftId) }))
     }
 
     /// Shows a failure where T3 does: the thread error banner for `key` (the thread or draft the
@@ -3171,6 +3239,32 @@ extension ComposerController {
         }
     }
 
+    // MARK: Send blocks
+
+    /// The send button's blocks (ChatView.tsx:11618-11632 and ChatComposer.tsx:2188-2193): the thread's
+    /// reason, else the attachment upload's. A lost environment is separate (`isEnvironmentUnavailable`).
+    private func syncSendBlock() {
+        composer.environmentUnavailable = shell == nil
+        var block = ComposerLogic.SendBlock(rewinding: threadRewindBusy, projectClone: projectCloneSendBlock)
+        if case .thread(let id) = target {
+            block.detailLoading = syncStatus.key == id.rawValue && syncStatus.value == .loading
+            let setup = panel.timeline.worktreeSetup.snapshot.flatMap { $0.threadId == id.localId.rawValue ? $0 : nil }
+            block.preparingWorktree = ComposerLogic.worktreeSetupBlocksSend(phase: setup?.phase, agentDone: setup?.agentStarted == true,
+                                                                            runPreparing: projection?.runs.last?.status == .preparing)
+        }
+        composer.sendDisabledReason = block.reason
+            ?? (questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil)
+    }
+
+    /// Enter while the environment is down (ChatView.tsx:8797-8811): a warning toast in one of three
+    /// slots, so repeated presses replace the oldest instead of piling up.
+    fileprivate func toastEnvironmentUnavailable() {
+        environmentToastIds.removeAll { panel.toasts.toast($0) == nil }
+        if environmentToastIds.count >= 3 { panel.toasts.dismiss(environmentToastIds.removeFirst()) }
+        environmentToastIds.append(panel.toasts.show(ToastView(title: "Not connected: message not sent",
+            message: "Reconnecting to the environment. Try again once it is connected.", kind: .warning)))
+    }
+
     // MARK: Thread sync row
 
     /// The thread store's status (`resolveThreadSyncPhase`): empty or synchronizing is "loading"
@@ -3182,6 +3276,7 @@ extension ComposerController {
         case .live, .deleted: nil
         }
         updateSyncPhase(phase, key: threadId.rawValue)
+        syncSendBlock()
     }
 
     private func updateSyncPhase(_ phase: ComposerActivityRowView.Phase?, key: String) {
@@ -3933,6 +4028,7 @@ extension ComposerController {
                 if let snapshot, snapshot.threadId == target.localId.rawValue,
                    snapshot.sequence >= (self.panel.timeline.worktreeSetup.snapshot?.sequence ?? -1) {
                     self.panel.timeline.worktreeSetup.snapshot = snapshot
+                    self.syncSendBlock()
                 }
             }
         }

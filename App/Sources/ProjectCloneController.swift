@@ -153,6 +153,7 @@ final class ProjectCloneController {
             guard let env = id.environmentId else { return nil }
             return clones[env]?.first { $0.projectId == id.localId.rawValue }
         }
+        composer?.projectCloneSendBlock = ComposerLogic.projectCloneSendBlockReason(running: clone.map { $0.phase == .running }, done: clone?.phase == .done)
         guard let clone, let project, clone.phase != .done else {
             bannerProject = nil
             panel.showsNoticeBanner = false

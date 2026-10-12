@@ -67,6 +67,32 @@ public enum BranchToolbarLogic {
         seed.branch.map { "Previous worktree (\($0))" } ?? "Previous worktree"
     }
 
+    /// `resolveLocalCheckoutBranchMismatch` (BranchToolbar.logic.ts:250-264): a thread in the project
+    /// checkout whose recorded branch is not the checked-out one.
+    public struct BranchMismatch: Equatable, Sendable {
+        public var threadBranch: String
+        public var currentBranch: String
+        public init(threadBranch: String, currentBranch: String) { self.threadBranch = threadBranch; self.currentBranch = currentBranch }
+        /// `branchMismatchKey` (ChatView.logic.ts:910-918).
+        public func key(threadId: String) -> String { "\(threadId):\(threadBranch):\(currentBranch)" }
+        /// The branch's tooltip (ChatView.tsx:7816-7819).
+        public var tooltip: String { "This thread last ran on \(threadBranch). Sending will continue on \(currentBranch)." }
+    }
+
+    public static func localCheckoutBranchMismatch(mode: EnvMode, worktreePath: String?, threadBranch: String?,
+                                                   currentGitBranch: String?) -> BranchMismatch? {
+        guard mode == .local, worktreePath == nil, let threadBranch, !threadBranch.isEmpty,
+              let currentGitBranch, !currentGitBranch.isEmpty, threadBranch != currentGitBranch else { return nil }
+        return BranchMismatch(threadBranch: threadBranch, currentBranch: currentGitBranch)
+    }
+
+    /// `shouldShowBranchMismatchBanner` (ChatView.logic.ts:926-936): only once the user starts a message,
+    /// then kept until the mismatch changes, unless dismissed for the session.
+    public static func showsBranchMismatchBanner(hasMismatch: Bool, dismissed: Bool, composerHasContent: Bool, wasShown: Bool) -> Bool {
+        guard hasMismatch, !dismissed else { return false }
+        return composerHasContent || wasShown
+    }
+
     /// `resolveBranchToolbarValue`: a new worktree shows its chosen base, otherwise the checkout's ref.
     public static func toolbarValue(mode: EnvMode, worktreePath: String?, threadBranch: String?, currentGitBranch: String?) -> String? {
         if mode == .worktree && worktreePath == nil { return threadBranch ?? currentGitBranch }

@@ -109,6 +109,7 @@ final class GitController {
         card.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
         card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }
         card.initGit.action = { [weak self] in self?.initializeGit() }
+        composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
         card.changes.action = { [weak self] in self?.panel.toggleDiff() }
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
@@ -306,6 +307,7 @@ final class GitController {
     var onRender: (() -> Void)?
 
     private func render() {
+        syncBranchMismatch()
         panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
@@ -1005,6 +1007,111 @@ final class GitController {
                 dialog.preparing = nil
                 dialog.prepareError = Self.message(error)
             }
+        }
+    }
+
+    // MARK: Branch change notice
+
+    /// Dismissed mismatch keys, for the app session (`sessionDismissedBranchMismatchKeys`, ChatView.logic.ts:954-964).
+    private static var dismissedMismatchKeys: Set<String> = []
+    /// `revealedBranchMismatchKey` (ChatView.tsx:7274-7303): once shown, the notice stays while the mismatch does.
+    private var revealedMismatchKey: String?
+    private var restoringBranch = false
+
+    /// `localCheckoutBranchMismatch` (ChatView.tsx:6960-6971): server threads only.
+    private var branchMismatch: BranchToolbarLogic.BranchMismatch? {
+        guard let target, target.threadId != nil else { return nil }
+        return BranchToolbarLogic.localCheckoutBranchMismatch(mode: target.envMode, worktreePath: target.worktreePath,
+                                                              threadBranch: target.branch, currentGitBranch: status?.refName)
+    }
+
+    /// The notice (ChatView.tsx:7784-7837): shown once the composer holds a message, until the
+    /// mismatch changes, resolves or is dismissed. Runs on every git render and composer refresh.
+    func syncBranchMismatch() {
+        let mismatch = branchMismatch
+        let key = mismatch.flatMap { m in target?.threadId.map { m.key(threadId: $0.rawValue) } }
+        let show = BranchToolbarLogic.showsBranchMismatchBanner(
+            hasMismatch: key != nil, dismissed: key.map { Self.dismissedMismatchKeys.contains($0) } ?? false,
+            composerHasContent: composer.hasUserContent, wasShown: revealedMismatchKey != nil && revealedMismatchKey == key)
+        if show { revealedMismatchKey = key } else if revealedMismatchKey != key { revealedMismatchKey = nil }
+        guard show, let mismatch, let key else {
+            panel.branchMismatchKey = nil
+            return
+        }
+        // ponytail: no `source-control:write` scope check (T3 disables Restore without it); add it with read-only pairings
+        panel.branchBanner.apply(.init(variant: .neutral, icon: .gitBranch, title: mismatch.threadBranch,
+                                       actions: [restoringBranch ? "Restoring..." : "Restore branch"],
+                                       dismissLabel: "Dismiss branch change notice",
+                                       titlePrefix: "Branch changed \u{2014} was", titleCode: true, titleTooltip: mismatch.tooltip))
+        panel.branchBanner.disabledActions = restoringBranch ? [0] : []
+        panel.branchBanner.onAction = { [weak self] index in
+            guard let self else { return }
+            if index == nil {
+                Self.dismissedMismatchKeys.insert(key)
+                syncBranchMismatch()
+            } else {
+                restoreThreadBranch()
+            }
+        }
+        panel.branchMismatchKey = key
+    }
+
+    /// `handleRestoreThreadBranch` (ChatView.tsx:7727-7741): uncommitted changes ask first.
+    private func restoreThreadBranch() {
+        guard !restoringBranch, let mismatch = branchMismatch else { return }
+        guard status?.hasWorkingTreeChanges == true else { switchCheckoutToThread(); return }
+        guard let window = panel.window else { return }
+        // ponytail: the branch in the title is plain text; T3 sets it in `<code>`. Add an attributed dialog title if it shows
+        let dialog = DialogView(kind: .alertDialog, title: "Switch to \(mismatch.threadBranch)?",
+                                message: "You have uncommitted changes. They'll carry over to the other branch, or block the switch if they conflict.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let confirm = ButtonView("Switch branch")
+        dialog.footerButtons = [cancel, confirm]
+        let host = present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        confirm.action = { [weak self, weak host] in
+            host?.close()
+            self?.switchCheckoutToThread()
+        }
+    }
+
+    /// `handleSwitchCheckoutToThread` (ChatView.tsx:7304-7376): `vcs.switchRef` in the project checkout to the
+    /// thread's branch, then `thread.metadata.update` only when git landed on another name.
+    private func switchCheckoutToThread() {
+        guard !restoringBranch, let target, let threadId = target.threadId, let mismatch = branchMismatch, let shell else { return }
+        restoringBranch = true
+        syncBranchMismatch()
+        Task { [weak self] in
+            let next: String
+            do {
+                let value = try await shell.supervisor.request(VcsRPC.switchRef, payload: VcsRPC.switchRefInput(cwd: target.projectRoot, refName: mismatch.threadBranch))
+                next = value.objectValue?["refName"]?.stringValue ?? mismatch.threadBranch
+            } catch {
+                guard let self else { return }
+                restoringBranch = false
+                toast("Failed to switch checkout", Self.message(error), kind: .error)
+                syncBranchMismatch()
+                return
+            }
+            if next != target.branch {
+                do {
+                    _ = try await shell.supervisor.request("orchestration.dispatchCommand", payload: .object([
+                        "type": .string("thread.metadata.update"), "commandId": .string(ThreadCommands.newCommandId()),
+                        "threadId": .string(threadId.localId.rawValue), "branch": .string(next), "worktreePath": .null]))
+                } catch {
+                    guard let self else { return }
+                    restoringBranch = false
+                    toast("Checkout switched, but the thread could not be updated", Self.message(error), kind: .error)
+                    refreshStatus()
+                    syncBranchMismatch()
+                    return
+                }
+            }
+            guard let self else { return }
+            refreshStatus()
+            restoringBranch = false
+            syncBranchMismatch()
+            composer.focusComposer()
         }
     }
 

@@ -172,6 +172,10 @@ public final class ThreadPanelView: DSView {
     public var goalBanner: ComposerNoticeBannerView { lazyGoalBanner.view }
     public var recoveryBanner: ComposerNoticeBannerView { lazyRecoveryBanner.view }
     public var showsGoal = false { didSet { if showsGoal != oldValue { needsLayout = true } } }
+    /// "Branch changed — was <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
+    public let lazyBranchBanner = LazyView { ComposerNoticeBannerView() }
+    public var branchBanner: ComposerNoticeBannerView { lazyBranchBanner.view }
+    public var branchMismatchKey: String? { didSet { if branchMismatchKey != oldValue { needsLayout = true } } }
     public var showsRecovery = false { didSet { if showsRecovery != oldValue { needsLayout = true } } }
     public let tasksView = ThreadTasksView()
     public let lazyPlanFollowUpBanner = LazyView { ComposerNoticeBannerView() }
@@ -190,6 +194,8 @@ public final class ThreadPanelView: DSView {
             if let notice = serverUpdateNotice {
                 serverUpdateBanner.apply(notice.content)
                 serverUpdateBanner.toolTip = notice.title + ": " + notice.detail
+                // The failed notice's X ("Dismiss update notice", ChatView.tsx:3209-3220).
+                serverUpdateBanner.onAction = { [weak self] index in if index == nil { self?.serverUpdateNotice = nil } }
             }
             needsLayout = true
         }
@@ -215,12 +221,12 @@ public final class ThreadPanelView: DSView {
 
     /// `composerBannerItems` (ChatView.tsx:7776-7839) in T3's order: limit recovery, usage limits, the
     /// project clone, the system items (environment, server update; ChatView.tsx:3091-3224), then the
-    /// goal. Not built yet: Codex feedback, background work, auto balance updates, branch mismatch.
+    /// goal, then the branch change notice. Not built yet: Codex feedback, background work, auto balance updates.
     func bannerStackItems(docked: Bool, composerVisible: Bool) -> [ComposerBannerStackItem] {
         var items: [ComposerBannerStackItem] = []
         let notice = { (id: String, view: ComposerNoticeBannerView) -> ComposerBannerStackItem in
             var item = ComposerBannerStackItem(id: id, view: view, priority: view.content?.priority, height: { _ in ComposerNoticeBannerView.height })
-            if view.content?.dismissLabel != nil {
+            if view.content?.dismissible == true {
                 view.onDismissRequest = { [weak self] in self?.bannerStack.requestDismiss(id) }
                 item.onDismiss = { [weak view] in view?.onAction?(nil) }
             } else {
@@ -249,6 +255,7 @@ public final class ThreadPanelView: DSView {
         }
         if serverUpdateNotice != nil && composerVisible { items.append(notice("server-version", serverUpdateBanner)) }
         if docked && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
+        if docked, let key = branchMismatchKey { items.append(notice("branch-mismatch:" + key, branchBanner)) }
         return items
     }
 
@@ -460,6 +467,7 @@ public final class ThreadPanelView: DSView {
         addSubview(fileDropOverlay); fileDropOverlay.isHidden = true; fileDropOverlay.layer?.zPosition = 40
         // Each banner goes where it always sat back to front: queue, goal, recovery, plan, tasks;
         // server update, notice, environment banner.
+        lazyBranchBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyGoalBanner.loaded, self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyGoalBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyRecoveryBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyPlanFollowUpBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.tasksView]) }
@@ -906,6 +914,8 @@ public final class ThreadPanelView: DSView {
     /// changing `model.optimisticMessages`.
     public func updateComposerShown() {
         composerShown = isDraft || switchingThread || model.projection != nil || !model.optimisticMessages.isEmpty
+        // `hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}` (ChatView.tsx:11474).
+        timeline.allowsEmptyPlaceholder = !isDraft && !switchingThread && model.projection != nil
         needsLayout = true
     }
 
@@ -1015,7 +1025,7 @@ public final class ThreadPanelView: DSView {
         }
         let ordered = ComposerBannerStackItem.ordered(items)
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
-                                                 lazyGoalBanner.loaded, lazyRecoveryBanner.loaded, usageLimitsBanner]
+                                                 lazyGoalBanner.loaded, lazyRecoveryBanner.loaded, lazyBranchBanner.loaded, usageLimitsBanner]
         for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
         bannerStack.update(ordered)
         let front = ordered.first
