@@ -22,7 +22,7 @@ Run them from the repo root.
 | Run some tests | `cd Packages/CandyKit && swift test --filter SidebarFidelityTests` |
 | Build an app to test | `scripts/build-test-app <task>` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
-| Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 T3_BIN=~/CandyWrapper-research/t3-2994/bin/t3-0.0.46-nightly.20261011.2994-darwin-arm64/t3 scripts/sandbox-server` |
+| Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 scripts/sandbox-server 0.0.46-nightly.20261011.2994`, token in that folder |
 | Regenerate the Xcode project after editing `project.yml` | `~/CandyWrapper-research/tools/xcodegen/bin/xcodegen` |
 | Measure performance | `scripts/perf-review`, see `docs/perf/README.md` |
 | Record real server traffic for protocol tests | `scripts/record-transcript.swift`, into `fixtures/transcripts/` with tokens, paths and e-mail scrubbed |

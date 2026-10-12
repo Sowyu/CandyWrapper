@@ -1,7 +1,7 @@
 #!/bin/sh
 # Starts an isolated T3 server for testing. Never touches ~/.t3/userdata.
 # Usage: scripts/sandbox-server [runtime-version]
-# For a second server, like the newer Nightly: SANDBOX_DIR=<dir> SANDBOX_PORT=<port> T3_BIN=<path to t3> scripts/sandbox-server
+# A second server, like a newer Nightly: SANDBOX_DIR=<dir> SANDBOX_PORT=<port> scripts/sandbox-server <runtime-version>
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
 sandbox="$here/../CandyWrapper-research/sandbox"
@@ -13,7 +13,6 @@ version="${1:-$(cat "$here/T3_VERSION" | sed 's/^v//')}"
 bin="$HOME/.t3/runtime/versions/$version/t3"
 # A Nightly the live T3 hasn't installed comes unpacked from its GitHub release (docs/nightly-catch-up.md).
 [ -x "$bin" ] || bin="$HOME/CandyWrapper-research/runtimes/t3-$version-darwin-arm64/t3"
-bin="${T3_BIN:-$bin}"
 mkdir -p "$sandbox/t3home"
 if [ -f "$sandbox/server.pid" ] && kill -0 "$(cat "$sandbox/server.pid")" 2>/dev/null; then
   echo "sandbox server already running, pid $(cat "$sandbox/server.pid")"; exit 0
