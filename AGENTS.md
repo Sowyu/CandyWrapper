@@ -22,6 +22,7 @@ Run them from the repo root.
 | Run some tests | `cd Packages/CandyKit && swift test --filter SidebarFidelityTests` |
 | Build an app to test | `scripts/build-test-app <task>` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
+| Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 T3_BIN=~/CandyWrapper-research/t3-2994/bin/t3-0.0.46-nightly.20261011.2994-darwin-arm64/t3 scripts/sandbox-server` |
 | Regenerate the Xcode project after editing `project.yml` | `~/CandyWrapper-research/tools/xcodegen/bin/xcodegen` |
 | Measure performance | `scripts/perf-review`, see `docs/perf/README.md` |
 | Record real server traffic for protocol tests | `scripts/record-transcript.swift`, into `fixtures/transcripts/` with tokens, paths and e-mail scrubbed |
@@ -52,12 +53,12 @@ Offscreen snapshots miss bugs that only show in a real window, so look at every 
 
 1. Run `scripts/sandbox-server`. It starts the sandbox server on port 47391, or reuses the one running.
 2. Build with `scripts/build-test-app <task>`. It prints the app's path, `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app`. The first build takes a few minutes, so allow 10.
-3. Launch it in the background: `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
-4. Once it's up, read your app's PID from `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app.pid`. No other agent writes that file.
-5. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call.
-6. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
+3. Other agents share the screen. Run `scripts/ui/screen-lock take <task>` before you launch your app, and give it back within 15 minutes with `scripts/ui/screen-lock give <task>`, after you quit your app.
+4. Launch it in the background: `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
+5. Once it's up, read your app's PID from `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app.pid`. No other agent writes that file.
+6. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
 7. Take screenshots with `screencapture -x -R<x,y,w,h> out.png`, in screen points from the top left. Check the screen's scale first with `system_profiler SPDisplaysDataType`. For motion, record with `screencapture -v` and look at the frames.
-8. When you're done, `kill <pid>` and delete `/tmp/cw-dd-<task>`.
+8. When you're done, `kill <pid>`, give the screen lock back and delete `/tmp/cw-dd-<task>`.
 
 For a quick look without driving the app, add `--snapshot /tmp/x.png --snapshot-delay 12` to the run-app arguments. The app renders its window to the PNG and quits.
 

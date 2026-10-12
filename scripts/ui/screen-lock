@@ -1,0 +1,32 @@
+#!/bin/sh
+# Agents share one GUI screen. Take the lock before you bring a window forward, send input or take a
+# screenshot. Give it back within 15 minutes, after you quit or hide your app.
+# Usage: scripts/ui/screen-lock take <task> | give <task> | who
+# take waits up to 9 minutes and exits 1 if the screen is still busy. A lock older than 20 minutes
+# counts as abandoned. A task that just gave the lock waits 30 seconds before taking it again, so
+# others get a turn.
+set -u
+lock=/tmp/cw-screen.lock
+last=/tmp/cw-screen.last
+case "${1:-}" in
+take)
+  task="${2:?task name}"
+  if [ "$(cut -d' ' -f1 "$last" 2>/dev/null)" = "$task" ] && [ $(( $(date +%s) - $(cut -d' ' -f2 "$last") )) -lt 30 ]; then sleep 30; fi
+  deadline=$(( $(date +%s) + 540 ))
+  while ! mkdir "$lock" 2>/dev/null; do
+    if [ -n "$(find "$lock" -maxdepth 0 -mmin +20 2>/dev/null)" ]; then rm -rf "$lock"; continue; fi
+    if [ "$(date +%s)" -ge "$deadline" ]; then echo "screen busy: $(cat "$lock/owner" 2>/dev/null)"; exit 1; fi
+    sleep 10
+  done
+  echo "$task $(date +%s)" > "$lock/owner"
+  echo "screen is yours, $task" ;;
+give)
+  task="${2:?task name}"
+  if [ "$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)" = "$task" ]; then
+    rm -rf "$lock"; echo "$task $(date +%s)" > "$last"; echo released
+  else
+    echo "not held by $task"
+  fi ;;
+who) cat "$lock/owner" 2>/dev/null || echo free ;;
+*) echo "usage: screen-lock take <task> | give <task> | who"; exit 2 ;;
+esac
