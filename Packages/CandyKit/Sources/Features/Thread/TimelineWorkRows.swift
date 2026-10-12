@@ -451,13 +451,17 @@ final class WorkLiveRowView: WorkRowBase {
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .workLive(let entry, _, _, _, let active, let thoughtEntry) = item.row.kind else { return }
-        let preview = thoughtEntry?.detail.map(liveThoughtLine) ?? ""
+        guard case .workLive(let entry, _, _, let expanded, let active, let thoughtEntry) = item.row.kind else { return }
+        // The expanded group already lists the thought, so the preview steps aside (MessagesTimeline.tsx:3970-3971).
+        let preview = expanded ? "" : (thoughtEntry?.detail.map(liveThoughtLine) ?? "")
         thought.text = preview
         thought.isHidden = preview.isEmpty
         thoughtIcon.isHidden = preview.isEmpty
+        // While the thought itself is the latest entry, the status line says Thinking instead of repeating it (:3972-3973).
+        let thoughtIsStatus = !preview.isEmpty && thoughtEntry?.id == entry.id
+        let label = thoughtIsStatus ? (active ? "Thinking" : "Thought") : WorkLog.liveLabel(entry, workspaceRoot: context.workspaceRoot, active: active)
         let l = line(0)
-        l.configure(icon: WorkIcons.entry(entry), text: WorkLog.liveLabel(entry, workspaceRoot: context.workspaceRoot, active: active),
+        l.configure(icon: WorkIcons.entry(entry), text: label,
                     style: .tool, time: entry.createdAt, expanded: false, active: active, now: context.now())
         l.expandable = false
         needsLayout = true
