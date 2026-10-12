@@ -123,10 +123,12 @@ final class ComposerController {
     fileprivate var fileUploadLimit: Int? { targetEnvironmentId.flatMap { capabilities[$0]?.uploadLimit } }
     private var capabilityTasks: [String: Task<Void, Never>] = [:]
 
-    /// Draft attachments by draft key, kept in memory (extension "Attachments" below).
-    // ponytail: draft attachments are not persisted; a relaunch keeps the prompt but drops them (its chips show unavailable). Persist the uploaded ids with the drafts if that bites
-    private var restoredSnapShots: Set<String> = []
-    private var savedSnapShots: [SnapShotPendingCapture] = []
+    /// Draft attachments by draft key (extension "Attachments" below), saved with the drafts
+    /// (`DraftAttachmentRecord`). Restored ones wait here for their environment to connect.
+    private var restoredUploads: [String: DraftAttachmentRecord.Pending] = [:]
+    /// Restored files whose upload the server has not confirmed yet: they keep their upload id when saved.
+    private var unverifiedUploads: Set<String> = []
+    private var savedDraftAttachments: [DraftAttachmentRecord] = []
     private var draftAttachments: [String: [ComposerAttachment]] = [:]
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
@@ -162,13 +164,7 @@ final class ComposerController {
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
         }
         sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
-        if let data = defaults.data(forKey: "snapShotPending.v1"),
-           let captures = try? JSONDecoder().decode([SnapShotPendingCapture].self, from: data) {
-            for capture in captures where FileManager.default.fileExists(atPath: capture.fileURL.path) {
-                draftAttachments[capture.draftKey, default: []].append(capture.attachment)
-                restoredSnapShots.insert(capture.id)
-            }
-        }
+        restoreDraftAttachments(defaults)
         if let data = defaults.data(forKey: "composer.reviewComments.v1"),
            let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
             menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
@@ -296,10 +292,23 @@ final class ComposerController {
                 ThemeLibrary.shared.setEnvironmentThemes([])
             }
         }
-        for (key, attachments) in draftAttachments {
-            for attachment in attachments where attachment.environmentId == environmentId && restoredSnapShots.contains(attachment.id) && shell != nil {
-                restoredSnapShots.remove(attachment.id)
-                startUpload(attachment.id, key: key)
+        // Restored attachments upload or verify once the new session has connected (requests are not queued).
+        var restored: [(key: String, id: String, pending: DraftAttachmentRecord.Pending)] = []
+        for (key, attachments) in draftAttachments where shell != nil {
+            for attachment in attachments where attachment.environmentId == environmentId {
+                if let pending = restoredUploads.removeValue(forKey: attachment.id) { restored.append((key, attachment.id, pending)) }
+            }
+        }
+        if let supervisor = shell?.supervisor, !restored.isEmpty {
+            Task { [weak self] in
+                guard await supervisor.waitForConnection(after: -1) != nil, let self else { return }
+                for r in restored {
+                    switch r.pending {
+                    case .upload: startUpload(r.id, key: r.key)
+                    case .verify: verifyRestoredUpload(r.id, key: r.key)
+                    case .reattach: break
+                    }
+                }
             }
         }
         refresh()
@@ -1025,7 +1034,7 @@ final class ComposerController {
         composer.placeholderInput = placeholder
         updateRequests()
         composer.sendDisabledReason = shell == nil ? "Environment disconnected"
-            : questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments.map(\.status)) : nil
+            : questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil
         syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
@@ -1245,7 +1254,7 @@ final class ComposerController {
         if !trimmed.isEmpty || !attachments.isEmpty { panel.usageLimitsBanner = nil }
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
-        guard ComposerAttachmentRules.uploadBlockReason(attachments.map(\.status)) == nil else { return }
+        guard ComposerAttachmentRules.uploadBlockReason(attachments) == nil else { return }
         if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
             if let key = draftKey { threadErrors.set(key, limit) }
             refresh()
@@ -2485,6 +2494,8 @@ extension ComposerController {
             guard let self, let token = ComposerInlineTokens.collect(source + " ").first,
                   case .context(_, let contextId, _) = token.kind,
                   let attachment = self.currentAttachments.first(where: { $0.contextId == contextId }) else { return false }
+            // A file to attach again has nothing to open (composerContextPresentation.tsx:237-242).
+            if attachment.needsReattach { return true }
             if attachment.kind == .image { self.expandDraftImage(attachment.id) }
             else { self.expandDraftFile(attachment) }
             return true
@@ -2527,19 +2538,104 @@ extension ComposerController {
         for attachment in attachments where attachment.snapShotSource != nil {
             if let id = attachment.attachmentId { sentFiles[id] = nil }
         }
-        persistSnapShots()
+        persistDraftAttachments()
     }
 
-    private func persistSnapShots() {
-        let records = draftAttachments.keys.sorted().flatMap { key in
-            (draftAttachments[key] ?? []).compactMap { SnapShotPendingCapture(draftKey: key, attachment: $0) }
-        }
-        guard records != savedSnapShots else { return }
-        savedSnapShots = records
-        if let data = try? JSONEncoder().encode(records) { UserDefaults.standard.set(data, forKey: "snapShotPending.v1") }
+    private static let draftAttachmentsKey = "composer.draftAttachments.v1"
+    /// Copies of draft images the app owns, per bundle id so test builds keep their own.
+    static var draftCopyDirectory: URL {
+        URL.applicationSupportDirectory.appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper")
+            .appendingPathComponent("DraftAttachments", isDirectory: true)
     }
+
+    /// Puts back the attachments saved with the drafts (`toHydratedThreadDraft`, composerDraftStore.ts:2510-2546),
+    /// then deletes image copies no draft holds any more (sent, stashed or dropped while the app ran).
+    private func restoreDraftAttachments(_ defaults: UserDefaults) {
+        var records = defaults.data(forKey: Self.draftAttachmentsKey).flatMap { try? JSONDecoder().decode([DraftAttachmentRecord].self, from: $0) }
+        if records == nil, let data = defaults.data(forKey: "snapShotPending.v1"),
+           let captures = try? JSONDecoder().decode([SnapShotPendingCapture].self, from: data) {
+            records = captures.map(DraftAttachmentRecord.init(capture:))
+        }
+        for record in records ?? [] {
+            guard let (attachment, pending) = record.restore(fileExists: { FileManager.default.fileExists(atPath: $0.path) }) else { continue }
+            draftAttachments[record.draftKey, default: []].append(attachment)
+            if pending != .reattach { restoredUploads[attachment.id] = pending }
+            if pending == .verify { unverifiedUploads.insert(attachment.id) }
+        }
+        let kept = Set(draftAttachments.values.joined().map { $0.fileURL.standardizedFileURL.path })
+        let directory = Self.draftCopyDirectory
+        Task.detached(priority: .utility) {
+            let urls = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            for url in urls where !kept.contains(url.standardizedFileURL.path) { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    /// Saves every draft's attachments. An image gets a copy the app owns first (APFS clones it), since its
+    /// file may be a temporary one or the user's own, which can move.
+    private func persistDraftAttachments() {
+        var records: [DraftAttachmentRecord] = []
+        let directory = Self.draftCopyDirectory
+        for key in draftAttachments.keys.sorted() {
+            guard var attachments = draftAttachments[key] else { continue }
+            var copied = false
+            for i in attachments.indices {
+                let a = attachments[i]
+                if a.kind == .image, a.snapShotSource == nil, a.fileURL.deletingLastPathComponent().standardizedFileURL != directory.standardizedFileURL {
+                    let copy = directory.appendingPathComponent(a.id + "-" + a.fileURL.lastPathComponent)
+                    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    if (try? FileManager.default.copyItem(at: a.fileURL, to: copy)) != nil {
+                        attachments[i].fileURL = copy; copied = true
+                    }
+                }
+                records.append(DraftAttachmentRecord(draftKey: key, attachment: attachments[i]))
+                if unverifiedUploads.contains(a.id), let id = a.attachmentId { records[records.count - 1].attachmentId = id }
+            }
+            if copied { draftAttachments[key] = attachments }
+        }
+        guard records != savedDraftAttachments else { return }
+        savedDraftAttachments = records
+        if let data = try? JSONEncoder().encode(records) {
+            UserDefaults.standard.set(data, forKey: Self.draftAttachmentsKey)
+            UserDefaults.standard.removeObject(forKey: "snapShotPending.v1")
+        }
+    }
+
+    /// `verifyPersistedAttachmentUpload` (packages/client-runtime/src/state/attachments.ts:61-93, attachmentUploadQueue.ts:193-230):
+    /// a restored file's upload is ready when the server still mints a URL for it. Pending uploads are swept after
+    /// 24 hours, so a missing one asks for the file again; a failed check is retried.
+    private func verifyRestoredUpload(_ id: String, key: String) {
+        guard let a = draftAttachments[key]?.first(where: { $0.id == id }), let attachmentId = a.attachmentId,
+              let shell = environments.session(a.environmentId) else { return }
+        let supervisor = shell.supervisor
+        updateAttachment(id, key: key) { $0.status = .uploading(0) }
+        attachmentTasks[id]?.cancel()
+        attachmentTasks[id] = Task { [weak self] in
+            var missing = false, failed = false
+            do {
+                _ = try await supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+            } catch let error as RPCClientError where error.typedError?.tag == "AssetAttachmentNotFoundError" {
+                missing = true
+            } catch {
+                failed = true
+            }
+            guard let self, !Task.isCancelled else { return }
+            attachmentTasks[id] = nil
+            if failed {
+                // Checked again on the next connection or by Retry.
+                restoredUploads[id] = .verify
+                updateAttachment(id, key: key) { $0.status = .failed("Upload failed") }
+                return
+            }
+            unverifiedUploads.remove(id)
+            updateAttachment(id, key: key) { a in
+                if missing { a.attachmentId = nil; a.needsReattach = true; a.status = .failed("Attach the file again") } else { a.status = .ready }
+            }
+        }
+    }
+
     fileprivate func syncAttachmentViews() {
-        persistSnapShots()
+        persistDraftAttachments()
         let attachments = currentAttachments
         let hidden = questionRequestId != nil || requests.activeApproval != nil
         composer.imageTiles = hidden ? [] : attachments.filter { $0.kind == .image }.map {
@@ -2556,7 +2652,7 @@ extension ComposerController {
     private func updateAttachment(_ id: String, key: String, _ change: (inout ComposerAttachment) -> Void) {
         guard let i = draftAttachments[key]?.firstIndex(where: { $0.id == id }) else { return }
         change(&draftAttachments[key]![i])
-        persistSnapShots()
+        persistDraftAttachments()
         if key == draftKey { refresh() }
     }
 
@@ -2633,7 +2729,7 @@ extension ComposerController {
             attachment.snapShotSource = SnapShotSource.resized(source, width: Int(size.width), height: Int(size.height))
         }
         draftAttachments[key, default: []].append(attachment)
-        persistSnapShots()
+        persistDraftAttachments()
         startUpload(attachment.id, key: key)
         refresh()
         return attachment.id
@@ -2675,6 +2771,13 @@ extension ComposerController {
         if !panel.rightPanelSheetOpen { focusComposer() }
     }
 
+    /// A moved file comment's new lines; one whose chip the user already removed stays removed.
+    func updateReviewComment(_ record: JSONValue) {
+        guard let id = record["contextId"]?.stringValue, ComposerContext.referencedIds(composer.text).contains(id) else { return }
+        menuState.records[id] = record
+        remember(composer.text)
+    }
+
     func deleteReviewComment(_ id: String) {
         composer.text = Self.removingReferences(to: id, in: composer.text)
         menuState.records.removeValue(forKey: id)
@@ -2708,6 +2811,7 @@ extension ComposerController {
         var reserved = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0)
         let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
         var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
+        var reattached: [String] = []
         var error: String?
         for file in files {
             if (try? file.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
@@ -2735,6 +2839,19 @@ extension ComposerController {
                 let size = (try? file.url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])).flatMap { $0.isDirectory == true ? 0 : $0.fileSize } ?? 0
                 if size <= 0 { error = "'\(file.name)' is empty or could not be read."; continue }
                 if size > limit { error = ComposerAttachmentRules.tooLargeMessage(file.name, limit); continue }
+                // The same file again replaces its attach-again marker in place, chip and all (composerDraftStore.ts:3530-3560).
+                if let i = draftAttachments[key]?.firstIndex(where: {
+                    $0.needsReattach && !reattached.contains($0.id)
+                        && ComposerAttachmentRules.matchesReattachMarker($0, name: file.name, mimeType: file.mimeType, sizeBytes: size)
+                }) {
+                    draftAttachments[key]![i].needsReattach = false
+                    draftAttachments[key]![i].fileURL = file.url
+                    draftAttachments[key]![i].mimeType = file.mimeType
+                    draftAttachments[key]![i].status = .uploading(0)
+                    draftAttachments[key]![i].environmentId = env
+                    reattached.append(draftAttachments[key]![i].id)
+                    continue
+                }
                 var attachment = ComposerAttachment(kind: .file, name: file.name, mimeType: file.mimeType, sizeBytes: size,
                                                     fileURL: file.url, environmentId: env)
                 attachment.pastedText = pastedText
@@ -2743,6 +2860,7 @@ extension ComposerController {
             reserved += 1
         }
         threadErrors.set(key, error)
+        for id in reattached { startUpload(id, key: key) }
         if !accepted.isEmpty {
             draftAttachments[key, default: []] += accepted
             composer.insertAtCaret(accepted.map(\.reference).joined(separator: " ") + " ")
@@ -2856,7 +2974,12 @@ extension ComposerController {
 
     /// `retryAttachmentUpload`.
     private func retryAttachment(_ id: String) {
-        guard let key = draftKey, let a = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+        guard let key = draftKey, let a = draftAttachments[key]?.first(where: { $0.id == id }), !a.needsReattach else { return }
+        if unverifiedUploads.contains(id) {
+            restoredUploads[id] = nil
+            verifyRestoredUpload(id, key: key)
+            return
+        }
         release(a)
         updateAttachment(id, key: key) { $0.attachmentId = nil; $0.status = .uploading(0) }
         startUpload(id, key: key)
@@ -2880,8 +3003,10 @@ extension ComposerController {
             guard let self, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
             release(image)
             draftAttachments[key]?.removeAll { $0.id == id }
-            if image.snapShotSource != nil { try? FileManager.default.removeItem(at: image.fileURL) }
-            persistSnapShots()
+            if image.snapShotSource != nil || image.fileURL.deletingLastPathComponent().standardizedFileURL == Self.draftCopyDirectory.standardizedFileURL {
+                try? FileManager.default.removeItem(at: image.fileURL)
+            }
+            persistDraftAttachments()
             if key == draftKey, ComposerContext.referencedIds(composer.text).contains(image.contextId) {
                 composer.text = Self.removingReferences(to: image.contextId, in: composer.text)
                 remember(composer.text)
@@ -2919,10 +3044,18 @@ extension ComposerController {
     fileprivate func attachmentChipLook(kind: String, contextId: String, label: String) -> ComposerChipLook? {
         guard kind == "image" || kind == "file", let a = currentAttachments.first(where: { $0.contextId == contextId }) else { return nil }
         var detail = ComposerFileRow.formatSize(a.sizeBytes)
-        if case .uploading(let p) = a.status { detail += " " + ComposerFileRow.formatProgress(p) }
-        if case .failed = a.status { detail += " upload failed" }
+        // FileContextChip (composerContextPresentation.tsx:217-247): "attach again" on a dashed chip, a failed
+        // upload in the destructive colors.
+        var state: ComposerChipLook.State?
+        if a.needsReattach {
+            detail += " attach again"; state = .unresolved
+        } else if case .uploading(let p) = a.status {
+            detail += " " + ComposerFileRow.formatProgress(p)
+        } else if case .failed = a.status {
+            detail += " upload failed"; state = .invalid
+        }
         return ComposerChipLook(kind: a.kind == .image ? .image : .file(name: a.name),
-                                label: ComposerAttachmentRules.middleTruncate(a.name), detail: detail)
+                                label: ComposerAttachmentRules.middleTruncate(a.name), detail: detail, state: state)
     }
 
     // MARK: Previews
@@ -3532,7 +3665,7 @@ extension ComposerController {
         guard !composer.runState.canInterrupt, pendingMessageId == nil, !threadRewindBusy else {
             toast(.warning, "Interrupt the current turn before reverting checkpoints."); return
         }
-        guard ComposerAttachmentRules.uploadBlockReason(currentAttachments.map(\.status)) == nil else {
+        guard ComposerAttachmentRules.uploadBlockReason(currentAttachments) == nil else {
             toast(.warning, "Wait for attachments to finish preparing before rewinding."); return
         }
         guard let checkpoint = ThreadPromptRewind.checkpoint(before: message, in: projection) else {

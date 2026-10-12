@@ -10,6 +10,35 @@ import T3Protocol
 struct ComposerAttachmentsTests {
     typealias R = ComposerAttachmentRules
 
+    /// composerDraftStore.ts:2224-2240, 2510-2546: images upload again, finished files are checked, unfinished
+    /// files come back as attach-again markers that block the send until replaced.
+    @Test func draftAttachmentsSurviveARelaunchLikeT3() throws {
+        let url = URL(fileURLWithPath: "/sandbox/a.png")
+        let image = ComposerAttachment(id: "i", kind: .image, name: "a.png", mimeType: "image/png", sizeBytes: 3,
+                                       fileURL: url, status: .ready, attachmentId: "up-i", environmentId: "env")
+        let done = ComposerAttachment(id: "f", kind: .file, name: "notes.txt", mimeType: "text/plain", sizeBytes: 5,
+                                      fileURL: url, status: .ready, attachmentId: "up-f", environmentId: "env")
+        let halfway = ComposerAttachment(id: "h", kind: .file, name: "big.zip", mimeType: "application/zip", sizeBytes: 9,
+                                         fileURL: url, status: .uploading(0.5), attachmentId: "minted", environmentId: "env")
+        let records = try JSONDecoder().decode([DraftAttachmentRecord].self, from: JSONEncoder().encode(
+            [image, done, halfway].map { DraftAttachmentRecord(draftKey: "draft", attachment: $0) }))
+        #expect(records[0].attachmentId == nil)
+        #expect(records[2].attachmentId == nil)
+        #expect(records[0].restore(fileExists: { _ in false }) == nil)
+        let restoredImage = try #require(records[0].restore(fileExists: { _ in true }))
+        #expect(restoredImage.pending == .upload && restoredImage.attachment.attachmentId == nil)
+        let restoredFile = try #require(records[1].restore(fileExists: { _ in false }))
+        #expect(restoredFile.pending == .verify && restoredFile.attachment.attachmentId == "up-f" && restoredFile.attachment.status != .ready)
+        let marker = try #require(records[2].restore(fileExists: { _ in true }))
+        #expect(marker.pending == .reattach && marker.attachment.needsReattach)
+        #expect(R.uploadBlockReason([marker.attachment]) == "Attach the interrupted file again or remove it")
+        #expect(R.uploadBlockReason([marker.attachment, marker.attachment]) == "Attach the interrupted files again or remove them")
+        #expect(R.matchesReattachMarker(marker.attachment, name: "big.zip", mimeType: "application/zip", sizeBytes: 9))
+        #expect(!R.matchesReattachMarker(marker.attachment, name: "big.zip", mimeType: "application/zip", sizeBytes: 8))
+        var video = marker.attachment; video.name = "clip.mov"; video.mimeType = ""
+        #expect(R.matchesReattachMarker(video, name: "clip.mov", mimeType: "video/quicktime", sizeBytes: 9))
+    }
+
     @Test func classifiesLikeT3() {
         #expect(R.classify(name: "a.png", mimeType: "image/png") == .image)
         #expect(R.classify(name: "photo.jpg", mimeType: "") == .image)

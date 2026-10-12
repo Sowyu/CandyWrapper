@@ -15,4 +15,28 @@ import AppKit
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.add(animation, forKey: "settings-panel-motion")
     }
+
+    /// The closing half (T3's width and grid-row transitions run both ways, ChatView.tsx:1325, 11284;
+    /// PreviewPanelShell.tsx:119): call before hiding `view`. A still image of it slides by `offset` over
+    /// the duration, then goes, so a closed panel keeps no live content and nothing runs afterwards.
+    public static func dismiss(_ view: NSView, offset: CGSize) {
+        guard duration > 0, view.window != nil, !view.isHidden, view.bounds.width > 0, view.bounds.height > 0,
+              let host = view.superview?.layer, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let ghost = CALayer()
+        ghost.contents = bitmap.cgImage
+        ghost.contentsScale = view.window?.backingScaleFactor ?? 2
+        ghost.frame = view.frame
+        ghost.zPosition = 30
+        host.addSublayer(ghost)
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { ghost.removeFromSuperlayer() }
+        let animation = CABasicAnimation(keyPath: "transform.translation")
+        animation.fromValue = NSValue(size: .zero); animation.toValue = NSValue(size: offset)
+        animation.duration = duration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        animation.fillMode = .forwards; animation.isRemovedOnCompletion = false
+        ghost.add(animation, forKey: "settings-panel-dismiss")
+        CATransaction.commit()
+    }
 }

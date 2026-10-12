@@ -34,9 +34,15 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// Text and icon color from the surrounding markup: a chip rendered as a link inside chat markdown takes
     /// `.chat-markdown a { color: var(--info-foreground) }`.
     public var foregroundOverride: NSColor?
+    /// ContextChip's `state` (ContextChip.tsx:50-81): `unresolved` dashes the border and takes `text-foreground`
+    /// (a file that must be attached again), `invalid` the destructive colors (a failed upload).
+    public enum State: Equatable, Sendable { case unresolved, invalid }
+    public var state: State?
 
-    public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil) {
+    public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil,
+                state: State? = nil) {
         self.kind = kind; self.label = label; self.detail = detail; self.accentOverride = accentOverride; self.foregroundOverride = foregroundOverride
+        self.state = state
     }
 
     /// Mentions and skills only; every context link shows as unavailable.
@@ -128,16 +134,24 @@ public struct ComposerChipLook: Equatable, Sendable {
 
     var foreground: NSColor {
         if let foregroundOverride { return foregroundOverride }
+        if state == .unresolved { return Themed.color(\.foreground) }
+        if state == .invalid { return Themed.color(\.destructive) }
         guard let accent else { return Themed.color(\.foreground) }
         return OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
     }
 
     var border: NSColor {
+        if state == .invalid { return Themed.color(\.destructive, 0.35) }
         guard let accent else { return Themed.color(\.border, 0.7) }
         return OKLab.mix(accent, 0.34, Themed.color(\.contrastBorder))
     }
 
-    var fill: NSColor { accent?.withAlphaComponent(0.11) ?? Themed.color(\.accent, 0.4) }
+    var fill: NSColor {
+        if state == .invalid { return Themed.color(\.destructive, 0.08) }
+        return accent?.withAlphaComponent(0.11) ?? Themed.color(\.accent, 0.4)
+    }
+
+    var dashed: Bool { kind == .unresolved || state == .unresolved }
 
     /// `[button:enabled&,a&]:hover`: the border at 48% and the fill at 17% on interactive chips.
     var hoverBorder: NSColor {
@@ -249,7 +263,7 @@ final class ComposerChipAttachment: NSTextAttachment {
         ctx.fillPath()
         ctx.setStrokeColor((hovered ? look.hoverBorder : look.border).cgColor)
         ctx.setLineWidth(1)
-        if look.kind == .unresolved { ctx.setLineDash(phase: 0, lengths: [3, 3]) }
+        if look.dashed { ctx.setLineDash(phase: 0, lengths: [3, 3]) }
         ctx.addPath(path)
         ctx.strokePath()
         ctx.setLineDash(phase: 0, lengths: [])

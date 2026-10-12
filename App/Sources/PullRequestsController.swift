@@ -880,6 +880,43 @@ final class ThreadPullRequestsController {
         panel.mutatePanel { $0.openPullRequest(target); return [] }
     }
 
+    /// Proactive panels' pull request side (ChatView.tsx:5707-5800): the key is every visible link while the
+    /// thread's pull requests surface is available, else the current link, and nil until the environment's
+    /// capabilities are known (`shouldDeferLink`). Several links, no persisted link, or no pull request
+    /// support open the list; one link opens itself.
+    func proactiveKey(_ thread: ThreadShell) -> String? {
+        guard let env = thread.id.environmentId else { return nil }
+        guard capabilities.known(env) else { capabilities.load(env); return nil }
+        let visible = ThreadPullRequests.visible(thread.pullRequests ?? [])
+        if capabilities.has(env, "threadPullRequests"), !visible.isEmpty {
+            return visible.map { "\($0.host)|\($0.repository.lowercased())|\($0.number)" }.sorted().joined(separator: ",")
+        }
+        return (thread.linkedPullRequest ?? thread.branchPullRequest).map { "\($0.projectId):\($0.repository):\($0.number)" }
+    }
+
+    func openProactive() {
+        guard let thread, let env = thread.id.environmentId else { return }
+        let visible = ThreadPullRequests.visible(thread.pullRequests ?? [])
+        let listAvailable = capabilities.has(env, "threadPullRequests") && !visible.isEmpty
+        let supports = capabilities.has(env, "pullRequests")
+        if listAvailable, visible.count > 1 || thread.linkedPullRequest == nil || !supports {
+            panel.mutatePanel { $0.open(.pullRequests); return [] }
+        } else if supports {
+            openCurrentPullRequest()
+        }
+    }
+
+    /// `shouldRetargetThreadPullRequestPanel` (ChatView.logic.ts:150-166): the panel follows a changed link
+    /// only while it still shows the previous one. This runs with proactive panels off too.
+    func followLink(from previous: ThreadLinkedPullRequest?, to current: ThreadLinkedPullRequest?) {
+        guard let previous, let current, case .pullRequest(let shown)? = panel.panelState.active, panel.panelState.isOpen,
+              previous.projectId != current.projectId || previous.repository.lowercased() != current.repository.lowercased()
+                || previous.number != current.number,
+              shown.projectId == previous.projectId.rawValue, shown.repository.lowercased() == previous.repository.lowercased(),
+              shown.number == previous.number else { return }
+        openCurrentPullRequest()
+    }
+
     /// A linked pull request clicked: the panel when a project here reads its repository
     /// (`useOpenChangeRequestLink`), the browser otherwise.
     func open(_ link: ThreadPullRequestLink) {
