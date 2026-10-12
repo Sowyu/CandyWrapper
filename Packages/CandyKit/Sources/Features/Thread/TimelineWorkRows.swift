@@ -58,7 +58,7 @@ enum WorkIcons {
         if e.itemType == .notification {
             let raw = e.projectedItem?.item
             if raw?.string("outcome") == "failed" { return .circleAlert }
-            switch raw?["source"]?["kind"]?.stringValue {
+            switch NotificationSource.kind(raw?["source"]) {
             case "subagent", "delegated_task": return .bot
             case "command": return .terminal
             case "monitor": return .eye

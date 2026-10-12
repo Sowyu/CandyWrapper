@@ -229,7 +229,7 @@ struct SnoozeTests {
         #expect(presets.map(\.iso) == ["2026-10-07T11:00:00.000Z", "2026-10-07T13:00:00.000Z", "2026-10-07T18:00:00.000Z",
                                        "2026-10-08T09:00:00.000Z", "2026-10-12T09:00:00.000Z"])
         // ICU puts a narrow no-break space before AM and PM, as Chromium's Intl does.
-        #expect(presets.map { $0.whenLabel.replacingOccurrences(of: "\u{202F}", with: " ") } == ["11:00 AM", "1:00 PM", "6:00 PM", "9:00 AM", "Mon 9:00 AM"])
+        #expect(presets.map(\.whenLabel) == ["11:00 AM", "1:00 PM", "6:00 PM", "9:00 AM", "Mon 9:00 AM"])
     }
 
     @Test func lateAfternoonDropsThisEvening() {

@@ -229,3 +229,19 @@ extension JSONValue {
         return a[index]
     }
 }
+
+/// `OrchestrationV2NotificationSource` (contracts/src/orchestrationV2.ts:1047-1098) as T3's clients decode it.
+/// Servers send a subagent as `background_task` with `work: "subagent"` and a command as
+/// `background_command`, the shape clients from before those kinds read. A kind T3 doesn't know, or
+/// none, decodes as `background_task` (`kindUnionWithFallback`, :770-797).
+public enum NotificationSource {
+    static let known: Set<String> = ["delegated_task", "subagent", "command", "monitor", "background_task"]
+
+    /// The decoded kind: `delegated_task`, `subagent`, `command`, `monitor` or `background_task`.
+    public static func kind(_ source: JSONValue?) -> String {
+        let raw = source?["kind"]?.stringValue ?? ""
+        if raw == "background_task", source?["work"]?.stringValue == "subagent" { return "subagent" }
+        if raw == "background_command" { return "command" }
+        return known.contains(raw) ? raw : "background_task"
+    }
+}

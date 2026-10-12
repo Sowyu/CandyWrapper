@@ -21,6 +21,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
     private var lastEditKind = ""
     private var lastEditAt = -Double.infinity
+    /// Chromium's caret; AppKit's indicator stays hidden (`didAddSubview`).
+    private let caretView = ComposerCaretView()
+    private var isFocused = false
+    private var keyObservers: [NSObjectProtocol] = []
+    /// Chromium's selection bands, under the text.
+    private let selectionView = ComposerSelectionView()
     private var codeHighlightTask: Task<Void, Never>?
     var clipboardEdit = false
     var applyingListEdit = false
@@ -102,6 +108,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         delegate = self
         tlm.delegate = self
         applyStyle()
+        addSubview(selectionView, positioned: .below, relativeTo: nil)
+        addSubview(caretView)
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -127,11 +135,16 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         if let storage = textStorage, storage.length > 0 {
             storage.addAttributes(attributes, range: NSRange(location: 0, length: storage.length))
         }
-        insertionPointColor = Themed.color(\.foreground)
-        // The editor has no `::selection` rule (ComposerPromptEditorTiptap.tsx:999), so Chromium paints the
-        // system selection color at 80% over the composer (#355272 on #101010 in dark mode) and keeps the text color.
-        selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.8)]
+        // AppKit resets its indicator's display mode as the caret moves; a clear color keeps it out of sight under ComposerCaretView.
+        insertionPointColor = .clear
+        // `drawBackground` paints the selection over whole CSS line boxes; TextKit's own band covers only the glyphs.
+        selectedTextAttributes = [.backgroundColor: NSColor.clear]
+        updateCaret(restart: false)
     }
+
+    /// The editor has no `::selection` rule (ComposerPromptEditorTiptap.tsx:999), so Chromium paints the
+    /// system selection color at 80% over the composer (#355272 on #101010 in dark mode) and keeps the text color.
+    static var selectionColor: NSColor { NSColor.selectedTextBackgroundColor.withAlphaComponent(0.8) }
 
     /// Replaces the text with the editor's style (programmatic sets skip the typing attributes).
     /// `text` is the expanded prompt; its tokens come back as chips.
@@ -235,6 +248,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         }
         highlightCodeBlocks()
         onTextChange?()
+        updateCaret(restart: true)
     }
 
     func textViewDidChangeSelection(_ notification: Notification) { onSelectionChange?() }
@@ -284,7 +298,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         if richTextEnabled, blockInfo.structured, isVerticallyResizable {
             size.height = max(size.height, contentHeight + 2 * (textContainerInset.height - lineTop))
         }
+        let width = frame.width
         super.setFrameSize(size)
+        if size.width != width { updateCaret(restart: false) }
     }
 
     /// The first line moves down by its block's top margin and line box (`ComposerBlockLayout`).
@@ -580,6 +596,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        defer { selectionMoved() }
         guard richTextEnabled, !stillSelecting, !hasMarkedText(), ranges.count == 1, ranges[0].rangeValue.length == 0,
               let storage = textStorage else { return }
         let caret = ranges[0].rangeValue.location, text = storage.string as NSString
@@ -921,7 +938,77 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     override func resignFirstResponder() -> Bool {
         onModifierChange?(false)
-        return super.resignFirstResponder()
+        guard super.resignFirstResponder() else { return false }
+        isFocused = false
+        focusChanged()
+        return true
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        guard super.becomeFirstResponder() else { return false }
+        isFocused = true
+        focusChanged()
+        return true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        keyObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        keyObservers = []
+        if let window {
+            keyObservers = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.focusChanged() }
+                }
+            }
+        }
+        updateCaret(restart: true)
+    }
+
+    override func didAddSubview(_ subview: NSView) {
+        super.didAddSubview(subview)
+        (subview as? NSTextInsertionIndicator)?.displayMode = .hidden
+    }
+
+    // MARK: Caret and selection band
+
+    private func focusChanged() { updateCaret(restart: true) }
+    override var isEditable: Bool { didSet { if isEditable != oldValue { updateCaret(restart: true) } } }
+    private func selectionMoved() { updateCaret(restart: true) }
+
+    /// Shows Chromium's caret while the editor has focus in the key window and nothing is selected,
+    /// and the selection bands while it has focus.
+    private func updateCaret(restart: Bool) {
+        // AppKit turns its indicator back on as focus and selection change.
+        for case let indicator as NSTextInsertionIndicator in subviews where indicator.displayMode != .hidden { indicator.displayMode = .hidden }
+        let bands = window == nil ? [] : selectionBands()
+        if !bands.isEmpty, selectionView.frame != bounds { selectionView.frame = bounds }
+        selectionView.bands = bands
+        guard isFocused, isEditable, window?.isKeyWindow == true, let rect = caretRect() else { caretView.hide(); return }
+        caretView.show(rect, color: Themed.color(\.foreground).cgColor(in: self), restart: restart)
+    }
+
+    /// Chromium's caret box: 1px at the caret's x, from the font's ascent above the baseline to its
+    /// descent below, both rounded to device pixels.
+    func caretRect() -> NSRect? {
+        let selection = selectedRange()
+        guard selection.length == 0, !hasMarkedText(), let tlm = textLayoutManager, let content = tlm.textContentManager,
+              let location = content.location(content.documentRange.location, offsetBy: selection.location) else { return nil }
+        let font = typingAttributes[.font] as? NSFont ?? Self.font
+        let options: NSTextLayoutManager.SegmentOptions = selectionAffinity == .upstream ? [.rangeNotRequired, .upstreamAffinity] : [.rangeNotRequired]
+        var found: (frame: CGRect, baseline: CGFloat)?
+        tlm.enumerateTextSegments(in: NSTextRange(location: location), type: .standard, options: options) { _, frame, baseline, _ in
+            found = (frame, baseline)
+            return false
+        }
+        let origin = textContainerOrigin
+        let scale = window?.backingScaleFactor ?? 2
+        func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+        // An empty draft has no line: TextKit would put the first baseline one ascent down.
+        let x = found.map { $0.frame.minX } ?? 0
+        let baseline = found.map { $0.frame.minY + $0.baseline } ?? font.ascender
+        let ascent = px(font.ascender), descent = px(-font.descender)
+        return NSRect(x: px(origin.x + x), y: px(origin.y + baseline) - ascent, width: 1, height: ascent + descent)
     }
 
     /// `isCaretOnVisualEdge` (ComposerPromptEditorTiptap.tsx:1673-1705): an empty editor, or a
@@ -984,6 +1071,45 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         if richTextEnabled, blockInfo.decorated { drawBlockDecorations(in: rect) }
+    }
+
+    /// Chromium paints a selected line's whole line box (22.75px for body text), where TextKit covers
+    /// only the glyphs (17px). TextKit gives each selected line's horizontal extent; the band takes the
+    /// line's CSS box, snapped to device pixels as Blink snaps it.
+    func selectionBands() -> [NSRect] {
+        let selection = selectedRange()
+        guard isFocused, selection.length > 0, let tlm = textLayoutManager, let content = tlm.textContentManager,
+              let start = content.location(content.documentRange.location, offsetBy: selection.location),
+              let end = content.location(start, offsetBy: selection.length),
+              let range = NSTextRange(location: start, end: end) else { return [] }
+        let origin = textContainerOrigin, scale = window?.backingScaleFactor ?? 2
+        func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+        var bands: [NSRect] = []
+        tlm.enumerateTextSegments(in: range, type: .selection, options: []) { _, frame, _, _ in
+            var band = frame.offsetBy(dx: origin.x, dy: origin.y)
+            if let top = cssBandTop(tlm, frame), top.box.height + 0.5 >= frame.height {
+                band.origin.y = px(origin.y + top.y)
+                band.size.height = px(origin.y + top.y + top.box.height) - band.origin.y
+            }
+            bands.append(band)
+            return true
+        }
+        return bands
+    }
+
+    /// The CSS line box of the line holding a selection segment, in container coordinates: a heading's
+    /// own box, else the body's. A line taller than its box (a code block's header) keeps TextKit's.
+    private func cssBandTop(_ tlm: NSTextLayoutManager, _ segment: CGRect) -> (y: CGFloat, box: ComposerRichTextStyler.LineBox)? {
+        guard let fragment = tlm.textLayoutFragment(for: CGPoint(x: segment.midX, y: segment.midY)),
+              let content = tlm.textContentManager else { return nil }
+        let frame = fragment.layoutFragmentFrame
+        guard let line = fragment.textLineFragments.first(where: {
+            segment.midY >= frame.minY + $0.typographicBounds.minY && segment.midY < frame.minY + $0.typographicBounds.maxY
+        }) ?? fragment.textLineFragments.last else { return nil }
+        var box = ComposerRichTextStyler.bodyBox
+        let paragraph = content.offset(from: content.documentRange.location, to: fragment.rangeInElement.location)
+        if richTextEnabled, let b = block(at: paragraph), case .heading(let level) = b.kind { box = ComposerRichTextStyler.headingBox(level) }
+        return (frame.minY + line.typographicBounds.minY - box.top, box)
     }
 
     /// What Chromium paints outside a line's text: an ordered item's `::marker`, which ends where

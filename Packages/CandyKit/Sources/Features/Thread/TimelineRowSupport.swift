@@ -64,12 +64,15 @@ enum TL {
     }
 
     /// `getTimestampFormatter(format, false)`: hour and minute in the locale's cycle, or forced 12 or 24 hours.
+    /// Foundation puts a narrow no-break space before AM and PM; Chromium's ICU writes a plain space
+    /// ("8:12 AM"), which T3 shows.
     static func timeOfDay(_ date: Date, format: String) -> String {
-        switch format {
-        case "12-hour": return twelveHour.string(from: date)
-        case "24-hour": return twentyFourHour.string(from: date)
-        default: return localeTime.string(from: date)
+        let text = switch format {
+        case "12-hour": twelveHour.string(from: date)
+        case "24-hour": twentyFourHour.string(from: date)
+        default: localeTime.string(from: date)
         }
+        return text.replacingOccurrences(of: "\u{202F}", with: " ")
     }
 
     private static func formatter(_ template: String) -> DateFormatter {

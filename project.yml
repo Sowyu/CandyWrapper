@@ -48,8 +48,13 @@ targets:
       # Sparkle's Installer and Downloader XPC services are for sandboxed apps only (B8), and the headers
       # are build-time files. The embed phase already signed the framework, so it is signed again after
       # the trim; the app's own signing comes after this phase. scripts/release re-signs all of it anyway.
+      # The input is the embed's signature, the last thing the embed writes: without it Xcode ran this
+      # script before the embed on rebuilds, so the copy put the trimmed files back or the signing hit a
+      # half-copied bundle ("bundle format unrecognized").
       - name: Trim Sparkle
         basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/Sparkle.framework/Versions/B/_CodeSignature
         script: |
           f="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/Sparkle.framework"
           [ -d "$f" ] || exit 0

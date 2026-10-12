@@ -111,6 +111,10 @@ final class MarkdownTextBox {
         return min((text as NSString).length, line.start + max(0, offset == kCFNotFound ? line.length : offset))
     }
 
+    /// The top of the CSS line box holding `baseline`: lines stack `lineHeight` apart from the box's top.
+    /// Chromium's selection paints that whole box, not the glyphs' content area.
+    func lineTop(baseline: CGFloat) -> CGFloat { (baseline / lineHeight).rounded(.down) * lineHeight }
+
     /// Horizontal extent and baseline of `range` on each line it touches, relative to the box.
     func spans(_ range: NSRange) -> [(x0: CGFloat, x1: CGFloat, baseline: CGFloat)] {
         lines.compactMap { line in

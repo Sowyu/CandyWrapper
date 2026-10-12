@@ -793,7 +793,7 @@ public final class MarkdownView: DSView {
             let overlap = NSIntersectionRange(range, NSRange(location: offset, length: (box.text as NSString).length))
             guard overlap.length > 0 else { continue }
             if let span = box.spans(NSRange(location: overlap.location - offset, length: overlap.length)).last {
-                last = NSRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                last = NSRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
                               width: max(1, span.x1 - span.x0), height: box.lineHeight)
             }
         }
@@ -887,7 +887,7 @@ public final class MarkdownView: DSView {
                     if overlap.length > 0 {
                         ctx.setFillColor(NSColor.selectedTextBackgroundColor.withAlphaComponent(0.5).cgColor)
                         for span in box.spans(NSRange(location: overlap.location - selectionOffset, length: overlap.length)) {
-                            ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + span.baseline - box.lineHeight * 0.75,
+                            ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
                                             width: max(1, span.x1 - span.x0), height: box.lineHeight))
                         }
                     }
