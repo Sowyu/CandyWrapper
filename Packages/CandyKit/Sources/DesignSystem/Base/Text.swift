@@ -105,6 +105,8 @@ public final class LabelView: DSView {
     }
 
     public override var wantsUpdateLayer: Bool { false }
+    /// A truncating label clips to its box and draws one line in it.
+    public override var drawsWholeBounds: Bool { truncates }
 
     /// Decoration: clicks go to the control or bar underneath.
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
