@@ -43,6 +43,10 @@ public final class SelectView: ControlView {
     public var popupSide: PopupPlacement.Side = .bottom
     /// Disabled items by index.
     public var disabledOptions: Set<Int> = []
+    /// `SelectGroupLabel` rows, each shown before the option at its key.
+    public var groupLabels: [Int: String] = [:]
+    /// Muted text at the end of each item (`justify-between gap-5`).
+    public var optionTrailingDetails: [String?] = []
     /// What the trigger shows for each option when it differs from the item (`SelectValue` children).
     public var valueLabels: [String]? { didSet { updateValue() } }
 
@@ -164,16 +168,23 @@ public final class SelectView: ControlView {
     public override func performAction() {
         super.performAction()
         guard let host = popupHost else { return }
-        let items = options.enumerated().map { i, title in
+        var items: [MenuItem] = []
+        var optionAt: [Int: Int] = [:]
+        for (i, title) in options.enumerated() {
+            if let group = groupLabels[i] { items.append(.label(group)) }
             var item = MenuItem(title, kind: hidesIndicator ? .item : .radio(i == selectedIndex))
             item.subtitle = optionDetails.indices.contains(i) ? optionDetails[i] : nil
             item.glyph = optionGlyphs.indices.contains(i) ? optionGlyphs[i] : nil
+            item.trailingDetail = optionTrailingDetails.indices.contains(i) ? optionTrailingDetails[i] : nil
             item.isDisabled = disabledOptions.contains(i)
-            return item
+            optionAt[items.count] = i
+            items.append(item)
         }
+        let selectedRow = selectedIndex.flatMap { s in optionAt.first { $0.value == s }?.key }
         let list = MenuPopupView(items: items, style: .select)
         list.minimumWidth = bounds.width
-        list.onChoose = { [weak self] i in
+        list.onChoose = { [weak self] row in
+            guard let i = optionAt[row] else { return }
             self?.selectedIndex = i
             self?.onChange?(i)
         }
@@ -181,8 +192,8 @@ public final class SelectView: ControlView {
         if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
         let popup = host.open(list, trigger: self, placement: placement, swallowsOutsideClick: true)
         list.hostPopup = popup
-        list.highlightedIndex = selectedIndex ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil)
-        if alignItemWithTrigger, let frame = Self.alignedFrame(list: list, selected: selectedIndex, trigger: host.convert(bounds, from: self),
+        list.highlightedIndex = selectedRow ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil)
+        if alignItemWithTrigger, let frame = Self.alignedFrame(list: list, selected: selectedRow, trigger: host.convert(bounds, from: self),
                                                                textInset: 1 + size.metrics.padding, bounds: host.bounds) {
             popup.container.frame = frame
         }

@@ -54,6 +54,24 @@ struct SettingsProjectTests {
         #expect(ProjectSettings.resolve(folded, projectId: "p", legacy: legacy).settings["defaultThreadEnvMode"] == .null)
     }
 
+    /// projectSettings.ts:95-141: the file fills keys the project and environment leave null, the built-in the rest.
+    @Test func projectFileTierFillsUnsetFileBackedKeys() {
+        let s = ServerSettingsValues(Self.json(#"{"projectSettingsFolded": true, "worktreeSubmodules": "none"}"#))
+        let file = T3ProjectFile.parse(#"{"defaultThreadEnvMode": "worktree", "worktreeSubmodules": "top-level"}"#)
+        let r = ProjectSettings.resolve(s, projectId: "p", projectFile: .some(file))
+        #expect(r.settings["defaultThreadEnvMode"] == .string("worktree"))
+        #expect(r.source("defaultThreadEnvMode") == .t3json)
+        #expect(r.settings["worktreeSubmodules"] == .string("none"))
+        #expect(r.source("worktreeSubmodules") == .environment)
+        // A missing file fills the built-in; an unread one leaves null.
+        #expect(ProjectSettings.resolve(s, projectId: "p", projectFile: .some(nil)).settings["defaultThreadEnvMode"] == .string("local"))
+        #expect(ProjectSettings.resolve(s, projectId: "p").settings["defaultThreadEnvMode"] == .null)
+        var scope = Self.scope([Self.env("server")], machine: "server")
+        scope.projectFiles = ["server:/repo": file]
+        #expect(scope.inheritance(["defaultThreadEnvMode"]) == (.inherited, "Inherited from the repository's t3.json"))
+        #expect(scope.values["defaultThreadEnvMode"] == .string("worktree"))
+    }
+
     @Test func projectScopeResolvesMembersAndSources() {
         let s = Self.scope([Self.env("server", #"{"projectSettingsOverrides": {"fleet": {"defaultAutoPull": true}}}"#), Self.env("laptop")])
         #expect(s.isProjectScope)

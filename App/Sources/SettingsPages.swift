@@ -217,7 +217,8 @@ extension SettingsController {
                 canWrite: hosts[id]?.session.map { $0.grants(AuthScopes.settingsWrite) } ?? true)
         }
         c.scope = SettingsScopeState(selection: scopeSelection, environments: scoped, primaryId: environments.primaryId,
-                                     projects: projectGroups())
+                                     projects: projectGroups(), projectFiles: projectFiles)
+        loadProjectFiles(c.scope.members)
         c.providers = c.scope.representative.flatMap { composer?.config($0.id)?.providers } ?? []
         c.configs = Dictionary(uniqueKeysWithValues: ids.compactMap { id in composer?.config(id).map { (id, $0) } })
         c.favorites = composer?.pickers.store.favorites ?? []
@@ -225,6 +226,24 @@ extension SettingsController {
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath
         c.scheduledTasks = ScheduledTasksStore.shared.lists
+    }
+
+    /// `useMemberProjectFiles` (SettingsScopeContext.tsx:20-55): each selected checkout's t3.json, so file-backed
+    /// settings show the file as a tier. A failed read counts as no file; the page refreshes when one lands.
+    private func loadProjectFiles(_ members: [SettingsScopeProject.Member]) {
+        for m in members {
+            let key = m.physicalKey
+            guard projectFiles[key] == nil, !projectFileLoads.contains(key), environments.state(m.environmentId)?.status == .connected else { continue }
+            projectFileLoads.insert(key)
+            Task { [weak self] in
+                let reply = try? await self?.environments.request(m.environmentId, "projects.readFile",
+                                                                   .object(["cwd": .string(m.workspaceRoot), "relativePath": .string(T3ProjectFile.fileName)]))
+                guard let self, self.projectFileLoads.contains(key) else { return }
+                let contents = reply?["truncated"]?.boolValue == true ? nil : reply?["contents"]?.stringValue
+                self.projectFiles[key] = .some(contents.flatMap(T3ProjectFile.parse))
+                self.refreshPages()
+            }
+        }
     }
 
     /// `useSettingsProjectGroups`: the sidebar's logical projects over every environment, by display name.

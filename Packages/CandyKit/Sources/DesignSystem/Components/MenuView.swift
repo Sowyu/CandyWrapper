@@ -50,6 +50,11 @@ public struct MenuItem {
     public var keepsOpen = false
     /// The leading icon in its own color at full opacity (a pull request state glyph), not the muted one.
     public var iconColor: NSColor?
+    /// A full-color leading mark in the icon's slot, for brand logos an `IconDefinition` cannot draw.
+    public var image: NSImage?
+    /// Muted 12pt tabular text at the row's end, 20pt after the title (`justify-between gap-5`, the browser
+    /// device presets' sizes, BrowserDeviceToolbar.tsx:200-211). Takes the shortcut's place.
+    public var trailingDetail: String?
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -483,6 +488,7 @@ final class MenuRowView: DSView {
     private let fill = BoxDecorationLayer()
     private let label = LabelView()
     private var iconView: IconView?
+    private var imageView: ImageGlyphView?
     private var trailing: IconView?
     private var glyphView: IconView?
     private var badgeView: IconView?
@@ -529,10 +535,10 @@ final class MenuRowView: DSView {
         if isSeparator || isNote { return 16 }
         var w = paddingLeading + paddingTrailing + label.textWidth
         if isCheckbox { w += 16 + 8 }
-        if iconView != nil { w += 12 + 8 }
+        if iconView != nil || imageView != nil { w += 12 + 8 }
         if glyphView != nil { w += 12 + 6 }
         if badgeView != nil { w += 8 + 14 }
-        if let shortcut { w += 8 + shortcut.intrinsicContentSize.width }
+        if let shortcut { w += (item.trailingDetail != nil ? 20 : 8) + shortcut.intrinsicContentSize.width }
         if trailing != nil { w += 8 + 14 }
         if accessoryView != nil { w += 8 + item.accessoryWidth }
         return w
@@ -540,6 +546,7 @@ final class MenuRowView: DSView {
 
     private func configure() {
         iconView?.removeFromSuperview(); iconView = nil
+        imageView?.removeFromSuperview(); imageView = nil
         trailing?.removeFromSuperview(); trailing = nil
         glyphView?.removeFromSuperview(); glyphView = nil
         badgeView?.removeFromSuperview(); badgeView = nil
@@ -578,7 +585,11 @@ final class MenuRowView: DSView {
             label.font = DSFont.ui(14)
             label.lineHeight = 20
         }
-        if let icon = item.icon, !isLabel, !isSeparator {
+        if let image = item.image, !isLabel, !isSeparator {
+            let v = ImageGlyphView(image: image)
+            addSubview(v)
+            imageView = v
+        } else if let icon = item.icon, !isLabel, !isSeparator {
             let v = IconView(name: icon)
             addSubview(v)
             iconView = v
@@ -604,7 +615,12 @@ final class MenuRowView: DSView {
             addSubview(v)
             trailing = v
         }
-        if let s = item.shortcut {
+        if let s = item.trailingDetail {
+            let v = TrackedLabelView(s, font: DSFont.ui(12).monospacedDigits, tracking: 0,
+                                     color: Themed.color(\.contrastMutedForeground), lineHeight: 16)
+            addSubview(v)
+            shortcut = v
+        } else if let s = item.shortcut {
             let v = TrackedLabelView(s, font: DSFont.ui(12, weight: .medium), tracking: 1.2,
                                      color: Themed.color(\.contrastSecondaryLabel), lineHeight: 16)
             addSubview(v)
@@ -699,8 +715,8 @@ final class MenuRowView: DSView {
             check?.frame = CGRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 16 + 8
         }
-        if let iconView {
-            iconView.frame = NSRect(x: x - 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        if let leading = iconView ?? imageView {
+            leading.frame = NSRect(x: x - 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 12 + 8
         }
         if let glyphView {

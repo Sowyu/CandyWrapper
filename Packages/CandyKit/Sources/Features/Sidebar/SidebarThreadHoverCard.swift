@@ -15,6 +15,8 @@ public struct SidebarThreadHoverCardModel: Equatable {
     public var branchMismatch = false
     /// The provider glyph's driver and "<model> · <instance>" or the model alone.
     public var provider: (driver: String, label: String)?
+    /// The instance's accent when it shows a badge: an 8pt dot on the glyph (Sidebar.tsx:508-520).
+    public var providerAccent: String?
     /// "Handed off from <names>".
     public var handedOffFrom: [String] = []
     public var terminalProcessCount = 0
@@ -28,7 +30,7 @@ public struct SidebarThreadHoverCardModel: Equatable {
     public static func == (a: Self, b: Self) -> Bool {
         a.title == b.title && a.projectLabel == b.projectLabel && a.projectIcon == b.projectIcon && a.environmentLabel == b.environmentLabel
             && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.branchMismatch == b.branchMismatch && a.provider?.driver == b.provider?.driver
-            && a.provider?.label == b.provider?.label && a.handedOffFrom == b.handedOffFrom && a.terminalProcessCount == b.terminalProcessCount
+            && a.provider?.label == b.provider?.label && a.providerAccent == b.providerAccent && a.handedOffFrom == b.handedOffFrom && a.terminalProcessCount == b.terminalProcessCount
             && a.errorIsUsageLimit == b.errorIsUsageLimit && a.pullRequests == b.pullRequests
     }
 }
@@ -98,8 +100,13 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         }
         if let provider = model.provider {
             let glyph = IconView(name: provider.driver == "codex" ? .brandOpenAI : .brandClaudeAI, size: 12, strokeColor: Themed.color(\.foreground))
-            glyph.alphaValue = 0.6 // `grayscale opacity-60`
-            add(glyph, provider.label)
+            glyph.alphaValue = 0.6 // `grayscale opacity-60`; the badge stays saturated
+            if let accent = model.providerAccent {
+                add(ProviderBadgedIconView(glyph: glyph, badge: ProviderBadge(initials: "", accent: accent, size: .dot, overhang: 0, ring: Themed.color(\.card))),
+                    provider.label)
+            } else {
+                add(glyph, provider.label)
+            }
         }
         if !model.handedOffFrom.isEmpty {
             add(IconView(name: .arrowRightLeft, size: 12, strokeColor: muted), "Handed off from \(model.handedOffFrom.joined(separator: ", "))")

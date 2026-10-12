@@ -497,7 +497,7 @@ public enum SidebarListBuilder {
 
     /// The provider glyph for an instance id. T3 resolves the driver from the server's provider list;
     /// the shell only carries instance ids, which default to the driver name.
-    // ponytail: guesses the driver from the instance id; read the server config's provider entries when it lands
+    // ponytail: guesses the driver from the instance id; read the server config's provider entries when it lands, and draw the account badge (ProviderBadge, Sidebar.tsx:379-401) with them
     static func providerDriver(_ instance: String) -> String {
         let id = instance.lowercased()
         if id.contains("codex") || id.contains("openai") { return "codex" }

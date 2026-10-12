@@ -4,9 +4,9 @@ import Foundation
 // pingdotgg/t3code checkout): packages/shared/src/projectSettings.ts, packages/shared/src/projectScripts.ts,
 // apps/web/src/projectScripts.ts and packages/contracts/src/settings.ts:1027-1102.
 
-/// Where a project-scoped value comes from (`ProjectSettingSource`). The t3.json tier is not read by this
-/// client, so its keys report the environment.
-public enum ProjectSettingSource: String, Sendable, Equatable { case environment, project }
+/// Where a project-scoped value comes from (`ProjectSettingSource`): a project override, the environment, or the
+/// checkout's t3.json for file-backed keys. The built-in default reports the environment.
+public enum ProjectSettingSource: String, Sendable, Equatable { case environment, project, t3json = "t3.json" }
 
 public enum ProjectSettings {
     /// `PROJECT_SCOPED_SERVER_SETTING_KEYS` (settings.ts:1027-1050).
@@ -42,9 +42,40 @@ public enum ProjectSettings {
         public func source(_ key: String) -> ProjectSettingSource { sources[key] ?? .environment }
     }
 
-    /// `resolveProjectSettings` without the t3.json tier: the project's override entry on top of the
-    /// environment settings. A model override on a disabled provider falls back to the environment.
-    public static func resolve(_ settings: ServerSettingsValues, projectId: String?, legacy: Legacy? = nil) -> Resolved {
+    /// `PROJECT_FILE_BACKED_SETTINGS` (contracts t3ProjectFile.ts:125-127): each key's built-in value. The
+    /// t3.json field has the key's name.
+    public static let fileBacked: [String: String] = ["defaultThreadEnvMode": "local", "worktreeSubmodules": "recursive"]
+
+    static func fileValue(_ key: String, _ file: T3ProjectFile?) -> String? {
+        switch key {
+        case "defaultThreadEnvMode": file?.defaultThreadEnvMode
+        case "worktreeSubmodules": file?.worktreeSubmodules
+        default: nil
+        }
+    }
+
+    /// `resolveProjectSettings` (shared/projectSettings.ts:86-121). With a `projectFile` (the outer optional
+    /// absent until the file was read, the inner nil for a missing or invalid file), every file-backed key
+    /// left null resolves to the file's value (source t3.json) or the built-in (source environment).
+    public static func resolve(_ settings: ServerSettingsValues, projectId: String?, legacy: Legacy? = nil,
+                               projectFile: T3ProjectFile?? = .none) -> Resolved {
+        var resolved = resolveOverrides(settings, projectId: projectId, legacy: legacy)
+        guard case .some(let file) = projectFile else { return resolved }
+        for (key, builtIn) in fileBacked where resolved.settings[key] == .null {
+            if let value = fileValue(key, file) {
+                resolved.settings.raw[key] = .string(value)
+                resolved.sources[key] = .t3json
+            } else {
+                resolved.settings.raw[key] = .string(builtIn)
+                resolved.sources[key] = .environment
+            }
+        }
+        return resolved
+    }
+
+    /// The project's override entry on top of the environment settings. A model override on a disabled
+    /// provider falls back to the environment.
+    private static func resolveOverrides(_ settings: ServerSettingsValues, projectId: String?, legacy: Legacy?) -> Resolved {
         let stored = projectId.flatMap { settings["projectSettingsOverrides"][$0]?.objectValue }
         var overrides: [String: JSONValue]
         if let legacy, !settings.bool("projectSettingsFolded") {

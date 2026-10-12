@@ -10,6 +10,11 @@ public final class KbdView: DSView {
     /// Overrides for parents that restyle keys, such as the command footer (`bg-foreground/8 text-foreground`).
     public var fillOverride: NSColor? { didSet { needsDisplay = true } }
     public var textOverride: NSColor? { didSet { applyColors() } }
+    /// Off inside glass popups, whose text Chromium draws without subpixel smoothing.
+    public var smoothsFont: Bool {
+        get { label.smoothsFont }
+        set { label.smoothsFont = newValue }
+    }
 
     private let label = LabelView()
     private var iconView: IconView?

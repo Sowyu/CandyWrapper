@@ -377,6 +377,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let updateToast = ProviderUpdateLaunchToast(viewport: threads.panel.toasts)
         providerUpdateToast = updateToast
         updateToast.openSettings = { [weak settings] in settings?.show(.providers) }
+        // ponytail: no `providers:manage` check before Update; the server refuses a connection without it and the rejected toast says so
+        updateToast.request = { [weak environments] method, payload in
+            guard let environments, let env = environments.primaryId else { throw Environments.CommandError.notConnected }
+            return try await environments.request(env, method, payload)
+        }
         // The provider update pill follows the primary environment's providers (`primaryServerProvidersAtom`).
         threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments, weak updateToast] env in
             guard env == environments?.primaryId, let providers = threads?.composer.config(env)?.providers else { return }

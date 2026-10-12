@@ -45,7 +45,8 @@ public struct SidebarActions {
     /// The hover card's provider row and handoff line, from the environment's provider list: the glyph's
     /// driver, the model label (with the instance name when instances need telling apart) and the names of
     /// earlier providers. Nil when the provider is unknown.
-    public var hoverProvider: (ThreadShell) -> (driver: String, label: String, handedOffFrom: [String])? = { _ in nil }
+    /// The accent is set only when the instance shows a badge (`showInstanceBadge && accentColor`).
+    public var hoverProvider: (ThreadShell) -> (driver: String, label: String, handedOffFrom: [String], accent: String?)? = { _ in nil }
     /// The branch a checkout (environment, cwd) is on now, from its VCS status; nil until known. The app starts
     /// watching the checkout on the first ask and calls `checkoutBranchChanged()` when it learns more.
     public var checkoutBranch: (_ environmentId: String, _ cwd: String) -> String? = { _, _ in nil }
@@ -524,6 +525,7 @@ public final class SidebarContentView: DSView {
         }
         if let provider = actions.hoverProvider(thread) {
             m.provider = (provider.driver, provider.label)
+            m.providerAccent = provider.accent
             m.handedOffFrom = provider.handedOffFrom
         }
         m.terminalProcessCount = state.terminalProcesses[id] ?? 0

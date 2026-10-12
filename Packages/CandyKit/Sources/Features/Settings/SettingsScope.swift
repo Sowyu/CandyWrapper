@@ -83,10 +83,14 @@ public struct SettingsScopeState: Equatable, Sendable {
     public var environments: [SettingsScopeEnvironment]
     public var primaryId: String?
     public var projects: [SettingsScopeProject]
+    /// Each member's decoded t3.json by `physicalKey` (SettingsScopeContext.tsx `useMemberProjectFiles`): absent
+    /// until its read settles, nil for a missing, truncated or invalid file.
+    public var projectFiles: [String: T3ProjectFile?]
 
     public init(selection: SettingsScopeSelection = .init(), environments: [SettingsScopeEnvironment], primaryId: String?,
-                projects: [SettingsScopeProject] = []) {
+                projects: [SettingsScopeProject] = [], projectFiles: [String: T3ProjectFile?] = [:]) {
         self.selection = selection; self.environments = environments; self.primaryId = primaryId; self.projects = projects
+        self.projectFiles = projectFiles
     }
 
     public var kind: Kind {
@@ -155,7 +159,7 @@ public struct SettingsScopeState: Equatable, Sendable {
         if isProjectScope {
             return members.compactMap { m in
                 guard let e = byId[m.environmentId], let s = e.settings else { return nil }
-                let r = ProjectSettings.resolve(s, projectId: m.projectId, legacy: m.legacy)
+                let r = ProjectSettings.resolve(s, projectId: m.projectId, legacy: m.legacy, projectFile: projectFiles[m.physicalKey])
                 return Target(environmentId: e.id, label: e.label, projectId: m.projectId, settings: r.settings, sources: r.sources)
             }
         }
@@ -210,6 +214,7 @@ public struct SettingsScopeState: Equatable, Sendable {
         if isProjectScope {
             switch source(scoped) {
             case .project?: return (.overridden, "Overridden for this project")
+            case .t3json?: return (.inherited, "Inherited from the repository's t3.json")
             case .environment? where !scoped.isEmpty:
                 let from = environmentIds.count == 1 ? environments.first { $0.id == environmentIds[0] }?.label ?? "environment" : "environment"
                 return (.inherited, "Inherited from \(from)")

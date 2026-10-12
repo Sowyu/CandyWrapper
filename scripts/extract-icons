@@ -187,6 +187,10 @@ TAG = re.compile(r"<(/?)(\w+)((?:[^<>{}]|\{[^{}]*\})*?)(/?)>", re.S)
 brand, brand_skipped = {}, {}
 for b in blocks:
     name = re.match(r"\w+", b).group(0)
+    # A clip path that is the whole view box (Zed's) clips nothing: drop it and its group's reference.
+    cp = re.search(r'<defs>\s*<clipPath id=\{(\w+)\}>\s*<path fill="#fff" d="M0 0h(\d+)v(\d+)H0z"\s*/>\s*</clipPath>\s*</defs>', b)
+    if cp and re.search(r'viewBox="0 0 %s %s"' % (cp.group(2), cp.group(3)), b):
+        b = b.replace(cp.group(0), "").replace("<g clipPath={`url(#${%s})`}>" % cp.group(1), "<g>")
     m = re.search(r"<svg\b((?:[^<>{}]|\{[^{}]*\})*?)>", b, re.S)
     if not m: continue
     def attrs(s):

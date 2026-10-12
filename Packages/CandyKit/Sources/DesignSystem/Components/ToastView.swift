@@ -32,6 +32,16 @@ public final class ToastView: DSView {
     private let iconView: IconView?
     private let actionButton: ButtonView?
     private let secondaryButton: ButtonView?
+    /// `actionVariant` and `data.secondaryActionVariant` (toast.tsx): `outline` on the stacked thread toasts.
+    public func setActionVariants(_ primary: ButtonView.Variant, secondary: ButtonView.Variant? = nil) {
+        actionButton?.variant = primary
+        if let secondary { secondaryButton?.variant = secondary }
+    }
+    /// `actionProps.disabled`.
+    public var isActionEnabled: Bool {
+        get { actionButton?.isEnabled ?? false }
+        set { actionButton?.isEnabled = newValue }
+    }
     private let stackedActions: Bool
     private let closeOrb = ToastCloseOrb()
 
