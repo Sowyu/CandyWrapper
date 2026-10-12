@@ -35,26 +35,21 @@ public final class TooltipView: DSView, PopupContent {
 
     public var text: String {
         get { label.text }
-        set { label.text = newValue; wrapped?.text = newValue; invalidateIntrinsicContentSize() }
+        set { label.text = newValue; wrapped?.text = newValue; invalidateIntrinsicContentSize(); needsLayout = true }
     }
 
-    /// `max-w-80` (`max-w-120` for code) less the padding and border.
+    /// Text past `max-w-80` (`max-w-120` for code) wraps, balanced (`text-balance wrap-anywhere`). One-line
+    /// tooltips keep the label; the block exists only once a long text needs it.
     private var maxText: CGFloat { (variant == .code ? 480 : 320) - 18 }
-    /// Text past the max width wraps, balanced (`text-balance wrap-anywhere whitespace-normal`); built only then,
-    /// so one-line tooltips draw exactly as before.
     private var wrapped: TextBlockView?
     private var wraps: Bool { label.textWidth > maxText }
     private func wrappedBlock() -> TextBlockView {
         if let wrapped { return wrapped }
-        let b = TextBlockView()
-        b.text = label.text
-        b.font = label.font
-        b.color = label.color
-        b.lineHeight = label.lineHeight
-        b.balanced = true
-        addSubview(b)
-        wrapped = b
-        return b
+        let block = TextBlockView(label.text, font: label.font, lineHeight: label.lineHeight, color: label.color)
+        block.balanced = variant != .code
+        addSubview(block)
+        wrapped = block
+        return block
     }
 
     public override var intrinsicContentSize: NSSize {

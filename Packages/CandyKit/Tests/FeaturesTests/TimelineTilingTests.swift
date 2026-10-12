@@ -25,9 +25,9 @@ struct TimelineTilingTests {
     /// on even steps and `workLive` on odd ones under the same id, then a streaming answer that
     /// grows every step.
     static func tail(_ n: Int, entry: WorkLogEntry, message: ChatMessage) -> [TimelineItem] {
-        var rows = [TimelineRow(id: "working-indicator-row", createdAt: nil, kind: .working)]
+        var rows = [TimelineRow(id: "working-indicator-row", createdAt: nil, kind: .working(compacting: false))]
         rows.append(n % 2 == 0
-            ? TimelineRow(id: "live-activity-row", createdAt: nil, kind: .thinking(groupId: nil, expanded: nil))
+            ? TimelineRow(id: "live-activity-row", createdAt: nil, kind: .thinking(groupId: nil, expanded: nil, compacting: false))
             : TimelineRow(id: "live-activity-row", createdAt: nil, kind: .workLive(
                 entry: entry, groupedEntries: [entry], groupId: "g", expanded: false, active: true, thought: nil)))
         var m = message
@@ -133,7 +133,7 @@ struct TimelineTilingTests {
             TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .work(groupedEntries: [entry, entry], isExpandedToolGroup: false, displayLabel: "Ran 2 commands")))
         }
         let live: [TimelineItem] = [
-            TimelineItem(row: TimelineRow(id: "working-indicator-row", createdAt: nil, kind: .working)),
+            TimelineItem(row: TimelineRow(id: "working-indicator-row", createdAt: nil, kind: .working(compacting: false))),
             msg("interim-1", "Looking at the seam.\n\nIt is real."), work("tools-1"),
             msg("interim-2", "Fixing the spill-over myself.\n\nOne line clips the grid."), work("tools-2"),
             TimelineItem(row: TimelineRow(id: "live-activity-row", createdAt: nil, kind: .workLive(

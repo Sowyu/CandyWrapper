@@ -38,10 +38,11 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case work(groupedEntries: [WorkLogEntry], isExpandedToolGroup: Bool, displayLabel: String?)
         /// The live activity line of a running turn.
         case workLive(entry: WorkLogEntry, groupedEntries: [WorkLogEntry], groupId: String, expanded: Bool, active: Bool, thought: WorkLogEntry?)
-        /// "Working for 12s" header; `createdAt` is the turn start.
-        case working
-        /// Placeholder while running with no visible activity.
-        case thinking(groupId: String?, expanded: Bool?)
+        /// "Working for 12s" header; `createdAt` is the turn start. `compacting` reads "Compacting…"
+        /// while a `/compact` waits for its compaction row (MessagesTimeline.tsx:3705-3716).
+        case working(compacting: Bool)
+        /// Placeholder while running with no visible activity. `compacting` blanks it (:3793-3795).
+        case thinking(groupId: String?, expanded: Bool?, compacting: Bool)
         /// Header of a settled group of tool calls.
         case workToggle(WorkToggle)
         /// "Worked for 22s" header of a settled turn.
@@ -113,6 +114,8 @@ public struct TimelineRowsInput: Sendable {
     public var runlessWorkActive = false
     public var activeTurnStartedAt: T3Timestamp?
     public var turnDiffSummaries: [TurnDiffSummary] = []
+    /// A `/compact` runs and its compaction has not completed (`isCompacting`, ChatView.tsx:3597-3619).
+    public var isCompacting = false
 
     public init(
         entries: [TimelineEntry], latestRun: TimelineLatestRun? = nil, runningRunId: RunId? = nil,
@@ -170,16 +173,18 @@ public struct TimelineRowsInput: Sendable {
             memo.checkpoints = projection.checkpoints
             memo.messages = projection.messages
         }
-        let input = TimelineRowsInput(
+        var input = TimelineRowsInput(
             entries: entries, latestRun: state.latestRun, runningRunId: state.runningRunId, isWorking: state.isWorking,
             runlessWorkActive: state.runlessWorkStartedAt != nil,
             activeTurnStartedAt: state.activeTurnStartedAt, turnDiffSummaries: memo.summaries)
+        input.isCompacting = state.isWorking && TimelineRunState.compactRequestActive(projection, latestRun: state.latestRun)
         return (input, changed)
     }
 
     /// Everything but the entries matches `other`: the row pass would fold and group the same way.
     func sameContext(_ other: TimelineRowsInput) -> Bool {
         latestRun == other.latestRun && runningRunId == other.runningRunId && isWorking == other.isWorking
+            && isCompacting == other.isCompacting
             && runlessWorkActive == other.runlessWorkActive && activeTurnStartedAt == other.activeTurnStartedAt
             && expandedRunIds == other.expandedRunIds && expandedAttemptIds == other.expandedAttemptIds
             && expandedWorkGroupIds == other.expandedWorkGroupIds && turnDiffSummaries == other.turnDiffSummaries
@@ -221,6 +226,18 @@ public struct TimelineRunState: Sendable, Hashable {
             activeTurnStartedAt = runlessWorkStartedAt
         }
         isWorking = isWorking || runlessWorkStartedAt != nil
+    }
+
+    /// The server half of `isCompacting` (ChatView.tsx:3598-3615): the latest user message is a bare
+    /// `/compact` in the unsettled activity run, and no completed compaction of that run has arrived.
+    public static func compactRequestActive(_ projection: ThreadProjection, latestRun: TimelineLatestRun?) -> Bool {
+        guard let run = latestRun, [.preparing, .queued, .starting, .running, .waiting].contains(run.status) else { return false }
+        let items = projection.visibleTurnItems
+        guard let index = items.lastIndex(where: { $0.item.type == .userMessage }) else { return false }
+        let user = items[index].item
+        guard user.runId == run.runId, (user["attachments"]?.arrayValue?.isEmpty ?? true),
+              user.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact" else { return false }
+        return !items[index...].contains { $0.item.type == .compaction && $0.item.runId == run.runId && $0.item.status == .completed }
     }
 }
 
@@ -596,7 +613,7 @@ public enum TimelineRows {
             TimelineRow(id: "\(groupId):details", createdAt: createdAt, kind: .work(groupedEntries: grouped, isExpandedToolGroup: true, displayLabel: nil))
         }
         func appendWorkingRow() {
-            rows.append(TimelineRow(id: workingRowId, createdAt: input.activeTurnStartedAt, kind: .working))
+            rows.append(TimelineRow(id: workingRowId, createdAt: input.activeTurnStartedAt, kind: .working(compacting: false)))
         }
 
         var index = 0
@@ -725,15 +742,23 @@ public enum TimelineRows {
         if input.isWorking, !head, !rows.contains(where: { $0.id == workingRowId }), activeTurnHeaderIndex == entries.count {
             appendWorkingRow()
         }
+        // `compactionAwaitingRow` (MessagesTimeline.tsx:1378-1379): a `/compact` runs and its compaction
+        // row has not shown up yet. The header reads "Compacting…" and Thinking keeps its height, blank.
+        let compacting = input.isCompacting && !hasActiveCompaction
+        if compacting, let i = rows.firstIndex(where: { $0.id == workingRowId }) {
+            rows[i].kind = .working(compacting: true)
+        }
         if input.isWorking, !head, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
                 let groupId = workGroupId(anchor.id)
                 let expanded = input.expandedWorkGroupIds.contains(groupId)
-                rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt, kind: .thinking(groupId: groupId, expanded: expanded)))
+                rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
+                                        kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting)))
                 if expanded { rows.append(expandedBody(groupId, anchor.createdAt, visibleActive.map { $0.work! })) }
             } else {
-                rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt, kind: .thinking(groupId: nil, expanded: nil)))
+                rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
+                                        kind: .thinking(groupId: nil, expanded: nil, compacting: compacting)))
             }
         }
 

@@ -221,7 +221,7 @@ final class EventRowView: TimelineRowView {
             let fromRun = item["source"]?["type"]?.stringValue == "run"
             return (.divider, .muted, .gitFork, fromRun ? "Forked from conversation" : "Conversation fork", nil)
         case .handoff: return (.divider, .muted, .arrowRightLeft, "Context handoff", nil)
-        case .compaction: return (.divider, .muted, .minus, "Context compacted", p.string("summary"))
+        case .compaction: return (.divider, .muted, .minus, compactionLabel(item.status), p.string("summary") ?? compactionTokens(item))
         case .threadCreated:
             // V2LifecycleRow.tsx:171-209: a bordered card in the resource summary, else a work-log line.
             let title = p.string("title") ?? item.title
@@ -235,6 +235,27 @@ final class EventRowView: TimelineRowView {
         default:
             return (.card, .muted, .wrench, item.title ?? item.type.rawValue.replacingOccurrences(of: "_", with: " "), nil)
         }
+    }
+
+    /// The compaction divider's label by status (V2LifecycleRow.tsx:110-117).
+    nonisolated static func compactionLabel(_ status: TurnItemStatus) -> String {
+        switch status {
+        case .failed: "Context compaction failed"
+        case .cancelled, .interrupted: "Context compaction stopped"
+        case .pending, .running, .waiting: "Compacting context"
+        default: "Context compacted"
+        }
+    }
+
+    /// `tokenDetail` (V2LifecycleRow.tsx:106-109): the raw counts, "?" for a missing one, as JS prints numbers.
+    nonisolated static func compactionTokens(_ item: TurnItem) -> String? {
+        let before = item["beforeTokenCount"]?.doubleValue, after = item["afterTokenCount"]?.doubleValue
+        guard before != nil || after != nil else { return nil }
+        func js(_ v: Double?) -> String {
+            guard let v else { return "?" }
+            return v == v.rounded() && abs(v) < 1e21 ? String(Int64(v)) : String(v)
+        }
+        return "\(js(before)) → \(js(after)) tokens"
     }
 
     /// The thread a row opens (V2LifecycleRow.tsx:159-231): a fork's source conversation (or the fork),

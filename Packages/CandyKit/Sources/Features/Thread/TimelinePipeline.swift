@@ -59,6 +59,12 @@ final class TimelinePipeline: @unchecked Sendable {
         if !request.pending.isEmpty {
             if source == nil { source = TimelineRowsInput(entries: []) }
             source?.entries += request.pending.map { TimelineEntry.message($0.id.rawValue, $0) }
+            // The optimistic half of `isCompacting` (ChatView.tsx:3601-3604): a `/compact` on its way
+            // already counts as work, with the Compacting header.
+            if let last = request.pending.last, ComposerCompaction.isCompactCommand(last.text, attachments: last.attachments.count) {
+                source?.isWorking = true
+                source?.isCompacting = true
+            }
         }
         let changed = changedSinceShown
         changedSinceShown = []
