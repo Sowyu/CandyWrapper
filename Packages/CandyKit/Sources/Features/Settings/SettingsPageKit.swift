@@ -85,6 +85,11 @@ public final class SettingsPageContext {
     public var watchScheduledTasks: ((Bool) -> Void)?
     /// The address this client reaches an environment at, for webhook URLs without T3 Connect.
     public var httpBaseURL: ((String) -> URL?)?
+    /// `desktopBridge.receiveProviderAuthCallback` (apps/desktop/src/ipc/methods/providerAuth.ts:16-38): opens
+    /// ChatGPT's sign-in page, catches its loopback callback on this computer and returns the callback URL.
+    public var receiveProviderAuthCallback: ((String) async throws -> String)?
+    /// `desktopBridge.cancelProviderAuthCallback`: stops listening for that sign-in.
+    public var cancelProviderAuthCallback: ((String) -> Void)?
 
     public init() {}
 

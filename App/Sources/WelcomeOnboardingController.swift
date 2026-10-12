@@ -55,6 +55,8 @@ final class WelcomeOnboardingController {
     /// Opens a new thread in a project, by environment and local id; false while the sidebar lacks it.
     var openProject: ((String, String) -> Bool)?
     var toasts: ToastViewport?
+    private var codexCards: [String: CodexSetupView] = [:]
+    private var createdAccount: (env: String, instance: String, displayName: String, autoStart: Bool)?
 
     init(window: NSWindow, environments: Environments, composer: ComposerController, settings: SettingsController) {
         self.window = window; self.environments = environments; self.composer = composer; self.settings = settings
@@ -160,8 +162,69 @@ final class WelcomeOnboardingController {
         dialog.onClose = { [weak host] in host?.close() }
         host.onDismiss = { [weak self] in
             guard let self else { return }
-            task?.cancel(); task = nil; self.host = nil; self.dialog = nil
+            task?.cancel(); task = nil; self.host = nil; self.dialog = nil; codexCards = [:]
             if gateRoute == .wizard && !suspendingWelcome && ClientSettingsStore.shared.current.string("onboardingCompletedAt").isEmpty { show() }
+        }
+    }
+    private func key(_ env: String, _ value: JSONValue) -> String { env + ":" + (value["path"]?.stringValue ?? "") }
+
+    // MARK: Codex (WelcomeWizard.tsx:866-941, `OnboardingCodexSetup`)
+
+    /// The card for one Codex instance, kept across renders so a sign-in survives them; nil when the user
+    /// chose the existing CLI (T3's `AgentCard`, which this wizard shows as a status line).
+    private func codexCard(env: String, instance: String, provider: ServerProvider?) -> CodexSetupView? {
+        guard let context = settings?.pageContext else { return nil }
+        let created = createdAccount.flatMap { $0.env == env && $0.instance == instance ? $0 : nil }
+        let stored = composer.config(env)?.settings.raw["providerInstances"]?[instance]
+        let value = stored ?? .object(["driver": .string("codex"),
+                                       "config": created != nil ? .object(["enabled": .bool(true), "setupMode": .string("managed")]) : .object([:])])
+        if value["config"]?["setupMode"]?.stringValue == "existing" { return nil }
+        let mode = CodexSetupLogic.setupMode(value["config"])
+        let key = env + "\u{0}" + instance
+        if let card = codexCards[key] {
+            card.update(provider: provider, enabled: provider?.enabled ?? true, readOnly: false, mode: mode)
+            return card
+        }
+        let card = CodexSetupView(context: context, environment: env, instance: instance, provider: provider, enabled: provider?.enabled ?? true,
+                                  readOnly: false, presentation: .onboarding, mode: mode, autoStart: created?.autoStart == true,
+                                  displayName: created?.displayName)
+        card.onAutoStartConsumed = { [weak self] in self?.createdAccount?.autoStart = false }
+        card.onModeChange = { [weak self] mode in self?.setCodexMode(env: env, instance: instance, mode: mode) }
+        card.onHeightChange = { [weak self] in
+            guard let dialog = self?.dialog else { return }
+            card.invalidateIntrinsicContentSize()
+            dialog.needsLayout = true
+            dialog.superview?.needsLayout = true
+        }
+        codexCards[key] = card
+        return card
+    }
+
+    /// `changeMode`: the instance enabled, in that setup mode, on that environment only.
+    private func setCodexMode(env: String, instance: String, mode: String) {
+        let stored = composer.config(env)?.settings.raw["providerInstances"]?[instance]?.objectValue ?? ["driver": .string("codex")]
+        var next = stored
+        var config = next["config"]?.objectValue ?? [:]
+        config["enabled"] = .bool(true); config["setupMode"] = .string(mode)
+        next["enabled"] = .bool(true); next["config"] = .object(config)
+        let payload = JSONValue.object(["patch": .object([:]), "providerInstanceMutation": .object([
+            "operation": .string("upsert"), "instanceId": .string(instance), "instance": .object(next)])])
+        Task { [weak self] in
+            guard let self else { return }
+            do { composer.applySettings(env, try await environments.request(env, "server.updateSettings", payload)) }
+            catch { self.error = "Could not update Codex setup. \(error)"; render() }
+        }
+    }
+
+    /// "Connect another ChatGPT account": the account dialog over the wizard; the new card starts its sign-in.
+    private func addChatGptAccount(_ env: String) {
+        guard let context = settings?.pageContext, let window else { return }
+        let dialog = ProviderCodexAccountDialog(context: context, environment: env)
+        let host = ModalHost.present(dialog, in: window)
+        dialog.close = { [weak host] in host?.close() }
+        dialog.onAccountCreated = { [weak self] id, name in
+            self?.createdAccount = (env, id, name, true)
+            self?.render()
         }
     }
     private func button(_ title: String, action: @escaping @MainActor () -> Void) -> ButtonView {
@@ -216,10 +279,26 @@ final class WelcomeOnboardingController {
         } else if step == 1 {
             for env in selected.sorted() {
                 content.append(LabelView(environments.label(env) ?? "Computer", font: DSFont.ui(14, weight: .medium)))
-                for driver in ["claudeAgent", "codex"] {
-                    let provider = OnboardingProviderReadiness.select(composer.config(env)?.providers ?? [], driver: driver)
-                    let title = driver == "codex" ? "Codex" : "Claude Code"
-                    content.append(LabelView("\(title) · \(provider?.status ?? "Checking…")", font: DSFont.ui(14)))
+                let providers = composer.config(env)?.providers ?? []
+                let claude = OnboardingProviderReadiness.select(providers, driver: "claudeAgent")
+                content.append(LabelView("Claude Code · \(claude?.status ?? "Checking…")", font: DSFont.ui(14)))
+                // WelcomeWizard.tsx:735-753: one Codex card per instance, a newly added account first.
+                var codex = providers.filter { $0.driver == "codex" }.map { ($0.instanceId.rawValue, Optional($0)) }
+                if codex.isEmpty { codex = [("codex", OnboardingProviderReadiness.select(providers, driver: "codex"))] }
+                if let created = createdAccount, created.env == env {
+                    let index = codex.firstIndex { $0.0 == created.instance }
+                    let existing = index.map { codex.remove(at: $0) }
+                    codex.insert(existing ?? (created.instance, nil), at: 0)
+                }
+                for (instance, provider) in codex {
+                    if let card = codexCard(env: env, instance: instance, provider: provider) { content.append(card) }
+                    else { content.append(LabelView("Codex · \(provider?.status ?? "Checking…")", font: DSFont.ui(14))) }
+                }
+                // WelcomeWizard.tsx:838-856.
+                if providers.contains(where: { $0.driver == "codex" && OnboardingProviderReadiness.state($0) == .ready }) {
+                    let another = ButtonView("Connect another ChatGPT account", variant: .ghostMuted, size: .xs)
+                    another.action = { [weak self] in self?.addChatGptAccount(env) }
+                    content.append(LeadingButtonRow(another))
                 }
             }
             // ponytail: provider setup opens the existing provider page; add the inline onboarding terminal before claiming step-two parity.
@@ -240,6 +319,8 @@ final class WelcomeOnboardingController {
         }
         if let error, step != 2 { content.append(LabelView(error, font: DSFont.ui(12), color: Themed.color(\.destructive))) }
         dialog.panelContent = content
+        // The host sizes the popup: a step with taller content (the Codex cards) needs it to measure again.
+        dialog.superview?.needsLayout = true
         if step == 2 {
             let skip = ButtonView("Do not import projects", variant: .ghostMuted)
             skip.isEnabled = !busy
@@ -452,5 +533,63 @@ private final class OnboardingProjectsLoadingView: DSView {
         let top = (bounds.height - 20 - 12 - 20) / 2
         spinner.frame = NSRect(x: (bounds.width - 20) / 2, y: top, width: 20, height: 20)
         label.frame = NSRect(x: 0, y: top + 32, width: bounds.width, height: 20)
+    }
+}
+
+
+/// A button at its own width at the start of a full-width panel row (`<div className="mt-3"><Button size="xs">`).
+private final class LeadingButtonRow: DSView {
+    private let button: ButtonView
+    init(_ button: ButtonView) {
+        self.button = button
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: button.intrinsicContentSize.height))
+        addSubview(button)
+    }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: button.intrinsicContentSize.height) }
+    override func layout() { super.layout(); button.frame = NSRect(origin: .zero, size: button.intrinsicContentSize) }
+}
+
+/// ChatGptWelcomeCoordinator.tsx (mounted in routes/__root.tsx:224): once per connected environment's
+/// provider that uses a ChatGPT plan, "Your ChatGPT plan is connected". It reads the verified provider
+/// snapshots, never a sign-in callback. Acknowledged profiles persist under T3's storage key.
+@MainActor
+final class ChatGptWelcomeCoordinator {
+    private weak var window: NSWindow?
+    private let environments: Environments
+    private let composer: ComposerController
+    private var host: ModalHost?
+    private var acknowledged: [String]
+
+    init(window: NSWindow, environments: Environments, composer: ComposerController) {
+        self.window = window; self.environments = environments; self.composer = composer
+        acknowledged = CodexSetupLogic.readAcknowledged(UserDefaults.standard.string(forKey: CodexSetupLogic.welcomeStorageKey))
+        _ = environments.observe { [weak self] in self?.evaluate() }
+        composer.configObservers.append { [weak self] _ in self?.evaluate() }
+    }
+    private var profiles: [CodexSetupLogic.WelcomeProfile] {
+        CodexSetupLogic.welcomeProfiles(environments.environmentIds.map { id in
+            (id, environments.label(id) ?? "Computer", environments.state(id)?.status == .connected, composer.config(id)?.providers ?? [])
+        })
+    }
+
+    func evaluate() {
+        guard host == nil, let window, let next = CodexSetupLogic.nextWelcome(profiles, acknowledged: acknowledged) else { return }
+        let dialog = ChatGptWelcomeDialog(profile: next) { url in NSWorkspace.shared.open(url) }
+        let host = ModalHost.present(dialog, in: window)
+        dialog.onContinue = { [weak host] in host?.close() }
+        // Every way out (Continue, Escape, the backdrop, the X) acknowledges the profile (`onOpenChange`).
+        host.onDismiss = { [weak self] in
+            guard let self else { return }
+            self.host = nil
+            self.dismiss(next.key)
+            self.evaluate()
+        }
+        self.host = host
+    }
+
+    private func dismiss(_ key: String) {
+        guard !acknowledged.contains(key) else { return }
+        acknowledged.append(key)
+        UserDefaults.standard.set(CodexSetupLogic.writeAcknowledged(acknowledged), forKey: CodexSetupLogic.welcomeStorageKey)
     }
 }

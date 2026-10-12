@@ -244,6 +244,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var setup: JSONValue?
     public var nativeSessions: JSONValue?
     public var configurableProviders: Bool?
+    /// `runtimePaths` (`{homePath, shadowHomePath}`, contracts server.ts:278-283): a managed Codex instance's homes.
+    public var runtimePaths: JSONValue?
 
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
@@ -265,7 +267,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
         case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
-        case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders
+        case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders, runtimePaths
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
 
@@ -309,6 +311,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         nativeSessions = try? c.decodeIfPresent(JSONValue.self, forKey: .nativeSessions)
         configurableProviders = try? c.decodeIfPresent(Bool.self, forKey: .configurableProviders)
         setup = (try? c.decodeIfPresent(JSONValue.self, forKey: .setup)) ?? nil
+        runtimePaths = (try? c.decodeIfPresent(JSONValue.self, forKey: .runtimePaths)) ?? nil
     }
 
     /// `resolveProviderSkillsForCwd`: the workspace snapshot's skills, else the provider's.

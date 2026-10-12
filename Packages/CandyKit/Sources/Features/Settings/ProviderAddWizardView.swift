@@ -18,6 +18,8 @@ public final class ProviderAddWizardView: DialogView {
     private var searchGeneration = 0
     public var onCreated: ((String) -> Void)?
     public var close: (() -> Void)?
+    /// "Continue with ChatGPT" on the Codex choice: the presenter swaps this wizard for the account dialog.
+    public var onAddChatGptAccount: (() -> Void)?
     private var label: String { labels[driver] ?? ProvidersLogic.label(driver) ?? driver }
     private var id: String { ids[driver] ?? ProviderSetupLogic.instanceID(driver: driver, label: label, existing: existing) }
 
@@ -134,7 +136,18 @@ public final class ProviderAddWizardView: DialogView {
             }
             if finish { self.save() } else { self.step += 1; self.error = nil; self.rebuild() }
         }
-        footerButtons = step == 0 ? [cancel, next] : [cancel, back, next]
+        if step == 0 && driver == "codex" {
+            // AddProviderInstanceDialog.tsx:663-686: Cancel is `ghost-muted` on the first step; Codex offers
+            // "Configure manually" (the next step) and Continue with ChatGPT (the managed account dialog).
+            cancel.variant = .ghostMuted
+            let manual = ButtonView("Configure manually", variant: .outline, size: .sm)
+            manual.action = { [weak self] in guard let self else { return }; self.step = 1; self.error = nil; self.rebuild() }
+            let chatGpt = ChatGptButtons.connection(size: .sm)
+            chatGpt.action = { [weak self] in self?.onAddChatGptAccount?() }
+            footerButtons = [cancel, manual, chatGpt]
+        } else {
+            footerButtons = step == 0 ? [cancel, next] : [cancel, back, next]
+        }
     }
     private func search(_ query: String) {
         guard let request = context.request else { return }

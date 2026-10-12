@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var desktopManaged: DesktopManagedController?
     private var updates: UpdateUI?
     private let codexAuth = CodexAuthCallbackReceiver()
+    private var chatGptWelcome: ChatGptWelcomeCoordinator?
     /// URLs that arrived before the window existed (a cold launch from a link).
     private var pendingURLs: [URL]? = []
 
@@ -179,6 +180,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main, environments: environments,
                                           t3: t3Connect)
         settings.composer = threads.composer
+        // The desktop bridge's ChatGPT callback (providerAuth.ts:16-47): the window comes forward once the browser returns.
+        settings.pageContext.receiveProviderAuthCallback = { [weak self] url in
+            guard let self else { throw CancellationError() }
+            let callback = try await self.codexAuth.receiveCallback(url)
+            NSApp.activate()
+            self.mainWindow?.makeKeyAndOrderFront(nil)
+            return callback
+        }
+        settings.pageContext.cancelProviderAuthCallback = { [weak self] url in self?.codexAuth.cancelCallback(url) }
         threads.scripts.saveActions = { [weak settings] writes in
             guard let settings else { return "Settings are unavailable." }
             return await settings.saveActions(writes)
@@ -259,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             threads?.newThread(in: project)
             return true
         }
+        chatGptWelcome = ChatGptWelcomeCoordinator(window: window, environments: environments, composer: threads.composer)
         var showedWelcome = false
         let priorLiveShell = environments.onLiveShell
         environments.onLiveShell = { [weak welcome, weak environments] env, snapshot in
