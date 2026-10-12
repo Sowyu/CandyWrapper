@@ -36,6 +36,13 @@ public final class MarkdownView: DSView {
         }
     }
 
+    // VoiceOver reads a message as its plain text; code block buttons and chips stay reachable as children.
+    public override func isAccessibilityElement() -> Bool { !document.blocks.isEmpty }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    public override func accessibilityValue() -> Any? {
+        document.blocks.map(\.plainText).filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+
     /// A streaming answer grows at its end: redraw from the first top-level block that changed
     /// down to the lower of the old and new bottoms, not the whole message.
     private func redrawChanges(from previous: MarkdownLayout, oldBlocks: [MarkdownBlock]) {

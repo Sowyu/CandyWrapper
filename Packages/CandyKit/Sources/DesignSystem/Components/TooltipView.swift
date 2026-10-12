@@ -106,6 +106,12 @@ public final class TooltipController: NSResponder, HoverSyncClient {
 
     nonisolated(unsafe) private static var associationKey: UInt8 = 0
 
+    /// The tooltip text attached to `view`, for its accessibility label.
+    static func text(for view: NSView) -> String? {
+        guard let c = objc_getAssociatedObject(view, &associationKey) as? TooltipController, !c.text.isEmpty else { return nil }
+        return c.text
+    }
+
     init(view: NSView, text: String, variant: TooltipView.Variant, placement: PopupPlacement, delay: TimeInterval, closeDelay: TimeInterval) {
         self.view = view; self.text = text; self.variant = variant; self.placement = placement
         self.delay = delay; self.closeDelay = closeDelay

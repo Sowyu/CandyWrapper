@@ -14,6 +14,33 @@ open class DSView: NSView {
 
     open override var isFlipped: Bool { true }
 
+    // A view that names its role (a dialog, a list, a slider) is an accessibility element; AppKit ignores views
+    // unless told otherwise. Unnamed groups stay transparent: they only lay out their children. The setters
+    // record what was set, so `isAccessibilityElement` reads no AppKit getters.
+    private var namedRole: NSAccessibility.Role?
+    private var elementIsSet = false
+    private var groupIsNamed = false
+    open override func setAccessibilityRole(_ role: NSAccessibility.Role?) {
+        super.setAccessibilityRole(role)
+        namedRole = role
+    }
+    open override func setAccessibilityRoleDescription(_ description: String?) {
+        super.setAccessibilityRoleDescription(description)
+        if description != nil { groupIsNamed = true }
+    }
+    open override func setAccessibilityLabel(_ label: String?) {
+        super.setAccessibilityLabel(label)
+        if !(label ?? "").isEmpty { groupIsNamed = true }
+    }
+    open override func setAccessibilityElement(_ element: Bool) {
+        super.setAccessibilityElement(element)
+        elementIsSet = true
+    }
+    open override func isAccessibilityElement() -> Bool {
+        guard !elementIsSet, let namedRole else { return super.isAccessibilityElement() }
+        return namedRole != .group || groupIsNamed
+    }
+
     /// Frame-based layout: any size change re-runs `layout()`.
     open override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize != frame.size

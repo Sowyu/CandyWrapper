@@ -82,6 +82,11 @@ public final class TextBlockView: DSView {
 
     public var text: String = "" { didSet { if text != oldValue { invalidate() } } }
     public var font: NSFont = DSFont.ui(14) { didSet { fontRecipe = FontRuntime.recipe(for: font); invalidate() } }
+
+    // Static text for VoiceOver, except inside a control, which reads it as its name.
+    public override func isAccessibilityElement() -> Bool { !text.isEmpty && !ControlView.isInsideControlElement(self) }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    public override func accessibilityValue() -> Any? { text }
     private var fontRecipe = FontRuntime.recipe(for: DSFont.ui(14))
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()

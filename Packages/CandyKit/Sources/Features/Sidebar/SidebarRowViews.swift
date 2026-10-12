@@ -588,6 +588,7 @@ final class SidebarCardRowView: SidebarRowBase {
         prBadge.badge = r.pullRequestBadge
         setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil, r.statusLabel, r.projectLabel]
             .compactMap { $0 }.joined(separator: ", "))
+        setAccessibilitySelected(r.isActive) // `aria-current="page"` (Sidebar.logic.ts:59)
         needsLayout = true
     }
 
@@ -790,6 +791,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         // The `sr-only` "Regenerating title" status (Sidebar.tsx:1838-1842).
         setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil].compactMap { $0 }.joined(separator: ", "))
+        setAccessibilitySelected(r.isActive) // `aria-current="page"` (Sidebar.logic.ts:59)
         needsLayout = true
     }
 

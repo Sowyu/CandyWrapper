@@ -8,7 +8,7 @@ import QuartzCore
 public class ChoiceView: ControlView {
     public enum Value: Sendable { case off, on, mixed }
 
-    public var value: Value = .off { didSet { if value != oldValue { restyle(); setAccessibilityValue(value == .on) } } }
+    public var value: Value = .off { didSet { if value != oldValue { restyle(); setAccessibilityValue(value == .on ? 1 : value == .mixed ? 2 : 0) } } }
     /// `aria-invalid`: destructive border, no shadows, destructive focus ring.
     public var isInvalid = false { didSet { restyle() } }
     public final var onChange: (@MainActor (Value) -> Void)?

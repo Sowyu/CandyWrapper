@@ -150,6 +150,17 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
 
     var surface: PopupSurface { style == .autocomplete ? .opaque : .glass }
 
+    // `role="menu"` (or a select's listbox), one element holding the rows.
+    public override func isAccessibilityElement() -> Bool { true }
+    public override func accessibilityRole() -> NSAccessibility.Role? { .menu }
+
+    /// VoiceOver pressed a row: the same as clicking it.
+    func activate(row: MenuRowView) -> Bool {
+        guard let i = rows.firstIndex(where: { $0 === row }), items[i].isSelectable else { return false }
+        activate(i)
+        return true
+    }
+
     public func setItems(_ items: [MenuItem]) {
         self.items = items
         highlightedIndex = nil
@@ -504,6 +515,28 @@ final class MenuRowView: DSView {
         layer?.addSublayer(fill)
         addSubview(label)
         configure()
+    }
+
+    // `role="menuitem"`, `menuitemcheckbox` or `menuitemradio`; labels and notes read as text.
+    override func isAccessibilityElement() -> Bool { !isSeparator }
+    override func accessibilityRole() -> NSAccessibility.Role? { isLabel || isNote ? .staticText : .menuItem }
+    override func accessibilityTitle() -> String? { isLabel || isNote ? nil : item.title }
+    override func accessibilityValue() -> Any? { isLabel || isNote ? item.title : nil }
+    override func accessibilityHelp() -> String? { item.subtitle ?? item.tooltip }
+    override func isAccessibilityEnabled() -> Bool { !item.isDisabled }
+    override func isAccessibilitySelected() -> Bool { highlighted }
+    override func accessibilityPerformPress() -> Bool {
+        var ancestor = superview
+        while let v = ancestor, !(v is MenuPopupView) { ancestor = v.superview }
+        return (ancestor as? MenuPopupView)?.activate(row: self) ?? false
+    }
+    /// `aria-checked` on checkbox and radio rows, as a native menu's check mark.
+    override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+        guard attribute.rawValue == "AXMenuItemMarkChar" else { return super.accessibilityAttributeValue(attribute) }
+        switch item.kind {
+        case .checkbox(true), .radio(true): return "\u{2713}"
+        default: return nil
+        }
     }
 
     var isLabel: Bool { if case .label = item.kind { true } else { false } }
