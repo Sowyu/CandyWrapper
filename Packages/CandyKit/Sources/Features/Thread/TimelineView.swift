@@ -220,6 +220,14 @@ public final class TimelineView: DSView {
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("timestampFormat") { self?.reconfigureVisible() }
             if keys.contains("chatWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
+            // Code blocks start wrapped or not by `wordWrap` (MarkdownView reads it as T3 does at mount), which changes
+            // their heights: every row measures again.
+            if keys.contains("wordWrap"), let self {
+                self.measured.removeAll()
+                self.reconfigureVisible()
+                self.heights = self.items.map { self.height(of: $0) }
+                self.relayout()
+            }
         }
         // A Mermaid diagram finished or toggled: the messages with diagrams measure again (their Markdown views
         // drop their own layouts first, so this waits a turn of the run loop).
