@@ -308,7 +308,7 @@ public final class ThreadViewModel {
         if rowsTask != nil { rowsWanted = true; return }
         var pending: [ChatMessage] = []
         if !optimisticMessages.isEmpty {
-            let confirmed = Set(projection?.messages.map(\.id) ?? [])
+            let confirmed = TimelineEntries.acknowledgedUserMessageIds(projection)
             pending = optimisticMessages.filter { $0.inputIntent != .queuedTurn && !confirmed.contains($0.id) }
         }
         let request = TimelinePipeline.Request(

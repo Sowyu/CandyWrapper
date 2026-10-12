@@ -400,6 +400,18 @@ public struct ThreadReducer: Sendable {
         return changes
     }
 
+    /// A load-earlier request was cancelled (its view moved to another connection): the control
+    /// becomes usable again without an error. Port of `clearActiveHistoryLoading`
+    /// (threadHistoryMerge.ts:38-50), which T3 runs when the request's fiber is interrupted.
+    @discardableResult
+    public mutating func cancelHistoryLoad(requestCursor: String) -> ThreadChangeSet {
+        var changes = ThreadChangeSet()
+        guard history.historyCursor == requestCursor, history.loading else { return changes }
+        history.loading = false
+        changes.historyChanged = true
+        return changes
+    }
+
     /// Records a failed page load for the control's error text.
     @discardableResult
     public mutating func failHistoryLoad(requestCursor: String, message: String) -> ThreadChangeSet {

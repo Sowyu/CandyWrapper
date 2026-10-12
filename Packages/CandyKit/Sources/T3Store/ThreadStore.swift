@@ -104,6 +104,10 @@ public actor ThreadStore {
         publish(reducer.failHistoryLoad(requestCursor: requestCursor, message: message))
     }
 
+    public func cancelHistoryLoad(requestCursor: String) {
+        publish(reducer.cancelHistoryLoad(requestCursor: requestCursor))
+    }
+
     /// Everything the store holds as one reset update, for a view that starts showing a retained
     /// store. Clears what was pending, so the next change calls `onChange` again. Nil without data.
     public func currentUpdate() -> ThreadUpdate? {

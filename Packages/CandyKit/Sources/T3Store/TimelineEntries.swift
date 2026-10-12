@@ -129,6 +129,20 @@ public enum TimelineEntries {
         .fork, .handoff, .runInterruptRequest, .runInterruptResult, .secretRequest, .subagent,
     ]
 
+    /// `serverAcknowledgedUserMessageIds` (ChatView.tsx:1751-1766, `deriveCommittedServerUserMessageIds`
+    /// in ChatView.logic.ts:1213-1221): user messages the server holds, as a timeline row or in
+    /// `messages`. Either one makes the optimistic copy redundant: a bounded snapshot or an older
+    /// page can carry the row without its message, and a queued prompt has a message but no row yet.
+    public static func acknowledgedUserMessageIds(_ projection: ThreadProjection?) -> Set<MessageId> {
+        guard let projection else { return [] }
+        var ids = Set<MessageId>()
+        for row in projection.visibleTurnItems where row.item.type == .userMessage {
+            if let id = row.item.messageId { ids.insert(id) }
+        }
+        for message in projection.messages where message.role == "user" { ids.insert(message.id) }
+        return ids
+    }
+
     /// `turnItemIsWorkspacePreparation` (client-runtime/src/state/turnItemPresentation.ts:13-20).
     static func isWorkspacePreparation(_ item: TurnItem) -> Bool {
         (item.type == .commandExecution && item.string("input") == "Preparing workspace")

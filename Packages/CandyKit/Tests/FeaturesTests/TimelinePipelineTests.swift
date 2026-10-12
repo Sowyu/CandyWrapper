@@ -67,6 +67,21 @@ struct TimelinePipelineTests {
         #expect(model.items.map(\.row) == reference.items.map(\.row))
     }
 
+    /// Stress regression (out-of-order seed 2, bounded seed 1): the prompt's row arrived but its
+    /// message did not (a bounded snapshot keeps only recent messages; a reconnect can lose the
+    /// message event), and the optimistic copy showed under it a second time. T3 drops the
+    /// optimistic copy once the row exists (ChatView.tsx:1751-1766, session-logic.ts:772-802).
+    @Test func anOptimisticPromptShowsOnceWhenItsRowArrivesWithoutItsMessage() throws {
+        var projection = try #require(try steps("02-turn.jsonl").last)
+        let prompt = try #require(projection.visibleTurnItems.first { $0.item.type == .userMessage }?.item)
+        let id = try #require(prompt.messageId)
+        projection.messages.removeAll { $0.id == id }
+        let model = ThreadViewModel()
+        model.setProjection(projection)
+        model.optimisticMessages = [ChatMessage(id: id, role: .user, text: prompt.text, createdAt: "2026-01-01T00:00:00.000Z")]
+        #expect(model.items.filter { $0.row.message?.id == id }.count == 1)
+    }
+
     /// A late result for the thread the view left is dropped.
     @Test func switchingThreadsDropsTheOldThreadsRows() async throws {
         let all = try ThreadPreview.projections()
