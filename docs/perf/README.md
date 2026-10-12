@@ -343,6 +343,49 @@ Update rate (brief step 4). `ThreadSession`'s pacer now caps at 30 updates a sec
 
 What is left at 40 a second (main thread 18% of a core): the last block's layout and draw per update, about 1 ms each; the timeline's row derivation 0.3 ms; window layout with AppKit's walk for Auto Layout views 0.25 ms; the document resize and scroll as the answer grows 0.3 ms; decoding two full-text events per tick off the main thread about 7%. At T3's real 2.5 updates a second all of this is about 4% on this thread. The rest would need fewer document resizes (growing it in steps, which changes scrolling at the end) or tiling the streaming message.
 
+### Second pass (2026-10-12, task streamcpu2)
+
+Same rig as above: the replay proxy (now also in `/tmp/cw-streamcpu2/`, not kept) on a copy of the side-by-side home, "Seeded 2000 messages" plus 30 heavy runs, window 1100x780 pt frontmost, Release builds, a fresh launch per round and three streams per mode. The proxy gained a `t3stream` mode that delivers text the way T3 0.0.46 does: the model writes 5 words every 100 ms, and an update goes out at most every 400 ms, cut at the last finished block by a port of `splitBufferedAssistantText`, and only when that cut moved (assistantStreaming.ts:35-128). On this answer that is 24 to 25 updates in 26 s. The `stream` mode of the first pass sends 20 words every 400 ms without cutting, so its last block grows in the middle of a paragraph or table every update; it is the heavier case and the one the first pass called T3's rate.
+
+| App CPU over the stream | `stream`, 2.5 a second, 20 words | `t3stream` (T3's cut) | `stream`, 40 a second, 1 word |
+|---|---|---|---|
+| Before (HEAD d3fd7b7) | 4.62, 4.62, 4.30% | 2.27, 2.12, 2.24% | 27.95, 27.75, 28.91% |
+| After | 3.57, 3.19, 3.47% | 1.96, 1.79, 1.74% | 22.17, 22.48, 22.52% |
+
+Wakeups at 40 a second fell from 57 to 61 a second to 36 to 38; WindowServer from 32.4% to 27%. A working turn that streams almost no text costs 0.32% (the "Thinking" shine and the "Working for" clock).
+
+Main thread per update, from Time Profiler over 60 updates of the `stream` mode at 2.5 a second (ms per update; before, each update rendered twice):
+
+| Phase | Before | After |
+|---|---|---|
+| Decode (frame, JSON, typed; off the main thread) | 0.4 | 0.6 |
+| Reduce (off the main thread) | 0.65 | 0.5 |
+| Rows (`TimelinePipeline.run`) | 1.3 | 0.8 |
+| Markdown parse | 0.6 | 0.7 |
+| `preservesAssistantLineBreaks` | 0.7 | 0 |
+| Markdown layout of the last blocks | 1.9 | 2.0 |
+| Window layout pass | 2.0 | 0.9 |
+| Layer display | 1.8 | 1.7 |
+| Document resize and tracking areas | 2.1 | 1.0 |
+| Main thread in all | 14.0 | 10.6 |
+
+What changed:
+
+1. Each streaming update reaches the panel once. T3 sends `message.updated` and then `turn-item.updated` with the same text (assistantStreaming.ts:92-128), and the subscription hands them to the store one value at a time, so the pacer pulled after the first and again after the second: two renders, two layouts and two commits per update. While text streams, `ThreadSession` asks the pacer to wait one frame (16 ms) before the first pull of a quiet spell, which catches the second event; any other change still renders at once. Panel updates went from 76 to 38 in 15 s at 2.5 a second (counted with dtrace).
+2. A text-only update skips the panel's own pass (`ThreadPanelView.setProjection(..., onlyStreamingText:)`): the diff summaries, proactive panels and composer layout read nothing that text changes. The header's title setters skip unchanged values, which had set `needsLayout` on the panel and run its layout, the header's and the banner stack's on every update.
+3. The streaming row is measured in `setItems` instead of getting an estimated height there and its real height in `tile`: one document resize per update instead of two.
+4. Empty `ButtonView` labels leave the view tree. A zero-size layer can't hold contents, so Core Animation displayed it again in every commit, hidden or not: 55 displays in 12 s for a code block's copy and wrap buttons. With items 1 to 4, layer displays per streamed update went from 36 (two renders) to 12.
+5. `TL.preservesAssistantLineBreaks` finds the "★ Insight" marker with `memmem` before the regex; `String.contains` scanned the whole answer per update.
+6. `MarkdownLayout(reusing:)` also hands its text boxes to the next layout (`TextBoxCache`), keyed by everything that shapes them, so the cells of a table and the items of a list above the growing end skip TextKit. `MarkdownIncrementalTests.growingTableReusesItsCells` checks the reuse and that the result matches a fresh layout. Markdown layout per update fell from 2.8 to 2.0 ms between two otherwise equal builds.
+
+What is left and why. The 2% target holds for T3's real cut (1.74 to 1.96%), not for the uncut `stream` mode (3.2 to 3.6%). The rest is spread thin:
+
+- Laying out the growing last block (2 ms) is TextKit 2 laying out the whole paragraph or table again; with T3's cut the last block is finished and only new blocks are laid out.
+- Layer display (1.7 ms): AppKit marks every view it drew itself (`layer.contents` is `NSViewBackingLayerContents`) as needing display whenever the visible rect of an ancestor changes, in `-[CALayer(NSViewVisibleRect) NS_viewVisibleRectDidChange]`, read from the disassembly. Every scroll step and document resize does that, so the streaming row's labels and the whole visible part of its markdown view redraw per update, not only the changed lines. Avoiding it means drawing those views into our own layer contents, which risks the text rendering the fidelity tests pin.
+- The window layout pass (0.9 ms) walks all 908 views of the window looking for Auto Layout (`_findAnySubviewNeedingAutoLayoutEngine`); 661 of them are hidden (parked rows 145, the thread details card 81, closed drawers and banners). Laying the row out synchronously made AppKit walk more, not less.
+- Growing the document in steps was not done: the scroll that follows the end would still move every row each update, and that scroll invalidates the same visible rects and tracking areas as the resize.
+- Decoding the text twice costs 0.5 ms per update in all, off the main thread; not worth a change to the wire path.
+
 ## Baseline: median of the last three runs (2026-10-10)
 
 The a4a5a06 review flagged `big_thread.after_scroll_footprint_mb` (+16%) and `after_scroll_peak_mb` (+13%) against 5ed1646. An A/B of the big-thread scenario, two rounds per build, gave 44.7 and 44.3 MB (5ed1646) against 44.6 and 43.8 MB (a4a5a06) after scrolling, and peaks of 103.9 to 106.7 MB for both: no change. The 5ed1646 review run had been an outlier (38.2 MB). `scripts/perf-review` now compares each metric with the median of the last three saved runs (the range is the spread of those medians), unless `--baseline` names one file.

@@ -38,7 +38,7 @@ public final class ButtonView: ControlView {
 
     public var variant: Variant = .default { didSet { restyle() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
-    public var title: String? { didSet { label.text = title ?? ""; label.isHidden = label.text.isEmpty; invalidateIntrinsicContentSize() } }
+    public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
     /// `justify-between`: the label at the start, the trailing icon at the end.
@@ -75,7 +75,7 @@ public final class ButtonView: ControlView {
         self.size = size
         self.title = title
         label.text = title ?? ""
-        label.isHidden = label.text.isEmpty
+        syncLabel()
         self.icon = icon
         updateIcons()
         restyle()
@@ -88,11 +88,18 @@ public final class ButtonView: ControlView {
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         label.font = DSFont.ui(14, weight: .medium)
-        addSubview(label)
-        // An empty label draws nothing, but its zero-size layer was displayed again in every Core
-        // Animation commit that reached the button (each streamed token for a code block's copy button).
-        label.isHidden = true
         restyle()
+    }
+
+    /// An empty label stays out of the view tree. Its zero-size layer can't hold contents, so Core
+    /// Animation displayed it again in every commit, hidden or not: 55 of the layer displays while
+    /// an answer with code blocks streamed (docs/perf/README.md, "Streaming text").
+    private func syncLabel() {
+        if label.text.isEmpty {
+            label.removeFromSuperview()
+        } else if label.superview !== self {
+            addSubview(label)
+        }
     }
 
     // MARK: Layout

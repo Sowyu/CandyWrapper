@@ -17,7 +17,17 @@ enum TL {
     static let relaxed: CGFloat = 14 * 1.625
 
     /// `shouldPreserveAssistantLineBreaks` (packages/shared/src/markdownPipeline.ts:291).
-    static func preservesAssistantLineBreaks(_ text: String) -> Bool { text.contains("★ Insight") && text.contains(/(?m)^★ Insight(?:\s|─)/) }
+    /// The regex runs only when a byte search finds the marker: `String.contains` cost 0.7 ms per
+    /// streaming update on a 7,500-character answer.
+    static func preservesAssistantLineBreaks(_ text: String) -> Bool {
+        let found = text.utf8.withContiguousStorageIfAvailable { bytes in
+            insightMarker.withUnsafeBufferPointer { marker in
+                memmem(bytes.baseAddress, bytes.count, marker.baseAddress, marker.count) != nil
+            }
+        } ?? text.contains("★ Insight")
+        return found && text.contains(/(?m)^★ Insight(?:\s|─)/)
+    }
+    private static let insightMarker = Array("★ Insight".utf8)
 
     /// `formatDayAwareTimestamp` (timestampFormat.ts:175-197) with the `timestampFormat` setting: the
     /// locale's hour cycle, or 12 or 24 hours (`hour12`).

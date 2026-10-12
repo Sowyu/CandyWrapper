@@ -246,7 +246,9 @@ public final class TimelineView: DSView {
         if case .rows(let changed) = change, consistent, new.count == old.count {
             var first = new.count
             for i in changed {
-                let h = height(of: new[i])
+                // A row on screen (the streaming answer) is measured now: an estimate here and the
+                // real height in `tile` resized the document twice per update.
+                let h = visible[new[i].id] != nil && laneFrame.width > 0 ? measure(i) : height(of: new[i])
                 if h != heights[i] { heights[i] = h; first = min(first, i) }
             }
             if first < new.count { recomputeTops(from: first) }
@@ -560,6 +562,15 @@ public final class TimelineView: DSView {
             view.setContentVisible(frame.intersects(viewport))
             if view.frame != frame || relayoutAll { view.frame = frame; view.needsLayout = true }
         }
+    }
+
+    /// Configures row `i`'s view and returns its height at the lane width, cached in `measured`.
+    private func measure(_ i: Int) -> CGFloat {
+        let item = items[i], width = laneFrame.width
+        if let m = measured[item.id], m.width == width, m.item == item { return m.height }
+        let h = viewFor(i).height(forWidth: width)
+        measured[item.id] = (width, item, h)
+        return h
     }
 
     private func isMeasured(_ item: TimelineItem, _ width: CGFloat) -> Bool {

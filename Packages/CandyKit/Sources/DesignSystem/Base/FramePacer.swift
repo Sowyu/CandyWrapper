@@ -82,10 +82,12 @@ public final class FramePacer {
         return 1.0 / Double(max(fps, 1))
     }
 
-    public func request() {
+    /// `settle`: wait at least this long even after a quiet spell, so requests that come in a
+    /// quick group (two events from one server write) fold into one run.
+    public func request(settle: CFTimeInterval = 0) {
         guard !scheduled else { return }
         let interval = max(Self.interval, maxRate.map { 1 / $0 } ?? 0)
-        let wait = Self.delay(now: CACurrentMediaTime(), last: last, interval: interval)
+        let wait = max(settle, Self.delay(now: CACurrentMediaTime(), last: last, interval: interval))
         if wait <= 0 { run(); return }
         scheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
