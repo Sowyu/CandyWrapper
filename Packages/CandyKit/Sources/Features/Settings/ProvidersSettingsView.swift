@@ -763,23 +763,26 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         variablesRow.footer = list.rows.isEmpty ? nil : list
         sections.append(SettingsSectionView(title: "Environment", rows: [variablesRow]))
 
-        // Models: favorites, visibility and order on this device; custom models on the environment.
-        let prefs = context.client["providerModelPreferences"][row.instanceId]
+        // Models: favorites, visibility and order on the environment (2994) or this device; custom models on the environment.
+        let resolved = context.modelPreferences?(env.id) ?? ([], .object([:]))
+        let prefs = resolved.providers[row.instanceId]
         let hidden = (prefs?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue)
         let order = (prefs?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue)
-        let favorites = Set(context.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
+        let favorites = Set(resolved.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
         let custom = ProvidersLogic.customModels(row.instance)
         let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
-        let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly)
+        let shared = context.configs[env.id].map { ModelPreferences.serverOwned($0.settings.raw) } ?? false
+        let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
+                                            sharedPreferences: shared)
         modelsView.builtinModels = provider?.models ?? []
         modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
         modelsView.onAddOpen = { [weak self] open in
             if open { self?.expandedModelAdd.insert(row.instanceId) } else { self?.expandedModelAdd.remove(row.instanceId) }
             self?.onHeightChange?()
         }
-        modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
-        modelsView.onHidden = { [weak self] next in self?.writePreferences(row.instanceId, hidden: next, order: order) }
-        modelsView.onOrder = { [weak self] next in self?.writePreferences(row.instanceId, hidden: hidden, order: next) }
+        modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(env.id, ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
+        modelsView.onHidden = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: next, order: order) }
+        modelsView.onOrder = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: next) }
         modelsView.onAdd = { [weak self] slug in
             var o = current().objectValue ?? [:]
             var config = o["config"]?.objectValue ?? [:]
@@ -802,7 +805,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             config["customModels"] = .array(custom.filter { $0.slug != slug }.map(\.raw))
             o["config"] = .object(config)
             self?.upsert(row, .object(o), env: env.id)
-            self?.writePreferences(row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
+            self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
         }
         modelsView.onHeightChange = { [weak self] in self?.onHeightChange?() }
         sections.append(SettingsSectionView(title: "Models", rows: [modelsView]))
@@ -863,15 +866,11 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         return rows
     }
 
-    /// `providerModelPreferences[instanceId]`, dropped when both lists are empty.
-    private func writePreferences(_ instanceId: String, hidden: [String], order: [String]) {
-        var all = context.client["providerModelPreferences"].objectValue ?? [:]
+    /// `providerModelPreferences[instanceId]` on the environment or this client.
+    private func writePreferences(_ env: String, _ instanceId: String, hidden: [String], order: [String]) {
         func unique(_ a: [String]) -> [String] { var s = Set<String>(); return a.filter { !$0.isEmpty && s.insert($0).inserted } }
-        let h = unique(hidden), o = unique(order)
-        if h.isEmpty && o.isEmpty { all.removeValue(forKey: instanceId) } else {
-            all[instanceId] = .object(["hiddenModels": .array(h.map(JSONValue.string)), "modelOrder": .array(o.map(JSONValue.string))])
-        }
-        context.writeClient?(["providerModelPreferences": .object(all)])
+        context.writeModelPreferences?(env, instanceId, unique(hidden), unique(order))
+        refresh()
     }
 
     /// The editor's status line: "Authenticated as <email> · <label>", else the summary headline and detail.
@@ -1165,14 +1164,19 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     static let placeholders = ["codex": "gpt-6.7-codex-ultra-preview", "claudeAgent": "claude-sonnet-5", "cursor": "claude-sonnet-4-6",
                                "opencode": "openai/gpt-5", "pi": "anthropic/claude-sonnet-5"]
 
-    init(models: [ProvidersLogic.DisplayModel], favorites: Set<String>, hidden: Set<String>, driver: String, canManage: Bool) {
+    /// `sharedPreferences`: the environment keeps favorites, visibility and order (2994 servers,
+    /// ProviderInstanceCard.tsx:1293-1295), not this device.
+    init(models: [ProvidersLogic.DisplayModel], favorites: Set<String>, hidden: Set<String>, driver: String, canManage: Bool,
+         sharedPreferences: Bool = false) {
         self.driver = driver
         self.models = models
         self.favorites = favorites
         self.hiddenSlugs = hidden
         self.canManage = canManage && driver != "antigravity"
         super.init(frame: .zero)
-        note.text = "Favorites, visibility, and ordering are saved on this device. Custom models are saved on the selected environment."
+        note.text = sharedPreferences
+            ? "Model preferences and custom models are saved on the selected environment and shared across connected devices."
+            : "Favorites, visibility, and ordering are saved on this device. Custom models are saved on the selected environment."
         note.font = DSFont.ui(12)
         note.lineHeight = 16
         note.color = Themed.color(\.mutedForeground)

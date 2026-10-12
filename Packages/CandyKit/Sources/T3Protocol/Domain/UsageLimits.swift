@@ -79,9 +79,11 @@ public struct UsageLimitSourceAccount: Hashable, Sendable {
     public var driver: String
     public var email: String?
     public var plan: String?
+    /// The workspace whose quota this is, from 2994 on (0be20c86c, providerUsageLimits.ts:96).
+    public var workspaceId: String?
     public var usageLimits: ProviderUsageLimits
-    public init(id: String, driver: String, email: String? = nil, plan: String? = nil, usageLimits: ProviderUsageLimits) {
-        self.id = id; self.driver = driver; self.email = email; self.plan = plan; self.usageLimits = usageLimits
+    public init(id: String, driver: String, email: String? = nil, plan: String? = nil, workspaceId: String? = nil, usageLimits: ProviderUsageLimits) {
+        self.id = id; self.driver = driver; self.email = email; self.plan = plan; self.workspaceId = workspaceId; self.usageLimits = usageLimits
     }
 }
 
@@ -102,7 +104,8 @@ public struct UsageLimitSourceSnapshot: Hashable, Sendable {
             let accounts = (s["accounts"]?.arrayValue ?? []).compactMap { a -> UsageLimitSourceAccount? in
                 guard let id = a["id"]?.stringValue, let driver = a["driver"]?.stringValue,
                       let limits = ProviderUsageLimits(json: a["usageLimits"]) else { return nil }
-                return UsageLimitSourceAccount(id: id, driver: driver, email: a["email"]?.stringValue, plan: a["plan"]?.stringValue, usageLimits: limits)
+                return UsageLimitSourceAccount(id: id, driver: driver, email: a["email"]?.stringValue, plan: a["plan"]?.stringValue,
+                                               workspaceId: a["workspaceId"]?.stringValue, usageLimits: limits)
             }
             return UsageLimitSourceSnapshot(id: id, label: label, checkedAt: s["checkedAt"]?.stringValue ?? "", accounts: accounts,
                                             error: s["error"]?.stringValue)
@@ -229,6 +232,7 @@ public enum UsageLimitsLogic {
     static func authStatus(_ p: ServerProvider) -> String? { p.auth?["status"]?.stringValue }
     static func authEmail(_ p: ServerProvider) -> String? { p.auth?["email"]?.stringValue }
     static func authLabel(_ p: ServerProvider) -> String? { p.auth?["label"]?.stringValue }
+    static func authWorkspace(_ p: ServerProvider) -> String? { p.auth?["workspaceId"]?.stringValue }
 
     /// `usesChatGptSharing`.
     public static func usesChatGptSharing(_ p: ServerProvider) -> Bool {
@@ -253,6 +257,30 @@ public enum UsageLimitsLogic {
     static func accountKey(_ driver: String, _ email: String?, _ limits: ProviderUsageLimits?) -> String? {
         if let e = email?.trimmingCharacters(in: .whitespaces).lowercased(), !e.isEmpty { return "\(driver):\(e)" }
         return limits?.credentialFingerprint.map { "\(driver):credential:\($0)" }
+    }
+
+    /// `AccountReport` (usageLimits.ts:128-140 in 2994): what a provider or hub says about one login.
+    struct AccountReport {
+        var driver: String, email: String?, workspaceId: String?, limits: ProviderUsageLimits?
+        init(_ p: ServerProvider) { driver = p.driver; email = authEmail(p); workspaceId = authWorkspace(p); limits = p.usageLimits }
+        init(_ a: UsageLimitSourceAccount) { driver = a.driver; email = a.email; workspaceId = a.workspaceId; limits = a.usageLimits }
+    }
+
+    /// `accountKeyResolver` (usageLimits.ts:142-166 in 2994): one email in two workspaces is two
+    /// accounts. A report without a workspace (a hub, an older server) joins the only workspace
+    /// known for its email, and gets no key when there are several. With no workspace anywhere,
+    /// as on servers before 2994, this is `accountKey`.
+    static func accountKeyResolver(_ reports: [AccountReport]) -> (AccountReport) -> String? {
+        var workspaces: [String: Set<String>] = [:]
+        for r in reports {
+            if let key = accountKey(r.driver, r.email, r.limits), let w = r.workspaceId { workspaces[key, default: []].insert(w) }
+        }
+        return { r in
+            guard let key = accountKey(r.driver, r.email, r.limits) else { return nil }
+            if let w = r.workspaceId { return "\(key):\(w)" }
+            guard let known = workspaces[key] else { return key }
+            return known.count == 1 ? "\(key):\(known.first!)" : nil
+        }
     }
 
     /// `limitsNotice`: the line shown when there are no bars.
@@ -293,11 +321,14 @@ public enum UsageLimitsLogic {
             merged.limits = limits
             accounts[key] = merged
         }
+        let resolveKey = accountKeyResolver(environments.flatMap { env in
+            env.providers.filter(\.enabled).map(AccountReport.init) + env.sources.flatMap(\.accounts).map(AccountReport.init)
+        })
         for env in environments {
             for p in providersWithLimits(env.providers) {
                 guard let limits = p.usageLimits, notice(limits) == nil else { continue }
                 let display = p.displayName?.trimmingCharacters(in: .whitespaces)
-                merge(accountKey(p.driver, authEmail(p), limits) ?? "\(env.environmentId):\(p.instanceId.rawValue)",
+                merge(resolveKey(AccountReport(p)) ?? "\(env.environmentId):\(p.instanceId.rawValue)",
                       UsageLimitAccount(key: "\(env.environmentId):\(p.instanceId.rawValue)", driver: p.driver,
                                         displayName: display?.isEmpty == false ? display : nil, email: authEmail(p), plan: authLabel(p),
                                         accentColor: p.accentColor, environments: [(env.environmentId, env.label)], sourceLabel: nil,
@@ -313,8 +344,9 @@ public enum UsageLimitsLogic {
                     let redeem = a.usageLimits.resetCredits?.nextCreditId.map {
                         (env.environmentId, UsageResetCreditTarget.hub(sourceId: source.id, accountId: a.id, creditId: $0))
                     }
-                    merge(accountKey(a.driver, a.email, a.usageLimits) ?? "\(source.id):\(a.id)",
-                          UsageLimitAccount(key: "\(source.id):\(a.id)", driver: a.driver, displayName: display, email: a.email, plan: a.plan,
+                    let key = "\(source.id):\(a.id)" + (a.workspaceId.map { ":\($0)" } ?? "")
+                    merge(resolveKey(AccountReport(a)) ?? key,
+                          UsageLimitAccount(key: key, driver: a.driver, displayName: display, email: a.email, plan: a.plan,
                                             accentColor: nil, environments: [], sourceLabel: sourceLabel, redeem: redeem, limits: a.usageLimits))
                 }
             }
@@ -372,10 +404,13 @@ public enum UsageLimitsLogic {
         return "\(minutes)m"
     }
 
-    /// `formatResetsIn`.
+    /// `formatResetsIn` (packages/shared/src/usageLimits.ts:606-613 in 2994): "Resets momentarily" in the
+    /// last minute, where "resets in 0m" used to show (262532709). T3 capitalizes only that one.
     public static func resetsIn(_ w: UsageLimitWindow, nowMs: Int64) -> String? {
         guard let reset = w.resetMs else { return nil }
-        return reset <= nowMs ? "resets now" : "resets in \(duration(Double(reset - nowMs)))"
+        if reset <= nowMs { return "resets now" }
+        if reset - nowMs < 60_000 { return "Resets momentarily" }
+        return "resets in \(duration(Double(reset - nowMs)))"
     }
 
     /// `resetCreditsSummary`.
@@ -475,8 +510,9 @@ public enum UsageLimitsLogic {
         guard let selected = providers.first(where: { $0.instanceId.rawValue == instanceId }),
               hasLimits(driver: selected.driver, providers: providers, sources: sources) else { return nil }
         let native = providersWithLimits(providers).filter { $0.driver == selected.driver }
+        let resolveKey = accountKeyResolver(providers.filter(\.enabled).map(AccountReport.init) + sources.flatMap(\.accounts).map(AccountReport.init))
         let nativeAccounts = Set(native.compactMap { p -> String? in
-            guard let key = accountKey(p.driver, authEmail(p), p.usageLimits), let l = p.usageLimits, !l.windows.isEmpty,
+            guard let key = resolveKey(AccountReport(p)), let l = p.usageLimits, !l.windows.isEmpty,
                   l.unavailableReason == nil else { return nil }
             return key
         })
@@ -484,9 +520,9 @@ public enum UsageLimitsLogic {
         var notices: [String] = []
         for p in native {
             guard let limits = p.usageLimits else { continue }
-            let key = accountKey(p.driver, authEmail(p), limits)
+            let key = resolveKey(AccountReport(p))
             let hub = sources.flatMap { s in s.accounts.map { (source: s, account: $0) } }
-                .filter { key != nil && accountKey($0.account.driver, $0.account.email, $0.account.usageLimits) == key
+                .filter { key != nil && resolveKey(AccountReport($0.account)) == key
                     && $0.account.usageLimits.resetCredits != nil && notice($0.account.usageLimits) == nil }
                 .enumerated().sorted { ($1.element.account.usageLimits.checkedMs, $0.offset) < ($0.element.account.usageLimits.checkedMs, $1.offset) }
                 .first?.element
@@ -506,7 +542,7 @@ public enum UsageLimitsLogic {
         for s in sources {
             let matching = s.accounts.filter { $0.driver == selected.driver }
             for a in matching {
-                if let key = accountKey(a.driver, a.email, a.usageLimits), nativeAccounts.contains(key) { continue }
+                if let key = resolveKey(AccountReport(a)), nativeAccounts.contains(key) { continue }
                 accounts.append(.init(
                     id: "\(s.id):\(a.id)", driver: a.driver, label: "\(s.label) · \(a.id)", plan: a.plan, email: a.email, sourceLabel: "CLI Proxy",
                     instanceId: nil,

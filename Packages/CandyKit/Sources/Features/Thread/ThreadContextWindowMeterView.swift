@@ -11,8 +11,10 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
     public var currency: String = "USD"
     public var autoCompactThreshold: Double? = nil
     public var automatically: Bool
-    /// When the usage last changed; the resume compaction offer waits 70 minutes from it.
+    /// When the usage last changed; the resume compaction offer waits the prompt cache's life from it.
     public var updatedAt: Date? = nil
+    /// The provider's prompt cache lifetime, on a live report from 2994 servers (c727d1219, orchestrationV2.ts:1066).
+    public var promptCacheTtlMs: Double? = nil
     public var percentage: Double? { maximum.flatMap { $0 > 0 ? min(100, max(0, used / $0 * 100)) : nil } }
     public static func derive(_ projection: ThreadProjection?) -> Self? {
         guard let projection else { return nil }
@@ -24,11 +26,17 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
                         cost: live ? nil : (json["cost"]?.doubleValue ?? json["cost"]?["amount"]?.doubleValue),
                         currency: json["cost"]?["currency"]?.stringValue ?? "USD",
                         autoCompactThreshold: json["autoCompactThreshold"]?.doubleValue, automatically: live || json["compactsAutomatically"]?.boolValue == true,
-                        updatedAt: updatedAt)
+                        updatedAt: updatedAt, promptCacheTtlMs: live ? json["promptCacheTtlMs"]?.doubleValue : nil)
         }
-        for turn in projection.providerTurns.reversed() {
-            if let usage = turn["tokenUsage"], let result = read(usage, live: true, updatedAt: date(usage["updatedAt"])) { return result }
+        // `latestProviderTurnTokenUsage` (lib/contextWindow.ts:29-41 in 2994): the newest report by
+        // `updatedAt`, ties to the later entry, since live upserts append.
+        var latest: (usage: JSONValue, at: Date?)?
+        for turn in projection.providerTurns {
+            guard let usage = turn["tokenUsage"] else { continue }
+            let at = date(usage["updatedAt"])
+            if latest == nil || (at ?? .distantPast) >= (latest!.at ?? .distantPast) { latest = (usage, at) }
         }
+        if let latest, let result = read(latest.usage, live: true, updatedAt: latest.at) { return result }
         if let provider = projection.providerThreads.first(where: { $0["id"]?.stringValue == projection.thread.activeProviderThreadId }),
            let usage = provider["contextUsage"], let result = read(usage, live: false, updatedAt: date(provider["updatedAt"])) { return result }
         for entry in projection.visibleTurnItems.reversed() {

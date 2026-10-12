@@ -46,18 +46,19 @@ public enum ComposerCompaction {
         "t3code:resume-compaction-dismissed:\(environmentId):\(instanceId?.rawValue ?? "claudeAgent")"
     }
 
-    /// `shouldOfferResumeCompaction` (ContextWindowMeter.logic.ts:63-83): a Claude thread at 100k tokens
-    /// or more whose usage last changed 70 minutes or more ago.
-    public static func shouldOfferResume(driver: String?, usedTokens: Double?, updatedAt: Date?, now: Date) -> Bool {
-        guard let start = offerStart(driver: driver, usedTokens: usedTokens, updatedAt: updatedAt) else { return false }
+    /// `shouldOfferResumeCompaction` (ContextWindowMeter.logic.ts:63-86 in 2994): a Claude thread at 100k
+    /// tokens or more whose usage last changed at least the prompt cache's life ago. A live report from
+    /// a 2994 server carries that life (`promptCacheTtlMs`, c727d1219); without it the offer waits 70 minutes.
+    public static func shouldOfferResume(driver: String?, usedTokens: Double?, updatedAt: Date?, promptCacheTtlMs: Double? = nil, now: Date) -> Bool {
+        guard let start = offerStart(driver: driver, usedTokens: usedTokens, updatedAt: updatedAt, promptCacheTtlMs: promptCacheTtlMs) else { return false }
         return now >= start
     }
 
     /// When the offer starts for this usage, or nil when it never will. T3 re-checks every minute;
     /// the app waits for this moment once instead.
-    public static func offerStart(driver: String?, usedTokens: Double?, updatedAt: Date?) -> Date? {
+    public static func offerStart(driver: String?, usedTokens: Double?, updatedAt: Date?, promptCacheTtlMs: Double? = nil) -> Date? {
         guard driver == "claudeAgent", (usedTokens ?? 0) >= resumeTokens, let updatedAt else { return nil }
-        return updatedAt.addingTimeInterval(resumeMinutes * 60)
+        return updatedAt.addingTimeInterval(promptCacheTtlMs.map { $0 / 1000 } ?? resumeMinutes * 60)
     }
 
     /// A bare `/compact` turn (`isCompactCommandMessage`, ChatView.tsx:820-823).
@@ -104,7 +105,8 @@ public enum ComposerCompaction {
     public static func resumeTokens(usage: ThreadContextWindowUsage?, driver: String?, dismissed: Bool, compactDisabled: Bool,
                                     hasHeldQueuedRuns: Bool, multipleModels: Bool, now: Date) -> Double? {
         guard let usage, !dismissed, !compactDisabled, !hasHeldQueuedRuns, !multipleModels,
-              shouldOfferResume(driver: driver, usedTokens: usage.used, updatedAt: usage.updatedAt, now: now) else { return nil }
+              shouldOfferResume(driver: driver, usedTokens: usage.used, updatedAt: usage.updatedAt,
+                                promptCacheTtlMs: usage.promptCacheTtlMs, now: now) else { return nil }
         return usage.used
     }
 

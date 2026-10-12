@@ -12,6 +12,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     var catalog: ProviderCatalog { didSet { reload() } }
     var favorites: [ModelFavorite] { didSet { reload() } }
+    /// `providerModelPreferences`: hidden models and order per instance.
+    let preferences: JSONValue
     let active: ProviderInstanceId
     let activeModel: String
     private(set) var rail: ModelPickerRail
@@ -52,15 +54,16 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private var frozenHeight: CGFloat?
     private var tracking: NSTrackingArea?
 
-    init(catalog: ProviderCatalog, favorites: [ModelFavorite], active: ProviderInstanceId, activeModel: String) {
+    init(catalog: ProviderCatalog, favorites: [ModelFavorite], active: ProviderInstanceId, activeModel: String, preferences: JSONValue? = nil) {
         self.catalog = catalog
+        self.preferences = preferences ?? ClientSettingsStore.shared.current["providerModelPreferences"]
         self.favorites = favorites
         self.active = active
         self.activeModel = activeModel
         rail = ModelPickerSections.initialRail(active: active, favorites: favorites, catalog: catalog)
         if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true { expandedLegacy = [active] }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: "", expandedLegacy: expandedLegacy)
+                                       rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences)
         favoritesButton = RailButtonView(kind: .favorites)
         super.init(frame: .zero)
         clipsToBounds = true
@@ -105,7 +108,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
             }
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: ClientSettingsStore.shared.current["providerModelPreferences"])
+                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences)
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // ponytail: every row is a view, rebuilt on each change (about 15 here); recycle rows like the timeline past ~100 models

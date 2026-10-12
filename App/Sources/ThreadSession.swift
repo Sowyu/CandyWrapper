@@ -385,6 +385,10 @@ final class ThreadController {
             guard let environments else { throw Environments.CommandError.notConnected }
             return try await environments.dispatch(id, payload)
         }
+        lineage.request = { [weak environments] env, method, payload in
+            guard let environments else { throw Environments.CommandError.notConnected }
+            return try await environments.request(env, method, payload)
+        }
         lineage.openThread = { [weak self] id in self?.open(id) }
         lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
         lineage.acknowledgeWake = { [weak self, weak sidebar] id, time in

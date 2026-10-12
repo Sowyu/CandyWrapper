@@ -13,7 +13,8 @@ public enum UsageContract {
 /// `UsageProviderKind` in `PROVIDER_PRESENTATION` order (usageProviders.ts:16-45), the reading order of
 /// every chart, table and hover row.
 public enum UsageProviderKind: String, CaseIterable, Sendable, Hashable {
-    case codex, claude, grok, cursor, opencode, antigravity
+    /// `pi` arrived in 2994 (9afde1c6d, usage.ts:41); older servers never send it.
+    case codex, claude, grok, cursor, opencode, antigravity, pi
 
     public var label: String {
         switch self {
@@ -23,6 +24,7 @@ public enum UsageProviderKind: String, CaseIterable, Sendable, Hashable {
         case .cursor: "Cursor"
         case .opencode: "OpenCode"
         case .antigravity: "Antigravity"
+        case .pi: "Pi"
         }
     }
 

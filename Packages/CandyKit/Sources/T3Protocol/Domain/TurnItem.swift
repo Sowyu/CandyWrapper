@@ -235,9 +235,10 @@ extension JSONValue {
 /// `background_command`, the shape clients from before those kinds read. A kind T3 doesn't know, or
 /// none, decodes as `background_task` (`kindUnionWithFallback`, :770-797).
 public enum NotificationSource {
-    static let known: Set<String> = ["delegated_task", "subagent", "command", "monitor", "background_task"]
+    /// `system` is T3 Code itself, such as a restart continuing a turn (a7223f396, orchestrationV2.ts:1186).
+    static let known: Set<String> = ["delegated_task", "subagent", "command", "monitor", "background_task", "system"]
 
-    /// The decoded kind: `delegated_task`, `subagent`, `command`, `monitor` or `background_task`.
+    /// The decoded kind: `delegated_task`, `subagent`, `command`, `monitor`, `background_task` or `system`.
     public static func kind(_ source: JSONValue?) -> String {
         let raw = source?["kind"]?.stringValue ?? ""
         if raw == "background_task", source?["work"]?.stringValue == "subagent" { return "subagent" }

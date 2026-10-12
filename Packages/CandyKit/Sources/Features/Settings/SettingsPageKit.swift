@@ -58,9 +58,12 @@ public final class SettingsPageContext {
     public var confirm: ((_ message: String, _ destructive: Bool, _ onConfirm: @escaping @MainActor () -> Void) -> Void)?
     /// Each environment's server config (providers, keybindings), by id.
     public var configs: [String: ServerProviderConfig] = [:]
-    /// The model picker's favorites (client setting `favorites`) and their toggle.
-    public var favorites: [ModelFavorite] = []
-    public var toggleFavorite: ((ProviderInstanceId, String) -> Void)?
+    /// An environment's model favorites and `providerModelPreferences`: the server's from 2994 on,
+    /// else this client's (`ModelPreferences`).
+    public var modelPreferences: ((String) -> (favorites: [ModelFavorite], providers: JSONValue))?
+    public var toggleFavorite: ((_ environmentId: String, ProviderInstanceId, String) -> Void)?
+    /// Saves one instance's hidden models and order on an environment.
+    public var writeModelPreferences: ((_ environmentId: String, _ instanceId: String, _ hidden: [String], _ order: [String]) -> Void)?
     /// Opens another settings page.
     public var openSection: ((SettingsSection) -> Void)?
     /// Leaves Settings for the thread view (after removing the open project).
