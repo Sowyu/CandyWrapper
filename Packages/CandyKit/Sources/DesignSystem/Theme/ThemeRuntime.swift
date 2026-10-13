@@ -62,7 +62,7 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var palettes = ThemePalettes.standard
     /// Bumped whenever `palettes` changes; cached colors compare against it.
     nonisolated(unsafe) public private(set) static var generation = 0
-    /// `--glass-opacity` as a fraction (0.4...1).
+    /// `--glass-opacity` as a fraction (0.1...1; T3 stops at 0.4).
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
     public private(set) static var input = ThemeRuntimeInput()
     /// Whether the Glass theme frosts the window in each appearance.
@@ -87,7 +87,7 @@ public enum ThemeRuntime {
             }
         }
         if next.glassOpacity != old.glassOpacity {
-            glassOpacity = CGFloat(min(max(next.glassOpacity, 40), 100)) / 100
+            glassOpacity = CGFloat(min(max(next.glassOpacity, 10), 100)) / 100
             changed = true
         }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
