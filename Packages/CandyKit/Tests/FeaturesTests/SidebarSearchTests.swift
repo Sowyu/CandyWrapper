@@ -155,6 +155,26 @@ struct SidebarSearchTests {
         #expect(view.naturalSize.width >= 148 && view.naturalSize.width <= 286)
     }
 
+    /// The draft screen's picker (DraftHeroHeadline.tsx:184-200 in 2994): projects then "Add project", which filtering
+    /// drops and which is never the selection.
+    @Test func draftProjectPickerFiltersAndTrailsAddProject() {
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: SidebarPreview.richSnapshot())
+        let demo = groups.first { $0.label == "demo-repo" }!.key
+        let view = SidebarProjectScopeView(groups: groups, selectedKey: demo, minimumWidth: 288, extra: .addProject)
+        #expect(view.shown.map(\.label) == ["candywrapper", "demo-repo", "t3code", "Add project"])
+        #expect(view.selectedKey == demo)
+        var picked: String?? = .none
+        view.onSelect = { picked = .some($0) }
+        view.setQuery("t3")
+        #expect(view.shown.map(\.label) == ["t3code"] && view.highlighted == 0)
+        view.setQuery("add")
+        #expect(view.shown.isEmpty)
+        view.setQuery("")
+        #expect(view.handleKey(.up) && view.highlighted == 3)
+        #expect(view.handleKey(.enter) && picked == .some(nil))
+        #expect(view.naturalSize.width == 286)
+    }
+
     @Test func draftRowsLeadTheListAndFreezeWhileOpen() {
         let c = content()
         let created = SidebarPreview.referenceNow

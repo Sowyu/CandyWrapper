@@ -40,15 +40,22 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private var rows: [ScopeRowView] = []
     private var scrollOffset: CGFloat = 0
 
+    /// The row with no project: the sidebar's leading "All projects", or the draft picker's trailing "Add project"
+    /// (DraftHeroHeadline.tsx:184-190 in 2994), which has no settings buttons and is never the selection.
+    enum Extra { case allProjects, addProject }
+    let extra: Extra
+
     init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat,
-         environments: SidebarEnvironments = SidebarEnvironments()) {
+         environments: SidebarEnvironments = SidebarEnvironments(), extra: Extra = .allProjects) {
+        self.extra = extra
         // Badges only while the projects span environments (Sidebar.tsx:2608-2611).
         let badges = SidebarEnvironments.span(groups)
-        items = [Item(key: nil, label: "All projects")] + groups.map { group in
+        let projects = groups.map { group in
             Item(key: group.key, label: group.label, projectTitle: group.representative.title,
                  projectIcon: ProjectIconSource(group.representative),
                  badge: badges ? environments.badge(group).map { Badge(machine: $0.machine, description: $0.description) } : nil)
         }
+        items = extra == .allProjects ? [Item(key: nil, label: "All projects")] + projects : projects + [Item(key: nil, label: "Add project")]
         // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone.
         self.selectedKey = groups.contains { $0.key == selectedKey } ? selectedKey : nil
         self.minimumWidth = minimumWidth
@@ -91,7 +98,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private func reload() {
         rows.forEach { $0.removeFromSuperview() }
         rows = shown.indices.map { i in
-            let row = ScopeRowView(item: shown[i], selected: shown[i].key == selectedKey)
+            let row = ScopeRowView(item: shown[i], selected: shown[i].key == selectedKey && (shown[i].key != nil || extra == .allProjects),
+                                   extra: extra)
             row.isHighlighted = { [weak self] in self?.highlighted == i }
             row.onHover = { [weak self] in self?.highlighted = i }
             row.action = { [weak self] in self?.choose(i) }
@@ -195,7 +203,7 @@ final class ScopeRowView: ControlView {
     let item: SidebarProjectScopeView.Item
     let selected: Bool
     private let fill = CALayer()
-    private let folder = IconView(name: .folder, size: 16)
+    private let folder: IconView
     private let monogram = ProjectMonogramView()
     private let label = LabelView()
     private let badge: EnvironmentMachineGlyphView?
@@ -204,10 +212,11 @@ final class ScopeRowView: ControlView {
     var onHover: (@MainActor () -> Void)?
     var onSettings: (@MainActor (String) -> Void)?
 
-    init(item: SidebarProjectScopeView.Item, selected: Bool) {
+    init(item: SidebarProjectScopeView.Item, selected: Bool, extra: SidebarProjectScopeView.Extra = .allProjects) {
         self.item = item
         self.selected = selected
-        settings = item.key == nil ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
+        folder = IconView(name: extra == .allProjects ? .folder : .folderPlus, size: 16)
+        settings = item.key == nil || extra == .addProject ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
         badge = item.badge.map { _ in EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14)) }
         super.init(frame: .zero)
         scalesWhenPressed = false
