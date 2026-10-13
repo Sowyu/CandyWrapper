@@ -99,6 +99,15 @@ struct MarkdownTests {
         #expect(list("- a\n\n  more\n- b")?.loose == true)
         #expect(list("- a\n  - x\n\n  - y\n- b")?.loose == false)
         #expect(list("- a\n  ```\n  x\n  ```\n- b")?.loose == false)
+        #expect(list("- a\nlazy\n\n- b")?.loose == true)
+        #expect(list("10) a\n\t\n11) b")?.loose == true)
+        // Only text that may hold a loose list pays for source positions.
+        for text in ["- a\n\n- b", "1. a\n\n  more", "* a\n\n\tcode", "- a\r\n\r\n- b", "> - a\n>\n> - b"] {
+            #expect(MarkdownDocument.mayHaveLooseList(Substring(text)), "\(text)")
+        }
+        for text in ["one\ntwo\n\nthree", "Intro\n\n- a\n- b\n\nOutro", "- a\n- b\n\nText\n\n- c", "-a\n\n-b", "1.5\n\n2.5", ""] {
+            #expect(!MarkdownDocument.mayHaveLooseList(Substring(text)), "\(text)")
+        }
         let tight = MarkdownLayout(document: MarkdownDocument(parsing: "1. a\n2. b\n3. c"), width: 400).height
         let loose = MarkdownLayout(document: MarkdownDocument(parsing: "1. a\n\n2. b\n\n3. c"), width: 400).height
         // The gaps grow, and the first and last `<p>` margins stay although the root zeroes the list's own.
