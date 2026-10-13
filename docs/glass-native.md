@@ -87,3 +87,32 @@ Performance on 2026-10-13, the Release build of 6111109 against the sandbox serv
 Idle cost is the same. Native misses the memory target by about 8 MB and launches about 37 ms later. A heap diff puts about 4 MB in Auto Layout: the split view controller lays out with constraints, and AppKit then puts every view in the window, about 1,000 of them, into the layout engine. Classic Glass creates the same autoresizing constraints but never solves them. Hosting the sidebar and page in frame-based views beside the split view, or putting the split view in the theme frame, did not stop it. Most of the rest is the system's toolbar and sidebar glass, which AppKit builds with SwiftUI. Phases 2 and 3 replace most of those 1,000 views with fewer native ones, so measure again then.
 
 Left for later phases: Files opens whatever surface the right panel last showed, not the files tree (phase 5 moves it to the inspector). The detail's page starts under the toolbar instead of scrolling under it (phase 3).
+
+### Phase 3, the thread (2026-10-13)
+
+The thread keeps T3 desktop's layout and the classic metrics. Native mode changes the material only:
+
+- The timeline reads a row style (`TimelineStyle`, set by `ThreadPanelView.hidesCustomChrome`). Work rows show SF Symbols where a Lucide icon has a match (`NativeTimeline.symbol`), and code blocks sit on a solid card. Column, bubbles, folds, row heights and wording are the classic ones, and a style switch keeps the scroll position at the end.
+- The rows scroll under the toolbar behind a soft within-window blur (`ToolbarScrollEdgeView`). The right panel and the banners start below the toolbar.
+- The approval and question panels keep T3's docked shape on a solid fill. Approval buttons are AppKit push buttons in T3's labels and order, Approve the default, and the other decisions open as an `NSMenu`.
+- The toolbar shows T3's breadcrumb (`NativeBreadcrumbView`): project icon, project (new thread), the parent of a subagent, and the title (thread menu on click, rename in place on double click or from the menu). Then T3's panel toggles in order: thread details, terminal drawer and right panel, with Maximize only while the right panel is open.
+- The empty state is T3's draft hero, unchanged.
+
+Dropped after the direction change: the 960 pt column, iPad bubbles and sizes, the Load earlier pill, the floating working pill, the iPad empty detail and the Git and Terminal menus.
+
+Left for the polish pass: the toolbar's glass group and the breadcrumb's look, the grey band of the scroll edge under the toolbar, the panel toggles' on state (the toolbar items have none), Maximize's icon when the panel is maximized, and the capsule shapes.
+
+Performance, Release build of cebf81c against the frozen workload, `scripts/perf-review --no-bench` run Glass, Glass Native, Glass back to back with `CANDY_THEME` (load average 3.0 to 3.2 for all three). Medians of three launches:
+
+| | Glass (1st) | Glass Native | Glass (2nd) |
+|---|---|---|---|
+| Launch to window | 204 ms | 257 ms | 201 ms |
+| Idle CPU | 0.041% | 0.040% | 0.026% |
+| Idle package wakeups | 0.17/s | 0.10/s | 0.10/s |
+| Footprint at rest | 34.3 MB | 46.3 MB | 34.2 MB |
+| Huge thread footprint | 35.9 MB | 48.4 MB | 35.4 MB |
+| Huge thread scroll CPU | 293 ms | 317 ms | 324 ms |
+| After scroll footprint | 44.3 MB | 57.6 MB | 44.7 MB |
+| Huge thread first frame | 58 ms | 41 ms | 55 ms |
+
+Idle cost and scrolling are the same, and the huge thread opens faster. Native still launches about 55 ms later and sits about 12 MB heavier, against 8 MB after phase 1. This run includes phase 2's sidebar, and the thread adds only one blur view and the breadcrumb, but I did not take a heap diff, so where the extra 4 MB sits is open. Phase 6 should find it.
