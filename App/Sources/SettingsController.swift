@@ -11,7 +11,7 @@ import T3Store
 @MainActor
 final class SettingsController {
     weak var window: NSWindow?
-    private weak var layout: SidebarLayoutView?
+    weak var layout: MainPresentation?
     private let threadSidebar: NSView
     private let threadPanel: NSView
     let environments: Environments
@@ -78,7 +78,7 @@ final class SettingsController {
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
-    init(window: NSWindow, layout: SidebarLayoutView, threadSidebar: NSView, threadPanel: NSView, environments: Environments,
+    init(window: NSWindow, layout: MainPresentation, threadSidebar: NSView, threadPanel: NSView, environments: Environments,
          t3: T3ConnectController) {
         self.window = window
         self.layout = layout
@@ -102,7 +102,7 @@ final class SettingsController {
         setUpPageContext()
         nav.onBack = { [weak self] in self?.close() }
         nav.onHome = { [weak self] in self?.onHome() }
-        nav.onToggleSidebar = { [weak layout = self.layout] in layout?.toggle() }
+        nav.onToggleSidebar = { [weak self] in self?.layout?.toggleSidebar() }
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
@@ -157,10 +157,9 @@ final class SettingsController {
         buildViews()
         isOpen = true
         nav.windowedMac = (threadSidebar as? SidebarContentView)?.windowedMac ?? true
-        layout.sidebar.content = nav
+        layout.sidebarContent = nav
         threadPanel.removeFromSuperview()
-        layout.main.addSubview(page)
-        layout.needsLayout = true
+        layout.mainContent = page
         show(section)
         window?.makeFirstResponder(page)
         startHostAccess()
@@ -190,14 +189,13 @@ final class SettingsController {
         stopHostAccess()
         isOpen = false
         updateScheduledTaskWatch()
-        layout.sidebar.content = threadSidebar
+        layout.sidebarContent = threadSidebar
         page.removeFromSuperview()
         // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
         page.page = nil
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]
         projectFiles = [:]; projectFileLoads = []
-        layout.main.addSubview(threadPanel)
-        layout.needsLayout = true
+        layout.mainContent = threadPanel
         if record { onRouteChange?() }
         onThreadViewReturn()
         let returnToWelcome = onOnboardingReturn; onOnboardingReturn = nil; returnToWelcome?()

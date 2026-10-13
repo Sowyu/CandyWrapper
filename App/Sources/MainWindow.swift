@@ -11,6 +11,22 @@ final class MainWindow: NSWindow {
     static let topbarHeight: CGFloat = 52
     static let trafficLightX: CGFloat = 16
 
+    /// Glass Native: a unified toolbar with the system's own traffic lights and title, in place of T3's
+    /// hidden-inset titlebar. `MainPresentation.install` sets the toolbar and the title's visibility. The titlebar
+    /// stays transparent, so the detail's frost runs up behind the toolbar.
+    var nativeChrome = false {
+        didSet {
+            guard nativeChrome != oldValue else { return }
+            // ponytail: workspace zoom is off in Glass Native, where scaling the root's bounds would scale the split
+            // view too; add per-column scaling once the native views land (phases 2 to 5)
+            guard !nativeChrome else { return }
+            title = "CandyWrapper"
+            subtitle = ""
+            applyWorkspaceZoom()
+            layoutTrafficLights()
+        }
+    }
+
     private var workspaceZoom: Double = 0
     func changeWorkspaceZoom(_ delta: Double) { setWorkspaceZoom(workspaceZoom + delta) }
     func setWorkspaceZoom(_ level: Double) {
@@ -18,7 +34,7 @@ final class MainWindow: NSWindow {
         applyWorkspaceZoom()
     }
     private func applyWorkspaceZoom() {
-        guard let contentView else { return }
+        guard !nativeChrome, let contentView else { return }
         let scale = pow(1.2, workspaceZoom)
         contentView.bounds.size = NSSize(width: contentView.frame.width / scale, height: contentView.frame.height / scale)
         contentView.needsLayout = true
@@ -77,7 +93,7 @@ final class MainWindow: NSWindow {
     /// Electron's hiddenInset positioning: grow the title bar container to the top bar's height,
     /// then place the buttons at x 16 with the system's spacing, vertically centered.
     func layoutTrafficLights() {
-        guard !styleMask.contains(.fullScreen),
+        guard !nativeChrome, !styleMask.contains(.fullScreen),
               let close = standardWindowButton(.closeButton),
               let mini = standardWindowButton(.miniaturizeButton),
               let zoom = standardWindowButton(.zoomButton),

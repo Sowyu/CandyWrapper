@@ -13,7 +13,7 @@ import T3Store
 final class SidebarCommands {
     private weak var sidebar: SidebarContentView?
     private weak var window: NSWindow?
-    private weak var layout: SidebarLayoutView?
+    weak var layout: MainPresentation?
     private let environments: Environments
     private let threads: ThreadController
     let ledger = ThreadUndoLedger()
@@ -52,7 +52,7 @@ final class SidebarCommands {
     /// Thread menu items this client does not have yet.
     static let unbuiltMenuItems: Set<String> = []
 
-    init(sidebar: SidebarContentView, window: NSWindow, layout: SidebarLayoutView, environments: Environments, threads: ThreadController) {
+    init(sidebar: SidebarContentView, window: NSWindow, layout: MainPresentation, environments: Environments, threads: ThreadController) {
         self.sidebar = sidebar
         self.window = window
         self.layout = layout
@@ -865,11 +865,10 @@ final class SidebarCommands {
         if utilityKind == .usage && page != .usage { usage.didHide() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
-        layout.main.addSubview(view)
+        layout.mainContent = view
         utilityPage = view
         utilityKind = page
         sidebar.isOnUtilityPage = true // clears the active row and draft while the page shows
-        layout.needsLayout = true
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
@@ -889,12 +888,11 @@ final class SidebarCommands {
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil
-        layout.main.addSubview(threads.panel)
+        layout.mainContent = threads.panel
         sidebar?.isOnUtilityPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()
         threads.focusComposerOnReturn()
-        layout.needsLayout = true
         if record { onRouteChange?() }
     }
 

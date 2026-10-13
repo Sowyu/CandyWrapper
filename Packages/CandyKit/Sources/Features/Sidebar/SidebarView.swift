@@ -113,6 +113,8 @@ public final class SidebarContentView: DSView {
     /// Traffic lights: the brand and toggle sit after `--workspace-controls-left` (90px) on windowed macOS.
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
+    /// Glass Native's toolbar takes the titlebar row (brand, toggle, stage) and the New thread button.
+    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyStage() } } }
     public var showsPullRequests = true { didSet { needsLayout = true } }
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
@@ -254,11 +256,13 @@ public final class SidebarContentView: DSView {
     private func applyStage() {
         let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
         let artwork = mode == "artwork" && stage == .nightly
-        backdrop.isHidden = !artwork
+        backdrop.isHidden = !artwork || hidesCustomChrome
         brand.onBackdrop = artwork
         trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
         environmentPill.title = stage == .dev ? "Dev" : "Nightly"
-        environmentPill.isHidden = mode != "pill" || stage == .none
+        environmentPill.isHidden = mode != "pill" || stage == .none || hidesCustomChrome
+        brand.isHidden = hidesCustomChrome
+        trigger.isHidden = hidesCustomChrome
         needsLayout = true
     }
 
@@ -724,7 +728,7 @@ public final class SidebarContentView: DSView {
         // Without projects there is nothing to scope, so scope and add project stay out (SidebarThreadHeader.tsx:127-135).
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         for b in [newThreadButton, addProjectButton, filterButton] {
-            b.isHidden = b !== newThreadButton && !hasProjects
+            b.isHidden = b === newThreadButton ? hidesCustomChrome : !hasProjects
             if b.isHidden { continue }
             b.frame = NSRect(x: right - 28, y: rowY + 2, width: 28, height: 28)
             right -= 28
