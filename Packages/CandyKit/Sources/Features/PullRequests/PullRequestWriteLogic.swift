@@ -12,16 +12,26 @@ public enum PullRequestWriteLogic {
         return a.trimmingCharacters(in: .whitespaces).lowercased() == b.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
-    /// `canEditPullRequestChangeRequest` (line 21): the host can, and the reader wrote it or may merge it.
+    /// `canEditPullRequestChangeRequest` (2994 pullRequestEditing.logic.ts:25-34): the host can, and it says
+    /// the reader may (`editChangeRequest`), or, where it doesn't say as on 2861 servers, the reader wrote it or may merge it.
     public static func canEditChangeRequest(_ d: PullRequestDetail) -> Bool {
         guard d.capabilities.edit?.changeRequest == true else { return false }
+        if let answer = d.viewerPermissions.editChangeRequest { return answer }
         return sameLogin(d.viewer, d.author?.login) || d.viewerPermissions.actions.contains("merge")
     }
 
-    /// `canEditPullRequestComment` (line 34): the reader's own issue or review comment.
-    public static func canEditComment(_ d: PullRequestDetail, author: String?, kind: String) -> Bool {
+    /// `canEditPullRequestComment` (2994 pullRequestEditing.logic.ts:41-49): an issue or review comment the
+    /// host says the reader may rewrite (`canEdit`), or, where it doesn't say, the reader's own.
+    public static func canEditComment(_ d: PullRequestDetail, author: String?, kind: String, hostAnswer: Bool? = nil) -> Bool {
         guard d.capabilities.edit?.comment == true, kind == "issue-comment" || kind == "review-comment" else { return false }
+        if let hostAnswer { return hostAnswer }
         return sameLogin(d.viewer, author)
+    }
+
+    /// `canResolvePullRequestThread` (2994 pullRequestEditing.logic.ts:56-61): the thread's own answer can
+    /// only narrow the reader's repository-wide `resolve`.
+    public static func canResolveThread(_ d: PullRequestDetail, _ thread: PullRequestReviewThread) -> Bool {
+        d.viewerPermissions.resolve && thread.canResolve != false
     }
 
     /// `saveTitle` (PullRequestDetailPanel.tsx:1033-1058): nil closes the editor without a request

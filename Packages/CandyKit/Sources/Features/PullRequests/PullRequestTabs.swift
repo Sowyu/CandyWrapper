@@ -431,7 +431,7 @@ final class CommentsItem: DSView, StackItem {
         guard let d = detail else { cards = []; return }
         cards = state.pending || state.error != nil ? [] : d.comments.map { c in
             let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
-                                   canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind),
+                                   canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
                                    canReact: d.capabilities.reactions == true, editing: editingId == c.id)
             card.onEdit = { [weak self] in self?.editingId = c.id; self?.onResize?() }
             card.onCancel = { [weak self] in self?.editingId = nil; self?.onResize?() }
