@@ -758,6 +758,15 @@ public final class ThreadPanelView: DSView {
     }
     /// "Browser" from the + menu or launcher: the app opens a server tab (`createBrowserSurface`).
     public var onAddBrowser: (@MainActor () -> Void)?
+    /// The browser profiles by id and name; with more than one the launcher's Browser row offers a chooser.
+    public var browserProfiles: [(id: String, name: String)] {
+        get { rightPanel.browserProfiles }
+        set { rightPanel.browserProfiles = newValue }
+    }
+    /// A profile from that chooser (`onAddBrowserInProfile`).
+    public var onAddBrowserInProfile: (@MainActor (String) -> Void)? {
+        didSet { rightPanel.onAddBrowserInProfile = onAddBrowserInProfile.map { f in { f($0) } } }
+    }
     /// The floating browser over the chat column; the app shows it and feeds its viewer.
     public let deviceMiniPlayer = BrowserMiniPlayerView()
     public var deviceMiniPlayerOrigin: CGPoint? { didSet { needsLayout = true } }

@@ -75,8 +75,11 @@ final class BrowserController {
         files.onBrowserTabsClosed = { [weak self] tabs in self?.closeTabs(tabs) }
         files.onReopenBrowser = { [weak self] thread, url in self?.reopen(thread: thread, url: url) }
         panel.onAddBrowser = { [weak self] in self?.createTab() }
+        panel.onAddBrowserInProfile = { [weak self] id in self?.openTab(url: nil, profileId: id) }
+        Self.showProfiles(in: panel)
         profileObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self, !keys.isDisjoint(with: ["browserProfiles", "browserDefaultProfileId"]) else { return }
+            Self.showProfiles(in: self.panel)
             for (env, supported) in self.serverBrowser where supported { self.reportProfiles(env) }
         }
         wireChrome()
@@ -629,6 +632,13 @@ final class BrowserController {
     }
 
     private func createTab() { openTab(url: nil) }
+
+    /// The launcher's profile chooser lists `resolveBrowserProfiles` (browserDefaults.ts:41-50).
+    private static func showProfiles(in panel: ThreadPanelView) {
+        panel.browserProfiles = BrowserProfiles.resolved(ClientSettingsStore.shared.current).compactMap { p in
+            p["id"]?.stringValue.flatMap { id in p["name"]?.stringValue.map { (id, $0) } }
+        }
+    }
 
     /// A new server tab at `url` (an HTML render's "Open in panel").
     func openURL(_ url: String) { openTab(url: url) }
