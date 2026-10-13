@@ -533,7 +533,8 @@ final class SidebarCommands {
 
     // MARK: Thread menu (Sidebar.tsx:4566-4840)
 
-    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, rename: (() -> Void)? = nil) {
+    /// `anchor` (in `view`) places the menu's top left there instead of at the pointer.
+    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil) {
         guard let thread = shell(id), let sidebar else { return }
         if rename == nil, sidebar.selectedThreadIds.contains(id) {
             showSelectionMenu(event: event, view: view)
@@ -564,7 +565,7 @@ final class SidebarCommands {
             if choice == "rename", let rename { rename(); return }
             self?.perform(choice, id: id, thread: thread, group: group, presets: presets)
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: view)
+        if let anchor { menu.popUp(positioning: nil, at: anchor, in: view) } else { NSMenu.popUpContextMenu(menu, with: event, for: view) }
     }
 
     private func perform(_ choice: String, id: ThreadId, thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) {
