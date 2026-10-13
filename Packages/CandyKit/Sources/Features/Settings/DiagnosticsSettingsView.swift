@@ -210,6 +210,10 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
             return
         }
         _ = env
+        // The rebuild re-adds the export form, which takes its field out of the window. Put the focus back after,
+        // so a load finishing mid-typing doesn't send the next keystrokes elsewhere. The editor keeps its selection.
+        let refocus = exportForm.flatMap { form in (window?.firstResponder as? NSView).flatMap { $0.isDescendant(of: form) ? $0 : nil } }
+        defer { if let refocus, let window, refocus.window === window, window.firstResponder !== refocus { window.makeFirstResponder(refocus) } }
         let p = processData, t = traceData, r = resourceData
         func n(_ v: JSONValue?, _ key: String) -> Double? { v?[key]?.doubleValue }
 
