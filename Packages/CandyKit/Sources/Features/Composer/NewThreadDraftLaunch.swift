@@ -30,6 +30,33 @@ public struct DraftSession: Codable, Equatable, Sendable {
     }
 }
 
+/// The draft screen's project picker choosing another project (DraftHeroHeadline.tsx:211-247 in 2994, 38571328a).
+public enum DraftProjectMove {
+    /// `composerDraftHasUserContent` (composerDraftStore.ts:427-443): typed text or attachments. With none the picker
+    /// opens the chosen project's own draft; with some the open draft moves there.
+    public static func hasUserContent(prompt: String, attachmentCount: Int) -> Bool {
+        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachmentCount > 0
+    }
+
+    /// `setLogicalProjectDraftThreadId` (composerDraftStore.ts:2724-2818) with `createDraftThreadState` (:1601-1640):
+    /// the draft maps to `key` alone; its branch, worktree and load-balanced machine are dropped, its workspace mode
+    /// and start-from-origin carry. The draft `key` held before survives under its own id only if `keep` says it
+    /// holds content.
+    public static func move(_ draft: DraftSession, to projectId: ProjectId, key: String, in sessions: [String: DraftSession],
+                            keep: (DraftSession) -> Bool) -> (sessions: [String: DraftSession], moved: DraftSession) {
+        var sessions = sessions.filter { $0.value.draftId != draft.draftId }
+        if let displaced = sessions.removeValue(forKey: key), keep(displaced) { sessions["draft:" + displaced.draftId] = displaced }
+        var moved = draft
+        moved.projectId = projectId.rawValue
+        moved.threadId = ThreadId(EnvironmentScope.localId(of: draft.threadId)).scoped(to: projectId.environmentId ?? "").rawValue
+        moved.branch = nil
+        moved.worktreePath = nil
+        moved.loadBalancedEnvironmentId = nil
+        sessions[key] = moved
+        return (sessions, moved)
+    }
+}
+
 /// A draft's first send, `orchestration.launchThread`. T3's server creates the thread with `thread.create`, which
 /// never checks for an existing thread: a launch with a used thread id rewrites that thread's shell (title,
 /// project, lineage, created time) and appends the message to its history (Orchestrator.ts:2183-2232,

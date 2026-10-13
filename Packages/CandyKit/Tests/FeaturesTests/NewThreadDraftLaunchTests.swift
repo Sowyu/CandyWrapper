@@ -14,6 +14,26 @@ struct NewThreadDraftLaunchTests {
         DraftSession(draftId: "draft-1", threadId: threadId, projectId: "env1:project-1", createdAt: Date(timeIntervalSince1970: 0))
     }
 
+    /// The draft picker (DraftHeroHeadline.tsx:211-247 in 2994): only a draft with content moves; it takes the new
+    /// project's slot, drops machine-specific picks, and an empty draft it displaces is discarded.
+    @Test func pickerMovesADraftWithContentToTheChosenProject() {
+        #expect(!DraftProjectMove.hasUserContent(prompt: "  \n", attachmentCount: 0))
+        #expect(DraftProjectMove.hasUserContent(prompt: "", attachmentCount: 1))
+        #expect(DraftProjectMove.hasUserContent(prompt: "fix it", attachmentCount: 0))
+        var open = Self.draft("env1:t1")
+        open.branch = "main"; open.worktreePath = "/w"; open.envMode = .worktree
+        let empty = DraftSession(draftId: "draft-2", threadId: "env2:t2", projectId: "env2:project-2", createdAt: Date())
+        let kept = DraftSession(draftId: "draft-3", threadId: "env2:t3", projectId: "env2:project-2", createdAt: Date())
+        let r = DraftProjectMove.move(open, to: ProjectId("env2:project-2"), key: "group-2",
+                                      in: ["group-1": open, "group-2": empty], keep: { _ in false })
+        #expect(r.sessions.keys.sorted() == ["group-2"])
+        #expect(r.moved.draftId == "draft-1" && r.moved.projectId == "env2:project-2" && r.moved.threadId == "env2:t1")
+        #expect(r.moved.branch == nil && r.moved.worktreePath == nil && r.moved.envMode == .worktree)
+        let k = DraftProjectMove.move(open, to: ProjectId("env2:project-2"), key: "group-2",
+                                      in: ["group-1": open, "group-2": kept], keep: { _ in true })
+        #expect(k.sessions["draft:draft-3"] == kept && k.sessions["group-2"]?.draftId == "draft-1")
+    }
+
     /// Two apps on one defaults domain: app B still holds the draft app A already launched as `existing`.
     /// B's send, or New thread while A's launch is in flight, starts from that stored session.
     @Test func launchNeverReusesTheStoredThreadId() {
