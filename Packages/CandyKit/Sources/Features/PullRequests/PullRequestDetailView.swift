@@ -682,6 +682,12 @@ public final class PullRequestDetailView: DSView {
             guard let self, let i, let armed = menuRef.armedIndex, i != armed else { return }
             self.inlineConfirm.disarm()
         }
+        // Escape on an armed row disarms it and leaves the menu open (the hook's capture-phase `keydown`).
+        popup?.escapeOverride = { [weak self] in
+            guard let self, menuRef.armedIndex != nil else { return false }
+            self.inlineConfirm.disarm()
+            return true
+        }
     }
 
     /// `PullRequestComposer`: Comment, or Review with a verdict, in a popover over the glass button

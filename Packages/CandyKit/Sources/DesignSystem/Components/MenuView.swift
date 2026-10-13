@@ -123,6 +123,8 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     public final var onChoose: (@MainActor (Int) -> Void)?
     /// Letter keys handled before typeahead (the right panel's + menu picks a surface by letter).
     public final var characterOverride: (@MainActor (String) -> Bool)?
+    /// Escape handled before the menu closes; true keeps it open (an armed row disarming).
+    public final var escapeOverride: (@MainActor () -> Bool)?
 
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
@@ -274,6 +276,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     // MARK: Keyboard (base-ui menu navigation: loop, skip disabled, typeahead)
 
     public func popupHandleKey(_ key: PopupKey) -> Bool {
+        if key == .escape, let escapeOverride, escapeOverride() { return true }
         switch key {
         case .down: move(1); return true
         case .up: move(-1); return true
