@@ -482,7 +482,7 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | preview.zoomOut | mod+- | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared |
 | preview.resetZoom | mod+0 | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared |
 | commandPalette.toggle | mod+k | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): fixed blank bottom rows |
-| filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): T3 highlights the first file before typing; the 45-go-to-file reference doesn't (item C) |
+| filePicker.toggle | mod+p | !terminalFocus | ✅ WP7.6a. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): opens with the first file highlighted, like T3 (item C fixed) |
 | projectSearch.toggle | mod+shift+f | !terminalFocus | ✅ WP7.6b: the palette's content mode. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | usage.open | mod+u | !terminalFocus | ✅ Usage page. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
@@ -495,10 +495,10 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 | composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
 | composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
 | composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | 🟡 resolved; sends, then opens a new thread in the same project (ComposerController.swift, ChatView.tsx:10020-10027). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
-| chat.new | mod+n | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): project chooser order fixed; the new draft doesn't carry the viewed thread's model (item A) |
-| chat.new | mod+shift+o | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): as Mod+N (item A) |
-| chat.newLocal | mod+shift+n | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): the draft doesn't carry the viewed thread's model (item A), and a reused empty draft keeps an earlier worktree choice where T3 starts from the defaults (item H) |
-| chat.newWithoutProject | mod+alt+n | !terminalFocus | 🟡 WP7.9: a draft in the scratch project of the open thread's machine, else the only machine offering one. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): scratch hero fixed; model carry differs (item A) |
+| chat.new | mod+n | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): project chooser order fixed; the new draft carries the viewed thread's model and interaction mode (item A fixed) |
+| chat.new | mod+shift+o | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): as Mod+N (item A fixed) |
+| chat.newLocal | mod+shift+n | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): the draft carries the viewed thread's model (item A fixed), and a reused empty draft starts from the configured workspace and access mode (item H fixed) |
+| chat.newWithoutProject | mod+alt+n | !terminalFocus | ✅ WP7.9: a draft in the scratch project of the open thread's machine, else the only machine offering one. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): scratch hero fixed; carries the model like Mod+N (item A fixed) |
 | chat.find | mod+f | !terminalFocus && !previewFocus | ⏳ thread find, WP7.8 |
 | modelPicker.toggle | mod+shift+m | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): focus goes back to the prompt on close |
 | composer.host | mod+shift+h | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): does nothing without a choice of machines |

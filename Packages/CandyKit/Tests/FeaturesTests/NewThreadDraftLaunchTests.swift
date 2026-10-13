@@ -59,4 +59,14 @@ struct NewThreadDraftLaunchTests {
         #expect(NewThreadDraftLaunch.restore(launch, key: "group-1", in: &taken) == nil)
         #expect(taken["group-1"]?.threadId == "env1:other")
     }
+
+    /// useHandleNewThread.ts:200-262: a reopened empty draft forgets the worktree it had, unless options were passed.
+    @Test func reopenedDraftDropsItsOldWorkspace() {
+        var session = DraftSession(draftId: "d", threadId: "env1:t", projectId: "env1:p", createdAt: Date(),
+                                   envMode: .worktree, branch: "feature", worktreePath: "/tmp/wt", startFromOrigin: true)
+        session.resetWorkspace(to: nil)
+        #expect(session.envMode == nil && session.branch == nil && session.worktreePath == nil && session.startFromOrigin == nil)
+        session.resetWorkspace(to: DraftSession(draftId: "x", threadId: "x", projectId: "x", createdAt: Date(), envMode: .local, branch: "main"))
+        #expect(session.envMode == .local && session.branch == "main" && session.worktreePath == nil && session.draftId == "d")
+    }
 }

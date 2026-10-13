@@ -173,9 +173,8 @@ public final class CommandPaletteController {
             if view.footerTrailing !== active.footerTrailing { view.footerTrailing = active.footerTrailing }
             view.startIcon = active.startIcon
             // `autoHighlight="always"`: the first row stays highlighted as results change.
-            // The reference capture (45) shows no highlight before typing.
             if let value = highlightedValue, flat.contains(where: { $0.value == value && !$0.isDisabled }) {} else {
-                highlightedValue = active.autoHighlight && !query.isEmpty ? firstEnabled?.value : nil
+                highlightedValue = active.autoHighlight ? firstEnabled?.value : nil
             }
             view.footerActionLabel = active.footerLabel.map { $0(highlightedEntry) } ?? active.footerActionLabel
             view.superview?.needsLayout = true

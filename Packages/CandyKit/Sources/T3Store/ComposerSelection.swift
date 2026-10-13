@@ -279,6 +279,41 @@ public final class ComposerSelectionStore {
         save()
     }
 
+    /// The model and interaction mode a new thread carries from the thread or draft on screen
+    /// (useHandleNewThread.ts:100-125): the composer's pick for its active instance, else the thread's.
+    public func carry(from key: String?, thread: ThreadShell?) -> (model: ModelSelection?, interaction: InteractionMode?) {
+        let draft = key.flatMap { drafts[$0] }
+        var model = thread?.modelSelection
+        if let id = draft?.activeInstance, let s = draft?.selectionByInstance[id] {
+            model = ModelSelection(instanceId: id, model: s.model, selections: s.options)
+        }
+        return (model, draft?.interactionMode ?? thread?.interactionMode)
+    }
+
+    /// A new-thread surface opens draft `key` (useHandleNewThread.ts:236-275, 390-405). An explicit model pick
+    /// stands; otherwise the project default, else the carried model, replaces the seed, and with neither the
+    /// sticky state applies (`resolveNewThreadModelSelectionOverride`, chatThreadActions.ts:47-57). The carried
+    /// interaction mode applies, and a draft that wasn't already open goes back to the default access mode.
+    public func seedNewDraft(_ key: String, carry: (model: ModelSelection?, interaction: InteractionMode?), carriedFromSameDraft: Bool,
+                             projectDefault: ModelSelection?, alreadyOpen: Bool) {
+        let before = drafts[key]
+        var draft = before ?? ComposerModelDraft()
+        if !draft.explicit {
+            draft.activeInstance = nil
+            draft.selectionByInstance = [:]
+            if let s = projectDefault ?? (carriedFromSameDraft ? nil : carry.model) {
+                draft.activeInstance = s.instanceId
+                let options = s.optionSelections
+                draft.selectionByInstance[s.instanceId] = InstanceModelSelection(model: s.model, options: options.isEmpty ? nil : options)
+            }
+        }
+        if let mode = carry.interaction { draft.interactionMode = mode }
+        if !alreadyOpen { draft.runtimeMode = nil }
+        guard draft != before else { return }
+        drafts[key] = draft
+        save()
+    }
+
     /// After a successful send the thread carries the selection; drop the draft so the thread's
     /// values show again.
     public func didSend(_ key: String) {
