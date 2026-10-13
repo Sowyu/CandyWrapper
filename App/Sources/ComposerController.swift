@@ -986,8 +986,19 @@ final class ComposerController {
             guard let key else { self.onAddProject?(); return }
             guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
             let project = group.members.first { $0.id.environmentId == currentId.environmentId } ?? group.representative
-            self.showDraft(project)
+            // `selectProject` (DraftHeroHeadline.tsx:211-247 in 2994, 38571328a): an empty draft opens the project's
+            // own draft; one with content moves there and keeps its prompt.
+            guard case .draft(let open) = self.target, self.hasUserContent(open, prompt: self.composer.text) else { return self.showDraft(project) }
+            let r = DraftProjectMove.move(open, to: project.id, key: key, in: self.sessions) {
+                self.hasUserContent($0, prompt: self.prompts[$0.draftId] ?? "")
+            }
+            self.sessions = r.sessions
+            self.showDraft(project, stored: r.moved)
         }
+    }
+
+    private func hasUserContent(_ session: DraftSession, prompt: String) -> Bool {
+        DraftProjectMove.hasUserContent(prompt: prompt, attachmentCount: draftAttachments[session.draftId]?.count ?? 0)
     }
 
     // MARK: Prompts
