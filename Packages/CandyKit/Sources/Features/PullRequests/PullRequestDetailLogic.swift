@@ -207,6 +207,41 @@ public enum PullRequestDetailLogic {
         return (d.behindBy, (d.capabilities.updateMethods ?? []).filter { allowed.contains($0) })
     }
 
+    // MARK: Comment filter (2994 PullRequestSummaryTab.tsx:369-439, 874-940)
+
+    /// Which kinds of comment the conversation shows. Kept for the app, not per pull request: wanting
+    /// bot reports and finished threads in view is a habit (`t3code:pull-request-comment-filter:v1`).
+    public struct CommentFilter: Equatable, Sendable {
+        public var bots = false
+        public var resolved = false
+        public init(bots: Bool = false, resolved: Bool = false) { self.bots = bots; self.resolved = resolved }
+
+        static let key = "pullRequests.commentFilter.v1"
+        public static func load(_ defaults: UserDefaults = .standard) -> CommentFilter {
+            let d = defaults.dictionary(forKey: key)
+            return CommentFilter(bots: d?["bots"] as? Bool ?? false, resolved: d?["resolved"] as? Bool ?? false)
+        }
+        public func save(_ defaults: UserDefaults = .standard) { defaults.set(["bots": bots, "resolved": resolved], forKey: Self.key) }
+    }
+
+    /// The comments the filter lets through, in their order, and how many it holds back. One count:
+    /// a resolved bot comment is both kinds, so per-kind counts would overlap.
+    public static func filterComments(_ d: PullRequestDetail, _ filter: CommentFilter) -> (shown: [PullRequestComment], hidden: Int) {
+        var resolvedIds = Set<String>()
+        for t in d.reviewThreads where t.isResolved { t.comments.forEach { resolvedIds.insert($0.id) } }
+        let shown = d.comments.filter { c in
+            let finished = resolvedIds.contains(c.id) || reviewOutcome(c.reviewState) == "dismissed"
+            let bot = c.author?.isBot == true || c.author?.login.hasSuffix("[bot]") == true
+            return (filter.bots || !bot) && (filter.resolved || !finished)
+        }
+        return (shown, d.comments.count - shown.count)
+    }
+
+    /// The note where the filter hides every comment.
+    public static func allCommentsHiddenNote(_ hidden: Int) -> String {
+        hidden == 1 ? "The only comment is hidden by the filter." : "All \(hidden) comments are hidden by the filter."
+    }
+
     // MARK: Reviews
 
     /// `pullRequestReviewOutcome`: approved, changes-requested, dismissed or nil.
