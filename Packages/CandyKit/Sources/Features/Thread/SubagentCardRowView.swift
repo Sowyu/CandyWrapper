@@ -297,12 +297,24 @@ final class SubagentCardHoverView: DSView, PopupContent {
         let tone = live == "failed" ? TL.c(\.destructive) : live == "completed" ? TL.c(\.success) : ThreadRelationships.isWorkActive(live) ? TL.c(\.info) : TL.c(\.mutedForeground)
         status.color = tone
         statusGlyph = IconView(name: live == "completed" ? .check : live == "failed" ? .circleX : .circleDashed, size: 12, strokeColor: tone)
-        glyph = (p?.driver.isEmpty ?? true) ? IconView(name: .bot, size: 12, strokeColor: TL.c(\.mutedForeground)) : ProviderIcon.make(driver: p?.driver ?? "", displayName: p?.driver ?? "", size: 12, color: TL.c(\.foreground, 0.6))
+        glyph = (p?.driver.isEmpty ?? true) ? IconView(name: .bot, size: 12, strokeColor: TL.c(\.mutedForeground)) : ProviderIcon.make(driver: p?.driver ?? "", displayName: p?.driver ?? "", size: 12, color: TL.c(\.mutedForeground))
+        // `grayscale opacity-60` (SubagentTooltipContent.tsx:135): Claude's #d97757 turns gray, the rest keep their color.
+        if let icon = glyph as? IconView, icon.name == .brandClaudeAI {
+            for l in icon.shapeLayers where l.fillColor != nil { l.fillColor = NSColor(srgbRed: 0.537, green: 0.537, blue: 0.537, alpha: 1).cgColor }
+        }
+        if !(p?.driver.isEmpty ?? true) { glyph?.alphaValue = 0.6 }
         for v in [title, model, status, elapsed, preview, terminal, glyph!, statusGlyph!] { addSubview(v) }
         title.color = TL.c(\.foreground); model.color = TL.c(\.foreground, 0.75)
         elapsed.color = TL.c(\.mutedForeground); preview.color = TL.c(\.mutedForeground)
     }
-    var popupSize: CGSize { CGSize(width: min(320, max(180, ceil(title.textWidth) + 26, ceil(model.textWidth) + 48, preview.value.isEmpty ? 0 : 320)), height: preview.value.isEmpty ? 88 : 110) }
+    /// Content-sized up to `max-w-80` (ThreadHoverCard.tsx:10, 26): the widest of the title, the model, the status
+    /// row (`justify-between gap-4`) and the preview, plus the card's padding.
+    var popupSize: CGSize {
+        let statusRow = 31 + ceil(status.textWidth) + 16 + ceil(elapsed.textWidth) + 13
+        let previewRow = preview.value.isEmpty ? 0 : ceil(preview.intrinsicContentSize.width) + 48
+        let width = max(ceil(title.textWidth) + 26, ceil(model.textWidth) + 48, statusRow, previewRow)
+        return CGSize(width: min(320, width), height: preview.value.isEmpty ? 88 : 110)
+    }
     override func layout() {
         super.layout(); box.layout(boxSize: bounds.size)
         title.frame = NSRect(x: 13, y: 13, width: bounds.width - 26, height: 15)
