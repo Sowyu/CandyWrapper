@@ -19,25 +19,9 @@ protocol SidebarItemsPresenting: NSView {
 
 extension SidebarListView: SidebarItemsPresenting {}
 
-/// Glass Native's list rules from T3 Mobile's iPad sidebar (docs/research/t3-mobile-ipad-design-2026-10-13.md
-/// section 2), kept apart from the views so tests can read them.
+/// Glass Native's list rules, kept apart from the views so tests can read them. The swipes are T3 Mobile's
+/// (home/thread-swipe-actions.tsx), standing in for T3 desktop's hover buttons, which a trackpad list has no hover for.
 enum NativeSidebarRules {
-    /// T3 Mobile's order (threadListV2.ts:801-840): pinned, active, then drafts, then the shelves. The web list
-    /// puts drafts first under a divider, so this moves them and drops the divider. Returns indices into `items`.
-    static func displayOrder(_ items: [SidebarItem]) -> [Int] {
-        var drafts: [Int] = [], rest: [Int] = []
-        for (i, item) in items.enumerated() {
-            switch item {
-            case .draft: drafts.append(i)
-            case .draftDivider: continue
-            default: rest.append(i)
-            }
-        }
-        guard !drafts.isEmpty else { return rest }
-        let shelf = rest.firstIndex { if case .shelfHeader = items[$0] { true } else { false } } ?? rest.count
-        return Array(rest[..<shelf]) + drafts + Array(rest[shelf...])
-    }
-
     /// A swipe's actions (home/thread-swipe-actions.tsx:46-54), first one runs on a full swipe.
     enum Swipe: Equatable {
         case settle, snooze, unsettle, wake, archive
@@ -86,40 +70,5 @@ enum NativeSidebarRules {
         let position = rows[..<min(index, rows.count)].filter { $0?.section == target && $0?.id != moving }.count
         if target == .pinned { pinned.insert(moving, at: position) } else { active.insert(moving, at: position) }
         return SidebarDropTarget(section: target, pinnedOrder: pinned, activeOrder: active)
-    }
-
-    /// The status label's SF Symbol and color (thread-list-v2-items.tsx:67-117). Woke is CandyWrapper's web status.
-    static func status(_ status: SidebarTopStatus) -> (symbol: String, color: NSColor) {
-        switch status {
-        case .approval: ("exclamationmark.shield", .systemOrange)
-        case .input: ("questionmark.bubble", .systemIndigo)
-        case .working: ("circle.dashed", .systemCyan)
-        case .waiting: ("clock", .secondaryLabelColor)
-        case .failed: ("exclamationmark.circle", .systemRed)
-        case .limited: ("exclamationmark.circle", .systemOrange)
-        case .done: ("checkmark.circle", .systemGreen)
-        case .woke: ("alarm", .systemOrange)
-        }
-    }
-
-    /// The machine kinds of `EnvironmentMachineIcon` as SF Symbols.
-    static func machineSymbol(_ kind: String) -> String {
-        switch kind {
-        case "mac-mini": "macmini"
-        case "mac-studio": "macstudio"
-        case "cloud": "cloud"
-        case "desktop": "desktopcomputer"
-        case "laptop": "laptopcomputer"
-        default: "server.rack"
-        }
-    }
-
-    static func pullRequestColor(_ tone: PullRequestStateTone?) -> NSColor {
-        switch tone {
-        case .open?: .systemGreen
-        case .closed?: .systemRed
-        case .merged?: .systemPurple
-        case .draft?, nil: .secondaryLabelColor
-        }
     }
 }

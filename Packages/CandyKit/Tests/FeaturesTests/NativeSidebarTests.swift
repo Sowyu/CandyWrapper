@@ -5,8 +5,8 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Glass Native's sidebar, phase 2 (docs/glass-native.md): T3 Mobile's order, the swipe action sets, the drop
-/// targets, and the native list's incremental updates.
+/// Glass Native's sidebar, phase 2 (docs/glass-native.md): T3 desktop's rows and order in a native table, the
+/// swipe action sets, the drop targets, and the native list's incremental updates.
 @MainActor
 struct NativeSidebarTests {
     static func row(_ id: String, _ section: SidebarSection, canSnooze: Bool = true) -> SidebarRowModel {
@@ -16,28 +16,6 @@ struct NativeSidebarTests {
                                branch: nil, hasWorktree: false, status: .ready, topStatus: nil, isGoal: false, isUnread: false, isWoke: false,
                                isPinned: section == .pinned, recedes: false, isActive: false, isRegeneratingTitle: false, timeLabel: "1m",
                                snoozeLabel: nil, workingStartedMs: nil, providerIcon: "claude", canSnooze: canSnooze)
-    }
-
-    static func draft(_ id: String) -> SidebarItem {
-        .draft(SidebarDraftRowModel(id: id, projectLabel: nil, projectTitle: nil, preview: "draft \(id)", isActive: false))
-    }
-
-    /// Pinned, then active, then drafts, then the Working, Snoozed and Settled shelves; no draft divider.
-    @Test func ordersLikeTheMobileList() {
-        let items: [SidebarItem] = [
-            Self.draft("d1"), Self.draft("d2"), .draftDivider,
-            .row(Self.row("p1", .pinned)), .row(Self.row("a1", .active)), .row(Self.row("a2", .active)),
-            .shelfHeader(.working, label: "Working (1)", expanded: false),
-            .shelfHeader(.snoozed, label: "Snoozed", expanded: true), .row(Self.row("z1", .snoozed)),
-            .shelfHeader(.settled, label: "Settled", expanded: true), .row(Self.row("s1", .settled)), .showMore(count: 25),
-        ]
-        let keys = NativeSidebarRules.displayOrder(items).map { items[$0].key }
-        #expect(keys == ["thread:p1", "thread:a1", "thread:a2", "draft:d1", "draft:d2", "shelf:working", "shelf:snoozed", "thread:z1",
-                         "shelf:settled", "thread:s1", "show-more"])
-        // Without shelves the drafts go last; without drafts nothing moves.
-        let short: [SidebarItem] = [Self.draft("d1"), .draftDivider, .row(Self.row("a1", .active))]
-        #expect(NativeSidebarRules.displayOrder(short).map { short[$0].key } == ["thread:a1", "draft:d1"])
-        #expect(NativeSidebarRules.displayOrder(Array(items[3...])) == Array(0..<(items.count - 3)))
     }
 
     /// Cards settle or snooze, settled rows un-settle, snoozed rows wake, and a server without settlement archives.
@@ -125,6 +103,8 @@ struct NativeSidebarTests {
         let row = try #require(native.rowIndex(snap.threads[1_400].id))
         let cell = try #require(native.table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeThreadCardCell)
         #expect(cell.title.stringValue == "Renamed on screen")
+        // T3 desktop's card: 82pt with the row gap, in builder order.
+        #expect(native.table.rect(ofRow: row).height == 82)
         // The cell fits the list's width, inside the source list's insets.
         let frame = cell.convert(cell.bounds, to: native)
         #expect(frame.minX >= 0 && frame.maxX <= native.bounds.width && frame.width > native.bounds.width - 40)

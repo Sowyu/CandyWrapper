@@ -883,7 +883,6 @@ final class SidebarCommands {
         layout.mainContent = view
         utilityPage = view
         utilityKind = page
-        sidebar.showsPullRequestsPage = page == .pullRequests
         sidebar.isOnUtilityPage = true // clears the active row and draft while the page shows
         if page == .pullRequests {
             pullRequestsPage.didShow()
@@ -905,7 +904,6 @@ final class SidebarCommands {
         utilityPage = nil
         utilityKind = nil
         layout.mainContent = threads.panel
-        sidebar?.showsPullRequestsPage = false
         sidebar?.isOnUtilityPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()

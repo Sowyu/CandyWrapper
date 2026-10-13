@@ -54,7 +54,6 @@ final class MainPresentationController {
         actions.rightPanel = { [weak self] in self?.threads.panel.toggleRightPanel() }
         actions.maximize = { [weak self] in self?.threads.panel.toggleMaximized() }
         actions.rightPanelOpen = { [weak self] in self?.threads.panel.rightPanelOpen == true && self?.threads.panel.window != nil }
-        actions.settings = { [weak self] in self?.sidebar?.actions.openSettings() }
         actions.threadShown = { [weak self] in self?.threads.panel.window != nil }
         presentation.actions = actions
         presentation.breadcrumb = breadcrumb
