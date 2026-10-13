@@ -506,6 +506,14 @@ public final class SidebarContentView: DSView {
         selectionAnchor = id
     }
 
+    /// Escape drops a multi-selection (_chat.tsx:98-102), but an open dialog takes it first: base-ui's dismiss
+    /// listener sits on the document, ahead of the chat layout's window listener, and closes the dialog.
+    public func escapeClearsSelection(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 53, !state.selectedThreadIds.isEmpty, !ModalHost.isPresented(in: event.window) else { return false }
+        clearSelection()
+        return true
+    }
+
     public func clearSelection() {
         guard !state.selectedThreadIds.isEmpty || selectionAnchor != nil else { return }
         state.selectedThreadIds = []
