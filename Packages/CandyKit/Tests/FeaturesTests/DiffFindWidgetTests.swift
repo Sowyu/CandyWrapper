@@ -36,3 +36,26 @@ struct DiffFindWidgetTests {
         #expect(widget.previous.isEnabled && widget.next.isEnabled)
     }
 }
+
+/// pierre's toggles are `<button>`s that Chromium focuses on press: a click on case, word or regex takes focus
+/// from the Search field. The field kept it here.
+@MainActor
+struct DiffFindToggleFocusTests {
+    @Test func toggleClickTakesFocusFromTheField() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 100), styleMask: [.borderless], backing: .buffered, defer: false)
+        let widget = DiffFindWidget()
+        widget.frame = NSRect(origin: .zero, size: widget.preferredSize)
+        window.contentView = widget
+        widget.layoutSubtreeIfNeeded()
+        window.makeFirstResponder(widget.field)
+        #expect(window.firstResponder is NSTextView || window.firstResponder === widget.field)
+        for toggle in [widget.matchCase, widget.wholeWord, widget.regex] {
+            window.makeFirstResponder(widget.field)
+            let point = toggle.convert(NSPoint(x: 10, y: 10), to: nil)
+            let press = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0,
+                                                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            toggle.mouseDown(with: press)
+            #expect(window.firstResponder === toggle)
+        }
+    }
+}

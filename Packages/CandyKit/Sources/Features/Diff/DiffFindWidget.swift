@@ -155,7 +155,11 @@ final class DiffFindButton: DSView {
     }
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
-    override func mouseDown(with event: NSEvent) {}
+    /// pierre's icons are plain `<button>`s with an `onclick` that never refocuses the field (fileTreeExpansion
+    /// `Ee`'s `w` and `T`), and Chromium focuses a button on press, so a click on a toggle, Previous or Next
+    /// takes the keyboard from the Search field.
+    override var acceptsFirstResponder: Bool { true }
+    override func mouseDown(with event: NSEvent) { if isEnabled { window?.makeFirstResponder(self) } }
     override func mouseUp(with event: NSEvent) {
         guard isEnabled, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         action?()
