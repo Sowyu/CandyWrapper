@@ -149,7 +149,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             if control.isSelected(forSegment: index) != selected { control.setSelected(selected, forSegment: index) }
         }
         if let i = segments.firstIndex(where: { $0.state == \.maximized }), i < control.segmentCount {
-            let label = states.maximized ? "Restore panel" : "Maximize panel"
+            let label = states.maximized ? "Restore panel size" : "Maximize panel"
             if control.toolTip(forSegment: i) != label {
                 let symbol = states.maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
                 control.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: label), forSegment: i)
@@ -172,16 +172,22 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
 
     private struct PanelSegment {
         let symbol: String, label: String, state: KeyPath<NativePanelStates, Bool>
+        var command: String? = nil
         let action: @MainActor (NativeToolbarActions) -> Void
+        /// The tooltip: T3's words and the command's shortcut (PanelLayoutControls.tsx:66-70, 101-104, 123-126).
+        @MainActor var tip: String { command.flatMap { ActiveKeymap.label(for: $0) }.map { "\(label) (\($0))" } ?? label }
     }
 
     /// T3's panel toggles in its order (PanelLayoutControls.tsx:61-127, Lucide square-menu, panel-bottom and
     /// panel-right with T3's words), with Maximize before the terminal while the right panel is open.
     private var panelSegments: [PanelSegment] {
         var segments = [
-            PanelSegment(symbol: "list.bullet.rectangle", label: "Toggle thread details", state: \.details) { $0.details() },
-            PanelSegment(symbol: "rectangle.bottomhalf.inset.filled", label: "Toggle terminal drawer", state: \.terminal) { $0.terminal() },
-            PanelSegment(symbol: "sidebar.right", label: "Toggle right panel", state: \.rightPanel) { $0.rightPanel() },
+            PanelSegment(symbol: "list.bullet.rectangle", label: "Toggle thread details", state: \.details,
+                         command: "threadPanel.toggle") { $0.details() },
+            PanelSegment(symbol: "rectangle.bottomhalf.inset.filled", label: "Toggle terminal drawer", state: \.terminal,
+                         command: "terminal.toggle") { $0.terminal() },
+            PanelSegment(symbol: "sidebar.right", label: "Toggle right panel", state: \.rightPanel,
+                         command: "rightPanel.toggle") { $0.rightPanel() },
         ]
         if maximizeShown {
             segments.insert(PanelSegment(symbol: "arrow.up.left.and.arrow.down.right", label: "Maximize panel", state: \.maximized) { $0.maximize() }, at: 1)
@@ -232,7 +238,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             // own color, so the tint is an opaque equivalent that keeps the glyph in the foreground color.
             control.selectedSegmentBezelColor = Themed.pick(light: NSColor(srgbRed: 0xe4 / 255, green: 0xe4 / 255, blue: 0xe7 / 255, alpha: 1),
                                                             dark: NSColor(white: 0.30, alpha: 1))
-            for (i, segment) in segments.enumerated() { control.setToolTip(segment.label, forSegment: i) }
+            for (i, segment) in segments.enumerated() { control.setToolTip(segment.tip, forSegment: i) }
             control.setAccessibilityLabel("Panels")
             let item = NativeValidatedToolbarItem(itemIdentifier: id)
             item.view = control

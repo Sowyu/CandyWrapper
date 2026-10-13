@@ -131,6 +131,19 @@ The command palette sits on Liquid Glass at its classic 18 pt radius. The overla
 
 The composer keeps the `border` hairline in dark mode, where the glass alone sat almost black on the dark detail. Checked at Glass opacity 10, 40, 80 and 100; light mode keeps no outline.
 
+### Phase 5b, the panels (2026-10-14)
+
+The thread's panels keep T3 desktop's layout and take the Visual spec's material. Screenshots are in `/tmp/cw-peek/panels-*`.
+
+- The right panel's chrome sits on the detail's frost: the tab strip, the launcher, the Files subheader and tree, the Diff header and empty state, a file tab's header and explorer, the browser's address row, control bar and empty states, a pull request's summary and the device list. Code, diffs, the terminal, pages and device screens stay solid, topped by a full-strength `border` hairline. `RightPanelView.nativeChrome` turns it on and hands it to each surface, lazy ones included, through `LazyView.set`.
+- Tabs, the launcher rows and the terminal's action cluster use SF Symbols where one means the same: `globe`, `terminal`, `doc.on.doc`, `plus.forwardslash.minus`, `link`, `iphone`, `rectangle.split.2x1`, `rectangle.split.1x2`, `plus` and `trash`. Pull request tabs keep T3's glyph in their state color, and files keep their type icons.
+- The terminal drawer keeps T3's layout, which has no header row: a full-width `aside` with `border-t`, a 6 pt resize strip and the action cluster floating 8 pt from the top right (ThreadTerminalDrawer.tsx:1532-1600 at the pinned tag). T3's 6% white edge vanishes where the frost meets the solid terminal, so native mode draws it at 12% white in dark and 10% black in light. A terminal tab in the right panel gets the same edge.
+- The thread details card. T3 keeps its inline and popover visibility apart (rightPanelStore.ts:117-120 and 200-203). Inline, beside a chat column of 1012 pt or more, it stays as the user left it and the chat lane moves aside (chatCanvasLayout.ts:46-58). As a popover over a narrower chat it starts closed, closes on an outside press or Escape and never persists (ThreadDetailsCard.tsx:137-176, rightPanelStore.ts:571-585). CandyWrapper had one stored flag for both, so a narrow window kept the popover over the first user bubble for good, in classic too. Both themes now follow T3. Only the inline state is stored, under the old key.
+- The toolbar toggles match T3's: thread details, terminal drawer and right panel (`toggleRightPanel` reopens the last surface or the launcher, ChatView.tsx:6047-6054 and rightPanelStore.ts:946-952), with Maximize while the right panel is open. Their tooltips now carry the shortcuts (PanelLayoutControls.tsx:66-70, 101-104, 123-126), and Maximize reads "Restore panel size" when on. Phase 1's Files button is gone since phase 3, so nothing opens a stale surface.
+- A file tab splits as T3 does: the explorer takes `min(22rem, 46%)` and at least 256 pt, the preview the rest, and code wraps by default (FilePreviewPanel.tsx:1480-1487, contracts settings.ts:506). In a 1,100 pt window the panel is 420 pt wide, so the preview gets about 164 pt in T3 as well.
+
+Left for later: a diff with content was not seen on screen, since the sandbox repo had no changes to show.
+
 ### Polish pass (2026-10-13)
 
 The user called the first native build "unpolished slop" and circled four regions. This pass set the "Visual spec" above and took each region to it. Screenshots are in `/tmp/cw-peek/polish-*`.

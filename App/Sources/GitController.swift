@@ -112,7 +112,7 @@ final class GitController {
             self?.renderCard()
         }
         composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
-        panel.setDetailsOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
+        panel.setDetailsInlineOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
@@ -128,6 +128,8 @@ final class GitController {
     func refresh() {
         let next = resolveTarget()
         if next != target {
+            // T3 keeps the popover's visibility per thread and starts it closed (rightPanelStore.ts:200-203).
+            if next?.threadId != target?.threadId || next?.projectId != target?.projectId { panel.closeDetailsPopover() }
             if next?.cwd != target?.cwd || next?.environmentId != target?.environmentId {
                 optimisticBranch = nil
                 success = nil
@@ -428,7 +430,8 @@ final class GitController {
     private func toggleDetails() {
         let open = !panel.detailsOpen
         panel.setDetailsOpen(open)
-        UserDefaults.standard.set(open, forKey: Self.detailsOpenKey)
+        // Only the inline card remembers its state; the popover always starts closed (rightPanelStore.ts:571-585).
+        if panel.detailsInline { UserDefaults.standard.set(open, forKey: Self.detailsOpenKey) }
         if open { refreshStatus() }
     }
 
