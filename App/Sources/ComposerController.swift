@@ -2718,8 +2718,11 @@ struct DelayedStatus {
 extension ComposerController {
     enum UploadResult { case uploaded(String), failed(String), cancelled }
 
+    /// Test builds keep their own folder, so a test stash never lands in the user's real one.
     static var supportDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CandyWrapper", isDirectory: true)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CandyWrapper", isDirectory: true)
+        guard AppDelegate.isTestBuild, let id = Bundle.main.bundleIdentifier else { return base }
+        return base.appendingPathComponent(id, isDirectory: true)
     }
     static var attachmentWorkDirectory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperAttachments", isDirectory: true)
