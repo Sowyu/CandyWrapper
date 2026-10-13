@@ -13,6 +13,9 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     /// Display row to index in `items`, and back.
     private(set) var order: [Int] = []
     private var rowOfItem: [Int] = []
+    /// Per display row: the item's key and height, kept so an update doesn't recompute them for every row.
+    private var keys: [String] = []
+    private var heights: [CGFloat] = []
     private(set) var itemsGeneration: Int?
     var nowMs: Int64 = 0
 
@@ -104,60 +107,94 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     /// or the table reloads when too much moved.
     func setItems(_ new: [SidebarItem], animated: Bool, generation: Int?) {
         itemsGeneration = generation
-        let oldItems = items, oldOrder = order
+        let oldItems = items, oldOrder = order, oldKeys = keys
         let newOrder = NativeSidebarRules.displayOrder(new)
-        let oldKeys = oldOrder.map { oldItems[$0].key }, newKeys = newOrder.map { new[$0].key }
+        let newKeys = newOrder.map { new[$0].key }
         items = new
         order = newOrder
+        keys = newKeys
         rowOfItem = Array(repeating: -1, count: new.count)
         for (row, i) in newOrder.enumerated() { rowOfItem[i] = row }
+        heights = newOrder.map { height(new[$0]) }
         if oldKeys == newKeys {
             for row in newOrder.indices where oldItems[oldOrder[row]] != new[newOrder[row]] {
                 refresh(row: row, old: oldItems[oldOrder[row]])
             }
-        } else {
-            let diff = newKeys.difference(from: oldKeys)
-            if animated, window != nil, !oldKeys.isEmpty, diff.count <= 60 {
-                var removed = IndexSet(), inserted = IndexSet()
-                for change in diff {
-                    switch change {
-                    case .remove(let offset, _, _): removed.insert(offset)
-                    case .insert(let offset, _, _): inserted.insert(offset)
-                    }
-                }
-                let oldByKey = Dictionary(oldOrder.map { (oldItems[$0].key, oldItems[$0]) }, uniquingKeysWith: { a, _ in a })
-                table.beginUpdates()
-                table.removeRows(at: removed, withAnimation: .effectFade)
-                table.insertRows(at: inserted, withAnimation: .effectFade)
-                table.endUpdates()
-                for row in newOrder.indices where !inserted.contains(row) {
-                    let item = new[newOrder[row]]
-                    if let old = oldByKey[item.key], old != item { refresh(row: row, old: old) }
-                }
-            } else {
-                closeHoverCard()
-                table.reloadData()
+        } else if !oldKeys.isEmpty, let (removed, inserted) = Self.rowChanges(from: oldKeys, to: newKeys) {
+            // Rows came or went (a shelf opening, a thread settling): only those rows change, and the rows that
+            // stay keep their cells. A handful fade; a whole shelf appears at once.
+            let fade = animated && window != nil && removed.count + inserted.count <= 60
+            let oldRow = Dictionary(oldKeys.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+            table.beginUpdates()
+            table.removeRows(at: removed, withAnimation: fade ? .effectFade : [])
+            table.insertRows(at: inserted, withAnimation: fade ? .effectFade : [])
+            table.endUpdates()
+            for row in newOrder.indices where !inserted.contains(row) {
+                guard let old = oldRow[newKeys[row]].map({ oldItems[oldOrder[$0]] }), old != new[newOrder[row]] else { continue }
+                refresh(row: row, old: old)
             }
+        } else {
+            // Too much moved (a new scope, a search): the table loads only the rows on screen.
+            closeHoverCard()
+            table.reloadData()
         }
         syncSelection()
     }
 
-    /// Single rows that kept their place, from `SidebarListCache.patch` (indices into `items`).
+    /// The rows to remove (old indices) and insert (new indices) to turn `old` into `new`, nil when a reload is
+    /// cheaper. The common head and tail are skipped first, so a shelf of 1,400 rows opening costs one pass; what is
+    /// left is diffed only while it is small.
+    static func rowChanges(from old: [String], to new: [String]) -> (removed: IndexSet, inserted: IndexSet)? {
+        var head = 0
+        while head < old.count, head < new.count, old[head] == new[head] { head += 1 }
+        var tail = 0
+        while tail < old.count - head, tail < new.count - head, old[old.count - 1 - tail] == new[new.count - 1 - tail] { tail += 1 }
+        let oldMiddle = old[head..<(old.count - tail)], newMiddle = new[head..<(new.count - tail)]
+        if oldMiddle.isEmpty || newMiddle.isEmpty {
+            return (IndexSet(oldMiddle.indices), IndexSet(newMiddle.indices))
+        }
+        guard oldMiddle.count <= 120, newMiddle.count <= 120 else { return nil }
+        var removed = IndexSet(), inserted = IndexSet()
+        for change in newMiddle.difference(from: oldMiddle) {
+            switch change {
+            case .remove(let offset, _, _): removed.insert(head + offset)
+            case .insert(let offset, _, _): inserted.insert(head + offset)
+            }
+        }
+        return removed.count + inserted.count <= 120 ? (removed, inserted) : nil
+    }
+
+    /// Single rows that kept their place, from `SidebarListCache.patch` (indices into `items`). A selection change
+    /// arrives here too, so only these rows' selection is looked at.
     func patchItems(_ patch: [(index: Int, item: SidebarItem)]) -> Bool {
         for (i, item) in patch { guard i < items.count, item.key == items[i].key else { return false } }
+        var select = IndexSet(), deselect = IndexSet()
         for (i, item) in patch where items[i] != item {
             let old = items[i]
             items[i] = item
-            if rowOfItem[i] >= 0 { refresh(row: rowOfItem[i], old: old) }
+            let row = rowOfItem[i]
+            guard row >= 0 else { continue }
+            refresh(row: row, old: old)
+            if Self.showsSelected(item) { select.insert(row) } else { deselect.insert(row) }
         }
-        syncSelection()
+        let current = table.selectedRowIndexes
+        if !select.isSubset(of: current) || !deselect.intersection(current).isEmpty {
+            syncingSelection = true
+            for row in deselect where current.contains(row) { table.deselectRow(row) }
+            table.selectRowIndexes(select, byExtendingSelection: true)
+            syncingSelection = false
+        }
         return true
     }
 
     /// One row's item changed: its cell reconfigures if it shows, and its height is noted if it moved.
     private func refresh(row: Int, old: SidebarItem) {
         guard let item = item(atRow: row) else { return }
-        if height(old) != height(item) { table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row)) }
+        let h = height(item)
+        if heights[row] != h {
+            heights[row] = h
+            table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row))
+        }
         if Self.identifier(old) != Self.identifier(item) {
             table.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
         } else if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeSidebarCell {
@@ -174,18 +211,21 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     /// The table shows the active thread and the multi-selection as its selection; the search highlight in search.
     private func syncSelection() {
         var rows = IndexSet()
-        for (row, i) in order.enumerated() {
-            switch items[i] {
-            case .row(let r) where r.isActive || r.isSelected: rows.insert(row)
-            case .draft(let d) where d.isActive: rows.insert(row)
-            case .searchResult(let r) where r.isHighlighted: rows.insert(row)
-            default: break
-            }
-        }
+        for (row, i) in order.enumerated() where Self.showsSelected(items[i]) { rows.insert(row) }
         guard table.selectedRowIndexes != rows else { return }
         syncingSelection = true
         table.selectRowIndexes(rows, byExtendingSelection: false)
         syncingSelection = false
+    }
+
+    /// The active thread, a multi-selected thread, the open draft or the search highlight.
+    static func showsSelected(_ item: SidebarItem) -> Bool {
+        switch item {
+        case .row(let r): r.isActive || r.isSelected
+        case .draft(let d): d.isActive
+        case .searchResult(let r): r.isHighlighted
+        default: false
+        }
     }
 
     var visibleRowModels: [SidebarRowModel] {
@@ -195,14 +235,11 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     }
 
     func scrollItemToVisible(_ key: String) {
-        guard let i = items.firstIndex(where: { $0.key == key }), rowOfItem[i] >= 0 else { return }
-        table.scrollRowToVisible(rowOfItem[i])
+        if let row = keys.firstIndex(of: key) { table.scrollRowToVisible(row) }
     }
 
     func rowIndex(_ id: ThreadId) -> Int? {
-        let key = "thread:\(id.rawValue)"
-        guard let i = items.firstIndex(where: { $0.key == key }), rowOfItem[i] >= 0 else { return nil }
-        return rowOfItem[i]
+        keys.firstIndex(of: "thread:\(id.rawValue)")
     }
 
     // MARK: Line 3 and title measuring
@@ -252,6 +289,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     func widthChanged() {
         let cards = IndexSet(order.indices.filter { if case .row(let r) = items[order[$0]], r.variant == .card { true } else { false } })
         guard !cards.isEmpty else { return }
+        for row in cards { heights[row] = height(items[order[row]]) }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
             table.noteHeightOfRows(withIndexesChanged: cards)
@@ -263,7 +301,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
 
     func numberOfRows(in tableView: NSTableView) -> Int { order.count }
 
-    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { item(atRow: row).map(height) ?? 1 }
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { heights.indices.contains(row) ? heights[row] : 1 }
 
     private static func identifier(_ item: SidebarItem) -> NSUserInterfaceItemIdentifier {
         switch item {

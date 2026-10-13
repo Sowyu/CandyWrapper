@@ -489,6 +489,45 @@ struct PerfBenchmarks {
         #expect(count > 0)
     }
 
+    /// The sidebar at the M10 load's 1,580 threads with the settled shelf open, in the classic list and in Glass
+    /// Native's table: a hinted one-thread rename, a minute's clock step and the settled shelf opening or closing,
+    /// each with the layout that follows.
+    @MainActor @Test func sidebarUpdates() {
+        for native in [false, true] {
+            var now = SidebarPreview.referenceNow
+            var snap = SidebarLoadTests.loadSnapshot()
+            let content = SidebarContentView()
+            content.now = { now }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = content
+            content.frame = NSRect(x: 0, y: 0, width: 320, height: 780)
+            content.hidesCustomChrome = native
+            content.state.settledExpanded = true
+            content.state.settledVisibleCount = 2_000
+            content.setSnapshot(snap, animated: false)
+            content.layoutSubtreeIfNeeded()
+            let style = native ? "native" : "classic"
+            var flip = false
+            measure("sidebar_rename_1580_\(style)", runs: 15) {
+                flip.toggle()
+                snap.threads[1_400].title = flip ? "Renamed on screen" : "Renamed again"
+                content.setSnapshot(snap, animated: false, changedThreadIds: [snap.threads[1_400].id])
+                content.layoutSubtreeIfNeeded()
+            }
+            measure("sidebar_tick_1580_\(style)", runs: 15) {
+                now = now.addingTimeInterval(60)
+                content.setSnapshot(snap, animated: false)
+                content.layoutSubtreeIfNeeded()
+            }
+            measure("sidebar_shelf_1580_\(style)", runs: 9) {
+                content.state.settledExpanded.toggle()
+                content.layoutSubtreeIfNeeded()
+            }
+            window.contentView = nil
+        }
+    }
+
     /// The side-by-side's 2,000-message thread and the huge thread, paged in to their start.
     @Test func historyPaging() async throws {
         let (frame, threadId) = try syntheticThreadFrame(copies: 300, window: 300)

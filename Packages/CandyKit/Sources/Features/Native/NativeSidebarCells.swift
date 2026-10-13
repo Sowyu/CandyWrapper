@@ -52,9 +52,17 @@ enum NativeSidebarMetrics {
         return f
     }
 
+    /// Rows ask for the same few symbols over and over, so each is made once.
+    // ponytail: never evicted; a dozen symbols in a few colors, bound it if row content ever brings arbitrary symbols
+    private static var symbols: [String: NSImage] = [:]
+
     static func symbol(_ name: String, size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor) -> NSImage? {
+        let key = "\(name) \(size) \(weight.rawValue) \(color.hash)"
+        if let image = symbols[key] { return image }
         let config = NSImage.SymbolConfiguration(pointSize: size, weight: weight).applying(.init(paletteColors: [color]))
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        symbols[key] = image
+        return image
     }
 
     /// An SF Symbol, a space, then the text, in one string: one label instead of an image view and a label.
