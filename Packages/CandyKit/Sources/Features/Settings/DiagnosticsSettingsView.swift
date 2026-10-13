@@ -91,6 +91,8 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     private var signaling: Int?
     private var loadedFor: String?
     private weak var telemetrySectionView: SettingsSectionView?
+    /// The OTLP export form, kept across rebuilds so drafts survive (one per environment).
+    private var exportForm: TelemetryExportView?
     static let windows: [(label: String, windowMs: Double, bucketMs: Double)] = [("5m", 300_000, 30_000), ("15m", 900_000, 60_000),
                                                                                   ("30m", 1_800_000, 120_000), ("1h", 3_600_000, 300_000)]
 
@@ -118,7 +120,7 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
             loads.removeAll(); pending.removeAll()
             telemetry = nil; telemetryHistory = nil
             processData = nil; traceData = nil; resourceData = nil
-            body = []; telemetrySectionView = nil
+            body = []; telemetrySectionView = nil; exportForm = nil
         } else { watchTelemetry(); loadAll() }
     }
 
@@ -320,7 +322,29 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         }
         let monitor = telemetrySection()
         telemetrySectionView = monitor
-        body = [monitor, live, resources, trace, latest, common, slowest, logs, top]
+        body = [monitor, live, resources, trace, latest, common, slowest, logs, top] + (exportSection(env).map { [$0] } ?? [])
+    }
+
+    /// `TelemetryExportSettings` (TelemetryExportSettings.tsx:44-56, 2994) under the tables. Only for servers with
+    /// `otlpEndpointCheck`, so 2861 servers keep today's page.
+    private func exportSection(_ env: SettingsScopeEnvironment) -> SettingsSectionView? {
+        guard env.capabilities.contains("otlpEndpointCheck") else { exportForm = nil; return nil }
+        let section: SettingsSectionView
+        if case .environment = context.scope.kind {
+            if exportForm?.environmentId != env.id { exportForm = TelemetryExportView(context: context, environmentId: env.id) }
+            exportForm?.update(environment: env, observability: context.configs[env.id]?.observability)
+            section = SettingsSectionView(title: "OpenTelemetry export", rows: [exportForm!])
+        } else {
+            exportForm = nil
+            let choices = context.scope.environments.filter(\.connected).map { e in
+                (e.label, { [weak self] in self?.context.selectScope?(SettingsScopeSelection(machine: e.id, project: nil)) } as @MainActor () -> Void)
+            }
+            section = SettingsSectionView(title: "OpenTelemetry export", rows: [
+                SettingsScopeNoticeView("Choose one environment to configure its telemetry exports.", choices: choices),
+            ], variant: .plain)
+        }
+        anchors["telemetry-export"] = section
+        return section
     }
 
     // ponytail: backend summary and history only; add the remaining telemetry groups with their detail views.

@@ -307,7 +307,7 @@ final class PermissionsDisclosureRow: DSView, SettingsGroupRow {
 /// tone at 60% bursts from 75% to 200% and fades in eight steps over the first 40% of every 2s
 /// (`animate-status-ping`, index.css:317-330), only while the dot is on screen.
 final class StatusDotView: DSView {
-    enum Tone { case success, warning, idle }
+    enum Tone { case success, warning, idle, destructive, off }
     var tone: Tone = .idle { didSet { needsDisplay = true } }
     var pings = false {
         didSet {
@@ -359,6 +359,8 @@ final class StatusDotView: DSView {
         case .success: (Themed.color(\.success), Themed.color(\.success, 0.6))
         case .warning: (Themed.color(\.warning), Themed.color(\.warning, 0.6))
         case .idle: (Themed.color(\.mutedForeground, 0.3), Themed.color(\.mutedForeground, 0.18))
+        case .destructive: (Themed.color(\.destructive), Themed.color(\.destructive, 0.6))
+        case .off: (Themed.color(\.mutedForeground, 0.4), Themed.color(\.mutedForeground, 0.24))
         }
         dot.backgroundColor = color.cgColor(in: self)
         halo.backgroundColor = ring.cgColor(in: self)
