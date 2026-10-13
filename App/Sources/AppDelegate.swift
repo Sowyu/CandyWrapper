@@ -209,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.sidebarCommands = commands
         commands.closeSettings = { [weak settings] in settings?.close(record: false) }
         settings.onThreadViewReturn = { [weak threads] in threads?.focusComposerOnReturn() }
+        threads.panel.header.onNewThreadInProject = { [weak threads] in threads?.newThread() }
         threads.panel.header.onThreadMenu = { [weak commands, weak threads] event, view in
             guard let id = threads?.openThreadId else { return }
             commands?.showThreadMenu(id, event: event, view: view, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })

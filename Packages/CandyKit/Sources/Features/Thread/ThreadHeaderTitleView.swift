@@ -44,6 +44,32 @@ final class ThreadHeaderTitleView: DSView {
 /// The parent thread crumb (ChatHeader.tsx:343-375 in 2994): the parent's title in `text-muted-foreground`,
 /// `hover:text-foreground transition-colors`, a tooltip with the title on top, and a click opens the parent.
 /// `collapsed` swaps the title for "..." when the whole breadcrumb doesn't fit (:130-164).
+/// The project crumb's button over the favicon and name (ChatHeader.tsx:271-289): `hover:text-foreground
+/// transition-colors`, the tooltip "New thread in <project>" on top, and a click starts a thread there.
+final class ThreadHeaderProjectButton: ControlView {
+    weak var label: LabelView?
+    private var tooltip: TooltipController?
+    var project = "" {
+        didSet {
+            guard project != oldValue else { return }
+            tooltip?.text = "New thread in \(project)"
+            setAccessibilityLabel("New thread in \(project)")
+        }
+    }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        transitions = .colors
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        tooltip = TooltipController.attach(to: self, text: "", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+    }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        label?.color = state.hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
+    }
+}
+
 final class ThreadHeaderParentCrumb: ControlView {
     let label = LabelView("", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
     let ellipsis = LabelView("...", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
