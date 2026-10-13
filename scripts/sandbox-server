@@ -4,10 +4,8 @@
 # A second server, like a newer Nightly: SANDBOX_DIR=<dir> SANDBOX_PORT=<port> scripts/sandbox-server <runtime-version>
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
-sandbox="$here/../CandyWrapper-research/sandbox"
-# Worktrees that live elsewhere, like the ones T3 makes, use the research folder in the home folder.
-[ -d "$sandbox" ] || sandbox="$HOME/CandyWrapper-research/sandbox"
-sandbox="${SANDBOX_DIR:-$sandbox}"
+# Always the research folder in the home folder, from the main checkout and from any worktree.
+sandbox="${SANDBOX_DIR:-$HOME/CandyWrapper-research/sandbox}"
 port="${SANDBOX_PORT:-47391}"
 version="${1:-$(cat "$here/T3_VERSION" | sed 's/^v//')}"
 bin="$HOME/.t3/runtime/versions/$version/t3"

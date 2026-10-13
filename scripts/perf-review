@@ -35,10 +35,8 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORK = "/tmp/cw-perf"
 BIN = WORK + "/bin"
-SANDBOX = os.path.normpath(os.path.join(REPO, "..", "CandyWrapper-research", "sandbox"))
-# A worktree under .claude/worktrees still shares the research folder next to the main checkout.
-if not os.path.isdir(SANDBOX):
-    SANDBOX = "/Users/mrm/CandyWrapper-research/sandbox"
+# Always the research folder in the home folder: resolving it next to a worktree once made a stray copy.
+SANDBOX = os.path.expanduser("~/CandyWrapper-research/sandbox")
 # The frozen workload. Bump WORKLOAD when the pristine dataset changes; runs compare only with runs
 # of the same workload. Workload 1: the sandbox home as of 2026-10-10 12:55.
 WORKLOAD = 1
