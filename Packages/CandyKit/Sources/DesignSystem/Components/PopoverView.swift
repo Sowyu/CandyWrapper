@@ -67,6 +67,16 @@ public final class PopoverView: DSView, PopupContent {
         dropShadow.update(boxSize: bounds.size)
     }
 
+    /// Glass Native: the popover's content on Liquid Glass, at the spec's 12 pt radius.
+    private var nativeGlass: NSView?
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, nativeGlass == nil, usesNativeChrome, let glass = NativePopupMaterial.attach(to: self) else { return }
+        nativeGlass = glass
+        decoration.boxStyle = NativePopupMaterial.box()
+        dropShadow.shadows = []
+    }
+
     /// Opens under `trigger`: bottom, center, 4px, scale .98 and fade in over 150ms, no exit motion.
     @discardableResult
     public func show(from trigger: NSView, placement: PopupPlacement = .popover) -> OpenPopup? {

@@ -394,6 +394,10 @@ public final class RunOnControl: ComposerContextControl {
     /// trigger, start aligned, 4 below, at least as wide as it; a "Run on" group label, then one item per machine.
     public func open() {
         guard interactive, let host = popupHost else { return }
+        if usesNativeChrome {
+            NativeMenu.popUpSelect(listItems(), from: self, selectedRow: nil, aligned: false)
+            return
+        }
         let list = MenuPopupView(items: listItems(), style: .select)
         list.minimumWidth = bounds.width
         list.hostPopup = host.open(list, trigger: self, placement: .dropdown, swallowsOutsideClick: true)

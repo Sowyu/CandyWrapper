@@ -6,7 +6,7 @@ import DesignSystem
 /// traffic lights at x 16, centered in the 52px workspace top bar; 1100x780 default,
 /// 840x620 minimum; initial background #0a0a0a dark or #ffffff light.
 @MainActor
-final class MainWindow: NSWindow {
+final class MainWindow: NSWindow, NativeChromeWindow {
     /// `MACOS_WORKSPACE_TOPBAR_HEIGHT` and the traffic light x from DesktopWindow.ts:38 and :268.
     static let topbarHeight: CGFloat = 52
     static let trafficLightX: CGFloat = 16

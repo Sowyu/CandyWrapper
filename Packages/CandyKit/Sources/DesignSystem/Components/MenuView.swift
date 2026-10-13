@@ -273,6 +273,17 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
         dropShadow.update(boxSize: bounds.size)
     }
 
+    /// Glass Native: a menu an `NSMenu` can't hold keeps its rows on Liquid Glass.
+    private var nativeGlass: NSView?
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, nativeGlass == nil, usesNativeChrome, let glass = NativePopupMaterial.attach(to: self) else { return }
+        nativeGlass = glass
+        decoration.boxStyle = NativePopupMaterial.box()
+        dropShadow.shadows = []
+        clip.layer?.cornerRadius = NativePopupMaterial.radius - 1
+    }
+
     // MARK: Keyboard (base-ui menu navigation: loop, skip disabled, typeahead)
 
     public func popupHandleKey(_ key: PopupKey) -> Bool {
@@ -492,6 +503,11 @@ public extension MenuPopupView {
     @discardableResult
     static func show(_ items: [MenuItem], from trigger: NSView, placement: PopupPlacement = .menu,
                      minimumWidth: CGFloat = 0, anchorRect: CGRect? = nil) -> MenuPopupView? {
+        // Glass Native: T3's plain menus open as an `NSMenu`, and return once it closes.
+        if trigger.usesNativeChrome, NativeMenu.canExpress(items) {
+            NativeMenu.popUp(items, from: trigger, placement: placement, minimumWidth: minimumWidth, anchorRect: anchorRect)
+            return nil
+        }
         guard let host = trigger.popupHost else { return nil }
         let menu = MenuPopupView(items: items)
         menu.minimumWidth = minimumWidth
@@ -503,6 +519,10 @@ public extension MenuPopupView {
     /// Opens a context menu at `point` in `view`'s coordinates.
     @discardableResult
     static func showContextMenu(_ items: [MenuItem], in view: NSView, at point: CGPoint) -> MenuPopupView? {
+        if view.usesNativeChrome, NativeMenu.canExpress(items) {
+            NativeMenu.popUpContextMenu(items, in: view, at: point)
+            return nil
+        }
         guard let host = view.popupHost else { return nil }
         let menu = MenuPopupView(items: items)
         let anchor = CGRect(origin: host.convert(point, from: view), size: .zero)
