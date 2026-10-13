@@ -336,6 +336,7 @@ final class PullRequestsPageController {
                                                    unavailable: summary.map { $0.configured ? nil : ($0.detail ?? "This host could not be read.") } ?? nil)
         }
         m.showProvider = hosts.count > 1
+        m.hostActions = PullRequestListLogic.hostActions(hosts)
         let viewers = answer?.result.viewers ?? [:]
         // The rows: involvement, local narrowing, search, then grouping and the sort.
         let typed = PullRequestListLogic.parseQuery(query)
