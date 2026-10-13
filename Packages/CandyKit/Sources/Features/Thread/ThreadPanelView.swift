@@ -38,6 +38,8 @@ public final class ThreadHeaderView: TopbarDragView {
     public var onThreadMenu: ((NSEvent, NSView) -> Void)?
     public var onRenameThread: ((String) -> Void)?
     public var onEmptyTitle: (() -> Void)?
+    /// The project or thread title changed, for a toolbar that shows them in place of this header.
+    public var onTitlesChange: (@MainActor () -> Void)?
     public func beginTitleRename() {
         guard onRenameThread != nil else { return }
         titleEditor.text = threadTitle
@@ -67,6 +69,7 @@ public final class ThreadHeaderView: TopbarDragView {
             if favicon.source?.title != newValue { favicon.source = nil }
             favicon.projectTitle = newValue
             needsLayout = true
+            onTitlesChange?()
         }
     }
 
@@ -105,6 +108,7 @@ public final class ThreadHeaderView: TopbarDragView {
             title.text = newValue
             titleHit.setAccessibilityLabel("Thread actions for \(newValue)")
             needsLayout = true
+            onTitlesChange?()
         }
     }
 
@@ -281,6 +285,9 @@ public final class ThreadPanelView: DSView {
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
+    /// Glass Native's toolbar shows the title and the panel buttons, so the chat column starts at the top.
+    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { needsLayout = true } } }
+    private var chatTop: CGFloat { hidesCustomChrome ? 0 : ThreadHeaderView.height }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
     /// The notice banners are built the first time they show; wire them through the lazy holders.
@@ -1152,7 +1159,7 @@ public final class ThreadPanelView: DSView {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
             // A draft without the strip (a scratch project has no checkout) centers without its 32px.
             let block = height + (showsContextStrip ? 32 : 0) + 20
-            let top = ThreadHeaderView.height + (chatHeight - ThreadHeaderView.height - block) / 2
+            let top = chatTop + (chatHeight - chatTop - block) / 2
             y = top.rounded()
             // The banner stack sits between the hero and the composer: the front notice and the peek.
             let stack = composerShown && chat > 0 ? ComposerBannerStackItem.ordered(bannerStackItems(docked: false, composerVisible: true)) : []
@@ -1318,13 +1325,13 @@ public final class ThreadPanelView: DSView {
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
-        header.isHidden = chat == 0
+        header.isHidden = chat == 0 || hidesCustomChrome
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
-        fileDropOverlay.frame = NSRect(x: 8, y: ThreadHeaderView.height + 8, width: max(0, chat - 16), height: max(0, bounds.height - ThreadHeaderView.height - 16))
+        fileDropOverlay.frame = NSRect(x: 8, y: chatTop + 8, width: max(0, chat - 16), height: max(0, bounds.height - chatTop - 16))
         // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
         // the column above it keeps at least the header.
-        let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - ThreadHeaderView.height)) : 0
+        let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - chatTop)) : 0
         let shownDrawer = !terminalSlide.isRunning ? drawer
             : ((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer
@@ -1332,7 +1339,7 @@ public final class ThreadPanelView: DSView {
         // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
         terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         terminalGhost?.frame.origin.y = chatHeight
-        timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
+        timeline.frame = NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: 0, width: panelWidth, height: bounds.height)
         panelGhost?.frame.origin.x = chat
@@ -1372,7 +1379,7 @@ public final class ThreadPanelView: DSView {
                 x -= 4
             }
         }
-        let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - ThreadHeaderView.height,
+        let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - chatTop,
             topInset: findInset) : nil
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
@@ -1380,22 +1387,22 @@ public final class ThreadPanelView: DSView {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).
             let w = max(0, min(280, chat - 24))
-            findBar.frame = NSRect(x: chat - 12 - w, y: ThreadHeaderView.height + 12, width: w, height: 36)
+            findBar.frame = NSRect(x: chat - 12 - w, y: chatTop + 12, width: w, height: 36)
             findBar.layer?.zPosition = 4
         }
         if detailsOpen {
             // The card folds to the height it has: inline, the placement's height; as a popover, the
             // canvas minus 52 (ThreadDetailsCard.tsx:62-63).
-            let canvasHeight = max(0, chatHeight - ThreadHeaderView.height)
+            let canvasHeight = max(0, chatHeight - chatTop)
             detailsCard.density = detailsCard.density(fitting: inlineDetails?.height ?? max(0, canvasHeight - 52))
             if let inlineDetails {
-                detailsCard.frame = NSRect(x: inlineDetails.minX, y: ThreadHeaderView.height + inlineDetails.minY,
+                detailsCard.frame = NSRect(x: inlineDetails.minX, y: chatTop + inlineDetails.minY,
                     width: inlineDetails.width, height: min(detailsCard.preferredHeight, inlineDetails.height))
                 detailsCard.isHidden = false
             } else {
                 // The popover sits 12px in from the right like the find bar, and under it while find is
                 // open (ThreadDetailsCard.tsx:185-193 and popover.tsx:75-83 in 2994, f92afe79c).
-                let w = min(280, chat - 24), top = ThreadHeaderView.height + 8 + findInset
+                let w = min(280, chat - 24), top = chatTop + 8 + findInset
                 detailsCard.frame = NSRect(x: chat - 12 - w, y: top,
                     width: w, height: min(detailsCard.preferredHeight, max(0, chatHeight - top - 8)))
                 detailsCard.isHidden = w <= 0
@@ -1410,11 +1417,11 @@ public final class ThreadPanelView: DSView {
         // previewMiniPlayerLayout.ts when the player is used beside long threads
         if deviceMiniPlayerShown {
             deviceMiniPlayer.frame = BrowserMiniPlayerView.frame(size: deviceMiniPlayerSize, origin: deviceMiniPlayerOrigin,
-                container: NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height)))
+                container: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)))
             deviceMiniPlayer.layer?.zPosition = 2
         }
         if miniPlayerShown {
-            let canvas = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
+            let canvas = NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop))
             let size = miniPlayerSize ?? BrowserMiniPlayerView.size(source: miniPlayerSource)
             miniPlayer.frame = BrowserMiniPlayerView.frame(size: size, origin: miniPlayerOrigin, container: canvas)
             miniPlayer.isHidden = chat < size.width + 24
@@ -1422,7 +1429,7 @@ public final class ThreadPanelView: DSView {
         }
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         // Each banner has its own `pt-3` in a `flex-col`.
-        var bannerTop = ThreadHeaderView.height + 12
+        var bannerTop = chatTop + 12
         for banner in [providerBanner, errorBanner] where !banner.isHidden {
             let w = banner.fittingWidth(max: max(0, min(768, chat - 32)))
             let h = banner.height(forWidth: w)
@@ -1436,7 +1443,7 @@ public final class ThreadPanelView: DSView {
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
-        fade.frame = CGRect(x: 0, y: ThreadHeaderView.height, width: max(0, chat - 6), height: 25)
+        fade.frame = CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
         fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || WindowGlass.isActive(for: self)
         errorBanner.layer?.zPosition = 2

@@ -11,6 +11,7 @@
 		1047A050AEFA93C1A6FF1E13 /* ProjectCloneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */; };
 		1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */; };
 		237342D7C8F16250C670D589 /* BrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */; };
+		274A3A1B5378DCDF430A574C /* NativeMainPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CD423A5F4F3C45815E791C /* NativeMainPresentation.swift */; };
 		27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */; };
 		357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */; };
 		38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */; };
@@ -94,6 +95,7 @@
 		9E2E782C1ADCF72BBE6BC1C4 /* CandyWrapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CandyWrapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
+		B0CD423A5F4F3C45815E791C /* NativeMainPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMainPresentation.swift; sourceTree = "<group>"; };
 		B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserController.swift; sourceTree = "<group>"; };
 		BBB0D6148904169BEA6E6F1B /* UpdateUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateUI.swift; sourceTree = "<group>"; };
 		C28281CD4D81D6A990C1B210 /* ThreadSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSession.swift; sourceTree = "<group>"; };
@@ -168,6 +170,7 @@
 				6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
+				B0CD423A5F4F3C45815E791C /* NativeMainPresentation.swift */,
 				71BA027EC2BDC6A0154A676E /* OpenInController.swift */,
 				FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
@@ -349,6 +352,7 @@
 				46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */,
 				1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
+				274A3A1B5378DCDF430A574C /* NativeMainPresentation.swift in Sources */,
 				D97D87BA1FC8BBAB38BFE647 /* OpenInController.swift in Sources */,
 				9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
