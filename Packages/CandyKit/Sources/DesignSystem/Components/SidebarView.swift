@@ -174,15 +174,7 @@ public final class SidebarLayoutView: DSView {
     /// Adds the frost under the surfaces while the Glass theme shows, and drops it otherwise. The theme runtime
     /// calls `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
     private func updateGlass() {
-        let on = window != nil && WindowGlass.isActive(for: self)
-        if on, glassBackdrop == nil {
-            let backdrop = WindowGlassBackdropView(frame: bounds)
-            addSubview(backdrop, positioned: .below, relativeTo: nil)
-            glassBackdrop = backdrop
-        } else if !on, let backdrop = glassBackdrop {
-            backdrop.removeFromSuperview()
-            glassBackdrop = nil
-        }
+        glassBackdrop = WindowGlass.syncBackdrop(glassBackdrop, in: self)
     }
 
     /// `sidebar.toggle` (Mod+B by default; the app's shortcut dispatcher calls it).

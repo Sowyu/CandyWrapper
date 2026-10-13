@@ -79,7 +79,8 @@ public enum ThemeRuntime {
         input = next
         var changed = false
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
-            || next.glassLight != old.glassLight || next.glassDark != old.glassDark {
+            || next.glassLight != old.glassLight || next.glassDark != old.glassDark
+            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -111,7 +112,7 @@ public enum ThemeRuntime {
     }
 
     /// Redraws the box decorations in a view tree, for an appearance change AppKit doesn't pass on to them.
-    static func redrawDecorations(in view: NSView) {
+    public static func redrawDecorations(in view: NSView) {
         view.layer.map(redrawDecorations)
         for sub in view.subviews { redrawDecorations(in: sub) }
     }
@@ -143,7 +144,7 @@ public enum ThemeRuntime {
         }
         func glass(_ palette: Palette, dark: Bool) -> Palette {
             guard dark ? input.glassDark : input.glassLight else { return palette }
-            return WindowGlass.readableMuted(palette, dark: dark)
+            return WindowGlass.readableMuted(palette, dark: dark, opacity: Double(input.glassOpacity) / 100)
         }
         return ThemePalettes(light: glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false),
                              dark: glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true),

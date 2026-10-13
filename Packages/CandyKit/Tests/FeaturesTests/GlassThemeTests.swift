@@ -9,7 +9,7 @@ import T3Protocol
 struct GlassThemeTests {
     @Test func glassKeepsTheStockPaletteAndFrostsEachSideItOwns() {
         let glass = ThemeDefinition.glass
-        #expect(ThemeDefinition.pickerBuiltIns.last == glass)
+        #expect(ThemeDefinition.pickerBuiltIns.last { !$0.isGlassNative } == glass)
         #expect(ThemePalette.reservedIds.contains(glass.id))
         #expect(ThemeCardDefinition(glass).previews == ThemeCardDefinition.standard.previews)
 
