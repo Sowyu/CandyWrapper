@@ -175,6 +175,10 @@ public final class TimelineView: DSView {
     }
     /// True while the viewport is at the end; new content then keeps it there.
     public private(set) var followsEnd = true
+    /// The row whose disclosure just toggled. Until the rows update, it keeps its place on screen instead of
+    /// the end staying pinned, so an expanded group opens downward (`suspendEndScrollMaintenanceForDisclosure`,
+    /// MessagesTimeline.tsx:719-752).
+    private var disclosureRowId: String?
     /// The user scrolled within `nearTop` of the first row. Called once per first row, so the
     /// app can load an older page and prepend it; the visible rows stay where they are.
     public var onNearTop: (@MainActor () -> Void)?
@@ -191,6 +195,11 @@ public final class TimelineView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        context.onDisclosure = { [weak self] id in
+            self?.disclosureRowId = id
+            // A toggle that changes no rows must not hold the next, unrelated update.
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.disclosureRowId = nil } }
+        }
         scrollView.drawsBackground = false
         scrollView.contentView.drawsBackground = false
         // LegendList is a plain overflow scroller with `scrollbar-gutter-both` (MessagesTimeline.tsx:1620): the bar
@@ -363,6 +372,7 @@ public final class TimelineView: DSView {
         }
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
+        disclosureRowId = nil
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
         if new.isEmpty != old.isEmpty { layoutEmptyPlaceholder() }
     }
@@ -495,16 +505,22 @@ public final class TimelineView: DSView {
 
     // MARK: Anchoring
 
-    private struct Anchor { var id: String; var offset: CGFloat }
+    private struct Anchor { var id: String; var offset: CGFloat; var disclosure = false }
 
     private func captureAnchor() -> Anchor? {
+        if let id = disclosureRowId, let i = indexById[id], i < tops.count, tops.count == items.count {
+            return Anchor(id: id, offset: tops[i] - viewport.minY, disclosure: true)
+        }
         guard !followsEnd, !items.isEmpty, tops.count == items.count else { return nil }
         let i = min(lowerBound(viewport.minY), items.count - 1)
         return Anchor(id: items[i].id, offset: tops[i] - viewport.minY)
     }
 
     private func restore(_ anchor: Anchor?) {
-        if followsEnd {
+        if let anchor, anchor.disclosure, let i = indexById[anchor.id], i < tops.count {
+            setScroll(tops[i] - anchor.offset)
+            followsEnd = maxScroll - viewport.minY <= 1
+        } else if followsEnd {
             setScroll(maxScroll)
         } else if let anchor, let i = indexById[anchor.id] {
             setScroll(tops[i] - anchor.offset)
@@ -586,8 +602,22 @@ public final class TimelineView: DSView {
         minimap.frame = NSRect(x: 12, y: (bounds.height - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
         updateMinimapPosition()
     }
+    /// The first turn on screen is the current one, else the last above it; every turn on screen lights its strip
+    /// (`resolveTimelineMinimapCurrentIndex`, MessagesTimeline.logic.ts:383-409).
     private func updateMinimapPosition() {
-        minimap.currentIndex = minimap.items.lastIndex { $0.rowIndex < tops.count && tops[$0.rowIndex] <= viewport.minY + 80 }
+        let top = viewport.minY, bottom = viewport.maxY
+        var current: Int?, preceding: Int?, inView = IndexSet()
+        for (index, item) in minimap.items.enumerated() where item.rowIndex < tops.count && item.rowIndex < heights.count {
+            let rowTop = tops[item.rowIndex]
+            if rowTop < bottom, rowTop + max(1, heights[item.rowIndex]) > top {
+                inView.insert(index)
+                if current == nil { current = index }
+            } else if rowTop <= top {
+                preceding = index
+            }
+        }
+        minimap.currentIndex = current ?? preceding
+        minimap.inView = inView
     }
 
     /// Lays out rows in the visible rect plus overscan. Rows measured for the first time can change

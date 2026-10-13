@@ -67,6 +67,21 @@ struct ThreadTimelineTests {
         #expect(!t.isPillVisible)
     }
 
+    /// At the end, a toggled disclosure keeps its row where it was and the rows below it grow downward (T3's
+    /// `suspendEndScrollMaintenanceForDisclosure`); without a toggle, growth stays pinned to the end.
+    @Test func aToggledRowStaysPutInsteadOfFollowingTheEnd() throws {
+        let items = try Self.manyItems()
+        let t = Self.timeline(Array(items.prefix(80)))
+        #expect(t.followsEnd)
+        let row = try #require(t.items.last { t.view(forRow: $0.id) != nil && $0.id != t.items.last?.id })
+        let before = t.view(forRow: row.id)!.frame.minY - Self.viewport(t).minY
+        t.context.disclosure(row.id)
+        t.setItems(Array(items.prefix(80)) + Array(items[80..<100]))
+        let after = try #require(t.view(forRow: row.id)).frame.minY - Self.viewport(t).minY
+        #expect(abs(before - after) <= 0.5)
+        #expect(!t.followsEnd)
+    }
+
     @Test func prependingKeepsTheVisibleRowInPlace() throws {
         let items = try Self.manyItems()
         let t = Self.timeline(Array(items.suffix(150)))

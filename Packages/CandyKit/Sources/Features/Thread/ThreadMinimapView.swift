@@ -43,7 +43,10 @@ public final class ThreadMinimapView: DSView {
         updatingPreview = false
         if hovered == index { showPreview() }
     }
-    public var currentIndex: Int? { didSet { if currentIndex != oldValue { needsDisplay = true; updateNavigation() } } }
+    /// The turn at the reader's position, for the previous and next buttons (`resolveTimelineMinimapCurrentIndex`).
+    public var currentIndex: Int? { didSet { if currentIndex != oldValue { updateNavigation() } } }
+    /// Strips whose turn is on screen draw bright (`data-in-view`, MessagesTimeline.tsx:1219-1234, 1890-1902).
+    public var inView = IndexSet() { didSet { if inView != oldValue { needsDisplay = true } } }
     public var persistentGutter = true { didSet { if persistentGutter != oldValue { needsDisplay = true; alphaValue = persistentGutter || hovered != nil ? 1 : 0 } } }
     /// Without a persistent gutter the strip fades in while hovered (`opacity-0 transition-opacity duration-150
     /// hover:opacity-100`, MessagesTimeline.tsx:1788-1792).
@@ -154,9 +157,15 @@ public final class ThreadMinimapView: DSView {
             let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8
             let rect = CGRect(x: 0, y: CGFloat(i) / last * span, width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
-            ctx.setFillColor(i == currentIndex ? current : distance == 0 ? near : base)
-            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil))
+            let path = CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil)
+            ctx.setFillColor(distance == 0 ? near : base)
+            ctx.addPath(path)
             ctx.fillPath()
+            if inView.contains(i) {
+                ctx.setFillColor(current)
+                ctx.addPath(path)
+                ctx.fillPath()
+            }
         }
     }
 }

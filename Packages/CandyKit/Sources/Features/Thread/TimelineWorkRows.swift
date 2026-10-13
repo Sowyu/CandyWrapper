@@ -105,6 +105,9 @@ final class WorkLineView: DSView {
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
     /// The chevron cell is `invisible` (still 16px) when there is nothing to expand.
     var expandable = false { didSet { chevron.isHidden = !expandable } }
+    /// The trailing slot holds only the timestamp, flush right, with no chevron cell (a failed error's row,
+    /// MessagesTimeline.tsx:5444-5450).
+    var timeOnlyTrailing = false { didSet { if timeOnlyTrailing != oldValue { needsLayout = true } } }
 
     /// `transition-transform duration-200`, `rotate-90` when open (MessagesTimeline.tsx:5713-5716).
     private func updateChevron(animated: Bool) {
@@ -205,7 +208,7 @@ final class WorkLineView: DSView {
         let h: CGFloat = 24
         iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
         // Trailing slot, right to left: chevron cell (16), timestamp.
-        let chevronX = bounds.width - 16
+        let chevronX = timeOnlyTrailing ? bounds.width + 3 : bounds.width - 16
         chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
         let timeWidth = showsTime ? ceil(time.textWidth) : 0
         time.frame = NSRect(x: chevronX - 6 - timeWidth, y: 4, width: timeWidth, height: 16)
@@ -287,6 +290,16 @@ final class WorkRowView: WorkRowBase {
         return (warning ? nil : item["failure"]?["message"]?.stringValue ?? "", item.runId)
     }
 
+    /// A failed error's heading is its own label ("Provider error"), not the display label, which is the message
+    /// shown below it; a usage limit reads "Usage limit reached." with the reset time (MessagesTimeline.tsx:5414-5420).
+    static func failedErrorLabel(_ e: WorkLogEntry) -> String? {
+        guard let item = e.projectedItem?.item, item.type == .error, item.status == .failed else { return nil }
+        guard item["failure"]?["class"]?.stringValue == "usage_limit" else { return e.label }
+        let reset = item["failure"]?["resetAt"]?.stringValue
+            .map { UsageTime.upcoming($0, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) }.flatMap { $0.isEmpty ? nil : $0 }
+        return "Usage limit reached." + (reset.map { " Retry after \($0)." } ?? "")
+    }
+
     /// The row opens: an inspector to show, or a thought with text (`canExpandProjectedItem`, :5552-5561).
     private func expandable(_ i: Int) -> Bool {
         let e = entries[i].entry
@@ -344,7 +357,7 @@ final class WorkRowView: WorkRowBase {
             let thought = e.itemType == .reasoning
             // An open thought's heading steps back to Thinking or Thought; the trace below holds the text (:5491-5496).
             let label = thought && open ? (e.toolLifecycleStatus == .inProgress ? "Thinking" : "Thought")
-                : (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
+                : Self.failedErrorLabel(e) ?? (!isGroup ? displayLabel : nil) ?? WorkLog.displayLabel(e, workspaceRoot: root)
             let failed = WorkLog.displayIndicatesFailure(e)
             let toolLike = WorkLog.isToolLike(e)
             let severe = failed && (e.itemType == .error || !toolLike)
@@ -354,6 +367,7 @@ final class WorkRowView: WorkRowBase {
             let l = line(i)
             l.configure(icon: icon, text: label, style: style, failed: failed, time: e.createdAt, expanded: open, now: context.now(), animated: sameRow)
             l.expandable = expandable(i)
+            l.timeOnlyTrailing = Self.failedError(e) != nil
             let model = context.model
             let created = e.projectedItem?.item.type == .threadCreated ? e.projectedItem?.string("targetThreadId").map { ThreadId($0) } : nil
             l.setTrailingAction(created == nil ? nil : "Open chat", created.map { id in { model?.onOpenThread?(id) } })
@@ -489,6 +503,7 @@ final class WorkRowView: WorkRowBase {
         guard !traceOnly, let i = lines.prefix(entries.count).firstIndex(where: { !$0.isHidden && $0.frame.contains(p) }), expandable(i) else {
             return super.mouseUp(with: event)
         }
+        context.disclosure(item?.id)
         context.model?.toggleEntry(entries[i].entry.id)
     }
 
@@ -605,6 +620,7 @@ final class WorkToggleRowView: WorkRowBase {
         super.init(frame: frameRect)
         onClick = { [weak self] in
             guard let self, case .workToggle(let t)? = self.item?.row.kind else { return }
+            self.context.disclosure(self.item?.id)
             self.context.model?.toggleGroup(t.groupId)
         }
     }
@@ -644,6 +660,7 @@ final class WorkLiveRowView: WorkRowBase {
         addSubview(thought)
         onClick = { [weak self] in
             guard let self, case .workLive(_, _, let groupId, _, _, _)? = self.item?.row.kind else { return }
+            self.context.disclosure(self.item?.id)
             self.context.model?.toggleGroup(groupId)
         }
     }
@@ -689,6 +706,7 @@ final class ThinkingRowView: WorkRowBase {
         super.init(frame: frameRect)
         onClick = { [weak self] in
             guard let self, case .thinking(let groupId?, _, _)? = self.item?.row.kind else { return }
+            self.context.disclosure(self.item?.id)
             self.context.model?.toggleGroup(groupId)
         }
     }
