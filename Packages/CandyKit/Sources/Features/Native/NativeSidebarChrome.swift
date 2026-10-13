@@ -19,6 +19,10 @@ enum NativeSpec {
     /// Hover, pressed and selected fills share one corner radius; text fields and buttons take the small one.
     static let radiusSmall: CGFloat = 6
     static let radiusRow: CGFloat = 8
+    /// The brand's left edge in the sidebar, which starts at the window's edge: the toolbar's sidebar toggle glyph
+    /// ends at 125 on macOS 26 and 27, and the brand follows it as classic's follows its trigger.
+    // ponytail: measured, not read from the toolbar, so full screen leaves a wider gap; follow the toggle if that shows
+    static let brandLeft: CGFloat = 140
 
     /// T3's own Lucide glyph as a template image, for an icon SF Symbols has no legible match for at this size
     /// (git-pull-request-arrow). Stroked at Lucide's 2 units, round caps and joins.

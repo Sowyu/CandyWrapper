@@ -124,7 +124,7 @@ public final class SidebarContentView: DSView {
     /// Traffic lights: the brand and toggle sit after `--workspace-controls-left` (90px) on windowed macOS.
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
-    /// Glass Native's toolbar takes the titlebar row (brand, toggle, stage) and the New thread button.
+    /// Glass Native's toolbar takes the titlebar row's toggle and stage; the brand stays beside the toggle.
     /// It also swaps the list for the native one (docs/glass-native.md phase 2).
     public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyStage(); applyPresentation() } } }
     /// Glass Native's list and its search and picker, while the native presentation shows the sidebar.
@@ -269,11 +269,11 @@ public final class SidebarContentView: DSView {
         let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
         let artwork = mode == "artwork" && stage == .nightly
         backdrop.isHidden = !artwork || hidesCustomChrome
-        brand.onBackdrop = artwork
+        // Glass Native keeps the brand, beside the toolbar's sidebar toggle, on the system sidebar without the art.
+        brand.onBackdrop = artwork && !hidesCustomChrome
         trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
         environmentPill.title = stage == .dev ? "Dev" : "Nightly"
         environmentPill.isHidden = mode != "pill" || stage == .none || hidesCustomChrome
-        brand.isHidden = hidesCustomChrome
         trigger.isHidden = hidesCustomChrome
         needsLayout = true
     }
