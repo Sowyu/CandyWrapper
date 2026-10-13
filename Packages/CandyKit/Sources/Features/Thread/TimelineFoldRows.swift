@@ -23,6 +23,7 @@ final class TurnFoldRowView: TimelineRowView {
         setAccessibilityRole(.button)
         onClick = { [weak self] in
             guard let self, case .turnFold(let runId, _, _)? = self.item?.row.kind else { return }
+            self.context.disclosure(self.item?.id)
             self.context.model?.toggleRun(runId)
         }
     }
@@ -81,6 +82,7 @@ final class AttemptFoldRowView: TimelineRowView {
         setAccessibilityRole(.button)
         onClick = { [weak self] in
             guard let self, case .attemptFold(_, let attemptId, _, _)? = self.item?.row.kind else { return }
+            self.context.disclosure(self.item?.id)
             self.context.model?.toggleAttempt(attemptId)
         }
     }

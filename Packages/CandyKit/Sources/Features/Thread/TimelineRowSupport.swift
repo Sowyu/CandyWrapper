@@ -95,6 +95,9 @@ enum TL {
 @MainActor
 final class TimelineContext {
     weak var model: ThreadViewModel?
+    /// A row is about to toggle a disclosure (a turn fold, a work group or an entry): the timeline holds it in place.
+    var onDisclosure: ((String) -> Void)?
+    func disclosure(_ rowId: String?) { if let rowId { onDisclosure?(rowId) } }
     var workspaceRoot: String? { model?.workspaceRoot }
     /// T3's `markdownCwd` (ChatView.tsx `gitCwd`): the thread's worktree, else the project root. File chips resolve against it.
     var markdownCwd: String? { model?.projection?.thread.worktreePath ?? model?.workspaceRoot }

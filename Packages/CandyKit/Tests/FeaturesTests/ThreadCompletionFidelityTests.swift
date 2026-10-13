@@ -25,6 +25,7 @@ struct ThreadCompletionFidelityTests {
                     let map = ThreadMinimapView(frame: NSRect(x: 8, y: 8, width: 40, height: 42))
                     map.items = (0..<6).map { ThreadMinimapItem(id: String($0), rowIndex: $0, userText: "Message") }
                     map.currentIndex = n["current"] as? Int
+                    map.inView = (n["current"] as? Int).map { IndexSet(integer: $0) } ?? []
                     view = map
                 case "tasks":
                     let tasks = ThreadTasksView()
