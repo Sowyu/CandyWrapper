@@ -103,6 +103,10 @@ public final class PullRequestSummaryView: DSView {
     private let checkRows = ChecksListItem()
     private let commentList = CommentsItem()
     private let orderButton = ButtonView("Newest first", icon: .arrowDownUp, variant: .ghostMuted, size: .xs)
+    /// "Filter", or "N hidden" (2994 PullRequestSummaryTab.tsx:874-904).
+    private let filterButton = ButtonView("Filter", icon: .listFilter, variant: .ghostMuted, size: .xs).menuTrigger()
+    private let commentTools = HStackAccessory()
+    private var commentFilter = PullRequestDetailLogic.CommentFilter.load()
     private var newestFirst = true
     private var detail: PullRequestDetail?
     var onOpenURL: ((String) -> Void)?
@@ -129,12 +133,17 @@ public final class PullRequestSummaryView: DSView {
         descriptionSection.body = markdown
         checks.body = checkRows
         comments.body = commentList
-        comments.accessory = orderButton
+        commentTools.views = [filterButton, orderButton]
+        comments.accessory = commentTools
+        filterButton.iconSize = 12
+        filterButton.setAccessibilityLabel("Filter comments")
+        filterButton.action = { [weak self] in self?.showFilterMenu() }
         orderButton.iconSize = 12
         orderButton.action = { [weak self] in
             guard let self else { return }
             self.newestFirst.toggle()
             self.orderButton.title = self.newestFirst ? "Newest first" : "Oldest first"
+            self.commentTools.invalidateIntrinsicContentSize()
             self.commentList.newestFirst = self.newestFirst
             self.stack.reload()
         }
@@ -150,8 +159,40 @@ public final class PullRequestSummaryView: DSView {
         markdown.set(d)
         checkRows.checks = d.checks
         comments.title = "Comments (\(d.commentCount))"
-        commentList.set(d, pending: activityPending, error: activityError, nowMs: nowMs)
+        commentList.set(d, pending: activityPending, error: activityError, nowMs: nowMs, filter: commentFilter)
+        updateFilterButton()
         stack.reload()
+    }
+
+    private func updateFilterButton() {
+        let hidden = detail.map { PullRequestDetailLogic.filterComments($0, commentFilter).hidden } ?? 0
+        filterButton.title = hidden > 0 ? "\(hidden) hidden" : "Filter"
+        commentTools.invalidateIntrinsicContentSize()
+        comments.needsLayout = true
+    }
+
+    /// `Menu` with a "Show" group of two checkboxes that keep the menu open (`closeOnClick={false}`).
+    private func showFilterMenu() {
+        let apply: (PullRequestDetailLogic.CommentFilter) -> Void = { [weak self] f in
+            guard let self else { return }
+            self.commentFilter = f
+            f.save()
+            if let d = self.detail { self.commentList.refilter(d, filter: f) }
+            self.updateFilterButton()
+            self.stack.reload()
+        }
+        let bots = MenuItem.checkbox("Bot comments", checked: commentFilter.bots) { [weak self] on in
+            guard var f = self?.commentFilter else { return }
+            f.bots = on
+            apply(f)
+        }
+        let resolved = MenuItem.checkbox("Resolved or dismissed", checked: commentFilter.resolved) { [weak self] on in
+            guard var f = self?.commentFilter else { return }
+            f.resolved = on
+            apply(f)
+        }
+        MenuPopupView.show([.label("Show"), bots, resolved], from: filterButton,
+                           placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }
 
     public override func layout() { super.layout(); stack.frame = bounds }
@@ -394,11 +435,14 @@ final class ChecksListItem: DSView, StackItem {
 }
 
 /// The Comments section: the truncation notice, "No comments yet.", or the cards.
-// ponytail: every comment renders at once; T3 pages them by 20 and folds bot and resolved ones into
-// groups. Add the paging when a long review thread is slow to open
+// ponytail: every comment renders at once and a resolved one shown by the filter gets a full card; T3
+// pages them by 20 and collapses resolved ones (`CollapsedComment`). Add both when a long review is slow
+// to open or a side-by-side check flags the cards
 final class CommentsItem: DSView, StackItem {
     private var cards: [CommentCard] = []
     private var detail: PullRequestDetail?
+    /// The comments the filter lets through.
+    private var comments: [PullRequestComment] = []
     private var nowMs: Int64 = 0
     var editingId: String? { didSet { if editingId != oldValue { rebuildCards() } } }
     var saving = false { didSet { cards.forEach { $0.editor?.saving = saving } } }
@@ -416,20 +460,28 @@ final class CommentsItem: DSView, StackItem {
         addSubview(note)
     }
 
-    func set(_ d: PullRequestDetail, pending: Bool, error: String?, nowMs: Int64) {
+    func set(_ d: PullRequestDetail, pending: Bool, error: String?, nowMs: Int64, filter: PullRequestDetailLogic.CommentFilter = .init()) {
         state = (pending, error)
-        detail = d
         self.nowMs = nowMs
-        if editingId != nil, !d.comments.contains(where: { $0.id == editingId }) { editingId = nil }
+        refilter(d, filter: filter)
+    }
+
+    /// The filter changed, or the detail did: rebuild the cards from the comments it lets through.
+    func refilter(_ d: PullRequestDetail, filter: PullRequestDetailLogic.CommentFilter) {
+        detail = d
+        let (shown, hidden) = PullRequestDetailLogic.filterComments(d, filter)
+        comments = shown
+        if editingId != nil, !shown.contains(where: { $0.id == editingId }) { editingId = nil }
         rebuildCards()
-        note.text = pending ? "Loading comments…" : error ?? (d.comments.isEmpty ? "No comments yet." : "")
+        note.text = state.pending ? "Loading comments…" : state.error ?? (d.comments.isEmpty ? "No comments yet."
+            : shown.isEmpty ? PullRequestDetailLogic.allCommentsHiddenNote(hidden) : "")
         needsLayout = true
     }
 
     private func rebuildCards() {
         cards.forEach { $0.removeFromSuperview() }
         guard let d = detail else { cards = []; return }
-        cards = state.pending || state.error != nil ? [] : d.comments.map { c in
+        cards = state.pending || state.error != nil ? [] : comments.map { c in
             let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
                                    canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
                                    canReact: d.capabilities.reactions == true, editing: editingId == c.id)
@@ -933,5 +985,24 @@ final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
         view.frame = NSRect(x: 0, y: 0, width: bounds.width - ew, height: bounds.height)
         editButton.frame = NSRect(x: bounds.width - 24, y: 0, width: 24, height: 24)
         editor?.frame = bounds
+    }
+}
+
+/// Controls side by side with `gap-1`, sized to fit, for a section header's accessory slot.
+final class HStackAccessory: DSView {
+    var views: [NSView] = [] { didSet { oldValue.forEach { $0.removeFromSuperview() }; views.forEach(addSubview); invalidateIntrinsicContentSize() } }
+    override var intrinsicContentSize: NSSize {
+        let sizes = views.map(\.intrinsicContentSize)
+        return NSSize(width: sizes.map { ceil($0.width) }.reduce(0, +) + CGFloat(max(0, sizes.count - 1)) * 4,
+                      height: sizes.map(\.height).max() ?? 0)
+    }
+    override func layout() {
+        super.layout()
+        var x: CGFloat = 0
+        for v in views {
+            let s = v.intrinsicContentSize
+            v.frame = NSRect(x: x, y: (bounds.height - s.height) / 2, width: ceil(s.width), height: s.height)
+            x += ceil(s.width) + 4
+        }
     }
 }
