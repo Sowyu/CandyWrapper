@@ -955,7 +955,7 @@ public final class ThreadPanelView: DSView {
             setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil)
             header.projectIcon = projectIconForTitle?(projectTitle)
             header.threadTitle = "New thread"
-            for view in header.subviews { view.isHidden = false }
+            header.setThreadVisible(true)
             header.cancelTitleRename()
         }
         updateComposerShown()
