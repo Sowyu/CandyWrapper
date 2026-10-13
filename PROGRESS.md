@@ -4,17 +4,14 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## State on 2026-10-13
 
-- Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`); its side-by-side half is open.
+- Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`). Its side-by-side half was dropped on 2026-10-13 after keyboard shortcuts and part of the thread view.
 - The latest release is v0.1.15. The user runs it daily on their MacBook and reports what they see.
 - The app works with T3 servers 0.0.46-nightly.20261009.2861 (pinned in `T3_VERSION`) and 20261011.2994. Its UI is caught up with 2861, plus the 2994 features listed in `docs/research/nightly-diff-2994.md` part 2 items 1, 2, 5, 6, 8 and 9 (done 2026-10-13).
 - A scheduled T3 task runs `docs/nightly-catch-up.md` around 2am Melbourne time on Monday and Thursday mornings, in a new thread each time.
 
 ## Open tasks
 
-Do next:
-
-1. Exercise every row of `docs/parity-checklist.md` next to T3 Code Nightly, in both themes, on the same sandbox data. A row turns ✅ only when both apps match. (taken 2026-10-13: Thread view, Settings, Command palette with Git and pull requests, Sidebar. Keyboard shortcuts checked, 43 ✅ and 18 🟡, notes in `docs/research/sbs-keyboard-2026-10-13.md`) The method is in `docs/research/m10-side-by-side-2026-10-12.md`. This is by far the biggest task, so take one checklist section per chat and mark rows as you go.
-
+None. The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
 The code also marks 267 known shortcuts with `// ponytail:`, each naming when to fix it (`grep -rnE '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
