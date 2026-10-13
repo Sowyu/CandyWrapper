@@ -792,7 +792,7 @@ public final class MarkdownView: DSView {
         for (box, origin, offset) in selectionBoxes {
             let overlap = NSIntersectionRange(range, NSRange(location: offset, length: (box.text as NSString).length))
             guard overlap.length > 0 else { continue }
-            if let span = box.spans(NSRange(location: overlap.location - offset, length: overlap.length)).last {
+            if let span = box.lastSpan(NSRange(location: overlap.location - offset, length: overlap.length)) {
                 last = NSRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
                               width: max(1, span.x1 - span.x0), height: box.lineHeight)
             }
@@ -882,11 +882,13 @@ public final class MarkdownView: DSView {
         for item in layout(forWidth: bounds.width).items {
             switch item {
             case .text(let box, let origin):
+                // A long code block lays out only the lines near what this pass paints.
+                let boxClip = dirtyRect.offsetBy(dx: -origin.x, dy: -origin.y)
                 if let range = assistantRange {
                     let overlap = NSIntersectionRange(range, NSRange(location: selectionOffset, length: (box.text as NSString).length))
                     if overlap.length > 0 {
                         ctx.setFillColor(NSColor.selectedTextBackgroundColor.withAlphaComponent(0.5).cgColor)
-                        for span in box.spans(NSRange(location: overlap.location - selectionOffset, length: overlap.length)) {
+                        for span in box.spans(NSRange(location: overlap.location - selectionOffset, length: overlap.length), clip: boxClip) {
                             ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
                                             width: max(1, span.x1 - span.x0), height: box.lineHeight))
                         }
@@ -904,11 +906,11 @@ public final class MarkdownView: DSView {
                         findOccurrence += 1
                         guard visible else { continue }
                         ctx.setFillColor(SearchMatchColors.background(active: active, dark: dark).cgColor)
-                        for span in box.spans(range) {
+                        for span in box.spans(range, clip: boxClip) {
                             let area = box.contentArea(at: range.location, baseline: MarkdownTextBox.snappedBaseline(origin.y + span.baseline))
                             ctx.fill(CGRect(x: origin.x + span.x0, y: area.y, width: span.x1 - span.x0, height: area.height))
                         }
-                        box.draw(range, color: SearchMatchColors.foreground(active: active, dark: dark), in: ctx, at: origin)
+                        box.draw(range, color: SearchMatchColors.foreground(active: active, dark: dark), in: ctx, at: origin, clip: dirtyRect)
                     }
                 }
             case .box(let rect, let fill, let border, let radius):
