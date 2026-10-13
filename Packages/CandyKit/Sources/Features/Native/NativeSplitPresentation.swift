@@ -65,6 +65,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             let accessory = NSSplitViewItemAccessoryViewController()
             accessory.view = NativeSidebarAccessoryView(newChat: { [weak self] in self?.actions.newThread() },
                                                         settings: { [weak self] in self?.actions.settings() })
+            if #available(macOS 26.1, *) { accessory.preferredScrollEdgeEffectStyle = .soft }
             sidebarItem.addBottomAlignedAccessoryViewController(accessory)
             sidebarAccessory = accessory
         }

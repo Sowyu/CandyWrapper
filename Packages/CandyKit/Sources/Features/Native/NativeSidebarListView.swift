@@ -90,6 +90,12 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         hoverWork?.cancel()
     }
 
+    /// The one column always spans the table, whatever width the list was made at (the source list style adds its own insets).
+    override func tile() {
+        super.tile()
+        table.sizeLastColumnToFit()
+    }
+
     // MARK: Data
 
     func item(atRow row: Int) -> SidebarItem? { order.indices.contains(row) ? items[order[row]] : nil }
