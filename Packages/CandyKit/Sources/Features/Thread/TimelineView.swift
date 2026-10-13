@@ -373,6 +373,7 @@ public final class TimelineView: DSView {
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
         disclosureRowId = nil
+        updateMinimapPosition()
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
         if new.isEmpty != old.isEmpty { layoutEmptyPlaceholder() }
     }
@@ -536,6 +537,8 @@ public final class TimelineView: DSView {
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: target))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         adjusting = false
+        // A scroll the timeline makes itself (opening at the end, anchoring) moves the minimap too.
+        updateMinimapPosition()
     }
 
     // MARK: Layout and tiling
