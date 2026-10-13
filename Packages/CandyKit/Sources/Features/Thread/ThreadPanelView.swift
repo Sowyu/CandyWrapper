@@ -1367,7 +1367,10 @@ public final class ThreadPanelView: DSView {
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
         // Glass Native: the right panel starts below the toolbar, its tabs clear of it.
-        let panelTop = hidesCustomChrome ? toolbarInset : 0
+        // Glass Native: the panel runs up under the toolbar, so its tabs share the toolbar's row as T3's share the
+        // header row with the panel toggles; the toggles' room at the right stays clear.
+        let panelTop: CGFloat = 0
+        rightPanel.trailingReserve = hidesCustomChrome ? RightPanelView.nativeToolbarReserve : RightPanelView.classicReserve
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet

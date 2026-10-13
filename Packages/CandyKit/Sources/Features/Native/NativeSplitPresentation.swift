@@ -159,6 +159,8 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         // T3 shows the toggles only over a thread or draft; Settings and the utility pages have none.
         let shown = actions.threadShown()
         if #available(macOS 15, *), let item = panelsItem, item.isHidden == shown { item.isHidden = !shown }
+        // A maximized panel covers the chat and runs its tabs where the breadcrumb sits; T3 hides the header then.
+        if #available(macOS 15, *), let item = breadcrumbItem, item.isHidden != states.maximized { item.isHidden = states.maximized }
     }
 
     // MARK: Toolbar
