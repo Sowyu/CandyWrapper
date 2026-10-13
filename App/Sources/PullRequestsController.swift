@@ -69,6 +69,8 @@ final class PullRequestDetailBinding {
     private var sliceError: String?
     /// The native stack read (`usePullRequestStack`).
     private var stackGeneration = 0
+    /// The last stack read for this pull request succeeded (`pullRequestStackView` `isFresh`).
+    private var stackFresh = false
 
     init(surface: LazyView<PullRequestDetailView>, environments: Environments, capabilities: PullRequestCapabilities) {
         self.surface = surface
@@ -143,6 +145,7 @@ final class PullRequestDetailBinding {
         viewedStates = nil
         overlay = [:]
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
+        stackFresh = false
         view.tab = .summary
         view.currentMergeMethod = nil
         // `usePullRequestDefaultMergeMethodResolver`: the project's override over the environment's setting.
@@ -309,7 +312,9 @@ final class PullRequestDetailBinding {
                 _ = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))
                 guard let self else { return }
                 self.view.actionPending = false
-                self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success)
+                // 2994 shows the new state in the panel and toasts only a revert, which opens another
+                // pull request (PullRequestDetailPanel.tsx:1027-1030).
+                if action == "revert" { self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success) }
                 self.onActed?(action)
                 self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
             } catch {
@@ -501,11 +506,18 @@ final class PullRequestDetailBinding {
         guard let shell, let ref = reference, let d = detail, d.capabilities.stacks == true, capabilities.has(environmentId, "threadPullRequests") else {
             view.stack = nil
             view.allowsSingleMerge = true
+            stackFresh = false
             return
         }
         let supportsActions = d.capabilities.stackActions == true && capabilities.has(environmentId, "pullRequestStackActions")
         stackGeneration += 1
         let gen = stackGeneration
+        // 2994 pullRequestStackView (pullRequestStackSnapshot.ts:50-67): a background refresh keeps the last
+        // successful read fresh, so the merge and stack actions don't blink out while it runs.
+        if stackFresh {
+            Task { [weak self] in await self?.readStack(shell: shell, ref: ref, detail: d, supportsActions: supportsActions, gen: gen) }
+            return
+        }
         view.stackFailed = false
         // `pullRequestStackView`: saved membership stands in while the read is pending or fails; it has no head
         // SHAs, so the stack actions wait for the live read (usePullRequestStack.ts:12-33).
@@ -516,22 +528,30 @@ final class PullRequestDetailBinding {
         }
         view.stackNotice = view.stack == nil ? nil : PullRequestWriteLogic.stackNotice(hasData: true, isSuccess: false, isPending: true, error: false)
         view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: view.stack != nil, stackPending: true, stackError: false)
-        Task { [weak self] in
-            do {
-                let value = try await shell.supervisor.request("pullRequests.stack", payload: ref.payload)
-                let stack = value == .null ? nil : try value.decode(as: PullRequestStackDetail.self)
-                guard let self, self.stackGeneration == gen else { return }
-                self.view.stack = stack
-                self.view.stackNotice = nil
-                self.view.stackCanMerge = supportsActions && PullRequestDetailLogic.can(d, "merge") && !PullRequestDetailLogic.allowedMergeMethods(d).isEmpty
-                self.view.stackCanRebase = supportsActions && d.viewerPermissions.stackRebase == true
-                self.view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: stack != nil, stackPending: false, stackError: false)
-            } catch {
-                guard let self, self.stackGeneration == gen else { return }
-                self.view.stackFailed = true
-                self.view.stackNotice = PullRequestWriteLogic.stackNotice(hasData: self.view.stack != nil, isSuccess: false, isPending: false, error: true)
-                self.view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: self.view.stack != nil, stackPending: false, stackError: true)
-            }
+        Task { [weak self] in await self?.readStack(shell: shell, ref: ref, detail: d, supportsActions: supportsActions, gen: gen) }
+    }
+
+    private func readStack(shell: ShellSession, ref: PullRequestRef, detail d: PullRequestDetail, supportsActions: Bool, gen: Int) async {
+        do {
+            let value = try await shell.supervisor.request("pullRequests.stack", payload: ref.payload)
+            let stack = value == .null ? nil : try value.decode(as: PullRequestStackDetail.self)
+            guard stackGeneration == gen else { return }
+            stackFresh = true
+            view.stackFailed = false
+            view.stack = stack
+            view.stackNotice = nil
+            view.stackCanMerge = supportsActions && PullRequestDetailLogic.can(d, "merge") && !PullRequestDetailLogic.allowedMergeMethods(d).isEmpty
+            view.stackCanRebase = supportsActions && d.viewerPermissions.stackRebase == true
+            view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: stack != nil, stackPending: false, stackError: false)
+        } catch {
+            guard stackGeneration == gen else { return }
+            // A failed refresh is no longer fresh: the stack actions wait for a good read (PullRequestDetailPanel.tsx:1954-1963).
+            stackFresh = false
+            view.stackFailed = true
+            view.stackCanMerge = false
+            view.stackCanRebase = false
+            view.stackNotice = PullRequestWriteLogic.stackNotice(hasData: view.stack != nil, isSuccess: false, isPending: false, error: true)
+            view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: view.stack != nil, stackPending: false, stackError: true)
         }
     }
 
