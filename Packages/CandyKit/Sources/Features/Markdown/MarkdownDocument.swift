@@ -15,9 +15,12 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 
     private static func parseBlocks(_ markdown: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
+        // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
+        // and only loose lists need them.
+        let positions = mayHaveLooseList(markdown)
         let options = AttributedString.MarkdownParsingOptions(
             allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible,
-            appliesSourcePositionAttributes: true)
+            appliesSourcePositionAttributes: positions)
         guard let parsed = try? AttributedString(markdown: String(markdown), options: options) else {
             return markdown.isEmpty ? [] : [.paragraph([InlineRun(text: String(markdown))])]
         }
@@ -25,12 +28,58 @@ public struct MarkdownDocument: Sendable, Equatable {
         for run in parsed.runs {
             builder.append(text: String(parsed[run.range].characters), run: run, preservesLineBreaks: preservesLineBreaks)
         }
-        // Source lines that hold only whitespace, 1-based like the parser's source positions.
-        var blank = Set<Int>()
-        for (index, line) in markdown.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
-        where line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) { blank.insert(index + 1) }
-        builder.root.markLooseLists(blank: blank)
+        if positions {
+            // Source lines that hold only whitespace, 1-based like the parser's source positions.
+            var blank = Set<Int>()
+            for (index, line) in markdown.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
+            where line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) { blank.insert(index + 1) }
+            builder.root.markLooseLists(blank: blank)
+        }
         return builder.root.children.compactMap(\.node).flatMap(Self.blocks(from:))
+    }
+
+    /// False only when no list can be loose: no blank line follows a list marker line and comes before
+    /// another marker or an indented line. A blank line followed by anything else ends the list (CommonMark).
+    /// True for some text that has no loose list (a fenced `- ` line, `* * *`), which only costs the slower parse.
+    static func mayHaveLooseList(_ text: Substring) -> Bool {
+        var inList = false, blankInList = false
+        var lineStart = text.utf8.startIndex
+        let end = text.utf8.endIndex
+        while lineStart < end {
+            let newline = text.utf8[lineStart...].firstIndex(of: UInt8(ascii: "\n")) ?? end
+            let line = text.utf8[lineStart..<newline]
+            // Blockquote markers count as indentation, so a loose list inside a quote is still caught.
+            let body = line.drop { $0 == UInt8(ascii: " ") || $0 == UInt8(ascii: "\t") || $0 == UInt8(ascii: ">") }
+            if body.allSatisfy({ $0 == UInt8(ascii: "\r") }) {
+                if inList { blankInList = true }
+            } else {
+                let marker = isListMarker(body)
+                if blankInList {
+                    if marker || body.startIndex != line.startIndex { return true }
+                    inList = false
+                    blankInList = false
+                }
+                if marker { inList = true }
+            }
+            lineStart = newline < end ? text.utf8.index(after: newline) : end
+        }
+        return false
+    }
+
+    /// `-`, `+`, `*` or 1 to 9 digits and `.` or `)`, then whitespace or the line's end.
+    private static func isListMarker(_ body: Substring.UTF8View.SubSequence) -> Bool {
+        var i = body.startIndex
+        guard i < body.endIndex else { return false }
+        let first = body[i]
+        if first == UInt8(ascii: "-") || first == UInt8(ascii: "+") || first == UInt8(ascii: "*") {
+            i = body.index(after: i)
+        } else {
+            var digits = 0
+            while i < body.endIndex, body[i] >= UInt8(ascii: "0"), body[i] <= UInt8(ascii: "9") { digits += 1; i = body.index(after: i) }
+            guard (1...9).contains(digits), i < body.endIndex, body[i] == UInt8(ascii: ".") || body[i] == UInt8(ascii: ")") else { return false }
+            i = body.index(after: i)
+        }
+        return i == body.endIndex || [UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\r")].contains(body[i])
     }
 
     // MARK: Streaming
