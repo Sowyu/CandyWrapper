@@ -28,7 +28,7 @@ Leave these alone during side-by-side checks.
 
 - The sidebar title is the candy glyph and "Wrapper", and clicking it goes home.
 - The app icon is a black, glossy candy. T3's logo and name stay out of CandyWrapper's branding, to avoid a takedown.
-- The Glass theme and the Panel animations setting exist only here.
+- The Glass theme and the Panel animations setting exist only here. The Glass opacity slider goes down to 10%, where T3 stops at 40%.
 - Escape leaves Settings.
 - Updates come from this repo's GitHub releases through Sparkle, and an update keeps agents on this Mac's server running.
 - Quitting asks first only while an agent runs on this Mac's own server.

@@ -156,10 +156,11 @@ struct SettingsLogicTests {
 
     @Test func clientSettingsDecodeWithDefaults() {
         let s = ClientSettings(decoding: .object([
-            "timestampFormat": .string("24-hour"), "glassOpacity": .number(10), "confirmQuit": .bool(false), "unknown": .bool(true),
+            "timestampFormat": .string("24-hour"), "glassOpacity": .number(5), "confirmQuit": .bool(false), "unknown": .bool(true),
         ]))
         #expect(s.string("timestampFormat") == "24-hour")
         #expect(s.int("glassOpacity") == 80)          // out of range: default
+        #expect(ClientSettings(decoding: .object(["glassOpacity": .number(10)])).int("glassOpacity") == 10)  // CandyWrapper's floor, under T3's 40
         #expect(s.string("confirmQuit") == "direct")  // legacy boolean
         #expect(s.values["unknown"] == nil)
         #expect(s.bool("showSkillsInSlashMenu"))

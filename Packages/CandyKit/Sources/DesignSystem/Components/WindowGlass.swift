@@ -7,7 +7,7 @@ import AppKit
 /// tint covers the blur everywhere. Popovers, menus and dialogs keep their own fills.
 public enum WindowGlass {
     /// How much of a base surface's own color covers the blur. Glass keeps 60% at T3's default "Glass opacity" of
-    /// 80% (index.css:117), so the frost shows; the setting scales it (30% at 40%, 75% at 100%). T3's own glass
+    /// 80% (index.css:117), so the frost shows; the setting scales it (7.5% at 10%, 75% at 100%). T3's own glass
     /// surfaces keep using the setting unchanged.
     public static var alpha: CGFloat { 0.75 * ThemeRuntime.glassOpacity }
 

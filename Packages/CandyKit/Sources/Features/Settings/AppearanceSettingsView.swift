@@ -179,7 +179,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let contrast = sliderRow("setting-appearance-contrast", "Adjust the contrast of colors and borders across the interface.",
                                  key: "appearanceContrast", range: 50...200, step: 5, reset: "contrast")
         let glass = sliderRow("setting-glass-opacity", "Higher values make menus, dialogs, and the composer more solid.",
-                              key: "glassOpacity", range: 40...100, step: 5, reset: "glass opacity")
+                              key: "glassOpacity", range: 10...100, step: 5, reset: "glass opacity")
         let identification = clientSelect("environment-identification", "Choose how Dev and Nightly environments are identified.",
                                           key: "environmentIdentificationMode", options: [("artwork", "Artwork"), ("pill", "Version pill"), ("none", "None")],
                                           width: 160, reset: "environment identification")
