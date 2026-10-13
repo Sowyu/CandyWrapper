@@ -83,6 +83,9 @@ final class RightPanelView: DSView {
     var browserAvailable = false { didSet { lazyLauncher.set(\.browserAvailable, browserAvailable) } }
     /// `terminalAvailable`: the thread has a project.
     var terminalAvailable = false { didSet { lazyLauncher.set(\.terminalAvailable, terminalAvailable) } }
+    /// The browser profiles (`useBrowserDefaults().profiles`); with more than one the launcher's Browser row offers them.
+    var browserProfiles: [(id: String, name: String)] = [] { didSet { lazyLauncher.set(\.browserProfiles, browserProfiles) } }
+    var onAddBrowserInProfile: ((String) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -91,7 +94,10 @@ final class RightPanelView: DSView {
         add.action = { [weak self] in self?.showAddMenu() }
         border.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(border)
-        lazyLauncher.configure { [weak self] launcher in launcher.onPick = { [weak self] kind in self?.onAdd?(kind) } }
+        lazyLauncher.configure { [weak self] launcher in
+            launcher.onPick = { [weak self] kind in self?.onAdd?(kind) }
+            launcher.onPickBrowserProfile = { [weak self] id in self?.onAddBrowserInProfile?(id) }
+        }
         lazyFile.configure { [weak self] file in file.explorer = self?.files }
         strip.onScroll = { [weak self] delta in self?.scrollTabs(delta) }
         scrollLeft.action = { [weak self] in guard let self else { return }; self.scrollTabs(-max(120, self.strip.bounds.width * 0.75)) }
@@ -413,7 +419,9 @@ final class SurfaceLauncherView: DSView {
     var pullRequestsAvailable = false { didSet { if pullRequestsAvailable != oldValue { rebuild() } } }
     var browserAvailable = false { didSet { if browserAvailable != oldValue { rebuild() } } }
     var terminalAvailable = false { didSet { if terminalAvailable != oldValue { rebuild() } } }
+    var browserProfiles: [(id: String, name: String)] = [] { didSet { rebuild() } }
     var onPick: ((RightPanelSurface.Kind) -> Void)?
+    var onPickBrowserProfile: ((String) -> Void)?
     private let heading = LabelView("Open a surface", font: DSFont.ui(14, weight: .medium))
     private var rows: [LauncherRow] = []
 
@@ -431,8 +439,11 @@ final class SurfaceLauncherView: DSView {
         rows = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable, pullRequestAvailable: pullRequestAvailable,
                             pullRequestsAvailable: pullRequestsAvailable, browserAvailable: browserAvailable,
                             terminalAvailable: terminalAvailable).map { action in
-            let row = LauncherRow(action)
+            // The profile chooser beside the Browser row, once there is a choice (RightPanelTabs.tsx:526-555).
+            let profiles = action.kind == .browser && browserProfiles.count > 1 ? browserProfiles : []
+            let row = LauncherRow(action, profiles: profiles)
             row.onClick = { [weak self] in if let kind = action.kind { self?.onPick?(kind) } }
+            row.onProfile = { [weak self] id in self?.onPickBrowserProfile?(id) }
             return row
         }
         rows.forEach(addSubview)
@@ -474,13 +485,23 @@ final class LauncherRow: DSView {
     private let icon: IconView
     private let label: LabelView
     private let kbd: KbdView
+    private let profiles: [(id: String, name: String)]
+    /// `size="icon-xs" variant="ghost-muted"` with a 14px chevron, `right-8` and centered.
+    private lazy var chooser: ButtonView = {
+        let b = ButtonView(icon: .chevronDown, variant: .ghostMuted, size: .iconXs)
+        b.setAccessibilityLabel("Open browser in a profile")
+        b.action = { [weak self] in self?.showProfiles() }
+        return b
+    }()
+    var onProfile: ((String) -> Void)?
     // `transition-colors group-hover:bg-accent/60` (RightPanelTabs.tsx:511).
     private var hovered = false { didSet { if hovered != oldValue { redisplay(transitioning: .colors) } } }
     private var tracking: NSTrackingArea?
     var onClick: (() -> Void)?
 
-    init(_ action: SurfaceLauncherView.Action) {
+    init(_ action: SurfaceLauncherView.Action, profiles: [(id: String, name: String)] = []) {
         self.action = action
+        self.profiles = profiles
         icon = IconView(name: action.icon, size: 16, strokeColor: Themed.color(\.foreground))
         label = LabelView(action.label, font: DSFont.ui(14), color: Themed.color(\.foreground))
         kbd = KbdView(action.shortcut)
@@ -488,6 +509,7 @@ final class LauncherRow: DSView {
         label.lineHeight = 20
         layer?.cornerRadius = 8
         [icon, label, kbd].forEach(addSubview)
+        if !profiles.isEmpty { addSubview(chooser) }
         alphaValue = action.kind == nil ? 0.5 : 1
         setAccessibilityRole(.button)
         setAccessibilityLabel(action.label)
@@ -500,7 +522,20 @@ final class LauncherRow: DSView {
         icon.frame = NSRect(x: 10, y: 8, width: 16, height: 16)
         let k = kbd.intrinsicContentSize
         kbd.frame = NSRect(x: bounds.width - 10 - k.width, y: (32 - k.height) / 2, width: k.width, height: k.height)
-        label.frame = NSRect(x: 36, y: 6, width: max(0, kbd.frame.minX - 10 - 36), height: 20)
+        // `pr-7` keeps the label clear of the chooser.
+        label.frame = NSRect(x: 36, y: 6, width: max(0, kbd.frame.minX - 10 - 36 - (profiles.isEmpty ? 0 : 28)), height: 20)
+        if !profiles.isEmpty { chooser.frame = NSRect(x: bounds.width - 32 - 24, y: 4, width: 24, height: 24) }
+    }
+
+    /// `MenuPopup align="end" side="bottom" sideOffset={6}`, one item per profile.
+    // ponytail: no `max-w-56` cap, so a 48-character profile name widens the menu; cap MenuPopupView if one shows up
+    private func showProfiles() {
+        let items = profiles.map { profile -> MenuItem in
+            var item = MenuItem(profile.name)
+            item.action = { [weak self] in self?.onProfile?(profile.id) }
+            return item
+        }
+        MenuPopupView.show(items, from: chooser, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 6, fallbackAxisSide: .none))
     }
 
     override func updateLayer() {
