@@ -149,6 +149,16 @@ open class ControlView: DSView {
         }
     }
 
+    /// An `NSMenu` this control opened has closed. Its tracking loop ate the release, so the press ends here.
+    func nativeMenuDidClose() {
+        pressOpenedAt = nil
+        pressPerformed = false
+        state.active = false
+        if let window {
+            state.hovered = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
+    }
+
     open override func mouseDragged(with event: NSEvent) {
         guard state.enabled else { return }
         if pressOpenedAt != nil {
