@@ -212,7 +212,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.panel.header.onNewThreadInProject = { [weak threads] in threads?.newThread() }
         threads.panel.header.onThreadMenu = { [weak commands, weak threads] event, view in
             guard let id = threads?.openThreadId else { return }
-            commands?.showThreadMenu(id, event: event, view: view, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
+            // A click opens it under the title's left edge, 4pt down (`openTitleMenuNow`, ChatHeader.tsx:179-184); a right
+            // click opens it at the pointer (:218-237).
+            let anchor = event.type == .rightMouseDown ? nil : NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4)
+            commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         let updater = UpdateController()
