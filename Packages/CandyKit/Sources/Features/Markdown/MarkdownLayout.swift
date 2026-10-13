@@ -314,6 +314,7 @@ public final class MarkdownLayout {
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
+        var native: Bool
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
@@ -327,17 +328,19 @@ public final class MarkdownLayout {
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false, reusing previous: MarkdownLayout? = nil) {
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false, native: Bool = false,
+                reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
+        builder.native = native
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
-                           runsShell: runsShell)
+                           runsShell: runsShell, native: native)
         var resume: (layout: MarkdownLayout, blocks: Int)?
         if let previous, previous.width == width, previous.reuseKey == key {
             let blocks = document.blocks, old = previous.rootBlocks
@@ -400,6 +403,9 @@ private struct Builder {
     var contexts: MarkdownContextChips?
     var cwd: String?
     var runsShell = false
+    /// Glass Native: body 14/21 and T3 Mobile's code block (docs/glass-native.md).
+    var native = false
+    var bodyLine: CGFloat { native ? NativeTimeline.bodyLine * FontRuntime.interfaceScale : MarkdownStyle.lineHeight }
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -453,7 +459,7 @@ private struct Builder {
     mutating func layout(_ block: MarkdownBlock, width: CGFloat, context: Context, tight: Bool) -> Box {
         switch block {
         case .paragraph(let runs):
-            var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: bodyLine, color: context.color)
             // Tight list items hold their text inline, without a <p> and its margins.
             let m = tight ? 0 : MarkdownStyle.blockMargin
             box.top = m; box.bottom = m
@@ -677,7 +683,7 @@ private struct Builder {
         if case .paragraph(let runs)? = blocks.first {
             blocks.removeFirst()
             // The first line starts after the box; the text box spans the full gutter so wrapped lines align.
-            let first = text(runs, width: width + gutter, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight,
+            let first = text(runs, width: width + gutter, size: MarkdownStyle.fontSize, lineHeight: bodyLine,
                              color: context.color, headIndent: gutter, firstLineIndent: gutter + lead)
             box = Box()
             box.add(first, at: CGPoint(x: -gutter, y: 0))
@@ -688,7 +694,7 @@ private struct Builder {
             box = flow(blocks, width: width, context: context, tight: true)
         }
         // vertical-align: middle puts the margin box's middle at baseline - x-height / 2.
-        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
+        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: bodyLine)
         let marginBox = 13 + 0.15 * MarkdownStyle.fontSize
         let top = baseline - body.xHeight / 2 - marginBox / 2
         box.items.insert(.checkbox(CGRect(x: -gutter, y: top, width: 13, height: 13), checked: checked), at: 0)
@@ -759,8 +765,13 @@ private struct Builder {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
-        box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
-                              border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
+        // Glass Native: T3 Mobile's `rounded-lg` with a border on the solid card (ThreadFeed.tsx:990).
+        if native {
+            box.items.append(.box(frame, fill: NativeTimeline.card, border: Themed.color(\.border), radius: 8))
+        } else {
+            box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
+                                  border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
+        }
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
         // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),

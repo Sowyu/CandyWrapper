@@ -78,6 +78,7 @@ public final class ApprovalPanelView: ComposerBannerView {
             return (option, button)
         }
         more.isHidden = approval.menuOptions.isEmpty
+        if nativeCard { buildNativeButtons() }
         updateEnabled()
         needsLayout = true
     }
@@ -85,7 +86,107 @@ public final class ApprovalPanelView: ComposerBannerView {
     private func updateEnabled() {
         let canRespond = approval?.canRespond ?? false
         buttons.forEach { $0.1.isEnabled = !isResponding && canRespond }
+        nativeButtons.forEach { $0.1.isEnabled = !isResponding && canRespond }
         more.isEnabled = !isResponding
+    }
+
+    // MARK: Glass Native
+
+    /// T3 Mobile's actions (PendingApprovalCard.tsx:23-76) as AppKit push buttons: Decline, Allow session and a
+    /// prominent Allow once, right to left as macOS orders a default button. Other decisions stay in the menu.
+    private var nativeButtons: [(ApprovalDecision, NSButton)] = []
+    /// The kind in capitals over the detail, made the first time a native card shows.
+    private var eyebrowLabel: LabelView?
+    private var eyebrow: LabelView {
+        if let eyebrowLabel { return eyebrowLabel }
+        let label = LabelView("", font: DSFont.ui(12, weight: .bold), color: Themed.color(\.warning))
+        label.lineHeight = 16
+        addSubview(label)
+        eyebrowLabel = label
+        return label
+    }
+    static let nativePad: CGFloat = 16, nativeGap: CGFloat = 10, nativeButton: CGFloat = 28
+
+    override func nativeCardDidChange() {
+        if nativeCard {
+            buildNativeButtons()
+        } else {
+            nativeButtons.forEach { $0.1.removeFromSuperview() }
+            nativeButtons = []
+            eyebrowLabel?.isHidden = true
+            icon.isHidden = false
+            kindLabel.isHidden = false
+            appLabel.isHidden = approval?.appName == nil
+            buttons.forEach { $0.1.isHidden = false }
+            more.isHidden = approval?.menuOptions.isEmpty ?? true
+        }
+        updateEnabled()
+    }
+
+    private func buildNativeButtons() {
+        nativeButtons.forEach { $0.1.removeFromSuperview() }
+        nativeButtons = []
+        guard let approval else { return }
+        let offered = approval.effectiveOptions.map(\.decision)
+        let order: [(ApprovalDecision, String)] = [(.decline, "Decline"), (.acceptForSession, "Allow session"), (.accept, "Allow once")]
+        for (decision, title) in order where offered.contains(decision) {
+            let button = NSButton(title: title, target: self, action: #selector(pressNative(_:)))
+            button.bezelStyle = .push
+            button.controlSize = .large
+            if decision == .accept {
+                button.keyEquivalent = "\r"
+                if #available(macOS 26, *) { button.tintProminence = .primary }
+            }
+            button.tag = nativeButtons.count
+            addSubview(button)
+            nativeButtons.append((decision, button))
+        }
+        // Allow session moved out of the menu; the rest stays there.
+        more.isHidden = !approval.menuOptions.contains { $0.decision != .acceptForSession }
+        eyebrow.text = approval.label.uppercased()
+        eyebrow.isHidden = false
+    }
+
+    @objc private func pressNative(_ sender: NSButton) {
+        guard nativeButtons.indices.contains(sender.tag) else { return }
+        respond(nativeButtons[sender.tag].0)
+    }
+
+    private func nativeDetailHeight(width: CGFloat) -> CGFloat {
+        detailBlock.isHidden ? 16 : min(Self.detailMaxHeight, max(16, detailBlock.height(forWidth: width)))
+    }
+
+    /// The card: eyebrow, detail, then the button row, `p-4 gap-2.5`.
+    private func nativeHeight(width: CGFloat) -> CGFloat {
+        let p = Self.nativePad
+        return p + 16 + Self.nativeGap + nativeDetailHeight(width: max(0, width - 2 * p)) + Self.nativeGap + Self.nativeButton + p
+    }
+
+    private func layoutNative() {
+        let w = bounds.width, p = Self.nativePad, cw = max(0, w - 2 * p)
+        icon.isHidden = true
+        kindLabel.isHidden = true
+        appLabel.isHidden = true
+        buttons.forEach { $0.1.isHidden = true }
+        let countWidth = countLabel.isHidden ? 0 : ceil(countLabel.textWidth)
+        countLabel.frame = NSRect(x: w - p - countWidth, y: p, width: countWidth, height: 16)
+        eyebrow.frame = NSRect(x: p, y: p, width: max(0, cw - countWidth - 8), height: 16)
+        let dh = nativeDetailHeight(width: cw)
+        let dy = p + 16 + Self.nativeGap
+        detailLine.frame = NSRect(x: p, y: dy, width: cw, height: 16)
+        detailBlock.frame = NSRect(x: p, y: dy, width: cw, height: dh)
+        let by = dy + dh + Self.nativeGap
+        var x = w - p
+        for (_, button) in nativeButtons.reversed() {
+            let bw = button.intrinsicContentSize.width
+            x -= bw
+            button.frame = NSRect(x: x, y: by + (Self.nativeButton - button.intrinsicContentSize.height) / 2, width: bw, height: button.intrinsicContentSize.height)
+            x -= 8
+        }
+        if !more.isHidden {
+            let size = more.intrinsicContentSize
+            more.frame = NSRect(x: p, y: by + (Self.nativeButton - 24) / 2, width: size.width, height: 24)
+        }
     }
 
     private func respond(_ decision: ApprovalDecision) {
@@ -127,6 +228,8 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     /// The banner's full height at `width`, the 17px under the composer included.
     public func preferredHeight(width: CGFloat) -> CGFloat {
+        // The native card has no overlap; the 17 keeps the caller's arithmetic the same in both styles.
+        if nativeCard { return nativeHeight(width: width) + Self.overlap }
         let content = 16 + 4 + detailHeight(width: max(0, contentWidth(width)))
         let actionsRow: CGFloat = width < Self.narrow ? 12 + 24 : 0
         return Self.pad + content + actionsRow + Self.pad + Self.overlap
@@ -134,6 +237,7 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     public override func layout() {
         super.layout()
+        if nativeCard { return layoutNative() }
         let w = bounds.width, pad = Self.pad
         let x = pad + Self.column + Self.gap
         let cw = max(0, contentWidth(w))

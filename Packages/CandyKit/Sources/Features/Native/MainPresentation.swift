@@ -27,6 +27,15 @@ public protocol CustomChromeHiding: AnyObject {
     var hidesCustomChrome: Bool { get set }
 }
 
+/// A page whose content scrolls under Glass Native's toolbar: it fills the column and keeps its own content clear
+/// of the toolbar's `toolbarInset`.
+@MainActor
+public protocol ToolbarUnderlapping: AnyObject {
+    var toolbarInset: CGFloat { get set }
+}
+
+extension ThreadPanelView: ToolbarUnderlapping {}
+
 extension SidebarContentView: CustomChromeHiding {}
 extension SettingsSidebarView: CustomChromeHiding {}
 extension ThreadPanelView: CustomChromeHiding {}

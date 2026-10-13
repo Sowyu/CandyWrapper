@@ -152,6 +152,8 @@ final class ThreadSession {
             panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot, onlyStreamingText: onlyStreamingText)
         }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
+        panel.timeline.hasEarlierHistory = update.history.showsLoadEarlierControl
+        panel.isSynchronizing = update.status == .synchronizing
         onProjection?(update.projection, onlyStreamingText)
         onStatus?(update.status)
     }
@@ -1067,6 +1069,7 @@ final class ThreadController {
     private(set) lazy var noActiveThread: NoActiveThreadStateView = {
         let view = NoActiveThreadStateView()
         view.autoresizingMask = [.width, .height]
+        view.onNewTask = { [weak self] in self?.sidebar?.actions.newThread() }
         return view
     }()
     /// The open thread once a shell listed it, so a thread launched a moment ago is not taken for a deleted one.
@@ -1102,6 +1105,7 @@ final class ThreadController {
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         sidebar?.state.activeThreadId = nil
         noActiveThread.frame = panel.bounds
+        noActiveThread.native = panel.hidesCustomChrome
         // Under `NoProjectsHero` when that shows too.
         if noProjectsHero.superview === panel {
             panel.addSubview(noActiveThread, positioned: .below, relativeTo: noProjectsHero)
