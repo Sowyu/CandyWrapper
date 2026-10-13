@@ -6,11 +6,16 @@ Read first: `docs/research/t3-mobile-ipad-design-2026-10-13.md` (the iPad design
 
 ## Direction
 
-- Apple-native. SF Pro and the system's semantic colors, tinted with T3's stock tokens: `primary` #1b4ed8 light and #346bf1 dark, the status hues, and the screen and card colors. The layout and anatomy come from T3 Mobile on iPad. AppKit controls replace custom-drawn ones wherever one exists.
-- It is still Glass. The detail column keeps Glass's frosted window and follows the Glass opacity slider. The sidebar is macOS's own floating glass sidebar. Toolbar buttons, the floating composer, the working pill and the command palette are Liquid Glass. Content blocks (code, diffs, tables, approval cards and the terminal) stay solid so text reads.
-- Sizes are T3 Mobile's iPad sizes scaled for the Mac, about 0.875 rounded: body 14/21, footnote 12, label 12, headline 16, title 18, and a 15 semibold toolbar title. The user's font size setting scales them.
-- Motion comes from the system: the split view collapse and the popover and menu animations. The only custom animation is the composer's pill-to-card morph, 220 ms, on layer properties. Nothing ticks once it ends.
+The user, 2026-10-13: "it uses native ui but it need to resemble t3 codes ui because im a t3 code power user and i need to have familarity." That decides every conflict below.
+
+- T3 Code desktop is the layout. Every element stays where T3 Code puts it, with T3's wording, order, shortcuts and information. That covers the sidebar rows and their order, the bottom icons, the header breadcrumb and its right-hand panel toggles, the timeline (user bubbles, "Worked for" folds, work rows), the composer (its pills, the branch and workspace strip beneath it), the right panel tabs and the terminal drawer. Today's classic CandyWrapper views match T3 desktop, so use them as the map of what goes where.
+- Native is the material and the controls. AppKit controls replace custom-drawn ones where one exists: `NSTableView` rows with system selection, `NSSearchField`, `NSMenu`, `NSPopover`, glass-bezel buttons, `NSToolbar` and `NSSplitViewController`. SF Pro is the font, and SF Symbols replace T3's Lucide icons where a close match exists. Keep the same glyph meaning in the same place.
+- T3 Mobile's iPad design (`docs/research/t3-mobile-ipad-design-2026-10-13.md`) is only a guide to how T3 itself maps its UI onto native controls and glass. Where it differs from T3 desktop in layout, T3 desktop wins. Examples: the iPad's "Threads | Pull requests" segmented control, its pill composer and its 960 pt column don't apply. Keep T3 desktop's sidebar shape, composer shape and content width.
+- It is still Glass. The detail column keeps Glass's frosted window and follows the Glass opacity slider. The sidebar is macOS's own floating glass sidebar. Toolbar buttons, the composer surface, popovers and the command palette are Liquid Glass. Content blocks (code, diffs, tables, approval cards and the terminal) stay solid so text reads.
+- Sizes follow T3 desktop, as the classic views have them. The user's font size setting scales them.
+- Motion comes from the system, plus T3's own transitions where a user would notice their absence. Nothing ticks once it ends.
 - It needs macOS 26 for `NSGlassEffectView`, the glass bezel and the split view glass. Below 26 the card is hidden, and a stored "Glass Native" preference falls back to Glass.
+- It must work with no bugs: every action that works in classic must work in native mode. Phase 6 is a full bug hunt.
 
 ## Structure
 
@@ -38,7 +43,7 @@ Read first: `docs/research/t3-mobile-ipad-design-2026-10-13.md` (the iPad design
 3. Native thread: the toolbar title, subtitle and items (sidebar toggle, new task, files, git, terminal), the native timeline row style (user bubbles, full-width assistant text, SF Symbol work rows, a 960 pt content column), the approval cards, and the floating working pill.
 4. Native composer: a floating glass composer that morphs from pill to card on focus, an `NSTextView` editor, a native model and options popover, and a circular send button. `ComposerController` drives it unchanged.
 5. Panels and overlays: Files, Git, Diff and pull request files in the inspector, the terminal drawer restyled, a glass command palette, and native menus throughout.
-6. Polish, a perf comparison with classic Glass, and a code review.
+6. A bug hunt over every action in native mode next to classic and the official T3 app, a familiarity pass against T3 Code desktop, a perf comparison with classic Glass, and a code review.
 
 ## Status
 
