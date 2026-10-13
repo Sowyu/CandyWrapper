@@ -7,8 +7,9 @@ import T3Store
 /// state and actions, where native controls take the custom-drawn ones' places: the table, the search field, the
 /// project menu and glass footer buttons. The native views exist only while the native presentation shows the sidebar.
 extension SidebarContentView {
-    private var classicChrome: [NSView] {
-        [scrollArea, search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton, backButton]
+    /// Classic's search row and footer buttons, in their stacking order: below the undo notice, above the brand.
+    private var classicButtons: [NSView] {
+        [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton, backButton]
     }
 
     func applyPresentation() {
@@ -22,10 +23,16 @@ extension SidebarContentView {
             addSubview(native)
             addSubview(chrome)
             addSubview(footer)
+            footer.backTarget = self
+            footer.backAction = #selector(footerPressed(_:))
             footer.showsBack = isOnUtilityPage
             footer.showsPullRequests = showsPullRequests
             list.setItems([], animated: false)
-            for view in classicChrome { view.isHidden = true }
+            // Out of the window, so the split view's layout engine and the layer tree skip classic's chrome.
+            for view in [scrollArea, trigger] + classicButtons {
+                view.isHidden = true
+                view.removeFromSuperview()
+            }
             chrome.search.stringValue = searchQuery
             wireNative()
         } else if !hidesCustomChrome, let native = nativeList {
@@ -36,6 +43,9 @@ extension SidebarContentView {
             nativeList = nil
             nativeChrome = nil
             nativeFooter = nil
+            addSubview(scrollArea, positioned: .below, relativeTo: brand)
+            addSubview(trigger, positioned: .above, relativeTo: brand)
+            for view in classicButtons { addSubview(view, positioned: .below, relativeTo: undoNotice) }
             scrollArea.isHidden = false
             search.isHidden = false
             search.text = searchQuery
@@ -80,7 +90,7 @@ extension SidebarContentView {
         chrome.addProject.action = #selector(addProjectPressed)
         chrome.newThread.target = self
         chrome.newThread.action = #selector(newThreadPressed)
-        for b in [footer.settings, footer.pullRequests, footer.usage, footer.back] {
+        for b in [footer.settings, footer.pullRequests, footer.usage] {
             b.target = self
             b.action = #selector(footerPressed(_:))
         }
