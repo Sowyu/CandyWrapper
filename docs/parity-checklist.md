@@ -461,73 +461,73 @@ Defaults are in `packages/shared/src/keybindings.ts` (`DEFAULT_KEYBINDINGS`, lin
 
 | Command | Key | When | Status |
 |---|---|---|---|
-| Engine: defaults, the primary environment's resolved rules merged per command, `keybindingsUpdated` live, last matching rule wins, when-clauses, shortcut labels | (system) | (all) | 🟡 WP7.1: `T3Protocol/Domain/Keybindings.swift`, `Features/Keyboard/ActiveKeymap.swift`, `App/Sources/Shortcuts.swift` (one dispatcher) |
-| sidebar.toggle | mod+b | (none) | 🟡 |
-| navigation.back | mod+[ | 🟡 | WP7.9: `RouteHistory` back |
-| navigation.forward | mod+] | 🟡 | WP7.9: `RouteHistory` forward |
-| terminal.toggle | mod+j | (none) | 🟡 |
-| rightPanel.toggle | mod+alt+b | (none) | 🟡 WP7.6a: hides an open panel, else shows its tabs or the launcher |
-| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | 🟡 WP7.6a: the + menu |
+| Engine: defaults, the primary environment's resolved rules merged per command, `keybindingsUpdated` live, last matching rule wins, when-clauses, shortcut labels | (system) | (all) | 🟡 WP7.1: `T3Protocol/Domain/Keybindings.swift`, `Features/Keyboard/ActiveKeymap.swift`, `App/Sources/Shortcuts.swift` (one dispatcher). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): every key driven resolved like T3's; live `keybindings.json` edits not tried |
+| sidebar.toggle | mod+b | (none) | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): toggles like T3, and a focused rich prompt keeps Mod+B for bold in both. With the palette open the palette's blurred backdrop stays a snapshot of the old layout (item B). T3 also pins the thread details card top right once the wider canvas fits it; CandyWrapper doesn't (item I) |
+| navigation.back | mod+[ | !terminalFocus | ✅ WP7.9: `RouteHistory` back. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| navigation.forward | mod+] | !terminalFocus | ✅ WP7.9: `RouteHistory` forward. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| terminal.toggle | mod+j | (none) | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md); T3 shows earlier output on reopen where CandyWrapper shows a fresh prompt (Terminal section) |
+| rightPanel.toggle | mod+alt+b | (none) | ✅ WP7.6a: hides an open panel, else shows its tabs or the launcher. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md); the launcher's Browser chevron is m10 item G |
+| rightPanel.new | mod+t | rightPanelOpen && !terminalFocus | ✅ WP7.6a: the + menu, opened without a highlight. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | terminal.split | mod+d | terminalFocus | ⏳ splits not drawn |
 | terminal.splitVertical | mod+shift+d | terminalFocus | ⏳ splits not drawn |
-| terminal.new | mod+n | terminalFocus | 🟡 one terminal shows |
-| terminal.close | mod+w | terminalFocus | 🟡 |
-| rightPanel.close | mod+w | !terminalFocus | 🟡 WP7.6a: closes the active tab |
-| view.reopenClosed | mod+shift+t | (none) | 🟡 WP7.6a: panel tabs only |
-| diff.toggle | mod+d | !terminalFocus | 🟡 |
-| preview.toggle | mod+shift+j | (none) | 🟡 WP7.6b |
-| preview.refresh | mod+r | previewFocus | 🟡 WP7.6b |
-| preview.focusUrl | mod+l | previewFocus | 🟡 WP7.6b |
-| preview.zoomIn | mod+= and mod++ | previewFocus | 🟡 WP7.6b |
-| preview.zoomOut | mod+- | previewFocus | 🟡 WP7.6b |
-| preview.resetZoom | mod+0 | previewFocus | 🟡 WP7.6b |
-| commandPalette.toggle | mod+k | !terminalFocus | 🟡 |
-| filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a |
-| projectSearch.toggle | mod+shift+f | !terminalFocus | 🟡 WP7.6b: the palette's content mode |
-| usage.open | mod+u | 🟡 | Usage page |
+| terminal.new | mod+n | terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): a new terminal group in both |
+| terminal.close | mod+w | terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): the same confirm dialog, but the terminal's text draws sharp above the dialog's dim (item F) |
+| rightPanel.close | mod+w | !terminalFocus | ✅ WP7.6a: closes the active tab. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| view.reopenClosed | mod+shift+t | (none) | ✅ WP7.6a: panel tabs only; a closed terminal doesn't come back in either app. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| diff.toggle | mod+d | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md); the diff's own content differs (size-limit notice, Diff section) |
+| preview.toggle | mod+shift+j | (none) | ✅ WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| preview.refresh | mod+r | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared, both apps share the server's browser tabs (see Not compared) |
+| preview.focusUrl | mod+l | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared |
+| preview.zoomIn | mod+= and mod++ | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared; outside the preview T3's Mod+= zooms the whole UI (View menu) |
+| preview.zoomOut | mod+- | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared |
+| preview.resetZoom | mod+0 | previewFocus | 🟡 WP7.6b. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not compared |
+| commandPalette.toggle | mod+k | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): fixed blank bottom rows |
+| filePicker.toggle | mod+p | !terminalFocus | 🟡 WP7.6a. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): T3 highlights the first file before typing; the 45-go-to-file reference doesn't (item C) |
+| projectSearch.toggle | mod+shift+f | !terminalFocus | ✅ WP7.6b: the palette's content mode. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| usage.open | mod+u | !terminalFocus | ✅ Usage page. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | theme.select | mod+alt+a | !terminalFocus | ⏳ themes, WP7.7 |
-| appearance.cycle | mod+alt+shift+a | !terminalFocus | 🟡 |
+| appearance.cycle | mod+alt+shift+a | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): same order and toast |
 | themeEditor.toggle | mod+alt+shift+t | (none) | ⏳ WP7.7 |
-| composer.stash | mod+s | !terminalFocus | 🟡 WP7.3 |
-| thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | 🟡 |
-| thread.editQueuedMessage | alt+arrowup | composerFocus | 🟡 |
-| composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 |
-| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11) |
-| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11) |
-| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | 🟡 resolved; sends, then opens a new thread in the same project (ComposerController.swift, ChatView.tsx:10020-10027) |
-| chat.new | mod+n | !terminalFocus | 🟡 |
-| chat.new | mod+shift+o | !terminalFocus | 🟡 |
-| chat.newLocal | mod+shift+n | !terminalFocus | 🟡 |
-| chat.newWithoutProject | mod+alt+n | 🟡 | WP7.9: a draft in the scratch project of the open thread's machine, else the only machine offering one |
+| composer.stash | mod+s | !terminalFocus | 🟡 WP7.3. Not side by side: a stash test writes to the user's real stash |
+| thread.steerQueuedMessage | mod+shift+enter | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| thread.editQueuedMessage | alt+arrowup | composerFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| composer.sendAlternate | mod+enter | composerFocus && turnRunning | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
+| composer.sendBackground | mod+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
+| composer.sendBackground | mod+alt+enter | composerFocus && draftThreadRoute | 🟡 resolved; starts the draft in the background behind a fresh draft (ComposerLogic.swift, WP7.11). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
+| composer.sendAndNewThread | mod+alt+enter | composerFocus && !draftThreadRoute | 🟡 resolved; sends, then opens a new thread in the same project (ComposerController.swift, ChatView.tsx:10020-10027). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): not driven |
+| chat.new | mod+n | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): project chooser order fixed; the new draft doesn't carry the viewed thread's model (item A) |
+| chat.new | mod+shift+o | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): as Mod+N (item A) |
+| chat.newLocal | mod+shift+n | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): the draft doesn't carry the viewed thread's model (item A), and a reused empty draft keeps an earlier worktree choice where T3 starts from the defaults (item H) |
+| chat.newWithoutProject | mod+alt+n | !terminalFocus | 🟡 WP7.9: a draft in the scratch project of the open thread's machine, else the only machine offering one. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): scratch hero fixed; model carry differs (item A) |
 | chat.find | mod+f | !terminalFocus && !previewFocus | ⏳ thread find, WP7.8 |
-| modelPicker.toggle | mod+shift+m | !terminalFocus | 🟡 |
-| composer.host | mod+shift+h | !terminalFocus | 🟡 |
-| composer.effort | mod+shift+e | !terminalFocus | 🟡 |
-| composer.mode | mod+shift+a | !terminalFocus | 🟡 |
-| composer.workspace | mod+shift+x | !terminalFocus | 🟡 |
-| composer.branch | mod+shift+g | !terminalFocus | 🟡 |
-| composer.previousWorktree | mod+shift+l | !terminalFocus | 🟡 |
+| modelPicker.toggle | mod+shift+m | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): focus goes back to the prompt on close |
+| composer.host | mod+shift+h | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): does nothing without a choice of machines |
+| composer.effort | mod+shift+e | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| composer.mode | mod+shift+a | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| composer.workspace | mod+shift+x | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): focus goes back to the prompt on close |
+| composer.branch | mod+shift+g | !terminalFocus | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): the picker opens about 7px lower than T3's (item E) |
+| composer.previousWorktree | mod+shift+l | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | pullRequest.copyNumber | mod+shift+k | !terminalFocus | ✅ WP7.5b, with a pull request tab active |
-| modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | 🟡 |
-| modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | 🟡 |
+| modelPicker.previousProvider | mod+shift+arrowup | modelPickerOpen | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| modelPicker.nextProvider | mod+shift+arrowdown | modelPickerOpen | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
 | editor.openFavorite | mod+o | (none) | ⏳ WP7.8 |
-| thread.previous | mod+shift+[ | (none) | 🟡 |
-| thread.next | mod+shift+] | (none) | 🟡 |
-| thread.copyReference | mod+shift+c | !terminalFocus | 🟡 copies the pull request link when the thread has one, else the thread ID (PullRequestsController.copyReferenceTarget, SidebarCommands.swift) |
-| thread.settle | mod+shift+s | !terminalFocus | 🟡 |
-| thread.pin | mod+shift+p | !terminalFocus | 🟡 |
-| thread.undo | mod+z | !terminalFocus && !editableFocus | 🟡 |
-| thread.jump.1 to thread.jump.9 (`THREAD_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | isDesktop | 🟡 |
+| thread.previous | mod+shift+[ | (none) | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| thread.next | mod+shift+] | (none) | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| thread.copyReference | mod+shift+c | !terminalFocus | ✅ copies the pull request link when the thread has one, else the thread ID (PullRequestsController.copyReferenceTarget, SidebarCommands.swift). SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| thread.settle | mod+shift+s | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): beats the editor's strikethrough and stays on the thread |
+| thread.pin | mod+shift+p | !terminalFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| thread.undo | mod+z | !terminalFocus && !editableFocus | ✅ SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): a click on empty thread space blurs the prompt, so Mod+Z reaches it |
+| thread.jump.1 to thread.jump.9 (`THREAD_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | isDesktop | 🟡 SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): jumps match; the hints shown while Command is held weren't compared |
 | modelPicker.jump.1 to .9 (`MODEL_PICKER_JUMP_KEYBINDING_COMMANDS`) | mod+1 to mod+9 | modelPickerOpen && isDesktop | ✅ M9 providers 2026-10-12: the composer picker shows the jump labels on the first nine models (always while open, as T3 desktop) |
-| usage.cost | c | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
-| usage.tokens | t | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
-| usage.limits | l | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
-| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | 🟡 | WP7.7c; ignored while a field, dialog or the model picker has focus; periods do nothing on Limits |
-| thread.stop | (no default) | (none) | 🟡 |
-| composer.cycleHost | (no default) | (none) | 🟡 |
+| usage.cost | c | usagePageOpen | ✅ WP7.7c; ignored while a field, dialog or the model picker has focus. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| usage.tokens | t | usagePageOpen | ✅ WP7.7c. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| usage.limits | l | usagePageOpen | ✅ WP7.7c. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md) |
+| usage.period.day / week / month / quarter | mod+shift+1 / 2 / 3 / 4 | usagePageOpen | 🟡 WP7.7c; periods do nothing on Limits. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): day and week match; macOS takes Mod+Shift+3 and 4 for screenshots before either app |
+| thread.stop | (no default) | (none) | 🟡 not side by side: no default key |
+| composer.cycleHost | (no default) | (none) | 🟡 not side by side: no default key |
 | script.<id>.run | (no default, user-assigned) | (none) | ⏳ project scripts, WP7.4 |
-| Fixed, not configurable: diff find | mod+f inside a diff | diff focused | 🟡 WP7.12: Cmd+F routed through the sole App/Sources/Shortcuts dispatcher when the diff is focused. WP7.12b adds full find controls and match painting; see the diff find row. |
-| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | 🟡 beside a thread; the Pull Requests page has no copy shortcut yet |
+| Fixed, not configurable: diff find | mod+f inside a diff | diff focused | 🟡 WP7.12: Cmd+F routed through the sole App/Sources/Shortcuts dispatcher when the diff is focused; WP7.12b adds full find controls and match painting. SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): a click on a file header now focuses the diff; T3's find is a floating field with "Search", CandyWrapper's a full-width bar (item D) |
+| Fixed: copy PR URL | mod+shift+c | PR open in panel or PR page | 🟡 beside a thread (SBS 2026-10-13 (docs/research/sbs-keyboard-2026-10-13.md): matches); the Pull Requests page has no copy shortcut yet |
 | Fixed: quit | mod+q (hold 1.2 s, or double press within 500 ms) | desktop | ⏳ WP7.8 |
 | When-clause context keys to implement | terminalFocus, previewFocus, composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop | n/a | 🟡 composerFocus, editableFocus, rightPanelOpen, turnRunning, draftThreadRoute, modelPickerOpen, usagePageOpen, isDesktop, isWeb set; terminalFocus and previewFocus come from the terminal and browser focus (AppDelegate.swift) |
 
