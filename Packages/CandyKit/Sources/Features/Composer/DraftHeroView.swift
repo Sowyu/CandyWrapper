@@ -146,7 +146,8 @@ extension DraftHeroView {
         guard let host = anchor.popupHost else { return }
         let view = SidebarProjectScopeView(groups: groups, selectedKey: selectedKey, minimumWidth: 288,
                                            environments: environments, extra: .addProject)
-        var popup: OpenPopup?
+        // Weak: the host holds the open popup, and a strong capture would make popup -> view -> onSelect -> popup a cycle.
+        weak var popup: OpenPopup?
         view.onSelect = { key in
             if let popup { host.close(popup, returnFocus: false) }
             onSelect(key)

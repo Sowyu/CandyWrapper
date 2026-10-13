@@ -837,12 +837,20 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(env.id, ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
         // Read the other list live: a focused toggle keeps this editor across server echoes, so `hidden`
         // and `order` above can be one write behind.
-        func live() -> (hidden: [String], order: [String]) {
-            let p = (context.modelPreferences?(env.id) ?? ([], .object([:]))).providers[row.instanceId]
+        // Takes the page as an argument: a nested func reading `context` would capture self strongly through the
+        // closures below and keep every visited page alive.
+        func live(_ page: ProvidersSettingsView) -> (hidden: [String], order: [String]) {
+            let p = (page.context.modelPreferences?(env.id) ?? ([], .object([:]))).providers[row.instanceId]
             return ((p?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue), (p?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue))
         }
-        modelsView.onHidden = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: next, order: live().order) }
-        modelsView.onOrder = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: live().hidden, order: next) }
+        modelsView.onHidden = { [weak self] next in
+            guard let self else { return }
+            self.writePreferences(env.id, row.instanceId, hidden: next, order: live(self).order)
+        }
+        modelsView.onOrder = { [weak self] next in
+            guard let self else { return }
+            self.writePreferences(env.id, row.instanceId, hidden: live(self).hidden, order: next)
+        }
         modelsView.onAdd = { [weak self] slug in
             var o = current().objectValue ?? [:]
             var config = o["config"]?.objectValue ?? [:]
