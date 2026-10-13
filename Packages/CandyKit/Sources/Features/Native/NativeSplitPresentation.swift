@@ -30,9 +30,9 @@ public struct NativePanelStates: Equatable, Sendable {
 /// the detail and a collapsed inspector, modeled on T3 Mobile's iPad split (createWorkspaceStackNavigator.ios.tsx:
 /// 184-283). The split view controller sits in a plain root view, because popups, modals and the palette add
 /// themselves to the window's content view.
-// ponytail: the split view's Auto Layout pulls every view in the window into the layout engine, about 4 MB at
-// rest with today's custom sidebar and timeline (a split view in the theme frame or frame-based hosts beside it
-// did not avoid it); measure again when phases 2 and 3 replace those views with fewer native ones
+// ponytail: the split view's Auto Layout puts every view in the window into one layout engine, about 1.3 MB plus
+// 3 KB per view (2.7 MB and 15 to 20 ms at launch with the window's 780 views, half of them hidden; docs/glass-native.md
+// "Perf audit"); create the thread panel's hidden panels on first use, or lay the split out by frames, if that matters
 @MainActor
 public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolbarDelegate {
     public let split = NSSplitViewController()

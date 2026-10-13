@@ -7,7 +7,8 @@
 # to a PNG and quits. The app's pid goes to <app>.pid next to the app, and to /tmp/candywrapper-app.pid,
 # which every run overwrites.
 # CANDY_LAUNCH_TIMING=1, CANDY_THREAD_TIMING=1, CANDY_THREAD_CACHE (a directory, or `off`),
-# CANDY_SIDEBAR_TIMING (1, or `nocache`) and CANDY_THEME (a theme id) in the caller's environment reach the app
+# CANDY_SIDEBAR_TIMING (1, or `nocache`), CANDY_THEME (a theme id) and MallocStackLogging (for `leaks --outputGraph`
+# and `malloc_history -callTree`) in the caller's environment reach the app
 # (scripts/perf-review).
 # Build first with scripts/build-test-app <task> and pass the path it prints in CANDY_APP.
 # Usage: scripts/run-app [--live] [app arguments]
@@ -35,5 +36,5 @@ user="$(id -un)"
 exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; echo $$ > "$0"; exec "$@"' "$app.pid" \
   env -i HOME="$HOME" USER="$user" LOGNAME="$user" LANG=en_US.UTF-8 T3CODE_TELEMETRY_ENABLED=false \
   "$home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" ${CANDY_LAUNCH_TIMING:+CANDY_LAUNCH_TIMING=1} ${CANDY_THREAD_TIMING:+CANDY_THREAD_TIMING=1} \
-  ${CANDY_THREAD_CACHE:+CANDY_THREAD_CACHE="$CANDY_THREAD_CACHE"} ${CANDY_SIDEBAR_TIMING:+CANDY_SIDEBAR_TIMING="$CANDY_SIDEBAR_TIMING"} ${CANDY_THEME:+CANDY_THEME="$CANDY_THEME"} \
+  ${CANDY_THREAD_CACHE:+CANDY_THREAD_CACHE="$CANDY_THREAD_CACHE"} ${CANDY_SIDEBAR_TIMING:+CANDY_SIDEBAR_TIMING="$CANDY_SIDEBAR_TIMING"} ${CANDY_THEME:+CANDY_THEME="$CANDY_THEME"} ${MallocStackLogging:+MallocStackLogging="$MallocStackLogging"} \
   "$app/Contents/MacOS/CandyWrapper" "$@"
