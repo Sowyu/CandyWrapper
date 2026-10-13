@@ -11,7 +11,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-1. (taken 2026-10-13: phases 2 and 3; phase 1 done) Build the Glass Native (Experimental) theme: a native AppKit presentation of the main window modeled on T3 Code Mobile's iPad layout, with Liquid Glass chrome. The plan and its six phases are in `docs/glass-native.md`.
+1. (taken 2026-10-13: design polish with the composer, and a perf audit; phases 1 to 3 done) Build the Glass Native (Experimental) theme: a native AppKit presentation of the main window modeled on T3 Code Mobile's iPad layout, with Liquid Glass chrome. The plan and its six phases are in `docs/glass-native.md`.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
