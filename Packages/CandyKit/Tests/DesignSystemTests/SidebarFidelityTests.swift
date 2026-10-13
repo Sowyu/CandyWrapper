@@ -248,20 +248,36 @@ struct SidebarBehaviourTests {
         layout.layoutSubtreeIfNeeded()
         for _ in 0..<3 { layout.toggle() }
         #expect(!layout.isOpen)
-        // Mid close slide the container keeps its frame (so AppKit still draws it) and its layer moves away.
-        #expect(layout.sidebar.frame.minX == 0 && layout.main.frame.minX == 0)
         #expect(!layout.collapsedTrigger.isHidden && layout.rail.isHidden)
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            #expect(layout.sidebar.layer?.animation(forKey: "sidebar-slide") != nil)
-            #expect(layout.main.layer?.animation(forKey: "sidebar-slide") != nil)
+            #expect(layout.slide.isRunning && layout.slide.target == 0)
+            // Mid close slide the container keeps its frame (so AppKit still draws it) and its layer moves
+            // away; the main panel starts at the sidebar's edge and fills the rest, reflowed (T3's gap width).
+            layout.slide.step(at: CACurrentMediaTime() + 0.05)
+            let gap = layout.main.frame.minX
+            #expect(gap > 0 && gap < 256 && layout.main.frame.width == 1100 - gap)
+            #expect(layout.sidebar.frame.minX == 0)
+            #expect(layout.sidebar.layer?.affineTransform().tx == gap - 256)
+            // It lands exactly on the collapsed layout and stops ticking.
+            layout.slide.step(at: CACurrentMediaTime() + 10)
+            #expect(!layout.slide.isRunning)
+            #expect(layout.sidebar.frame.maxX == 0 && layout.main.frame == NSRect(x: 0, y: 0, width: 1100, height: 780))
+            #expect(layout.sidebar.layer?.affineTransform() == .identity)
         }
-        // Off again: the next toggle is instant and drops the slide.
+        // Off again: the next toggle is instant.
         SettingsPanelMotion.durationMs = 0
         layout.toggle()
         layout.layoutSubtreeIfNeeded()
         #expect(layout.isOpen && layout.sidebar.frame.minX == 0 && layout.main.frame.minX == 256)
         #expect(layout.collapsedTrigger.isHidden)
-        #expect(layout.sidebar.layer?.animation(forKey: "sidebar-slide") == nil)
+        #expect(!layout.slide.isRunning)
+    }
+
+    /// The CSS `ease-out` curve: ends fixed, fast start.
+    @Test func easeOutCurve() {
+        let curve = CubicBezier(0, 0, 0.58, 1)
+        #expect(curve.y(atX: 0) == 0 && abs(curve.y(atX: 1) - 1) < 1e-6)
+        #expect(abs(curve.y(atX: 0.5) - 0.6846) < 0.001) // cubic-bezier(0,0,.58,1) at 50%
     }
 
     /// `COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS`: a header under the window controls starts its content at 130.

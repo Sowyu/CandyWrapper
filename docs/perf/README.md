@@ -108,6 +108,8 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 
 `CANDY_SIDEBAR_TIMING=1` (passed through `scripts/run-app`) prints `sidebar rebuild <ms>, <items> items, <n> rows built` for every sidebar update; `CANDY_SIDEBAR_TIMING=nocache` builds the list from scratch each time, for a before. Numbers and method: `docs/research/m10-load-2026-10-12.md`, "Sidebar updates".
 
+The same variable makes `PanelSlide` print `slide frame <gap> ms after the last, <work> ms of work, value <v>` for every display frame of a sidebar slide. With panel animations at 400 ms, a Release build and the 2,000 message thread open, both directions took 24 frames 16.7 ms apart, with 1 to 4 ms of layout per frame (the main panel reflows on each one, as T3's does). A `screencapture -v` recording showed the main panel's content column moving on every frame, and the window after a close and open slide matched the screenshot taken before it pixel for pixel. Idle afterwards the app sat at 0.6% CPU and 2.8 wakeups a second with five servers connected: no display link outlives a slide.
+
 ## Opening a thread (2026-10-10)
 
 `CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.
