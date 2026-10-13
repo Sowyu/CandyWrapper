@@ -11,7 +11,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-1. Run `scripts/perf-review` on v1.0.0 (78b73ad) once no Zen build is running. It was skipped on 2026-10-13 because a Zen build loaded the Mac, and a run under that load would save a skewed baseline. Show the user the comparison with the 2026-10-12 run.
+1. (taken 2026-10-13: phase 1) Build the Glass Native (Experimental) theme: a native AppKit presentation of the main window modeled on T3 Code Mobile's iPad layout, with Liquid Glass chrome. The plan and its six phases are in `docs/glass-native.md`.
+2. Run `scripts/perf-review` on v1.0.0 (78b73ad) once no Zen build is running. It was skipped on 2026-10-13 because a Zen build loaded the Mac, and a run under that load would save a skewed baseline. Show the user the comparison with the 2026-10-12 run.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
