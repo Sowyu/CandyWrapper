@@ -137,7 +137,13 @@ final class DiffFileHeaderView: DiffRowView {
         if !viewedBox.isHidden, viewedBox.frame.union(viewedLabel.frame).contains(point) { return }
         if title.frame.contains(point), let onOpenFile { onOpenFile(path) } else { onToggle?(file) }
     }
-    override func mouseDown(with event: NSEvent) {}
+    /// The header is a button in T3, and Chromium focuses a pressed button, so focus lands in the diff
+    /// and Mod+F opens the diff's find rather than the thread's.
+    override func mouseDown(with event: NSEvent) {
+        var view = superview
+        while let v = view, !(v is DiffListView) { view = v.superview }
+        if let list = view { window?.makeFirstResponder(list) }
+    }
 }
 
 /// File name in the header: 12px sans on a 16px line, truncated at the start like pierre's

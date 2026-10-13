@@ -392,7 +392,11 @@ public final class CommandPaletteView: DSView {
     private func realizeRows() {
         guard case .results = content else { return }
         let width = document.frame.width
-        let visible = scroll.scrollView.contentView.bounds.insetBy(dx: 0, dy: -Self.overscan)
+        // The clip view takes its new size only when the scroll view lays out, after this layout pass, so the
+        // height comes from the list frame set here: a stale clip height left the last visible rows blank.
+        let clip = scroll.scrollView.contentView.bounds
+        let visible = NSRect(x: 0, y: clip.minY, width: width, height: max(clip.height, scroll.frame.height))
+            .insetBy(dx: 0, dy: -Self.overscan)
         // ponytail: linear scan of the slots, microseconds per 1,000 results; binary search if lists reach 100,000
         var keep = Set<Int>()
         for (i, slot) in rowSlots.enumerated() where slot.y < visible.maxY && slot.y + slot.height > visible.minY {

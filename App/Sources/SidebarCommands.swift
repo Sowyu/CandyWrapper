@@ -196,11 +196,12 @@ final class SidebarCommands {
             guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil, !self.isUsagePageOpen else { return false }
             return self.ledger.undoLatest()
         }
-        // `thread.settle` settles the open thread, or unsettles a settled one.
+        // `thread.settle` settles the open thread, or unsettles a settled one. The view stays on the thread
+        // (`settleThread(activeThreadRef)`, ChatView.tsx:8010-8030); only the sidebar's settle moves on.
         shortcuts.on("thread.settle") { [weak self] _ in
             guard let self, self.threads.panel.window != nil else { return false }
             if let id = self.threads.openThreadId, let thread = self.shell(id) {
-                if thread.settledOverride == .settled { self.unsettle(id) } else { self.settle(id) }
+                if thread.settledOverride == .settled { self.unsettle(id) } else { self.settle(id, navigates: false) }
             }
             return true
         }
@@ -290,10 +291,10 @@ final class SidebarCommands {
 
     // MARK: Lifecycle commands (useThreadActions.ts:658-976)
 
-    func settle(_ id: ThreadId) {
+    func settle(_ id: ThreadId, navigates: Bool = true) {
         guard !settling.contains(id), let thread = shell(id) else { return }
         settling.insert(id)
-        let navigate = planForwardNavigation(id)
+        let navigate = navigates ? planForwardNavigation(id) : nil
         let wokeAt = SidebarModel.threadWokeAt(SidebarThread(thread), nowMs: nowMs)
         // Settling drops the pin and the snooze on the server, so Undo puts them back too.
         let pinKey = thread.pinnedAt != nil ? thread.pinOrderKey : nil
