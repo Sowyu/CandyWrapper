@@ -36,13 +36,14 @@ final class ProjectScriptsController {
         self.sidebar = sidebar
         self.composer = composer
         self.terminal = terminal
-        let card = panel.detailsCard
-        card.scripts.primary.action = { [weak self] in
-            guard let self, let primary = ProjectScripts.primary(self.scripts) else { self?.openMenu(); return }
-            self.terminal.runScript(primary)
+        panel.lazyDetailsCard.configure { [weak self] card in
+            card.scripts.primary.action = { [weak self] in
+                guard let self, let primary = ProjectScripts.primary(self.scripts) else { self?.openMenu(); return }
+                self.terminal.runScript(primary)
+            }
+            card.scripts.secondary.action = { [weak self] in self?.openMenu() }
+            card.addScript.action = { [weak self] in self?.openEditor(nil) }
         }
-        card.scripts.secondary.action = { [weak self] in self?.openMenu() }
-        card.addScript.action = { [weak self] in self?.openEditor(nil) }
         composer.configObservers.append { [weak self] _ in self?.refresh() }
     }
 
@@ -55,15 +56,15 @@ final class ProjectScriptsController {
     func refresh() {
         guard let threadId, let env = threadId.environmentId, let project = project(threadId) else {
             scripts = []
-            panel.detailsCard.scriptsRow = nil
+            panel.lazyDetailsCard.set(\.scriptsRow, nil)
             return
         }
         let settings = ServerSettingsValues(composer?.config(env)?.settings.raw ?? .null)
         scripts = ProjectScripts.resolve(settings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)))
         loadProjectFile(env, cwd: thread(threadId)?.worktreePath ?? project.workspaceRoot)
         // ProjectScriptsControl.tsx:269-300, 372-375: "Actions" while only a settle action or t3.json imports exist.
-        panel.detailsCard.scriptsRow = ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
-            ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions)
+        panel.lazyDetailsCard.set(\.scriptsRow, ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
+            ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions))
     }
 
     /// `useT3ProjectFileState` (hooks/useT3ProjectFileScripts.ts:31-53): `t3.json` at the workspace root; a missing,

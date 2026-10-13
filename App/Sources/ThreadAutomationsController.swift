@@ -18,7 +18,11 @@ final class ThreadAutomationsController {
     init(panel: ThreadPanelView, environments: Environments) {
         self.panel = panel
         self.environments = environments
-        let view = panel.detailsCard.automations
+        panel.lazyDetailsCard.configure { [weak self] card in self?.wire(card.automations); self?.sync() }
+        _ = ScheduledTasksStore.shared.observe { [weak self] in self?.sync() }
+    }
+
+    private func wire(_ view: ThreadAutomationsView) {
         view.onManage = { [weak self] in
             guard let self, let id = self.openThreadId?(), let env = id.environmentId else { return }
             self.openSettings?(env, nil)
@@ -32,14 +36,15 @@ final class ThreadAutomationsController {
         view.onToggle = { [weak self] t, on in
             self?.act(t, "scheduledTasks.setEnabled", .object(["id": .string(t.id), "enabled": .bool(on)]), failure: "Could not update automation")
         }
-        _ = ScheduledTasksStore.shared.observe { [weak self] in self?.sync() }
     }
 
     func sync() {
         let id = openThreadId?()
         ScheduledTasksStore.shared.watch("thread", id?.environmentId.map { [$0] } ?? [])
-        let view = panel.detailsCard.automations
-        guard let id, let env = id.environmentId else { view.tasks = []; view.error = nil; panel.detailsCard.automationsChanged(); return }
+        // The card fills on its first build.
+        guard let card = panel.lazyDetailsCard.loaded else { return }
+        let view = card.automations
+        guard let id, let env = id.environmentId else { view.tasks = []; view.error = nil; card.automationsChanged(); return }
         switch ScheduledTasksStore.shared.lists[env] {
         case .loaded(let tasks):
             view.error = nil
@@ -52,7 +57,7 @@ final class ThreadAutomationsController {
             view.tasks = []
         }
         view.busyTaskId = busy
-        panel.detailsCard.automationsChanged()
+        card.automationsChanged()
     }
 
     private func act(_ t: ScheduledTask, _ method: String, _ payload: JSONValue, failure: String) {

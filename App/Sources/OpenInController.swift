@@ -9,18 +9,22 @@ import T3Protocol
 /// environment, so the server launches the editor; the choice is remembered as T3's `t3code:last-editor`.
 @MainActor
 final class OpenInController {
-    private let card: ThreadDetailsCardView
+    /// The details card, built the first time it opens; `render` fills it then.
+    private let lazyCard: LazyView<ThreadDetailsCardView>
     private let git: GitController
     private let environments: Environments
     private let composer: ComposerController
 
-    init(card: ThreadDetailsCardView, git: GitController, environments: Environments, composer: ComposerController, shortcuts: Shortcuts?) {
-        self.card = card
+    init(card: LazyView<ThreadDetailsCardView>, git: GitController, environments: Environments, composer: ComposerController, shortcuts: Shortcuts?) {
+        lazyCard = card
         self.git = git
         self.environments = environments
         self.composer = composer
-        card.openIn.primary.action = { [weak self] in self?.open(nil) }
-        card.openIn.secondary.action = { [weak self] in self?.showMenu() }
+        card.configure { [weak self] card in
+            card.openIn.primary.action = { [weak self] in self?.open(nil) }
+            card.openIn.secondary.action = { [weak self] in self?.showMenu() }
+            self?.render()
+        }
         git.onRender = { [weak self] in self?.render() }
         // `useOpenFavoriteEditorShortcut`: only while the picker shows, an editor is known and there is a workspace.
         shortcuts?.on("editor.openFavorite") { [weak self] _ in
@@ -73,6 +77,7 @@ final class OpenInController {
     }
 
     func render() {
+        guard let card = lazyCard.loaded else { return }
         card.showsOpenIn = isShown
         guard isShown else { return }
         let editor = preferred
@@ -105,7 +110,7 @@ final class OpenInController {
             items.append(MenuItem("Opens over SSH. Needs your key on \(environmentLabel)", disabled: true))
         }
         if remote == .unavailable { items = [MenuItem("No SSH route to \(environmentLabel)", disabled: true)] }
-        let split = card.openIn
+        let split = lazyCard.view.openIn
         MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
     }
