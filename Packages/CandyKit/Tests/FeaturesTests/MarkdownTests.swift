@@ -116,7 +116,7 @@ struct MarkdownTests {
         let text = (1...300).map { "let value\($0) = compute(\($0)) // line \($0)" }.joined(separator: "\n")
         let box = MarkdownTextBox(NSAttributedString(string: text, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)]),
                                   width: 400, lineHeight: 20, strut: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), wraps: false)
-        #expect(box.lines.count == 300)
+        #expect(box.lineCount == 300)
         func render(_ clip: CGRect?) -> [UInt8] {
             let w = 400, h = 6000
             var pixels = [UInt8](repeating: 0, count: w * h * 4)
@@ -134,5 +134,73 @@ struct MarkdownTests {
         #expect(rows(clipped, 0..<1900).allSatisfy { $0 == 0 })
         #expect(rows(clipped, 2400..<6000).allSatisfy { $0 == 0 })
         #expect(rows(full, 0..<1900).contains { $0 != 0 })
+    }
+
+    /// A code block's attributed string as `MarkdownLayout.codeBlock` builds it, with some italic runs.
+    private func codeString(_ code: String) -> NSAttributedString {
+        let font = DSFont.mono(MarkdownStyle.codeFontSize)
+        let string = NSMutableAttributedString(string: code, attributes: [.font: font])
+        let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        var at = 0
+        while at + 7 < string.length { string.addAttribute(.font, value: italic, range: NSRange(location: at, length: 5)); at += 97 }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineBreakStrategy = []
+        paragraph.defaultTabInterval = 8 * TextLine(NSAttributedString(string: " ", attributes: [.font: font])).width
+        paragraph.tabStops = []
+        string.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: string.length))
+        return string
+    }
+
+    /// Lazy layout breaks, places and measures every line as the full layout does.
+    @Test func lazyTextBoxMatchesFullLayout() {
+        let samples = ["let value = compute(1) // plain", "", "\tfunc a() {", "\t\tif x {\treturn 1 }", "abc\tdef\tg", "trailing spaces   ",
+                       String(repeating: "word ", count: 40), String(repeating: "x", count: 150), "café ünïcode", "emoji 🍬 here", "中文代码行",
+                       String(repeating: "ab ", count: 30) + "    ", "}"]
+        let code = (0..<260).map { samples[$0 % samples.count] + ($0 % 3 == 0 ? " // \($0)" : "") }.joined(separator: "\n")
+        let string = codeString(code), font = DSFont.mono(MarkdownStyle.codeFontSize)
+        for wraps in [true, false] {
+            for width in [301.0, 512.5, 700] as [CGFloat] {
+                let full = MarkdownTextBox(string, width: width, lineHeight: 18, strut: font, wraps: wraps, lazy: false)
+                let lazy = MarkdownTextBox(string, width: width, lineHeight: 18, strut: font, wraps: wraps, lazy: true)
+                #expect(lazy.laidOutCount < 260)
+                #expect(lazy.lineCount == full.lineCount && lazy.height == full.height && lazy.firstBaseline == full.firstBaseline)
+                #expect(abs(lazy.usedWidth - full.usedWidth) < 0.001)
+                let all = NSRange(location: 0, length: (code as NSString).length)
+                let a = lazy.spans(all), b = full.spans(all)
+                #expect(a.count == b.count)
+                #expect(zip(a, b).allSatisfy { $0.x0 == $1.x0 && $0.x1 == $1.x1 && $0.baseline == $1.baseline })
+                for y in stride(from: 3.0, to: full.height, by: 97) {
+                    #expect(lazy.character(at: CGPoint(x: 60, y: y)) == full.character(at: CGPoint(x: 60, y: y)))
+                }
+            }
+        }
+    }
+
+    /// An 18,000 line block opens without laying out its lines, then lays out the ones that draw, however far down.
+    @Test func lazyTextBoxLaysOutLinesFarBelowTheFold() {
+        let code = (0..<18_000).map { "let value\($0) = compute(\($0)) // line \($0) of the huge block" }.joined(separator: "\n")
+        let font = DSFont.mono(MarkdownStyle.codeFontSize)
+        let box = MarkdownTextBox(codeString(code), width: 700, lineHeight: 18, strut: font)
+        #expect(box.lineCount == 18_000 && box.height == 18_000 * 18)
+        #expect(box.laidOutCount == 0)
+        func paint(_ top: CGFloat) -> Bool {
+            let w = 700, h = 400
+            var pixels = [UInt8](repeating: 0, count: w * h * 4)
+            pixels.withUnsafeMutableBytes { raw in
+                let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
+                box.draw(in: ctx, at: CGPoint(x: 0, y: -top), clip: CGRect(x: 0, y: 0, width: 700, height: 400))
+            }
+            return pixels.contains { $0 != 0 }
+        }
+        #expect(paint(0))
+        #expect(box.laidOutCount < 40)
+        #expect(paint(box.height - 400))
+        #expect(box.laidOutCount < 80)
+        let last = box.spans(NSRange(location: (code as NSString).length - 5, length: 5))
+        #expect(last.count == 1 && (last.first?.baseline ?? 0) > box.height - 18)
+        #expect(box.laidOutCount < 80)
     }
 }

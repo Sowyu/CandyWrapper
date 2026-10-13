@@ -719,19 +719,21 @@ private struct Builder {
     mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool) -> Box {
         let p = MarkdownStyle.codePadding
         let font = DSFont.mono(MarkdownStyle.codeFontSize)
-        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.color])
-        let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-        for token in CodeHighlighter.tokens(code, language: language) {
-            string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
-            if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
-        }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineBreakStrategy = []
         // Chromium's default tab-size is 8 spaces.
         paragraph.defaultTabInterval = 8 * TextLine(NSAttributedString(string: " ", attributes: [.font: font])).width
         paragraph.tabStops = []
-        string.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: string.length))
+        // The paragraph style goes in before the tokens split the string into runs: added after, it rebuilt
+        // every run's attributes, 0.1 s for an 18,000 line block.
+        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.color,
+                                                                          .paragraphStyle: paragraph])
+        let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        for token in CodeHighlighter.tokens(code, language: language) {
+            string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
+            if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
+        }
         let inner = width - 2 - 2 * p.x
         let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
         // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
