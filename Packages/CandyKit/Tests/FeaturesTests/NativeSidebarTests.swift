@@ -69,6 +69,19 @@ struct NativeSidebarTests {
         #expect(NativeSidebarRules.dropTarget(rows, moving: ThreadId("a1"), at: 6) == nil)
     }
 
+    /// A shelf opening inserts one block after the common head; a settle moves one row; a reshuffle reloads.
+    @Test func rowChangesSkipTheCommonHeadAndTail() {
+        let settled = (0..<1_400).map { "s\($0)" }
+        let open = NativeSidebarListView.rowChanges(from: ["a", "b", "shelf"], to: ["a", "b", "shelf"] + settled)
+        #expect(open?.removed.isEmpty == true && open?.inserted == IndexSet(3..<1_403))
+        let close = NativeSidebarListView.rowChanges(from: ["a", "shelf"] + settled, to: ["a", "shelf"])
+        #expect(close?.removed == IndexSet(2..<1_402) && close?.inserted.isEmpty == true)
+        let settle = NativeSidebarListView.rowChanges(from: ["a", "b", "c", "shelf", "s1"], to: ["a", "c", "shelf", "b", "s1"])
+        #expect(settle?.removed == IndexSet(integer: 1) && settle?.inserted == IndexSet(integer: 3))
+        let shuffled = (0..<300).map { "t\($0)" }
+        #expect(NativeSidebarListView.rowChanges(from: shuffled, to: shuffled.reversed()) == nil)
+    }
+
     static func nativeContent(_ snap: ShellSnapshot, now: @escaping () -> Date) -> (SidebarContentView, NSWindow) {
         let content = SidebarContentView()
         content.now = now
