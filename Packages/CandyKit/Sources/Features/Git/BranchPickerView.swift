@@ -20,6 +20,10 @@ public final class BranchPickerView: DSView, PickerPopupBody {
     }
 
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 28, maxListHeight: CGFloat = 224
+    /// `ComboboxList`'s `not-empty:px-1 not-empty:py-1` around LegendList's `ps-1 pe-0 pt-2 pb-1` and its 6px stable
+    /// scrollbar gutter (BranchPicker.tsx:196-221, combobox.tsx): rows start 12 down and 8 in, and end 10 short of the
+    /// right edge (measured in T3's web client: rows 8 to 308 of 318, list 76 tall with two rows).
+    static let listTop: CGFloat = 12, listBottom: CGFloat = 8, rowLeft: CGFloat = 8, rowRight: CGFloat = 10
 
     public var rows: [Row] = [] { didSet { reload() } }
     public var selectedValue: String?
@@ -123,9 +127,9 @@ public final class BranchPickerView: DSView, PickerPopupBody {
     // MARK: Size and layout
 
     private var listHeight: CGFloat {
-        rows.isEmpty ? 36 : min(Self.maxListHeight, 8 + CGFloat(rows.count) * Self.rowHeight + 4)
+        rows.isEmpty ? 36 : min(Self.maxListHeight, contentListHeight)
     }
-    private var contentListHeight: CGFloat { 8 + CGFloat(rows.count) * Self.rowHeight + 4 }
+    private var contentListHeight: CGFloat { Self.listTop + CGFloat(rows.count) * Self.rowHeight + Self.listBottom }
     private var originHeight: CGFloat { originRow.isHidden ? 0 : 35 }
     private var statusHeight: CGFloat { status.isHidden ? 0 : 32 }
 
@@ -148,10 +152,9 @@ public final class BranchPickerView: DSView, PickerPopupBody {
         let listH = max(0, bounds.height - Self.searchHeight - originHeight - statusHeight)
         list.frame = NSRect(x: 0, y: Self.searchHeight, width: bounds.width, height: listH)
         scrollOffset = min(scrollOffset, maxScroll)
-        var y = 8 - scrollOffset
+        var y = Self.listTop - scrollOffset
         for row in rowViews {
-            // `ps-1 pe-0` with a stable scrollbar gutter.
-            row.frame = NSRect(x: 4, y: y, width: list.bounds.width - 4 - 4, height: Self.rowHeight)
+            row.frame = NSRect(x: Self.rowLeft, y: y, width: list.bounds.width - Self.rowLeft - Self.rowRight, height: Self.rowHeight)
             y += Self.rowHeight
         }
         emptyLabel.frame = NSRect(x: 8, y: 8, width: list.bounds.width - 16, height: 20)
@@ -172,8 +175,9 @@ public final class BranchPickerView: DSView, PickerPopupBody {
 
     private func scrollToHighlight() {
         guard let i = highlighted, list.bounds.height > 0, i < rowViews.count else { return }
-        let top = 8 + CGFloat(i) * Self.rowHeight, bottom = top + Self.rowHeight
-        if top - 8 < scrollOffset { scrollOffset = top - 8 } else if bottom + 4 > scrollOffset + list.bounds.height { scrollOffset = bottom + 4 - list.bounds.height }
+        let top = Self.listTop + CGFloat(i) * Self.rowHeight, bottom = top + Self.rowHeight
+        if top - Self.listTop < scrollOffset { scrollOffset = top - Self.listTop }
+        else if bottom + Self.listBottom > scrollOffset + list.bounds.height { scrollOffset = bottom + Self.listBottom - list.bounds.height }
         needsLayout = true
         maybeLoadMore()
     }
