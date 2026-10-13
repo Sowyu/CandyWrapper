@@ -155,7 +155,12 @@ def build_app(src, sha, osize=False):
                              stdout=f, stderr=subprocess.STDOUT)
     if rc != 0:
         sys.exit("perf-review: build failed, see " + build_log)
-    return dd + "/Build/Products/Release/CandyWrapper.app"
+    app = dd + "/Build/Products/Release/CandyWrapper.app"
+    # A plain Release build signs the app with the Apple Development team but leaves Sparkle on its own
+    # signature, and dyld then refuses to load Sparkle ("different Team IDs"). scripts/release re-signs every
+    # piece; a perf run only needs the app to launch, so sign it ad hoc as one.
+    subprocess.call(["codesign", "--force", "--deep", "--sign", "-", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return app
 
 
 def sizes(app):
