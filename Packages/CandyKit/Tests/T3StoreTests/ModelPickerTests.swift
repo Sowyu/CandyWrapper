@@ -257,6 +257,38 @@ struct ModelPickerTests {
         #expect(ComposerSelectionStore.blockReason(from: current, to: claude, model: "claude-opus-5-5",
                                                    ComposerSelectionContext(catalog: catalog, hasStartedSession: false)) == nil)
     }
+
+    /// useHandleNewThread.ts:100-135, 236-275: a new draft carries the viewed composer's model and interaction
+    /// mode; the project default beats it, an explicit pick in the draft stands, and reopening the same draft
+    /// carries nothing from itself.
+    @Test func newDraftCarriesViewedModel() throws {
+        let config = try Self.recordedConfig()
+        let ctx = ComposerSelectionContext(catalog: ProviderCatalog(config.providers), serverDefaults: config.settings, planModeEnabled: true)
+        let store = ComposerSelectionStore(defaults: nil)
+        store.pickModel("source", instance: "claudeAgent", model: "claude-opus-5-5", ctx)
+        store.pickModel("other", instance: "claudeAgent", model: "claude-fable-5-1", ctx)
+        store.setInteractionMode("source", .plan)
+        store.setRuntimeMode("new", .approvalRequired)
+        let carry = store.carry(from: "source", thread: nil)
+        #expect(carry.model?.model == "claude-opus-5-5" && carry.interaction == .plan)
+        store.seedNewDraft("new", carry: carry, carriedFromSameDraft: false, projectDefault: nil, alreadyOpen: false)
+        var r = store.resolve("new", ctx)
+        #expect(r.modelSlug == "claude-opus-5-5" && r.interactionMode == .plan && store.drafts["new"]?.runtimeMode == nil)
+        #expect(store.drafts["new"]?.explicit == false)
+
+        let projectDefault = ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5", selections: nil)
+        store.seedNewDraft("new", carry: carry, carriedFromSameDraft: false, projectDefault: projectDefault, alreadyOpen: false)
+        #expect(store.resolve("new", ctx).modelSlug == "claude-haiku-5-5")
+
+        // The same draft reopened: no self carry, so sticky (the last pick, Fable) applies.
+        store.seedNewDraft("new", carry: carry, carriedFromSameDraft: true, projectDefault: nil, alreadyOpen: true)
+        #expect(store.resolve("new", ctx).modelSlug == "claude-fable-5-1")
+
+        store.pickModel("new", instance: "claudeAgent", model: "claude-haiku-5-5", ctx)
+        store.seedNewDraft("new", carry: carry, carriedFromSameDraft: false, projectDefault: nil, alreadyOpen: false)
+        r = store.resolve("new", ctx)
+        #expect(r.modelSlug == "claude-haiku-5-5")
+    }
 }
 
 extension JSONEncoder {

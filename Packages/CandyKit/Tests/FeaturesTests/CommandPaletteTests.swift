@@ -108,6 +108,15 @@ import DesignSystem
         #expect(closed == 2)
     }
 
+    /// Go to file opens with its first file highlighted, before anything is typed (`autoHighlight="always"`,
+    /// CommandPalette.tsx:2995-2996, 3471).
+    @Test func modeHighlightsItsFirstRowOnOpen() {
+        let palette = CommandPaletteController(source: .init(rootGroups: { [] }))
+        let files = [PaletteGroup(value: "files", label: "demo-repo", items: [action("a.py", ["a.py"]) {}, action("b.md", ["b.md"]) {}])]
+        palette.setMode(.init(name: "files", placeholder: "Search files\u{2026}", footerActionLabel: "Open file") { _ in (files, "") })
+        #expect(palette.view.highlightedIndex == 0)
+    }
+
     @Test func jumpRunsTheItemShowingThatShortcut() {
         var ran: [String] = []
         let items = PaletteSearch.enumerate([action("a", ["A"]) { ran.append("a") }, action("b", ["B"]) { ran.append("b") }])

@@ -724,21 +724,30 @@ final class ComposerController {
         let group = group(of: project.id)
         let key = group?.key ?? project.id.rawValue
         var session: DraftSession
+        // The thread or draft on screen, whose model and interaction mode a new draft carries.
+        let carry = pickers.store.carry(from: draftKey, thread: shellThread)
+        let sourceDraftId: String? = if case .draft(let s) = target { s.draftId } else { nil }
         if let stored {
             session = stored
         } else if var existing = storedSession(key, members: Set(group?.memberProjectIds ?? [project.id])) {
-            if existing.projectId != project.id.rawValue, target != .draft(existing),
-               (prompts[existing.draftId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Self.retarget(&existing, to: project)
+            let alreadyOpen = sourceDraftId == existing.draftId
+            let empty = (alreadyOpen ? composer.text : prompts[existing.draftId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if !alreadyOpen, empty {
+                if existing.projectId != project.id.rawValue { Self.retarget(&existing, to: project) }
+                existing.resetWorkspace(to: workspace)
                 sessions[key] = existing
             }
             session = existing
+            if empty { pickers.store.seedNewDraft(existing.draftId, carry: carry, carriedFromSameDraft: alreadyOpen,
+                                       projectDefault: project.defaultModelSelection, alreadyOpen: alreadyOpen) }
         } else {
             let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
             session = DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
                                    projectId: project.id.rawValue, createdAt: Date(), envMode: workspace?.envMode,
                                    branch: workspace?.branch, worktreePath: workspace?.worktreePath, startFromOrigin: workspace?.startFromOrigin)
             sessions[key] = session
+            pickers.store.seedNewDraft(session.draftId, carry: carry, carriedFromSameDraft: false,
+                                       projectDefault: project.defaultModelSelection, alreadyOpen: false)
         }
         flushPrompt()
         queuedEdit = nil

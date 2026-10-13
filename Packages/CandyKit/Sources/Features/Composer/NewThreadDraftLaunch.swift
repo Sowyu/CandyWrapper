@@ -28,6 +28,15 @@ public struct DraftSession: Codable, Equatable, Sendable {
         self.worktreePath = worktreePath
         self.startFromOrigin = startFromOrigin
     }
+
+    /// An empty draft reopened from a new-thread surface drops its old workspace: the explicit options win, else
+    /// all four go back to nil so the configured default applies again (useHandleNewThread.ts:200-262).
+    public mutating func resetWorkspace(to explicit: DraftSession?) {
+        envMode = explicit?.envMode
+        branch = explicit?.branch
+        worktreePath = explicit?.worktreePath
+        startFromOrigin = explicit?.startFromOrigin
+    }
 }
 
 /// The draft screen's project picker choosing another project (DraftHeroHeadline.tsx:211-247 in 2994, 38571328a).
