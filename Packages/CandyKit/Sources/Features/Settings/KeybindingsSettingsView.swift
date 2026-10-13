@@ -51,12 +51,6 @@ public final class KeybindingsSettingsView: SettingsPageBase {
         binder.add { [weak self] in self?.rebuild() }
     }
 
-    /// Mod+F focuses the search from anywhere on the page.
-    public func focusSearch() {
-        window?.makeFirstResponder(search.input)
-        search.input.selectAll(nil)
-    }
-
     private var keybindings: [ResolvedKeybindingRule] { Keymap.merged(withServer: context.serverKeybindings).rules }
 
     /// A search jump to a command clears the page filter so its row exists (KeybindingsSettings.tsx:1335-1341).
