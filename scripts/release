@@ -61,9 +61,11 @@ if [[ -n $source ]]; then sha=$(git -C $source rev-parse HEAD); print "test buil
 else sha=$(git -C $here rev-parse --verify "$commit^{commit}"); print "release from $sha"; fi
 
 # 1. Unlock the release keychain before anything reads it: a locked keychain opens a GUI dialog and waits.
-pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
-print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
-unset pw
+unlock() {
+  local pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
+  print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
+}
+unlock
 # Anything running as this user can read the keychain's password, so keep it unlocked only while a
 # release runs: auto-lock after 5 idle minutes or on sleep, and lock again on exit (trap below).
 security set-keychain-settings -t 300 -l $KC
@@ -143,7 +145,8 @@ shasum -a 256 $out/$zip $out/$dmg | sed "s|$out/||" > $out/sha256.txt
 # 6. EdDSA: the archive, then the appcast. The seed goes to sign_update on stdin.
 edkey() {
   if [[ -n $edfile ]]; then cat $edfile
-  else security find-generic-password -s dev.candywrapper.sparkle-ed25519 -w $KC; fi
+  # Unlock again: the keychain locks after 5 idle minutes, and a build on a busy Mac takes longer than that.
+  else unlock; security find-generic-password -s dev.candywrapper.sparkle-ed25519 -w $KC; fi
 }
 sig_line=$(edkey | $sparkle_bin/sign_update --ed-key-file - $out/$zip)
 print -r -- "$sig_line" > $out/enclosure.txt
