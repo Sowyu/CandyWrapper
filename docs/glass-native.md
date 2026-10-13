@@ -220,3 +220,51 @@ Performance, Release builds alternating Glass and Glass Native launches with `CA
 Update cost at 1,580 threads with the settled shelf open, `PerfBenchmarks.sidebarUpdates`, median main thread time with layout: a one-thread rename 0.46 ms classic and 0.61 ms native, a minute's clock step 0.31 and 0.65 ms, the settled shelf opening or closing 2.0 and 1.6 ms.
 
 Parity is not reached: native is about 11 MB heavier and 65 to 75 ms slower to the window. A heap diff at rest puts the extra in the window structure, not the sidebar: SwiftUI view graphs behind each glass control (19 graphs, 23 glass material providers), 3,300 Auto Layout variables, method caches and Swift metadata for the extra AppKit and SwiftUI classes. The classic sidebar was never the main cost. Measure again after the polish pass settles the controls.
+
+### Perf audit (2026-10-13)
+
+Release builds of 76d7b4c on the frozen perf workload, Glass and Glass Native launches interleaved with `CANDY_THEME`, the first (cold) launch dropped, load average 1.5 to 2.1. Two idle perf builds that Time Profiler had launched and left behind ran during these runs, the same for both themes. Medians of three, with the range:
+
+| | Glass | Glass Native |
+|---|---|---|
+| Launch to window | 177 ms (175 to 188) | 255 ms (231 to 264) |
+| Footprint at rest | 33.8 MB (33.7 to 34.1) | 44.2 MB (43.6 to 45.2) |
+| Peak footprint | 34.0 MB (33.9 to 34.3) | 44.6 MB (44.4 to 45.5) |
+| CPU from 5 to 50 s after the window | 0.030% | 0.087% (0.032 to 0.097) |
+| Package idle wakeups | 0.13/s | 0.11/s |
+
+Where the difference goes. A scratch build took one piece out of the native window at a time (two interleaved launches each), and a bare AppKit app with 700 plain frame-laid views measured the same system pieces with no CandyWrapper code (three launches each):
+
+| Piece | Memory | Launch | Bare AppKit window | Avoidable |
+|---|---|---|---|---|
+| `NSToolbar`, unified, with its glass items | 3.6 MB | 20 to 30 ms | 3.3 MB | Only without `NSToolbar`. Fewer items saved nothing. |
+| `NSSplitViewController` and its Auto Layout engine | 2.7 MB | 15 to 20 ms | 1.3 MB, plus 3 KB per view in the window | Partly, with fewer views in the window |
+| The native sidebar: table, search field, SF Symbols, cells | 2.7 MB | about 15 ms | | The sidebar owner's |
+| Breadcrumb, scroll edge blur, column views, collapsed inspector, hidden Maximize | about 1.3 MB together, none above the noise alone | about 10 ms | | |
+
+Toolbar and split view together took 6.3 MB and 45 ms off, and `makeKeyAndOrderFront` fell from 48 to 5 ms. The bare window showed the same 6.6 MB for them. The engine's share grows with the window: 2.0 MB at 700 views and 8.2 MB at 2,100. Classic Glass creates the same autoresizing constraints (2,500 of them) but never adds them to an engine.
+
+The buckets the audit was asked to name:
+
+- Auto Layout and the split view: the rows above. The engine holds every view in the window, hidden ones too.
+- Toolbar: the row above. Its heap is spread thin: SwiftUI view graphs, key-value dependencies, SF Symbol parsing and AppKit method caches.
+- Glass and visual effect views: the window server composites them, and the CoreAnimation region is smaller in native (1.7 MB against 2.2 MB). The glass costs sit in the toolbar's SwiftUI graphs.
+- Layer backing stores: 209 layers with contents in native against 188 in classic, about 4 MB each by area.
+- Inspector: collapsed on an empty controller, it never loads a view. Removing it changed nothing.
+- Classic views kept in native mode: the classic sidebar's hidden chrome (scroll area, search field, buttons, pills, about 25 views) and the thread header (29 views), which the breadcrumb reads. About 0.2 MB with their engine share.
+- Hidden views (counted on 7152980): 431 of the native window's 784 views are hidden or sit under a hidden view, against 355 of 631 in classic. The thread details card has 81, the header 29, the context strip and terminal drawer 28 each, the stash menu 25 and the question panel 20. They hold about 1 MB of layer contents, mostly the timeline's hidden recycled rows (307 KB), the terminal drawer (148 KB) and the header (131 KB). Taking them out before the first layout saved 2.5 MB in Glass and 3.9 MB in Glass Native.
+
+Launch, from launch marks and Time Profiler: native spends 25 ms more building the presentation (the split view controller, the toolbar's view, the native sidebar and the breadcrumb) and 45 ms more in `makeKeyAndOrderFront`, whose first layout solves the engine (about 22 ms) and runs the toolbar's SwiftUI layout (about 16 ms).
+
+Idle is the same once the app settles. A 65 s sample from 20 s after launch has the main thread idle throughout. From 3 s on, the only main thread work is about 13 ms of Core Animation commits and `NSPersistentUI` flushes, which is what the 5 to 50 s CPU column shows.
+
+Fixes tried that saved nothing measurable: the sidebar accessory's buttons without the measuring convenience initializer (the accessory is gone since), fewer toolbar items, no inspector item, and content views with `translatesAutoresizingMaskIntoConstraints` off. No code fix went in. `scripts/run-app` now passes `MallocStackLogging` through, for `leaks --outputGraph` and `malloc_history -callTree`.
+
+The target, within 2 MB and 10 ms of Glass, is out of reach while Glass Native uses `NSToolbar` and `NSSplitViewController`: those two cost 6.3 MB and 45 ms here, and the same in an empty AppKit window. Bigger fixes, with what each would save:
+
+1. Create the thread panel's hidden panels on first show: 2.5 MB in both themes and 3.9 MB in Glass Native, so the gap shrinks by 1.4 MB, plus a few ms of the first layout. It touches `ThreadPanelView` and the panels' callers (`detailsCard` alone has 54).
+2. Bring the native sidebar to classic's cost: up to 2.7 MB and 15 ms. Dropping the hidden classic chrome in native mode is about 0.2 MB of it.
+3. Lay the split out by frames with our own sidebar glass instead of `NSSplitViewController`: 2.7 MB and 15 to 20 ms, but it gives up the system sidebar glass, its collapse animation and the tracking separator. A design call.
+4. The toolbar has no saving short of dropping `NSToolbar`, 3.6 MB and 20 to 30 ms.
+
+With 1 and 2 done, Glass Native would sit about 6 MB and 50 ms over Glass, which is what the system's toolbar and split view cost.
