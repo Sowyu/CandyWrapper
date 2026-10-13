@@ -13,6 +13,24 @@ public final class ThreadHeaderView: TopbarDragView {
     private let project = LabelView("", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
     private let slash = LabelView("/", font: TL.font(14, .medium), color: TL.c(\.iconMuted))
     private let titleHit = ThreadHeaderTitleView()
+    private let parentCrumb = ThreadHeaderParentCrumb()
+    private let parentSlash = LabelView("/", font: TL.font(14, .medium), color: TL.c(\.iconMuted))
+    /// The open subagent's parent title, nil for any other thread (ChatHeader.tsx:343-375 in 2994).
+    public var parentThreadTitle: String? {
+        didSet {
+            guard parentThreadTitle != oldValue else { return }
+            parentCrumb.title = parentThreadTitle ?? ""
+            updateParentVisibility()
+            needsLayout = true
+        }
+    }
+    public var onOpenParent: (@MainActor () -> Void)? { didSet { parentCrumb.action = onOpenParent } }
+    private var threadVisible = true
+    private func updateParentVisibility() {
+        let hidden = !threadVisible || parentThreadTitle == nil
+        parentCrumb.isHidden = hidden
+        parentSlash.isHidden = hidden
+    }
     private let titleEditor = InputView(placeholder: "Thread title", size: .inline)
     public var onThreadMenu: ((NSEvent, NSView) -> Void)?
     public var onRenameThread: ((String) -> Void)?
@@ -57,6 +75,8 @@ public final class ThreadHeaderView: TopbarDragView {
     public func setThreadVisible(_ visible: Bool) {
         for view in subviews where view !== titleEditor { view.isHidden = !visible }
         if !visible { titleEditor.isHidden = true }
+        threadVisible = visible
+        updateParentVisibility()
     }
     public func cancelTitleRename() { titleEditor.isHidden = true; titleHit.cancelPendingMenu() }
 
@@ -91,20 +111,25 @@ public final class ThreadHeaderView: TopbarDragView {
 
     public override func accessibilityChildren() -> [Any]? {
         // The header itself is ignored, so its own children are its unignored descendants.
-        let others = NSAccessibility.unignoredChildren(from: subviews.filter { $0 !== titleHit && !$0.isHidden })
+        let others = NSAccessibility.unignoredChildren(from: subviews.filter { $0 !== titleHit && $0 !== parentCrumb && !$0.isHidden })
         guard !title.isHidden, let window else { return others }
         func screen(_ rect: NSRect) -> NSRect { window.convertToScreen(convert(rect, to: nil)) }
         projectElement.setAccessibilityLabel(project.text)
         projectElement.setAccessibilityFrame(screen(project.frame))
         breadcrumb.setAccessibilityFrame(screen(project.frame.union(titleHit.frame)))
-        let crumbs: [Any] = project.text.isEmpty ? [titleHit] : [projectElement, titleHit]
+        var crumbs: [Any] = project.text.isEmpty ? [] : [projectElement]
+        if !parentCrumb.isHidden { crumbs.append(parentCrumb) }
+        crumbs.append(titleHit)
         breadcrumb.setAccessibilityChildren(crumbs)
         return [breadcrumb] + others
     }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for label in [project, slash, title] { label.lineHeight = 20; addSubview(label) }
+        for label in [project, slash, parentSlash, title] { label.lineHeight = 20; addSubview(label) }
+        addSubview(parentCrumb)
+        parentCrumb.accessibilityGroup = breadcrumb
+        updateParentVisibility()
         addSubview(favicon)
         toggles[0].setAccessibilityLabel("Toggle thread details panel")
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
@@ -146,12 +171,22 @@ public final class ThreadHeaderView: TopbarDragView {
         project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
         let slashX = start + 20 + projectWidth + 12
         slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
-        let titleX = slashX + slash.textWidth + 12
+        var titleX = slashX + slash.textWidth + 12
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
         let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
-        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, bounds.width - 38 - reserve - titleX)), height: 20)
+        let titleRight = bounds.width - 38 - reserve
+        if !parentCrumb.isHidden {
+            // The parent shows in full unless the whole breadcrumb would then overflow; then it collapses
+            // to "..." (ChatHeader.tsx:130-164 in 2994).
+            let slashWidth = ceil(parentSlash.textWidth)
+            parentCrumb.collapsed = titleX + parentCrumb.fullWidth + 12 + slashWidth + 12 + ceil(title.textWidth) + 1 > titleRight
+            parentCrumb.frame = NSRect(x: titleX, y: midY - 10, width: parentCrumb.width, height: 20)
+            parentSlash.frame = NSRect(x: parentCrumb.frame.maxX + 12, y: midY - 10, width: slashWidth, height: 20)
+            titleX = parentSlash.frame.maxX + 12
+        }
+        title.frame = NSRect(x: titleX, y: midY - 10, width: max(0, min(ceil(title.textWidth) + 1, titleRight - titleX)), height: 20)
         titleHit.frame = title.frame.insetBy(dx: 0, dy: 0)
         titleHit.frame.size.width += 18
         titleEditor.frame = NSRect(x: title.frame.minX - 4, y: midY - 11, width: max(80, title.frame.width + 8), height: 22)
@@ -183,10 +218,42 @@ public final class ThreadPanelView: DSView {
     public let lazyFindBar = LazyView { ThreadFindBarView() }
     public var findBar: ThreadFindBarView { lazyFindBar.view }
     public var findOpen = false { didSet {
-        if findOpen { findBar.isHidden = false } else { lazyFindBar.release() }
+        // The details card makes room under the bar: inline it slides down and returns at once, as a popover it
+        // slides both ways; the bar fades in (ThreadDetailsCard.tsx:163-170, popover.tsx:79-83, ThreadFindBar.tsx:62-66
+        // in 2994, f92afe79c).
+        let changed = findOpen != oldValue
+        if changed, detailsOpen, !detailsCard.isHidden, findOpen || timeline.detailsCardLeft == nil { detailsSlideFrom = detailsCard.frame.minY }
+        if findOpen {
+            findBar.isHidden = false
+            if changed { Self.fadeIn(findBar) }
+        } else { lazyFindBar.release() }
         if !findOpen { pendingFindMatch = nil; model.closeThreadFind(); timeline.threadFindMatch = nil }
         needsLayout = true
     } }
+    /// `THREAD_FIND_BAR_RESERVED_HEIGHT`: the find bar's `top-3` and 36px height push the details card down.
+    private var findInset: CGFloat { findOpen ? 48 : 0 }
+    private var detailsSlideFrom: CGFloat?
+    /// `transition-[top] duration-150 ease-out`, as an additive offset so the frame is final at once.
+    private static func slide(_ view: NSView, by offset: CGFloat) {
+        guard !Motion.reduced, let layer = view.layer else { return }
+        let a = CABasicAnimation(keyPath: "transform.translation.y")
+        a.fromValue = offset
+        a.toValue = 0
+        a.isAdditive = true
+        a.duration = Motion.Durations.default
+        a.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+        layer.add(a, forKey: "findSlide")
+    }
+    /// `transition-opacity duration-150 ease-out starting:opacity-0`.
+    private static func fadeIn(_ view: NSView) {
+        guard !Motion.reduced, let layer = view.layer else { return }
+        let a = CABasicAnimation(keyPath: "opacity")
+        a.fromValue = 0
+        a.toValue = 1
+        a.duration = Motion.Durations.default
+        a.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+        layer.add(a, forKey: "findFade")
+    }
     private var pendingFindMatch: ThreadFindResult.Match?
     public func revealThreadFind(_ match: ThreadFindResult.Match) {
         pendingFindMatch = match
@@ -1201,11 +1268,14 @@ public final class ThreadPanelView: DSView {
             }
         }
         let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - ThreadHeaderView.height,
-            topInset: lazyFindBar.loaded?.isHidden ?? true ? 0 : 48) : nil
+            topInset: findInset) : nil
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         if let findBar = lazyFindBar.loaded {
-            findBar.frame = NSRect(x: max(12, chat - 396), y: ThreadHeaderView.height + 12, width: max(0, min(384, chat - 24)), height: 36)
+            // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
+            // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).
+            let w = max(0, min(280, chat - 24))
+            findBar.frame = NSRect(x: chat - 12 - w, y: ThreadHeaderView.height + 12, width: w, height: 36)
             findBar.layer?.zPosition = 4
         }
         if detailsOpen {
@@ -1218,12 +1288,18 @@ public final class ThreadPanelView: DSView {
                     width: inlineDetails.width, height: min(detailsCard.preferredHeight, inlineDetails.height))
                 detailsCard.isHidden = false
             } else {
-                let w: CGFloat = 280
-                detailsCard.frame = NSRect(x: max(8, chat - 8 - w), y: ThreadHeaderView.height + 8,
-                    width: w, height: min(detailsCard.preferredHeight, max(0, chatHeight - ThreadHeaderView.height - 16)))
-                detailsCard.isHidden = chat < w + 16
+                // The popover sits 12px in from the right like the find bar, and under it while find is
+                // open (ThreadDetailsCard.tsx:185-193 and popover.tsx:75-83 in 2994, f92afe79c).
+                let w = min(280, chat - 24), top = ThreadHeaderView.height + 8 + findInset
+                detailsCard.frame = NSRect(x: chat - 12 - w, y: top,
+                    width: w, height: min(detailsCard.preferredHeight, max(0, chatHeight - top - 8)))
+                detailsCard.isHidden = w <= 0
+            }
+            if let from = detailsSlideFrom, !detailsCard.isHidden, from != detailsCard.frame.minY {
+                Self.slide(detailsCard, by: from - detailsCard.frame.minY)
             }
         }
+        detailsSlideFrom = nil
         // The floating browser keeps to the chat canvas, top right by default (previewMiniPlayerLayout.ts).
         // ponytail: no composer or details-card obstacles and no resize handles; add them from
         // previewMiniPlayerLayout.ts when the player is used beside long threads

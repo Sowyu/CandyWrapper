@@ -84,6 +84,13 @@ public struct ProjectedSubagent: Sendable, Equatable {
 }
 
 public enum ThreadRelationships {
+    /// `parentThreadLink` (ChatView.tsx:2154-2175 in 2994): only a subagent names its parent, titled from the
+    /// parent's shell or "Parent thread" while that shell is missing. Forks get no link.
+    public static func parentLink(_ lineage: ThreadLineage?, threads: [ThreadShell]) -> (threadId: ThreadId, title: String)? {
+        guard lineage?.relationshipToParent == .subagent, let parent = lineage?.parentThreadId else { return nil }
+        return (parent, threads.first { $0.id == parent }?.title ?? "Parent thread")
+    }
+
     /// The environment's shells with local ids, the way the projection names threads.
     public static func unscoped(_ shells: [ThreadShell], environmentId: String) -> [ThreadShell] {
         shells.compactMap { shell in

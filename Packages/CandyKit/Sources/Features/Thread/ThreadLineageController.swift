@@ -66,6 +66,7 @@ public final class ThreadLineageController {
             panel.composer.replacement = nil
             panel.timeline.setHeader(nil, height: 0)
             panel.timeline.setFooter(nil, height: 0)
+            panel.header.parentThreadTitle = nil
             return
         }
         let all = shells?() ?? []
@@ -74,14 +75,18 @@ public final class ThreadLineageController {
         let byId = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         section.mergeTargetTitle = lineage.mergeTarget.flatMap { byId[$0]?.title }
         section.lineage = lineage
-        // "Subagent of": any thread whose lineage names a subagent parent.
+        // "Subagent of" over the timeline and the parent crumb in the header: any thread whose lineage names a
+        // subagent parent.
         let thread = projection.thread
-        if thread.lineage?.relationshipToParent == .subagent, let parent = thread.lineage?.parentThreadId {
-            parentLink.parentTitle = byId[parent]?.title ?? "Parent thread"
-            parentLink.onOpen = { [weak self] in self?.open(parent) }
+        if let link = ThreadRelationships.parentLink(thread.lineage, threads: local) {
+            parentLink.parentTitle = link.title
+            parentLink.onOpen = { [weak self] in self?.open(link.threadId) }
             panel.timeline.setHeader(parentLink, height: TimelineParentLinkView.height)
+            panel.header.parentThreadTitle = link.title
+            panel.header.onOpenParent = { [weak self] in self?.open(link.threadId) }
         } else {
             panel.timeline.setHeader(nil, height: 0)
+            panel.header.parentThreadTitle = nil
         }
         updateBar(projection, shell: byId[thread.id], parent: thread.lineage?.parentThreadId, env: env)
         updateStatusLine(all.first { $0.id == threadId })

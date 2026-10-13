@@ -945,6 +945,12 @@ final class GitController {
             if !call.isRepeat { self.openRunContextMenu(inPanel: false) }
             return true
         }
+        // `threadPanel.toggle` (ChatView.tsx:8144-8149 in 2994): the header's details toggle.
+        shortcuts.on("threadPanel.toggle") { [weak self] _ in
+            guard let self, self.panel.window != nil, !self.panel.header.toggles[0].isHidden else { return false }
+            self.toggleDetails()
+            return true
+        }
         shortcuts.on("composer.previousWorktree") { [weak self] call in
             guard let self, self.stripShowsGit, self.previousWorktree != nil else { return false }
             if !call.isRepeat { self.usePreviousWorktree(); self.composer.focusComposer() }
