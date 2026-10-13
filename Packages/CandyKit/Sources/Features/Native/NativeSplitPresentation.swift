@@ -8,6 +8,8 @@ public struct NativeToolbarActions {
     public var files: () -> Void = {}
     public var git: () -> Void = {}
     public var terminal: () -> Void = {}
+    /// The sidebar's bottom Settings button.
+    public var settings: () -> Void = {}
     /// Whether Files, Git and Terminal apply now: a thread or draft shows in the detail column.
     public var threadShown: () -> Bool = { false }
     public init() {}
@@ -33,6 +35,8 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     private let rootController = NativeRootController()
     private let sidebarColumn: NativeColumnController
     private let detailColumn: NativeColumnController
+    /// The sidebar's bottom accessory with New chat and Settings (macOS 26), hidden while Settings' navigation shows.
+    private var sidebarAccessory: NSViewController?
 
     /// T3 Mobile's column metrics (createWorkspaceStackNavigator.ios.tsx:198-203).
     public static let sidebarMinimum: CGFloat = 280, sidebarMaximum: CGFloat = 380, sidebarPreferred: CGFloat = 320
@@ -57,6 +61,13 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         split.addSplitViewItem(detailItem)
         split.addSplitViewItem(inspectorItem)
         if let autosaveName { split.splitView.autosaveName = autosaveName }
+        if #available(macOS 26, *) {
+            let accessory = NSSplitViewItemAccessoryViewController()
+            accessory.view = NativeSidebarAccessoryView(newChat: { [weak self] in self?.actions.newThread() },
+                                                        settings: { [weak self] in self?.actions.settings() })
+            sidebarItem.addBottomAlignedAccessoryViewController(accessory)
+            sidebarAccessory = accessory
+        }
         rootController.addChild(split)
         rootController.view.addSubview(split.view)
         split.view.frame = rootController.view.bounds
@@ -73,7 +84,12 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
 
     public var sidebarContent: NSView? {
         get { sidebarColumn.content }
-        set { sidebarColumn.content = newValue }
+        set {
+            sidebarColumn.content = newValue
+            if #available(macOS 26, *), let accessory = sidebarAccessory as? NSSplitViewItemAccessoryViewController {
+                accessory.isHidden = !(newValue is SidebarContentView)
+            }
+        }
     }
 
     public var mainContent: NSView? {
@@ -244,5 +260,55 @@ final class NativeColumnView: DSView {
         // (hidden in this mode) and lines that row up with the toolbar, so its search starts just below it.
         let y = detail ? top : top - ThreadHeaderView.height
         content?.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y))
+    }
+}
+
+/// The sidebar's bottom accessory: a glass "New chat" button (T3 Mobile's bottom-toolbar compose,
+/// WorkspaceToolbar.ios.tsx:115-122) and a glass Settings button.
+@available(macOS 26, *)
+final class NativeSidebarAccessoryView: NSView {
+    let newChat: NSButton
+    let settings: NSButton
+    private let onNewChat: () -> Void
+    private let onSettings: () -> Void
+
+    init(newChat: @escaping () -> Void, settings: @escaping () -> Void) {
+        onNewChat = newChat
+        onSettings = settings
+        self.newChat = NSButton(title: "New chat", image: NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)!,
+                                target: nil, action: nil)
+        self.settings = NSButton(image: NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")!, target: nil, action: nil)
+        super.init(frame: NSRect(x: 0, y: 0, width: NativeSplitPresentation.sidebarPreferred, height: Self.height))
+        for button in [self.newChat, self.settings] {
+            button.bezelStyle = .glass
+            button.controlSize = .large
+            addSubview(button)
+        }
+        self.newChat.imagePosition = .imageLeading
+        self.newChat.borderShape = .capsule
+        self.newChat.target = self
+        self.newChat.action = #selector(pressNewChat)
+        self.newChat.toolTip = "New chat"
+        self.settings.borderShape = .circle
+        self.settings.target = self
+        self.settings.action = #selector(pressSettings)
+        self.settings.toolTip = "Settings"
+        heightAnchor.constraint(equalToConstant: Self.height).isActive = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    static let height: CGFloat = 52
+
+    @objc private func pressNewChat() { onNewChat() }
+    @objc private func pressSettings() { onSettings() }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height, size: CGFloat = 34
+        settings.frame = NSRect(x: 12, y: (h - size) / 2, width: size, height: size)
+        let width = max(size, newChat.fittingSize.width + 8)
+        newChat.frame = NSRect(x: bounds.width - 12 - width, y: (h - size) / 2, width: width, height: size)
     }
 }
