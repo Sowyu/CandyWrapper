@@ -141,20 +141,15 @@ public final class TimelineView: DSView {
         let lane = laneFrame
         let host = worktreeSetup.isHidden ? parked : document
         if worktreeSetup.superview !== host { host.addSubview(worktreeSetup) }
-        let top = chromeTop + earlierSpace
+        let top = chromeTop
         header?.frame = NSRect(x: TL.snap(lane.x), y: top, width: lane.width, height: headerHeight)
         let height = worktreeSetup.height(forWidth: lane.width)
         worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: top + headerHeight + 12, width: lane.width, height: height)
         if setupHeight != height { setupHeight = height; updateTopInset() }
-        if let earlier = earlierPill, !earlier.isHidden {
-            let size = earlier.intrinsicContentSize
-            earlier.frame = NSRect(x: TL.snap(lane.x + (lane.width - size.width) / 2), y: TL.snap(chromeTop + 8 + (NativeTimeline.earlierPill - size.height) / 2),
-                                   width: size.width, height: size.height)
-        }
         layoutEmptyPlaceholder()
     }
 
-    private func updateTopInset() { topInset = 24 + chromeTop + earlierSpace + headerHeight + setupHeight }
+    private func updateTopInset() { topInset = 24 + chromeTop + headerHeight + setupHeight }
 
     // MARK: Glass Native
 
@@ -167,7 +162,6 @@ public final class TimelineView: DSView {
             context.style = style
             measured.removeAll()
             reconfigureVisible()
-            if style == .classic { earlierPill?.isHidden = true } else { earlierPill?.isHidden = !hasEarlierHistory }
             updateTopInset()
             laidOutWidth = -1
             needsLayout = true
@@ -179,43 +173,6 @@ public final class TimelineView: DSView {
     /// Room the window's toolbar takes over the top of the timeline (Glass Native): the rows scroll under it.
     public var chromeTop: CGFloat = 0 { didSet { if chromeTop != oldValue { updateTopInset(); layoutHeader() } } }
 
-    /// The thread has older history to page in. Glass Native shows "Load earlier activity" above the rows;
-    /// both styles still load it when the scroll nears the top.
-    public var hasEarlierHistory = false {
-        didSet {
-            guard hasEarlierHistory != oldValue else { return }
-            if hasEarlierHistory && style == .native && earlierPill == nil {
-                let pill = NSButton(title: "Load earlier activity", image: NSImage(systemSymbolName: "chevron.up", accessibilityDescription: nil)!,
-                                    target: self, action: #selector(loadEarlier))
-                pill.bezelStyle = .push
-                pill.controlSize = .large
-                pill.imagePosition = .imageLeading
-                document.addSubview(pill)
-                earlierPill = pill
-            }
-            earlierPill?.isHidden = !(hasEarlierHistory && style == .native)
-            updateTopInset()
-            layoutHeader()
-        }
-    }
-    private var earlierPill: NSButton?
-    @objc private func loadEarlier() { onNearTop?() }
-    private var earlierSpace: CGFloat { earlierPill?.isHidden == false ? NativeTimeline.earlierSpace : 0 }
-
-    /// The turn that works now, from the timeline's `working` row: when it started and whether it compacts.
-    /// Glass Native's floating pill shows it.
-    public private(set) var working: TimelineWorking? { didSet { if working != oldValue { onWorkingChange?() } } }
-    public var onWorkingChange: (@MainActor () -> Void)?
-    public var itemCount: Int { items.count }
-    private func updateWorking() {
-        // The working row closes the list.
-        let row = items.suffix(3).last { if case .working = $0.row.kind { true } else { false } }
-        if let row, case .working(let compacting) = row.row.kind {
-            working = TimelineWorking(sinceMs: row.row.createdAt?.epochMs, compacting: compacting)
-        } else {
-            working = nil
-        }
-    }
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
     public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
 
@@ -445,7 +402,6 @@ public final class TimelineView: DSView {
         updateMinimapPosition()
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
         if new.isEmpty != old.isEmpty { layoutEmptyPlaceholder() }
-        updateWorking()
     }
 
     /// Development (CANDY_THREAD_TIMING): the next display refresh after the rows were placed, so
@@ -485,7 +441,6 @@ public final class TimelineView: DSView {
     public var detailsCardLeft: CGFloat? { didSet { if detailsCardLeft != oldValue { relayout() } } }
     var laneFrame: (x: CGFloat, width: CGFloat) {
         let w = document.bounds.width
-        if context.native { return NativeTimeline.lane(width: w, cardLeft: detailsCardLeft) }
         // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
         // keeps 48px beside an open right panel.
         let padding: CGFloat = viewportWidth >= 640 ? 48 : 12

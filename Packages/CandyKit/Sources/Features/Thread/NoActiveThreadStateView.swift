@@ -19,64 +19,8 @@ public final class NoActiveThreadStateView: DSView {
         setAccessibilityLabel("No active thread")
     }
 
-    /// Glass Native's empty detail (T3 Mobile WorkspaceEmptyDetail.tsx:39-62): a 34 pt `sidebar.left`, "Select a
-    /// thread", the hint and a prominent New Task button, centered. Built the first time it shows.
-    public var native = false {
-        didSet {
-            guard native != oldValue else { return }
-            header.isHidden = native
-            empty.isHidden = native
-            if native, nativeContent == nil { nativeContent = makeNative() }
-            nativeContent?.forEach { $0.isHidden = !native }
-            needsLayout = true
-            needsDisplay = true
-        }
-    }
-    /// New Task in the native empty detail.
-    public var onNewTask: (() -> Void)?
-    private var nativeContent: [NSView]?
-
-    private func makeNative() -> [NSView] {
-        let icon = NSImageView()
-        icon.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 34, weight: .regular).applying(.init(hierarchicalColor: .secondaryLabelColor)))
-        let title = NSTextField(labelWithString: "Select a thread")
-        title.font = .systemFont(ofSize: 18 * FontRuntime.interfaceScale, weight: .bold)
-        title.alignment = .center
-        let hint = NSTextField(wrappingLabelWithString: "Choose a thread from the sidebar or start a new task.")
-        hint.font = .systemFont(ofSize: 14 * FontRuntime.interfaceScale)
-        hint.textColor = .secondaryLabelColor
-        hint.alignment = .center
-        let button = NSButton(title: "New Task", target: self, action: #selector(newTask))
-        button.bezelStyle = .push
-        button.controlSize = .large
-        if #available(macOS 26, *) { button.tintProminence = .primary }
-        let views: [NSView] = [icon, title, hint, button]
-        views.forEach(addSubview)
-        return views
-    }
-
-    @objc private func newTask() { onNewTask?() }
-
-    private func layoutNative(_ views: [NSView]) {
-        let w = min(360, bounds.width - 40)
-        let sizes = views.map { view -> NSSize in
-            if let hint = view as? NSTextField, hint.cell?.wraps == true { return NSSize(width: w, height: ceil(hint.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: w, height: 1000)).height)) }
-            return view.intrinsicContentSize
-        }
-        let gaps: [CGFloat] = [12, 6, 16]
-        let total = sizes.reduce(0) { $0 + $1.height } + gaps.reduce(0, +)
-        var y = ((bounds.height - total) / 2).rounded()
-        for (i, view) in views.enumerated() {
-            let size = sizes[i]
-            view.frame = NSRect(x: ((bounds.width - size.width) / 2).rounded(), y: y, width: size.width, height: size.height)
-            y += size.height + (i < gaps.count ? gaps[i] : 0)
-        }
-    }
-
     public override func layout() {
         super.layout()
-        if native, let nativeContent { return layoutNative(nativeContent) }
         let h = Self.headerHeight
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
         // `Empty` (p-12) around `w-full max-w-lg px-8 py-12`.

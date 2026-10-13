@@ -17,9 +17,6 @@ final class ProjectScriptsController {
     private let terminal: TerminalController
     private var threadId: ThreadId?
     private var scripts: [ProjectScript] = []
-    /// The open thread's project actions, for Glass Native's Terminal menu.
-    var current: [ProjectScript] { scripts }
-    func run(_ script: ProjectScript) { terminal.runScript(script) }
     /// Settings, Project: where actions are added and edited.
     var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
     private var editor: ProjectActionEditor?

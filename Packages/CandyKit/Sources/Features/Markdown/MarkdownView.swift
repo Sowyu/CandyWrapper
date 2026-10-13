@@ -76,7 +76,7 @@ public final class MarkdownView: DSView {
         didSet { if bodyColor != oldValue { invalidate() } }
     }
 
-    /// Glass Native's timeline: body 14/21 and solid code cards with radius 8.
+    /// Glass Native's timeline: code blocks on solid cards.
     public var native = false {
         didSet { if native != oldValue { invalidate() } }
     }
