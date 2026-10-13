@@ -109,10 +109,10 @@ The user called the first native build "unpolished slop" and circled four region
 3. The thread. The timeline uses the system's scroller in native mode, kept between the toolbar and the composer. User bubbles keep a hairline where the frost would swallow them, and the approval card takes the `border` hairline.
 4. The composer. It is one `NSGlassEffectView` in an `NSGlassEffectContainerView`, tinted with classic's surface at the Glass opacity, in place of the blur, fill, outline and shadow. Shape, pills, spacing, the context strip and the 20 pt bottom margin are classic's.
 5. The project filter opens classic's combobox under the native search field: search, environment badges and per-project settings.
+6. The right panel runs up under the toolbar, so its tabs share the toolbar's row as T3's share the header row with the panel toggles. The strip keeps 176 pt clear at the right for the toggles, content under the toolbar still takes clicks, and a maximized panel hides the breadcrumb, as T3 hides its header.
 
 Left for later:
 
-- The right panel's tab strip sits in its own row under the toolbar, so the panel has two header rows where T3 has one. Moving the tabs up into the toolbar row needs them to take clicks under the titlebar.
 - The details card overlaps the first user bubble at the top right, as it does in classic.
 
 What works in Glass Native now:

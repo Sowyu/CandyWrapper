@@ -8,6 +8,10 @@ import T3Store
 /// `ThreadPanelView` places them. Surfaces here: the diff, the files explorer and file tabs.
 final class RightPanelView: DSView {
     static let tabBarHeight: CGFloat = 52
+    /// Room the tab strip leaves at its right: classic's window controls, or Glass Native's toolbar toggles with
+    /// Maximize and the 8 pt toolbar margin.
+    static let classicReserve: CGFloat = 112, nativeToolbarReserve: CGFloat = 176
+    var trailingReserve: CGFloat = classicReserve { didSet { if trailingReserve != oldValue { needsLayout = true } } }
     /// `PREVIEW_PANEL_DEFAULT_WIDTH`, `_MIN_WIDTH` and the sibling column's floor
     /// (usePreviewPanelInlineSize.ts).
     static let defaultWidth: CGFloat = 540
@@ -388,7 +392,7 @@ final class RightPanelView: DSView {
         super.layout()
         // `border-l border-border`; the content is `width - 1` wide right of it.
         border.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - 112), height: Self.tabBarHeight)
+        strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - trailingReserve), height: Self.tabBarHeight)
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
         let overflow = total > strip.bounds.width
