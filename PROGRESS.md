@@ -15,7 +15,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
    - Build the thread panel's hidden panels on first show, which saves 2.5 MB in every theme. See the "Perf audit" subsection. (taken 2026-10-14)
    - Bring the native sidebar to classic's cost, up to 2.7 MB, and put the candy brand at its top where T3 has its wordmark. (taken 2026-10-14)
    - Phase 5a: native menus throughout and the glass command palette, in T3 desktop's layout, plus the composer's low contrast in dark mode. (taken 2026-10-14)
-   - Phase 5b: the right panel's surfaces (Files, Git, Diff, pull request files), the terminal drawer and the details card in T3 desktop's layout. It starts after the hidden panels land, since both touch `ThreadPanelView`.
+   - Phase 5b: the right panel's surfaces (Files, Git, Diff, pull request files), the terminal drawer and the details card in T3 desktop's layout. (taken 2026-10-14)
    - Phase 6: a bug hunt over every action in native mode next to classic, and a familiarity pass against T3 desktop.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
