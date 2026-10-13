@@ -441,12 +441,15 @@ final class SettingsSliderControl: DSView {
     let slider: SliderView
     private let pill = CALayer()
     private let outputWidth: CGFloat
+    /// The row may stretch the control on a narrow page; its own size stays this, so a wider page gets the label room back.
+    private let preferredWidth: CGFloat
     var format: (Double) -> String = { "\(Int($0))%" } { didSet { sync() } }
     var onChange: ((Double) -> Void)?
 
     init(value: Double, range: ClosedRange<Double>, step: Double, width: CGFloat = 208, outputWidth: CGFloat = 48) {
         slider = SliderView(value: value, range: range, step: step)
         self.outputWidth = outputWidth
+        preferredWidth = width
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 24))
         pill.cornerRadius = 6
         pill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -462,7 +465,7 @@ final class SettingsSliderControl: DSView {
     var value: Double { get { slider.value } set { slider.value = newValue; sync() } }
     private func sync() { output.text = format(slider.value) }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: frame.width, height: 24) }
+    override var intrinsicContentSize: NSSize { NSSize(width: preferredWidth, height: 24) }
     override func updateLayer() { pill.backgroundColor = Themed.color(\.muted).cgColor(in: self) }
 
     override func layout() {
