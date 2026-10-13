@@ -3,6 +3,7 @@
 What the user decided and why, newest first. Check here before changing anything these cover.
 
 
+- 2026-10-13: the user dropped the side-by-side check of every parity checklist row ("side by side isnt that important if its about ui parity"). Rows already checked stay ✅, the rest stay 🟡, and the findings so far are in `docs/research/sbs-keyboard-2026-10-13.md`. Fix a difference when someone reports it, not by sweeping the checklist.
 - 2026-10-11, at the M7 demo: the user skipped T3's opt-in legacy sidebar (row 67, now n/a).
 
 - 2026-10-10: One known difference from T3, to check in the milestone 10 side-by-side: editing a project action without touching its shortcut keeps the shortcut, where T3 drops it (WP7.7b). Everything else aims at T3's behavior as is.
