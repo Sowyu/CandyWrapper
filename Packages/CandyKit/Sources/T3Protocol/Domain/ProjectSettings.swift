@@ -133,6 +133,34 @@ public enum ProjectSettings {
     /// `DEFAULT_DISABLED_PROVIDER_DRIVERS` (settings.ts:1356-1360).
     public static let defaultDisabledDrivers: Set<String> = ["cursor", "grok", "muse", "pi", "opencode", "antigravity"]
 
+    /// A project's own `providerInstances[id].enabled` (contracts settings.ts:975-1021, 2994), nil when it inherits.
+    /// `resolveProjectProviderInstanceEnabled` (settings.ts:1398-1414) uses it before the machine-wide value.
+    public static func providerOverride(_ settings: ServerSettingsValues, projectId: String, instanceId: String) -> Bool? {
+        settings["projectSettingsOverrides"][projectId]?["providerInstances"]?[instanceId]?["enabled"]?.boolValue
+    }
+
+    /// `buildProviderInstanceOverridePatch` (ProviderSettingsPanel.logic.ts:126-148): each project's whole entry with
+    /// the instance's `enabled` set, or dropped for nil. An entry left empty becomes null.
+    public static func providerOverridePatch(_ settings: ServerSettingsValues, projectIds: [String], instanceId: String,
+                                             enabled: Bool?) -> JSONValue {
+        let overrides = settings["projectSettingsOverrides"].objectValue ?? [:]
+        var patch: [String: JSONValue] = [:]
+        for projectId in projectIds {
+            var rest = overrides[projectId]?.objectValue ?? [:]
+            var instances = rest.removeValue(forKey: "providerInstances")?.objectValue ?? [:]
+            var instance = instances[instanceId]?.objectValue ?? [:]
+            if let enabled { instance["enabled"] = .bool(enabled) } else { instance.removeValue(forKey: "enabled") }
+            if instance.isEmpty { instances.removeValue(forKey: instanceId) } else { instances[instanceId] = .object(instance) }
+            if rest.isEmpty && instances.isEmpty {
+                patch[projectId] = .null
+            } else {
+                rest["providerInstances"] = .object(instances)
+                patch[projectId] = .object(rest)
+            }
+        }
+        return .object(patch)
+    }
+
     /// `resolveProviderInstanceEnabled`: an explicit false on the envelope or in the config wins, then the
     /// envelope, the config, and the driver's default.
     public static func providerInstanceEnabled(_ instance: JSONValue) -> Bool {
