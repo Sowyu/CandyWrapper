@@ -7,9 +7,23 @@ public enum NativeItemContextMenu {
     public static func make(_ items: [ThreadMenuItem], choose: @escaping @MainActor (String) -> Void) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        // ElectronMenu.ts:147-187: the first destructive item starts its own section unless an explicit separator
+        // already did, and a destructive leaf wears the 12pt template "trash" image.
+        var destructiveSeparated = false, sectionFromSeparator = false
         for item in items {
-            if item.separatorBefore, menu.items.last.map({ !$0.isSeparatorItem }) == true { menu.addItem(.separator()) }
+            if item.separatorBefore {
+                if menu.items.last.map({ !$0.isSeparatorItem }) == true { menu.addItem(.separator()) }
+                sectionFromSeparator = true
+            }
+            if item.destructive, !destructiveSeparated, !sectionFromSeparator, menu.items.last.map({ !$0.isSeparatorItem }) == true {
+                menu.addItem(.separator())
+                destructiveSeparated = true
+            }
             let native = NativeItemContextMenuAction(title: item.label, action: nil, keyEquivalent: "")
+            if item.destructive, item.children.isEmpty {
+                native.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
+                    .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
+            }
             native.isEnabled = !item.disabled
             if let checked = item.checked { native.state = checked ? .on : .off }
             if item.children.isEmpty {
