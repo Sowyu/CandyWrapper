@@ -658,12 +658,15 @@ public final class SidebarContentView: DSView {
 
     /// Opens the scope combobox under the search field, or closes it when it is open.
     func toggleScopePopup() {
-        guard let host = filterButton.popupHost else { return }
+        // Glass Native anchors the same combobox to its own search field and filter button.
+        let trigger: NSView = nativeChrome?.filter ?? filterButton
+        let field: NSView = nativeChrome?.search ?? search
+        guard let host = trigger.popupHost else { return }
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
         let view = SidebarProjectScopeView(
             groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
                                                           order: SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt),
-            selectedKey: state.projectScopeKey, minimumWidth: search.frame.width, environments: state.environments)
+            selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments)
         view.onSelect = { [weak self] key in
             self?.setProjectScope(key)
             self?.closeScopePopup()
@@ -672,8 +675,8 @@ public final class SidebarContentView: DSView {
             self?.closeScopePopup()
             self?.actions.openProjectSettings(key)
         }
-        let anchor = filterButton.convert(search.bounds, from: search)
-        let popup = host.open(PickerPopupView(view), trigger: filterButton, anchorRect: anchor, placement: .dropdown,
+        let anchor = trigger.convert(field.bounds, from: field)
+        let popup = host.open(PickerPopupView(view), trigger: trigger, anchorRect: anchor, placement: .dropdown,
                               swallowsOutsideClick: true)
         popup.onClose = { [weak self] in self?.scopePopup = nil }
         scopePopup = popup

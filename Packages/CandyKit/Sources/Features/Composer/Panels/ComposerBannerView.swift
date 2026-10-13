@@ -67,7 +67,9 @@ public class ComposerBannerView: DSView {
         switch variant {
         case .neutral:
             tint.backgroundColor = nil
-            surface.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+            // Glass Native's solid card keeps a full `border` hairline, so it reads at any Glass opacity.
+            surface.layer?.borderColor = nativeCard ? Themed.color(\.border).cgColor(in: self)
+                : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         case .warning:
             tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)

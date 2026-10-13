@@ -95,6 +95,31 @@ public final class ComposerView: DSView {
     /// sides open, its bottom 2px from 22 to width - 22 (`contextSeamClasses`, ComposerSurface.tsx:51-53).
     public var joinsContextStrip = false { didSet { if joinsContextStrip != oldValue { needsLayout = true } } }
 
+    /// Glass Native: one Liquid Glass surface, in its container, in place of the backdrop blur, the 80% fill, the
+    /// outline and the shadow. Its tint follows the Glass opacity slider, as the classic fill does.
+    public var nativeGlass = false { didSet { if nativeGlass != oldValue { applyNativeGlass() } } }
+    private var glassContainer: NSView?
+    private weak var glassSurface: NSView?
+
+    private func applyNativeGlass() {
+        if nativeGlass, glassContainer == nil, #available(macOS 26, *) {
+            let container = NSGlassEffectContainerView()
+            let surface = NSGlassEffectView()
+            surface.cornerRadius = Self.radius
+            container.contentView = surface
+            addSubview(container, positioned: .below, relativeTo: blur)
+            glassContainer = container
+            glassSurface = surface
+        } else if !nativeGlass {
+            glassContainer?.removeFromSuperview()
+            glassContainer = nil
+        }
+        blur.isHidden = nativeGlass
+        outline.isHidden = nativeGlass
+        needsDisplay = true
+        needsLayout = true
+    }
+
     /// A runtime request docked above (ChatComposer.tsx:6980, 7468, 7547-7553).
     public enum PendingState: Equatable, Sendable {
         case none
@@ -686,12 +711,17 @@ public final class ComposerView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        glass.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        // The drop highlight stays on `glass`, so in native mode it stays and loses only its fill.
+        glass.layer?.backgroundColor = nativeGlass ? nil : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
-        shadowLayer.shadowOpacity = dark ? 0 : 0.4
+        shadowLayer.shadowOpacity = dark || nativeGlass ? 0 : 0.4
         CATransaction.commit()
+        if #available(macOS 26, *), let surface = glassSurface as? NSGlassEffectView {
+            surface.tintColor = Themed.color(light: \.card, Double(ThemeRuntime.glassOpacity),
+                                             dark: \.surfaceRaised, Double(ThemeRuntime.glassOpacity))
+        }
     }
 
     public override func layout() {
@@ -712,6 +742,7 @@ public final class ComposerView: DSView {
         blur.frame = box
         glass.frame = box
         outline.frame = box
+        glassContainer?.frame = box
         if joinsContextStrip {
             let mask = outline.layer?.mask as? CAShapeLayer ?? CAShapeLayer()
             let path = CGMutablePath()

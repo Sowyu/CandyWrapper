@@ -7,8 +7,8 @@ import T3Store
 /// information in the same places and sizes, drawn with labels, SF Symbols and the table's own selection.
 @MainActor
 enum NativeSidebarMetrics {
-    /// The cell's inset; the source list row adds its own around it.
-    static let pad: CGFloat = 8
+    /// Where a row's text and glyphs start: inside the fill, which starts at the sidebar's edge inset.
+    static let pad: CGFloat = NativeSpec.edge + NativeSpec.rowPad
 
     /// Row heights without the table's 2pt row gap: the classic rows' heights (`SidebarItem.height`) less 2.
     static func height(_ item: SidebarItem) -> CGFloat {
@@ -71,7 +71,12 @@ class NativeSidebarCell: NSTableCellView {
     func configure(_ item: SidebarItem, list: NativeSidebarListView) {
         self.item = item
         self.list = list
+        (superview as? NativeSidebarRowView)?.restyle()
     }
+
+    /// The pointer is over the row: cards trade the status for Settle and Snooze, slim rows the time for their
+    /// action (Sidebar.tsx:2027-2094, 1857-1937).
+    var hovered = false { didSet { if hovered != oldValue, let item, let list { configure(item, list: list) } } }
 
     var emphasized: Bool { backgroundStyle == .emphasized }
 
@@ -103,6 +108,10 @@ final class NativeThreadCardCell: NativeSidebarCell {
     let pullRequest = PullRequestBadgeView()
     let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let provider = ProviderGlyphView()
+    /// T3's hover actions in the status slot: Snooze, then Settle with its word (Sidebar.tsx:2027-2094).
+    let settle = NativeIconButton("checkmark", "Settle thread", text: "Settle", pointSize: 11)
+    let snooze = NativeIconButton("clock", "Snooze thread", pointSize: 12)
+    private var showsActions = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -110,9 +119,18 @@ final class NativeThreadCardCell: NativeSidebarCell {
         worktree.image = NativeSidebarMetrics.symbol("folder", size: 10)
         terminal.isHidden = true
         for v in [favicon, project, pin, statusIcon, status, duration, title, worktree, branch, scratchMachine, terminal, pullRequest,
-                  machine, provider] as [NSView] { addSubview(v) }
+                  machine, provider, snooze, settle] as [NSView] { addSubview(v) }
+        settle.isHidden = true
+        snooze.isHidden = true
+        settle.target = self
+        settle.action = #selector(pressSettle)
+        snooze.target = self
+        snooze.action = #selector(pressSnooze)
         textField = title
     }
+
+    @objc private func pressSettle() { if let r = row { list?.actions.settle(r.id) } }
+    @objc private func pressSnooze() { if let r = row { list?.actions.snooze(r.id, snooze) } }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -147,7 +165,13 @@ final class NativeThreadCardCell: NativeSidebarCell {
             duration.font = SB.tabular(12)
             duration.textColor = ink(SB.c(\.secondaryLabel))
         }
-        statusIcon.isHidden = statusIcon.image == nil
+        // The status and the actions trade places on hover; a woken row keeps its status (Sidebar.tsx:2027).
+        showsActions = hovered && !r.isRenaming && list.settlementSupported() && r.topStatus != .woke
+        settle.isHidden = !showsActions
+        snooze.isHidden = !showsActions || !(r.action == .settle && r.canSnooze && list.snoozeSupported())
+        statusIcon.isHidden = statusIcon.image == nil || showsActions
+        status.isHidden = showsActions
+        duration.isHidden = showsActions
         Self.set(title, r.isRenaming ? "" : r.title)
         title.font = SB.font(14, r.recedes ? .regular : .medium)
         title.textColor = ink(r.recedes ? SB.c(\.secondaryLabel)
@@ -202,6 +226,13 @@ final class NativeThreadCardCell: NativeSidebarCell {
             sx -= lw
             if !statusIcon.isHidden { statusIcon.frame = NSRect(x: sx - 4 - 14, y: top + 3, width: 14, height: 14); sx -= 18 }
         }
+        if showsActions {
+            // `-mr-1` on Settle; the buttons fill the 20pt line.
+            let sw = ceil(settle.intrinsicContentSize.width) + 12
+            settle.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
+            snooze.frame = NSRect(x: settle.frame.minX - 20, y: top, width: 20, height: 20)
+            sx = (snooze.isHidden ? settle : snooze).frame.minX
+        }
         var slotRight = right - max(32, right - sx) // `min-w-8`
         if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
         project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
@@ -233,6 +264,9 @@ final class NativeThreadSlimCell: NativeSidebarCell {
     let terminal = TerminalStatusGlyph()
     let pullRequest = PullRequestBadgeView()
     let time = NativeSidebarMetrics.label(SB.tabular(12))
+    /// The row's hover action in the time's place: Wake, Un-settle or Settle (Sidebar.tsx:1903-1937).
+    private var actionButton: NativeIconButton?
+    private var actionKind: SidebarRowModel.Action?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -241,6 +275,17 @@ final class NativeThreadSlimCell: NativeSidebarCell {
         for v in [favicon, title, pin, terminal, pullRequest, time] as [NSView] { addSubview(v) }
         textField = title
     }
+
+    @objc private func pressAction() {
+        guard let r = row, let actions = list?.actions else { return }
+        switch r.action {
+        case .unsnooze: actions.unsnooze(r.id)
+        case .unsettle: actions.unsettle(r.id)
+        case .settle: actions.settle(r.id)
+        }
+    }
+
+    var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -267,6 +312,22 @@ final class NativeThreadSlimCell: NativeSidebarCell {
         pullRequest.onOpenURL = { [weak list] url in list?.actions.openPullRequestURL(r.id, url) }
         Self.set(time, r.snoozeLabel ?? r.timeLabel)
         time.textColor = ink(r.snoozeLabel != nil ? SB.c(\.infoForeground) : SB.c(\.secondaryLabel))
+        if actionKind != r.action {
+            actionButton?.removeFromSuperview()
+            let b = switch r.action {
+            case .unsnooze: NativeIconButton("alarm", "Wake thread now", pointSize: 11)
+            case .unsettle: NativeIconButton("arrow.uturn.backward", "Un-settle thread", pointSize: 12)
+            case .settle: NativeIconButton("checkmark", "Settle thread", pointSize: 11)
+            }
+            b.target = self
+            b.action = #selector(pressAction)
+            addSubview(b)
+            actionButton = b
+            actionKind = r.action
+        }
+        let acts = hovered && !r.isRenaming
+        actionButton?.isHidden = !acts
+        time.isHidden = acts && !r.isWoke
         setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
@@ -278,6 +339,7 @@ final class NativeThreadSlimCell: NativeSidebarCell {
         let x = pad + 16 + 10
         let tw = ceil(time.intrinsicContentSize.width) + 4
         time.frame = NSRect(x: w - pad - tw, y: (h - 16) / 2, width: tw, height: 16)
+        actionButton?.frame = NSRect(x: w - pad + 4 - 24, y: (h - 24) / 2, width: 24, height: 24) // `-mr-1`
         var right = w - pad - max(32, tw) - 10
         if !pullRequest.isHidden {
             let pw = pullRequest.preferredWidth
@@ -323,10 +385,10 @@ final class NativeShelfHeaderCell: NativeSidebarCell {
 
     override func layout() {
         super.layout()
-        let w = bounds.width, mid = bounds.height / 2, x: CGFloat = 8
+        let w = bounds.width, mid = bounds.height / 2, x = NativeSidebarMetrics.pad
         let labelWidth = ceil(label.intrinsicContentSize.width) + 4
         label.frame = NSRect(x: x, y: mid - 8, width: labelWidth, height: 16)
-        chevron.frame = NSRect(x: w - 8 - 12, y: mid - 6, width: 12, height: 12)
+        chevron.frame = NSRect(x: w - x - 12, y: mid - 6, width: 12, height: 12)
         rule.frame = NSRect(x: label.frame.maxX + 8, y: mid - 0.5, width: max(8, chevron.frame.minX - 8 - label.frame.maxX - 8), height: 1)
     }
 }
@@ -388,14 +450,15 @@ final class NativeTextCell: NativeSidebarCell {
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        if !rule.isHidden { rule.frame = NSRect(x: 2, y: (h - 1) / 2, width: w - 4, height: 1); return }
+        let pad = NativeSidebarMetrics.pad, edge = NativeSpec.edge
+        if !rule.isHidden { rule.frame = NSRect(x: edge, y: (h - 1) / 2, width: w - 2 * edge, height: 1); return }
         if !icon.isHidden {
-            icon.frame = NSRect(x: 10, y: (h - 16) / 2, width: 16, height: 16)
-            label.frame = NSRect(x: 36, y: (h - 20) / 2, width: w - 46, height: 20)
+            icon.frame = NSRect(x: pad, y: (h - 16) / 2, width: 16, height: 16)
+            label.frame = NSRect(x: pad + 26, y: (h - 20) / 2, width: w - pad - 26 - pad, height: 20)
         } else if button.isHidden {
-            label.frame = NSRect(x: 8, y: (h - 16) / 2, width: w - 16, height: 16)
+            label.frame = NSRect(x: pad, y: (h - 16) / 2, width: w - 2 * pad, height: 16)
         } else {
-            label.frame = NSRect(x: 8, y: 24, width: w - 16, height: 16)
+            label.frame = NSRect(x: pad, y: 24, width: w - 2 * pad, height: 16)
             button.sizeToFit()
             button.frame.origin = NSPoint(x: (w - button.frame.width) / 2, y: 48)
         }
@@ -488,5 +551,65 @@ final class NativeSearchResultCell: NativeSidebarCell {
         favicon.frame = NSRect(x: pad, y: y + 2, width: 16, height: 16)
         title.frame = NSRect(x: pad + 24, y: y, width: max(0, time.frame.minX - 8 - pad - 24), height: 20)
         excerpt.frame = NSRect(x: pad + 24, y: y + 20, width: max(0, w - 2 * pad - 24), height: 16)
+    }
+}
+
+/// A sidebar row's fill, T3's instead of the system's: the active or selected thread on `sidebarRowActive` or
+/// `sidebarRowSelected`, a hovered row on `sidebarRowHover` (Sidebar.tsx:1582-1605), inset to the sidebar's edge
+/// with the row radius. Never the blue emphasized fill, so the text keeps its colors. One layer, changed on
+/// selection and hover only.
+final class NativeSidebarRowView: NSTableRowView {
+    private let fill = CALayer()
+    var isHovered = false {
+        didSet {
+            guard isHovered != oldValue else { return }
+            restyle()
+            cell?.hovered = isHovered
+        }
+    }
+    /// Shelf headers, Show more and the status lines hover without a fill, as classic's do.
+    var fills = true { didSet { if fills != oldValue { restyle() } } }
+    /// The row's cell. `view(atColumn:)` raises while the table is still setting the row up, so look among subviews.
+    private var cell: NativeSidebarCell? { subviews.lazy.compactMap { $0 as? NativeSidebarCell }.first }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        fill.cornerRadius = NativeSpec.radiusRow
+        fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(fill)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var isSelected: Bool { didSet { if isSelected != oldValue { restyle() } } }
+    override var interiorBackgroundStyle: NSView.BackgroundStyle { .normal }
+    override func drawSelection(in dirtyRect: NSRect) {}
+    override func drawBackground(in dirtyRect: NSRect) {}
+    override var wantsUpdateLayer: Bool { true }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        isHovered = false
+    }
+
+    override func layout() {
+        super.layout()
+        fill.frame = bounds.insetBy(dx: NativeSpec.edge, dy: 0)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
+    /// Also when the cell's item changes: a multi-selected thread that isn't open takes the lighter fill.
+    func restyle() {
+        var multi = false
+        if case .row(let r)? = cell?.item { multi = r.isSelected && !r.isActive }
+        let color: NSColor? = !fills ? nil : isSelected ? SB.c(multi ? \.sidebarRowSelected : \.sidebarRowActive)
+            : isHovered ? SB.c(\.sidebarRowHover) : nil
+        fill.backgroundColor = color?.cgColor(in: self)
     }
 }

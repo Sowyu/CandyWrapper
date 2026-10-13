@@ -27,7 +27,7 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         for button in [project, parent] {
             button.isBordered = false
             button.target = self
-            button.font = .systemFont(ofSize: 13, weight: .medium)
+            button.font = .systemFont(ofSize: 14, weight: .regular)
             button.contentTintColor = .secondaryLabelColor
             button.lineBreakMode = .byTruncatingTail
             addSubview(button)
@@ -44,7 +44,7 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         }
         addSubview(title)
         editor.isHidden = true
-        editor.font = .systemFont(ofSize: 13, weight: .semibold)
+        editor.font = .systemFont(ofSize: 14, weight: .medium)
         editor.delegate = self
         editor.focusRingType = .none
         addSubview(editor)
@@ -58,7 +58,7 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
 
     private static func label(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: 13, weight: .medium)
+        field.font = .systemFont(ofSize: 14, weight: .regular)
         field.textColor = .tertiaryLabelColor
         return field
     }
@@ -190,7 +190,7 @@ final class NativeBreadcrumbTitle: NSView {
 
     init() {
         super.init(frame: .zero)
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = .systemFont(ofSize: 14, weight: .medium)
         label.textColor = .labelColor
         label.lineBreakMode = .byTruncatingTail
         chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?

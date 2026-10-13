@@ -40,6 +40,24 @@ struct NativeTimelineTests {
         let user = try #require(native.view(forRow: items[0].id) as? UserMessageRowView)
         #expect(user.bubbleWidth(forWidth: native.laneFrame.width) == native.laneFrame.width * 0.8)
         #expect(native.layoutProblems().isEmpty)
+        // Native bubbles keep an edge below the default Glass opacity; classic ones never get one.
+        #expect(user.bubbleBorder != nil)
+        #expect((classic.view(forRow: items[0].id) as? UserMessageRowView)?.bubbleBorder == nil)
+    }
+
+    /// In dark mode the bubble's hairline shows only below the default Glass opacity.
+    @Test func theLowOpacityEdgeFollowsTheSlider() {
+        let view = NSView()
+        view.appearance = NSAppearance(named: .darkAqua)
+        let before = ThemeRuntime.glassOpacity
+        defer { ThemeRuntime.apply(ThemeRuntimeInput(glassOpacity: Int(before * 100))) }
+        ThemeRuntime.apply(ThemeRuntimeInput(glassOpacity: 30))
+        #expect(NativeTimeline.lowOpacityEdge.cgColor(in: view).alpha > 0.1)
+        ThemeRuntime.apply(ThemeRuntimeInput(glassOpacity: 80))
+        #expect(NativeTimeline.lowOpacityEdge.cgColor(in: view).alpha == 0)
+        // Light keeps its hairline at every opacity.
+        view.appearance = NSAppearance(named: .aqua)
+        #expect(abs(NativeTimeline.lowOpacityEdge.cgColor(in: view).alpha - 0.08) < 0.001)
     }
 
     @Test func nativeWorkRowsUseSFSymbols() throws {
@@ -86,11 +104,11 @@ struct NativeTimelineTests {
         panel.hidesCustomChrome = true
         #expect(panel.timeline.style == .native)
         #expect(panel.approvalPanel.nativeCard)
-        #expect(panel.subviews.contains { $0 is ToolbarScrollEdgeView })
+        #expect(panel.timeline.scrollView.layer?.mask is CAGradientLayer)
         panel.hidesCustomChrome = false
         #expect(panel.timeline.style == .classic)
         #expect(!panel.approvalPanel.nativeCard)
-        #expect(!panel.subviews.contains { $0 is ToolbarScrollEdgeView })
+        #expect(panel.timeline.scrollView.layer?.mask == nil)
     }
 
     /// The approval keeps T3's labels and order, as native push buttons.
