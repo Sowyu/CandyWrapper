@@ -24,6 +24,9 @@ public final class InlineActionConfirm {
 
     public init() {}
 
+    // A panel that closes while a control is armed must not leave its event monitor and observer behind.
+    isolated deinit { clear() }
+
     public func isArmed(_ action: String, slot: String) -> Bool { armed?.action == action && armed?.slot == slot }
 
     /// A press on `slot`'s `action`. True when it confirms an armed control, so the caller runs the
