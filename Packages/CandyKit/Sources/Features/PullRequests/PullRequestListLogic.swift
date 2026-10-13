@@ -459,6 +459,22 @@ public enum PullRequestListLogic {
         hosts.filter { $0.kind == entry.kind }.count > 1 ? entry.host : providerName(entry.kind)
     }
 
+    /// `pullRequestHostActions` (2994 pullRequestList.logic.ts:1268-1290): each host's reported actions, by
+    /// lowercased host. Hosts that report none, as on 2861 servers, are left out.
+    public static func hostActions(_ providers: [PullRequestProviderSummary]) -> [String: Set<String>] {
+        var out: [String: Set<String>] = [:]
+        for p in providers { if let actions = p.actions { out[p.host.lowercased()] = Set(actions) } }
+        return out
+    }
+
+    /// `pullRequestQuickActions` (2994 pullRequestList.logic.ts:1293-1306): what the row's state allows, narrowed
+    /// to what its host can do. A host that reports nothing keeps what it always got: GitHub all four, others none.
+    public static func quickActions(state: String, isDraft: Bool, host: String, provider: String, byHost: [String: Set<String>]) -> [String] {
+        let can = byHost[host.lowercased()] ?? (provider == "github" ? ["close", "merge", "ready", "reopen"] : [])
+        let forState: [String] = state == "merged" ? [] : state == "closed" ? ["reopen"] : isDraft ? ["close", "ready"] : ["close", "merge"]
+        return forState.filter(can.contains)
+    }
+
     /// `getSourceControlPresentationForKind(kind).providerName`.
     public static func providerName(_ kind: String) -> String {
         switch kind {

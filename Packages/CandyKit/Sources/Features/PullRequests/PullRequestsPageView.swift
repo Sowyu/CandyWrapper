@@ -57,6 +57,8 @@ public final class PullRequestsPageView: DSView {
         public var refreshing = false
         public var searchBusy = false
         public var speedMode = false
+        /// Each host's reported actions (`pullRequestHostActions`), which narrow the quick actions.
+        public var hostActions: [String: Set<String>] = [:]
         // Controls.
         public var sort = "ready"
         public var state = "open"
@@ -259,7 +261,7 @@ public final class PullRequestsPageView: DSView {
                 }()
                 let elsewhere = !m.searchText.isEmpty && PullRequestListLogic.score(entry, m.searchText) <= PullRequestListLogic.matchedElsewhereScore
                 row.configure(entry, selected: m.selectedKey == key, showProvider: m.showProvider, matchedElsewhere: elsewhere,
-                              speedMode: m.speedMode, nowMs: m.nowMs)
+                              speedMode: m.speedMode, hostActions: m.hostActions, nowMs: m.nowMs)
             }
         }
         for (key, row) in rowViews where !keep.contains(key) { row.removeFromSuperview(); rowViews[key] = nil }
@@ -668,7 +670,8 @@ final class PullRequestRowView: DSView {
         needsLayout = true
     }
 
-    func configure(_ e: PullRequestListEntry, selected: Bool, showProvider: Bool, matchedElsewhere: Bool, speedMode: Bool, nowMs: Int64) {
+    func configure(_ e: PullRequestListEntry, selected: Bool, showProvider: Bool, matchedElsewhere: Bool, speedMode: Bool,
+                   hostActions: [String: Set<String>] = [:], nowMs: Int64) {
         watch.isHidden = true
         branches.text = ""
         authorless = false
@@ -707,14 +710,14 @@ final class PullRequestRowView: DSView {
         labelChips = e.labels.prefix(3).enumerated().map { i, label in PullRequestLabelChip.make(label, overflow: 0) }
         labelChips.forEach(addSubview)
         time.text = TimestampFormat.formatRelativeTimeLabel(e.updatedAt, nowMs: nowMs)
-        // Shift's quick actions (PullRequestSpeedActions.tsx), GitHub rows that are not merged.
+        // Shift's quick actions (2994 PullRequestSpeedActions.tsx:76-78), the ones the row's host can take.
         speedButtons.forEach { $0.removeFromSuperview() }
         speedButtons = []
-        if speedMode && e.state != "merged" && e.provider == "github" {
-            let actions: [(String, String, IconName)] = e.state == "closed" ? [("reopen", "Reopen", .gitPullRequestArrow)]
-                : e.isDraft ? [("close", "Close", .gitPullRequestClosed), ("ready", "Ready for review", .gitPullRequestArrow)]
-                : [("close", "Close", .gitPullRequestClosed), ("merge", "Merge", .gitMerge)]
-            speedButtons = actions.map { action, label, icon in
+        if speedMode {
+            let labels: [String: (String, IconName)] = ["close": ("Close", .gitPullRequestClosed), "merge": ("Merge", .gitMerge),
+                                                        "ready": ("Ready for review", .gitPullRequestArrow), "reopen": ("Reopen", .gitPullRequestArrow)]
+            let actions = PullRequestListLogic.quickActions(state: e.state, isDraft: e.isDraft, host: e.host, provider: e.provider, byHost: hostActions)
+            speedButtons = actions.compactMap { action in labels[action].map { (action, $0.0, $0.1) } }.map { action, label, icon in
                 let b = ButtonView(label, icon: icon, variant: action == "close" ? .destructiveOutline : .outline, size: .xs)
                 b.iconSize = 12
                 b.isEnabled = !(action == "merge" && e.stack != nil)

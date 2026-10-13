@@ -370,3 +370,28 @@ enum PullRequestFixtures {
 
     static func list() throws -> PullRequestListResult { try json("list.json").decode(as: PullRequestListResult.self) }
 }
+
+/// 2994: quick actions follow each host's reported `actions` (pullRequestList.logic.ts:1268-1306).
+struct PullRequestQuickActionTests {
+    @Test func followTheHost() throws {
+        let summary = { (host: String, actions: [String]?) in
+            var json: [String: JSONValue] = ["host": .string(host), "kind": .string("forgejo"), "searchesOnHost": .bool(true),
+                                             "projectCount": .number(1), "configured": .bool(true), "detail": .null]
+            if let actions { json["actions"] = .array(actions.map(JSONValue.string)) }
+            return try JSONValue.object(json).decode(as: PullRequestProviderSummary.self)
+        }
+        let byHost = PullRequestListLogic.hostActions([try summary("Code.Example", ["close", "reopen"]), try summary("old.example", nil)])
+        #expect(byHost == ["code.example": ["close", "reopen"]])
+        let q = { (state: String, draft: Bool, host: String, provider: String) in
+            PullRequestListLogic.quickActions(state: state, isDraft: draft, host: host, provider: provider, byHost: byHost)
+        }
+        #expect(q("open", false, "code.example", "forgejo") == ["close"])
+        #expect(q("open", true, "CODE.example", "forgejo") == ["close"])
+        #expect(q("closed", false, "code.example", "forgejo") == ["reopen"])
+        #expect(q("merged", false, "code.example", "forgejo") == [])
+        // A host the server says nothing about: GitHub keeps the old four, others get none.
+        #expect(q("open", false, "github.com", "github") == ["close", "merge"])
+        #expect(q("open", true, "github.com", "github") == ["close", "ready"])
+        #expect(q("open", false, "old.example", "gitlab") == [])
+    }
+}
