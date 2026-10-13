@@ -5,13 +5,15 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## State on 2026-10-13
 
 - Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`). Its side-by-side half was dropped on 2026-10-13 after keyboard shortcuts and part of the thread view.
-- The latest release is v0.1.15. The user runs it daily on their MacBook and reports what they see.
+- The latest release is v1.0.0 (build 17), the first full release, published 2026-10-13. The user runs it daily on their MacBook and reports what they see.
 - The app works with T3 servers 0.0.46-nightly.20261009.2861 (pinned in `T3_VERSION`) and 20261011.2994. Its UI is caught up with 2861, plus the 2994 features listed in `docs/research/nightly-diff-2994.md` part 2 items 1, 2, 5, 6, 8 and 9 (done 2026-10-13).
 - A scheduled T3 task runs `docs/nightly-catch-up.md` around 2am Melbourne time on Monday and Thursday mornings, in a new thread each time.
 
 ## Open tasks
 
-None. The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
+1. Run `scripts/perf-review` on v1.0.0 (78b73ad) once no Zen build is running. It was skipped on 2026-10-13 because a Zen build loaded the Mac, and a run under that load would save a skewed baseline. Show the user the comparison with the 2026-10-12 run.
+
+The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
 The code also marks 267 known shortcuts with `// ponytail:`, each naming when to fix it (`grep -rnE '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
