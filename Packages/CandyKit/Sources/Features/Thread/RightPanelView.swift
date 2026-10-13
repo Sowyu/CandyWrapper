@@ -118,6 +118,8 @@ final class RightPanelView: DSView {
     /// hidden file tab's web view or player stops.
     func apply(_ state: RightPanelState) {
         revealActiveTab = self.state.activeSurfaceId != state.activeSurfaceId || self.state.surfaces != state.surfaces
+        // A tab opened or closed mid-drag (an agent closing a preview) invalidates the drag's indices: drop it.
+        if drag != nil, self.state.surfaces != state.surfaces { drag = nil; setAutoScroll(0) }
         self.state = state
         tabs.forEach { $0.removeFromSuperview() }
         tabs = state.surfaces.map { surface in
@@ -297,7 +299,7 @@ final class RightPanelView: DSView {
     /// Places the dragged tab and its neighbours for the current pointer offset. The dragged tab moves its
     /// frame, so hit testing follows it; the neighbours only slide their layers.
     private func layoutDrag() {
-        guard let drag else { return }
+        guard let drag, drag.index < tabs.count, drag.rest.count == tabs.count else { return }
         let rest = drag.rest
         let dragged = rest[drag.index]
         // The tab stays under the pointer while the strip scrolls under it; targets compare along the content.
