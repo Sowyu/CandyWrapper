@@ -243,10 +243,19 @@ final class RightPanelView: DSView {
         MenuPopupView.showContextMenu(items, in: tab, at: tab.convert(event.locationInWindow, from: nil))
     }
 
-    /// The tab being dragged: its index, how far the pointer moved and the index it would drop at.
-    /// The tab being dragged: its index, how far the pointer moved, the index it would drop at and where the
-    /// tabs rest.
-    private var drag: (index: Int, offset: CGFloat, over: Int, rest: [NSRect])?
+    /// The tab being dragged: its index, how far the pointer moved, the index it would drop at, where the tabs
+    /// rest along the scrolled content and where the dragged one started in the strip.
+    private var drag: (index: Int, offset: CGFloat, over: Int, rest: [NSRect], start: CGFloat)?
+    /// dnd-kit's scroll intent (`useScrollIntent`): the strip scrolls only toward a side the pointer has moved to.
+    private var dragIntent: (left: Bool, right: Bool) = (false, false)
+    /// Where the press landed in the dragged tab.
+    private var dragGrab: CGFloat = 0
+    /// Auto-scroll while the pointer sits near an edge: points per 5 ms tick, signed.
+    private(set) var autoScrollSpeed: CGFloat = 0
+    private var autoScrollLink: CADisplayLink?
+    var isAutoScrolling: Bool { autoScrollLink != nil }
+    var tabStripOffset: CGFloat { stripOffset }
+    private var autoScrollLast: CFTimeInterval?
 
     /// `SortableTabList` (RightPanelTabs.tsx:813-866 in 2994, dnd-kit): the tab follows the pointer along the
     /// strip and stays inside it (`restrictToHorizontalAxis`, `restrictToFirstScrollableAncestor`), above its
@@ -257,17 +266,22 @@ final class RightPanelView: DSView {
     private func dragTab(_ id: String, _ phase: PanelTabView.DragPhase) {
         guard let index = state.surfaces.firstIndex(where: { $0.id == id }), tabs.indices.contains(index) else { return }
         switch phase {
-        case .began:
+        case .began(let grab):
             guard onMove != nil else { return }
-            drag = (index, 0, index, tabs.map(\.frame))
+            drag = (index, 0, index, tabs.map { $0.frame.offsetBy(dx: stripOffset, dy: 0) }, tabs[index].frame.minX)
+            dragIntent = (false, false)
+            dragGrab = grab
             tabs[index].layer?.zPosition = 10
         case .moved(let dx):
-            guard drag?.index == index else { return }
+            guard let current = drag, current.index == index else { return }
+            if dx < current.offset { dragIntent.left = true } else if dx > current.offset { dragIntent.right = true }
             drag?.offset = dx
             layoutDrag()
+            updateAutoScroll()
         case .ended:
             guard let ended = drag, ended.index == index else { return }
             drag = nil
+            setAutoScroll(0)
             CATransaction.begin(); CATransaction.setDisableActions(true)
             for tab in tabs {
                 tab.layer?.removeAnimation(forKey: "tab-sort")
@@ -286,8 +300,9 @@ final class RightPanelView: DSView {
         guard let drag else { return }
         let rest = drag.rest
         let dragged = rest[drag.index]
-        let x = min(max(dragged.minX + drag.offset, 0), max(0, strip.bounds.width - dragged.width))
-        let center = x + dragged.width / 2
+        // The tab stays under the pointer while the strip scrolls under it; targets compare along the content.
+        let x = min(max(drag.start + drag.offset, 0), max(0, strip.bounds.width - dragged.width))
+        let center = x + stripOffset + dragged.width / 2
         let over = rest.indices.min { abs(rest[$0].midX - center) < abs(rest[$1].midX - center) } ?? drag.index
         self.drag?.over = over
         let shift = dragged.width + 4
@@ -306,6 +321,59 @@ final class RightPanelView: DSView {
             layer.add(slide, forKey: "tab-sort")
         }
         CATransaction.commit()
+    }
+
+    /// dnd-kit's auto-scroller with the defaults T3 keeps (its `DndContext` sets no `autoScroll`,
+    /// RightPanelTabs.tsx:833-839 in 2994). The pointer starts it inside the outer 20% of the strip
+    /// (`defaultThreshold`). The speed ramps linearly from 0 at the zone's inner edge to `acceleration` 10 px at
+    /// the strip's edge, applied every `interval` of 5 ms, so up to 2,000 px a second (@dnd-kit/core 6.3.1
+    /// core.esm.js:827-890, 1765-1860). Only a side the pointer moved toward scrolls (`useScrollIntent`,
+    /// core.esm.js:1886-1913), and it stops at either end. Here the display link steps it, scaled to 5 ms ticks,
+    /// and lives only while the pointer sits in a zone.
+    private func updateAutoScroll() {
+        guard let drag else { return setAutoScroll(0) }
+        // `AutoScrollActivator.Pointer`: the pointer itself, not the clamped tab.
+        let pointer = drag.start + dragGrab + drag.offset
+        let width = strip.bounds.width, threshold = width * 0.2
+        guard threshold > 0 else { return setAutoScroll(0) }
+        let content = tabs.reduce(0) { $0 + $1.frame.width } + CGFloat(tabs.count) * 4 + 24
+        let atLeft = stripOffset <= 0, atRight = stripOffset + width >= content - 0.5
+        if !atRight, dragIntent.right, pointer >= width - threshold {
+            setAutoScroll(10 * abs((width - threshold - pointer) / threshold))
+        } else if !atLeft, dragIntent.left, pointer <= threshold {
+            setAutoScroll(-10 * abs((threshold - pointer) / threshold))
+        } else {
+            setAutoScroll(0)
+        }
+    }
+
+    private func setAutoScroll(_ speed: CGFloat) {
+        autoScrollSpeed = speed
+        if speed == 0 {
+            autoScrollLink?.invalidate(); autoScrollLink = nil; autoScrollLast = nil
+        } else if autoScrollLink == nil, window != nil {
+            let link = strip.displayLink(target: self, selector: #selector(autoScrollFired))
+            link.add(to: .main, forMode: .common)
+            autoScrollLink = link
+        }
+    }
+
+    @objc private func autoScrollFired(_ link: CADisplayLink) {
+        let dt = autoScrollLast.map { link.targetTimestamp - $0 } ?? (link.targetTimestamp - link.timestamp)
+        autoScrollLast = link.targetTimestamp
+        if !stepAutoScroll(dt) { setAutoScroll(0) }
+    }
+
+    /// One auto-scroll step of `dt` seconds. False once the strip is at its end. Tests call it directly.
+    @discardableResult
+    func stepAutoScroll(_ dt: CFTimeInterval) -> Bool {
+        guard autoScrollSpeed != 0 else { return false }
+        let before = stripOffset
+        revealActiveTab = false
+        stripOffset += autoScrollSpeed * CGFloat(dt / 0.005)
+        needsLayout = true
+        layoutSubtreeIfNeeded() // clamps to the ends and places the dragged tab again
+        return stripOffset != before
     }
 
     private func scrollTabs(_ delta: CGFloat) {
@@ -378,7 +446,8 @@ final class PanelTabView: DSView {
     var onSelect: (@MainActor () -> Void)?
     var onMenu: (@MainActor (NSEvent) -> Void)?
     var onMiddleClick: (@MainActor () -> Void)?
-    enum DragPhase { case began, moved(CGFloat), ended }
+    /// `began` carries where the press landed in the tab; `moved` how far the pointer has gone since.
+    enum DragPhase { case began(CGFloat), moved(CGFloat), ended }
     /// Drag to reorder. The tab starts dragging once the pointer moves 6px from the press (`PointerSensor`
     /// `activationConstraint: { distance: 6 }`, RightPanelTabs.tsx:822 in 2994); a drag selects nothing.
     var onDrag: (@MainActor (DragPhase) -> Void)?
@@ -473,7 +542,7 @@ final class PanelTabView: DSView {
         if !dragging {
             guard hypot(point.x - press.x, point.y - press.y) >= 6 else { return }
             dragging = true
-            onDrag?(.began)
+            onDrag?(.began(convert(press, from: nil).x))
         }
         onDrag?(.moved(point.x - press.x))
     }

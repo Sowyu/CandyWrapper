@@ -21,6 +21,11 @@ struct RightPanelTabDragTests {
         view.subviews.flatMap { ($0 as? PanelTabView).map { [$0] } ?? tabs($0) }.sorted { $0.frame.minX < $1.frame.minX }
     }
 
+    private func at(_ type: NSEvent.EventType, _ origin: NSPoint, _ dx: CGFloat) -> NSEvent {
+        NSEvent.mouseEvent(with: type, location: NSPoint(x: origin.x + dx, y: origin.y), modifierFlags: [], timestamp: 0,
+                           windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+    }
+
     private func mouse(_ type: NSEvent.EventType, _ tab: PanelTabView, dx: CGFloat) -> NSEvent {
         let start = tab.convert(NSPoint(x: tab.bounds.midX, y: tab.bounds.midY), to: nil)
         return NSEvent.mouseEvent(with: type, location: NSPoint(x: start.x + dx, y: start.y), modifierFlags: [], timestamp: 0,
@@ -95,5 +100,37 @@ struct RightPanelTabDragTests {
         var same = saved
         same.move("pull-requests", to: 9); same.move("nope", to: 0)
         #expect(same == saved)
+    }
+
+    /// dnd-kit's auto-scroll: inside the strip's outer 20% the speed ramps to 10 px per 5 ms at the edge, only
+    /// toward a side the pointer moved to, and it stops at the end and on release.
+    @Test func dragAutoScrollsAnOverflowingStrip() throws {
+        let (window, panel) = makePanel()
+        _ = window
+        panel.mutatePanel { s in for i in 0..<12 { s.openBrowser("t\(i)") }; s.activate("diff"); return [] }
+        panel.layoutSubtreeIfNeeded()
+        let strip = try #require(tabs(panel.rightPanel).first?.superview)
+        let width = strip.bounds.width, threshold = width * 0.2
+        let first = tabs(panel.rightPanel)[0]
+        #expect(panel.rightPanel.tabStripOffset == 0)
+        // Press the tab's middle and drag so the pointer sits halfway into the right zone.
+        let origin = first.convert(NSPoint(x: first.bounds.midX, y: first.bounds.midY), to: nil)
+        first.mouseDown(with: at(.leftMouseDown, origin, 0))
+        let pointerStart = first.frame.midX
+        let dx = (width - threshold / 2) - pointerStart
+        first.mouseDragged(with: at(.leftMouseDragged, origin, dx))
+        #expect(abs(panel.rightPanel.autoScrollSpeed - 5) < 0.01)
+        panel.rightPanel.stepAutoScroll(0.05) // ten 5 ms ticks at 5 px
+        #expect(abs(panel.rightPanel.tabStripOffset - 50) < 0.01)
+        // Scrolled to the end, it stops.
+        for _ in 0..<200 { panel.rightPanel.stepAutoScroll(0.05) }
+        #expect(!panel.rightPanel.stepAutoScroll(0.05))
+        // Back to the middle: no zone, no scroll. Into the left zone after moving left: scrolls back.
+        first.mouseDragged(with: at(.leftMouseDragged, origin, width / 2 - pointerStart))
+        #expect(panel.rightPanel.autoScrollSpeed == 0)
+        first.mouseDragged(with: at(.leftMouseDragged, origin, -pointerStart))
+        #expect(abs(panel.rightPanel.autoScrollSpeed + 10) < 0.01)
+        first.mouseUp(with: at(.leftMouseUp, origin, -pointerStart))
+        #expect(panel.rightPanel.autoScrollSpeed == 0 && !panel.rightPanel.isAutoScrolling)
     }
 }
