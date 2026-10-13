@@ -299,8 +299,11 @@ public final class SidebarContentView: DSView {
     // MARK: Data
 
     /// Shows a snapshot. Unchanged rows keep their views; only rows whose derived model differs reconfigure.
-    public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true) {
+    /// `changedThreadIds` names the only threads that differ from the previous snapshot, when the caller
+    /// knows; without it every thread is compared.
+    public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
+        listCache?.noteChanges(changedThreadIds)
         rebuild(animated: animated)
     }
 
@@ -320,12 +323,28 @@ public final class SidebarContentView: DSView {
     /// The thread rows in display order, outside search (`orderedThreadKeys`, Sidebar.tsx:3073-3079):
     /// what `thread.previous`, `thread.next` and `thread.jump.N` walk.
     public var orderedThreadIds: [ThreadId] {
-        SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs).compactMap {
+        SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs, cache: listCache).compactMap {
             if case .row(let row) = $0 { row.id } else { nil }
         }
     }
 
+    /// Keeps the list's threads, shelves and row models between rebuilds.
+    public let listCache: SidebarListCache? = SidebarContentView.timing == "nocache" ? nil : SidebarListCache()
+
+    /// Development: with CANDY_SIDEBAR_TIMING set, each rebuild prints its time to stderr; set to `nocache`,
+    /// the list builds from scratch every time, as it did before `SidebarListCache`.
+    private static let timing = ProcessInfo.processInfo.environment["CANDY_SIDEBAR_TIMING"]
+
     private func rebuild(animated: Bool) {
+        guard Self.timing != nil else { return rebuildNow(animated: animated) }
+        let start = DispatchTime.now().uptimeNanoseconds, built = listCache?.rowModelBuilds ?? 0
+        rebuildNow(animated: animated)
+        let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+        FileHandle.standardError.write(Data(String(format: "sidebar rebuild %.2f ms, %d items, %d rows built\n", ms, list.items.count,
+                                                   (listCache?.rowModelBuilds ?? 0) - built).utf8))
+    }
+
+    private func rebuildNow(animated: Bool) {
         let ms = nowMs
         list.nowMs = ms
         // `inboxReturns.observe(workingShelfEnabled ? threads : null)` on every list rebuild.
@@ -343,7 +362,16 @@ public final class SidebarContentView: DSView {
             list.setItems(items, animated: false)
         } else {
             searchOrderKey = ""
-            list.setItems(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms), animated: animated)
+            // A thread changed in place or a label stepped: patch those rows of the list it already shows.
+            var patched = false
+            if let cache = listCache, let snapshot, list.itemsGeneration == cache.generation,
+               let patch = cache.patch(snapshot: snapshot, state: state, nowMs: ms) {
+                patched = list.patchItems(patch)
+            }
+            if !patched {
+                let items = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms, cache: listCache)
+                list.setItems(items, animated: animated, generation: listCache?.generation)
+            }
         }
         // The results `ul` is a listbox named "Thread search results" (Sidebar.tsx:5151-5156).
         list.setAccessibilityLabel(isSearching ? "Thread search results" : nil)

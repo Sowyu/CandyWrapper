@@ -486,11 +486,14 @@ public enum SidebarModel {
         shelves.active = workingShelf ? sortInboxThreadsByReturn(shelves.active, returnedAt: returnedAt) : sortActiveThreadsByOrderKey(shelves.active)
         shelves.working = sortWorkingThreadsBySend(shelves.working)
         // Soonest wake first (Sidebar.tsx:2874-2879).
-        shelves.snoozed = stableSorted(shelves.snoozed) {
-            firstValidTimestampMs($0.shell.snoozedUntil) < firstValidTimestampMs($1.shell.snoozedUntil)
-        }
+        shelves.snoozed = sortSnoozedThreads(shelves.snoozed)
         shelves.settled = sortSettledThreads(shelves.settled)
         return shelves
+    }
+
+    /// Soonest wake first, ties in input order (Sidebar.tsx:2874-2879).
+    public static func sortSnoozedThreads(_ threads: [SidebarThread]) -> [SidebarThread] {
+        stableSorted(threads) { firstValidTimestampMs($0.shell.snoozedUntil) < firstValidTimestampMs($1.shell.snoozedUntil) }
     }
 
     /// The row's time label: `threadTimeLabel` (Sidebar.tsx:332-335), or `settledTimeLabel`
