@@ -171,12 +171,13 @@ public final class TimelineView: DSView {
 
     private var endAfterRestyle = false
 
-    /// Glass Native uses the system's scroller, which hides while idle, kept between the toolbar and the composer.
-    /// Classic keeps T3's always-drawn bar.
+    /// Glass Native uses the system's overlay scroller, which hides while idle, kept between the toolbar and the
+    /// composer. Always overlay, as T3's bar never takes a lane: a legacy scroller narrows the clip view, and the
+    /// timeline then measures its rows again at the narrower width. Classic keeps T3's always-drawn bar.
     private func applyScrollerStyle() {
         if style == .native {
             scrollView.verticalScroller = NSScroller()
-            scrollView.scrollerStyle = NSScroller.preferredScrollerStyle
+            scrollView.scrollerStyle = .overlay
             scrollView.hasVerticalScroller = true
             scrollView.autohidesScrollers = true
         } else {

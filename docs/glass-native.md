@@ -106,7 +106,7 @@ The user called the first native build "unpolished slop" and circled four region
 
 1. The sidebar top and the toolbar. The sidebar toggle is a plain glyph beside the traffic lights, and New thread is back in the search row with the project filter and Add project. The panel toggles are one segmented control with T3's subtle on state. They hide on Settings, Pull Requests and Usage, as T3's do. The breadcrumb is plain 14 pt text in two weights. The grey band under the toolbar is gone: rows fade out under it (`ToolbarScrollFade`, an alpha mask on the timeline's scroll view).
 2. The sidebar rows and footer. Rows draw T3's own fills (`NativeSidebarRowView`): hover, the open thread and the multi-selection, inset 8 pt, never the blue emphasized selection. Cards show T3's hover Snooze and Settle in the status slot, and slim rows their Wake, Un-settle or Settle button. Row text starts 18 pt in, on the same line as the search field's magnifier and the footer's first glyph. The footer's Pull Requests glyph is T3's Lucide icon, since SF's `arrow.triangle.pull` doesn't read at 14 pt.
-3. The thread. The timeline uses the system's scroller in native mode, kept between the toolbar and the composer. User bubbles keep a hairline where the frost would swallow them, and the approval card takes the `border` hairline.
+3. The thread. The timeline uses the system's overlay scroller in native mode, kept between the toolbar and the composer. User bubbles keep a hairline where the frost would swallow them, and the approval card takes the `border` hairline.
 4. The composer. It is one `NSGlassEffectView` in an `NSGlassEffectContainerView`, tinted with classic's surface at the Glass opacity, in place of the blur, fill, outline and shadow. Shape, pills, spacing, the context strip and the 20 pt bottom margin are classic's.
 5. The project filter opens classic's combobox under the native search field: search, environment badges and per-project settings.
 6. The right panel runs up under the toolbar, so its tabs share the toolbar's row as T3's share the header row with the panel toggles. The strip keeps 176 pt clear at the right for the toggles, content under the toolbar still takes clicks, and a maximized panel hides the breadcrumb, as T3 hides its header.
@@ -114,6 +114,20 @@ The user called the first native build "unpolished slop" and circled four region
 Left for later:
 
 - The details card overlaps the first user bubble at the top right, as it does in classic.
+
+Performance, Release builds on the frozen workload with `scripts/perf-review --no-bench` and `CANDY_THEME`, load average 2 to 6. Glass and the polished native ran 3 launches, the native fix 2.
+
+| | Glass | Native before polish (76d7b4c) | Native after polish |
+|---|---|---|---|
+| Launch to window | 207 ms | 278 ms | 276 ms |
+| Idle CPU | 0.044% | 0.045% | 0.055% |
+| Idle package wakeups | 0.20/s | 0.17/s | 0.10/s |
+| Footprint at rest | 34.0 MB | 44.7 MB | 45.0 MB |
+| Huge thread footprint | 35.8 MB | 46.1 MB | 46.3 MB |
+| Huge thread scroll CPU | 360 ms | 404 ms | 376 ms |
+| After scroll footprint | 45.3 MB | 54.4 MB | 54.2 MB |
+
+The polish costs nothing measurable. A first version used the system's preferred scroller style, which is legacy on this Mac with its mouse: the scroller took a lane, the timeline measured every row again at the narrower width, and the after-scroll footprint rose to 72 MB. The timeline now keeps the overlay style. The composer's glass and the fade mask each measured within noise. Native is still about 11 MB heavier and 70 ms slower to the window than Glass, from the window structure the Phase 2 notes describe.
 
 What works in Glass Native now:
 
