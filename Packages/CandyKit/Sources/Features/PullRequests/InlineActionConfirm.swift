@@ -40,8 +40,7 @@ public final class InlineActionConfirm {
             guard let self, let armed = self.armed else { return event }
             if event.type == .keyDown {
                 // Escape disarms and goes no further (`preventDefault` and `stopPropagation`).
-                // ponytail: PopupHost sees Escape first, so in the ⋯ menu it also closes the menu where T3 keeps
-                // it open; route Escape through the popup's key handling if a side-by-side check flags it
+                // An open menu sees Escape first and asks its `escapeOverride`, which disarms its row.
 
                 if event.keyCode == 53 { self.disarm(); return nil }
                 return event
