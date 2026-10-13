@@ -115,7 +115,6 @@ public final class ComposerView: DSView {
             glassContainer = nil
         }
         blur.isHidden = nativeGlass
-        outline.isHidden = nativeGlass
         needsDisplay = true
         needsLayout = true
     }
@@ -714,6 +713,10 @@ public final class ComposerView: DSView {
         // The drop highlight stays on `glass`, so in native mode it stays and loses only its fill.
         glass.layer?.backgroundColor = nativeGlass ? nil : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+        // Glass Native: in dark mode the glass barely parts from a plain dark detail, so it keeps T3's `border`
+        // hairline at the edge. Light mode's glass separates by its own shading.
+        outline.isHidden = nativeGlass && !dark
+        if nativeGlass, dark { outline.layer?.borderColor = Themed.color(\.border).cgColor(in: self) }
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         shadowLayer.shadowOpacity = dark || nativeGlass ? 0 : 0.4
