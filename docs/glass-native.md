@@ -118,47 +118,39 @@ Performance, Release build of cebf81c against the frozen workload, `scripts/perf
 Idle cost and scrolling are the same, and the huge thread opens faster. Native still launches about 55 ms later and sits about 12 MB heavier, against 8 MB after phase 1. This run includes phase 2's sidebar, and the thread adds only one blur view and the breadcrumb, but I did not take a heap diff, so where the extra 4 MB sits is open. Phase 6 should find it.
 ### Phase 2: the native sidebar
 
-What Glass Native's sidebar does now:
+Rebuilt on 2026-10-13 after the new Direction: it is T3 Code desktop's sidebar, as classic draws it, with native controls in the custom-drawn ones' places. Screenshots: `/tmp/cw-peek/sidebar-pair-classic.png` and `sidebar-pair-native.png`.
 
-- The list is a view-based source list `NSTableView` (`Features/Native/NativeSidebarListView.swift`) with T3 Mobile's card rows (favicon, project, status label with its SF Symbol and color or the time, a two-line title, branch · environment with the PR chip and provider) and slim rows for settled and snoozed threads. Receded rows draw at 0.55.
-- The order is pinned, active, drafts, then the Working, Snoozed and Settled shelves (`NativeSidebarRules.displayOrder`). Shelf headers show the count while collapsed and a chevron. Settled shows 10, then pages of 25 behind "Show N more".
-- Selection is the table's own: the open thread, the Cmd and Shift multi-selection and the search highlight. Arrow keys walk the list and open each thread while the list keeps focus. Return opens, double click renames in place.
-- An `NSSearchField` ("Search threads") sits at the top. Cmd+F in the list focuses it. Results show the server's "You:" or "Agent:" excerpt.
-- The filter button beside it opens a native menu with Environment (when there is more than one), Project, Add project and Usage. The classic search row is gone in this mode.
-- "Threads | Pull requests" is an `NSSegmentedControl`. CandyWrapper has no pull request list model separate from the Pull Requests page (its list and detail live in `PullRequestsPageController`), so the segment opens today's page in the detail and Threads goes back.
-- Trackpad swipes come from `rowActionsForRow:edge:`: Settle and Snooze on cards (Snooze opens a native "Snooze until" menu of the presets), Un-settle on settled rows, Wake on snoozed rows, and Archive on servers without settlement. Right click shows the existing thread menu. Drags reorder pins and the inbox through the same planner as the classic list, files drop onto a row, and a drag out carries thread context to the composer. Hover cards work as before.
-- The split view's bottom accessory holds a glass "New chat" button and a glass Settings button. It hides while Settings' navigation fills the column.
-- Every other theme keeps the classic sidebar. The native views exist only while the native presentation shows the sidebar; swapping the theme back drops them.
+What it has now:
 
-Seams: `SidebarItemsPresenting` (`Features/Native/NativeSidebarModel.swift`) is what `SidebarContentView` needs from a list, and both lists conform. `SidebarContentView.presenter` picks the one showing, and `shownItems` replaces `list.items` for the app. The native list takes the same `SidebarListCache` items and patches and keeps them in builder order, so the app's ordering code (forward navigation after Settle, range select) is unchanged. `SidebarActions.archive` is new.
+- The list is a view-based source list `NSTableView` (`Features/Native/NativeSidebarListView.swift`) with the system selection, emphasized while the list has focus. Rows keep classic's anatomy and heights (`NativeSidebarCells.swift`): card rows at 82 pt with favicon, project, pin and the status or time on line 1, the title on line 2, and branch, terminal, pull request badge, remote machine and provider on line 3; slim rows at 36 pt; drafts first under their divider; Working, Snoozed and Settled shelves with "Settled (N)" and the chevron; "Show N more". Status glyphs are SF Symbols in T3's status colors. Titles take classic's weights and colors.
+- The search row sits where T3 has it: an `NSSearchField` ("Search"), then the project filter and Add project as plain icon buttons. The filter opens a native menu of projects and fills while a project scope applies. New thread stays in the toolbar (phase 1). Cmd+F in the list focuses the field; results show the "You:" or "Agent:" excerpt.
+- The footer is T3's row of plain icons: Settings, Pull Requests and Usage at the left, the update pill at the right, Back on Pull Requests and Usage, the undo notice and provider pill above.
+- Trackpad swipes from `rowActionsForRow:edge:` stand in for T3's hover buttons: Settle and Snooze on cards (Snooze opens a native "Snooze until" menu), Un-settle on settled rows, Wake on snoozed rows, Archive on servers without settlement. Right click shows the thread menu. Arrow keys walk the list and open each thread with the list keeping focus. Double click renames in place. Drags reorder pins and the inbox through the classic planner, files drop onto rows, and a drag out carries thread context to the composer. Hover cards work.
+- Removed after the Direction change: the "Threads | Pull requests" switcher, the "New chat" accessory, the glass footer circles, the Environment filter and T3 Mobile's row anatomy and order.
 
-Decisions to confirm:
+Seams: `SidebarItemsPresenting` (`Features/Native/NativeSidebarModel.swift`) is what `SidebarContentView` needs from a list; both lists conform, `presenter` picks the one showing and `shownItems` replaces `list.items` for the app. The native list takes the same `SidebarListCache` items and patches. A one-thread change reconfigures one cell; a clock step touches only rows whose labels changed; shelves opening or closing insert or remove only their rows (`rowChanges` skips the common head and tail). `SidebarActions.archive` is new.
 
-- macOS has no hover fill for source list rows, so rows show none, as in Finder and Mail. I drew nothing by hand.
-- Native cards show "Working" without the running duration, as T3 Mobile does, so no per-second tick runs for them.
-- Line 3 shows the environment's label on every card, as T3 Mobile does, not only for remote threads.
-- A failed thread's `lastError` on line 3 is not shown yet, because the row model doesn't carry it.
-- Usage moved into the filter menu, since the footer row it lived in is gone.
-- The search field sits above the picker, as Mail and Notes put search at the top.
+Where it still differs from classic in layout (for the polish pass):
 
-Performance, the Release build of this phase, alternating Glass and Glass Native launches with `CANDY_THEME`, three each. The machine was busy (load average 2 to 5 on the sandbox runs, 2 to 4.6 on the load runs), so compare the columns, not the absolute numbers.
+1. The sidebar column is 320 pt wide (the split view's 280 to 380), where classic is 255.
+2. The header row has the toolbar's sidebar toggle and New thread items, not classic's brand and toggle. The toolbar is phase 1 and 3 territory.
+3. Row content starts 26 pt from the column edge, where classic's starts 18 pt: the source list adds its own row inset around the 8 pt cell inset. The search field starts at 8.
+4. The search field is the system capsule, not classic's flat field, and the row has two buttons, not three (New thread moved to the toolbar).
+5. Rows have no hover fill and no hover Settle and Snooze buttons; swipes and the menu do those.
+6. The project filter is a plain menu, without classic's popup search, environment badges and per-project settings button; the scoped trigger shows a filled folder, not the project's favicon.
+7. Line 3's pull request badge, terminal, machine and provider glyphs are classic's custom views; the status and pin glyphs are SF Symbols. Labels sit 2 pt in from their frames (the text field inset).
+8. Shelf headers and Show more are plain cells; classic's focus ring and hover fill are absent.
+
+Performance, Release builds alternating Glass and Glass Native launches with `CANDY_THEME`, three each, taken before the redirect (the row views changed since, the window structure did not). The machine was busy, so compare the columns.
 
 | | Glass | Glass Native |
 |---|---|---|
 | Sandbox: launch to window | 181 ms (171 to 181) | 255 ms (252 to 262) |
 | Sandbox: footprint at rest | 38.3 MB (37.3 to 39.8) | 49.7 MB (47.5 to 50.0) |
-| Sandbox: idle CPU | 0.035% | 0.03 to 0.11% |
 | Five load homes, 1,580 threads: launch to window | 207 ms (206 to 788, the first launch cold) | 271 ms (270 to 275) |
 | Five load homes: footprint at rest | 84.4 MB (70.8 to 84.5) | 94.7 MB (92.7 to 95.1) |
-| Five load homes: idle wakeups | 0.07/s package, 0.3/s interrupt | 0.10/s, 0.33/s |
+| Idle CPU and wakeups | 0.02 to 0.05%, 0.07/s | 0.03 to 0.11%, 0.10/s |
 
-Update cost at 1,580 threads with the settled shelf open, `PerfBenchmarks.sidebarUpdates` (new), median main thread time including layout:
+Update cost at 1,580 threads with the settled shelf open, `PerfBenchmarks.sidebarUpdates`, median main thread time with layout: a one-thread rename 0.46 ms classic and 0.61 ms native, a minute's clock step 0.31 and 0.65 ms, the settled shelf opening or closing 2.0 and 1.6 ms.
 
-| | Classic list | Native list |
-|---|---|---|
-| One thread renamed | 0.46 ms | 0.61 ms |
-| A minute's clock step | 0.31 ms | 0.65 ms |
-| The settled shelf opening or closing | 2.0 ms | 1.6 ms |
-
-Parity is not reached. Native is about 11 MB heavier and 65 to 75 ms slower to the window, where phase 1 measured 8 MB and 37 ms with the classic sidebar inside it. A heap diff of the two at rest puts the extra in many small places rather than the sidebar: SwiftUI view graphs behind each glass control (19 graphs and 23 glass material providers: toolbar items, the sidebar glass, the accessory buttons), Auto Layout variables (3,300), Objective-C method caches and Swift metadata for the extra AppKit and SwiftUI classes, and the AppKit controls themselves. The classic sidebar was not the main cost: its rows were never more than about 20 views on screen. What could still move it: fewer glass controls (the accessory and toolbar items), and phase 3 and 4 replacing more custom views, so measure again after them.
-
+Parity is not reached: native is about 11 MB heavier and 65 to 75 ms slower to the window. A heap diff at rest puts the extra in the window structure, not the sidebar: SwiftUI view graphs behind each glass control (19 graphs, 23 glass material providers), 3,300 Auto Layout variables, method caches and Swift metadata for the extra AppKit and SwiftUI classes. The classic sidebar was never the main cost. Measure again after the polish pass settles the controls.

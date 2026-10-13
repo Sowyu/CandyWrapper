@@ -130,18 +130,15 @@ public final class SidebarContentView: DSView {
     /// Glass Native's list and its search and picker, while the native presentation shows the sidebar.
     var nativeList: NativeSidebarListView?
     var nativeChrome: NativeSidebarChrome?
+    var nativeFooter: NativeSidebarFooter?
     /// The list that shows the items now.
     var presenter: SidebarItemsPresenting { nativeList ?? list }
     /// The items the sidebar shows, in builder order: what Settle's forward navigation and the menus walk.
     public var shownItems: [SidebarItem] { presenter.items }
-    /// The open utility page is Pull Requests, for the native picker.
-    public var showsPullRequestsPage = false { didSet { syncSegments() } }
-    /// Glass Native's Environment filter: only projects of this environment. Nil shows all.
-    public internal(set) var environmentFilter: String?
-    public var showsPullRequests = true { didSet { syncSegments(); needsLayout = true } }
+    public var showsPullRequests = true { didSet { nativeFooter?.showsPullRequests = showsPullRequests; needsLayout = true } }
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
-    public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; syncSegments(); needsLayout = true } }
+    public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; nativeFooter?.showsBack = isOnUtilityPage; needsLayout = true } }
 
     private func clearActiveRows() {
         if state.activeThreadId != nil { state.activeThreadId = nil }
@@ -324,7 +321,6 @@ public final class SidebarContentView: DSView {
     public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
         listCache?.noteChanges(changedThreadIds)
-        if environmentFilter != nil { syncEnvironmentFilter() }
         rebuild(animated: animated)
     }
 
@@ -648,7 +644,8 @@ public final class SidebarContentView: DSView {
 
     func updateScopeTrigger() {
         let group = scopedGroup
-        nativeChrome?.filterActive = group != nil || environmentFilter != nil
+        nativeChrome?.setScope(group?.label)
+        nativeChrome?.hasProjects = !(snapshot?.projects.isEmpty ?? true)
         filterMonogram.isHidden = group == nil
         if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
         if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .folder : nil }
@@ -700,8 +697,7 @@ public final class SidebarContentView: DSView {
         guard window != nil else { LabelClock.shared.cancel(self); return }
         let ms = nowMs, rows = presenter.visibleRowModels
         let rebuildAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false)
-        // Native cards show "Working" without a duration, so nothing ticks for them.
-        let workingAt = nativeList == nil ? SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false) : nil
+        let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
         guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }
         LabelClock.shared.schedule(self, in: Double(next - ms) / 1000) { [weak self] in self?.labelTimerFired(rebuildAt: rebuildAt) }
     }
@@ -720,7 +716,7 @@ public final class SidebarContentView: DSView {
             presenter.nowMs = ms
             scheduleLabelTimer()
         }
-        if nativeList == nil { list.tickWorkingRows() }
+        if let nativeList { nativeList.tickWorkingRows() } else { list.tickWorkingRows() }
     }
 
     public override func viewDidMoveToWindow() {

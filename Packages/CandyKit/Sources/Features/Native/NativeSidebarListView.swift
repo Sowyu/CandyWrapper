@@ -3,17 +3,14 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// Glass Native's thread list (docs/glass-native.md phase 2): a view-based source list `NSTableView` with T3
-/// Mobile's card and slim rows. It takes the same items and `SidebarListCache` patches as `SidebarListView`, keeps
-/// them in builder order, and draws them in T3 Mobile's order (`NativeSidebarRules.displayOrder`). A change to one
-/// thread reconfigures that row's cell in place, and only labels whose text changed are set.
+/// Glass Native's thread list (docs/glass-native.md phase 2): a view-based source list `NSTableView` with T3 Code
+/// desktop's rows in T3's order. It takes the same items and `SidebarListCache` patches as `SidebarListView`. A
+/// change to one thread reconfigures that row's cell in place, and only labels whose text changed are set.
 final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     let table = NativeSidebarTableView()
     private(set) var items: [SidebarItem] = []
     /// Display row to index in `items`, and back.
-    private(set) var order: [Int] = []
-    private var rowOfItem: [Int] = []
-    /// Per display row: the item's key and height, kept so an update doesn't recompute them for every row.
+    /// Per row: the item's key and height, kept so an update doesn't recompute them for every row.
     private var keys: [String] = []
     private var heights: [CGFloat] = []
     private(set) var itemsGeneration: Int?
@@ -31,9 +28,6 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     var onRenameCommit: ((ThreadId, String, String) -> Void)?
     var onRenameCancel: (() -> Void)?
     var hoverCard: ((ThreadId) -> SidebarThreadHoverCardModel?)?
-    /// The environment's label for line 3, nil when unknown.
-    var environmentLabel: (String) -> String? = { _ in nil }
-    var environmentMachine: (String) -> String = { _ in "server" }
     var settlementSupported: () -> Bool = { true }
     var snoozeSupported: () -> Bool = { true }
     var canSortThread: (ThreadId) -> Bool = { _ in false }
@@ -50,6 +44,8 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     override init(frame: NSRect) {
         super.init(frame: frame)
         drawsBackground = false
+        // The list sits below the search row, clear of the toolbar; no automatic inset pushes or hides rows.
+        automaticallyAdjustsContentInsets = false
         hasVerticalScroller = true
         autohidesScrollers = true
         borderType = .noBorder
@@ -101,24 +97,20 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
 
     // MARK: Data
 
-    func item(atRow row: Int) -> SidebarItem? { order.indices.contains(row) ? items[order[row]] : nil }
+    func item(atRow row: Int) -> SidebarItem? { items.indices.contains(row) ? items[row] : nil }
 
     /// Replaces the items. Same rows in the same order reconfigure in place; otherwise rows that came or went fade,
     /// or the table reloads when too much moved.
     func setItems(_ new: [SidebarItem], animated: Bool, generation: Int?) {
         itemsGeneration = generation
-        let oldItems = items, oldOrder = order, oldKeys = keys
-        let newOrder = NativeSidebarRules.displayOrder(new)
-        let newKeys = newOrder.map { new[$0].key }
+        let oldItems = items, oldKeys = keys
+        let newKeys = new.map(\.key)
         items = new
-        order = newOrder
         keys = newKeys
-        rowOfItem = Array(repeating: -1, count: new.count)
-        for (row, i) in newOrder.enumerated() { rowOfItem[i] = row }
-        heights = newOrder.map { height(new[$0]) }
+        heights = new.map(height)
         if oldKeys == newKeys {
-            for row in newOrder.indices where oldItems[oldOrder[row]] != new[newOrder[row]] {
-                refresh(row: row, old: oldItems[oldOrder[row]])
+            for row in new.indices where oldItems[row] != new[row] {
+                refresh(row: row, old: oldItems[row])
             }
         } else if !oldKeys.isEmpty, let (removed, inserted) = Self.rowChanges(from: oldKeys, to: newKeys) {
             // Rows came or went (a shelf opening, a thread settling): only those rows change, and the rows that
@@ -129,8 +121,8 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
             table.removeRows(at: removed, withAnimation: fade ? .effectFade : [])
             table.insertRows(at: inserted, withAnimation: fade ? .effectFade : [])
             table.endUpdates()
-            for row in newOrder.indices where !inserted.contains(row) {
-                guard let old = oldRow[newKeys[row]].map({ oldItems[oldOrder[$0]] }), old != new[newOrder[row]] else { continue }
+            for row in new.indices where !inserted.contains(row) {
+                guard let old = oldRow[newKeys[row]].map({ oldItems[$0] }), old != new[row] else { continue }
                 refresh(row: row, old: old)
             }
         } else {
@@ -172,8 +164,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         for (i, item) in patch where items[i] != item {
             let old = items[i]
             items[i] = item
-            let row = rowOfItem[i]
-            guard row >= 0 else { continue }
+            let row = i
             refresh(row: row, old: old)
             if Self.showsSelected(item) { select.insert(row) } else { deselect.insert(row) }
         }
@@ -211,7 +202,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     /// The table shows the active thread and the multi-selection as its selection; the search highlight in search.
     private func syncSelection() {
         var rows = IndexSet()
-        for (row, i) in order.enumerated() where Self.showsSelected(items[i]) { rows.insert(row) }
+        for (row, item) in items.enumerated() where Self.showsSelected(item) { rows.insert(row) }
         guard table.selectedRowIndexes != rows else { return }
         syncingSelection = true
         table.selectRowIndexes(rows, byExtendingSelection: false)
@@ -242,64 +233,19 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         keys.firstIndex(of: "thread:\(id.rawValue)")
     }
 
-    // MARK: Line 3 and title measuring
+    func height(_ item: SidebarItem) -> CGFloat { NativeSidebarMetrics.height(item) }
 
-    /// "branch · environment" with the machine glyph (thread-list-v2-items.tsx line 3).
-    func detailLine(_ r: SidebarRowModel) -> NSAttributedString {
-        typealias M = NativeSidebarMetrics
-        let s = NSMutableAttributedString()
-        if let branch = r.branch, !branch.isEmpty {
-            s.append(NSAttributedString(string: branch, attributes: [.font: M.monoFont, .foregroundColor: NSColor.secondaryLabelColor]))
+    /// Re-applies the clock to on-screen Working durations without rebuilding anything.
+    func tickWorkingRows() {
+        let range = table.rows(in: table.visibleRect)
+        for row in range.location..<(range.location + range.length) {
+            (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeThreadCardCell)?.tick()
         }
-        let env = r.id.environmentId
-        if let env, let label = r.scratchMachineLabel ?? environmentLabel(env) {
-            if s.length > 0 { s.append(NSAttributedString(string: " · ", attributes: [.font: M.detailFont, .foregroundColor: NSColor.tertiaryLabelColor])) }
-            s.append(M.symbolText(NativeSidebarRules.machineSymbol(r.scratchMachine ?? environmentMachine(env)), label,
-                                  font: M.detailFont, color: .secondaryLabelColor))
-        }
-        return s
-    }
-
-    private func hasDetailLine(_ r: SidebarRowModel) -> Bool {
-        (r.branch?.isEmpty == false) || r.pullRequestBadge != nil || r.scratchMachineLabel != nil
-            || r.id.environmentId.flatMap(environmentLabel) != nil
-    }
-
-    private var measuredWidth: CGFloat = 0
-    private var twoLineTitles: [String: Bool] = [:]
-
-    /// Whether a card's title wraps to a second line at the current width. Cached per title until the width changes.
-    func titleNeedsTwoLines(_ title: String) -> Bool {
-        let width = max(40, table.bounds.width - 2 * NativeSidebarMetrics.pad - 20)
-        if width != measuredWidth { measuredWidth = width; twoLineTitles = [:] }
-        if let known = twoLineTitles[title] { return known }
-        let height = (title as NSString).boundingRect(with: NSSize(width: width, height: 1_000), options: [.usesLineFragmentOrigin],
-                                                      attributes: [.font: NativeSidebarMetrics.titleFont]).height
-        let two = height > NativeSidebarMetrics.titleFont.pointSize * 1.8
-        twoLineTitles[title] = two
-        return two
-    }
-
-    func height(_ item: SidebarItem) -> CGFloat {
-        guard case .row(let r) = item, r.variant == .card else { return NativeSidebarMetrics.height(item, twoLines: false, line3: false) }
-        return NativeSidebarMetrics.cardHeight(twoLines: titleNeedsTwoLines(r.title), line3: hasDetailLine(r))
-    }
-
-    /// The width changed: card titles wrap again.
-    func widthChanged() {
-        let cards = IndexSet(order.indices.filter { if case .row(let r) = items[order[$0]], r.variant == .card { true } else { false } })
-        guard !cards.isEmpty else { return }
-        for row in cards { heights[row] = height(items[order[row]]) }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            table.noteHeightOfRows(withIndexesChanged: cards)
-        }
-        for row in cards { if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeSidebarCell, let item = item(atRow: row) { configure(cell, item) } }
     }
 
     // MARK: NSTableViewDataSource and delegate
 
-    func numberOfRows(in tableView: NSTableView) -> Int { order.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { heights.indices.contains(row) ? heights[row] : 1 }
 
@@ -440,7 +386,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
 
     private lazy var renameField: NSTextField = {
         let field = NSTextField(string: "")
-        field.font = NativeSidebarMetrics.titleFont
+        field.font = SB.font(14)
         field.delegate = self
         field.focusRingType = .default
         field.bezelStyle = .roundedBezel
@@ -578,7 +524,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     }
 
     private var sortRows: [(id: ThreadId, section: SidebarSection)?] {
-        order.map { if case .row(let r) = items[$0] { (r.id, r.section) } else { nil } }
+        items.map { if case .row(let r) = $0 { (r.id, r.section) } else { nil } }
     }
 
     private func section(of id: ThreadId) -> SidebarSection? {
@@ -593,7 +539,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
             return .move
         }
         guard info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return [] }
-        let target = dropOperation == .on ? row : min(row, order.count - 1)
+        let target = dropOperation == .on ? row : min(row, items.count - 1)
         guard case .row? = item(atRow: target) else { return [] }
         tableView.setDropRow(target, dropOperation: .on)
         return .copy
@@ -613,7 +559,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     }
 }
 
-/// The table: hover tracking for the cards, the thread menu on right click and a width change hook.
+/// The table: hover tracking for the hover cards and the thread menu on right click.
 final class NativeSidebarTableView: NSTableView {
     weak var list: NativeSidebarListView?
     private var tracking: NSTrackingArea?
@@ -646,12 +592,6 @@ final class NativeSidebarTableView: NSTableView {
         guard row >= 0 else { return nil }
         list?.hoverEnded()
         return list?.menu(for: event, row: row)
-    }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        let changed = newSize.width != frame.width
-        super.setFrameSize(newSize)
-        if changed { list?.widthChanged() }
     }
 
     /// Return and Space open the selected row, as clicking does.
