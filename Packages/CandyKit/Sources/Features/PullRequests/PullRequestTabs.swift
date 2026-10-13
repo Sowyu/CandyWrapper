@@ -435,14 +435,15 @@ final class ChecksListItem: DSView, StackItem {
 }
 
 /// The Comments section: the truncation notice, "No comments yet.", or the cards.
-// ponytail: every comment renders at once and a resolved one shown by the filter gets a full card; T3
-// pages them by 20 and collapses resolved ones (`CollapsedComment`). Add both when a long review is slow
-// to open or a side-by-side check flags the cards
+// ponytail: every comment renders at once; T3 pages them by 20. Add the paging when a long review is
+// slow to open
 final class CommentsItem: DSView, StackItem {
     private var cards: [CommentCard] = []
     private var detail: PullRequestDetail?
     /// The comments the filter lets through.
     private var comments: [PullRequestComment] = []
+    /// Collapsed cards the reader opened.
+    private var openIds: Set<String> = []
     private var nowMs: Int64 = 0
     var editingId: String? { didSet { if editingId != oldValue { rebuildCards() } } }
     var saving = false { didSet { cards.forEach { $0.editor?.saving = saving } } }
@@ -468,6 +469,7 @@ final class CommentsItem: DSView, StackItem {
 
     /// The filter changed, or the detail did: rebuild the cards from the comments it lets through.
     func refilter(_ d: PullRequestDetail, filter: PullRequestDetailLogic.CommentFilter) {
+        if detail?.url != d.url { openIds = [] }
         detail = d
         let (shown, hidden) = PullRequestDetailLogic.filterComments(d, filter)
         comments = shown
@@ -484,7 +486,14 @@ final class CommentsItem: DSView, StackItem {
         cards = state.pending || state.error != nil ? [] : comments.map { c in
             let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
                                    canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
-                                   canReact: d.capabilities.reactions == true, editing: editingId == c.id)
+                                   canReact: d.capabilities.reactions == true, editing: editingId == c.id,
+                                   collapsed: PullRequestDetailLogic.collapsed(c, in: d), open: openIds.contains(c.id))
+            // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
+            card.onResize = { [weak self, weak card] in
+                guard let self, let card else { return }
+                if card.isOpen { self.openIds.insert(c.id) } else { self.openIds.remove(c.id) }
+                self.onResize?()
+            }
             card.onEdit = { [weak self] in self?.editingId = c.id; self?.onResize?() }
             card.onCancel = { [weak self] in self?.editingId = nil; self?.onResize?() }
             card.onSave = { [weak self] body in self?.onSave?(c, body) }
@@ -544,10 +553,25 @@ final class CommentCard: DSView, FocusWithinObserver {
     private let state = LabelView("", font: DSFont.ui(12))
     private let body = MarkdownView()
     private let hasBody: Bool
+    /// A resolved or dismissed remark (`CollapsedComment`): no head fill, a status toggle and a
+    /// one-line preview while closed, the words below once opened.
+    private let collapsed: PullRequestDetailLogic.Collapsed?
+    private(set) var isOpen = false
+    private var mayEdit = false
+    private var toggle: ButtonView?
+    private let chevron = IconView(name: .chevronDown, size: 14)
+    private let location = LabelView("", font: DSFont.mono(12))
+    private let outdated = LabelView("Outdated", font: DSFont.ui(12))
+    private var summary: CollapsedSummaryLine?
+    var onResize: (() -> Void)?
 
-    init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false) {
+    init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
+         collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false) {
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
         hasBody = PullRequestDetailLogic.visibleBody(c.body) != nil || canEdit
+        self.collapsed = collapsed
+        // An edit in progress keeps its card open.
+        isOpen = open || editing
         super.init(frame: .zero)
         reactionBar.canReact = canReact
         reactionBar.reactions = c.reactions ?? []
@@ -555,6 +579,7 @@ final class CommentCard: DSView, FocusWithinObserver {
         editButton.iconSize = 12
         editButton.setAccessibilityLabel("Edit comment")
         editButton.isHidden = !canEdit || editing
+        mayEdit = canEdit
         editButton.action = { [weak self] in self?.onEdit?() }
         editButton.alphaValue = 0
         addSubview(editButton)
@@ -585,15 +610,67 @@ final class CommentCard: DSView, FocusWithinObserver {
         body.cwd = cwd
         if hasBody { body.setMarkdown(c.body) }
         addSubview(body)
+        if let collapsed {
+            headFill.isHidden = true
+            state.isHidden = true
+            // `rounded-md px-2 py-1 text-xs gap-1.5`, muted, `hover:bg-muted hover:text-foreground`.
+            let t = ButtonView(collapsed.label, variant: .ghostMuted, size: .xs)
+            t.accessory = chevron
+            t.action = { [weak self] in self?.setOpen(!(self?.isOpen ?? false)) }
+            t.setAccessibilityLabel(collapsed.label)
+            addSubview(t)
+            toggle = t
+            chevron.setRotation(isOpen ? 180 : 0, motion: .none)
+            location.text = collapsed.location ?? ""
+            location.lineHeight = 16
+            location.truncates = true
+            location.toolTip = collapsed.location
+            outdated.lineHeight = 16
+            outdated.isHidden = !collapsed.outdated
+            [location, outdated].forEach(addSubview)
+            if let visible = PullRequestDetailLogic.visibleBody(c.body) {
+                let line = CollapsedSummaryLine(PullRequestDetailLogic.collapsedSummary(visible))
+                line.onClick = { [weak self] in self?.setOpen(true) }
+                addSubview(line)
+                summary = line
+            }
+        }
     }
 
+    /// Opens or closes the words, sliding the cards below (`CollapsiblePanel`, `{open ? … : null}`).
+    func setOpen(_ open: Bool) {
+        guard collapsed != nil, open != isOpen else { return }
+        CollapseMotion.run(in: self, showsClosingContent: false) {
+            isOpen = open
+            chevron.setRotation(open ? 180 : 0)
+            needsLayout = true
+            onResize?()
+        }
+    }
+
+    /// The `p-3` block's height: the status row, the location and, while closed, the preview.
+    private var collapsedHead: CGFloat {
+        guard let collapsed else { return 0 }
+        return 12 + 24 + (collapsed.location != nil ? 24 : 0) + (!isOpen && summary != nil ? 24 : 0) + 12
+    }
+
+    /// The words shown in an opened card: none for a bare verdict nobody may rewrite.
+    private var collapsedShowsBody: Bool { isOpen && (hasBody || editor != nil) }
+
     func height(forWidth w: CGFloat) -> CGFloat {
+        if collapsed != nil {
+            guard isOpen else { return collapsedHead + 2 }
+            let ew: CGFloat = mayEdit && editor == nil ? 28 : 0
+            let words = editor.map { $0.height(forWidth: w - 24) } ?? (collapsedShowsBody ? body.height(forWidth: w - 24 - ew) : 0)
+            return collapsedHead + (collapsedShowsBody ? 8 + words : 0) + 12 + 2
+        }
         if let editor { return 36 + 24 + editor.height(forWidth: w - 24) + 2 }
         return 36 + (hasBody ? 24 + body.height(forWidth: w - 24 - (editButton.isHidden ? 0 : 28)) : 0) + 2
     }
 
     override func layout() {
         super.layout()
+        if collapsed != nil { layoutCollapsed(); return }
         headFill.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 37)
         avatar.frame = NSRect(x: 12, y: 11, width: 16, height: 16)
         var x: CGFloat = 34
@@ -611,13 +688,84 @@ final class CommentCard: DSView, FocusWithinObserver {
         if let editor { editor.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24, height: editor.height(forWidth: bounds.width - 24)) }
     }
 
+    /// `p-3`: identity, the status toggle and the reactions on one row (`items-start gap-2`), then
+    /// `mt-2` location and preview; opened, the words below in `px-3 pb-3` with `mt-2`.
+    private func layoutCollapsed() {
+        let top: CGFloat = 1 + 12
+        let rw = reactionBar.isHidden ? 0 : reactionBar.width
+        reactionBar.frame = NSRect(x: bounds.width - 13 - rw, y: top, width: rw, height: 24)
+        var x: CGFloat = 13
+        avatar.frame = NSRect(x: x, y: top + 4, width: 16, height: 16); x += 16 + 6
+        let lw = ceil(login.textWidth) + 1
+        login.frame = NSRect(x: x, y: top + 4, width: lw, height: 16); x += lw + 8
+        let tw = ceil(time.textWidth) + 1
+        time.frame = NSRect(x: x, y: top + 4, width: tw, height: 16); x += tw + 8
+        if let toggle {
+            let w = ceil(toggle.intrinsicContentSize.width)
+            toggle.frame = NSRect(x: x, y: top, width: w, height: 24)
+        }
+        var y = top + 24
+        let hasLocation = !(collapsed?.location ?? "").isEmpty
+        location.isHidden = !hasLocation
+        outdated.isHidden = !hasLocation || collapsed?.outdated != true
+        if hasLocation {
+            let ow = outdated.isHidden ? 0 : ceil(outdated.textWidth) + 1 + 8
+            location.frame = NSRect(x: 13, y: y + 8, width: min(ceil(location.textWidth) + 1, bounds.width - 26 - ow), height: 16)
+            outdated.frame = NSRect(x: location.frame.maxX + 8, y: y + 8, width: ow - 8, height: 16)
+            y += 24
+        }
+        summary?.isHidden = isOpen
+        if let summary, !isOpen {
+            summary.frame = NSRect(x: 13, y: y + 8, width: bounds.width - 26, height: 16)
+        }
+        let bodyTop = 1 + collapsedHead + 8
+        let ew: CGFloat = mayEdit && editor == nil ? 28 : 0
+        body.isHidden = !collapsedShowsBody || editor != nil
+        editButton.isHidden = !mayEdit || editor != nil || !isOpen
+        if collapsedShowsBody {
+            body.frame = NSRect(x: 13, y: bodyTop, width: bounds.width - 26 - ew, height: body.height(forWidth: bounds.width - 26 - ew))
+            editButton.frame = NSRect(x: bounds.width - 13 - 24, y: bodyTop - 4, width: 24, height: 24)
+        }
+        if let editor { editor.frame = NSRect(x: 13, y: bodyTop, width: bounds.width - 26, height: editor.height(forWidth: bounds.width - 26)) }
+    }
+
     override func updateLayer() {
         layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self)
+        chevron.strokeColor = Themed.color(\.mutedForeground)
+        location.color = Themed.color(\.mutedForeground)
+        outdated.color = Themed.color(\.mutedForeground)
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         headFill.backgroundColor = Themed.color(\.muted, 0.25).cgColor(in: self)
         login.color = Themed.color(\.foreground)
         time.color = Themed.color(\.mutedForeground)
         state.color = Themed.color(\.mutedForeground)
+    }
+}
+
+/// A collapsed remark's preview (`mt-2 block w-full truncate text-left text-xs text-muted-foreground
+/// hover:text-foreground`): one line, and a press opens the card.
+final class CollapsedSummaryLine: DSView {
+    private let label = LabelView("", font: DSFont.ui(12))
+    private var hover: HoverGroup?
+    var onClick: (() -> Void)?
+
+    init(_ text: String) {
+        super.init(frame: .zero)
+        label.text = text
+        label.lineHeight = 16
+        label.truncates = true
+        addSubview(label)
+        hover = HoverGroup(self) { [weak self] _ in self?.needsDisplay = true; self?.updateLayer() }
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(text)
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+    override func layout() { super.layout(); label.frame = bounds }
+    override func updateLayer() { label.color = Themed.color(hover?.hovered == true ? \.foreground : \.mutedForeground) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }
 }
 

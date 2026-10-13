@@ -25,6 +25,16 @@ struct PullRequestCommentFilterTests {
         #expect(ids(F(bots: true)) == ["a", "b", "c"])
         #expect(ids(F(resolved: true)) == ["a", "d", "e"])
         #expect(ids(F(bots: true, resolved: true)) == ["a", "b", "c", "d", "e"])
+        // Finished remarks collapse (CollapsedComment, PullRequestSummaryTab.tsx:204-273, 568-591).
+        thread.line = 12
+        thread.isOutdated = true
+        d.reviewThreads = [thread]
+        #expect(PullRequestDetailLogic.collapsed(d.comments[3], in: d)
+                == .init(label: "Resolved", location: "a:12", outdated: true))
+        #expect(PullRequestDetailLogic.collapsed(d.comments[4], in: d) == .init(label: "Review dismissed", location: nil, outdated: false))
+        #expect(PullRequestDetailLogic.collapsed(d.comments[0], in: d) == nil)
+        #expect(PullRequestDetailLogic.collapsedSummary("<!-- x -->\n> [!NOTE]\n## Use **this** [link](http://a) and `code`\n- item")
+                == "Use this link and code item")
         #expect(PullRequestDetailLogic.allCommentsHiddenNote(1) == "The only comment is hidden by the filter.")
         #expect(PullRequestDetailLogic.allCommentsHiddenNote(3) == "All 3 comments are hidden by the filter.")
         let defaults = try #require(UserDefaults(suiteName: "prpanel-filter-test"))
