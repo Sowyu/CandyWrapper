@@ -365,6 +365,9 @@ public final class CommandPaletteOverlay: DSView {
     private let blurred = CALayer()
     private weak var previousResponder: NSResponder?
     private var isClosing = false
+    private var snapshotPending = false
+    /// The blurred window content behind the palette.
+    var backdrop: CGImage? { blurred.contents.map { $0 as! CGImage } }
 
     public init(controller: CommandPaletteController) {
         self.controller = controller
@@ -388,11 +391,32 @@ public final class CommandPaletteOverlay: DSView {
         layoutSubtreeIfNeeded()
         window.makeFirstResponder(controller.view.input)
         animate(entering: true)
+        // T3's backdrop is a live `backdrop-filter`, so the sidebar toggled under the open palette (Mod+B) shows
+        // its new layout. The views under the palette moving or resizing asks for a fresh snapshot, once per turn.
+        for sibling in container.subviews where sibling !== self {
+            NotificationCenter.default.addObserver(self, selector: #selector(siblingMoved), name: NSView.frameDidChangeNotification, object: sibling)
+        }
+    }
+
+    @objc private func siblingMoved() {
+        guard !snapshotPending, !isClosing else { return }
+        snapshotPending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.snapshotPending = false
+            guard !self.isClosing, let container = self.superview else { return }
+            self.blurred.contents = ModalHost.blurredSnapshot(of: container, excluding: self)
+        }
+    }
+
+    private func stopObserving() {
+        NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: nil)
     }
 
     public func close() {
         guard !isClosing else { return }
         isClosing = true
+        stopObserving()
         if let window {
             if let previousResponder, previousResponder !== controller.view.input, (previousResponder as? NSView)?.window === window {
                 window.makeFirstResponder(previousResponder)

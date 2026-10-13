@@ -328,6 +328,23 @@ final class InputTerminalView: TerminalView {
         return surface?.contextMenu()
     }
 
+    /// SwiftTerm clears its cells to transparent and lets the layer's background show. A dialog's blurred snapshot
+    /// draws views without layer backgrounds, so the cells came out transparent and the live terminal showed through
+    /// sharp above the dim. T3 blurs the terminal with the rest (`backdrop-filter`): paint the background behind the glyphs.
+    /// The snapshot shares one context with every view drawn before the terminal, so the text position their labels
+    /// left behind would shift its glyphs: start from the identity text matrix.
+    override func draw(_ dirtyRect: NSRect) {
+        let snapshot = ModalHost.isTakingSnapshot ? NSGraphicsContext.current?.cgContext : nil
+        snapshot?.textMatrix = .identity
+        super.draw(dirtyRect)
+        guard let context = snapshot else { return }
+        context.saveGState()
+        context.setBlendMode(.destinationOver)
+        context.setFillColor(nativeBackgroundColor.cgColor)
+        context.fill(dirtyRect)
+        context.restoreGState()
+    }
+
     /// A press in a pane makes it the active one (the grid cell's `onMouseDown`).
     override func mouseDown(with event: NSEvent) {
         surface?.cancelSelectionPopup()

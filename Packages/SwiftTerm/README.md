@@ -28,6 +28,8 @@ CandyWrapper only uses the CoreText renderer, so neither is needed.
   isolated cell with the font `CTFontCreateForString` resolves. CoreText's line layout ignores a
   cascade list on the system UI fonts, so they drew as LastResort boxes (2026-10-11, M8).
 - `Package.swift` builds the target with `-Osize` in release, like CandyKit.
+- `TerminalView.draw` on macOS is `open`, so CandyWrapper's subclass can paint the background behind the
+  glyphs when a dialog snapshots the window (2026-10-13, keyboard side by side item F).
 
 ## Updating
 
