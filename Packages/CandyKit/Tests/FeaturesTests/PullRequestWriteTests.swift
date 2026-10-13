@@ -108,6 +108,24 @@ struct PullRequestWriteTests {
         #expect(PullRequestWriteLogic.canEditComment(d, author: "octocat", kind: "issue-comment"))
         #expect(!PullRequestWriteLogic.canEditComment(d, author: "octocat", kind: "review"))
         #expect(!PullRequestWriteLogic.canEditComment(d, author: "hubot", kind: "review-comment"))
+        // 2994 hosts answer for themselves; a 2861 server leaves the fields out and the guesses stand.
+        #expect(PullRequestWriteLogic.canEditComment(d, author: "hubot", kind: "review-comment", hostAnswer: true))
+        #expect(!PullRequestWriteLogic.canEditComment(d, author: "octocat", kind: "issue-comment", hostAnswer: false))
+        #expect(!PullRequestWriteLogic.canEditComment(d, author: "hubot", kind: "review", hostAnswer: true))
+        d.viewerPermissions.editChangeRequest = false
+        #expect(!PullRequestWriteLogic.canEditChangeRequest(d))
+        d.viewer = "someone"
+        d.viewerPermissions.editChangeRequest = true
+        #expect(PullRequestWriteLogic.canEditChangeRequest(d))
+        var thread = PullRequestReviewThread(id: "t", path: "a", line: 1, side: "right", isResolved: false, isOutdated: false, comments: [])
+        #expect(PullRequestWriteLogic.canResolveThread(d, thread) == d.viewerPermissions.resolve)
+        thread.canResolve = false
+        #expect(!PullRequestWriteLogic.canResolveThread(d, thread))
+        thread.canResolve = true
+        d.viewerPermissions.resolve = false
+        #expect(!PullRequestWriteLogic.canResolveThread(d, thread))
+        let decoded = try JSONDecoder().decode(PullRequestComment.self, from: Data(#"{"id":"c","kind":"issue-comment","author":null,"body":"","createdAt":"2026-10-11T00:00:00Z","url":null,"path":null,"reviewState":null,"canEdit":true}"#.utf8))
+        #expect(decoded.canEdit == true)
         #expect(PullRequestWriteLogic.titleToSave("  Same ", current: "Same") == nil)
         #expect(PullRequestWriteLogic.titleToSave(" New ", current: "Old") == "New")
     }

@@ -211,9 +211,9 @@ public final class PullRequestCodeView: DSView {
         guard let d = detail, let actions else { return nil }
         if let card = threadCards[t.id] { return card }
         let card = PullRequestReviewThreadCardView(
-            thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && d.viewerPermissions.resolve,
+            thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && PullRequestWriteLogic.canResolveThread(d, t),
             canReact: d.capabilities.reactions == true,
-            canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment") },
+            canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
             actions: actions, cwd: d.workspaceRoot, nowMs: nowMs)
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
         threadCards[t.id] = card

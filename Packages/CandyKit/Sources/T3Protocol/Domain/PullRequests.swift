@@ -58,10 +58,14 @@ public struct PullRequestComment: Codable, Hashable, Sendable {
     public var path: String?
     public var reviewState: String?
     public var reactions: [PullRequestReaction]?
+    /// The host's answer to whether this reader may rewrite the remark (2994, pullRequest.ts:217).
+    /// Absent from older servers and hosts that don't say, which leaves the guess from authorship.
+    public var canEdit: Bool?
     public init(id: String, kind: String, author: PullRequestActor?, body: String, createdAt: String,
-                url: String? = nil, path: String? = nil, reviewState: String? = nil, reactions: [PullRequestReaction]? = nil) {
+                url: String? = nil, path: String? = nil, reviewState: String? = nil, reactions: [PullRequestReaction]? = nil,
+                canEdit: Bool? = nil) {
         self.id = id; self.kind = kind; self.author = author; self.body = body; self.createdAt = createdAt
-        self.url = url; self.path = path; self.reviewState = reviewState; self.reactions = reactions
+        self.url = url; self.path = path; self.reviewState = reviewState; self.reactions = reactions; self.canEdit = canEdit
     }
 }
 
@@ -74,6 +78,8 @@ public struct PullRequestThreadComment: Codable, Hashable, Sendable {
     public var editedAt: String?
     public var url: String?
     public var reactions: [PullRequestReaction]?
+    /// As on `PullRequestComment` (2994, pullRequest.ts:246).
+    public var canEdit: Bool?
 }
 
 /// `PullRequestReviewThread` (pullRequest.ts:243): a conversation pinned to a diff line.
@@ -87,6 +93,8 @@ public struct PullRequestReviewThread: Codable, Hashable, Sendable {
     public var comments: [PullRequestThreadComment]
     public var commentCount: Int?
     public var nextCommentsCursor: String?
+    /// The host's per-thread answer, which only narrows the viewer's `resolve` (2994, pullRequest.ts:277).
+    public var canResolve: Bool?
 }
 
 /// `PullRequestReviewerCandidate` (pullRequest.ts:275).
@@ -175,6 +183,8 @@ public struct PullRequestViewerPermissions: Codable, Hashable, Sendable {
     public var requestReviewers: Bool
     public var updateMethods: [String]?
     public var labels: Bool?
+    /// Whether the title and description can be rewritten, where the host says (2994, pullRequest.ts:506).
+    public var editChangeRequest: Bool?
 }
 
 public struct PullRequestMergeCapabilities: Codable, Hashable, Sendable {
@@ -246,6 +256,8 @@ public struct PullRequestProviderSummary: Codable, Hashable, Sendable {
     public var host: String
     public var kind: String
     public var searchesOnHost: Bool
+    /// What this host can do, so a row offers only those actions (2994, pullRequest.ts:641). Absent from older servers.
+    public var actions: [String]?
     public var projectCount: Int
     public var configured: Bool
     public var detail: String?
