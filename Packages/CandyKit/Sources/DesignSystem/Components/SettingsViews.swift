@@ -21,6 +21,8 @@ public final class SettingsRowView: DSView {
     /// `status`: a line under the description (`pt-0.5 text-xs text-muted-foreground`), destructive for errors.
     public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var statusIsError = false { didSet { statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground) } }
+    /// A description in `text-destructive`, such as a failed cleanup entry.
+    public var detailIsError = false { didSet { detailText.color = detailIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground, 0.8) } }
     /// `aria-disabled`: opacity .64 (and muted text, which the dimmed foreground approximates).
     public var isDisabled = false { didSet { alphaValue = isDisabled ? 0.64 : 1 } }
     /// The 1px `border-t border-border/50` a divided group gives every row after the first.
