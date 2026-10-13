@@ -471,7 +471,19 @@ final class GitController {
         let width: CGFloat = inPanel ? anchor.bounds.width : previousWorktree != nil ? 336 : 0
         let placement = inPanel ? PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none)
             : PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none)
-        MenuPopupView.show(items, from: anchor, placement: placement, minimumWidth: width)
+        let menu = MenuPopupView.show(items, from: anchor, placement: placement, minimumWidth: width)
+        if !inPanel { returnFocusToComposer(menu?.hostPopup, from: anchor) }
+    }
+
+    /// The composer's strip menus hand focus back to the prompt when they close, as the composer's own
+    /// controls do in T3 (`openControl`, ChatComposer.tsx:6449-6470); the trigger keeps none.
+    private func returnFocusToComposer(_ popup: OpenPopup?, from anchor: NSView) {
+        guard let popup else { return }
+        let previous = popup.onClose
+        popup.onClose = { [weak self, weak anchor] in
+            previous?()
+            if let anchor, anchor.window?.firstResponder === anchor { self?.composer.focusComposer() }
+        }
     }
 
     /// `onEnvModeChange` for a draft (ChatView.tsx:10791-10822): a new worktree leaves any picked worktree.
@@ -521,6 +533,7 @@ final class GitController {
             : PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none)
         guard let popup = view.present(from: anchor, placement: placement) else { return }
         popup.onClose = { [weak self] in self?.picker = nil }
+        if !inPanel { returnFocusToComposer(popup, from: anchor) }
         picker = (view, popup, "", [], inPanel)
         pickerQuery("")
     }
