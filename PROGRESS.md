@@ -14,15 +14,14 @@ The current state and the open work. Before you stop, tick what you finished, ad
 Do next:
 
 1. Exercise every row of `docs/parity-checklist.md` next to T3 Code Nightly, in both themes, on the same sandbox data. A row turns ✅ only when both apps match. (taken 2026-10-13: Keyboard shortcuts) The method is in `docs/research/m10-side-by-side-2026-10-12.md`. This is by far the biggest task, so take one checklist section per chat and mark rows as you go.
-2. (taken 2026-10-13: shared model favorites) Build the newer Nightly's UI from `docs/research/nightly-diff-2994.md`: shared model favorites, the pull request panel's confirm in place and comment filters, the parent thread breadcrumb, draggable right panel tabs, a searchable project picker, the storage cleanup report, OpenTelemetry export and per-project provider toggles. The app must keep working with 2861 servers. Ask the user before you re-pin `T3_VERSION`. T3's source at 2994 isn't on this Mac: `git clone --depth 1 --branch v0.0.46-nightly.20261011.2994 https://github.com/pingdotgg/t3code /tmp/t3code-2994`.
-3. (taken 2026-10-13) An 18,000-line code block takes 0.9 s and 294 MB to open, because every line lays out up front (`docs/research/m10-load-2026-10-12.md`).
-4. (taken 2026-10-13) The sidebar rebuilds fully on every change and every relative-time tick, about 20 ms at 1,580 threads.
+2. (taken 2026-10-13: shared model favorites, pull request panel) Build the newer Nightly's UI from `docs/research/nightly-diff-2994.md`: shared model favorites, the pull request panel's confirm in place and comment filters, the parent thread breadcrumb, draggable right panel tabs, a searchable project picker, the storage cleanup report, OpenTelemetry export and per-project provider toggles. The app must keep working with 2861 servers. Ask the user before you re-pin `T3_VERSION`. T3's source at 2994 isn't on this Mac: `git clone --depth 1 --branch v0.0.46-nightly.20261011.2994 https://github.com/pingdotgg/t3code /tmp/t3code-2994`.
+3. (taken 2026-10-13) The sidebar rebuilds fully on every change and every relative-time tick, about 20 ms at 1,580 threads.
 
 Smaller leftovers:
 
-5. (taken 2026-10-13) While the sidebar slides open, the main panel reflows once instead of every frame (`SidebarView.swift:175`).
-6. The right panel and the terminal still use the old slide. The sidebar's interruptible slide is the model.
-7. A fresh Debug app holds the main thread 170 to 200 ms on its first thread open. Measure it in Release first.
+4. (taken 2026-10-13) While the sidebar slides open, the main panel reflows once instead of every frame (`SidebarView.swift:175`).
+5. The right panel and the terminal still use the old slide. The sidebar's interruptible slide is the model.
+6. A fresh Debug app holds the main thread 170 to 200 ms on its first thread open. Measure it in Release first.
 
 The code also marks 267 known shortcuts with `// ponytail:`, each naming when to fix it (`grep -rnE '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
