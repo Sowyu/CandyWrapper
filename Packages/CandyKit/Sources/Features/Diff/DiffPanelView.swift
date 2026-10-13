@@ -208,15 +208,9 @@ public final class DiffPanelView: DSView {
     private let treeCount = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let treeExpansion = ButtonView(nil, icon: .chevronsDownUp, variant: .ghost, size: .iconXs)
     private let treeScroll: ScrollAreaView
-    private let find = InputView(placeholder: "Find", size: .compact)
-    private let findCount = LabelView("", font: DSFont.ui(11))
-    private let findCase = ToggleView("Aa", variant: .ghost, size: .sm)
-    private let findWord = ToggleView("Ab", variant: .ghost, size: .sm)
-    private let findRegex = ToggleView(".*", variant: .ghost, size: .sm)
-    private let findPrevious = ButtonView(nil, icon: .arrowUp, variant: .ghost, size: .iconSm)
-    private let findNext = ButtonView(nil, icon: .arrowDown, variant: .ghost, size: .iconSm)
-    private let findClose = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
-    private var findControls: [NSView] { [find, findCount, findCase, findWord, findRegex, findPrevious, findNext, findClose] }
+    /// The find widget floating over the files (@pierre/diffs' search panel).
+    let findWidget = DiffFindWidget()
+    private var find: InputView { findWidget.field }
     private var searchMatches: [DiffPanelSearch.Match] = []
     private var searchIndex = 0
     private let scopeButton = ButtonView("Latest turn", variant: .secondary, size: .xs).menuTrigger()
@@ -279,17 +273,13 @@ public final class DiffPanelView: DSView {
         }
         list.onVisibleFile = { [weak self] path in self?.fileTree.selectedPath = path }
         fileTree.onOpenFile = { [weak self] path in self?.fileTree.selectedPath = path; self?.list.reveal(path: path) }
-        findControls.forEach { $0.isHidden = true; addSubview($0) }
-        for (toggle, label) in [(findCase, "Match case"), (findWord, "Match whole word"), (findRegex, "Use regular expression")] {
-            toggle.setAccessibilityLabel(label)
-            toggle.onPressedChange = { [weak self] _ in self?.search() }
+        findWidget.isHidden = true
+        for toggle in [findWidget.matchCase, findWidget.wholeWord, findWidget.regex] {
+            toggle.action = { [weak self, weak toggle] in toggle?.isPressed.toggle(); self?.search() }
         }
-        findPrevious.setAccessibilityLabel("Previous match")
-        findNext.setAccessibilityLabel("Next match")
-        findClose.setAccessibilityLabel("Close find")
-        findPrevious.action = { [weak self] in self?.stepSearch(-1) }
-        findNext.action = { [weak self] in self?.stepSearch(1) }
-        findClose.action = { [weak self] in self?.closeFind() }
+        findWidget.previous.action = { [weak self] in self?.stepSearch(-1) }
+        findWidget.next.action = { [weak self] in self?.stepSearch(1) }
+        findWidget.close.action = { [weak self] in self?.closeFind() }
         find.onChange = { [weak self] _ in self?.search() }
         find.onCommand = { [weak self] selector in
             guard let self else { return false }
@@ -310,8 +300,8 @@ public final class DiffPanelView: DSView {
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [treeTitle, treeCount, treeExpansion, treeScroll, find, findCount, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine,
-         compareHead, compareArrow, baseRefButton, truncatedNotice].forEach(addSubview)
+        [treeTitle, treeCount, treeExpansion, treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine,
+         compareHead, compareArrow, baseRefButton, truncatedNotice, findWidget].forEach(addSubview)
         baseRefButton.trailingIcon = .chevronDown
         baseRefButton.iconSize = 14
         baseRefButton.scalesWhenPressed = false
@@ -663,17 +653,17 @@ public final class DiffPanelView: DSView {
     public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
 
     public func showFind() {
-        findControls.forEach { $0.isHidden = false }; search(); needsLayout = true
+        findWidget.isHidden = false; search(); needsLayout = true
         window?.makeFirstResponder(find)
     }
     private func closeFind() {
-        findControls.forEach { $0.isHidden = true }
+        findWidget.isHidden = true
         list.searchMatches = []; list.activeSearchMatch = nil
         needsLayout = true; window?.makeFirstResponder(list)
     }
     private func search() {
-        searchMatches = DiffPanelSearch.matches(find.text, in: list.diff, caseSensitive: findCase.isPressed,
-                                               wholeWord: findWord.isPressed, regex: findRegex.isPressed)
+        searchMatches = DiffPanelSearch.matches(find.text, in: list.diff, caseSensitive: findWidget.matchCase.isPressed,
+                                               wholeWord: findWidget.wholeWord.isPressed, regex: findWidget.regex.isPressed)
         searchIndex = 0; revealSearch()
     }
     private func stepSearch(_ direction: Int) {
@@ -684,13 +674,13 @@ public final class DiffPanelView: DSView {
     private func revealSearch() {
         list.searchMatches = searchMatches
         list.activeSearchMatch = searchMatches.isEmpty ? nil : searchMatches[searchIndex]
-        findPrevious.isEnabled = !searchMatches.isEmpty; findNext.isEnabled = !searchMatches.isEmpty
-        findCount.text = searchMatches.isEmpty ? "No results" : "\(searchIndex + 1) of \(searchMatches.count)"
+        findWidget.hasMatches = !searchMatches.isEmpty
+        findWidget.countText = searchMatches.isEmpty ? "No results" : "\(searchIndex + 1) of \(searchMatches.count)"
         if !searchMatches.isEmpty { list.revealSearch(searchMatches[searchIndex]) }
     }
 
     private var headerHeight: CGFloat { inlineHeader ? 28 : 40 }
-    private var bodyTop: CGFloat { (inlineHeader ? 28 + 12 : 40) + bodyOffset + (find.isHidden ? 0 : 36) }
+    private var bodyTop: CGFloat { (inlineHeader ? 28 + 12 : 40) + bodyOffset }
     /// For the fidelity test: the reference captures' tab strip ends at a half pixel and the list
     /// lands on the next whole one, 0.5pt lower than the header row's offset says.
     var bodyOffset: CGFloat = 0
@@ -743,14 +733,6 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
-        find.frame = NSRect(x: 8, y: headerHeight + 4, width: max(32, bounds.width - 266), height: 28)
-        findCount.frame = NSRect(x: bounds.width - 166, y: headerHeight + 8, width: 72, height: 20)
-        for (i, control) in [findCase, findWord, findRegex].enumerated() {
-            control.frame = NSRect(x: bounds.width - 258 + CGFloat(i) * 30, y: headerHeight + 4, width: 28, height: 28)
-        }
-        for (i, control) in [findPrevious, findNext, findClose].enumerated() {
-            control.frame = NSRect(x: bounds.width - 92 + CGFloat(i) * 28, y: headerHeight + 4, width: 28, height: 28)
-        }
         let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
         for view in [treeTitle, treeCount, treeExpansion] { view.isHidden = treeScroll.isHidden }
         treeTitle.frame = NSRect(x: 12, y: bodyTop + 6, width: 60, height: 16)
@@ -768,6 +750,10 @@ public final class DiffPanelView: DSView {
         truncatedBottom.frame = CGRect(x: 0, y: notice - 1, width: bounds.width - treeWidth, height: 1)
         truncatedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
         scroll.frame = NSRect(x: treeWidth, y: bodyTop + notice, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop - notice))
+        // `[data-search-panel]`: sticky 32pt down the scroller plus `top: 8px`, 16pt in from its end plus `right: 16px`.
+        let widget = findWidget.preferredSize
+        findWidget.frame = NSRect(x: scroll.frame.maxX - 32 - widget.width + DiffFindWidget.overhang,
+                                  y: scroll.frame.minY + 40 - DiffFindWidget.overhang, width: widget.width, height: widget.height)
         // The error paragraph (`px-3`, `mb-2`) takes its height off the top of the centered area.
         errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)
         let messageTop = bodyTop + (errorLine.isHidden ? 0 : 16.5 + 8)
