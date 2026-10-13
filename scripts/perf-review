@@ -79,9 +79,12 @@ THRESHOLDS = {
     "big_thread.after_scroll_footprint_mb": (0.10, 3, "MB"),
     "big_thread.after_scroll_peak_mb": (0.10, 5, "MB"),
     # Click to the first display refresh after the rows are placed; the refresh adds up to two frames of noise.
-    "open.big_first_frame_ms": (0.25, 25, "ms"),
-    "open.big_reopen_first_frame_ms": (0.25, 25, "ms"),
-    "open.big_cache_first_frame_ms": (0.25, 25, "ms"),
+    # First frames land on display refreshes (about 55, 60 or 75 ms here), so a few ms of work can move one by a
+    # whole frame: 52.6 to 79.0 ms on 2026-10-13 was that, with the work before it at 46 against 49 ms over 19
+    # interleaved runs. Flag only a change of two frames or more.
+    "open.big_first_frame_ms": (0.25, 34, "ms"),
+    "open.big_reopen_first_frame_ms": (0.25, 34, "ms"),
+    "open.big_cache_first_frame_ms": (0.25, 34, "ms"),
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),

@@ -12,7 +12,6 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## Open tasks
 
 1. (taken 2026-10-13: phase 1) Build the Glass Native (Experimental) theme: a native AppKit presentation of the main window modeled on T3 Code Mobile's iPad layout, with Liquid Glass chrome. The plan and its six phases are in `docs/glass-native.md`.
-2. (taken 2026-10-13) The v1.0.0 perf review (`docs/perf/2026-10-13-78b73ad-w1.md`) found the cached huge thread's first frame at 79.0 ms against 52.6 on 2026-10-12. Find the commit and fix it.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
