@@ -6,8 +6,8 @@ import QuartzCore
 /// out from `value` in `onFrame`, so whatever takes the panel's room (the main panel) reflows every frame,
 /// as it does in the browser. A new target mid-slide starts from where the panel is and takes the share of
 /// the duration it has left to travel, like a reversed CSS transition. The display link exists only while a
-/// slide runs. Used by `SidebarLayoutView`; any panel that slides in from an edge can drive its frames
-/// with one.
+/// slide runs. Used by `SidebarLayoutView` and by `ThreadPanelView` for the right panel and the terminal;
+/// any panel that slides in from an edge can drive its frames with one.
 @MainActor
 public final class PanelSlide: NSObject {
     /// Where the panel is now. Equals the target when no slide runs.
