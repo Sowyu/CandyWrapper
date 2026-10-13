@@ -63,10 +63,11 @@ struct PreviewStateTests {
         #expect(p.surfaces.map(\.id) == ["browser:t1"])
         p.upsert(.diff)
         p.reconcileBrowser(tabIds: ["t1", "t2", "h"], hidden: ["h"])
-        #expect(p.surfaces.map(\.id) == ["diff", "browser:t1", "browser:t2"])
+        // 2994 keeps the tabs in place (a dragged order survives), new ones go last.
+        #expect(p.surfaces.map(\.id) == ["browser:t1", "diff", "browser:t2"])
         p.activate("browser:t2")
         p.reconcileBrowser(tabIds: ["t1"], hidden: [])
-        #expect(p.surfaces.map(\.id) == ["diff", "browser:t1"] && p.activeSurfaceId == "browser:t1")
+        #expect(p.surfaces.map(\.id) == ["browser:t1", "diff"] && p.activeSurfaceId == "browser:t1")
         #expect(RightPanelSurface.browser(tabId: "x").title == "Browser")
         var closed = ClosedPanelTabs()
         closed.remember(.browser(tabId: "t1"), threadKey: "k", browserURL: "http://a/")

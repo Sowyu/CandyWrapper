@@ -74,6 +74,9 @@ final class RightPanelView: DSView {
     var onCloseToRight: ((String) -> Void)?
     var onCloseAll: (() -> Void)?
     var onCopyPath: ((String) -> Void)?
+    /// A tab was dragged to a new index (`onMoveSurface`). Tabs drag only while it is set: the owner must
+    /// keep the new order (RightPanelTabs.tsx:130-131 in 2994).
+    var onMove: ((String, Int) -> Void)?
     /// What the + menu and the launcher may open (`filesAvailable`, `diffAvailable`).
     var filesAvailable = true { didSet { lazyLauncher.set(\.filesAvailable, filesAvailable) } }
     var diffAvailable = true { didSet { lazyLauncher.set(\.diffAvailable, diffAvailable) } }
@@ -129,6 +132,7 @@ final class RightPanelView: DSView {
             tab.close.action = { [weak self] in self?.onClose?(surface.id) }
             tab.onMenu = { [weak self, weak tab] event in if let tab { self?.showTabMenu(surface, tab: tab, event: event) } }
             tab.onMiddleClick = { [weak self] in self?.onClose?(surface.id) }
+            tab.onDrag = { [weak self] phase in self?.dragTab(surface.id, phase) }
             return tab
         }
         tabs.forEach(strip.addSubview)
@@ -239,6 +243,71 @@ final class RightPanelView: DSView {
         MenuPopupView.showContextMenu(items, in: tab, at: tab.convert(event.locationInWindow, from: nil))
     }
 
+    /// The tab being dragged: its index, how far the pointer moved and the index it would drop at.
+    /// The tab being dragged: its index, how far the pointer moved, the index it would drop at and where the
+    /// tabs rest.
+    private var drag: (index: Int, offset: CGFloat, over: Int, rest: [NSRect])?
+
+    /// `SortableTabList` (RightPanelTabs.tsx:813-866 in 2994, dnd-kit): the tab follows the pointer along the
+    /// strip and stays inside it (`restrictToHorizontalAxis`, `restrictToFirstScrollableAncestor`), above its
+    /// neighbours (`z-10`). The drop target is the tab whose resting center is closest to the dragged tab's
+    /// (`closestCenter`); the tabs in between slide aside by its width and the 4px gap
+    /// (`horizontalListSortingStrategy`) over 200 ms `ease`. The order commits on release and everything
+    /// lands in place at once, as dnd-kit drops without an overlay.
+    private func dragTab(_ id: String, _ phase: PanelTabView.DragPhase) {
+        guard let index = state.surfaces.firstIndex(where: { $0.id == id }), tabs.indices.contains(index) else { return }
+        switch phase {
+        case .began:
+            guard onMove != nil else { return }
+            drag = (index, 0, index, tabs.map(\.frame))
+            tabs[index].layer?.zPosition = 10
+        case .moved(let dx):
+            guard drag?.index == index else { return }
+            drag?.offset = dx
+            layoutDrag()
+        case .ended:
+            guard let ended = drag, ended.index == index else { return }
+            drag = nil
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            for tab in tabs {
+                tab.layer?.removeAnimation(forKey: "tab-sort")
+                tab.layer?.setAffineTransform(.identity)
+                tab.layer?.zPosition = 0
+            }
+            CATransaction.commit()
+            needsLayout = true
+            if ended.over != index { onMove?(id, ended.over) }
+        }
+    }
+
+    /// Places the dragged tab and its neighbours for the current pointer offset. The dragged tab moves its
+    /// frame, so hit testing follows it; the neighbours only slide their layers.
+    private func layoutDrag() {
+        guard let drag else { return }
+        let rest = drag.rest
+        let dragged = rest[drag.index]
+        let x = min(max(dragged.minX + drag.offset, 0), max(0, strip.bounds.width - dragged.width))
+        let center = x + dragged.width / 2
+        let over = rest.indices.min { abs(rest[$0].midX - center) < abs(rest[$1].midX - center) } ?? drag.index
+        self.drag?.over = over
+        let shift = dragged.width + 4
+        tabs[drag.index].setFrameOrigin(NSPoint(x: x, y: dragged.minY))
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for (i, tab) in tabs.enumerated() where i != drag.index {
+            let target: CGFloat = i > drag.index && i <= over ? -shift : i < drag.index && i >= over ? shift : 0
+            guard let layer = tab.layer, layer.affineTransform().tx != target else { continue }
+            let shown = (layer.presentation() ?? layer).affineTransform().tx
+            layer.setAffineTransform(CGAffineTransform(translationX: target, y: 0))
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = shown
+            slide.toValue = target
+            slide.duration = 0.2
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1) // CSS `ease`
+            layer.add(slide, forKey: "tab-sort")
+        }
+        CATransaction.commit()
+    }
+
     private func scrollTabs(_ delta: CGFloat) {
         revealActiveTab = false
         stripOffset += delta
@@ -272,6 +341,7 @@ final class RightPanelView: DSView {
             tab.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: w, height: 24)
             x += w + 4
         }
+        layoutDrag()
         add.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: 24, height: 24)
         let content = NSRect(x: 1, y: Self.tabBarHeight, width: max(0, bounds.width - 1), height: max(0, bounds.height - Self.tabBarHeight))
         lazyDiff.loaded?.frame = content
@@ -308,6 +378,17 @@ final class PanelTabView: DSView {
     var onSelect: (@MainActor () -> Void)?
     var onMenu: (@MainActor (NSEvent) -> Void)?
     var onMiddleClick: (@MainActor () -> Void)?
+    enum DragPhase { case began, moved(CGFloat), ended }
+    /// Drag to reorder. The tab starts dragging once the pointer moves 6px from the press (`PointerSensor`
+    /// `activationConstraint: { distance: 6 }`, RightPanelTabs.tsx:822 in 2994); a drag selects nothing.
+    var onDrag: (@MainActor (DragPhase) -> Void)?
+    private var press: NSPoint?
+    private var dragging = false
+    /// The tab bar drags the window, its tabs don't (`[-webkit-app-region:no-drag]`, RightPanelTabs.tsx:1220).
+    /// In the transparent title bar AppKit still moved the window on a drag from a view that refuses first
+    /// responder (measured on macOS 27); the title is a focusable button in T3 anyway.
+    override var mouseDownCanMoveWindow: Bool { false }
+    override var acceptsFirstResponder: Bool { true }
 
     /// A lucide glyph takes the tab's text color (`text-muted-foreground` until active); file icons keep theirs.
     private let tintedIdentity: IconView?
@@ -382,8 +463,24 @@ final class PanelTabView: DSView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func mouseDown(with event: NSEvent) {
+        press = nil
         if event.clickCount == 2, onRename != nil { beginRename() }
-        else if event.modifierFlags.contains(.control) { onMenu?(event) } else { onSelect?() }
+        else if event.modifierFlags.contains(.control) { onMenu?(event) } else { press = event.locationInWindow }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let press, renameInput == nil else { return }
+        let point = event.locationInWindow
+        if !dragging {
+            guard hypot(point.x - press.x, point.y - press.y) >= 6 else { return }
+            dragging = true
+            onDrag?(.began)
+        }
+        onDrag?(.moved(point.x - press.x))
+    }
+    /// The title is a button (`onClick`, RightPanelTabs.tsx:1305): the tab activates on release, unless it was dragged.
+    override func mouseUp(with event: NSEvent) {
+        defer { press = nil; dragging = false }
+        if dragging { onDrag?(.ended) } else if press != nil { onSelect?() }
     }
     override func rightMouseDown(with event: NSEvent) { onMenu?(event) }
     // `onAuxClick`: a middle click closes the tab.

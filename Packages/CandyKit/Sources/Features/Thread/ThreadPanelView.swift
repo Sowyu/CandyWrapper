@@ -494,11 +494,10 @@ public final class ThreadPanelView: DSView {
     public private(set) var detailsOpen = false
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
-    /// `maximizedRightPanelThreadKey` (ChatView.tsx:1915, 2392-2394): the panel asked to fill the window.
-    /// A narrow window shows the panel as a sheet and cannot maximize; widening it again restores the
-    /// maximized panel. Closing the panel or another thread clears it.
-    private var maximizeRequested = false
-    public var rightPanelMaximized: Bool { maximizeRequested && canMaximizeRightPanel }
+    /// `rightPanelState.maximized` (ChatView.tsx:2390 in 2994, 71f6f1db8): the thread's panel asked to fill the
+    /// window. A narrow window shows the panel as a sheet and cannot maximize; widening it again restores the
+    /// maximized panel. It stays with the thread through a close, a thread switch and a relaunch.
+    public var rightPanelMaximized: Bool { panelState.maximized == true && canMaximizeRightPanel }
     /// `canMaximizeRightPanel = rightPanelOpen && !shouldUsePlanSidebarSheet`.
     var canMaximizeRightPanel: Bool { rightPanelOpen && viewportWidth > 980 }
     private var summaries: [TurnDiffSummary] = []
@@ -619,6 +618,7 @@ public final class ThreadPanelView: DSView {
             header.toggles[1].isPressed = terminalOpen // the controller decides
             onTerminalToggle?()
         }
+        rightPanel.onMove = { [weak self] id, index in self?.moveSurface(id, to: index) }
         rightPanel.onRenameDevice = { [weak self] id, title in self?.mutatePanel { $0.renameDevice(id, title: title); return [] } }
         rightPanel.onActivate = { [weak self] id in self?.mutatePanel { $0.activate(id); return [] } }
         rightPanel.onClose = { [weak self] id in self?.closeSurface(id) }
@@ -803,7 +803,7 @@ public final class ThreadPanelView: DSView {
         if slides, !open { panelGhost = ghost(of: rightPanel, replacing: panelGhost) }
         if open { dropGhost(&panelGhost) }
         panelState = state
-        if !open { setMaximized(false) }
+        updateMaximizeControl()
         rightPanel.isHidden = !open
         rightPanel.apply(state)
         header.toggles[2].isPressed = open
@@ -987,11 +987,27 @@ public final class ThreadPanelView: DSView {
     /// `toggleRightPanelMaximized` (ChatView.tsx:6059-6064): the control, and `rightPanel.toggleMaximized`.
     public func toggleMaximized() {
         guard canMaximizeRightPanel else { return }
-        setMaximized(!maximizeRequested)
+        // `setMaximized` is layout only: no user-action revision, so proactive panels still apply
+        // (rightPanelStore.ts:976-984 in 2994).
+        var next = panelState
+        next.maximized = rightPanelMaximized ? nil : true
+        panelState = next
+        updateMaximizeControl()
+        onPanelChange?(next, [])
     }
 
-    private func setMaximized(_ on: Bool) {
-        maximizeRequested = on
+    /// A tab dragged to `index` (`moveSurface`, rightPanelStore.ts:901-912 in 2994): not a choice about what
+    /// the panel shows, so it leaves the user-action revision alone too.
+    func moveSurface(_ id: String, to index: Int) {
+        var next = panelState
+        next.move(id, to: index)
+        guard next != panelState else { return }
+        setPanelState(next)
+        onPanelChange?(next, [])
+    }
+
+    private func updateMaximizeControl() {
+        let on = panelState.maximized == true
         maximize.isPressed = on
         maximize.icon = on ? .minimize2 : .maximize2
         let label = on ? "Restore panel size" : "Maximize panel"
@@ -1089,7 +1105,6 @@ public final class ThreadPanelView: DSView {
             proactiveRepositoryIsGit = nil
             timeline.context.forgetDocuments()
             header.cancelTitleRename()
-            if maximizeRequested { setMaximized(false) }
         }
         lazyDiffPanel.set(\.workspaceRoot, workspaceRoot)
         lazyDiffPanel.set(\.threadId, projection?.thread.id)
