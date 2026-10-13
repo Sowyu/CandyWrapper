@@ -183,6 +183,9 @@ public struct RightPanelState: Codable, Sendable, Equatable {
     public var isOpen = false
     public var activeSurfaceId: String?
     public var surfaces: [RightPanelSurface] = []
+    /// `maximized?: true` (rightPanelStore.ts:115-116 in 2994, 71f6f1db8): kept with the thread, so the panel
+    /// opens maximized again after a close, a thread switch or a relaunch. Nil is not maximized.
+    public var maximized: Bool?
 
     public init(isOpen: Bool = false, activeSurfaceId: String? = nil, surfaces: [RightPanelSurface] = []) {
         self.isOpen = isOpen; self.activeSurfaceId = activeSurfaceId; self.surfaces = surfaces
@@ -236,11 +239,11 @@ public struct RightPanelState: Codable, Sendable, Equatable {
     /// open the panel.
     public mutating func reconcileBrowser(tabIds: [String], hidden: Set<String>) {
         let valid = Set(tabIds.map { "browser:" + $0 })
-        let nonBrowser = surfaces.filter { $0.kind != .browser }
-        let existing = surfaces.filter { $0.kind == .browser && $0.id != "browser:new" && valid.contains($0.id) }
-        let known = Set(existing.map(\.id))
+        // Filtered in place, so browser tabs keep the order the user dragged them into (rightPanelStore.ts:917 in 2994).
+        let kept = surfaces.filter { $0.kind != .browser || ($0.id != "browser:new" && valid.contains($0.id)) }
+        let known = Set(kept.map(\.id))
         let added = tabIds.filter { !known.contains("browser:" + $0) && !hidden.contains($0) }.map { RightPanelSurface.browser(tabId: $0) }
-        let next = nonBrowser + existing + added
+        let next = kept + added
         guard next != surfaces else { return }
         surfaces = next
         if !surfaces.contains(where: { $0.id == activeSurfaceId }) {
@@ -327,6 +330,12 @@ public struct RightPanelState: Codable, Sendable, Equatable {
 
     /// Every terminal id the panel's tabs show (the drawer leaves them out, ChatView.tsx:1013-1022).
     public var panelTerminalIds: Set<String> { Set(surfaces.flatMap { $0.terminal?.terminalIds ?? [] }) }
+
+    /// `moveSurface` (rightPanelStore.ts:901-912 in 2994, 410793042): a tab dragged to `index`.
+    public mutating func move(_ id: String, to index: Int) {
+        guard let from = surfaces.firstIndex(where: { $0.id == id }), from != index, surfaces.indices.contains(index) else { return }
+        surfaces.insert(surfaces.remove(at: from), at: index)
+    }
 
     /// `activateSurface`.
     public mutating func activate(_ id: String) {

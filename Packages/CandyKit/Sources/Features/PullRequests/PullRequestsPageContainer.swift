@@ -34,6 +34,7 @@ public final class PullRequestsPageContainer: DSView {
         rightPanel.onCloseOthers = { [weak self] id in self?.mutate { _ = $0.closeOthers(id) } }
         rightPanel.onCloseToRight = { [weak self] id in self?.mutate { _ = $0.closeToRight(id) } }
         rightPanel.onCloseAll = { [weak self] in self?.mutate { _ = $0.closeAll() } }
+        rightPanel.onMove = { [weak self] id, index in self?.mutate { $0.move(id, to: index) } } // _chat.pull-requests.tsx:2282-2285 in 2994
     }
 
     public func mutate(_ change: (inout RightPanelState) -> Void) {
