@@ -395,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The no-projects hero (NoProjectsHero.tsx).
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
+        threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
         threads.noProjectsHero.startWithoutProject.action = { [weak palette, weak environments] in
             guard let palette, let env = palette.scratchEnvironmentId(environments?.primaryId) else { return }
             palette.startScratchThread(env)

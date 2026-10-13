@@ -1,6 +1,7 @@
 import AppKit
 import CoreText
 import DesignSystem
+import T3Store
 
 /// The new-thread headline (DraftHeroHeadline.tsx:331-385): "What should we build in {project}?"
 /// at 30/36, weight 400, `tracking-tight`, centered, with the project as a picker (weight 500,
@@ -133,4 +134,24 @@ public final class DraftHeroView: DSView {
         if overProject(event) { onPickProject?(projectAnchor) }
     }
     public override func resetCursorRects() { addCursorRect(projectAnchor.frame, cursor: .pointingHand) }
+}
+
+extension DraftHeroView {
+    /// The searchable project picker (DraftHeroHeadline.tsx:271-356 in 2994, b744bded0): a `w-72` `ComboboxPopup`
+    /// centered under the project name with "Search projects...", every project group, then "Add project", which
+    /// filtering drops. `onSelect` gets a group key, or nil for "Add project". The sidebar's project scope popup is
+    /// the same combobox, so both use `SidebarProjectScopeView`.
+    public static func showProjectPicker(groups: [SidebarModel.ProjectGroup], selectedKey: String?, environments: SidebarEnvironments,
+                                         from anchor: NSView, onSelect: @escaping @MainActor (String?) -> Void) {
+        guard let host = anchor.popupHost else { return }
+        let view = SidebarProjectScopeView(groups: groups, selectedKey: selectedKey, minimumWidth: 288,
+                                           environments: environments, extra: .addProject)
+        var popup: OpenPopup?
+        view.onSelect = { key in
+            if let popup { host.close(popup, returnFocus: false) }
+            onSelect(key)
+        }
+        popup = host.open(PickerPopupView(view), trigger: anchor, placement: .popover, swallowsOutsideClick: true)
+        anchor.window?.makeFirstResponder(view.search)
+    }
 }

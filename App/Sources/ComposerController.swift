@@ -65,6 +65,8 @@ final class ComposerController {
     private var dismissedProviderBannerKey: String?
     /// Opens a new thread in the open thread's project, leaving the thread (`handleNewThreadInActiveProject`).
     var onNewThread: (() -> Void)?
+    /// The draft picker's "Add project" row.
+    var onAddProject: (() -> Void)?
     /// The open draft's project is a Git repository: the strip shows the run context and branch.
     var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
     /// The target changed (a thread or draft opened, or the draft's workspace changed).
@@ -976,23 +978,16 @@ final class ComposerController {
         if let i = groups.firstIndex(where: { $0.memberProjectIds.contains(currentId) }), i > 0 {
             groups.insert(groups.remove(at: i), at: 0)
         }
-        let badges = SidebarEnvironments.span(groups)
-        let items = groups.map { group in
-            let active = group.memberProjectIds.contains(currentId)
-            var item = MenuItem.radio(group.label, checked: active)
-            item.closesOnClick = true
-            let icon = ProjectIconSource(group.representative)
-            item.leading = { ProjectMonogramView(icon) } // `ProjectFavicon size-4` (DraftHeroHeadline.tsx:285)
-            if badges, let badge = envs.badge(group) {
-                item.badge = EnvironmentMachineIcon.definition(badge.machine)
-                item.badgeTooltip = badge.description
-            }
-            let project = group.members.first { $0.id == currentId }
-                ?? group.members.first { $0.id.environmentId == currentId.environmentId } ?? group.representative
-            item.action = { [weak self] in if !active { self?.showDraft(project) } }
-            return item
+        let active = groups.first { $0.memberProjectIds.contains(currentId) }
+        // `onValueChange` (DraftHeroHeadline.tsx:282-295 in 2994): "Add project" opens the add flow, the current
+        // project does nothing, another opens its draft.
+        DraftHeroView.showProjectPicker(groups: groups, selectedKey: active?.key, environments: envs, from: anchor) { [weak self] key in
+            guard let self else { return }
+            guard let key else { self.onAddProject?(); return }
+            guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
+            let project = group.members.first { $0.id.environmentId == currentId.environmentId } ?? group.representative
+            self.showDraft(project)
         }
-        MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4))
     }
 
     // MARK: Prompts
