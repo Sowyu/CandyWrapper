@@ -189,7 +189,7 @@ final class RightPanelView: DSView {
 
     /// The + menu (RightPanelTabs.tsx:1248-1335): every kind with its letter; only the ones this
     /// app draws are enabled. Letters pick while the menu is open.
-    func showAddMenu() {
+    func showAddMenu(fromShortcut: Bool = false) {
         let actions = SurfaceLauncherView.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable,
                                                   pullRequestAvailable: pullRequestAvailable, pullRequestsAvailable: pullRequestsAvailable,
                                                   browserAvailable: browserAvailable, terminalAvailable: terminalAvailable)
@@ -199,6 +199,9 @@ final class RightPanelView: DSView {
             return item
         }
         let menu = MenuPopupView.show(items, from: add, placement: .dropdown)
+        // `rightPanel.new` opens the menu through its state (`setAddSurfaceMenuOpen(true)`,
+        // RightPanelTabs.tsx:824-827), not a keyboard press on the trigger, so nothing is highlighted.
+        if fromShortcut { menu?.highlightedIndex = nil }
         menu?.characterOverride = { [weak self, weak menu] c in
             guard let action = actions.first(where: { $0.shortcut.lowercased() == c.lowercased() }) else { return false }
             if let kind = action.kind { menu?.closeTree(); self?.onAdd?(kind) }

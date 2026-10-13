@@ -371,7 +371,11 @@ final class PaletteCommands {
     /// Project groups with the open thread's group first (`pickerProjects`).
     private func projectGroups() -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
-        var groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
+        // `projectGroups` in the `sidebarProjectSortOrder` order (CommandPalette.tsx:955-963), then the
+        // contextual project first (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:168-175).
+        let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt
+        var groups = SidebarModel.sortLogicalProjectsForSidebar(
+            SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId), threads: snapshot.threads, order: order)
         if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), i > 0 {
             groups.insert(groups.remove(at: i), at: 0)
         }
@@ -561,10 +565,7 @@ final class PaletteCommands {
         scratchEnvironmentId(threads.composer.targetEnvironmentId ?? environments.primaryId)
     }
 
-    private func isScratch(_ project: ProjectShell) -> Bool {
-        guard let env = project.id.environmentId, let root = threads.composer.config(env)?.scratchWorkspaceRoot else { return false }
-        return SidebarModel.normalizeProjectPath(root) == SidebarModel.normalizeProjectPath(project.workspaceRoot)
-    }
+    private func isScratch(_ project: ProjectShell) -> Bool { threads.composer.isScratch(project) }
 
     /// `startScratchThread`: `projects.ensureScratch`, wait for the project in the shell (10 s), then a draft in it.
     func startScratchThread(_ env: String) {

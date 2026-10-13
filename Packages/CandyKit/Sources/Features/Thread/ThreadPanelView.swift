@@ -609,7 +609,7 @@ public final class ThreadPanelView: DSView {
         set { rightPanel.filesAvailable = newValue }
     }
     /// Opens the + menu (`rightPanel.new`).
-    public func showAddSurfaceMenu() { rightPanel.showAddMenu() }
+    public func showAddSurfaceMenu(fromShortcut: Bool = false) { rightPanel.showAddMenu(fromShortcut: fromShortcut) }
     /// The pull request surfaces, for the app to fill.
     public var pullRequestView: PullRequestDetailView { rightPanel.pullRequest }
     public var linkedPullRequestsView: ThreadPullRequestsListView { rightPanel.linkedPullRequests }
@@ -858,6 +858,14 @@ public final class ThreadPanelView: DSView {
         needsLayout = true
     }
 
+    /// A press that nothing under it takes (empty timeline, header or page space) blurs the prompt, as a
+    /// click on a non-focusable element does in the browser. `editableFocus` then clears, so Mod+Z reaches
+    /// `thread.undo` (keybindings.ts:191) instead of the editor.
+    public override func mouseDown(with event: NSEvent) {
+        if let focused = window?.firstResponder as? NSView, focused.isDescendant(of: composer) { window?.makeFirstResponder(nil) }
+        super.mouseDown(with: event)
+    }
+
     /// The window's width, or the outermost view's without a window (tests).
     /// Full reference viewport when this panel is rendered alone in the component gallery.
     var referenceViewportWidth: CGFloat?
@@ -871,10 +879,11 @@ public final class ThreadPanelView: DSView {
 
     /// The new-thread page: header "{project} / New thread", the hero and the centered composer.
     /// Pass nil to leave it.
-    public func setDraft(projectTitle: String?) {
+    public func setDraft(projectTitle: String?, isScratch: Bool = false) {
         isDraft = projectTitle != nil
         hero.isHidden = !isDraft
         hero.projectTitle = projectTitle ?? ""
+        hero.isScratch = isScratch
         if let projectTitle {
             setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil)
             header.projectIcon = projectIconForTitle?(projectTitle)
@@ -981,7 +990,8 @@ public final class ThreadPanelView: DSView {
         let y: CGFloat
         if isDraft {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
-            let block = height + 32 + 20
+            // A draft without the strip (a scratch project has no checkout) centers without its 32px.
+            let block = height + (showsContextStrip ? 32 : 0) + 20
             let top = ThreadHeaderView.height + (chatHeight - ThreadHeaderView.height - block) / 2
             y = top.rounded()
             // The banner stack sits between the hero and the composer: the front notice and the peek.

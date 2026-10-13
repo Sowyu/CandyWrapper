@@ -11,6 +11,9 @@ public final class DraftHeroView: DSView {
     public static let height: CGFloat = 68
 
     public var projectTitle = "" { didSet { if projectTitle != oldValue { needsDisplay = true } } }
+    /// A draft in the scratch project: "What should we work on?" with the picker, "No project", on the
+    /// line below (DraftHeroHeadline.tsx:244-246, 326, 366-383).
+    public var isScratch = false { didSet { if isScratch != oldValue { needsDisplay = true } } }
     /// The project name was clicked; show the project menu under `anchor`.
     public var onPickProject: ((NSView) -> Void)?
 
@@ -55,6 +58,7 @@ public final class DraftHeroView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
+        if isScratch { drawScratch(ctx); return }
         let (string, range) = pieces()
         let line = TextLine(string)
         let x = ((bounds.width - line.width) / 2).rounded()
@@ -64,7 +68,30 @@ public final class DraftHeroView: DSView {
         let x0 = CTLineGetOffsetForStringIndex(line.line, range.location, nil)
         let x1 = CTLineGetOffsetForStringIndex(line.line, range.location + range.length, nil)
         projectAnchor.frame = NSRect(x: x + x0, y: 0, width: x1 - x0, height: 36)
-        let thickness = max(1, (Self.projectFont.underlineThickness * 2).rounded() / 2)
+        drawUnderline(ctx, font: Self.projectFont, from: x + x0, to: x + x1, baseline: baseline)
+
+        // ponytail: "or start without a project" is drawn but inert; scratch threads come with the project picker work
+        let sub = TextLine(NSAttributedString(string: "or start without a project",
+                                              attributes: [.font: Self.subFont, .foregroundColor: Themed.color(\.mutedForeground)]))
+        draw(sub.line, at: CGPoint(x: ((bounds.width - sub.width) / 2).rounded(), y: sub.baseline(top: 44, lineHeight: 24)), in: ctx)
+    }
+
+    private func drawScratch(_ ctx: CGContext) {
+        let fg = Themed.color(\.foreground)
+        let title = TextLine(NSAttributedString(string: "What should we work on?",
+                                                attributes: [.font: Self.sentence, .foregroundColor: fg, .kern: -0.025 * 30]))
+        draw(title.line, at: CGPoint(x: ((bounds.width - title.width) / 2).rounded(), y: title.baseline(top: 0, lineHeight: 36)), in: ctx)
+        let picker = TextLine(NSAttributedString(string: "No project", attributes: [.font: Self.subFont, .foregroundColor: fg]))
+        let x = ((bounds.width - picker.width) / 2).rounded()
+        let baseline = picker.baseline(top: 44, lineHeight: 24)
+        draw(picker.line, at: CGPoint(x: x, y: baseline), in: ctx)
+        projectAnchor.frame = NSRect(x: x, y: 44, width: picker.width, height: 24)
+        drawUnderline(ctx, font: Self.subFont, from: x, to: x + picker.width, baseline: baseline)
+    }
+
+    /// The picker's underline (`underline-offset-4`): dotted `foreground/30`, solid `foreground` on hover.
+    private func drawUnderline(_ ctx: CGContext, font: NSFont, from x0: CGFloat, to x1: CGFloat, baseline: CGFloat) {
+        let thickness = max(1, (font.underlineThickness * 2).rounded() / 2)
         let y = baseline + 4 + thickness / 2
         ctx.setStrokeColor(Themed.color(\.foreground, hovered ? 1 : 0.3).cgColor(in: self))
         ctx.setLineWidth(thickness)
@@ -72,15 +99,10 @@ public final class DraftHeroView: DSView {
             ctx.setLineCap(.round)
             ctx.setLineDash(phase: 0, lengths: [0, thickness * 2])
         }
-        ctx.move(to: CGPoint(x: x + x0 + thickness / 2, y: y))
-        ctx.addLine(to: CGPoint(x: x + x1 - (hovered ? thickness / 2 : 0), y: y))
+        ctx.move(to: CGPoint(x: x0 + thickness / 2, y: y))
+        ctx.addLine(to: CGPoint(x: x1 - (hovered ? thickness / 2 : 0), y: y))
         ctx.strokePath()
         ctx.setLineDash(phase: 0, lengths: [])
-
-        // ponytail: "or start without a project" is drawn but inert; scratch threads come with the project picker work
-        let sub = TextLine(NSAttributedString(string: "or start without a project",
-                                              attributes: [.font: Self.subFont, .foregroundColor: Themed.color(\.mutedForeground)]))
-        draw(sub.line, at: CGPoint(x: ((bounds.width - sub.width) / 2).rounded(), y: sub.baseline(top: 44, lineHeight: 24)), in: ctx)
     }
 
     private func draw(_ line: CTLine, at point: CGPoint, in ctx: CGContext) {

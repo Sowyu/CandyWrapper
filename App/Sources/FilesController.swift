@@ -531,7 +531,7 @@ final class FilesController {
         // `rightPanel.new`: the + menu.
         shortcuts.on("rightPanel.new") { [weak self] call in
             guard let self, self.panel.rightPanelOpen, !self.panel.isDraft else { return false }
-            if !call.isRepeat { self.panel.showAddSurfaceMenu() }
+            if !call.isRepeat { self.panel.showAddSurfaceMenu(fromShortcut: true) }
             return true
         }
         // `view.reopenClosed` (ReopenClosedViewShortcut.tsx).

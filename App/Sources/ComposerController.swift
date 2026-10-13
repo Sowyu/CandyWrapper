@@ -231,6 +231,7 @@ final class ComposerController {
             composer.text = text
             remember(text)
         }
+        pickers.focusComposer = { [weak self] in self?.composer.focus() }
         pickers.onBlocked = { [weak self] reason in self?.report(.modelChangeBlocked(reason), key: nil) }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
@@ -426,6 +427,12 @@ final class ComposerController {
     /// An environment's last `server.getConfig` snapshot with its updates.
     func config(_ environmentId: String) -> ServerProviderConfig? { serverConfigs[environmentId] }
 
+    /// `isScratchProject`: the project sits at its environment's scratch folder.
+    func isScratch(_ project: ProjectShell) -> Bool {
+        guard let env = project.id.environmentId, let root = config(env)?.scratchWorkspaceRoot else { return false }
+        return SidebarModel.normalizeProjectPath(root) == SidebarModel.normalizeProjectPath(project.workspaceRoot)
+    }
+
     /// An environment's grants arrived: the send button may now say it can't change threads.
     func grantsChanged() { refreshAfterCommit() }
 
@@ -537,8 +544,14 @@ final class ComposerController {
     func registerShortcuts(_ shortcuts: Shortcuts) {
         shortcuts.on("chat.find") { [weak self] _ in self?.openThreadFind() ?? false }
 
-        shortcuts.onKey { [weak self] event in
+        shortcuts.onKey { [weak self, weak shortcuts] event in
             guard let self, self.isActive else { return false }
+            // ChatView's keybindings listen in the capture phase (ChatView.tsx:8277), ahead of the editor, so
+            // a bound key such as Mod+Shift+S (`thread.settle`) beats the editor's strikethrough. Only Mod+B
+            // stays with the editor (AppSidebarLayout.tsx:105-112).
+            if let shortcuts, let command = ActiveKeymap.resolve(event, context: shortcuts.context()), command != "sidebar.toggle" {
+                return false
+            }
             return self.panel.composer.handleFormattingKey(event)
         }
         // Digits 1 to 9 pick a question's option unless focus is in an editable field
@@ -563,6 +576,9 @@ final class ComposerController {
         // `composer.host`: opens "Run on" when it can choose (ChatView.tsx:8183-8192).
         shortcuts.on("composer.host") { [weak self] call in
             guard let self, self.isActive else { return false }
+            // Only the machine picker carries `composer.host`, and only with a choice of machines on an
+            // unlocked draft (BranchToolbar.tsx:297-299, 697-699); otherwise the key does nothing.
+            guard case .draft = self.target, !self.panel.contextStrip.runOn.locked else { return true }
             if !call.isRepeat, !self.panel.contextStrip.isHidden {
                 if self.panel.contextStrip.showsGitControls { self.panel.contextStrip.runContext.performAction() } else { self.panel.contextStrip.runOn.open() }
             }
@@ -734,7 +750,7 @@ final class ComposerController {
         pendingMessageId = nil
         sidebar?.state.activeThreadId = nil
         // The hero names the group (`activeProjectDisplayName`, DraftHeroHeadline.tsx:143-144).
-        panel.setDraft(projectTitle: group?.label ?? project.title)
+        panel.setDraft(projectTitle: group?.label ?? project.title, isScratch: isScratch(project))
         // T3 keeps the right panel per thread (rightPanelStore.ts); a draft opens with it closed.
         // ponytail: drafts don't remember an opened panel; key the state by draft id if that shows
         panel.setRightPanelOpen(false)
@@ -1841,7 +1857,7 @@ final class ComposerController {
         if let draft, target == .draft(draft) || target == nil {
             // Back to the draft page with its text.
             if let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == draft.projectId }) {
-                panel.setDraft(projectTitle: project.title)
+                panel.setDraft(projectTitle: project.title, isScratch: isScratch(project))
             }
         }
         let restore = composer.text.isEmpty ? text : nil

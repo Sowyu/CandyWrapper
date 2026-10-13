@@ -347,9 +347,16 @@ public final class ComposerPickers {
     private func track(_ popup: OpenPopup) {
         openPopup = popup
         popup.onClose = { [weak self, weak popup] in
-            if self?.openPopup === popup { self?.openPopup = nil }
+            guard let self else { return }
+            if self.openPopup === popup { self.openPopup = nil }
+            // T3's composer menus hand focus back to the prompt when they close, whether a click or a
+            // shortcut (`openControl`, ChatComposer.tsx:6449-6470) opened them; the trigger keeps none.
+            if let trigger = popup?.trigger, trigger.window?.firstResponder === trigger { self.focusComposer?() }
         }
     }
+
+    /// Focuses the prompt editor.
+    public var focusComposer: (() -> Void)?
 
     /// Closes this control's popup when it is open; a second shortcut press toggles it closed.
     private func closeIfOpen(_ trigger: NSView) -> Bool {
