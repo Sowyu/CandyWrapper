@@ -14,6 +14,9 @@ public final class ThreadHeaderView: TopbarDragView {
     private let slash = LabelView("/", font: TL.font(14, .medium), color: TL.c(\.iconMuted))
     private let titleHit = ThreadHeaderTitleView()
     private let parentCrumb = ThreadHeaderParentCrumb()
+    private let projectButton = ThreadHeaderProjectButton()
+    /// The project crumb's click: a new thread in this project (`onNewThreadInProject`, ChatView.tsx:2605-2607).
+    public var onNewThreadInProject: (@MainActor () -> Void)? { didSet { projectButton.action = onNewThreadInProject } }
     private let parentSlash = LabelView("/", font: TL.font(14, .medium), color: TL.c(\.iconMuted))
     /// The open subagent's parent title, nil for any other thread (ChatHeader.tsx:343-375 in 2994).
     public var parentThreadTitle: String? {
@@ -60,6 +63,7 @@ public final class ThreadHeaderView: TopbarDragView {
         set {
             guard newValue != project.text else { return }
             project.text = newValue
+            projectButton.project = newValue
             if favicon.source?.title != newValue { favicon.source = nil }
             favicon.projectTitle = newValue
             needsLayout = true
@@ -107,17 +111,14 @@ public final class ThreadHeaderView: TopbarDragView {
     /// The `nav` named "Thread breadcrumb" (ChatHeader.tsx:262-264): the project, then the title button
     /// ("Thread actions for ...", :325-327).
     private let breadcrumb = NSAccessibilityElement()
-    private let projectElement = NSAccessibilityElement()
 
     public override func accessibilityChildren() -> [Any]? {
         // The header itself is ignored, so its own children are its unignored descendants.
-        let others = NSAccessibility.unignoredChildren(from: subviews.filter { $0 !== titleHit && $0 !== parentCrumb && !$0.isHidden })
+        let others = NSAccessibility.unignoredChildren(from: subviews.filter { $0 !== titleHit && $0 !== parentCrumb && $0 !== projectButton && !$0.isHidden })
         guard !title.isHidden, let window else { return others }
         func screen(_ rect: NSRect) -> NSRect { window.convertToScreen(convert(rect, to: nil)) }
-        projectElement.setAccessibilityLabel(project.text)
-        projectElement.setAccessibilityFrame(screen(project.frame))
         breadcrumb.setAccessibilityFrame(screen(project.frame.union(titleHit.frame)))
-        var crumbs: [Any] = project.text.isEmpty ? [] : [projectElement]
+        var crumbs: [Any] = project.text.isEmpty ? [] : [projectButton]
         if !parentCrumb.isHidden { crumbs.append(parentCrumb) }
         crumbs.append(titleHit)
         breadcrumb.setAccessibilityChildren(crumbs)
@@ -131,6 +132,8 @@ public final class ThreadHeaderView: TopbarDragView {
         parentCrumb.accessibilityGroup = breadcrumb
         updateParentVisibility()
         addSubview(favicon)
+        projectButton.label = project
+        addSubview(projectButton)
         toggles[0].setAccessibilityLabel("Toggle thread details panel")
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
@@ -143,8 +146,6 @@ public final class ThreadHeaderView: TopbarDragView {
         breadcrumb.setAccessibilityRole(.group)
         breadcrumb.setAccessibilityLabel("Thread breadcrumb")
         breadcrumb.setAccessibilityParent(self)
-        projectElement.setAccessibilityRole(.staticText)
-        projectElement.setAccessibilityParent(breadcrumb)
         titleHit.setAccessibilityElement(true)
         titleHit.setAccessibilityRole(.button)
         titleHit.accessibilityGroup = breadcrumb
@@ -170,6 +171,8 @@ public final class ThreadHeaderView: TopbarDragView {
         let projectWidth = min(160, project.textWidth)
         project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
         let slashX = start + 20 + projectWidth + 12
+        projectButton.frame = NSRect(x: start, y: midY - 10, width: 20 + ceil(projectWidth), height: 20)
+        projectButton.isHidden = project.text.isEmpty || !threadVisible
         slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
         var titleX = slashX + slash.textWidth + 12
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
