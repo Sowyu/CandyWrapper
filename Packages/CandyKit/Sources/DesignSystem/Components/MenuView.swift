@@ -48,6 +48,8 @@ public struct MenuItem {
     public var accessoryWidth: CGFloat = 0
     /// base-ui `closeOnClick={false}` on a plain item: a click on the row does nothing.
     public var keepsOpen = false
+    /// base-ui `closeOnClick={false}` with an `onClick`: the action runs and the menu stays open.
+    public var runsInPlace = false
     /// The leading icon in its own color at full opacity (a pull request state glyph), not the muted one.
     public var iconColor: NSColor?
     /// A full-color leading mark in the icon's slot, for brand logos an `IconDefinition` cannot draw.
@@ -102,8 +104,10 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     public private(set) var items: [MenuItem]
     /// `data-highlighted`, from the pointer or the keyboard.
     public var highlightedIndex: Int? {
-        didSet { if highlightedIndex != oldValue { rowsDidChange(); scrollToHighlight() } }
+        didSet { if highlightedIndex != oldValue { rowsDidChange(); scrollToHighlight(); onHighlight?(highlightedIndex) } }
     }
+    /// The highlight moved, which in base-ui moves focus and blurs the row before.
+    public final var onHighlight: (@MainActor (Int?) -> Void)?
     /// Minimum width, for example the trigger width (`min-w-(--anchor-width)`).
     public var minimumWidth: CGFloat = 0 {
         didSet {
@@ -164,6 +168,17 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
         activate(i)
         return true
     }
+
+    /// Swaps one row in place, keeping the highlight (an action relabelling its own row).
+    public func replaceItem(at i: Int, with item: MenuItem) {
+        guard i < items.count else { return }
+        items[i] = item
+        rows[i].item = item
+        needsLayout = true
+    }
+
+    /// Row `i`'s view, for hit tests.
+    public func rowView(at i: Int) -> NSView? { i < rows.count ? rows[i] : nil }
 
     public func setItems(_ items: [MenuItem]) {
         self.items = items
@@ -363,7 +378,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
         case .submenu:
             openSubmenu(at: i, highlightFirst: byKeyboard)
         case .item:
-            if !items[i].keepsOpen { choose(i) }
+            if items[i].runsInPlace { items[i].action?() } else if !items[i].keepsOpen { choose(i) }
         case .label, .separator, .note:
             break
         }

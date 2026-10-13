@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quitOnSIGTERM()
         showMainWindow()
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
+        if CommandLine.arguments.contains("--pull-request-sample") { PullRequestsGallery.openWindow() }
         NSApp.activate()
         if let i = args.firstIndex(of: "--desktop-managed-preview"), args.indices.contains(i + 1) { desktopManaged?.preview(args[i + 1]) }
     }
@@ -620,7 +621,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered, defer: false)
             window.title = "Component Gallery"
             window.isReleasedWhenClosed = false
-            ComponentGallery.extraSections = [MarkdownGallery.section] + DiffGallery.sections + PickersGallery.sections
+            ComponentGallery.extraSections = [MarkdownGallery.section] + DiffGallery.sections + PickersGallery.sections + PullRequestsGallery.sections
             window.contentView = ComponentGallery.makeView()
             window.center()
             galleryWindow = window

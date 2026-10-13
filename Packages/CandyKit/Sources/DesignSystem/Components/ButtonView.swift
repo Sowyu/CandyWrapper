@@ -56,6 +56,9 @@ public final class ButtonView: ControlView {
     public var accessory: NSView? {
         didSet { oldValue?.removeFromSuperview(); accessory.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
+    /// Labels the button may switch between, stacked in one `inline-grid` cell with the unused ones
+    /// `invisible`: the label slot is as wide as the widest, so swapping labels never moves the edges.
+    public var reservedTitles: [String] = [] { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     /// See `LabelView.smoothsFont`: off for buttons on glass (backdrop-filter) surfaces.
     public var smoothsFont: Bool {
         get { label.smoothsFont }
@@ -112,7 +115,7 @@ public final class ButtonView: ControlView {
         let joined = CGFloat((joinedSides.leading ? 1 : 0) + (joinedSides.trailing ? 1 : 0))
         if size.isIconOnly { return NSSize(width: m.height - joined, height: m.height) }
         // CSS: padding and the 1px border on both sides, plus the exact text advance.
-        var width = 2 * (m.padding + 1) + label.textWidth - joined
+        var width = 2 * (m.padding + 1) + labelSlotWidth - joined
         let icons = [leadingIconView, trailingIconView].compactMap { $0 }
         // Icons carry `-mx-0.5`, so each takes its size minus 4px of inline space.
         width += icons.reduce(0) { total, _ in total + m.icon - 4 + m.gap }
@@ -134,9 +137,10 @@ public final class ButtonView: ControlView {
         }
         // Content is centered as a group, like `justify-center` with `gap`.
         let labelWidth = title?.isEmpty ?? true ? 0 : label.textWidth
+        let slotWidth = labelWidth > 0 ? labelSlotWidth : 0
         var parts: [CGFloat] = []
         if leadingIconView != nil { parts.append(m.icon - 4) }
-        if labelWidth > 0 { parts.append(labelWidth) }
+        if slotWidth > 0 { parts.append(slotWidth) }
         let accessoryWidth = accessory?.intrinsicContentSize.width ?? 0
         if accessory != nil { parts.append(accessoryWidth) }
         if trailingIconView != nil { parts.append(m.icon - 4) }
@@ -146,8 +150,9 @@ public final class ButtonView: ControlView {
             leading.frame = NSRect(x: x - 2, y: iconY, width: m.icon, height: m.icon)
             x += m.icon - 4 + m.gap
         }
-        label.frame = NSRect(x: x, y: (bounds.height - m.line) / 2, width: labelWidth, height: m.line)
-        x += labelWidth + (labelWidth > 0 ? m.gap : 0)
+        // The button's `text-align: center` centers the shown label in its slot.
+        label.frame = NSRect(x: x + (slotWidth - labelWidth) / 2, y: (bounds.height - m.line) / 2, width: labelWidth, height: m.line)
+        x += slotWidth + (slotWidth > 0 ? m.gap : 0)
         if let accessory {
             let h = accessory.intrinsicContentSize.height
             accessory.frame = NSRect(x: x, y: ((bounds.height - h) / 2).rounded(), width: accessoryWidth, height: h)
@@ -157,6 +162,13 @@ public final class ButtonView: ControlView {
         if justifiesBetween {
             label.frame.origin.x = m.padding + 1
             trailingIconView?.frame.origin.x = bounds.width - m.padding - 1 - m.icon + 2
+        }
+    }
+
+    /// The label's width, or the widest reserved title's.
+    private var labelSlotWidth: CGFloat {
+        reservedTitles.reduce(label.textWidth) { widest, title in
+            max(widest, TextLine(NSAttributedString(string: title, attributes: [.font: label.font])).width)
         }
     }
 

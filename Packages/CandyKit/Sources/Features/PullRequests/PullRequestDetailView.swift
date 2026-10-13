@@ -91,6 +91,8 @@ public final class PullRequestDetailView: DSView {
     private let numberIcon = IconView(name: .externalLink, size: 10)
     private let checkout = ButtonView("Check out", icon: .gitBranch, variant: .outline, size: .xs).menuTrigger()
     private var primary: NSView?
+    /// Merge, auto-merge, close and revert confirm in place (`useInlineActionConfirm`).
+    let inlineConfirm = InlineActionConfirm()
     let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private let titleLabel = LabelView("", font: DSFont.ui(16, weight: .semibold))
     private let authorAvatar = PullRequestAvatarView()
@@ -298,6 +300,8 @@ public final class PullRequestDetailView: DSView {
         self.detail = detail
         phase = .loaded
         if !sameIdentity {
+            // Another pull request: nothing stays armed (the hook's `scopeKey`).
+            inlineConfirm.disarm()
             code.reset()
             titleDraft = nil
             condensed = false
@@ -474,23 +478,15 @@ public final class PullRequestDetailView: DSView {
             b.action = { [weak self] in self?.onAction?("ready", nil) }
             primary = b
         case "enable-auto-merge":
-            let b = ButtonView(actionPending ? "Enabling..." : "Auto-merge (\(PullRequestDetailLogic.mergeMethodLabel(method).lowercased()))",
-                               icon: .gitMerge, variant: .default, size: .xs)
-            b.iconSize = 14
-            b.isEnabled = !actionPending
-            b.action = { [weak self] in self?.confirm("enable-auto-merge", method: method) }
-            primary = b
+            let normal = "Auto-merge (\(PullRequestDetailLogic.mergeMethodLabel(method).lowercased()))"
+            primary = confirmButton("enable-auto-merge", method: method, normal: normal, armed: "Confirm auto-merge?", pending: "Enabling...")
         case "auto-merge-armed":
             let label = d.autoMergeMethod.map { "Auto-merge (\(PullRequestDetailLogic.mergeMethodLabel($0).lowercased()))" } ?? "Auto-merge"
             let badge = BadgeView(label, variant: .info, size: .control, icon: .gitMerge)
             badge.toolTip = "\(label): the host will merge this on its own once its requirements are met"
             primary = badge
         case "merge":
-            let b = ButtonView(actionPending ? "Merging..." : PullRequestDetailLogic.mergeMethodLabel(method), icon: .gitMerge, variant: .default, size: .xs)
-            b.iconSize = 14
-            b.isEnabled = !actionPending
-            b.action = { [weak self] in self?.confirm("merge", method: method) }
-            primary = b
+            primary = confirmButton("merge", method: method, normal: PullRequestDetailLogic.mergeMethodLabel(method), armed: "Confirm merge?", pending: "Merging...")
         case "merged", "closed":
             let tone = PullRequestStateTone(state: d.state, isDraft: d.isDraft)
             let badge = StateBadge(tone: tone)
@@ -519,24 +515,65 @@ public final class PullRequestDetailView: DSView {
         stackMergeButton.toolTip = "Merge stack through #\(d.number) into \(stack.base) (\(n) \(n == 1 ? "pull request" : "pull requests"))"
     }
 
-    /// The confirmation T3 asks before merging, auto-merging, reverting or closing.
-    private func confirm(_ action: String, method: String? = nil) {
-        guard let d = detail, let window else { return }
-        let methodLabel = PullRequestDetailLogic.mergeMethodLabel(method ?? "merge")
-        let (title, message, button): (String, String, String) = switch action {
-        case "merge": ("Merge pull request?", "This merges #\(d.number) using \(method ?? "merge").", methodLabel)
-        case "enable-auto-merge": ("Enable auto-merge?", "This merges #\(d.number) using \(method ?? "merge") as soon as the host considers it ready, which may be immediately.", "Enable auto-merge")
-        case "revert": ("Revert these changes?", "This opens a new pull request that reverses the changes merged by #\(d.number).", "Create revert PR")
-        default: ("Close pull request?", "This closes #\(d.number) without merging it.", "Close")
+    /// The header's merge or auto-merge button, confirmed in place (2994 PullRequestDetailPanel.tsx:2025-2141):
+    /// the first press relabels it "Confirm …?", the second runs it. Its label slot holds both labels' width.
+    private func confirmButton(_ action: String, method: String, normal: String, armed: String, pending: String) -> ButtonView {
+        let label = actionPending ? pending : inlineConfirm.isArmed(action, slot: "header") ? armed : normal
+        let b = ButtonView(label, icon: .gitMerge, variant: .default, size: .xs)
+        b.iconSize = 14
+        b.reservedTitles = [normal, armed]
+        b.isEnabled = !actionPending
+        b.toolTip = label
+        b.setAccessibilityLabel(label)
+        b.action = { [weak self, weak b] in
+            guard let self else { return }
+            let confirmed = self.inlineConfirm.press(action, slot: "header",
+                                                     contains: { [weak self] e in InlineActionConfirm.hits(e, self?.primary) },
+                                                     onDisarm: { [weak self] in self?.rebuildActions() })
+            if confirmed { self.onAction?(action, method); self.rebuildActions(); return }
+            // Relabel in place: a rebuilt button would drop the hover under the pointer.
+            b?.title = armed
+            b?.toolTip = armed
+            b?.setAccessibilityLabel(armed)
         }
-        let dialog = DialogView(kind: .alertDialog, title: title, message: message)
-        let cancel = ButtonView("Cancel", variant: .outline, size: .sm)
-        let go = ButtonView(button, variant: action == "close" ? .destructive : .default, size: .sm)
-        dialog.footerButtons = [cancel, go]
-        let host = ModalHost.present(dialog, in: window)
-        cancel.action = { host.close() }
-        go.action = { [weak self] in host.close(); self?.onAction?(action, method) }
+        return b
     }
+
+    /// A ⋯ menu row confirmed in place (`closeOnClick={isArmed}`, PullRequestDetailPanel.tsx:2265-2416): the first
+    /// press relabels the row and keeps the menu open, the second closes the menu and runs the action.
+    private func confirmMenuItem(_ action: String, method: String? = nil, title: String, armed: String, icon: IconName,
+                                 destructive: Bool = false, armedDestructive: Bool = false, index: Int, menu: WeakMenu) -> MenuItem {
+        var item = MenuItem(title, icon: icon, destructive: destructive, disabled: actionPending)
+        item.runsInPlace = true
+        // The row relabels itself from the menu's copy, so no closure holds the item that holds it.
+        let relabel = { (popup: MenuPopupView, isArmed: Bool) in
+            guard index < popup.items.count else { return }
+            var row = popup.items[index]
+            row.title = isArmed ? armed : title
+            row.isDestructive = destructive || (isArmed && armedDestructive)
+            popup.replaceItem(at: index, with: row)
+        }
+        item.action = { [weak self] in
+            guard let self, let popup = menu.popup else { return }
+            let confirmed = self.inlineConfirm.press(action, slot: "menu:\(action)",
+                                                     contains: { [weak popup] e in InlineActionConfirm.hits(e, popup?.rowView(at: index)) },
+                                                     onDisarm: { [weak popup] in
+                                                         menu.armedIndex = nil
+                                                         if let popup { relabel(popup, false) }
+                                                     })
+            if confirmed {
+                popup.closeTree()
+                self.onAction?(action, method)
+            } else {
+                relabel(popup, true)
+                menu.armedIndex = index
+            }
+        }
+        return item
+    }
+
+    /// The open ⋯ menu and its armed row, shared by the rows' actions.
+    final class WeakMenu { weak var popup: MenuPopupView?; var armedIndex: Int? }
 
     private func showNumberMenu(_ event: NSEvent) {
         guard let d = detail else { return }
@@ -562,6 +599,7 @@ public final class PullRequestDetailView: DSView {
     private func showMoreMenu() {
         guard let d = detail else { return }
         var items: [MenuItem] = []
+        let menuRef = WeakMenu()
         // `PullRequestThreadLinks display="menu-item"`: "Link to this thread" or "Unlink from this thread".
         if let title = linkItemTitle {
             var link = MenuItem(title, icon: title.hasPrefix("Unlink") ? .unlink2 : .link2)
@@ -587,9 +625,8 @@ public final class PullRequestDetailView: DSView {
                                                                 preferred: preferredMergeMethod)
             let showsMergeNow = (primaryControl == "enable-auto-merge" || primaryControl == "auto-merge-armed") && can("merge") && !d.isDraft && !conflicting && !allowed.isEmpty
             if showsMergeNow {
-                var item = MenuItem("Merge now", icon: .gitMerge, disabled: actionPending)
-                item.action = { [weak self] in self?.confirm("merge", method: method) }
-                items.append(item)
+                items.append(confirmMenuItem("merge", method: method, title: "Merge now", armed: "Confirm merge?", icon: .gitMerge,
+                                             index: items.count, menu: menuRef))
             }
             let armed = d.autoMergeEnabled == true
             let showsAutoMerge = (armed && can("disable-auto-merge"))
@@ -599,9 +636,8 @@ public final class PullRequestDetailView: DSView {
                 item.action = { [weak self] in self?.onAction?("disable-auto-merge", nil) }
                 items.append(item)
             } else if showsAutoMerge {
-                var item = MenuItem("Enable auto-merge", icon: .gitMerge, disabled: actionPending)
-                item.action = { [weak self] in self?.confirm("enable-auto-merge", method: method) }
-                items.append(item)
+                items.append(confirmMenuItem("enable-auto-merge", method: method, title: "Enable auto-merge", armed: "Confirm auto-merge?",
+                                             icon: .gitMerge, index: items.count, menu: menuRef))
             }
             let showsMethods = can("merge") && !d.isDraft && !conflicting && allowed.count > 1
             if showsMethods {
@@ -627,19 +663,25 @@ public final class PullRequestDetailView: DSView {
         copyNumber.action = { [weak self] in self?.onCopy?("#\(d.number)", "PR number") }
         items += [open, copyLink, copyNumber]
         if d.state == "open" && can("close") {
-            var close = MenuItem("Close pull request", icon: .gitPullRequestClosed, destructive: true, disabled: actionPending)
-            close.action = { [weak self] in self?.confirm("close") }
-            items += [.separator, close]
+            items.append(.separator)
+            items.append(confirmMenuItem("close", title: "Close pull request", armed: "Confirm close?", icon: .gitPullRequestClosed,
+                                         destructive: true, index: items.count, menu: menuRef))
         } else if d.state == "closed" && can("reopen") {
             var reopen = MenuItem("Reopen pull request", icon: .gitPullRequestArrow, disabled: actionPending)
             reopen.action = { [weak self] in self?.onAction?("reopen", nil) }
             items += [.separator, reopen]
         } else if d.state == "merged" && can("revert") {
-            var revert = MenuItem("Revert changes", icon: .rotateCcw, disabled: actionPending)
-            revert.action = { [weak self] in self?.confirm("revert") }
-            items += [.separator, revert]
+            items.append(.separator)
+            items.append(confirmMenuItem("revert", title: "Revert changes", armed: "Confirm revert?", icon: .rotateCcw,
+                                         armedDestructive: true, index: items.count, menu: menuRef))
         }
-        MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+        let popup = MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+        menuRef.popup = popup
+        // base-ui focuses the highlighted row, which blurs an armed one and disarms it.
+        popup?.onHighlight = { [weak self] i in
+            guard let self, let i, let armed = menuRef.armedIndex, i != armed else { return }
+            self.inlineConfirm.disarm()
+        }
     }
 
     /// `PullRequestComposer`: Comment, or Review with a verdict, in a popover over the glass button
@@ -909,13 +951,15 @@ public final class PullRequestDetailView: DSView {
         var r = w - 16
         let mw: CGFloat = 24
         more.frame = NSRect(x: r - mw, y: 2, width: mw, height: 24); r -= mw + 4
-        if let primary {
-            let pw = ceil(primary.intrinsicContentSize.width)
-            primary.frame = NSRect(x: r - pw, y: 2, width: pw, height: 24); r -= pw + 4
-        }
+        // Check out sits beside the menu, so a host action arriving on its left can't move another
+        // action under the pointer (2994 PullRequestDetailPanel.tsx:2152-2154).
         if !checkout.isHidden {
             let cw = ceil(checkout.intrinsicContentSize.width)
             checkout.frame = NSRect(x: r - cw, y: 2, width: cw, height: 24); r -= cw + 4
+        }
+        if let primary {
+            let pw = ceil(primary.intrinsicContentSize.width)
+            primary.frame = NSRect(x: r - pw, y: 2, width: pw, height: 24); r -= pw + 4
         }
         if !stackMergeButton.isHidden {
             let sw = ceil(stackMergeButton.intrinsicContentSize.width)
