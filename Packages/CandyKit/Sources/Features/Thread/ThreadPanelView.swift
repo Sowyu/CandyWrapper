@@ -25,6 +25,7 @@ public final class ThreadHeaderView: TopbarDragView {
             parentCrumb.title = parentThreadTitle ?? ""
             updateParentVisibility()
             needsLayout = true
+            onTitlesChange?()
         }
     }
     public var onOpenParent: (@MainActor () -> Void)? { didSet { parentCrumb.action = onOpenParent } }
@@ -40,8 +41,16 @@ public final class ThreadHeaderView: TopbarDragView {
     public var onEmptyTitle: (() -> Void)?
     /// The project or thread title changed, for a toolbar that shows them in place of this header.
     public var onTitlesChange: (@MainActor () -> Void)?
+    /// Glass Native's toolbar breadcrumb edits the title in its own field while this header is hidden.
+    public var renameInPlace: (@MainActor () -> Void)?
+    /// A rename typed elsewhere (the toolbar breadcrumb): empty asks `onEmptyTitle`, a new title `onRenameThread`.
+    public func commitRename(_ text: String) {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty { onEmptyTitle?() } else if value != threadTitle { onRenameThread?(value) }
+    }
     public func beginTitleRename() {
         guard onRenameThread != nil else { return }
+        if let renameInPlace, isHidden { return renameInPlace() }
         titleEditor.text = threadTitle
         titleEditor.isHidden = false
         needsLayout = true
@@ -76,7 +85,11 @@ public final class ThreadHeaderView: TopbarDragView {
     /// The project's icon inputs; set after `projectTitle`. A different title clears it.
     public var projectIcon: ProjectIconSource? {
         get { favicon.source }
-        set { favicon.source = newValue }
+        set {
+            guard newValue != favicon.source else { return }
+            favicon.source = newValue
+            onTitlesChange?()
+        }
     }
 
     public func setThreadVisible(_ visible: Bool) {
@@ -284,20 +297,19 @@ public final class ThreadPanelView: DSView {
     /// "<label> is reconnecting|offline" (ChatView.tsx:3091-3142): the banner stack's front item, docked
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
-    public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true; updateWorkingPill() } } }
+    public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
     /// Glass Native's toolbar shows the title and the panel buttons, so the chat column starts at the top.
-    /// It also turns on Glass Native's thread: the native row style, the request cards and the working pill.
+    /// It also turns on Glass Native's material: the native row style and solid request panels with native buttons.
     public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyPresentation() } } }
     /// The height of the window's toolbar over this view (Glass Native). The timeline scrolls under it; the rest
     /// of the chat column starts below it.
     public var toolbarInset: CGFloat = 0 { didSet { if toolbarInset != oldValue { needsLayout = true } } }
     private var chatTop: CGFloat { hidesCustomChrome ? toolbarInset : ThreadHeaderView.height }
 
-    /// The thread is catching up with the server after a reconnect (`ThreadSyncStatus.synchronizing`).
-    public var isSynchronizing = false { didSet { if isSynchronizing != oldValue { updateWorkingPill() } } }
-    /// Glass Native's floating working pill, made the first time the native style shows.
-    private var workingPill: NativeWorkingPillView?
-    /// The soft edge where the rows scroll under the toolbar (T3 Mobile's `scrollEdgeEffects`, HomeScreen.tsx:245-247).
+    /// The right panel can maximize now (open, not a sheet): Glass Native's toolbar shows its Maximize button.
+    public var onMaximizableChange: ((Bool) -> Void)?
+    private var reportedMaximizable = false
+    /// The soft edge where the rows scroll under the toolbar, made while Glass Native shows.
     private var scrollEdge: ToolbarScrollEdgeView?
 
     private func applyPresentation() {
@@ -305,36 +317,15 @@ public final class ThreadPanelView: DSView {
         timeline.style = native ? .native : .classic
         approvalPanel.nativeCard = native
         questionPanel.nativeCard = native
-        for case let view as NoActiveThreadStateView in subviews { view.native = native }
-        if native, workingPill == nil {
-            let pill = NativeWorkingPillView()
-            addSubview(pill)
-            workingPill = pill
-            timeline.onWorkingChange = { [weak self] in self?.updateWorkingPill() }
+        if native, scrollEdge == nil {
             let edge = ToolbarScrollEdgeView()
             addSubview(edge, positioned: .above, relativeTo: timeline)
             scrollEdge = edge
-        } else if !native, let pill = workingPill {
-            pill.state = nil
-            pill.removeFromSuperview()
-            workingPill = nil
-            timeline.onWorkingChange = nil
+        } else if !native {
             scrollEdge?.removeFromSuperview()
             scrollEdge = nil
         }
-        updateWorkingPill()
         needsLayout = true
-    }
-
-    /// Reconnecting first, then syncing, compacting and working (floating-working-control.tsx).
-    private func updateWorkingPill() {
-        guard let pill = workingPill else { return }
-        let state: NativeWorkingPillView.State?
-        if showsEnvironmentBanner, !isDraft { state = .reconnecting }
-        else if isSynchronizing, timeline.itemCount > 0 { state = .syncing }
-        else if let working = timeline.working { state = working.compacting ? .compacting : .working(sinceMs: working.sinceMs) }
-        else { state = nil }
-        if pill.state != state { pill.state = state; needsLayout = true }
     }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
@@ -1142,10 +1133,6 @@ public final class ThreadPanelView: DSView {
     /// panel lays out, the diff summaries or the proactive panels read changed, so only the
     /// timeline updates.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?, onlyStreamingText: Bool = false) {
-        if projection == nil {
-            timeline.hasEarlierHistory = false
-            isSynchronizing = false
-        }
         if onlyStreamingText, let projection, projection.thread.id == model.projection?.thread.id, !switchingThread, !isDraft,
            !timeline.isInert, projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot {
             model.setProjection(projection)
@@ -1269,16 +1256,9 @@ public final class ThreadPanelView: DSView {
         if let shown {
             // `max-h-[min(24rem,40dvh)]` for the question body.
             questionPanel.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
-            if shown.nativeCard {
-                // Glass Native: a card as wide as the composer, 8 above it, with no overlap.
-                let h = (shown === approvalPanel ? approvalPanel.preferredHeight(width: width) : questionPanel.preferredHeight(width: width)) - overlap
-                shown.frame = NSRect(x: x, y: top - 8 - h, width: width, height: h)
-                top = shown.frame.minY - overlap
-            } else {
-                let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
-                shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
-                top = shown.frame.minY
-            }
+            let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
+            shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
+            top = shown.frame.minY
         }
         tasksView.isHidden = !docked || tasksView.steps.isEmpty
         if !tasksView.isHidden {
@@ -1345,19 +1325,7 @@ public final class ThreadPanelView: DSView {
         // ponytail: the timeline keeps room for the collapsed stack only; an open stack overlays it, reserve it if T3's inset jump matters
         let stackCap = bannerStack.hasStack ? ComposerBannerStackView.peekHeight : 0
         let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
-        // Glass Native's working pill floats 8 above everything over the composer, centered on it, and the last row
-        // scrolls clear of it too.
-        var pillSpace: CGFloat = 0
-        if let pill = workingPill, pill.state != nil, docked {
-            let w = pill.fittingWidth, h = NativeWorkingPillView.height
-            pill.frame = NSRect(x: (x + (width - w) / 2).rounded(), y: top - stackCap - 8 - h, width: w, height: h)
-            pill.isHidden = false
-            pill.layer?.zPosition = 3
-            pillSpace = h + 8
-        } else {
-            workingPill?.isHidden = true
-        }
-        let inset = docked ? 8 + above + height + 20 + pillSpace : 0
+        let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset { timeline.bottomInset = inset }
         if isDraft { timeline.isHidden = true }
     }
@@ -1393,6 +1361,8 @@ public final class ThreadPanelView: DSView {
         let chat = sheet ? bounds.width : max(0, bounds.width - shownPanel)
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
+        // Glass Native: the right panel starts below the toolbar, its tabs clear of it.
+        let panelTop = hidesCustomChrome ? toolbarInset : 0
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
@@ -1417,7 +1387,7 @@ public final class ThreadPanelView: DSView {
         scrollEdge?.frame = NSRect(x: 0, y: 0, width: chat, height: toolbarInset + ToolbarScrollEdgeView.fade)
         scrollEdge?.isHidden = chat == 0 || toolbarInset == 0
         // Mid-slide the panel keeps its width and runs past the window's right edge.
-        rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: 0, width: panelWidth, height: bounds.height)
+        rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
         panelGhost?.frame.origin.x = chat
         if rightPanelSheetOpen != sheetWasOpen {
             sheetWasOpen = rightPanelSheetOpen
@@ -1442,9 +1412,17 @@ public final class ThreadPanelView: DSView {
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
         // The sheet has no maximize control (ChatView.tsx:11211-11232). It fades with the slide, `transition-opacity`
         // over the same duration and curve (ChatView.tsx:11213-11224).
-        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil)
+        // Glass Native's toolbar holds the panel toggles and Maximize, so the in-panel copies stay hidden.
+        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil) || hidesCustomChrome
+        let maximizable = !sheet && rightPanelOpen
+        if maximizable != reportedMaximizable {
+            reportedMaximizable = maximizable
+            onMaximizableChange?(maximizable)
+        }
+        if hidesCustomChrome { for toggle in header.toggles where toggle.superview === self { toggle.isHidden = true } }
+        else { header.toggles.forEach { $0.isHidden = false } }
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
-        panelResize.frame = NSRect(x: chat - 4, y: 0, width: 8, height: bounds.height)
+        panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
             var x = bounds.width - 12 - 1

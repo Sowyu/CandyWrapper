@@ -49,40 +49,22 @@ final class MainPresentationController {
         let presentation = NativeSplitPresentation()
         var actions = NativeToolbarActions()
         actions.newThread = { [weak self] in self?.sidebar?.actions.newThread() }
-        actions.files = { [weak self] in self?.threads.panel.toggleRightPanel() }
-        actions.git = { [weak self] in self?.threads.panel.onDetailsToggle?() }
+        actions.details = { [weak self] in self?.threads.panel.onDetailsToggle?() }
         actions.terminal = { [weak self] in self?.threads.panel.onTerminalToggle?() }
+        actions.rightPanel = { [weak self] in self?.threads.panel.toggleRightPanel() }
+        actions.maximize = { [weak self] in self?.threads.panel.toggleMaximized() }
+        actions.rightPanelOpen = { [weak self] in self?.threads.panel.rightPanelOpen == true && self?.threads.panel.window != nil }
         actions.settings = { [weak self] in self?.sidebar?.actions.openSettings() }
         actions.threadShown = { [weak self] in self?.threads.panel.window != nil }
-        // T3 Mobile's Git menu (ThreadGitControls.tsx:350-410): the branch, review changes and the thread's details.
-        actions.gitMenu = { [weak self] in
-            guard let self else { return [] }
-            let threads = self.threads, shown = threads.panel.window != nil
-            return [
-                NativeMenuEntry("Branch…", symbol: "point.topleft.down.curvedto.point.bottomright.up", isEnabled: shown) { threads.git.openBranchPicker(inPanel: false) },
-                NativeMenuEntry("Review Changes", symbol: "text.bubble", isEnabled: shown) { threads.panel.toggleDiff() },
-                .separator,
-                NativeMenuEntry("Thread Details", symbol: "info.circle", isEnabled: shown) { threads.panel.onDetailsToggle?() },
-            ]
-        }
-        // T3 Mobile's Terminal menu (ThreadGitControls.tsx:280-340): the project's actions, then the drawer.
-        actions.terminalMenu = { [weak self] in
-            guard let self else { return [] }
-            let threads = self.threads, shown = threads.panel.window != nil
-            var entries = threads.scripts.current.map { script in
-                NativeMenuEntry(ProjectScripts.menuLabel(script), symbol: "play", isEnabled: shown) { threads.scripts.run(script) }
-            }
-            if entries.isEmpty { entries.append(NativeMenuEntry("No Project Actions", symbol: "play", isEnabled: false) {}) }
-            entries.append(.separator)
-            entries.append(NativeMenuEntry(threads.terminal.isOpen ? "Hide Terminal" : "Show Terminal", symbol: "terminal", isEnabled: shown) {
-                threads.panel.onTerminalToggle?()
-            })
-            entries.append(NativeMenuEntry("Open New Terminal", symbol: "plus", isEnabled: shown) { threads.terminal.openNew() })
-            return entries
-        }
         presentation.actions = actions
+        presentation.breadcrumb = breadcrumb
+        presentation.setMaximizeShown(threads.panel.rightPanelOpen)
+        threads.panel.onMaximizableChange = { [weak presentation] in presentation?.setMaximizeShown($0) }
         return presentation
     }
+
+    /// T3's breadcrumb for the toolbar, over the thread panel's hidden header. One for the window's life.
+    private lazy var breadcrumb = NativeBreadcrumbView(header: threads.panel.header)
 
     /// Rebuilds the window's content in the other presentation when the theme asks for it.
     func sync() {
@@ -98,15 +80,14 @@ final class MainPresentationController {
         updateTitle()
     }
 
-    /// The toolbar's title and subtitle in native mode: the page, or the thread and "project · environment"
-    /// (T3 Mobile ThreadRouteScreen.tsx:441-446).
+    /// The toolbar's breadcrumb in native mode: the page's name, or T3's project / thread crumbs. The window's own
+    /// title follows for the Window menu.
     func updateTitle() {
         guard let native = current as? NativeSplitPresentation else { return }
-        if settings?.isOpen == true { return native.setTitle("Settings", subtitle: "") }
-        if let page = commands?.openUtilityKind { return native.setTitle(page == .pullRequests ? "Pull Requests" : "Usage", subtitle: "") }
-        let header = threads.panel.header
-        let environment = threads.openThreadId?.environmentId.flatMap { environments.label($0) } ?? ""
-        let subtitle = [header.projectTitle, environment].filter { !$0.isEmpty }.joined(separator: " · ")
-        native.setTitle(header.threadTitle.isEmpty ? "CandyWrapper" : header.threadTitle, subtitle: subtitle)
+        let page: String? = settings?.isOpen == true ? "Settings"
+            : commands?.openUtilityKind.map { $0 == .pullRequests ? "Pull Requests" : "Usage" }
+        breadcrumb.show(page: page)
+        let thread = threads.panel.header.threadTitle
+        native.setTitle(page ?? (thread.isEmpty ? "CandyWrapper" : thread))
     }
 }

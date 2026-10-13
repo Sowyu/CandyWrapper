@@ -102,8 +102,8 @@ final class WorkLineView: DSView {
     private var threadLink: ThreadStatusLineAction?
     private let threadLinkClose = LabelView("\u{201D}", font: TL.font(14), color: TL.c(\.secondaryLabel))
 
-    /// Glass Native: an SF Symbol in a 24 slot, a muted 14 label, rose when failed (work-log-layout.tsx). The
-    /// symbol view is made the first time a native line configures.
+    /// Glass Native: SF Symbols in place of the Lucide icons that have one. The symbol view is made the first
+    /// time a native line shows one.
     var native = false
     private var symbolView: SymbolView?
 
@@ -200,20 +200,15 @@ final class WorkLineView: DSView {
             label.base.color = style == .tool ? TL.c(\.secondaryLabel) : TL.c(\.foreground, 0.8)
             label.base.font = TL.font(14)
         }
-        iconView.isHidden = native
-        if native {
-            let symbol = symbolView ?? SymbolView()
-            if symbolView == nil { symbolView = symbol; addSubview(symbol) }
-            symbol.isHidden = false
-            symbol.symbol = NativeTimeline.symbol(icon)
-            let tone: NSColor = switch style {
-            case .destructive: NativeTimeline.rose
-            case .warning: TL.c(\.warning)
-            case .tool, .plain: failed ? NativeTimeline.rose : TL.c(\.mutedForeground)
-            }
-            symbol.color = tone
-            label.base.color = tone
-            label.base.font = TL.font(14)
+        // Glass Native: the SF Symbol for the same glyph, in the same cell and color.
+        let symbol = native ? NativeTimeline.symbol(icon) : nil
+        iconView.isHidden = symbol != nil
+        if let symbol {
+            let view = symbolView ?? SymbolView()
+            if symbolView == nil { symbolView = view; addSubview(view) }
+            view.symbol = symbol
+            view.color = iconView.strokeColor
+            view.isHidden = false
         } else {
             symbolView?.isHidden = true
         }
@@ -228,28 +223,26 @@ final class WorkLineView: DSView {
     override func layout() {
         super.layout()
         let h: CGFloat = 24
-        // A native line is 28 tall; its 24 content band sits centered in it.
-        let y = native ? ((bounds.height - h) / 2).rounded() : 0
-        iconView.frame = NSRect(x: 4, y: y + 4, width: 16, height: 16)
-        symbolView?.frame = NSRect(x: 0, y: y, width: NativeTimeline.workIcon, height: NativeTimeline.workIcon)
+        iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
+        symbolView?.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
         // Trailing slot, right to left: chevron cell (16), timestamp.
         let chevronX = timeOnlyTrailing ? bounds.width + 3 : bounds.width - 16
-        chevron.frame = NSRect(x: chevronX + 2, y: y + 6, width: 12, height: 12)
+        chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
         let timeWidth = showsTime ? ceil(time.textWidth) : 0
-        time.frame = NSRect(x: chevronX - 6 - timeWidth, y: y + 4, width: timeWidth, height: 16)
+        time.frame = NSRect(x: chevronX - 6 - timeWidth, y: 4, width: timeWidth, height: 16)
         var right = showsTime ? time.frame.minX - 6 : chevronX - 6
         if let a = trailingAction, !a.isHidden {
             let w = a.preferredWidth
-            a.frame = NSRect(x: right - w, y: y, width: w, height: h)
+            a.frame = NSRect(x: right - w, y: 0, width: w, height: h)
             right = a.frame.minX - 6
         }
-        label.frame = NSRect(x: 30, y: y, width: max(0, min(ceil(label.textWidth) + 1, right - 30)), height: h)
+        label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, right - 30)), height: h)
         if let link = threadLink, !link.isHidden {
             // The three runs sit flush, as inline text does.
             let closeWidth = ceil(threadLinkClose.textWidth) + 1
             let x = min(label.frame.maxX, 30 + label.textWidth)
-            link.frame = NSRect(x: x, y: y, width: max(0, min(link.preferredWidth, right - closeWidth - x)), height: h)
-            threadLinkClose.frame = NSRect(x: min(link.frame.maxX, x + link.label.textWidth), y: y, width: closeWidth, height: h)
+            link.frame = NSRect(x: x, y: 0, width: max(0, min(link.preferredWidth, right - closeWidth - x)), height: h)
+            threadLinkClose.frame = NSRect(x: min(link.frame.maxX, x + link.label.textWidth), y: 0, width: closeWidth, height: h)
         }
     }
 }
@@ -264,11 +257,6 @@ class WorkRowBase: TimelineRowView {
 
     /// `pb-2` standalone, nothing when another work row follows.
     var blockPadding: CGFloat { item?.row.continuesWorkLog == true ? 0 : 8 }
-    /// A work line's height: 24, or Glass Native's 28.
-    var lineHeight: CGFloat { context.native ? NativeTimeline.workLine : 24 }
-    /// A single-line row (toggle, live, thinking): the line plus 2 above and 2 below in the classic style.
-    var singleLineSpace: CGFloat { context.native ? NativeTimeline.workLine : 28 }
-    var singleLineTop: CGFloat { context.native ? 0 : 2 }
 
     func line(_ i: Int) -> WorkLineView {
         while lines.count <= i {
@@ -372,7 +360,6 @@ final class WorkRowView: WorkRowBase {
                 let view = cards[i] ?? SubagentCardLinkView()
                 if cards[i] == nil { cards[i] = view; addSubview(view) }
                 view.isHidden = false
-                view.native = context.native
                 view.configure(card)
                 view.action = { [weak self] in
                     guard let child = card.child else { return }
@@ -476,15 +463,13 @@ final class WorkRowView: WorkRowBase {
         for (i, l) in lines.enumerated() { l.showsTime = i == entry || (i < pinnedTime.count && pinnedTime[i]) }
     }
 
-    private var rowPad: CGFloat { isGroupBody || context.native ? 0 : 2 }
-    /// Open details: flush in the classic style, indented `ml-7` under the label in Glass Native.
-    private var detailX: CGFloat { context.native ? NativeTimeline.workIndent : 2 }
+    private var rowPad: CGFloat { isGroupBody ? 0 : 2 }
 
     /// Detail box `mt-0.5 mb-1.5`, indented like `ms-7` for text (28px) and flush for panels.
     private func detailHeight(_ i: Int, _ width: CGFloat) -> CGFloat {
         if hasTrace(i), let t = traces[i] { return t.height(forWidth: ReasoningTraceView.width(in: width)) }
         guard entries[i].open, !entries[i].detail.blocks.isEmpty else { return 0 }
-        return 2 + details[i].height(forWidth: max(0, width - detailX - 2)) + 6
+        return 2 + details[i].height(forWidth: max(0, width - 4)) + 6
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
@@ -492,7 +477,7 @@ final class WorkRowView: WorkRowBase {
         var h: CGFloat = 0
         for i in entries.indices {
             h += isCard(i) ? SubagentCardLinkView.height
-                : rowPad * 2 + lineHeight + (failure(i)?.height(forWidth: width - 4) ?? 0) + detailHeight(i, width)
+                : rowPad * 2 + 24 + (failure(i)?.height(forWidth: width - 4) ?? 0) + detailHeight(i, width)
         }
         return h + (isGroupBody ? 4 : blockPadding)
     }
@@ -515,8 +500,8 @@ final class WorkRowView: WorkRowBase {
                 continue
             }
             y += rowPad
-            lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: lineHeight)
-            y += lineHeight
+            lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
+            y += 24
             if let f = failure(i) {
                 let fh = f.height(forWidth: bounds.width - 4)
                 f.frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: fh)
@@ -525,7 +510,7 @@ final class WorkRowView: WorkRowBase {
             let dh = detailHeight(i, bounds.width)
             if hasTrace(i), let t = traces[i] {
                 t.frame = NSRect(x: ReasoningTraceView.inset, y: y, width: ReasoningTraceView.width(in: bounds.width), height: dh)
-            } else if dh > 0 { details[i].frame = NSRect(x: detailX, y: y + 2, width: bounds.width - detailX - 2, height: dh - 8) }
+            } else if dh > 0 { details[i].frame = NSRect(x: 2, y: y + 2, width: bounds.width - 4, height: dh - 8) }
             y += dh + rowPad
         }
         // An entry that opened or closed under a still pointer moves the spans.
@@ -671,13 +656,13 @@ final class WorkToggleRowView: WorkRowBase {
         setAccessibilityExpanded(t.expanded)
     }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { singleLineSpace + blockPadding }
+    override func height(forWidth width: CGFloat) -> CGFloat { 28 + blockPadding }
 
     override func hoverChanged() { line(0).showsTime = hovered }
 
     override func layout() {
         super.layout()
-        line(0).frame = NSRect(x: 2, y: singleLineTop, width: bounds.width - 4, height: lineHeight)
+        line(0).frame = NSRect(x: 2, y: 2, width: bounds.width - 4, height: 24)
     }
 }
 
@@ -721,14 +706,14 @@ final class WorkLiveRowView: WorkRowBase {
         thought.isHidden ? 0 : 2 + max(24, thought.height(forWidth: max(0, width - 34))) + 2
     }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { thoughtHeight(width) + singleLineSpace + blockPadding }
+    override func height(forWidth width: CGFloat) -> CGFloat { thoughtHeight(width) + 28 + blockPadding }
 
     override func layout() {
         super.layout()
         let th = thoughtHeight(bounds.width)
         thoughtIcon.frame = NSRect(x: 6, y: 2 + (TL.relaxed - 16) / 2, width: 16, height: 16)
         thought.frame = NSRect(x: 32, y: 2, width: max(0, bounds.width - 34), height: max(0, th - 4))
-        line(0).frame = NSRect(x: 2, y: th + singleLineTop, width: bounds.width - 4, height: lineHeight)
+        line(0).frame = NSRect(x: 2, y: th + 2, width: bounds.width - 4, height: 24)
     }
 }
 
@@ -756,13 +741,13 @@ final class ThinkingRowView: WorkRowBase {
         l.expandable = false
     }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { singleLineSpace + blockPadding }
+    override func height(forWidth width: CGFloat) -> CGFloat { 28 + blockPadding }
 
     override func layout() {
         super.layout()
         // `line(0)` shows the line it hands out, so the blank state goes back on after.
         let l = line(0)
-        l.frame = NSRect(x: 2, y: singleLineTop, width: bounds.width - 4, height: lineHeight)
+        l.frame = NSRect(x: 2, y: 2, width: bounds.width - 4, height: 24)
         l.isHidden = blank
     }
 }
@@ -798,15 +783,12 @@ final class WorkingRowView: TimelineRowView {
         super.configure(item)
         startMs = item.row.createdAt?.epochMs
         if case .working(let c) = item.row.kind { compacting = c } else { compacting = false }
-        // Glass Native shows the turn's state in the floating working pill, so the row keeps no height and no tick.
-        let native = context.native
-        label.isHidden = compacting || native
-        compactingIcon.isHidden = !compacting || native
-        compactingLabel.isHidden = !compacting || native
-        compactingLabel.shining = compacting && !native
-        rule.isHidden = native
+        label.isHidden = compacting
+        compactingIcon.isHidden = !compacting
+        compactingLabel.isHidden = !compacting
+        compactingLabel.shining = compacting
         needsLayout = true
-        if native { LabelClock.shared.cancel(self) } else { tick() }
+        tick()
     }
 
     /// `formatWorkingTimer` (:3477-3490). The text shows whole seconds, so it changes once a second.
@@ -822,7 +804,7 @@ final class WorkingRowView: TimelineRowView {
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); LabelClock.shared.visibilityChanged() }
     override func viewDidUnhide() { super.viewDidUnhide(); LabelClock.shared.visibilityChanged() }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { context.native ? 0 : 4 + 24 + 8 + 1 + 6 }
+    override func height(forWidth width: CGFloat) -> CGFloat { 4 + 24 + 8 + 1 + 6 }
 
     override func layout() {
         super.layout()

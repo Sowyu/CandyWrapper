@@ -26,8 +26,7 @@ public class ComposerBannerView: DSView {
     /// notices the banner stack shows above the column when it expands.
     public enum Placement { case attached, floating }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true } } }
-    /// Glass Native: a whole solid card with radius 20 and no blur, standing apart from the composer
-    /// (T3 Mobile PendingApprovalCard.tsx:23-76). The owner places it with no overlap.
+    /// Glass Native: the same docked shape on a solid card fill with no blur, so the request reads over the frost.
     public var nativeCard = false {
         didSet { if nativeCard != oldValue { blur.isHidden = nativeCard; needsLayout = true; needsDisplay = true; nativeCardDidChange() } }
     }
@@ -84,15 +83,6 @@ public class ComposerBannerView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        if nativeCard {
-            clip.frame = bounds
-            surface.frame = bounds
-            surface.layer?.cornerRadius = min(NativeTimeline.cardRadius, h / 2)
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            tint.frame = surface.bounds
-            CATransaction.commit()
-            return
-        }
         let floating = placement == .floating
         clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - (floating ? 0 : 16)))
         // Taller than the clip so the bottom corners never show. Joined: 1pt above the clip, so

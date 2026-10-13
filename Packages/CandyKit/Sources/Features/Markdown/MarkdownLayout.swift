@@ -403,9 +403,8 @@ private struct Builder {
     var contexts: MarkdownContextChips?
     var cwd: String?
     var runsShell = false
-    /// Glass Native: body 14/21 and T3 Mobile's code block (docs/glass-native.md).
+    /// Glass Native: code blocks are solid cards on the frost (docs/glass-native.md).
     var native = false
-    var bodyLine: CGFloat { native ? NativeTimeline.bodyLine * FontRuntime.interfaceScale : MarkdownStyle.lineHeight }
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -459,7 +458,7 @@ private struct Builder {
     mutating func layout(_ block: MarkdownBlock, width: CGFloat, context: Context, tight: Bool) -> Box {
         switch block {
         case .paragraph(let runs):
-            var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: bodyLine, color: context.color)
+            var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
             // Tight list items hold their text inline, without a <p> and its margins.
             let m = tight ? 0 : MarkdownStyle.blockMargin
             box.top = m; box.bottom = m
@@ -683,7 +682,7 @@ private struct Builder {
         if case .paragraph(let runs)? = blocks.first {
             blocks.removeFirst()
             // The first line starts after the box; the text box spans the full gutter so wrapped lines align.
-            let first = text(runs, width: width + gutter, size: MarkdownStyle.fontSize, lineHeight: bodyLine,
+            let first = text(runs, width: width + gutter, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight,
                              color: context.color, headIndent: gutter, firstLineIndent: gutter + lead)
             box = Box()
             box.add(first, at: CGPoint(x: -gutter, y: 0))
@@ -694,7 +693,7 @@ private struct Builder {
             box = flow(blocks, width: width, context: context, tight: true)
         }
         // vertical-align: middle puts the margin box's middle at baseline - x-height / 2.
-        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: bodyLine)
+        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
         let marginBox = 13 + 0.15 * MarkdownStyle.fontSize
         let top = baseline - body.xHeight / 2 - marginBox / 2
         box.items.insert(.checkbox(CGRect(x: -gutter, y: top, width: 13, height: 13), checked: checked), at: 0)
@@ -765,9 +764,9 @@ private struct Builder {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
-        // Glass Native: T3 Mobile's `rounded-lg` with a border on the solid card (ThreadFeed.tsx:990).
+        // Glass Native: the same box on the solid card color, so code reads over the frost.
         if native {
-            box.items.append(.box(frame, fill: NativeTimeline.card, border: Themed.color(\.border), radius: 8))
+            box.items.append(.box(frame, fill: NativeTimeline.card, border: Themed.color(\.border), radius: 10))
         } else {
             box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
                                   border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
