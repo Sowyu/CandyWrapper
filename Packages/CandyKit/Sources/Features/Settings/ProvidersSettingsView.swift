@@ -781,8 +781,14 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             self?.onHeightChange?()
         }
         modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(env.id, ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
-        modelsView.onHidden = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: next, order: order) }
-        modelsView.onOrder = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: next) }
+        // Read the other list live: a focused toggle keeps this editor across server echoes, so `hidden`
+        // and `order` above can be one write behind.
+        func live() -> (hidden: [String], order: [String]) {
+            let p = (context.modelPreferences?(env.id) ?? ([], .object([:]))).providers[row.instanceId]
+            return ((p?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue), (p?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue))
+        }
+        modelsView.onHidden = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: next, order: live().order) }
+        modelsView.onOrder = { [weak self] next in self?.writePreferences(env.id, row.instanceId, hidden: live().hidden, order: next) }
         modelsView.onAdd = { [weak self] slug in
             var o = current().objectValue ?? [:]
             var config = o["config"]?.objectValue ?? [:]
@@ -890,7 +896,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
 extension NSView {
     /// Whether the window's first responder is this view or inside it (a focused field).
     var isFirstResponderInside: Bool {
-        guard let responder = window?.firstResponder as? NSView else { return false }
+        // Only a text field holds a draft worth keeping; a clicked toggle or arrow doesn't.
+        guard let responder = window?.firstResponder as? NSView, responder is NSText || responder is NSTextField else { return false }
         return responder === self || responder.isDescendant(of: self)
     }
 }

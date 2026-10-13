@@ -86,6 +86,10 @@ public final class ComposerPickers {
         refresh(notify: false)
         if let picker = modelPicker {
             picker.catalog = self.context.catalog
+            // 2994 servers share favorites and model preferences, so another client's edit lands here.
+            let favorites = favorites(), preferences = modelPreferences()
+            if picker.favorites != favorites { picker.favorites = favorites }
+            if picker.preferences != preferences { picker.preferences = preferences }
         }
     }
 
