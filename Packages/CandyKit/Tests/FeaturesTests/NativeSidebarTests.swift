@@ -75,8 +75,11 @@ struct NativeSidebarTests {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = content
-        content.frame = NSRect(x: 0, y: 0, width: 320, height: 780)
+        // Made at the classic width, then widened, as a theme swap does.
+        content.frame = NSRect(x: 0, y: 0, width: 255, height: 780)
         content.hidesCustomChrome = true
+        content.layoutSubtreeIfNeeded()
+        content.frame = NSRect(x: 0, y: 0, width: 320, height: 780)
         content.state.settledExpanded = true
         content.state.settledVisibleCount = 2_000
         content.setSnapshot(snap, animated: false)
@@ -109,6 +112,9 @@ struct NativeSidebarTests {
         let row = try #require(native.rowIndex(snap.threads[1_400].id))
         let cell = try #require(native.table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeThreadCardCell)
         #expect(cell.title.stringValue == "Renamed on screen")
+        // The cell fits the list's width, inside the source list's insets.
+        let frame = cell.convert(cell.bounds, to: native)
+        #expect(frame.minX >= 0 && frame.maxX <= native.bounds.width && frame.width > native.bounds.width - 40)
         now = now.addingTimeInterval(3_600)
         content.setSnapshot(snap, animated: false)
         #expect(cache.generation == generation)

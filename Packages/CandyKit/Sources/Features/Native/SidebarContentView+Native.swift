@@ -158,7 +158,9 @@ extension SidebarContentView {
         // The column lines the hidden 52pt titlebar row up with the toolbar, so the native top starts below it.
         let top: CGFloat = 52 + 6
         chrome.frame = NSRect(x: 0, y: top, width: w, height: showsPullRequests ? NativeSidebarChrome.height : 32)
-        var bottom = h
+        // The split item's bottom accessory (New chat, Settings) floats over the column's last points.
+        let inset = max(safeAreaInsets.bottom, superview?.safeAreaInsets.bottom ?? 0)
+        var bottom = h - inset
         if !providerUpdatePill.isHidden {
             providerUpdatePill.frame = NSRect(x: 8, y: bottom - 8 - 28, width: w - 16, height: 28)
             bottom = providerUpdatePill.frame.minY
@@ -170,6 +172,11 @@ extension SidebarContentView {
         }
         updatePill.frame = NSRect(x: w - 8 - 32, y: bottom - 8 - 32, width: 32, height: 32)
         if !updatePill.isHidden { bottom = updatePill.frame.minY }
-        native.frame = NSRect(x: 0, y: chrome.frame.maxY + 4, width: w, height: max(0, bottom - chrome.frame.maxY - 4))
+        // With nothing above the accessory the list scrolls on under its glass, its last row clear of it.
+        let under = bottom == h - inset
+        native.automaticallyAdjustsContentInsets = false
+        native.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: under ? inset : 0, right: 0)
+        let listTop = chrome.frame.maxY + 4
+        native.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, (under ? h : bottom) - listTop))
     }
 }
