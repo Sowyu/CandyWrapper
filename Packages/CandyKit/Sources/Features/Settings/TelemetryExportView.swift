@@ -17,6 +17,8 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
     private var saved: [String: String] = [:]
     private var running: [String: String] = [:]
     private var canEdit = false
+    /// `canCheck`: servers before 2994 have no `otlpEndpointCheck`, so they keep the editor without Test (TelemetryExportSettings.tsx:66-73).
+    private var canCheck = false
     private var drafts: [String: String] = [:]
     /// The latest check per field: the URL it checked and the result, nil while it runs.
     private var checks: [String: (url: String, result: OtlpEndpointCheckResult?)] = [:]
@@ -63,6 +65,7 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
     func update(environment: SettingsScopeEnvironment, observability: JSONValue?) {
         environmentLabel = environment.label
         canEdit = environment.canWrite
+        canCheck = canEdit && environment.capabilities.contains("otlpEndpointCheck")
         let o = environment.settings?["observability"]
         for s in Self.signals {
             saved[s.key] = o?[s.key]?.stringValue ?? ""
@@ -79,7 +82,7 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
     private var changed: [String] { Self.signals.map(\.key).filter { value($0) != saved[$0] } }
 
     private func check(_ key: String, _ signal: String, _ url: String) {
-        guard OtlpEndpointCheckResult.isHttpURL(url), canEdit, let request = context.request else { return }
+        guard OtlpEndpointCheckResult.isHttpURL(url), canCheck, let request = context.request else { return }
         checks[key] = (url, nil)
         apply()
         let env = environmentId
@@ -146,6 +149,7 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
             let st = OtlpEndpointCheckResult.status(url: url, check: checks[s.key])
             f.status.text = st.label
             f.dot.tone = switch st.tone { case .off: .off; case .checking: .warning; case .success: .success; case .failure: .destructive }
+            f.showsCheck = canCheck
             f.test.isEnabled = canEdit && OtlpEndpointCheckResult.isHttpURL(url) && !(checks[s.key].map { $0.result == nil } ?? false)
             let r = running[s.key] ?? ""
             f.running = saved[s.key] != r ? "Running: \(r.isEmpty ? "Disabled" : r)" : nil
@@ -211,18 +215,21 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
             for v in [dot, label, status, input, test, runningText] as [NSView] { addSubview(v) }
         }
 
+        /// The status dot, its label and Test, shown only where the server can check endpoints.
+        var showsCheck = true { didSet { for v in [dot, status, test] as [NSView] { v.isHidden = !showsCheck }; needsLayout = true } }
+
         func height(forWidth width: CGFloat) -> CGFloat { 16 + 6 + 28 + (running == nil ? 0 : 6 + runningText.height(forWidth: width)) }
 
         override func layout() {
             super.layout()
             let w = bounds.width
             dot.frame = NSRect(x: 0, y: 2, width: 12, height: 12)
-            label.frame = NSRect(x: 18, y: 0, width: ceil(label.textWidth) + 1, height: 16)
+            label.frame = NSRect(x: showsCheck ? 18 : 0, y: 0, width: ceil(label.textWidth) + 1, height: 16)
             let sw = ceil(status.textWidth) + 1
             status.frame = NSRect(x: w - sw, y: 0, width: sw, height: 16)
             let tw = test.intrinsicContentSize.width
             test.frame = NSRect(x: w - tw, y: 22, width: tw, height: 28)
-            input.frame = NSRect(x: 0, y: 22, width: max(0, w - tw - 8), height: 28)
+            input.frame = NSRect(x: 0, y: 22, width: max(0, showsCheck ? w - tw - 8 : w), height: 28)
             runningText.frame = NSRect(x: 0, y: 56, width: w, height: runningText.height(forWidth: w))
         }
     }

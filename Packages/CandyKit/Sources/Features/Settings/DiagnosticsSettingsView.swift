@@ -325,10 +325,9 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         body = [monitor, live, resources, trace, latest, common, slowest, logs, top] + (exportSection(env).map { [$0] } ?? [])
     }
 
-    /// `TelemetryExportSettings` (TelemetryExportSettings.tsx:44-56, 2994) under the tables. Only for servers with
-    /// `otlpEndpointCheck`, so 2861 servers keep today's page.
+    /// `TelemetryExportSettings` (TelemetryExportSettings.tsx:44-56, 2994) under the tables, on every server as in
+    /// 2994's web app. Servers without `otlpEndpointCheck` get the editor without Test.
     private func exportSection(_ env: SettingsScopeEnvironment) -> SettingsSectionView? {
-        guard env.capabilities.contains("otlpEndpointCheck") else { exportForm = nil; return nil }
         let section: SettingsSectionView
         if case .environment = context.scope.kind {
             if exportForm?.environmentId != env.id { exportForm = TelemetryExportView(context: context, environmentId: env.id) }
