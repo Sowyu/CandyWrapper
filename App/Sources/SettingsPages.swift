@@ -524,18 +524,17 @@ extension SettingsController {
 
     // MARK: Keys
 
-    /// `/` focuses the settings search; Mod+F focuses the Keybindings search (SettingsSidebarNav.tsx:139-167,
-    /// KeybindingsSettings.tsx:1345-1366).
+    /// `/` outside a text field, and Mod+F from anywhere, focus the settings search (SettingsSidebarNav.tsx:141-181
+    /// in 2994, f769e01e2). A shortcut recorder keeps both keys.
     func registerShortcuts(_ shortcuts: Shortcuts) {
         shortcuts.onKey { [weak self] event in
             guard let self, self.isOpen, self.modal == nil else { return false }
-            let flags = event.modifierFlags.intersection([.command, .control, .option])
+            let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
             let chars = event.charactersIgnoringModifiers?.lowercased()
-            if flags == [.command], chars == "f", self.section == .keybindings, let page = self.keybindingsPage {
-                page.focusSearch()
-                return true
-            }
-            guard flags.isEmpty, chars == "/", !Shortcuts.editableFocused(in: self.window) else { return false }
+            let find = flags == [.command] && chars == "f"
+            let slash = flags.isDisjoint(with: [.command, .control, .option]) && event.charactersIgnoringModifiers == "/"
+                && !Shortcuts.editableFocused(in: self.window)
+            guard find || slash else { return false }
             if self.window?.firstResponder is ShortcutCaptureResponder { return false }
             self.nav.focusSearch()
             return true
