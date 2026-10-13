@@ -52,6 +52,7 @@ final class MainPresentationController {
         actions.files = { [weak self] in self?.threads.panel.toggleRightPanel() }
         actions.git = { [weak self] in self?.threads.panel.onDetailsToggle?() }
         actions.terminal = { [weak self] in self?.threads.panel.onTerminalToggle?() }
+        actions.settings = { [weak self] in self?.sidebar?.actions.openSettings() }
         actions.threadShown = { [weak self] in self?.threads.panel.window != nil }
         presentation.actions = actions
         return presentation

@@ -63,6 +63,7 @@ final class SidebarCommands {
         sidebar.actions.snooze = { [weak self] id, anchor in self?.showSnoozeMenu(id, anchor: anchor) }
         sidebar.actions.unsnooze = { [weak self] in self?.unsnooze($0) }
         sidebar.actions.unpin = { [weak self] in self?.unpin($0) }
+        sidebar.actions.archive = { [weak self] in self?.archive($0) }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
         sidebar.actions.undo = { [weak self] in self?.ledger.undoLatest() }
         sidebar.actions.addProject = { [weak self] in self?.addProject() }
@@ -106,7 +107,7 @@ final class SidebarCommands {
         let activeSettled = thread.settledOverride == .settled
         if !caps.contains("threadSettlement") && (target.section == .settled || activeSettled) { return nil }
         func displayed(_ section: SidebarSection) -> [ThreadId] {
-            sidebar.list.items.compactMap { if case .row(let r) = $0, r.section == section { r.id } else { nil } }
+            sidebar.shownItems.compactMap { if case .row(let r) = $0, r.section == section { r.id } else { nil } }
         }
         // Rows whose server cannot store an order are never written; keyless ones leave the plan, keyed
         // ones stay as bounds.
@@ -508,7 +509,7 @@ final class SidebarCommands {
     /// in list order (wrapping), else a draft in its project. Nil when the thread is not the open one.
     private func planForwardNavigation(_ id: ThreadId, leaving: Set<ThreadId> = []) -> (() -> Void)? {
         guard routeThreadId == id, let sidebar else { return nil }
-        let rows: [SidebarRowModel] = sidebar.list.items.compactMap { if case .row(let r) = $0 { r } else { nil } }
+        let rows: [SidebarRowModel] = sidebar.shownItems.compactMap { if case .row(let r) = $0 { r } else { nil } }
         let project = shell(id).flatMap { t in snapshot?.projects.first { $0.id == t.projectId } }
         if let index = rows.firstIndex(where: { $0.id == id }),
            let next = (rows[(index + 1)...] + rows[..<index]).first(where: { $0.action == .settle && !leaving.contains($0.id) }) {
@@ -521,6 +522,7 @@ final class SidebarCommands {
 
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
+        if layout is NativeSplitPresentation { return showNativeSnoozeMenu(id, anchor: anchor) }
         var items = SnoozePresets.resolve(now: Date()).map { preset in
             MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
         }
@@ -529,6 +531,19 @@ final class SidebarCommands {
             self?.requestCustomSnooze { wake in self?.snooze(id, until: wake) }
         })
         MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    /// Glass Native's swipe Snooze: a native menu titled "Snooze until", as T3 Mobile's (thread-swipe-actions.tsx).
+    private func showNativeSnoozeMenu(_ id: ThreadId, anchor: NSView) {
+        let presets = SnoozePresets.resolve(now: Date())
+        let items = presets.map { ThreadMenuItem("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))") }
+            + [ThreadMenuItem("snooze:custom", "Custom…", separatorBefore: true)]
+        let menu = NativeItemContextMenu.make(items) { [weak self] choice in
+            if choice == "snooze:custom" { self?.requestCustomSnooze { wake in self?.snooze(id, until: wake) }; return }
+            if let preset = presets.first(where: { "snooze:\($0.id)" == choice }) { self?.snooze(id, preset) }
+        }
+        menu.insertItem(NSMenuItem.sectionHeader(title: "Snooze until"), at: 0)
+        menu.popUp(positioning: nil, at: NSPoint(x: anchor.bounds.maxX - 8, y: anchor.bounds.midY), in: anchor)
     }
 
     // MARK: Thread menu (Sidebar.tsx:4566-4840)
@@ -541,7 +556,7 @@ final class SidebarCommands {
             return
         }
         let presented = SidebarThread(thread)
-        let row = sidebar.list.items.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
+        let row = sidebar.shownItems.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
         let group = snapshot.flatMap { s in
             SidebarModel.buildProjectGroups(s.projects, preferredEnvironmentId: sidebar.state.environments.primaryId)
                 .first { $0.memberProjectIds.contains(thread.projectId) }
@@ -720,7 +735,7 @@ final class SidebarCommands {
     private func showSelectionMenu(event: NSEvent, view: NSView) {
         guard let sidebar else { return }
         // Only threads with a row now: selections can outlive their rows (settled paging, deletes elsewhere).
-        let rowIds = Set(sidebar.list.items.compactMap { if case .row(let r) = $0 { r.id } else { nil } })
+        let rowIds = Set(sidebar.shownItems.compactMap { if case .row(let r) = $0 { r.id } else { nil } })
         let selected = (snapshot?.threads ?? []).filter { sidebar.selectedThreadIds.contains($0.id) && rowIds.contains($0.id) }
         guard !selected.isEmpty else { return }
         let ms = nowMs
@@ -868,6 +883,7 @@ final class SidebarCommands {
         layout.mainContent = view
         utilityPage = view
         utilityKind = page
+        sidebar.showsPullRequestsPage = page == .pullRequests
         sidebar.isOnUtilityPage = true // clears the active row and draft while the page shows
         if page == .pullRequests {
             pullRequestsPage.didShow()
@@ -889,6 +905,7 @@ final class SidebarCommands {
         utilityPage = nil
         utilityKind = nil
         layout.mainContent = threads.panel
+        sidebar?.showsPullRequestsPage = false
         sidebar?.isOnUtilityPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()

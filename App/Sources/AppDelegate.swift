@@ -494,6 +494,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let sidebar, settings?.isOpen != true, commands?.isUsagePageOpen != true else { return false }
             return sidebar.escapeClearsSelection(event)
         }
+        // Glass Native: Cmd+F in the sidebar goes to its search field.
+        shortcuts.onKey { [weak sidebar] event in sidebar?.focusSearch(event) ?? false }
         shortcuts.onKey { [weak panel = threads.panel] event in
             guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
                   let panel, panel.panelState.isOpen, panel.panelState.active?.kind == .diff,

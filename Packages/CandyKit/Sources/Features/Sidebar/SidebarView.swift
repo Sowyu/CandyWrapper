@@ -12,6 +12,8 @@ public struct SidebarActions {
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     public var unsnooze: (ThreadId) -> Void = { _ in }
     public var unpin: (ThreadId) -> Void = { _ in }
+    /// Glass Native's swipe on a server without settlement (T3 Mobile's "Archive" for older servers).
+    public var archive: (ThreadId) -> Void = { _ in }
     /// A row's pull request badge was clicked.
     public var openPullRequest: (ThreadId) -> Void = { _ in }
     /// A pull request row in the badge's hover list: open the thread and that pull request in its panel
@@ -103,6 +105,15 @@ public final class SidebarContentView: DSView {
     static let snoozedExpandedKey = "sidebar.snoozedExpanded"
     static let workingExpandedKey = "sidebar.workingExpanded"
 
+    func toggleShelf(_ shelf: SidebarShelf) {
+        switch shelf {
+        case .settled: state.settledExpanded.toggle(); state.settledVisibleCount = SidebarListBuilder.settledInitialCount
+        case .snoozed: state.snoozedExpanded.toggle()
+        case .working: state.workingExpanded.toggle()
+        }
+        saveShelves()
+    }
+
     private func saveShelves() {
         guard let d = shelfDefaults else { return }
         d.set(state.settledExpanded, forKey: Self.settledExpandedKey)
@@ -114,11 +125,23 @@ public final class SidebarContentView: DSView {
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
     /// Glass Native's toolbar takes the titlebar row (brand, toggle, stage) and the New thread button.
-    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyStage() } } }
-    public var showsPullRequests = true { didSet { needsLayout = true } }
+    /// It also swaps the list for the native one (docs/glass-native.md phase 2).
+    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyStage(); applyPresentation() } } }
+    /// Glass Native's list and its search and picker, while the native presentation shows the sidebar.
+    var nativeList: NativeSidebarListView?
+    var nativeChrome: NativeSidebarChrome?
+    /// The list that shows the items now.
+    var presenter: SidebarItemsPresenting { nativeList ?? list }
+    /// The items the sidebar shows, in builder order: what Settle's forward navigation and the menus walk.
+    public var shownItems: [SidebarItem] { presenter.items }
+    /// The open utility page is Pull Requests, for the native picker.
+    public var showsPullRequestsPage = false { didSet { syncSegments() } }
+    /// Glass Native's Environment filter: only projects of this environment. Nil shows all.
+    public internal(set) var environmentFilter: String?
+    public var showsPullRequests = true { didSet { syncSegments(); needsLayout = true } }
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
-    public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
+    public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; syncSegments(); needsLayout = true } }
 
     private func clearActiveRows() {
         if state.activeThreadId != nil { state.activeThreadId = nil }
@@ -183,15 +206,7 @@ public final class SidebarContentView: DSView {
         providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
-        list.onToggleShelf = { [weak self] shelf in
-            guard let self else { return }
-            switch shelf {
-            case .settled: self.state.settledExpanded.toggle(); self.state.settledVisibleCount = SidebarListBuilder.settledInitialCount
-            case .snoozed: self.state.snoozedExpanded.toggle()
-            case .working: self.state.workingExpanded.toggle()
-            }
-            self.saveShelves()
-        }
+        list.onToggleShelf = { [weak self] in self?.toggleShelf($0) }
         list.sortContextProvider = { [weak self] in
             guard let self else { return SidebarSortPlanner.Context() }
             let snoozed = self.snapshot.map {
@@ -298,6 +313,7 @@ public final class SidebarContentView: DSView {
         settingsButton.action = { [weak self] in self?.actions.openSettings() }
         pullRequestsButton.action = { [weak self] in self?.actions.openPullRequests() }
         usageButton.action = { [weak self] in self?.actions.openUsage() }
+        wireNative()
     }
 
     // MARK: Data
@@ -308,6 +324,7 @@ public final class SidebarContentView: DSView {
     public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
         listCache?.noteChanges(changedThreadIds)
+        if environmentFilter != nil { syncEnvironmentFilter() }
         rebuild(animated: animated)
     }
 
@@ -322,7 +339,7 @@ public final class SidebarContentView: DSView {
         if let update = await store.takeUpdate() { apply(update) }
     }
 
-    private var nowMs: Int64 { TimestampFormat.nowMs(now()) }
+    var nowMs: Int64 { TimestampFormat.nowMs(now()) }
 
     /// The thread rows in display order, outside search (`orderedThreadKeys`, Sidebar.tsx:3073-3079):
     /// what `thread.previous`, `thread.next` and `thread.jump.N` walk.
@@ -339,18 +356,18 @@ public final class SidebarContentView: DSView {
     /// the list builds from scratch every time, as it did before `SidebarListCache`.
     private static let timing = ProcessInfo.processInfo.environment["CANDY_SIDEBAR_TIMING"]
 
-    private func rebuild(animated: Bool) {
+    func rebuild(animated: Bool) {
         guard Self.timing != nil else { return rebuildNow(animated: animated) }
         let start = DispatchTime.now().uptimeNanoseconds, built = listCache?.rowModelBuilds ?? 0
         rebuildNow(animated: animated)
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-        FileHandle.standardError.write(Data(String(format: "sidebar rebuild %.2f ms, %d items, %d rows built\n", ms, list.items.count,
+        FileHandle.standardError.write(Data(String(format: "sidebar rebuild %.2f ms, %d items, %d rows built\n", ms, presenter.items.count,
                                                    (listCache?.rowModelBuilds ?? 0) - built).utf8))
     }
 
     private func rebuildNow(animated: Bool) {
         let ms = nowMs
-        list.nowMs = ms
+        presenter.nowMs = ms
         // `inboxReturns.observe(workingShelfEnabled ? threads : null)` on every list rebuild.
         if let tracker = state.inboxReturns, let snapshot {
             tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(SidebarThread.init), nowMs: ms)
@@ -363,22 +380,22 @@ public final class SidebarContentView: DSView {
                 searchOrderKey = order
                 if searchHighlight != 0 { searchHighlight = 0; items = searchItems(nowMs: ms) }
             }
-            list.setItems(items, animated: false)
+            presenter.setItems(items, animated: false, generation: nil)
         } else {
             searchOrderKey = ""
             // A thread changed in place or a label stepped: patch those rows of the list it already shows.
             var patched = false
-            if let cache = listCache, let snapshot, list.itemsGeneration == cache.generation,
+            if let cache = listCache, let snapshot, presenter.itemsGeneration == cache.generation,
                let patch = cache.patch(snapshot: snapshot, state: state, nowMs: ms) {
-                patched = list.patchItems(patch)
+                patched = presenter.patchItems(patch)
             }
             if !patched {
                 let items = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms, cache: listCache)
-                list.setItems(items, animated: animated, generation: listCache?.generation)
+                presenter.setItems(items, animated: animated, generation: listCache?.generation)
             }
         }
         // The results `ul` is a listbox named "Thread search results" (Sidebar.tsx:5151-5156).
-        list.setAccessibilityLabel(isSearching ? "Thread search results" : nil)
+        presenter.setAccessibilityLabel(isSearching ? "Thread search results" : nil)
         updateScopeTrigger()
         scheduleLabelTimer()
     }
@@ -393,6 +410,7 @@ public final class SidebarContentView: DSView {
     /// Types into the search field programmatically (tests, previews).
     public func setSearchText(_ query: String) {
         search.text = query
+        nativeChrome?.search.stringValue = query
         setSearchQuery(query)
     }
 
@@ -422,6 +440,7 @@ public final class SidebarContentView: DSView {
 
     public func clearSearch() {
         search.text = ""
+        nativeChrome?.search.stringValue = ""
         setSearchQuery("")
     }
 
@@ -429,13 +448,13 @@ public final class SidebarContentView: DSView {
         guard isSearching, index != searchHighlight else { return }
         searchHighlight = index
         rebuild(animated: false)
-        if scroll, let item = list.items.first(where: { if case .searchResult(let r) = $0 { r.index == index } else { false } }) {
-            list.scrollItemToVisible(item.key) // `scrollIntoView({ block: "nearest" })`
+        if scroll, let item = presenter.items.first(where: { if case .searchResult(let r) = $0 { r.index == index } else { false } }) {
+            presenter.scrollItemToVisible(item.key) // `scrollIntoView({ block: "nearest" })`
         }
     }
 
     private var searchResultCount: Int {
-        list.items.reduce(0) { n, item in if case .searchResult = item { n + 1 } else { n } }
+        presenter.items.reduce(0) { n, item in if case .searchResult = item { n + 1 } else { n } }
     }
 
     func selectSearchResult(_ id: ThreadId) {
@@ -455,7 +474,7 @@ public final class SidebarContentView: DSView {
         case #selector(NSResponder.moveDown(_:)): setSearchHighlight((searchHighlight + 1) % n, scroll: true)
         case #selector(NSResponder.moveUp(_:)): setSearchHighlight((searchHighlight - 1 + n) % n, scroll: true)
         case #selector(NSResponder.insertNewline(_:)):
-            for case .searchResult(let r) in list.items where r.index == searchHighlight { selectSearchResult(r.id) }
+            for case .searchResult(let r) in presenter.items where r.index == searchHighlight { selectSearchResult(r.id) }
         default: return false
         }
         return true
@@ -491,7 +510,7 @@ public final class SidebarContentView: DSView {
     /// `rangeSelectTo`: every row between the anchor and `id` in list order; without an anchor in the
     /// list, `id` alone, which becomes the anchor.
     func selectRange(to id: ThreadId) {
-        let ordered = list.items.compactMap { if case .row(let r) = $0 { r.id } else { nil } }
+        let ordered = presenter.items.compactMap { if case .row(let r) = $0 { r.id } else { nil } }
         var next = state.selectedThreadIds
         if let anchor = selectionAnchor, let a = ordered.firstIndex(of: anchor), let b = ordered.firstIndex(of: id) {
             next.formUnion(ordered[min(a, b)...max(a, b)])
@@ -533,6 +552,11 @@ public final class SidebarContentView: DSView {
     /// `startThreadRename`: the row's title turns into a field holding the title, selected.
     public func startRename(_ id: ThreadId) {
         guard let thread = snapshot?.threads.first(where: { $0.id == id }) else { return }
+        if let nativeList {
+            state.renamingThreadId = id
+            nativeList.beginRename(id)
+            return
+        }
         list.renameField.begin(id, title: thread.title)
         state.renamingThreadId = id
         if let frame = list.rowFrame(id) { list.scrollToVisible(frame) }
@@ -546,14 +570,14 @@ public final class SidebarContentView: DSView {
 
     public var renamingThreadId: ThreadId? { state.renamingThreadId }
 
-    private func endRename() {
+    func endRename() {
         state.renamingThreadId = nil
     }
 
     // MARK: Hover card
 
     /// A checkout's branch arrived or changed: the open card shows or hides its mismatch line.
-    public func checkoutBranchChanged() { list.refreshHoverCard() }
+    public func checkoutBranchChanged() { presenter.refreshHoverCard() }
 
     /// `SidebarThreadTooltip`'s props for a thread.
     func hoverCardModel(_ id: ThreadId) -> SidebarThreadHoverCardModel? {
@@ -622,8 +646,9 @@ public final class SidebarContentView: DSView {
         return SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId).first { $0.key == key }
     }
 
-    private func updateScopeTrigger() {
+    func updateScopeTrigger() {
         let group = scopedGroup
+        nativeChrome?.filterActive = group != nil || environmentFilter != nil
         filterMonogram.isHidden = group == nil
         if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
         if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .folder : nil }
@@ -673,9 +698,10 @@ public final class SidebarContentView: DSView {
     /// again, so labels are fresh after a hidden stretch. None when no visible label can change.
     func scheduleLabelTimer() {
         guard window != nil else { LabelClock.shared.cancel(self); return }
-        let ms = nowMs, rows = list.visibleRowModels
+        let ms = nowMs, rows = presenter.visibleRowModels
         let rebuildAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false)
-        let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
+        // Native cards show "Working" without a duration, so nothing ticks for them.
+        let workingAt = nativeList == nil ? SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false) : nil
         guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }
         LabelClock.shared.schedule(self, in: Double(next - ms) / 1000) { [weak self] in self?.labelTimerFired(rebuildAt: rebuildAt) }
     }
@@ -691,10 +717,10 @@ public final class SidebarContentView: DSView {
         if let rebuildAt, rebuildAt <= ms {
             rebuild(animated: ms - rebuildAt < 2_000)
         } else {
-            list.nowMs = ms
+            presenter.nowMs = ms
             scheduleLabelTimer()
         }
-        list.tickWorkingRows()
+        if nativeList == nil { list.tickWorkingRows() }
     }
 
     public override func viewDidMoveToWindow() {
@@ -712,6 +738,7 @@ public final class SidebarContentView: DSView {
 
     public override func layout() {
         super.layout()
+        if nativeList != nil { return layoutNative() }
         let w = bounds.width, h = bounds.height
         // Titlebar row, 52px. The art bleeds 80px under the search row.
         backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 80)
