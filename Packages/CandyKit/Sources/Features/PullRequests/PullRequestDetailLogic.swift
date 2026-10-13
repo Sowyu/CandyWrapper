@@ -237,6 +237,41 @@ public enum PullRequestDetailLogic {
         return (shown, d.comments.count - shown.count)
     }
 
+    /// The one-line preview of a collapsed remark: comments, callout markers, link targets, list and
+    /// heading marks, emphasis and runs of space stripped (2994 PullRequestSummaryTab.tsx:248-255).
+    public static func collapsedSummary(_ body: String) -> String {
+        var s = body
+        let steps: [(String, String)] = [
+            (#"<!--[\s\S]*?-->"#, ""),
+            (#"(?m)^\s*>?\s*\[!\w+\]\s*$"#, ""),
+            (#"!?(\[([^\]]+)\])\([^)]*\)"#, "$2"),
+            (#"(?m)^[\s>#*-]+"#, ""),
+            (#"[*`]"#, ""),
+            (#"\s+"#, " "),
+        ]
+        for (pattern, template) in steps {
+            s = s.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+        }
+        return s.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// A finished remark's collapsed card (`CollapsedComment`, 2994 PullRequestSummaryTab.tsx:204-273, 568-591):
+    /// its label, `path:line` (`CommentLocation`, :119-138) and whether the thread is outdated.
+    public struct Collapsed: Equatable, Sendable {
+        public var label: String
+        public var location: String?
+        public var outdated: Bool
+    }
+
+    /// The collapsed card for a resolved or dismissed comment, nil for one still open.
+    public static func collapsed(_ c: PullRequestComment, in d: PullRequestDetail) -> Collapsed? {
+        let thread = d.reviewThreads.first { t in t.comments.contains { $0.id == c.id } }
+        let resolved = thread?.isResolved == true
+        guard resolved || reviewOutcome(c.reviewState) == "dismissed" else { return nil }
+        let location = (thread?.path ?? c.path).map { path in path + (thread?.line.map { ":\($0)" } ?? "") }
+        return Collapsed(label: resolved ? "Resolved" : "Review dismissed", location: location, outdated: thread?.isOutdated == true)
+    }
+
     /// The note where the filter hides every comment.
     public static func allCommentsHiddenNote(_ hidden: Int) -> String {
         hidden == 1 ? "The only comment is hidden by the filter." : "All \(hidden) comments are hidden by the filter."
