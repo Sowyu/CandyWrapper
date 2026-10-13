@@ -100,6 +100,37 @@ The system's blue emphasized selection never shows. Text keeps its T3 colors on 
 
 Phase 1 is done (2026-10-13). Phase 2, the native sidebar, is done (2026-10-13, see "Phase 2" below).
 
+### Phase 5a (2026-10-14)
+
+Menus, the command palette and the composer's dark contrast. Screenshots are in `/tmp/cw-peek/menus-*`.
+
+Menus. The window says whether it is native through `NativeChromeWindow` (`DesignSystem/Components/NativeMenu.swift`), which `MainWindow` adopts. In native mode `MenuPopupView.show`, `MenuPopupView.showContextMenu`, `SelectView` and the composer's Run on select build an `NSMenu` from the same `MenuItem`s: labels become section headers, checkbox and radio rows checkmarks, shortcuts key equivalents, and disabled, destructive, subtitle and tooltip carry over. The menu is built on open and dropped on close. That covers every plain T3 menu the window opens through those calls:
+
+- the right panel's + menu, with its letters as key equivalents, and the tab menu
+- Open in, Git actions, project scripts and the details card's run context (Run on, Workspace)
+- the diff's scope and base ref, file breadcrumbs, message actions, lineage, the composer's Implement menu
+- the pull request page's sort, provider, filters, checkout and row menus, Settings, Usage and T3 Connect menus
+- every `SelectView`, as the system pop-up menu with the picked row over the trigger
+
+The sidebar's thread, bulk and snooze menus, the approval decisions, files, Git, terminal and Markdown context menus were native already and keep T3's items (`NativeItemContextMenu`, from `ThreadActionMenu`).
+
+A menu stays custom when `NativeMenu.canExpress` says an `NSMenu` can't hold it: rows with their own controls, favicons, wrapping notes, trailing badges or details, or rows that keep the menu open for an inline confirm. Those and T3's rich popups keep their content and get one `NSGlassEffectView` at the spec's 12 pt radius with a hairline, in place of `dropdown-glass` and its shadow (`MenuPopupView` and `PopoverView` attach it when they join a native window):
+
+- the model picker, with its search, provider rail and favorites
+- the traits menu, with its Default badge, and the access select, with its descriptions
+- the branch picker and the project filter combobox, which search
+- the composer's @ and / autocomplete
+- the browser menu with its zoom controls, the pull request detail's More menu with inline confirms, the stack menu that loads, the browser device presets
+- the draft hero's project picker, comboboxes and popovers such as the context meter
+
+The stash list is a drawer docked on the composer, not a popup, and keeps its classic look.
+
+On this Mac macOS 27 shows no images in any `NSMenu`, a bare AppKit test app's SF Symbol included, so the Lucide icons the menus carry (`NativeMenu.image`) don't show. The items keep them for when the system draws them.
+
+The command palette sits on Liquid Glass at its classic 18 pt radius. The overlay puts the glass under the palette as a sibling: inside the palette, behind its scroll view, the glass drew an outlined pill around every row. Layout, groups, rows, hints and keys are classic's, which follow T3 (`apps/web/src/components/ui/command.tsx:52-79` for the popup, `:100-115` for the input). The "Actions" label tucked under the search field in an early screenshot was the pointer resting on a row, which scrolls the list in classic too.
+
+The composer keeps the `border` hairline in dark mode, where the glass alone sat almost black on the dark detail. Checked at Glass opacity 10, 40, 80 and 100; light mode keeps no outline.
+
 ### Polish pass (2026-10-13)
 
 The user called the first native build "unpolished slop" and circled four regions. This pass set the "Visual spec" above and took each region to it. Screenshots are in `/tmp/cw-peek/polish-*`.
