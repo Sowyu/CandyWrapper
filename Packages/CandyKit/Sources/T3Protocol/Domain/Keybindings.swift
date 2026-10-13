@@ -317,6 +317,8 @@ public struct Keymap: Sendable, Equatable {
         ("mod+]", "navigation.forward", "!terminalFocus"),
         ("mod+j", "terminal.toggle", nil),
         ("mod+alt+b", "rightPanel.toggle", nil),
+        // New in 2994 (b1508672a, packages/shared/src/keybindings.ts:129). A client default, so 2861 servers get it too.
+        ("mod+shift+b", "threadPanel.toggle", "!terminalFocus"),
         ("mod+t", "rightPanel.new", "rightPanelOpen && !terminalFocus"),
         ("mod+d", "terminal.split", "terminalFocus"),
         ("mod+shift+d", "terminal.splitVertical", "terminalFocus"),

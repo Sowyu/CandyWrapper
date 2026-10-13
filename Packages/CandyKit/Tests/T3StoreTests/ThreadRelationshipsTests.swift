@@ -29,6 +29,16 @@ import Testing
         }
     }
 
+    @Test func parentLinkNamesOnlyASubagentParent() {
+        let parent = thread("parent") { $0.title = "Plan the release" }
+        let sub = child("sub", of: "parent", .subagent), fork = child("fork", of: "parent", .fork)
+        #expect(ThreadRelationships.parentLink(sub.lineage, threads: [parent, sub])?.title == "Plan the release")
+        #expect(ThreadRelationships.parentLink(sub.lineage, threads: [parent, sub])?.threadId == "parent")
+        #expect(ThreadRelationships.parentLink(sub.lineage, threads: [sub])?.title == "Parent thread")
+        #expect(ThreadRelationships.parentLink(fork.lineage, threads: [parent, fork]) == nil)
+        #expect(ThreadRelationships.parentLink(nil, threads: [parent]) == nil)
+    }
+
     @Test(arguments: [("running", "completed"), ("completed", "running"), ("waiting", "failed"), ("interrupted", "pending")])
     func parentStatusIsIndependentOfTheChild(_ parentStatus: String, _ childStatus: String) {
         let parent = thread("parent") { $0.activityRunStatus = ThreadStatus(rawValue: parentStatus); $0.status = .cancelled }

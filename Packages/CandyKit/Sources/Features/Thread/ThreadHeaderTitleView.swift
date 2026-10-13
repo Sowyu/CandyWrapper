@@ -40,3 +40,45 @@ final class ThreadHeaderTitleView: DSView {
     weak var accessibilityGroup: NSAccessibilityElement?
     override func accessibilityParent() -> Any? { accessibilityGroup ?? super.accessibilityParent() }
 }
+
+/// The parent thread crumb (ChatHeader.tsx:343-375 in 2994): the parent's title in `text-muted-foreground`,
+/// `hover:text-foreground transition-colors`, a tooltip with the title on top, and a click opens the parent.
+/// `collapsed` swaps the title for "..." when the whole breadcrumb doesn't fit (:130-164).
+final class ThreadHeaderParentCrumb: ControlView {
+    let label = LabelView("", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
+    let ellipsis = LabelView("...", font: TL.font(14, .medium), color: TL.c(\.mutedForeground))
+    private var tooltip: TooltipController?
+    weak var accessibilityGroup: NSAccessibilityElement?
+    var title = "" {
+        didSet {
+            guard title != oldValue else { return }
+            label.text = title
+            tooltip?.text = title
+            setAccessibilityLabel("Open parent thread: \(title)")
+        }
+    }
+    var collapsed = false { didSet { label.isHidden = collapsed; ellipsis.isHidden = !collapsed } }
+    var fullWidth: CGFloat { ceil(label.textWidth) }
+    var width: CGFloat { collapsed ? ceil(ellipsis.textWidth) : fullWidth }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        transitions = .colors
+        for l in [label, ellipsis] { l.lineHeight = 20; addSubview(l) }
+        ellipsis.isHidden = true
+        tooltip = TooltipController.attach(to: self, text: "", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+    }
+    override func layout() {
+        super.layout()
+        label.frame = bounds
+        ellipsis.frame = bounds
+    }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        let color = state.hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
+        label.color = color
+        ellipsis.color = color
+    }
+    override func accessibilityParent() -> Any? { accessibilityGroup ?? super.accessibilityParent() }
+}
