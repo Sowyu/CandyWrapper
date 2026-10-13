@@ -34,6 +34,21 @@ struct Settings2994WireTests {
         #expect(StorageCleanupReport.formatBytes(150 * 1024 * 1024) == "150 MB")
     }
 
+    @Test func otlpEndpointCheckDecodesAndLabels() {
+        #expect(OtlpEndpointCheckResult(json: UsageTests.json(#"{"_tag":"Accepted","latencyMs":12.6}"#)) == .accepted(latencyMs: 12.6))
+        #expect(OtlpEndpointCheckResult(json: UsageTests.json(#"{"_tag":"Rejected","status":404}"#)) == .rejected(status: 404))
+        #expect(OtlpEndpointCheckResult(json: UsageTests.json(#"{"_tag":"Unreachable","timedOut":true}"#)) == .unreachable(timedOut: true))
+        #expect(OtlpEndpointCheckResult(json: UsageTests.json(#"{"_tag":"Other"}"#)) == nil)
+        #expect(OtlpEndpointCheckResult.isHttpURL("HTTPS://x") && !OtlpEndpointCheckResult.isHttpURL("http://") && !OtlpEndpointCheckResult.isHttpURL("data:x"))
+        let url = "http://127.0.0.1:4318/v1/traces"
+        #expect(OtlpEndpointCheckResult.status(url: "", check: nil).label == "Off")
+        #expect(OtlpEndpointCheckResult.status(url: url, check: ("http://other", nil)).label == "Not checked")
+        #expect(OtlpEndpointCheckResult.status(url: url, check: (url, nil)) == .init(label: "Checking…", tone: .checking))
+        #expect(OtlpEndpointCheckResult.status(url: url, check: (url, .accepted(latencyMs: 12.6))).label == "Connected · 13 ms")
+        #expect(OtlpEndpointCheckResult.status(url: url, check: (url, .rejected(status: 404))).label == "Rejected · HTTP 404")
+        #expect(OtlpEndpointCheckResult.status(url: url, check: (url, .unreachable(timedOut: false))) == .init(label: "Unreachable", tone: .failure))
+    }
+
     @Test func worktreeKeepWhenFollowsTheEnvironment() {
         let s = ServerSettingsValues(UsageTests.json(#"{"storageCleanup":{"worktreeKeepWhen":"tracked-changes"},"projectSettingsFolded":true,"projectSettingsOverrides":{"off":{"worktreeCleanup":{"mode":"off"}}}}"#))
         #expect(ProjectSettings.worktreeCleanup(s, projectId: nil)["worktreeKeepWhen"] == .string("tracked-changes"))

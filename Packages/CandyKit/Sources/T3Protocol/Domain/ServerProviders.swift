@@ -372,6 +372,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
     public var availableEditors: [String] = []
     public var logsDirectoryPath: String?
+    /// `observability` (`ServerObservability`, server.ts:340-357): the running server's log folder and OTLP exports.
+    public var observability: JSONValue?
     public var keybindingIssues: [JSONValue] = []
     public var remoteOpenTargets: [JSONValue] = []
     /// `shellRevealInFileManager`: `shell.openInEditor` honors `reveal: true`.
@@ -411,7 +413,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         if try c.decodeIfPresent(Bool.self, forKey: .threadFindProgressive) == true { capabilities.insert("threadFindProgressive") }
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
         keybindingIssues = (try? c.decodeIfPresent([JSONValue].self, forKey: .issues)) ?? []
-        logsDirectoryPath = (try? c.decodeIfPresent(JSONValue.self, forKey: .observability))?["logsDirectoryPath"]?.stringValue
+        observability = try? c.decodeIfPresent(JSONValue.self, forKey: .observability)
+        logsDirectoryPath = observability?["logsDirectoryPath"]?.stringValue
         availableEditors = (try? c.decodeIfPresent([String].self, forKey: .availableEditors)) ?? []
         remoteOpenTargets = (try? c.decodeIfPresent([JSONValue].self, forKey: .remoteOpenTargets)) ?? []
         revealsInFileManager = (try? c.decodeIfPresent(Bool.self, forKey: .shellRevealInFileManager)) ?? false
