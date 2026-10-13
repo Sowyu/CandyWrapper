@@ -50,6 +50,19 @@ public struct ProviderCatalog: Hashable, Sendable {
 
     public init(_ providers: [ServerProvider]) { entries = providers.map(ProviderInstanceEntry.init) }
 
+    /// `applyProviderInstanceSettings` (providerInstances.ts:197-209, 2994) for a project: an instance the project
+    /// switched on or off takes that `enabled`, so pickers hide or offer it there. Without a project or an
+    /// override the server's machine-wide value stands.
+    public init(_ providers: [ServerProvider], settings: ServerSettingsValues?, projectId: String?) {
+        guard let settings, let projectId else { self.init(providers); return }
+        self.init(providers.map { p in
+            guard let enabled = ProjectSettings.providerOverride(settings, projectId: projectId, instanceId: p.instanceId.rawValue) else { return p }
+            var p = p
+            p.enabled = enabled
+            return p
+        })
+    }
+
     public func entry(_ id: ProviderInstanceId?) -> ProviderInstanceEntry? { id.flatMap { id in entries.first { $0.id == id } } }
 
     /// `resolveSelectableProviderInstanceEntry` (providerInstances.ts:296-310): the first requested
