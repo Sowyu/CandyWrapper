@@ -175,6 +175,12 @@ enum MarkdownStyle {
             let textStart = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]
             if run.code {
+                // Inline code keeps `white-space: normal`: its spaces collapse to one, and a leading space after a
+                // space or at the start of a line disappears (` M hello.py` after "showed ").
+                // ponytail: a space after code that ends in one still shows; collapse it too if a reply needs it
+                run.text = run.text.replacing(/[ \t\n]+/, with: " ")
+                let previous = out.length > 0 ? out.mutableString.character(at: out.length - 1) : nil
+                if previous == nil || previous == 0x20 || previous == 0x2028 { run.text = String(run.text.drop { $0 == " " }) }
                 attributes[.font] = DSFont.mono(chipFontSize)
                 attributes[.foregroundColor] = strong
             } else {
@@ -223,6 +229,9 @@ enum MarkdownStyle {
 public final class MarkdownLayout {
     public let width: CGFloat
     public private(set) var height: CGFloat = 0
+    /// The bottom margin the last block's descendants leave inside `height` (a loose list item's `<p>`). A next
+    /// sibling's own top margin collapses with it.
+    public var trailingMargin: CGFloat { rootEnds.last?.innerBottom ?? 0 }
 
     enum Item {
         case text(MarkdownTextBox, CGPoint)
@@ -301,7 +310,7 @@ public final class MarkdownLayout {
     private(set) var reusedTextBoxes = 0
     /// The flow after one top-level block: the items and controls so far, the y below the block,
     /// its own bottom margin (before the root zeroes the last one) and the next code block index.
-    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int }
+    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int; var innerBottom: CGFloat = 0 }
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
@@ -360,6 +369,10 @@ public final class MarkdownLayout {
 private struct Box {
     var top: CGFloat = 0
     var bottom: CGFloat = 0
+    /// The part of `top` and `bottom` that comes from descendants (a loose list item's `<p>`), which
+    /// `.chat-markdown > :first-child` and `:last-child` don't zero.
+    var innerTop: CGFloat = 0
+    var innerBottom: CGFloat = 0
     var height: CGFloat = 0
     var items: [MarkdownLayout.Item] = []
     var controls: [MarkdownLayout.Control] = []
@@ -421,17 +434,18 @@ private struct Builder {
         for index in first..<blocks.count {
             var box = layout(blocks[index], width: width, context: context, tight: tight)
             let ownBottom = box.bottom
-            if root, index == 0 { box.top = 0 }
+            // The root zeroes its first and last child's own margins; a loose list item's `<p>` margin still shows.
+            if root, index == 0 { y += box.innerTop; box.top = 0 }
             if root, index == blocks.count - 1 { box.bottom = 0 }
             if let previousBottom { y += max(previousBottom, box.top) } else { out.top = box.top }
             if root { rootTops.append(y) }
             out.add(box, at: CGPoint(x: 0, y: y))
             y += box.height
             previousBottom = box.bottom
-            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex)) }
+            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex, innerBottom: box.innerBottom)) }
         }
         out.bottom = previousBottom ?? 0
-        out.height = y
+        out.height = y + (root ? rootEnds.last?.innerBottom ?? 0 : 0)
         return out
     }
 
@@ -596,11 +610,12 @@ private struct Builder {
             if let checked = item.task {
                 content = taskItem(item, checked: checked, width: width - gutter, gutter: gutter, context: inner)
             } else {
-                content = flow(item.blocks, width: width - gutter, context: inner, tight: true)
+                // A loose list's items hold their text in a `<p>`, whose margins collapse with `li + li`.
+                content = flow(item.blocks, width: width - gutter, context: inner, tight: !list.loose)
             }
             // `li + li { margin-top: 0.25rem }`, collapsing with whatever the item's first child brings.
             content.top = max(index == 0 ? 0 : MarkdownStyle.itemGap, content.top)
-            if let previousBottom { y += max(previousBottom, content.top) } else { out.top = max(out.top, content.top) }
+            if let previousBottom { y += max(previousBottom, content.top) } else { out.top = max(out.top, content.top); out.innerTop = content.top }
             if item.task == nil, !list.ordered, let baseline = content.baseline {
                 // Blink's ListMarker: a bullet (ascent * 2/3 + 1) / 2 device px wide, its top 3(ascent - ascent * 2/3) / 2
                 // below the ascent line, its right edge 8px before the content (measured).
@@ -620,6 +635,7 @@ private struct Builder {
             previousBottom = content.bottom
         }
         out.bottom = max(out.bottom, previousBottom ?? 0)
+        out.innerBottom = previousBottom ?? 0
         out.height = y
         return out
     }

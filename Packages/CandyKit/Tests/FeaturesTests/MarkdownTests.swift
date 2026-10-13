@@ -88,6 +88,24 @@ struct MarkdownTests {
         #expect(CodeHighlighter.tokens("anything", language: "brainfuck").isEmpty)
     }
 
+    /// A blank line between items makes the list loose: each item's `<p>` margin (0.65rem) replaces `li + li`'s 0.25rem.
+    @Test func looseListsSpaceItemsLikeParagraphs() {
+        func list(_ text: String) -> MarkdownList? {
+            if case .list(let l)? = MarkdownDocument(parsing: text).blocks.first { return l }
+            return nil
+        }
+        #expect(list("1. a\n2. b")?.loose == false)
+        #expect(list("1. a\n\n2. b")?.loose == true)
+        #expect(list("- a\n\n  more\n- b")?.loose == true)
+        #expect(list("- a\n  - x\n\n  - y\n- b")?.loose == false)
+        #expect(list("- a\n  ```\n  x\n  ```\n- b")?.loose == false)
+        let tight = MarkdownLayout(document: MarkdownDocument(parsing: "1. a\n2. b\n3. c"), width: 400).height
+        let loose = MarkdownLayout(document: MarkdownDocument(parsing: "1. a\n\n2. b\n\n3. c"), width: 400).height
+        // The gaps grow, and the first and last `<p>` margins stay although the root zeroes the list's own.
+        let m = MarkdownStyle.blockMargin
+        #expect(abs(loose - tight - 2 * (m - MarkdownStyle.itemGap) - 2 * m) < 0.01)
+    }
+
     @Test func heightIsCachedPerWidth() {
         let view = MarkdownView(frame: .zero)
         view.setMarkdown(MarkdownGallery.sample)

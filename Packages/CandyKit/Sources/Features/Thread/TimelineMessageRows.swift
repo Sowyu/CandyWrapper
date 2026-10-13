@@ -399,6 +399,14 @@ final class AssistantMessageRowView: TimelineRowView {
         empty.isHidden ? markdown.height(forWidth: max(0, width - 8)) : TL.relaxed
     }
 
+    /// The answer's trailing `<p>` margin collapses with the card's `mt-4` or the meta row's `mt-1.5` (CSS margin
+    /// collapsing through the row's wrappers, MessagesTimeline.tsx:2751-2786).
+    private func collapsedMargin(_ width: CGFloat) -> CGFloat {
+        guard empty.isHidden else { return 0 }
+        let m = markdown.layout(forWidth: max(0, width - 8)).trailingMargin
+        return cardFiles != nil ? min(m, 16) : showMeta ? min(m, 6) : 0
+    }
+
     /// The card's height plus its `mt-4`, or 0.
     private var cardSpace: CGFloat {
         guard let cardFiles else { return 0 }
@@ -406,7 +414,7 @@ final class AssistantMessageRowView: TimelineRowView {
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
-        2 + bodyHeight(width) + cardSpace + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
+        2 + bodyHeight(width) - collapsedMargin(width) + cardSpace + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
     }
 
     override func layout() {
@@ -414,9 +422,9 @@ final class AssistantMessageRowView: TimelineRowView {
         let body = bodyHeight(bounds.width)
         markdown.frame = NSRect(x: 4, y: 2, width: max(0, bounds.width - 8), height: body)
         empty.frame = NSRect(x: 4, y: 2, width: bounds.width - 8, height: TL.relaxed)
-        let cardSpace = self.cardSpace
-        if cardSpace > 0 { card.frame = NSRect(x: 4, y: 2 + body + 16, width: max(0, bounds.width - 8), height: cardSpace - 16) }
-        meta.frame = NSRect(x: 4, y: 2 + body + cardSpace + 6, width: bounds.width - 8, height: 24)
+        let cardSpace = self.cardSpace, flow = body - collapsedMargin(bounds.width)
+        if cardSpace > 0 { card.frame = NSRect(x: 4, y: 2 + flow + 16, width: max(0, bounds.width - 8), height: cardSpace - 16) }
+        meta.frame = NSRect(x: 4, y: 2 + flow + cardSpace + 6, width: bounds.width - 8, height: 24)
     }
 
     /// `group/assistant` sits on the whole row, padding included (MessagesTimeline.tsx:2032-2035).

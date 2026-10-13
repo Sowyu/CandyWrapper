@@ -16,7 +16,8 @@ public struct MarkdownDocument: Sendable, Equatable {
 
     private static func parseBlocks(_ markdown: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
         let options = AttributedString.MarkdownParsingOptions(
-            allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible)
+            allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible,
+            appliesSourcePositionAttributes: true)
         guard let parsed = try? AttributedString(markdown: String(markdown), options: options) else {
             return markdown.isEmpty ? [] : [.paragraph([InlineRun(text: String(markdown))])]
         }
@@ -24,6 +25,11 @@ public struct MarkdownDocument: Sendable, Equatable {
         for run in parsed.runs {
             builder.append(text: String(parsed[run.range].characters), run: run, preservesLineBreaks: preservesLineBreaks)
         }
+        // Source lines that hold only whitespace, 1-based like the parser's source positions.
+        var blank = Set<Int>()
+        for (index, line) in markdown.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
+        where line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) { blank.insert(index + 1) }
+        builder.root.markLooseLists(blank: blank)
         return builder.root.children.compactMap(\.node).flatMap(Self.blocks(from:))
     }
 
@@ -147,7 +153,7 @@ public struct MarkdownDocument: Sendable, Equatable {
                 return nil
             } ?? 1
             let ordered: Bool = { if case .orderedList = node.kind { return true }; return false }()
-            return [.list(MarkdownList(ordered: ordered, start: start, items: items))]
+            return [.list(MarkdownList(ordered: ordered, start: start, items: items, loose: node.loose))]
         case .blockQuote:
             var children = node.children.compactMap(\.node).flatMap(blocks(from:))
             if let kind = alertKind(&children) { return [.alert(kind, children)] }
@@ -265,6 +271,9 @@ public struct MarkdownList: Sendable, Equatable {
     public var ordered: Bool
     public var start: Int
     public var items: [MarkdownListItem]
+    /// CommonMark's loose list: a blank line between two items or between two blocks of one item.
+    /// react-markdown then wraps every item's text in a `<p>` with its margins.
+    public var loose = false
 }
 
 public struct MarkdownListItem: Sendable, Equatable {
@@ -314,6 +323,7 @@ private struct TreeBuilder {
     mutating func append(text: String, run: AttributedString.Runs.Run, preservesLineBreaks: Bool) {
         let path = (run.presentationIntent?.components ?? []).reversed().map { ($0.kind, $0.identity) }
         var inline = InlineRun(text: text)
+        let lines = run.markdownSourcePosition.map { $0.startLine...max($0.startLine, $0.endLine) }
         if let i = run.inlinePresentationIntent {
             inline.bold = i.contains(.stronglyEmphasized)
             inline.italic = i.contains(.emphasized)
@@ -324,7 +334,7 @@ private struct TreeBuilder {
         }
         inline.link = run.link
         inline.image = run.imageURL
-        root.insert(inline, along: path[...])
+        root.insert(inline, lines: lines, along: path[...])
     }
 }
 
@@ -338,6 +348,30 @@ private struct Node {
     var kind: Kind
     var identity: Int
     var children: [Child] = []
+    /// The source lines the node's text spans, nil when it has none.
+    var lines: ClosedRange<Int>?
+    var loose = false
+
+    /// Sets `loose` on every list with a blank source line between two items or between two blocks of one item.
+    mutating func markLooseLists(blank: Set<Int>) {
+        func gap(_ a: ClosedRange<Int>?, _ b: ClosedRange<Int>?) -> Bool {
+            guard let a, let b, b.lowerBound > a.upperBound + 1 else { return false }
+            return (a.upperBound + 1..<b.lowerBound).contains { blank.contains($0) }
+        }
+        func blankBetween(_ nodes: [Node]) -> Bool { zip(nodes, nodes.dropFirst()).contains { gap($0.lines, $1.lines) } }
+        switch kind {
+        case .orderedList, .unorderedList:
+            let items = children.compactMap(\.node)
+            loose = blankBetween(items) || items.contains { blankBetween($0.children.compactMap(\.node)) }
+        default: break
+        }
+        for index in children.indices {
+            if case .node(var child) = children[index] {
+                child.markLooseLists(blank: blank)
+                children[index] = .node(child)
+            }
+        }
+    }
 
     var runs: [InlineRun] {
         children.flatMap { child -> [InlineRun] in
@@ -348,7 +382,8 @@ private struct Node {
         }
     }
 
-    mutating func insert(_ run: InlineRun, along path: ArraySlice<(PresentationIntent.Kind, Int)>) {
+    mutating func insert(_ run: InlineRun, lines l: ClosedRange<Int>?, along path: ArraySlice<(PresentationIntent.Kind, Int)>) {
+        if let l { lines = lines.map { min($0.lowerBound, l.lowerBound)...max($0.upperBound, l.upperBound) } ?? l }
         // The last child comes out of the array before it changes, so its text and children are
         // uniquely referenced and grow in place. Changing a copy while the array still held the
         // original copied them on every run: quadratic, 67 ms for a 22 KB reply of short lines.
@@ -365,11 +400,11 @@ private struct Node {
         }
         if case .node(var last)? = children.last, last.identity == identity {
             children.removeLast()
-            last.insert(run, along: path.dropFirst())
+            last.insert(run, lines: l, along: path.dropFirst())
             children.append(.node(last))
         } else {
             var node = Node(kind: Self.kind(kind), identity: identity)
-            node.insert(run, along: path.dropFirst())
+            node.insert(run, lines: l, along: path.dropFirst())
             children.append(.node(node))
         }
     }
