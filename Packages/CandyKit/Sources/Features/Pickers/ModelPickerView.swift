@@ -13,7 +13,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     var catalog: ProviderCatalog { didSet { reload() } }
     var favorites: [ModelFavorite] { didSet { reload() } }
     /// `providerModelPreferences`: hidden models and order per instance.
-    let preferences: JSONValue
+    var preferences: JSONValue { didSet { reload() } }
     let active: ProviderInstanceId
     let activeModel: String
     private(set) var rail: ModelPickerRail
