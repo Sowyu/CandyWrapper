@@ -9,6 +9,8 @@ import T3Store
 /// The controller feeds `detail`, the activity state, the patch and the viewed marks, and runs the
 /// callbacks; nothing here talks to a server.
 public final class PullRequestDetailView: DSView {
+    /// Glass Native's right panel tab: the summary and timeline sit on the detail's frost.
+    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsDisplay = true } } }
     public enum Tab: Int, Sendable { case summary, timeline, code }
     public enum Phase: Equatable, Sendable {
         /// Nothing read yet: the ghost, seeded from the list row when there is one.
@@ -1114,7 +1116,7 @@ public final class PullRequestDetailView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
         condensedRule.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
         pendingBadge.layer?.backgroundColor = Themed.color(\.info).cgColor(in: self)
         pendingBadge.color = .white

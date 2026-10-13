@@ -323,6 +323,8 @@ public final class ThreadPanelView: DSView {
         approvalPanel.nativeCard = native
         lazyQuestionPanel.set(\.nativeCard, native)
         composer.nativeGlass = native
+        rightPanel.nativeChrome = native
+        lazyTerminalDrawer.set(\.nativeChrome, native)
         if native, scrollFade == nil {
             scrollFade = ToolbarScrollFade(on: timeline.scrollView)
         } else if !native {
@@ -551,7 +553,15 @@ public final class ThreadPanelView: DSView {
     /// and while it is loaded.
     public let lazyDetailsCard = LazyView { ThreadDetailsCardView() }
     public var detailsCard: ThreadDetailsCardView { lazyDetailsCard.view }
-    public private(set) var detailsOpen = false
+    /// T3 keeps the card's inline and popover visibility apart (rightPanelStore.ts:117-120 and 200-203). Inline, it
+    /// stays as the user left it. As a popover over a narrow chat it opens on demand and closes on an outside
+    /// press or Escape (ThreadDetailsCard.tsx:137-176), so it never sits over the thread for good.
+    private var detailsInlineOpen = false
+    private var detailsPopoverOpen = false
+    /// The card pins inline beside the chat lane (true) or pops over the chat (false), as of the last layout.
+    public private(set) var detailsInline = false
+    public var detailsOpen: Bool { detailsInline ? detailsInlineOpen : detailsPopoverOpen }
+    private var detailsPopoverMonitor: Any?
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
     /// `rightPanelState.maximized` (ChatView.tsx:2390 in 2994, 71f6f1db8): the thread's panel asked to fill the
@@ -713,13 +723,75 @@ public final class ThreadPanelView: DSView {
 
     // MARK: Thread details
 
-    /// Shows or hides the details card.
+    /// Shows or hides the details card in its current presentation (`toggleThreadPanel`, rightPanelStore.ts:980-991).
     public func setDetailsOpen(_ open: Bool) {
-        detailsOpen = open
+        if detailsInline { detailsInlineOpen = open } else { detailsPopoverOpen = open }
+        detailsVisibilityChanged()
+    }
+
+    /// The inline card's stored visibility, restored at launch.
+    public func setDetailsInlineOpen(_ open: Bool) {
+        detailsInlineOpen = open
+        detailsVisibilityChanged()
+    }
+
+    private func detailsVisibilityChanged() {
+        let open = detailsOpen
         header.toggles[0].isPressed = open
         if open { detailsCard.isHidden = false } else { lazyDetailsCard.loaded?.isHidden = true }
+        syncDetailsPopoverMonitor()
         needsLayout = true
         onPanelTogglesChange?()
+    }
+
+    /// Watches for the outside press or Escape that closes the popover, only while it shows.
+    private func syncDetailsPopoverMonitor() {
+        let watch = detailsPopoverOpen && !detailsInline
+        if watch, detailsPopoverMonitor == nil {
+            detailsPopoverMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+                nonisolated(unsafe) let event = event
+                MainActor.assumeIsolated { self?.dismissDetailsPopover(on: event) }
+                return event
+            }
+        } else if !watch, let monitor = detailsPopoverMonitor {
+            NSEvent.removeMonitor(monitor)
+            detailsPopoverMonitor = nil
+        }
+    }
+
+    private func dismissDetailsPopover(on event: NSEvent) {
+        guard detailsPopoverOpen, !detailsInline, let window, event.window === window else { return }
+        // A menu or popover the card opened takes the press or the key first, as Base UI nests them.
+        if let host = window.contentView?.subviews.lazy.compactMap({ $0 as? PopupHost }).first, !host.popups.isEmpty { return }
+        if event.type == .keyDown {
+            guard event.keyCode == 53 else { return } // Escape
+        } else {
+            // The toolbar's controls, the details toggle among them, handle their own presses.
+            if event.locationInWindow.y > window.contentLayoutRect.maxY { return }
+            if let card = lazyDetailsCard.loaded, !card.isHidden, card.bounds.contains(card.convert(event.locationInWindow, from: nil)) { return }
+            let toggle = header.toggles[0]
+            if toggle.window === window, toggle.bounds.contains(toggle.convert(event.locationInWindow, from: nil)) { return }
+        }
+        setDetailsOpen(false)
+    }
+
+    /// The card's presentation follows the chat column's width (ThreadDetailsCard.tsx:37-46); layout calls this.
+    private func updateDetailsPresentation(inline: Bool) {
+        guard inline != detailsInline else { return }
+        detailsInline = inline
+        if inline { detailsPopoverOpen = false }
+        header.toggles[0].isPressed = detailsOpen
+        if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
+        syncDetailsPopoverMonitor()
+        onPanelTogglesChange?()
+    }
+
+    /// T3 closes the popover when the card turns inline (ThreadDetailsCard.tsx:81-85), and on another thread it
+    /// starts closed.
+    public func closeDetailsPopover() {
+        guard detailsPopoverOpen else { return }
+        detailsPopoverOpen = false
+        detailsVisibilityChanged()
     }
 
     // MARK: Right panel
@@ -1454,8 +1526,9 @@ public final class ThreadPanelView: DSView {
                 x -= 4
             }
         }
-        let inlineDetails = detailsOpen ? ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - chatTop,
-            topInset: findInset) : nil
+        let inlinePlacement = ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - chatTop, topInset: findInset)
+        updateDetailsPresentation(inline: inlinePlacement != nil)
+        let inlineDetails = detailsOpen ? inlinePlacement : nil
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         if let findBar = lazyFindBar.loaded {

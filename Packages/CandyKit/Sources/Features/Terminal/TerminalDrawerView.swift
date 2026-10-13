@@ -23,7 +23,17 @@ public final class TerminalDrawerView: DSView {
 
     /// A right panel tab's terminal: no top border, no height handle.
     public var isPanel = false {
-        didSet { handle.isHidden = isPanel; border.isHidden = isPanel; needsLayout = true }
+        didSet { handle.isHidden = isPanel; border.isHidden = isPanel && !nativeChrome; needsLayout = true }
+    }
+    /// Glass Native: the terminal stays a solid block on the frost, so its top edge always shows the `border`
+    /// hairline, in a right panel tab too, at full strength.
+    public var nativeChrome = false {
+        didSet {
+            guard nativeChrome != oldValue else { return }
+            border.isHidden = isPanel && !nativeChrome
+            actions.nativeSymbols = nativeChrome
+            needsLayout = true; needsDisplay = true
+        }
     }
 
     /// The panes on screen; empty shows the empty state.
@@ -84,7 +94,7 @@ public final class TerminalDrawerView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let top: CGFloat = isPanel ? 0 : 1
+        let top: CGFloat = isPanel && !nativeChrome ? 0 : 1
         border.frame = CGRect(x: 0, y: 0, width: w, height: 1)
         handle.frame = NSRect(x: 0, y: 0, width: w, height: Self.handleHeight)
         let content = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
@@ -110,7 +120,11 @@ public final class TerminalDrawerView: DSView {
     public override func updateLayer() {
         // The split container is `bg-(--terminal-background)`, the app's background.
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
-        border.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self)
+        // Glass Native: T3's `border-border/80` edge (6% white in dark) disappears where the frost meets the solid
+        // terminal, so the edge is 12% white in dark and 10% black in light, the user bubble's hairline strength.
+        let edge = nativeChrome ? Themed.pick(light: NSColor.black.withAlphaComponent(0.1), dark: NSColor.white.withAlphaComponent(0.12))
+            : Themed.color(\.border, 0.8)
+        border.backgroundColor = edge.cgColor(in: self)
         emptyLabel.color = Themed.color(\.mutedForeground)
     }
 
@@ -155,6 +169,14 @@ public final class TerminalActionCluster: DSView {
     private var tooltips: [Action: TooltipController] = [:]
     private let rules = (0..<3).map { _ in CALayer() }
     public var onAction: ((Action) -> Void)?
+    /// Glass Native: SF Symbols in place of the Lucide glyphs, same meaning and slots.
+    var nativeSymbols = false {
+        didSet {
+            guard nativeSymbols != oldValue else { return }
+            let symbols: [Action: String] = [.split: "rectangle.split.2x1", .splitVertical: "rectangle.split.1x2", .new: "plus", .close: "trash"]
+            for (action, button) in buttons { button.symbol = nativeSymbols ? symbols[action] : nil }
+        }
+    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -232,7 +254,17 @@ public final class TerminalActionCluster: DSView {
     /// One `p-1 text-foreground/90 hover:bg-accent` button. The cluster clips them to its corners.
     final class Button: ControlView {
         private let icon: IconView
+        private var symbolView: NSImageView?
         var limited = false { didSet { alphaValue = limited ? 0.64 : 1; needsDisplay = true } }
+        var symbol: String? {
+            didSet {
+                symbolView?.removeFromSuperview()
+                symbolView = symbol.map { RightPanelView.symbolView($0, size: 11) }
+                if let symbolView { addSubview(symbolView) }
+                icon.isHidden = symbolView != nil
+                needsLayout = true; needsDisplay = true
+            }
+        }
 
         init(icon name: IconName) {
             icon = IconView(name: name, size: 13)
@@ -245,10 +277,12 @@ public final class TerminalActionCluster: DSView {
         override func layout() {
             super.layout()
             icon.frame = NSRect(x: 4, y: 4, width: 13, height: 13)
+            symbolView?.frame = icon.frame
         }
 
         override func updateLayer() {
             icon.strokeColor = Themed.color(\.foreground, 0.9)
+            symbolView?.contentTintColor = Themed.color(\.foreground, 0.9)
             Motion.setBackground(layer, state.hovered && !limited ? Themed.color(\.accent).cgColor(in: self) : nil)
         }
     }

@@ -225,6 +225,8 @@ public final class DiffPanelView: DSView {
     /// The failed request's message above the empty state (DiffPanel.tsx:1093-1097, `text-2xs text-error/80`).
     let errorLine = LabelView("", font: DSFont.ui(11), color: Themed.color(\.error, 0.8))
     private let headerBorder = CALayer()
+    /// Glass Native: the header, the file tree and the empty state sit on the detail's frost, the diff stays solid.
+    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsLayout = true; needsDisplay = true } } }
 
     private var summaries: [TurnDiffSummary] = []
     private var selectedRunId: RunId?
@@ -750,6 +752,12 @@ public final class DiffPanelView: DSView {
         truncatedBottom.frame = CGRect(x: 0, y: notice - 1, width: bounds.width - treeWidth, height: 1)
         truncatedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
         scroll.frame = NSRect(x: treeWidth, y: bodyTop + notice, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop - notice))
+        if nativeChrome {
+            // Glass Native: the header and the empty state sit on the frost; the hairline tops the solid diff.
+            headerBorder.isHidden = scroll.isHidden
+            headerBorder.zPosition = 1
+            headerBorder.frame = CGRect(x: 0, y: bodyTop - 1, width: bounds.width, height: 1)
+        }
         // `[data-search-panel]`: sticky 32pt down the scroller plus `top: 8px`, 16pt in from its end plus `right: 16px`.
         let widget = findWidget.preferredSize
         findWidget.frame = NSRect(x: scroll.frame.maxX - 32 - widget.width + DiffFindWidget.overhang,
@@ -761,8 +769,8 @@ public final class DiffPanelView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
-        headerBorder.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
+        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
+        headerBorder.backgroundColor = Themed.color(\.border, nativeChrome ? 1 : 0.6).cgColor(in: self)
         // `bg-muted/40` with the 1px `border-border/70` along its bottom.
         truncatedBar.backgroundColor = Themed.color(\.muted, 0.4).cgColor(in: self)
         truncatedBottom.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)

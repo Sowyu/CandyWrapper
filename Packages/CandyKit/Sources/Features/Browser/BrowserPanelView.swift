@@ -70,8 +70,19 @@ public final class BrowserPanelView: DSView {
         unreachable.frame = hasServerTab ? below : content
     }
 
+    /// Glass Native: the address row, the control bar and the empty and unreachable states sit on the detail's
+    /// frost; the page stays solid.
+    public var nativeChrome = false {
+        didSet {
+            guard nativeChrome != oldValue else { return }
+            unreachable.nativeChrome = nativeChrome
+            viewer.nativeChrome = nativeChrome
+            needsDisplay = true
+        }
+    }
+
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
     }
 }
 
@@ -651,6 +662,8 @@ public final class BrowserMockupView: DSView {
 /// `PreviewUnreachable` (Chromium's "This site can't be reached" in T3's styles) and
 /// `PreviewFileNotShown` for an address the server's browser saved as a file.
 public final class BrowserUnreachableView: DSView {
+    /// Glass Native: on the detail's frost.
+    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsDisplay = true } } }
     public enum Content: Equatable {
         case failed(url: String, code: Int, description: String)
         case fileNotShown(url: String, fileName: String)
@@ -773,7 +786,7 @@ public final class BrowserUnreachableView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
         icon.color = Themed.color(\.mutedForeground, 0.7)
         heading.color = Themed.color(\.foreground)
         paragraph.color = Themed.color(\.mutedForeground)

@@ -10,6 +10,8 @@ import T3Protocol
 /// The app owns the socket: it sets `control`, `viewport` and frames, and sends what `onInput` gives.
 public final class ServerBrowserView: DSView {
     public enum ControlPosition { case top, bottom }
+    /// Glass Native: the control bar sits on the detail's frost.
+    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsDisplay = true } } }
 
     public var controlPosition: ControlPosition = .top { didSet { needsLayout = true } }
     /// Input for the page. Moves and wheel deltas are coalesced to one message each per frame.
@@ -271,7 +273,7 @@ public final class ServerBrowserView: DSView {
     public var frameSize: CGSize? { reportedSize }
 
     public override func updateLayer() {
-        bar.layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        bar.layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
         barBorder.backgroundColor = Themed.color(\.border).cgColor(in: self)
         status.color = Themed.color(\.mutedForeground)
     }

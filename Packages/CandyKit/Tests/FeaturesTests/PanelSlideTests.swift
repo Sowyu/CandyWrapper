@@ -17,6 +17,27 @@ struct PanelSlideTests {
         return (window, panel)
     }
 
+    /// T3 keeps the details card's inline and popover visibility apart: a narrow chat shows it as a popover that
+    /// starts closed, and widening the window again shows the inline card as the user left it.
+    @Test func detailsPopoverIsSeparateFromTheInlineCard() {
+        let (window, panel) = makePanel()
+        _ = window
+        panel.setDetailsInlineOpen(true)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.detailsInline && panel.detailsOpen && panel.lazyDetailsCard.loaded?.isHidden == false)
+        panel.setFrameSize(NSSize(width: 800, height: 800))
+        panel.layoutSubtreeIfNeeded()
+        #expect(!panel.detailsInline && !panel.detailsOpen && panel.lazyDetailsCard.loaded?.isHidden == true)
+        panel.setDetailsOpen(true)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.detailsOpen && panel.lazyDetailsCard.loaded?.isHidden == false)
+        panel.closeDetailsPopover()
+        #expect(!panel.detailsOpen)
+        panel.setFrameSize(NSSize(width: 1400, height: 800))
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.detailsInline && panel.detailsOpen)
+    }
+
     /// Hidden panels hold nothing until they first show; a closed one stays built and hidden.
     @Test func hiddenPanelsAreBuiltOnFirstShow() {
         let (window, panel) = makePanel()
