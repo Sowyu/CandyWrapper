@@ -576,7 +576,7 @@ final class Environments {
 
     private func merge() {
         let shown = shells.merged(order: order)
-        sidebar?.setSnapshot(shown, animated: sidebar?.snapshot != nil)
+        sidebar?.setSnapshot(shown, animated: sidebar?.snapshot != nil, changedThreadIds: shells.lastChangedThreadIds)
         if let shown { onShell?(shown) }
         for o in shellObservers { o() }
     }

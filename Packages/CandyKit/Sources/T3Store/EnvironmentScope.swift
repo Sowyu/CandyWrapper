@@ -74,6 +74,9 @@ public struct MergedShell: Sendable {
     private var scoped: [String: ShellSnapshot] = [:]
     /// Projects and threads the last `set` scoped anew (the rest were reused). For tests.
     public private(set) var lastRescoped = 0
+    /// The scoped ids of the threads the last `set` scoped anew: the only threads of the merge that can differ
+    /// from the merge before it. Nil after a first `set` or a `remove`, when that isn't known.
+    public private(set) var lastChangedThreadIds: Set<ThreadId>?
 
     public init() {}
 
@@ -82,18 +85,25 @@ public struct MergedShell: Sendable {
             raw[env] = snapshot
             scoped[env] = EnvironmentScope.scope(snapshot, environmentId: env)
             lastRescoped = snapshot.projects.count + snapshot.threads.count + snapshot.archivedThreads.count
+            lastChangedThreadIds = nil
             return
         }
         var count = 0
         var out = snapshot
         out.projects = Self.rescope(snapshot.projects, oldRaw.projects, oldScoped.projects, &count) { EnvironmentScope.scope($0, env) }
-        out.threads = Self.rescope(snapshot.threads, oldRaw.threads, oldScoped.threads, &count) { EnvironmentScope.scope($0, env) }
+        var changed = Set<ThreadId>()
+        out.threads = Self.rescope(snapshot.threads, oldRaw.threads, oldScoped.threads, &count) {
+            let scoped = EnvironmentScope.scope($0, env)
+            changed.insert(scoped.id)
+            return scoped
+        }
         out.archivedThreads = Self.rescope(snapshot.archivedThreads, oldRaw.archivedThreads, oldScoped.archivedThreads, &count) {
             EnvironmentScope.scope($0, env)
         }
         raw[env] = snapshot
         scoped[env] = out
         lastRescoped = count
+        lastChangedThreadIds = changed
     }
 
     /// `new` scoped, reusing the scoped copy of every item equal to its previous value. Items usually
@@ -115,6 +125,7 @@ public struct MergedShell: Sendable {
     public mutating func remove(_ environmentId: String) {
         raw[environmentId] = nil
         scoped[environmentId] = nil
+        lastChangedThreadIds = nil
     }
 
     /// The environments in `order` that have a shell, concatenated. Nil when none has one.

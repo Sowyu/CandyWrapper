@@ -324,17 +324,20 @@ public enum SidebarListBuilder {
 
     /// `sidebarListItems` (Sidebar.tsx:3781-3829) without the drag-only markers and the beta Working shelf,
     /// after the draft block (Sidebar.tsx:5393-5402), or the empty state (Sidebar.tsx:5548-5575).
-    public static func items(snapshot: ShellSnapshot?, state: SidebarListState, nowMs: Int64) -> [SidebarItem] {
+    /// With a `cache`, only what changed since its last build is redone.
+    public static func items(snapshot: ShellSnapshot?, state: SidebarListState, nowMs: Int64,
+                             cache: SidebarListCache? = nil) -> [SidebarItem] {
         guard let snapshot else { return [] }
-        let ctx = Context(snapshot: snapshot, state: state, nowMs: nowMs)
+        let ctx = cache?.context(snapshot: snapshot, state: state, nowMs: nowMs) ?? Context(snapshot: snapshot, state: state, nowMs: nowMs)
         let drafts = draftRows(ctx, state: state)
-        var items = threadItems(ctx, state: state, nowMs: nowMs)
+        var items = threadItems(ctx, state: state, nowMs: nowMs, cache: cache)
         if !drafts.isEmpty { items = drafts.map(SidebarItem.draft) + [.draftDivider] + items }
         if items.isEmpty {
             if snapshot.projects.isEmpty { return [.noProjects] }
             let text = ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
             items = [.emptyText(text, search: false)]
         }
+        cache?.record(items, state: state, nowMs: nowMs)
         return items
     }
 
@@ -385,17 +388,11 @@ public enum SidebarListBuilder {
         }
     }
 
-    static func threadItems(_ ctx: Context, state: SidebarListState, nowMs: Int64) -> [SidebarItem] {
+    static func threadItems(_ ctx: Context, state: SidebarListState, nowMs: Int64, cache: SidebarListCache? = nil) -> [SidebarItem] {
         let shelves = ctx.shelves
         func row(_ t: SidebarThread, _ section: SidebarSection) -> SidebarItem {
-            var model = rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
-                                 group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs)
-            if ctx.spansEnvironments, t.shell.branch == nil, let env = t.id.environmentId,
-               let project = ctx.projectById[t.shell.projectId], isScratch(project, state: state) {
-                model.scratchMachineLabel = state.environments.labels[env]
-                model.scratchMachine = state.environments.machine(env)
-            }
-            return .row(model)
+            guard let cache else { return .row(rowModel(t, section: section, ctx: ctx, state: state, nowMs: nowMs)) }
+            return .row(cache.row(t, section: section, ctx: ctx, state: state, nowMs: nowMs))
         }
         // `orderItemsByPreferredIds`: the held ids first, in the drop's order, then the rest as sorted.
         func held(_ threads: [SidebarThread], _ section: SidebarSection) -> [SidebarThread] {
@@ -437,6 +434,18 @@ public enum SidebarListBuilder {
             }
         }
         return items
+    }
+
+    /// A thread row's model with the context's project lookups, and the machine on scratch rows.
+    static func rowModel(_ t: SidebarThread, section: SidebarSection, ctx: Context, state: SidebarListState, nowMs: Int64) -> SidebarRowModel {
+        var model = rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
+                             group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs)
+        if ctx.spansEnvironments, t.shell.branch == nil, let env = t.id.environmentId,
+           let project = ctx.projectById[t.shell.projectId], isScratch(project, state: state) {
+            model.scratchMachineLabel = state.environments.labels[env]
+            model.scratchMachine = state.environments.machine(env)
+        }
+        return model
     }
 
     /// `isScratchProject`: the project sits at its environment's scratch folder.

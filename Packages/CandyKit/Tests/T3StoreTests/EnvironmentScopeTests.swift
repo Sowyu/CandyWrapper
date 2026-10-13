@@ -69,6 +69,7 @@ struct EnvironmentScopeTests {
         snapshot.threads[500].title = "renamed"
         shells.set(snapshot, environmentId: "a")
         #expect(shells.lastRescoped == 1)
+        #expect(shells.lastChangedThreadIds == [EnvironmentScope.scope(snapshot.threads[500], "a").id])
         #expect(shells.merged(order: ["a"])?.threads == EnvironmentScope.scope(snapshot, environmentId: "a").threads)
         // A new thread first shifts every other one; they are still reused.
         snapshot.threads.insert(thread("new"), at: 0)

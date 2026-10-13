@@ -57,7 +57,9 @@ public final class SidebarListView: DSView {
     // MARK: Data
 
     /// Replaces the items. Rows whose model is unchanged keep their view untouched; moved rows slide.
-    public func setItems(_ new: [SidebarItem], animated: Bool) {
+    public func setItems(_ new: [SidebarItem], animated: Bool, generation: Int? = nil) {
+        itemsGeneration = generation
+        if sort == nil, releasedTops == nil, replaceInPlace(new) { return }
         var oldTops = Dictionary(uniqueKeysWithValues: items.indices.map { (items[$0].key, tops[$0]) })
         // After a drop the rows glide from where the preview left them, not from their old slots.
         let released = releasedTops
@@ -99,6 +101,41 @@ public final class SidebarListView: DSView {
         } else {
             tile(oldTops: shouldAnimate ? oldTops : nil)
         }
+    }
+
+    /// The `SidebarListCache` generation the items came from, nil when unknown: a patch from that cache fits them.
+    private(set) var itemsGeneration: Int?
+
+    /// Replaces single rows that keep their place and size, reconfiguring only those on screen. False,
+    /// with nothing changed, when one doesn't fit or a drag owns the rows.
+    func patchItems(_ patch: [(index: Int, item: SidebarItem)]) -> Bool {
+        guard sort == nil, releasedTops == nil else { return false }
+        for (i, item) in patch {
+            guard i < items.count, item.kind == items[i].kind, item.height == items[i].height else { return false }
+        }
+        for (i, item) in patch where items[i] != item {
+            items[i] = item
+            if let view = visible[item.key] { configure(view, item) }
+        }
+        return true
+    }
+
+    /// The common update: same rows in the same order and sizes, some with new content (a status, a title,
+    /// a time label). Only the changed rows on screen reconfigure; geometry and keys stay. False when the
+    /// shape changed, for `setItems` to diff.
+    private func replaceInPlace(_ new: [SidebarItem]) -> Bool {
+        guard new.count == items.count, !items.isEmpty else { return false }
+        var changed: [Int] = []
+        for i in new.indices where new[i] != items[i] {
+            guard new[i].kind == items[i].kind, new[i].height == items[i].height, new[i].key == items[i].key else { return false }
+            changed.append(i)
+        }
+        guard !changed.isEmpty else { return true }
+        items = new
+        for i in changed {
+            if let view = visible[items[i].key] { configure(view, items[i]) }
+        }
+        return true
     }
 
     static let maxFadedRows = 40
@@ -172,7 +209,7 @@ public final class SidebarListView: DSView {
     /// The models of rows currently on screen (overscan excluded), for the label timer.
     public var visibleRowModels: [SidebarRowModel] {
         let rect = visibleRect
-        return items.indices.compactMap { i in
+        return visibleRange.compactMap { i in
             guard tops[i] < rect.maxY, tops[i] + items[i].height > rect.minY, case .row(let r) = items[i] else { return nil }
             return r
         }
