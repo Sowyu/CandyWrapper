@@ -3,6 +3,8 @@
 What the user decided and why, newest first. Check here before changing anything these cover.
 
 
+- 2026-10-14: Glass Native keeps the real `NSToolbar` and `NSSplitViewController`, about 6 MB and 50 ms over classic Glass, instead of a frame-laid lookalike. The user answered "yes" to keeping them.
+- 2026-10-14: agents may use the shared GUI screen while the user works on it, taking turns through `scripts/ui/screen-lock`.
 - 2026-10-13: the user dropped the side-by-side check of every parity checklist row ("side by side isnt that important if its about ui parity"). Rows already checked stay ✅, the rest stay 🟡, and the findings so far are in `docs/research/sbs-keyboard-2026-10-13.md`. Fix a difference when someone reports it, not by sweeping the checklist.
 - 2026-10-11, at the M7 demo: the user skipped T3's opt-in legacy sidebar (row 67, now n/a).
 

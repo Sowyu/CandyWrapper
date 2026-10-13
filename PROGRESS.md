@@ -12,8 +12,10 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## Open tasks
 
 1. Glass Native (Experimental): phases 1 to 3 and the design polish are done (`docs/glass-native.md`). Left, in order:
-   - Build the thread panel's hidden panels on first show (saves 2.5 MB in every theme) and bring the native sidebar to classic's cost (up to 2.7 MB). See the "Perf audit" subsection.
-   - Phase 5: native menus throughout, the command palette and the remaining panels, all in T3 desktop's layout.
+   - Build the thread panel's hidden panels on first show, which saves 2.5 MB in every theme. See the "Perf audit" subsection. (taken 2026-10-14)
+   - Bring the native sidebar to classic's cost, up to 2.7 MB, and put the candy brand at its top where T3 has its wordmark. (taken 2026-10-14)
+   - Phase 5a: native menus throughout and the glass command palette, in T3 desktop's layout, plus the composer's low contrast in dark mode. (taken 2026-10-14)
+   - Phase 5b: the right panel's surfaces (Files, Git, Diff, pull request files), the terminal drawer and the details card in T3 desktop's layout. It starts after the hidden panels land, since both touch `ThreadPanelView`.
    - Phase 6: a bug hunt over every action in native mode next to classic, and a familiarity pass against T3 desktop.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
@@ -22,8 +24,6 @@ The code also marks 267 known shortcuts with `// ponytail:`, each naming when to
 
 ## Waiting on the user
 
-- Whether Glass Native keeps the real macOS toolbar and split view (about 6 MB and 50 ms over classic Glass) or gets a frame-laid lookalike that matches classic's cost (asked 2026-10-13).
-- Whether agents may use the shared screen while the user works on it, since test windows take focus (asked 2026-10-13).
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
 
