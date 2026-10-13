@@ -7,6 +7,8 @@ public final class InputView: FieldView {
         case sm, compact, `default`, lg
         /// An in-place editor the size of a line of text (`rounded-sm border px-1 text-sm`): the sidebar's rename field.
         case inline
+        /// @pierre/diffs' find field (`font-size: 13px; line-height: 24px; padding-inline: 6px`, 6px radius): the diff panel.
+        case find
 
         /// Height with border, inline padding, font px, radius.
         var metrics: (height: CGFloat, padding: CGFloat, font: CGFloat, radius: CGFloat) {
@@ -16,6 +18,7 @@ public final class InputView: FieldView {
             case .default: (32, 11, 14, 10)
             case .lg: (36, 11, 14, 10)
             case .inline: (22, 4, 14, 4)
+            case .find: (28, 6, 13, 6)
             }
         }
     }
