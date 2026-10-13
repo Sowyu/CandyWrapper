@@ -252,8 +252,12 @@ final class ComposerController {
         panel.approvalPanel.onRespond = { [weak self] _, payload in
             self?.respond(payload, failure: ComposerFeedback.Failure.approval)
         }
-        let question = panel.questionPanel
-        question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
+        panel.lazyQuestionPanel.configure { [weak self] question in
+            question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
+            question.onDismiss = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.dismissQuestion) }
+            question.onDisplacedAnswer = { [weak self] text in self?.carryDisplaced(text) }
+            question.onChange = { [weak self] in self?.syncQuestion() }
+        }
         composer.onAttach = { [weak self] in self?.attachPressed() }
         composer.onInsertRejected = { [weak self] in
             self?.toast(.error, "Unable to add to chat", "The composer is busy; try again once it is ready.")
@@ -261,11 +265,8 @@ final class ComposerController {
         composer.fileList.onRemove = { [weak self] id in self?.removeQuestionFile(id) }
         composer.fileList.onOpen = { [weak self] id in self?.expandQuestionFile(id) }
         composer.fileList.onRetry = { [weak self] id in self?.retryQuestionFile(id) }
-        question.onDismiss = { [weak self] payload in self?.respond(payload, failure: ComposerFeedback.Failure.dismissQuestion) }
-        question.onDisplacedAnswer = { [weak self] text in self?.carryDisplaced(text) }
-        question.onChange = { [weak self] in self?.syncQuestion() }
-        composer.onQuestionAdvance = { [weak self] in self?.panel.questionPanel.advance() }
-        composer.onQuestionPrevious = { [weak self] in self?.panel.questionPanel.previous() }
+        composer.onQuestionAdvance = { [weak self] in self?.panel.lazyQuestionPanel.loaded?.advance() }
+        composer.onQuestionPrevious = { [weak self] in self?.panel.lazyQuestionPanel.loaded?.previous() }
         panel.lazyGoalBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in
             guard let self, let goal = self.shellThread?.goal, let index else { return }
             let resume = index == 0 && ThreadGoalPresentation.canResume(goal)
@@ -559,9 +560,10 @@ final class ComposerController {
         // Digits 1 to 9 pick a question's option unless focus is in an editable field
         // (ComposerPendingUserInputPanel.tsx:157-182, a document-level listener, not a keybinding).
         shortcuts.onKey { [weak self] event in
-            guard let self, self.isActive, self.panel.drawer == .question, !self.panel.questionPanel.isHidden,
+            guard let self, self.isActive, self.panel.drawer == .question,
+                  let question = self.panel.lazyQuestionPanel.loaded, !question.isHidden,
                   !Shortcuts.editableFocused(in: event.window) else { return false }
-            return self.panel.questionPanel.handleKey(event)
+            return question.handleKey(event)
         }
         // `modelPicker.toggle`, `composer.effort`, `composer.mode`: swallowed, repeats ignored.
         shortcuts.on(["modelPicker.toggle", "composer.effort", "composer.mode"]) { [weak self] call in
@@ -1024,7 +1026,7 @@ final class ComposerController {
     private func remember(_ text: String) {
         // An open question: the editor is its custom answer, not the prompt.
         if questionRequestId != nil {
-            if text != panel.questionPanel.customAnswer { panel.questionPanel.setCustomAnswer(text) }
+            if let question = panel.lazyQuestionPanel.loaded, text != question.customAnswer { question.setCustomAnswer(text) }
             return
         }
         pickers.prompt = text
@@ -1272,10 +1274,10 @@ final class ComposerController {
     /// The question card changed (pick, typing, next, previous): the editor, placeholder and
     /// footer follow its active question.
     private func syncQuestion() {
-        guard questionRequestId != nil, panel.questionPanel.session != nil else { return }
+        guard questionRequestId != nil, panel.lazyQuestionPanel.loaded?.session != nil else { return }
         // Files first: their state feeds the session that the footer reads below.
         syncQuestionFiles()
-        guard let session = panel.questionPanel.session else { return }
+        guard let session = panel.lazyQuestionPanel.loaded?.session else { return }
         let question = panel.questionPanel
         if composer.text != question.customAnswer { composer.text = question.customAnswer }
         var placeholder = composer.placeholderInput
@@ -2186,7 +2188,7 @@ extension ComposerController {
     /// The active question's key, when it can take files.
     private var activeQuestionKey: String? {
         guard case .thread(let threadId) = target, let requestId = questionRequestId,
-              let question = panel.questionPanel.session?.progress.activeQuestion else { return nil }
+              let question = panel.lazyQuestionPanel.loaded?.session?.progress.activeQuestion else { return nil }
         return Self.questionKey(threadId, requestId, question.id)
     }
 
@@ -2195,7 +2197,7 @@ extension ComposerController {
     fileprivate func syncQuestionFiles() {
         pruneQuestionFiles()
         composer.fileRows = activeQuestionKey.map { (questionFiles[$0] ?? []).map(\.row) } ?? []
-        guard let session = panel.questionPanel.session, case .thread(let threadId) = target else { return }
+        guard let session = panel.lazyQuestionPanel.loaded?.session, case .thread(let threadId) = target else { return }
         var states: [String: UserInputSession.AttachmentState] = [:]
         for q in session.request.questions {
             let files = questionFiles[Self.questionKey(threadId, session.request.requestId, q.id)] ?? []
@@ -2203,7 +2205,7 @@ extension ComposerController {
                 states[q.id] = .init(count: files.count, blocked: !supportsQuestionAttachments || files.contains { $0.status != .ready })
             }
         }
-        panel.questionPanel.setAttachments(states)
+        panel.lazyQuestionPanel.loaded?.setAttachments(states)
     }
 
     /// The open thread's files whose request is no longer pending go (other threads keep theirs).
@@ -2236,7 +2238,7 @@ extension ComposerController {
     /// T3's checks (count, empty, size) and an upload per accepted file.
     // ponytail: images go up as plain files without thumbnails, compression or the image type, and there is no paste or drop; add them with the composer's own attachments
     fileprivate func attachToQuestion() {
-        guard let requestId = questionRequestId, let session = panel.questionPanel.session, let key = activeQuestionKey,
+        guard let requestId = questionRequestId, let session = panel.lazyQuestionPanel.loaded?.session, let key = activeQuestionKey,
               session.progress.activeQuestion?.allowsCustomAnswer == true, supportsQuestionAttachments,
               !responding.contains(requestId), let window = composer.window else { return }
         let panel = NSOpenPanel()
@@ -2249,7 +2251,7 @@ extension ComposerController {
     }
 
     private func addQuestionFiles(_ urls: [URL], key: String, requestId: String) {
-        guard let session = panel.questionPanel.session, session.request.requestId == requestId, case .thread(let threadId) = target else { return }
+        guard let session = panel.lazyQuestionPanel.loaded?.session, session.request.requestId == requestId, case .thread(let threadId) = target else { return }
         var reserved = session.request.questions.reduce(0) { $0 + (questionFiles[Self.questionKey(threadId, requestId, $1.id)]?.count ?? 0) }
         var error: String?
         for url in urls {
@@ -2791,10 +2793,13 @@ extension ComposerController {
         }
         panel.model.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
         panel.stashBadge.onToggleMenu = { [weak self] in self?.toggleStashMenu() }
-        panel.stashMenu.imageURL = { [weak self] image in self?.stash.imageURL(image) ?? URL(fileURLWithPath: "/") }
-        panel.stashMenu.onRestore = { [weak self] entry in self?.restoreStash(entry) }
-        panel.stashMenu.onDelete = { [weak self] entry in self?.deleteStash(entry) }
-        panel.stashMenu.onClose = { [weak self] in self?.setStashMenu(false) }
+        panel.lazyStashMenu.configure { [weak self] menu in
+            menu.imageURL = { [weak self] image in self?.stash.imageURL(image) ?? URL(fileURLWithPath: "/") }
+            menu.onRestore = { [weak self] entry in self?.restoreStash(entry) }
+            menu.onDelete = { [weak self] entry in self?.deleteStash(entry) }
+            menu.onClose = { [weak self] in self?.setStashMenu(false) }
+            menu.shortcutLabel = ActiveKeymap.label(for: "composer.stash")
+        }
         stash.onChange = { [weak self] in self?.syncStashViews() }
         syncStashViews()
     }
@@ -3078,7 +3083,7 @@ extension ComposerController {
         guard !files.isEmpty, let key = draftKey, let env = targetEnvironmentId else { return }
         if questionRequestId != nil {
             guard let requestId = questionRequestId, let questionKey = activeQuestionKey, supportsQuestionAttachments,
-                  panel.questionPanel.session?.progress.activeQuestion?.allowsCustomAnswer == true, !responding.contains(requestId) else {
+                  panel.lazyQuestionPanel.loaded?.session?.progress.activeQuestion?.allowsCustomAnswer == true, !responding.contains(requestId) else {
                 _ = panel.toasts.show(ToastView(title: "This question cannot accept attachments.", kind: .error))
                 return
             }
@@ -3542,8 +3547,10 @@ extension ComposerController {
         panel.showsStashBadge = !stash.entries.isEmpty && target != nil
         panel.stashBadge.menuOpen = panel.stashMenuOpen
         let label = ActiveKeymap.label(for: "composer.stash")
-        if panel.stashMenu.shortcutLabel != label { panel.stashMenu.shortcutLabel = label }
-        panel.stashMenu.entries = stash.entries
+        if let menu = panel.lazyStashMenu.loaded {
+            if menu.shortcutLabel != label { menu.shortcutLabel = label }
+            menu.entries = stash.entries
+        }
         if panel.stashMenuOpen, panel.menus.isOpen { setStashMenu(false) }
     }
 
@@ -3562,7 +3569,7 @@ extension ComposerController {
             nonisolated(unsafe) let event = event
             MainActor.assumeIsolated {
                 guard let self, event.window === self.panel.window else { return }
-                for view in [self.panel.stashMenu, self.panel.stashBadge] as [NSView] where !view.isHidden {
+                for view in [self.panel.lazyStashMenu.loaded, self.panel.stashBadge].compactMap({ $0 }) as [NSView] where !view.isHidden {
                     if view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return }
                 }
                 self.setStashMenu(false)
@@ -3573,8 +3580,8 @@ extension ComposerController {
 
     /// The menu's keys while it is open, before the composer's (a capture-phase listener in T3).
     func handleStashMenuKey(_ event: NSEvent) -> Bool {
-        guard panel.stashMenuOpen, !panel.stashMenu.isHidden else { return false }
-        return panel.stashMenu.handleKey(event)
+        guard panel.stashMenuOpen, let menu = panel.lazyStashMenu.loaded, !menu.isHidden else { return false }
+        return menu.handleKey(event)
     }
 
     /// `composer.stash` (ChatComposer.tsx:5696-5720): always claimed; with a question open it toggles

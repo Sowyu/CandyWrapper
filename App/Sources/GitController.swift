@@ -87,13 +87,10 @@ final class GitController {
         self.sidebar = sidebar
         self.environments = environments
         self.composer = composer
-        panel.setDetailsOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         panel.onDetailsToggle = { [weak self] in self?.toggleDetails() }
         let strip = panel.contextStrip
         strip.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: false) }
         strip.branch.action = { [weak self] in self?.openBranchPicker(inPanel: false) }
-        let card = panel.detailsCard
-        card.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: true) }
         let branchMenu: (NSEvent, NSView) -> Void = { [weak self] event, view in
             guard let name = self?.resolvedBranch, !name.isEmpty else { return }
             let menu = SidebarCommands.nativeMenu([ThreadMenuItem("copy", "Copy branch name")]) { _ in
@@ -104,13 +101,18 @@ final class GitController {
             NSMenu.popUpContextMenu(menu, with: event, for: view)
         }
         strip.branch.onContextMenu = branchMenu
-        card.branch.onContextMenu = branchMenu
-        card.branch.action = { [weak self] in self?.openBranchPicker(inPanel: true) }
-        card.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
-        card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }
-        card.initGit.action = { [weak self] in self?.initializeGit() }
+        panel.lazyDetailsCard.configure { [weak self] card in
+            card.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: true) }
+            card.branch.onContextMenu = branchMenu
+            card.branch.action = { [weak self] in self?.openBranchPicker(inPanel: true) }
+            card.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
+            card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }
+            card.initGit.action = { [weak self] in self?.initializeGit() }
+            card.changes.action = { [weak self] in self?.panel.toggleDiff() }
+            self?.renderCard()
+        }
         composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
-        card.changes.action = { [weak self] in self?.panel.toggleDiff() }
+        panel.setDetailsOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
             let window = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
@@ -311,10 +313,7 @@ final class GitController {
         panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
-        guard let target else {
-            panel.detailsCard.showsVersionControl = false
-            return
-        }
+        guard let target else { renderCard(); return }
         if !target.isDraft {
             panel.contextStrip.showsGitControls = isRepo
             panel.showsContextStrip = isRepo || target.environmentId != sidebar?.state.environments.primaryId
@@ -338,9 +337,16 @@ final class GitController {
         strip.runContext.interactive = target.isDraft && composer.currentDraft != nil
         strip.branch.text = branchLabel
         strip.branch.isEnabled = refsLoaded && !branchActionPending
+        renderCard()
+        panel.needsLayout = true
+    }
 
-        // The details card.
-        let card = panel.detailsCard
+    /// The details card, while it is built.
+    private func renderCard() {
+        guard let card = panel.lazyDetailsCard.loaded else { return }
+        guard let target else { card.showsVersionControl = false; return }
+        let label = BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: !target.isDraft)
+        let env = environmentOption
         card.runContext.icons = env != nil ? [EnvironmentMachineIcon.definition(env!.machine), folderIcon(target)] : [folderIcon(target)]
         card.runContext.text = env?.label ?? label
         card.runContext.kind = target.isDraft && runOnChoices || target.isDraft ? .select : .locked
@@ -353,7 +359,6 @@ final class GitController {
         let totals = status?.branchChanges.map { ($0.insertions, $0.deletions) } ?? status.map { ($0.workingTree.insertions, $0.workingTree.deletions) } ?? (0, 0)
         card.totals.insertions = totals.0
         card.totals.deletions = totals.1
-        panel.needsLayout = true
     }
 
     private var quickAction: GitActionsLogic.QuickAction {
@@ -389,7 +394,7 @@ final class GitController {
     }
 
     private func renderGitActions() {
-        let split = panel.detailsCard.gitActions
+        guard let split = panel.lazyDetailsCard.loaded?.gitActions else { return }
         let key = statusKey ?? ""
         if let running {
             let status = GitActionsLogic.progressStatus(isPull: running.isPull, currentLabel: running.label)

@@ -653,7 +653,7 @@ final class ThreadPullRequestsController {
         guard let thread, let env = thread.id.environmentId else {
             panel.pullRequestAvailable = false
             panel.pullRequestsAvailable = false
-            if cardKey != nil { cardKey = nil; panel.detailsCard.pullRequestRows = [] }
+            if cardKey != nil { cardKey = nil; panel.lazyDetailsCard.set(\.pullRequestRows, []) }
             detail.clear()
             return
         }
@@ -885,7 +885,7 @@ final class ThreadPullRequestsController {
         } else if let legacy = thread.linkedPullRequest {
             rows.append(row(number: legacy.number, title: nil, state: nil, isDraft: false) { [weak self] in self?.openCurrentPullRequest() })
         }
-        panel.detailsCard.pullRequestRows = rows
+        panel.lazyDetailsCard.set(\.pullRequestRows, rows)
     }
 
     /// `threadPullRequestPanelTarget`: the current link, else the legacy link or the branch's PR.

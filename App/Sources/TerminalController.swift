@@ -67,9 +67,12 @@ final class TerminalController {
     /// Where terminals show: the drawer or the active terminal tab. Each owns the panes it shows.
     @MainActor
     private final class Host {
-        let view: TerminalDrawerView
+        private let lazyView: LazyView<TerminalDrawerView>
         var attachments: [String: Attachment] = [:]
-        init(view: TerminalDrawerView) { self.view = view }
+        init(_ lazyView: LazyView<TerminalDrawerView>) { self.lazyView = lazyView }
+        /// The view, built now if it isn't yet.
+        var view: TerminalDrawerView { lazyView.view }
+        var loaded: TerminalDrawerView? { lazyView.loaded }
 
         var focused: Attachment? { attachments.values.first { $0.surface.isFocused } }
 
@@ -83,17 +86,11 @@ final class TerminalController {
         self.panel = panel
         self.sidebar = sidebar
         self.environments = environments
-        drawerHost = Host(view: panel.terminalDrawer)
-        panelHost = Host(view: panel.terminalPanel)
+        drawerHost = Host(panel.lazyTerminalDrawer)
+        panelHost = Host(LazyView { [unowned panel] in panel.terminalPanel })
         states = Self.loadStates()
         panel.onTerminalToggle = { [weak self] in self?.toggle() }
-        let drawer = panel.terminalDrawer
-        drawer.actions.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
-        drawer.list.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
-        drawer.list.onActivate = { [weak self] id in self?.activate(id) }
-        drawer.list.onClose = { [weak self] id in self?.confirmClose([id]) { self?.close(id) } }
-        drawer.emptyButton.action = { [weak self] in self?.newTerminal() }
-        drawer.onDrag = { [weak self] start, delta, ended in self?.drag(start: start, delta: delta, ended: ended) }
+        panel.lazyTerminalDrawer.configure { [weak self] drawer in self?.wireDrawer(drawer) }
         let tab = panel.terminalPanel
         tab.actions.onAction = { [weak self] action in self?.perform(action, inPanel: true) }
         tab.list.onAction = { [weak self] action in self?.perform(action, inPanel: true) }
@@ -108,6 +105,17 @@ final class TerminalController {
                 self.windowResized()
             }
         }
+    }
+
+    /// The drawer's wiring and labels, when it is first built.
+    private func wireDrawer(_ drawer: TerminalDrawerView) {
+        drawer.actions.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
+        drawer.list.onAction = { [weak self] action in self?.perform(action, inPanel: false) }
+        drawer.list.onActivate = { [weak self] id in self?.activate(id) }
+        drawer.list.onClose = { [weak self] id in self?.confirmClose([id]) { self?.close(id) } }
+        drawer.emptyButton.action = { [weak self] in self?.newTerminal() }
+        drawer.onDrag = { [weak self] start, delta, ended in self?.drag(start: start, delta: delta, ended: ended) }
+        updateLabels(state)
     }
 
     // MARK: Thread and environment changes
@@ -256,7 +264,7 @@ final class TerminalController {
             host.attachments[id] = nil
         }
         guard let threadId else {
-            host.view.show([], direction: direction, activeId: "", list: nil)
+            host.loaded?.show([], direction: direction, activeId: "", list: nil)
             return
         }
         var panes: [(id: String, surface: TerminalSurfaceView)] = []
@@ -628,7 +636,8 @@ final class TerminalController {
         let limitDrawer = state.hasReachedSplitLimit
         let limitPanel = (panel.panelState.active?.terminal?.terminalIds.count ?? 0) >= max
         let new = label("New Terminal", "terminal.new"), close = label("Close Terminal", "terminal.close")
-        for (view, limit) in [(panel.terminalDrawer, limitDrawer), (panel.terminalPanel, limitPanel)] {
+        for (view, limit) in [(panel.lazyTerminalDrawer.loaded, limitDrawer), (panel.terminalPanel, limitPanel)] {
+            guard let view else { continue }
             let split = limit ? "Split Terminal Horizontally (max \(max) per group)" : label("Split Terminal Horizontally", "terminal.split")
             let vertical = limit ? "Split Terminal Vertically (max \(max) per group)" : label("Split Terminal Vertically", "terminal.splitVertical")
             view.actions.setLabels(split: split, splitVertical: vertical, new: new, close: close)
@@ -657,7 +666,7 @@ final class TerminalController {
     private func relabel() {
         let state = state
         if state.open, state.hasTerminalList {
-            panel.terminalDrawer.list.apply(TerminalListModel.make(state, label: label, closeShortcut: shortcut("terminal.close")))
+            panel.lazyTerminalDrawer.loaded?.list.apply(TerminalListModel.make(state, label: label, closeShortcut: shortcut("terminal.close")))
         }
         if let surface = panel.panelState.active?.terminal, surface.terminalIds.count > 1 {
             let tab = TerminalDrawerState(open: true, terminalIds: surface.terminalIds, activeTerminalId: surface.activeTerminalId,

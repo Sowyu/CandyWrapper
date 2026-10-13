@@ -17,6 +17,21 @@ struct PanelSlideTests {
         return (window, panel)
     }
 
+    /// Hidden panels hold nothing until they first show; a closed one stays built and hidden.
+    @Test func hiddenPanelsAreBuiltOnFirstShow() {
+        let (window, panel) = makePanel()
+        _ = window
+        #expect(panel.lazyDetailsCard.loaded == nil && panel.lazyTerminalDrawer.loaded == nil)
+        #expect(panel.lazyStashMenu.loaded == nil && panel.lazyQuestionPanel.loaded == nil)
+        panel.setDetailsOpen(true)
+        panel.setTerminal(open: true, height: 200)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.lazyDetailsCard.loaded?.superview === panel && panel.lazyTerminalDrawer.loaded?.isHidden == false)
+        panel.setDetailsOpen(false)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.lazyDetailsCard.loaded?.isHidden == true)
+    }
+
     @Test func rightPanelSlidesAndLandsOnItsRestingFrame() {
         let previous = SettingsPanelMotion.durationMs
         defer { SettingsPanelMotion.durationMs = previous }

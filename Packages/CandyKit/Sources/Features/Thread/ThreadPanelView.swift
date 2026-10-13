@@ -242,7 +242,7 @@ public final class ThreadPanelView: DSView {
         // slides both ways; the bar fades in (ThreadDetailsCard.tsx:163-170, popover.tsx:79-83, ThreadFindBar.tsx:62-66
         // in 2994, f92afe79c).
         let changed = findOpen != oldValue
-        if changed, detailsOpen, !detailsCard.isHidden, findOpen || timeline.detailsCardLeft == nil { detailsSlideFrom = detailsCard.frame.minY }
+        if changed, detailsOpen, let card = lazyDetailsCard.loaded, !card.isHidden, findOpen || timeline.detailsCardLeft == nil { detailsSlideFrom = card.frame.minY }
         if findOpen {
             findBar.isHidden = false
             if changed { Self.fadeIn(findBar) }
@@ -289,7 +289,9 @@ public final class ThreadPanelView: DSView {
     /// The runtime request docked between the queue and the composer (ChatComposer.tsx's top
     /// drawer). Show one through `drawer`; the composer controller configures them.
     public let approvalPanel = ApprovalPanelView()
-    public let questionPanel = QuestionPanelView()
+    /// The pending question's card, built the first time a question shows. Wire it through `lazyQuestionPanel`.
+    public let lazyQuestionPanel = LazyView { QuestionPanelView() }
+    public var questionPanel: QuestionPanelView { lazyQuestionPanel.view }
     /// The `/`, `@`, `$` and `#` menu, docked on the composer's top edge over the other attachments.
     public let commandMenu = ComposerCommandMenuView()
     /// Drives `commandMenu` from the composer's caret; the app supplies rows and acts on picks.
@@ -319,7 +321,7 @@ public final class ThreadPanelView: DSView {
         let native = hidesCustomChrome
         timeline.style = native ? .native : .classic
         approvalPanel.nativeCard = native
-        questionPanel.nativeCard = native
+        lazyQuestionPanel.set(\.nativeCard, native)
         composer.nativeGlass = native
         if native, scrollFade == nil {
             scrollFade = ToolbarScrollFade(on: timeline.scrollView)
@@ -432,7 +434,9 @@ public final class ThreadPanelView: DSView {
     public let stashBadge = ComposerStashBadgeView()
     public var showsStashBadge = false { didSet { if showsStashBadge != oldValue { needsLayout = true } } }
     /// The stash list, docked where the `/` menu goes; the `/` menu wins when both are open.
-    public let stashMenu = ComposerStashMenuView()
+    /// Built the first time it opens. Wire it and push entries through `lazyStashMenu`.
+    public let lazyStashMenu = LazyView { ComposerStashMenuView() }
+    public var stashMenu: ComposerStashMenuView { lazyStashMenu.view }
     public var stashMenuOpen = false { didSet { if stashMenuOpen != oldValue { needsLayout = true } } }
     /// "Loading messages..." over the composer while the thread syncs (`ComposerActivityRow`).
     public let activityRow = ComposerActivityRowView()
@@ -534,14 +538,19 @@ public final class ThreadPanelView: DSView {
     public var diffPanel: DiffPanelView { rightPanel.diff }
     public var lazyDiffPanel: LazyView<DiffPanelView> { rightPanel.lazyDiff }
     /// The terminal drawer under the chat column; `TerminalController` fills it.
-    public let terminalDrawer = TerminalDrawerView()
+    /// Built the first time it opens. Wire it through `lazyTerminalDrawer`.
+    public let lazyTerminalDrawer = LazyView { TerminalDrawerView() }
+    public var terminalDrawer: TerminalDrawerView { lazyTerminalDrawer.view }
     public private(set) var terminalOpen = false
     /// The drawer's height while open (already clamped by the controller).
     public private(set) var terminalHeight: CGFloat = 0
     /// The header's terminal toggle was clicked (`terminal.toggle`).
     public var onTerminalToggle: (@MainActor () -> Void)?
     /// The thread details card (`ThreadDetailsPanel`): workspace, branch and git actions.
-    public let detailsCard = ThreadDetailsCardView()
+    /// Built the first time it opens. Controllers wire it with `lazyDetailsCard.configure` and fill it there
+    /// and while it is loaded.
+    public let lazyDetailsCard = LazyView { ThreadDetailsCardView() }
+    public var detailsCard: ThreadDetailsCardView { lazyDetailsCard.view }
     public private(set) var detailsOpen = false
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
@@ -577,7 +586,6 @@ public final class ThreadPanelView: DSView {
         composer.isHidden = true
         queue.isHidden = true
         approvalPanel.isHidden = true
-        questionPanel.isHidden = true
         // Back to front: queue, request panel, composer (each slides under the next).
         addSubview(queue)
         tasksView.isHidden = true; addSubview(tasksView)
@@ -593,12 +601,9 @@ public final class ThreadPanelView: DSView {
         bannerStack.onLayoutChange = { [weak self] in self?.needsLayout = true }
         addSubview(bannerStack)
         addSubview(approvalPanel)
-        addSubview(questionPanel)
         contextStrip.isHidden = true
         addSubview(contextStrip)
         addSubview(commandMenu)
-        stashMenu.isHidden = true
-        addSubview(stashMenu)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         menus.onLayoutChange = { [weak self] in self?.needsLayout = true }
@@ -616,8 +621,6 @@ public final class ThreadPanelView: DSView {
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
         addSubview(providerBanner)
-        terminalDrawer.isHidden = true
-        addSubview(terminalDrawer)
         rightPanel.isHidden = true
         rightPanelBackdrop.isHidden = true
         addSubview(rightPanelBackdrop)
@@ -631,8 +634,6 @@ public final class ThreadPanelView: DSView {
             slide.onFrame = { [weak self] _ in self?.layoutNow() }
             slide.onEnd = { [weak self] in self?.slideEnded() }
         }
-        detailsCard.isHidden = true
-        addSubview(detailsCard)
         addSubview(toasts)
         addSubview(fileDropOverlay); fileDropOverlay.isHidden = true; fileDropOverlay.layer?.zPosition = 40
         // Each banner goes where it always sat back to front: queue, goal, recovery, plan, tasks;
@@ -643,6 +644,15 @@ public final class ThreadPanelView: DSView {
         lazyPlanFollowUpBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.tasksView]) }
         lazyServerUpdateBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyNoticeBanner.loaded, self?.environmentBanner]) }
         lazyNoticeBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.environmentBanner]) }
+        // The panels go where they always sat back to front: question panel, context strip, command menu, stash
+        // menu, composer; banners, terminal drawer, right panel; maximize, details card, toasts.
+        lazyQuestionPanel.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.contextStrip]) }
+        lazyStashMenu.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.composer]) }
+        lazyTerminalDrawer.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.rightPanelBackdrop]) }
+        lazyDetailsCard.onLoad = { [weak self] card in
+            self?.insertAccessory(card, under: [self?.toasts])
+            card.layer?.zPosition = 2
+        }
         lazyFindBar.onLoad = { [weak self] bar in
             guard let self else { return }
             bar.isHidden = true
@@ -707,7 +717,7 @@ public final class ThreadPanelView: DSView {
     public func setDetailsOpen(_ open: Bool) {
         detailsOpen = open
         header.toggles[0].isPressed = open
-        detailsCard.isHidden = !open
+        if open { detailsCard.isHidden = false } else { lazyDetailsCard.loaded?.isHidden = true }
         needsLayout = true
         onPanelTogglesChange?()
     }
@@ -999,11 +1009,11 @@ public final class ThreadPanelView: DSView {
         let wasOpen = terminalOpen
         let slides = open != wasOpen && !switchingThread
         // The controller empties a closed drawer right after this; a still image of it slides down.
-        if slides, !open { terminalGhost = ghost(of: terminalDrawer, replacing: terminalGhost) }
+        if slides, !open, let drawer = lazyTerminalDrawer.loaded { terminalGhost = ghost(of: drawer, replacing: terminalGhost) }
         if open { dropGhost(&terminalGhost) }
         terminalOpen = open
         terminalHeight = height
-        terminalDrawer.isHidden = !open
+        if open { terminalDrawer.isHidden = false } else { lazyTerminalDrawer.loaded?.isHidden = true }
         header.toggles[1].isPressed = open
         needsLayout = true
         onPanelTogglesChange?()
@@ -1233,8 +1243,9 @@ public final class ThreadPanelView: DSView {
                                        width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
         }
         let stashShown = !menuShown && stashMenuOpen && !composer.isHidden && drawer != .approval
-        stashMenu.isHidden = !stashShown
+        lazyStashMenu.loaded?.isHidden = !stashShown
         if stashShown {
+            stashMenu.isHidden = false
             let maxList = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
             let h = min(stashMenu.preferredHeight(maxList: maxList), max(96, y - 24 + ComposerBannerView.overlap))
             stashMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
@@ -1257,10 +1268,10 @@ public final class ThreadPanelView: DSView {
         var top = y
         let shown: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
         approvalPanel.isHidden = shown !== approvalPanel
-        questionPanel.isHidden = shown !== questionPanel
+        lazyQuestionPanel.loaded?.isHidden = shown !== lazyQuestionPanel.loaded
         if let shown {
             // `max-h-[min(24rem,40dvh)]` for the question body.
-            questionPanel.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            lazyQuestionPanel.loaded?.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
             let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
@@ -1326,7 +1337,7 @@ public final class ThreadPanelView: DSView {
         if activityShown && !activityInStack { activityRow.joinsAbove = attachedAbove }
         let stripAbove = attachedAbove || (activityShown && !activityInStack)
         approvalPanel.joinsAbove = stripAbove
-        questionPanel.joinsAbove = stripAbove
+        lazyQuestionPanel.loaded?.joinsAbove = stripAbove
         // ponytail: the timeline keeps room for the collapsed stack only; an open stack overlays it, reserve it if T3's inset jump matters
         let stackCap = bannerStack.hasStack ? ComposerBannerStackView.peekHeight : 0
         let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
@@ -1384,9 +1395,11 @@ public final class ThreadPanelView: DSView {
         let shownDrawer = !terminalSlide.isRunning ? drawer
             : ((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer
-        terminalDrawer.isHidden = drawer == 0
-        // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
-        terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
+        if let terminalDrawer = drawer > 0 ? self.terminalDrawer : lazyTerminalDrawer.loaded {
+            terminalDrawer.isHidden = drawer == 0
+            // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
+            terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
+        }
         terminalGhost?.frame.origin.y = chatHeight
         // Glass Native: the rows scroll under the toolbar and start below it.
         let timelineTop = hidesCustomChrome ? 0 : chatTop
@@ -1453,6 +1466,7 @@ public final class ThreadPanelView: DSView {
             findBar.layer?.zPosition = 4
         }
         if detailsOpen {
+            let detailsCard = self.detailsCard
             // The card folds to the height it has: inline, the placement's height; as a popover, the
             // canvas minus 52 (ThreadDetailsCard.tsx:62-63).
             let canvasHeight = max(0, chatHeight - chatTop)
@@ -1510,7 +1524,6 @@ public final class ThreadPanelView: DSView {
         fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || WindowGlass.isActive(for: self)
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
-        detailsCard.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
         CATransaction.commit()
     }

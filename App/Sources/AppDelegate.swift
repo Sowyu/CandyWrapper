@@ -240,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updateSlowRPCToast() }
         }
         installQuitHold(window: window, presenter: presenter)
-        openIn = OpenInController(card: threads.panel.detailsCard, git: threads.git, environments: environments, composer: threads.composer,
+        openIn = OpenInController(card: threads.panel.lazyDetailsCard, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) }

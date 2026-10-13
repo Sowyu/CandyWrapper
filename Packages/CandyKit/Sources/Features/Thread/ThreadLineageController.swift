@@ -36,23 +36,26 @@ public final class ThreadLineageController {
 
     public init(panel: ThreadPanelView) {
         self.panel = panel
-        let section = panel.detailsCard.lineage
-        section.provider = { [weak self] instance in
-            guard let self, let env = threadId?.environmentId,
-                  let p = providers?(env).first(where: { $0.instanceId.rawValue == instance }) else { return nil }
-            return (p.driver, p.displayName ?? p.driver)
+        // The card is built the first time it opens; `sync` keeps its lineage in `lazyDetailsCard` until then.
+        panel.lazyDetailsCard.configure { [weak self] card in
+            let section = card.lineage
+            section.provider = { [weak self] instance in
+                guard let self, let env = threadId?.environmentId,
+                      let p = providers?(env).first(where: { $0.instanceId.rawValue == instance }) else { return nil }
+                return (p.driver, p.displayName ?? p.driver)
+            }
+            section.onOpen = { [weak self] id in self?.open(id) }
+            section.onMerge = { [weak self] in self?.merge() }
+            section.onStop = { [weak self] id in self?.stop(id) }
+            section.onStopWorkflow = { [weak self] id, coordinator in self?.stopWorkflow(id, coordinator: coordinator) }
+            section.onDetach = { [weak self] in self?.detach() }
         }
-        section.onOpen = { [weak self] id in self?.open(id) }
-        section.onMerge = { [weak self] in self?.merge() }
-        section.onStop = { [weak self] id in self?.stop(id) }
-        section.onStopWorkflow = { [weak self] id, coordinator in self?.stopWorkflow(id, coordinator: coordinator) }
-        section.onDetach = { [weak self] in self?.detach() }
         panel.model.onForkFromRun = { [weak self] source, run in self?.fork(source: source, run: run) }
     }
 
     /// The open thread changed or one of its inputs did. `threadId` is scoped; nil on a draft.
     public func update(threadId: ThreadId?, projection: ThreadProjection?) {
-        if threadId != self.threadId { panel.detailsCard.lineage.reset() }
+        if threadId != self.threadId { panel.lazyDetailsCard.loaded?.lineage.reset() }
         self.threadId = threadId
         self.projection = projection
         sync()
@@ -60,9 +63,9 @@ public final class ThreadLineageController {
 
     /// Shells or providers changed.
     public func sync() {
-        let section = panel.detailsCard.lineage
+        let card = panel.lazyDetailsCard
         guard let threadId, let env = threadId.environmentId, let projection else {
-            section.lineage = ThreadRelationships.Lineage()
+            card.set(\.lineage.lineage, ThreadRelationships.Lineage())
             panel.composer.replacement = nil
             panel.timeline.setHeader(nil, height: 0)
             panel.timeline.setFooter(nil, height: 0)
@@ -73,8 +76,8 @@ public final class ThreadLineageController {
         let local = ThreadRelationships.unscoped(ThreadRelationships.related(all, to: threadId, projection: projection), environmentId: env)
         let lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection)
         let byId = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        section.mergeTargetTitle = lineage.mergeTarget.flatMap { byId[$0]?.title }
-        section.lineage = lineage
+        card.set(\.lineage.mergeTargetTitle, lineage.mergeTarget.flatMap { byId[$0]?.title })
+        card.set(\.lineage.lineage, lineage)
         // "Subagent of" over the timeline and the parent crumb in the header: any thread whose lineage names a
         // subagent parent.
         let thread = projection.thread
