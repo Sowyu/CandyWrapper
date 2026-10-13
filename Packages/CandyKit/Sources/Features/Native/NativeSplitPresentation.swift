@@ -4,7 +4,6 @@ import DesignSystem
 /// What Glass Native's toolbar buttons do. The app wires them to its existing commands.
 @MainActor
 public struct NativeToolbarActions {
-    public var newThread: () -> Void = {}
     /// T3's panel toggles, in its order (PanelLayoutControls.tsx:76): thread details, terminal drawer, right panel.
     public var details: () -> Void = {}
     public var terminal: () -> Void = {}
@@ -12,9 +11,19 @@ public struct NativeToolbarActions {
     /// Maximize or restore the right panel; the toolbar shows it while the right panel is open (ChatView.tsx:11211-11232).
     public var maximize: () -> Void = {}
     public var rightPanelOpen: () -> Bool = { false }
+    /// The toggles' on states: thread details, terminal drawer, right panel, and whether the panel is maximized.
+    public var panelStates: () -> NativePanelStates = { NativePanelStates() }
     /// Whether the panel toggles apply now: a thread or draft shows in the detail column.
     public var threadShown: () -> Bool = { false }
     public init() {}
+}
+
+/// What the toolbar's panel toggles show as on.
+public struct NativePanelStates: Equatable, Sendable {
+    public var details = false, terminal = false, rightPanel = false, maximized = false
+    public init(details: Bool = false, terminal: Bool = false, rightPanel: Bool = false, maximized: Bool = false) {
+        self.details = details; self.terminal = terminal; self.rightPanel = rightPanel; self.maximized = maximized
+    }
 }
 
 /// Glass Native's main window (docs/glass-native.md): a unified toolbar over a split view with the sidebar,
@@ -25,7 +34,7 @@ public struct NativeToolbarActions {
 // rest with today's custom sidebar and timeline (a split view in the theme frame or frame-based hosts beside it
 // did not avoid it); measure again when phases 2 and 3 replace those views with fewer native ones
 @MainActor
-public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolbarDelegate, NSToolbarItemValidation {
+public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolbarDelegate {
     public let split = NSSplitViewController()
     public let sidebarItem: NSSplitViewItem
     public let detailItem: NSSplitViewItem
@@ -111,32 +120,79 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         didSet { breadcrumbItem?.view = breadcrumb }
     }
     private weak var breadcrumbItem: NSToolbarItem?
-    private weak var maximizeItem: NSToolbarItem?
+    private weak var panels: NSSegmentedControl?
+    private weak var panelsItem: NSToolbarItem?
     private var maximizeShown = false
+    /// The states the panel toggles last showed, to tell which segment a click flipped.
+    private var shownStates = NativePanelStates()
 
-    /// Maximize shows only while the right panel is open, as T3's does (ChatView.tsx:11211-11232).
+    /// Maximize shows only while the right panel is open, as T3's does (ChatView.tsx:11211-11232). The toggles'
+    /// group swaps for one with the extra segment.
     public func setMaximizeShown(_ shown: Bool) {
+        guard shown != maximizeShown else { return }
         maximizeShown = shown
-        if #available(macOS 15, *) { maximizeItem?.isHidden = !shown }
+        guard let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.panels || $0.itemIdentifier == Self.panelsWithMaximize })
+        else { return }
+        toolbar.removeItem(at: index)
+        toolbar.insertItem(withItemIdentifier: shown ? Self.panelsWithMaximize : Self.panels, at: index)
+    }
+
+    /// Shows the toggles' on states. The app calls it when a panel opens or closes; AppKit's validation after
+    /// each event calls it too.
+    public func syncPanelStates() {
+        guard let control = panels else { return }
+        let states = actions.panelStates()
+        shownStates = states
+        let segments = panelSegments
+        for (index, segment) in segments.enumerated() where index < control.segmentCount {
+            let selected = states[keyPath: segment.state]
+            if control.isSelected(forSegment: index) != selected { control.setSelected(selected, forSegment: index) }
+        }
+        if let i = segments.firstIndex(where: { $0.state == \.maximized }), i < control.segmentCount {
+            let label = states.maximized ? "Restore panel" : "Maximize panel"
+            if control.toolTip(forSegment: i) != label {
+                let symbol = states.maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+                control.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: label), forSegment: i)
+                control.setToolTip(label, forSegment: i)
+            }
+        }
+        // T3 shows the toggles only over a thread or draft; Settings and the utility pages have none.
+        let shown = actions.threadShown()
+        if #available(macOS 15, *), let item = panelsItem, item.isHidden == shown { item.isHidden = !shown }
     }
 
     // MARK: Toolbar
 
     static let sidebarToggle = NSToolbarItem.Identifier("candy.sidebar")
-    static let newThread = NSToolbarItem.Identifier("candy.newThread")
     static let title = NSToolbarItem.Identifier("candy.breadcrumb")
-    static let details = NSToolbarItem.Identifier("candy.details")
-    static let terminal = NSToolbarItem.Identifier("candy.terminal")
-    static let rightPanel = NSToolbarItem.Identifier("candy.rightPanel")
-    static let maximize = NSToolbarItem.Identifier("candy.maximize")
+    static let panels = NSToolbarItem.Identifier("candy.panels")
+    static let panelsWithMaximize = NSToolbarItem.Identifier("candy.panelsWithMaximize")
+
+    private struct PanelSegment {
+        let symbol: String, label: String, state: KeyPath<NativePanelStates, Bool>
+        let action: @MainActor (NativeToolbarActions) -> Void
+    }
+
+    /// T3's panel toggles in its order (PanelLayoutControls.tsx:61-127, Lucide square-menu, panel-bottom and
+    /// panel-right with T3's words), with Maximize before the terminal while the right panel is open.
+    private var panelSegments: [PanelSegment] {
+        var segments = [
+            PanelSegment(symbol: "list.bullet.rectangle", label: "Toggle thread details", state: \.details) { $0.details() },
+            PanelSegment(symbol: "rectangle.bottomhalf.inset.filled", label: "Toggle terminal drawer", state: \.terminal) { $0.terminal() },
+            PanelSegment(symbol: "sidebar.right", label: "Toggle right panel", state: \.rightPanel) { $0.rightPanel() },
+        ]
+        if maximizeShown {
+            segments.insert(PanelSegment(symbol: "arrow.up.left.and.arrow.down.right", label: "Maximize panel", state: \.maximized) { $0.maximize() }, at: 1)
+        }
+        return segments
+    }
 
     public func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.sidebarToggle, .flexibleSpace, Self.newThread, .sidebarTrackingSeparator, Self.title, .flexibleSpace,
-         Self.details, Self.maximize, Self.terminal, Self.rightPanel]
+        [Self.sidebarToggle, .sidebarTrackingSeparator, Self.title, .flexibleSpace, maximizeShown ? Self.panelsWithMaximize : Self.panels]
     }
 
     public func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
+        [Self.sidebarToggle, .sidebarTrackingSeparator, Self.title, .flexibleSpace, Self.panels, Self.panelsWithMaximize]
     }
 
     public func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
@@ -144,8 +200,16 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         switch id {
         case .sidebarTrackingSeparator:
             return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 0)
-        case Self.sidebarToggle: return item(id, "sidebar.left", "Toggle Sidebar", #selector(pressSidebar))
-        case Self.newThread: return item(id, "square.and.pencil", "New Thread", #selector(pressNewThread))
+        case Self.sidebarToggle:
+            // T3's plain panel-left glyph beside the traffic lights, not a glass button.
+            let item = NSToolbarItem(itemIdentifier: id)
+            item.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Toggle Sidebar")
+            item.label = "Toggle Sidebar"
+            item.toolTip = "Toggle Sidebar"
+            item.isBordered = false
+            item.target = self
+            item.action = #selector(pressSidebar)
+            return item
         case Self.title:
             let item = NSToolbarItem(itemIdentifier: id)
             item.view = breadcrumb
@@ -155,45 +219,49 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             item.visibilityPriority = .high
             breadcrumbItem = item
             return item
-        // PanelLayoutControls.tsx:61-127: Lucide square-menu, panel-bottom and panel-right, with T3's words.
-        case Self.details: return item(id, "list.bullet.rectangle", "Toggle thread details", #selector(pressDetails))
-        case Self.terminal: return item(id, "rectangle.bottomhalf.inset.filled", "Toggle terminal drawer", #selector(pressTerminal))
-        case Self.rightPanel: return item(id, "sidebar.right", "Toggle right panel", #selector(pressRightPanel))
-        case Self.maximize:
-            let item = item(id, "arrow.up.left.and.arrow.down.right", "Maximize panel", #selector(pressMaximize))
-            if #available(macOS 15, *) { item.isHidden = !maximizeShown }
-            maximizeItem = item
+        case Self.panels, Self.panelsWithMaximize:
+            // A plain segmented control, not an `NSToolbarItemGroup`: the group's control draws its on segments in
+            // the system's saturated accent, and T3 marks an on toggle with the subtle `accent` tint
+            // (`data-pressed:bg-accent`).
+            let segments = panelSegments
+            let control = NSSegmentedControl(images: segments.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: $0.label)! },
+                                             trackingMode: .selectAny, target: self, action: #selector(pressPanel(_:)))
+            // T3's 4% `accent` tint vanishes on the toolbar's glass, and AppKit picks the glyph color from the bezel's
+            // own color, so the tint is an opaque equivalent that keeps the glyph in the foreground color.
+            control.selectedSegmentBezelColor = Themed.pick(light: NSColor(srgbRed: 0xe4 / 255, green: 0xe4 / 255, blue: 0xe7 / 255, alpha: 1),
+                                                            dark: NSColor(white: 0.30, alpha: 1))
+            for (i, segment) in segments.enumerated() { control.setToolTip(segment.label, forSegment: i) }
+            control.setAccessibilityLabel("Panels")
+            let item = NativeValidatedToolbarItem(itemIdentifier: id)
+            item.view = control
+            item.label = "Panels"
+            item.onValidate = { [weak self] in self?.syncPanelStates() }
+            panels = control
+            panelsItem = item
+            syncPanelStates()
             return item
         default: return nil
         }
     }
 
-    private func item(_ id: NSToolbarItem.Identifier, _ symbol: String, _ label: String, _ action: Selector) -> NSToolbarItem {
-        let item = NSToolbarItem(itemIdentifier: id)
-        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        item.label = label
-        item.toolTip = label
-        item.isBordered = true
-        item.target = self
-        item.action = action
-        return item
-    }
-
     @objc private func pressSidebar() { toggleSidebar() }
-    @objc private func pressNewThread() { actions.newThread() }
-    @objc private func pressDetails() { actions.details() }
-    @objc private func pressTerminal() { actions.terminal() }
-    @objc private func pressRightPanel() { actions.rightPanel() }
-    @objc private func pressMaximize() { actions.maximize() }
 
-    /// AppKit asks on window updates (after events), never while idle.
-    public func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        switch item.itemIdentifier {
-        case Self.details, Self.terminal, Self.rightPanel: return actions.threadShown()
-        case Self.maximize: return actions.rightPanelOpen()
-        default: return true
+    /// The segment whose selection the click flipped runs its toggle; the panel's real state then decides what shows.
+    @objc private func pressPanel(_ sender: Any?) {
+        guard let control = panels else { return }
+        let segments = panelSegments
+        if let index = segments.indices.first(where: { control.isSelected(forSegment: $0) != shownStates[keyPath: segments[$0].state] }) {
+            segments[index].action(actions)
         }
+        syncPanelStates()
     }
+
+}
+
+/// A custom-view toolbar item that AppKit's validation, after events and never while idle, reaches.
+final class NativeValidatedToolbarItem: NSToolbarItem {
+    var onValidate: (() -> Void)?
+    override func validate() { onValidate?() }
 }
 
 private extension NSViewController {

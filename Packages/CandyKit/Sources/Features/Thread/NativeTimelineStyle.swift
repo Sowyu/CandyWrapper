@@ -12,6 +12,18 @@ enum NativeTimeline {
     /// `--color-card`: #ffffff light, #111111 dark. Content blocks stay solid so text reads over the frost.
     nonisolated(unsafe) static let card = Themed.pick(light: .white, dark: NSColor(srgbRed: 0x11 / 255, green: 0x11 / 255, blue: 0x11 / 255, alpha: 1))
 
+    /// A hairline that keeps a user bubble's shape readable on the frost. Light mode always has one, 8% black: T3's
+    /// #f4f4f5 bubble sits within a few levels of the light frost at any opacity, and its `border` token is too pale to
+    /// show. Dark mode gets 12% white only below the default Glass opacity, fading out by 80%, where T3's bubble reads.
+    /// Resolved at draw time, so a slider change shows on the next redraw.
+    nonisolated(unsafe) static let lowOpacityEdge: NSColor = {
+        NSColor(name: nil) { appearance in
+            guard appearance.isDark else { return NSColor.black.withAlphaComponent(0.08) }
+            let strength = min(1, max(0, (0.8 - ThemeRuntime.glassOpacity) / 0.5))
+            return NSColor.white.withAlphaComponent(0.12 * strength)
+        }
+    }()
+
     /// The SF Symbol for a work row's Lucide icon, where one means the same; nil keeps the Lucide glyph (T3's own
     /// brand marks, for one).
     static func symbol(_ icon: IconName) -> String? {

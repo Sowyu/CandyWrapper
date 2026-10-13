@@ -78,6 +78,8 @@ extension SidebarContentView {
         chrome.filter.action = #selector(showFilterMenu(_:))
         chrome.addProject.target = self
         chrome.addProject.action = #selector(addProjectPressed)
+        chrome.newThread.target = self
+        chrome.newThread.action = #selector(newThreadPressed)
         for b in [footer.settings, footer.pullRequests, footer.usage, footer.back] {
             b.target = self
             b.action = #selector(footerPressed(_:))
@@ -85,6 +87,7 @@ extension SidebarContentView {
     }
 
     @objc private func addProjectPressed() { actions.addProject() }
+    @objc private func newThreadPressed() { actions.newThread() }
 
     @objc private func footerPressed(_ sender: NSButton) {
         guard let footer = nativeFooter else { return }
@@ -105,19 +108,11 @@ extension SidebarContentView {
         return true
     }
 
-    // MARK: Project filter (SidebarProjectScopeView's choices as a native menu)
+    // MARK: Project filter
 
-    @objc private func showFilterMenu(_ sender: NSButton) {
-        let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt
-        let groups = SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId, order: order)
-        let items = [ThreadMenuItem("project:", "All projects", checked: state.projectScopeKey == nil)]
-            + groups.map { ThreadMenuItem("project:\($0.key)", $0.label, checked: state.projectScopeKey == $0.key) }
-        let menu = NativeItemContextMenu.make(items) { [weak self] choice in
-            let key = String(choice.dropFirst(8))
-            self?.setProjectScope(key.isEmpty ? nil : key)
-        }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
-    }
+    /// Classic's project combobox (Sidebar.tsx:4990-5122): search, environment badges and per-project settings,
+    /// under the native search field.
+    @objc private func showFilterMenu(_ sender: NSButton) { toggleScopePopup() }
 
     func layoutNative() {
         guard let native = nativeList, let chrome = nativeChrome, let footer = nativeFooter else { return }

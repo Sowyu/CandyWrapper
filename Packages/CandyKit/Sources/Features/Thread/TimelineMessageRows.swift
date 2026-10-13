@@ -195,6 +195,8 @@ final class UserMessageRowView: TimelineRowView {
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
         markdown.native = context.native
+        // Below the default Glass opacity the frost nears the bubble's fill; a hairline keeps its shape.
+        bubble.border = context.native ? NativeTimeline.lowOpacityEdge : nil
         // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
         let model = context.model
         markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments,
@@ -280,6 +282,9 @@ final class UserMessageRowView: TimelineRowView {
         let body = collapsible && !expanded ? min(full, Self.collapsedHeight) : full
         return (bubbleWidth, body, full)
     }
+
+    /// The bubble's hairline, for tests.
+    var bubbleBorder: NSColor? { bubble.border }
 
     /// The bubble's width in a lane `width` wide, for tests.
     func bubbleWidth(forWidth width: CGFloat) -> CGFloat { metrics(width).bubble }

@@ -308,22 +308,24 @@ public final class ThreadPanelView: DSView {
 
     /// The right panel can maximize now (open, not a sheet): Glass Native's toolbar shows its Maximize button.
     public var onMaximizableChange: ((Bool) -> Void)?
+    /// Thread details, the terminal drawer, the right panel or its maximized state changed: Glass Native's
+    /// toolbar toggles show their on states.
+    public var onPanelTogglesChange: (() -> Void)?
     private var reportedMaximizable = false
     /// The soft edge where the rows scroll under the toolbar, made while Glass Native shows.
-    private var scrollEdge: ToolbarScrollEdgeView?
+    private var scrollFade: ToolbarScrollFade?
 
     private func applyPresentation() {
         let native = hidesCustomChrome
         timeline.style = native ? .native : .classic
         approvalPanel.nativeCard = native
         questionPanel.nativeCard = native
-        if native, scrollEdge == nil {
-            let edge = ToolbarScrollEdgeView()
-            addSubview(edge, positioned: .above, relativeTo: timeline)
-            scrollEdge = edge
+        composer.nativeGlass = native
+        if native, scrollFade == nil {
+            scrollFade = ToolbarScrollFade(on: timeline.scrollView)
         } else if !native {
-            scrollEdge?.removeFromSuperview()
-            scrollEdge = nil
+            scrollFade?.remove()
+            scrollFade = nil
         }
         needsLayout = true
     }
@@ -707,6 +709,7 @@ public final class ThreadPanelView: DSView {
         header.toggles[0].isPressed = open
         detailsCard.isHidden = !open
         needsLayout = true
+        onPanelTogglesChange?()
     }
 
     // MARK: Right panel
@@ -1003,6 +1006,7 @@ public final class ThreadPanelView: DSView {
         terminalDrawer.isHidden = !open
         header.toggles[1].isPressed = open
         needsLayout = true
+        onPanelTogglesChange?()
         if open != wasOpen || terminalSlide.isRunning {
             terminalSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
             layoutNow()
@@ -1063,6 +1067,7 @@ public final class ThreadPanelView: DSView {
         maximize.setAccessibilityLabel(label)
         maximize.toolTip = label
         needsLayout = true
+        onPanelTogglesChange?()
     }
 
     /// A press that nothing under it takes (empty timeline, header or page space) blurs the prompt, as a
@@ -1384,8 +1389,8 @@ public final class ThreadPanelView: DSView {
         let timelineTop = hidesCustomChrome ? 0 : chatTop
         timeline.chromeTop = hidesCustomChrome ? toolbarInset : 0
         timeline.frame = NSRect(x: 0, y: timelineTop, width: chat, height: max(0, chatHeight - timelineTop))
-        scrollEdge?.frame = NSRect(x: 0, y: 0, width: chat, height: toolbarInset + ToolbarScrollEdgeView.fade)
-        scrollEdge?.isHidden = chat == 0 || toolbarInset == 0
+        // The timeline's scroll view fills the timeline.
+        scrollFade?.update(toolbar: toolbarInset - timeline.frame.minY, size: timeline.frame.size)
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
         panelGhost?.frame.origin.x = chat

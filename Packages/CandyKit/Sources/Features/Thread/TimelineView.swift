@@ -160,6 +160,7 @@ public final class TimelineView: DSView {
             // A thread read at its end stays at its end in the other style.
             endAfterRestyle = followsEnd || maxScroll - viewport.minY <= 1
             context.style = style
+            applyScrollerStyle()
             measured.removeAll()
             reconfigureVisible()
             updateTopInset()
@@ -170,11 +171,31 @@ public final class TimelineView: DSView {
 
     private var endAfterRestyle = false
 
+    /// Glass Native uses the system's scroller, which hides while idle, kept between the toolbar and the composer.
+    /// Classic keeps T3's always-drawn bar.
+    private func applyScrollerStyle() {
+        if style == .native {
+            scrollView.verticalScroller = NSScroller()
+            scrollView.scrollerStyle = NSScroller.preferredScrollerStyle
+            scrollView.hasVerticalScroller = true
+            scrollView.autohidesScrollers = true
+        } else {
+            scrollView.useT3Scrollbars(.native, reservesLane: false)
+            scrollView.scrollerInsets = NSEdgeInsetsZero
+        }
+        updateScrollerInsets()
+    }
+
+    private func updateScrollerInsets() {
+        guard style == .native else { return }
+        scrollView.scrollerInsets = NSEdgeInsets(top: chromeTop, left: 0, bottom: bottomInset, right: 0)
+    }
+
     /// Room the window's toolbar takes over the top of the timeline (Glass Native): the rows scroll under it.
-    public var chromeTop: CGFloat = 0 { didSet { if chromeTop != oldValue { updateTopInset(); layoutHeader() } } }
+    public var chromeTop: CGFloat = 0 { didSet { if chromeTop != oldValue { updateTopInset(); layoutHeader(); updateScrollerInsets() } } }
 
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
-    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
+    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true; updateScrollerInsets() } } }
 
     /// A loaded server thread (T3's `hideEmptyPlaceholder` is false): with nothing to list, the timeline
     /// says so (MessagesTimeline.tsx:1541-1562). Drafts and loading threads leave it off.

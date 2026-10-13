@@ -48,17 +48,22 @@ final class MainPresentationController {
         }
         let presentation = NativeSplitPresentation()
         var actions = NativeToolbarActions()
-        actions.newThread = { [weak self] in self?.sidebar?.actions.newThread() }
         actions.details = { [weak self] in self?.threads.panel.onDetailsToggle?() }
         actions.terminal = { [weak self] in self?.threads.panel.onTerminalToggle?() }
         actions.rightPanel = { [weak self] in self?.threads.panel.toggleRightPanel() }
         actions.maximize = { [weak self] in self?.threads.panel.toggleMaximized() }
         actions.rightPanelOpen = { [weak self] in self?.threads.panel.rightPanelOpen == true && self?.threads.panel.window != nil }
         actions.threadShown = { [weak self] in self?.threads.panel.window != nil }
+        actions.panelStates = { [weak self] in
+            guard let panel = self?.threads.panel, panel.window != nil else { return NativePanelStates() }
+            return NativePanelStates(details: panel.detailsOpen, terminal: panel.terminalOpen, rightPanel: panel.rightPanelOpen,
+                                     maximized: panel.rightPanelMaximized)
+        }
         presentation.actions = actions
         presentation.breadcrumb = breadcrumb
         presentation.setMaximizeShown(threads.panel.rightPanelOpen)
         threads.panel.onMaximizableChange = { [weak presentation] in presentation?.setMaximizeShown($0) }
+        threads.panel.onPanelTogglesChange = { [weak presentation] in presentation?.syncPanelStates() }
         return presentation
     }
 
@@ -86,6 +91,7 @@ final class MainPresentationController {
         let page: String? = settings?.isOpen == true ? "Settings"
             : commands?.openUtilityKind.map { $0 == .pullRequests ? "Pull Requests" : "Usage" }
         breadcrumb.show(page: page)
+        native.syncPanelStates()
         let thread = threads.panel.header.threadTitle
         native.setTitle(page ?? (thread.isEmpty ? "CandyWrapper" : thread))
     }

@@ -17,6 +17,57 @@ The user, 2026-10-13: "it uses native ui but it need to resemble t3 codes ui bec
 - It needs macOS 26 for `NSGlassEffectView`, the glass bezel and the split view glass. Below 26 the card is hidden, and a stored "Glass Native" preference falls back to Glass.
 - It must work with no bugs: every action that works in classic must work in native mode. Phase 6 is a full bug hunt.
 
+## Visual spec
+
+Set on 2026-10-13 by the polish pass, after the user called the first native build "unpolished slop". Every native view keeps to it. The numbers live in `NativeSpec` (`Features/Native/NativeSidebarChrome.swift`).
+
+Spacing is a 4 pt grid. Insets are 8, 12, 16 or 20, and nothing else.
+
+The sidebar has two vertical lines that everything hangs on:
+
+1. Surfaces start 8 pt from the column's edges. That covers the search field, every row's hover and selection fill, and the footer's buttons.
+2. Text and glyphs start 18 pt in, 10 pt inside a row's fill, as classic's rows do. The search field's magnifier and the footer's first glyph land on the same line within 2 pt.
+
+The toolbar is the window's 52 pt unified toolbar. Every item centers on the traffic lights, 26 pt down.
+
+- The sidebar toggle is a plain glyph right of the traffic lights, where T3's sits.
+- The breadcrumb is plain text: project at 14 regular in the secondary label color, the title at 14 medium.
+- T3's panel toggles are one glass segmented control that shows each on state. Maximize joins it while the right panel is open.
+- Rows scroll under the toolbar and fade out from 16 pt below its bottom edge to 12 pt above it. There is no band, tint or line at rest.
+- New thread lives in the sidebar's search row, as in T3, not in the toolbar.
+
+The corner radius scale has four steps.
+
+| Radius | Used for |
+|---|---|
+| 6 | icon buttons' hover and pressed fills, small controls |
+| 8 | row fills in the sidebar |
+| 12 | cards and popovers |
+| 22 | the composer (classic's `ComposerView.radius`) |
+
+Type is SF Pro at classic's sizes: 12 for metadata, 14 for row titles, the breadcrumb and body text. It uses two weights, regular and medium. Tabular figures go on times and durations.
+
+Icons are SF Symbols. The search row and the footer use 14 pt regular glyphs in 28 and 32 pt square buttons, as classic sizes them. Row glyphs stay at 10 to 12 pt, and the toolbar uses the system's item size.
+
+Glass is allowed in three places: the toolbar's item groups, the composer and popovers. The sidebar is macOS's own sidebar material. Rows, the search row, the footer, the timeline and content blocks get no glass of their own.
+
+Colors come from T3's tokens through `Themed` and `SB`: `foreground`, `mutedForeground`, `secondaryLabel`, `accent`, `sidebarRowHover`, `sidebarRowActive` and `sidebarRowSelected`. Two places can't use a token as it is, and each says why in code:
+
+- The toolbar toggles' on tint is an opaque stand-in for T3's 4% `accent`, which vanishes on glass and makes AppKit draw the glyph dark.
+- A user bubble keeps a hairline: 8% black in light mode at every opacity, and 12% white in dark mode below the default 80% Glass opacity. T3's `border` token sits too close to the bubble to show on the frost.
+
+Content that has to read stays readable at every Glass opacity from 10 to 100: user bubbles by their hairline, code blocks and approval cards on a solid card with a `border` hairline.
+
+| State | Rows | Icon buttons | Toolbar toggles |
+|---|---|---|---|
+| Hover | `sidebarRowHover` fill, plus Settle and Snooze in the status slot | `accent` fill, glyph to `foreground` | system |
+| Pressed | | `sidebarRowActive` fill | system |
+| Selected | `sidebarRowActive`, or `sidebarRowSelected` for a multi-selected row that isn't open | | |
+| On | | `accent` fill and an accent glyph, as on the scoped project filter | a subtle grey segment, glyph in the foreground color |
+| Disabled | | glyph at `mutedForeground` 50% | system |
+
+The system's blue emphasized selection never shows. Text keeps its T3 colors on a selected row.
+
 ## Structure
 
 - Theme id `candywrapper-glass-native`, label "Glass Native (Experimental)". It uses Glass's palette rules: stock T3 tokens, the frosted window and the same opacity slider. Add the id to `ThemePalette.reservedIds`. The choice lives in UserDefaults like every theme and never reaches the server.
@@ -48,6 +99,21 @@ The user, 2026-10-13: "it uses native ui but it need to resemble t3 codes ui bec
 ## Status
 
 Phase 1 is done (2026-10-13). Phase 2, the native sidebar, is done (2026-10-13, see "Phase 2" below).
+
+### Polish pass (2026-10-13)
+
+The user called the first native build "unpolished slop" and circled four regions. This pass set the "Visual spec" above and took each region to it. Screenshots are in `/tmp/cw-peek/polish-*`.
+
+1. The sidebar top and the toolbar. The sidebar toggle is a plain glyph beside the traffic lights, and New thread is back in the search row with the project filter and Add project. The panel toggles are one segmented control with T3's subtle on state. They hide on Settings, Pull Requests and Usage, as T3's do. The breadcrumb is plain 14 pt text in two weights. The grey band under the toolbar is gone: rows fade out under it (`ToolbarScrollFade`, an alpha mask on the timeline's scroll view).
+2. The sidebar rows and footer. Rows draw T3's own fills (`NativeSidebarRowView`): hover, the open thread and the multi-selection, inset 8 pt, never the blue emphasized selection. Cards show T3's hover Snooze and Settle in the status slot, and slim rows their Wake, Un-settle or Settle button. Row text starts 18 pt in, on the same line as the search field's magnifier and the footer's first glyph. The footer's Pull Requests glyph is T3's Lucide icon, since SF's `arrow.triangle.pull` doesn't read at 14 pt.
+3. The thread. The timeline uses the system's scroller in native mode, kept between the toolbar and the composer. User bubbles keep a hairline where the frost would swallow them, and the approval card takes the `border` hairline.
+4. The composer. It is one `NSGlassEffectView` in an `NSGlassEffectContainerView`, tinted with classic's surface at the Glass opacity, in place of the blur, fill, outline and shadow. Shape, pills, spacing, the context strip and the 20 pt bottom margin are classic's.
+5. The project filter opens classic's combobox under the native search field: search, environment badges and per-project settings.
+
+Left for later:
+
+- The right panel's tab strip sits in its own row under the toolbar, so the panel has two header rows where T3 has one. Moving the tabs up into the toolbar row needs them to take clicks under the titlebar.
+- The details card overlaps the first user bubble at the top right, as it does in classic.
 
 What works in Glass Native now:
 

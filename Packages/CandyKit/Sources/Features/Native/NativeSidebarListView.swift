@@ -53,7 +53,10 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
         table.headerView = nil
-        table.style = .sourceList
+        // Plain, with T3's fills drawn by `NativeSidebarRowView`: the source list style insets rows by its own
+        // amount and paints the blue emphasized selection.
+        table.style = .plain
+        table.selectionHighlightStyle = .none
         table.rowSizeStyle = .custom
         table.backgroundColor = .clear
         table.intercellSpacing = NSSize(width: 0, height: 2)
@@ -75,6 +78,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: contentView, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.closeHoverCard()
+                self?.hoverFillFollowsPointer()
                 self?.onVisibleRowsChange?()
             }
         }
@@ -281,6 +285,22 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         return cell
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let view = tableView.makeView(withIdentifier: Self.rowViewId, owner: nil) as? NativeSidebarRowView ?? {
+            let made = NativeSidebarRowView(frame: .zero)
+            made.identifier = Self.rowViewId
+            return made
+        }()
+        switch item(atRow: row) {
+        case .emptyText?, .noProjects?, .draftDivider?: view.fills = false
+        default: view.fills = true
+        }
+        view.isHovered = row == hoverRow
+        return view
+    }
+
+    private static let rowViewId = NSUserInterfaceItemIdentifier("row")
+
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
         switch item(atRow: row) {
         case .row?, .draft?, .searchResult?: true
@@ -445,6 +465,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
 
     func hover(row: Int) {
         guard row != hoverRow else { return }
+        setHoverFill(from: hoverRow, to: row)
         hoverRow = row
         hoverWork?.cancel()
         let id: ThreadId? = switch item(atRow: row) {
@@ -463,6 +484,21 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         }
         hoverWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + (instant ? 0 : 0.15), execute: work)
+    }
+
+    /// After a scroll the pointer rests over another row: the fill moves there, the hover card stays shut.
+    private func hoverFillFollowsPointer() {
+        guard hoverRow >= 0, let window else { return }
+        let row = table.row(at: table.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        guard row != hoverRow else { return }
+        setHoverFill(from: hoverRow, to: row)
+        hoverRow = row
+    }
+
+    private func setHoverFill(from old: Int, to new: Int) {
+        for (row, on) in [(old, false), (new, true)] where row >= 0 && row < table.numberOfRows {
+            (table.rowView(atRow: row, makeIfNecessary: false) as? NativeSidebarRowView)?.isHovered = on
+        }
     }
 
     private func showHoverCard(_ id: ThreadId, row: Int, instant: Bool) {
@@ -491,6 +527,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     }
 
     func hoverEnded() {
+        setHoverFill(from: hoverRow, to: -1)
         hoverRow = -1
         closeHoverCard()
     }
@@ -583,7 +620,7 @@ final class NativeSidebarTableView: NSTableView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        list?.hoverEnded()
+        list?.closeHoverCard()
         super.mouseDown(with: event)
     }
 
