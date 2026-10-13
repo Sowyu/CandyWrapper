@@ -76,6 +76,24 @@ struct RightPanelTabDragTests {
         #expect(panel.panelState.surfaces.map(\.id) == ["diff", "files", "pull-requests"])
     }
 
+    @Test func aTabClosedMidDragEndsTheDrag() throws {
+        let (window, panel) = makePanel()
+        _ = window
+        let before = tabs(panel.rightPanel)
+        let last = before[2], distance = before[0].frame.midX - last.frame.midX
+        last.mouseDown(with: mouse(.leftMouseDown, last, dx: 0))
+        last.mouseDragged(with: mouse(.leftMouseDragged, last, dx: distance / 2))
+        // An agent closes a tab while the last one is held: layout used to index past the end and trap.
+        panel.mutatePanel { $0.close("files") }
+        panel.layoutSubtreeIfNeeded()
+        last.mouseDragged(with: mouse(.leftMouseDragged, last, dx: distance))
+        last.mouseUp(with: mouse(.leftMouseUp, last, dx: distance))
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.panelState.surfaces.map(\.id) == ["diff", "pull-requests"])
+        #expect(!panel.rightPanel.isAutoScrolling)
+        #expect(tabs(panel.rightPanel).allSatisfy { $0.layer?.affineTransform() == .identity })
+    }
+
     @Test func orderAndMaximizeSurviveTheRoundTrip() throws {
         let (window, panel) = makePanel()
         _ = window
