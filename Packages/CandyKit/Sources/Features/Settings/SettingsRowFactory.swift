@@ -239,10 +239,13 @@ final class ChainView: DSView {
     private var blocks: [(header: [NSView], rows: [(DSView, LabelView, LabelView, IconView?)])] = []
     private var dividers: [CALayer] = []
 
-    func add(header: String, machine: String, layers: [(label: String, value: String, effective: Bool, set: Bool)]) {
+    /// A nil header lists the layers alone (the provider override popover, ProviderInstanceCard.tsx:518-551).
+    func add(header: String?, machine: String, layers: [(label: String, value: String, effective: Bool, set: Bool)]) {
         let glyph = EnvironmentMachineIcon.view(machine, size: 14, color: Themed.color(\.mutedForeground))
-        let title = LabelView(header, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground))
+        let title = LabelView(header ?? "", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground))
         title.lineHeight = 16
+        glyph.isHidden = header == nil
+        title.isHidden = header == nil
         [glyph, title].forEach(addSubview)
         var rows: [(DSView, LabelView, LabelView, IconView?)] = []
         for l in layers {
@@ -271,7 +274,7 @@ final class ChainView: DSView {
 
     override var intrinsicContentSize: NSSize {
         var h = CGFloat(dividers.count)
-        for block in blocks { h += 42 + CGFloat(block.rows.count) * 28 }
+        for block in blocks { h += (block.header[1].isHidden ? 20 : 42) + CGFloat(block.rows.count) * 28 }
         return NSSize(width: 320, height: h)
     }
 
@@ -283,7 +286,7 @@ final class ChainView: DSView {
             y += 10
             block.header[0].frame = NSRect(x: 12, y: y + 1, width: 14, height: 14)
             block.header[1].frame = NSRect(x: 32, y: y, width: bounds.width - 44, height: 16)
-            y += 22
+            if !block.header[1].isHidden { y += 22 }
             for (bg, name, value, check) in block.rows {
                 bg.frame = NSRect(x: 12, y: y, width: bounds.width - 24, height: 28)
                 let vw = min(128, ceil(value.textWidth) + 1)

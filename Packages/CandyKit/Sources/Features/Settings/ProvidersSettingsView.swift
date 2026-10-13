@@ -282,13 +282,26 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             let label = TimestampFormat.formatRelativeTimeLabel(iso, nowMs: TimestampFormat.nowMs())
             return label.isEmpty ? "Checked unavailable" : "Checked \(label)"
         })
+        // The project's checkouts on this environment (settings.providers.tsx:28-34). Servers without
+        // `projectProviderInstanceOverrides` would drop the patch, so they keep the machine switch (ProviderSettingsPanel.tsx:588-593).
+        let projectIds = scope.isProjectScope && env.capabilities.contains("projectProviderInstanceOverrides")
+            ? scope.targets.filter { $0.environmentId == env.id }.compactMap(\.projectId) : []
         providers.list = rows.map { row in
             let p = live.first { $0.instanceId.rawValue == row.instanceId }
-            let item = ProviderListRow(row: row, provider: p)
+            let override = projectIds.first.map { ProjectSettings.providerOverride(settings, projectId: $0, instanceId: row.instanceId) }
+            let item = ProviderListRow(row: row, provider: p, enabled: override.map { $0 ?? row.enabled })
             item.isSelected = row.instanceId == chosen?.instanceId
             item.onSelect = { [weak self] in self?.selected = row.instanceId; self?.refresh() }
-            item.toggle.isEnabled = env.canWrite
-            item.toggle.onChange = { [weak self] on in self?.setEnabled(row, on, env: env.id) }
+            if projectIds.isEmpty {
+                item.toggle.isEnabled = env.canWrite
+                item.toggle.onChange = { [weak self] on in self?.setEnabled(row, on, env: env.id) }
+            } else {
+                item.toggle.isEnabled = env.canWrite
+                item.toggle.onChange = { [weak self] on in self?.writeProjectOverride(row, on, projectIds: projectIds, env: env.id) }
+                if let value = override ?? nil {
+                    item.overrideControls = projectOverrideControls(row, projectEnabled: value, readOnly: !env.canWrite, projectIds: projectIds, env: env.id)
+                }
+            }
             let name = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
             item.advisory = advisoryButton(row, provider: p, readOnly: !env.canWrite, displayName: name, micro: true)
             if updatingInstances.contains(row.instanceId) || ProviderVersionAdvisoryLogic.isUpdating(p) {
@@ -469,6 +482,47 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             patch["textGenerationModelSelection"] = ServerSettingsValues.fields["textGenerationModelSelection"]!.defaultValue
         }
         upsert(row, .object(o), env: env, patch: patch)
+    }
+
+    /// `writeProjectOverride` (ProviderSettingsPanel.tsx:931-940): every checkout of the project on this environment
+    /// gets the same `enabled`, or drops it for nil. The machine's own instance stays untouched.
+    private func writeProjectOverride(_ row: ProvidersLogic.Row, _ enabled: Bool?, projectIds: [String], env: String) {
+        guard let settings = environment?.settings, let request = context.request else { return }
+        let patch = ProjectSettings.providerOverridePatch(settings, projectIds: projectIds, instanceId: row.instanceId, enabled: enabled)
+        Task { [weak self] in
+            do {
+                let result = try await request(env, "server.updateSettings", .object(["patch": .object(["projectSettingsOverrides": patch])]))
+                self?.context.applySettings?(env, result)
+            } catch {
+                self?.context.toast?("Setting not saved", "\(error)", .error)
+            }
+        }
+    }
+
+    /// `ProjectOverrideInheritance` and the reset arrow (ProviderInstanceCard.tsx:487-553, :1072-1085): a primary
+    /// layers glyph whose popover lists Project (effective) and Device, then "Reset to the device setting".
+    private func projectOverrideControls(_ row: ProvidersLogic.Row, projectEnabled: Bool, readOnly: Bool, projectIds: [String], env: String) -> NSView {
+        let box = DSView(frame: NSRect(x: 0, y: 0, width: 40, height: 20))
+        let inheritance = InheritanceButton(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        inheritance.state = .overridden
+        inheritance.summary = "Overridden for this project"
+        inheritance.button.setAccessibilityLabel("Overridden for this project. Show where this value comes from")
+        inheritance.onOpen = { trigger in
+            let chain = ChainView()
+            chain.add(header: nil, machine: "", layers: [("Project", projectEnabled ? "On" : "Off", true, true),
+                                                          ("Device", row.enabled ? "On" : "Off", false, true)])
+            _ = PopoverView(content: chain, padding: .none, width: .md)
+                .show(from: trigger, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
+        }
+        let name = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
+        let reset = ResetSlot(label: "\(name) enablement", tooltip: "Reset to the device setting")
+        reset.frame = NSRect(x: 20, y: 0, width: 20, height: 20)
+        reset.isShown = true
+        reset.button.isEnabled = !readOnly
+        reset.action = { [weak self] in self?.writeProjectOverride(row, nil, projectIds: projectIds, env: env) }
+        box.addSubview(inheritance)
+        box.addSubview(reset)
+        return box
     }
 
     private func refreshProviders() {
@@ -1038,13 +1092,18 @@ final class ProviderListRow: ControlView {
     /// The version advisory button (`icon-micro`) after the version, and the update progress in place of the status.
     var advisory: ButtonView? { didSet { oldValue?.removeFromSuperview(); advisory.map(addSubview); needsLayout = true } }
     var updateProgress: String? { didSet { if let updateProgress { status.text = "Updating · \(updateProgress)"; dot.isHidden = true } } }
+    /// The project override's inheritance glyph and reset arrow before the switch (`flex h-5 items-center gap-1`).
+    var overrideControls: NSView? { didSet { oldValue?.removeFromSuperview(); overrideControls.map(addSubview); needsLayout = true } }
+    private var overrideWidth: CGFloat { overrideControls == nil ? 0 : 40 + 4 }
 
-    init(row: ProvidersLogic.Row, provider: ServerProvider?) {
+    /// `enabled` is the project's effective value when a project override applies (ProviderInstanceCard.tsx:672).
+    init(row: ProvidersLogic.Row, provider: ServerProvider?, enabled effective: Bool? = nil) {
+        let on = effective ?? row.enabled
         let displayName = row.instance["displayName"]?.stringValue ?? ProvidersLogic.label(row.driver) ?? row.driver
         icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8),
                                  badge: ProviderBadge.settingsCard(row, displayName: displayName))
-        enabled = row.enabled
-        let key = row.enabled ? provider?.status.rawValue ?? "warning" : "disabled"
+        enabled = on
+        let key = on ? provider?.status.rawValue ?? "warning" : "disabled"
         showsDot = key == "warning" || key == "error"
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -1054,7 +1113,8 @@ final class ProviderListRow: ControlView {
         name.lineHeight = 20
         version.text = ProvidersLogic.versionLabel(provider?.version) ?? ""
         version.lineHeight = 16
-        let summary: (headline: String, detail: String?) = row.enabled ? ProvidersLogic.summary(provider) : ("Disabled", nil)
+        // `liveProvider.enabled` is machine-wide; a project override can turn it on (ProviderInstanceCard.tsx:680-683).
+        let summary: (headline: String, detail: String?) = !on ? ("Disabled", nil) : effective == nil ? ProvidersLogic.summary(provider) : ProvidersLogic.summary(provider.map { var p = $0; p.enabled = true; return p })
         status.text = summary.headline + (showsDot ? summary.detail.map { " · \($0)" } ?? "" : "")
         status.font = DSFont.ui(12)
         status.lineHeight = 18
@@ -1065,7 +1125,7 @@ final class ProviderListRow: ControlView {
         dot.isHidden = !showsDot
         layer?.addSublayer(dot)
         for v in [icon, name, version, status, toggle] as [NSView] { addSubview(v) }
-        toggle.isOn = row.enabled
+        toggle.isOn = on
         toggle.setAccessibilityLabel("Enable \(displayName)")
         action = { [weak self] in self?.onSelect?() }
         setAccessibilityLabel("Select \(displayName)")
@@ -1076,7 +1136,7 @@ final class ProviderListRow: ControlView {
 
     /// `min-h-18 py-3`: the name line, `mt-0.5`, and up to two status lines.
     func height(forWidth width: CGFloat) -> CGFloat {
-        let right = width - 16 - toggle.intrinsicContentSize.width - 12
+        let right = width - 16 - toggle.intrinsicContentSize.width - 12 - overrideWidth
         let sx: CGFloat = 16 + 20 + 12 + (showsDot ? 12 : 0)
         return max(72, 12 + 20 + 2 + status.height(forWidth: max(0, right - sx)) + 12)
     }
@@ -1096,7 +1156,8 @@ final class ProviderListRow: ControlView {
         let s = toggle.intrinsicContentSize
         toggle.frame = NSRect(x: bounds.width - 16 - s.width, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
         let textX: CGFloat = 16 + 20 + 12
-        let right = toggle.frame.minX - 12
+        let right = toggle.frame.minX - 12 - overrideWidth
+        overrideControls?.frame = NSRect(x: toggle.frame.minX - 4 - overrideWidth + 4, y: (bounds.height - 20) / 2, width: overrideWidth - 4, height: 20)
         icon.frame = NSRect(x: 16 + 2, y: 12 + 2, width: 16, height: 16)
         let nw = min(ceil(name.textWidth) + 1, max(0, right - textX))
         name.frame = NSRect(x: textX, y: 12, width: nw, height: 20)
@@ -1114,7 +1175,8 @@ final class ProviderListRow: ControlView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if toggle.frame.contains(convert(event.locationInWindow, from: nil)) { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if toggle.frame.contains(p) || overrideControls?.frame.contains(p) == true { return }
         super.mouseDown(with: event)
     }
 }

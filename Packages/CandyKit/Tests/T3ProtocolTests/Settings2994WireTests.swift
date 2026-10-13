@@ -49,6 +49,18 @@ struct Settings2994WireTests {
         #expect(OtlpEndpointCheckResult.status(url: url, check: (url, .unreachable(timedOut: false))) == .init(label: "Unreachable", tone: .failure))
     }
 
+    @Test func projectProviderOverrides() {
+        let s = ServerSettingsValues(UsageTests.json(#"{"projectSettingsOverrides":{"p1":{"defaultAutoPull":true,"providerInstances":{"codex":{"enabled":false}}},"p2":{"providerInstances":{"codex":{"enabled":true}}}}}"#))
+        #expect(ProjectSettings.providerOverride(s, projectId: "p1", instanceId: "codex") == false)
+        #expect(ProjectSettings.providerOverride(s, projectId: "p1", instanceId: "claudeAgent") == nil)
+        #expect(ProjectSettings.providerOverride(s, projectId: "p3", instanceId: "codex") == nil)
+        // Setting keeps each entry's other keys; resetting drops the instance, and an emptied entry becomes null.
+        #expect(ProjectSettings.providerOverridePatch(s, projectIds: ["p1", "p3"], instanceId: "cursor", enabled: true) == UsageTests.json(
+            #"{"p1":{"defaultAutoPull":true,"providerInstances":{"codex":{"enabled":false},"cursor":{"enabled":true}}},"p3":{"providerInstances":{"cursor":{"enabled":true}}}}"#))
+        #expect(ProjectSettings.providerOverridePatch(s, projectIds: ["p1", "p2"], instanceId: "codex", enabled: nil) == UsageTests.json(
+            #"{"p1":{"defaultAutoPull":true,"providerInstances":{}},"p2":null}"#))
+    }
+
     @Test func worktreeKeepWhenFollowsTheEnvironment() {
         let s = ServerSettingsValues(UsageTests.json(#"{"storageCleanup":{"worktreeKeepWhen":"tracked-changes"},"projectSettingsFolded":true,"projectSettingsOverrides":{"off":{"worktreeCleanup":{"mode":"off"}}}}"#))
         #expect(ProjectSettings.worktreeCleanup(s, projectId: nil)["worktreeKeepWhen"] == .string("tracked-changes"))
