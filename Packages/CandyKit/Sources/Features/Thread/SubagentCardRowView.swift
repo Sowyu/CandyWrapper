@@ -143,6 +143,7 @@ final class SubagentCardRowView: TimelineRowView {
         while links.count > agents.count { let gone = links.removeLast(); gone.stop(); gone.removeFromSuperview() }
         while links.count < agents.count { let link = SubagentCardLinkView(); links.append(link); addSubview(link) }
         for (link, agent) in zip(links, agents) {
+            link.native = context.native
             let live = item.ui.subagentRecords.first { $0["id"]?.stringValue == agent.string("subagentId") }
             link.configure(SubagentCardPresentation(agent, live: live))
             link.action = { [weak self, weak link] in
@@ -152,10 +153,12 @@ final class SubagentCardRowView: TimelineRowView {
         }
         needsLayout = true
     }
-    override func height(forWidth width: CGFloat) -> CGFloat { CGFloat(links.count) * SubagentCardLinkView.height + 8 }
+    /// Glass Native's cards stand apart, 6 between them.
+    private var step: CGFloat { SubagentCardLinkView.height + (context.native ? 6 : 0) }
+    override func height(forWidth width: CGFloat) -> CGFloat { CGFloat(links.count) * step + 8 - (context.native && !links.isEmpty ? 6 : 0) }
     override func layout() {
         super.layout()
-        for (i, link) in links.enumerated() { link.frame = NSRect(x: 0, y: CGFloat(i) * SubagentCardLinkView.height, width: bounds.width, height: SubagentCardLinkView.height) }
+        for (i, link) in links.enumerated() { link.frame = NSRect(x: 0, y: CGFloat(i) * step, width: bounds.width, height: SubagentCardLinkView.height) }
     }
     override func setContentVisible(_ visible: Bool) { links.forEach { $0.contentVisible = visible } }
     override func prepareForReuse() {
@@ -179,6 +182,8 @@ final class SubagentCardLinkView: ControlView {
     private let chevron = IconView(name: .chevronRight, size: 14)
     private var tooltip: TooltipController?
     var contentVisible = true { didSet { if contentVisible { tick() } else { stop() } } }
+    /// Glass Native: T3 Mobile's subagent card, `rounded-xl border-border-subtle bg-card` (thread-work-log.tsx).
+    var native = false { didSet { if native != oldValue { restyle() } } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -246,8 +251,17 @@ final class SubagentCardLinkView: ControlView {
         dot.layer?.shadowOffset = .zero
         dot.layer?.shadowPath = CGPath(ellipseIn: CGRect(x: -2, y: -2, width: 12, height: 12), transform: nil)
         chevron.strokeColor = state.hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground, 0.6)
+        let hover = state.hovered && presentation?.child != nil
+        if native {
+            layer?.cornerRadius = 12
+            layer?.backgroundColor = (hover ? TL.c(\.accent) : NativeTimeline.card).cgColor(in: self)
+            layer?.borderWidth = 1
+            layer?.borderColor = TL.c(\.border, 0.6).cgColor(in: self)
+            return
+        }
+        layer?.borderWidth = 0
         layer?.cornerRadius = 6
-        layer?.backgroundColor = state.hovered && presentation?.child != nil ? TL.c(\.accent, 0.2).cgColor(in: self) : nil
+        layer?.backgroundColor = hover ? TL.c(\.accent, 0.2).cgColor(in: self) : nil
     }
     override func layout() {
         super.layout()

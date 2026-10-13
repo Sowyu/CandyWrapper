@@ -76,6 +76,11 @@ public final class MarkdownView: DSView {
         didSet { if bodyColor != oldValue { invalidate() } }
     }
 
+    /// Glass Native's timeline: body 14/21 and solid code cards with radius 8.
+    public var native = false {
+        didSet { if native != oldValue { invalidate() } }
+    }
+
     /// The directory relative file paths resolve against: T3's `markdownCwd`, the thread's worktree
     /// or else the project's workspace root. Path-shaped inline code and file links render as chips.
     public var cwd: String? {
@@ -206,7 +211,7 @@ public final class MarkdownView: DSView {
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
-                                  runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
+                                  runsShell: onRunShellCommand != nil, native: native, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
         return made

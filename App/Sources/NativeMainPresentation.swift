@@ -54,6 +54,32 @@ final class MainPresentationController {
         actions.terminal = { [weak self] in self?.threads.panel.onTerminalToggle?() }
         actions.settings = { [weak self] in self?.sidebar?.actions.openSettings() }
         actions.threadShown = { [weak self] in self?.threads.panel.window != nil }
+        // T3 Mobile's Git menu (ThreadGitControls.tsx:350-410): the branch, review changes and the thread's details.
+        actions.gitMenu = { [weak self] in
+            guard let self else { return [] }
+            let threads = self.threads, shown = threads.panel.window != nil
+            return [
+                NativeMenuEntry("Branch…", symbol: "point.topleft.down.curvedto.point.bottomright.up", isEnabled: shown) { threads.git.openBranchPicker(inPanel: false) },
+                NativeMenuEntry("Review Changes", symbol: "text.bubble", isEnabled: shown) { threads.panel.toggleDiff() },
+                .separator,
+                NativeMenuEntry("Thread Details", symbol: "info.circle", isEnabled: shown) { threads.panel.onDetailsToggle?() },
+            ]
+        }
+        // T3 Mobile's Terminal menu (ThreadGitControls.tsx:280-340): the project's actions, then the drawer.
+        actions.terminalMenu = { [weak self] in
+            guard let self else { return [] }
+            let threads = self.threads, shown = threads.panel.window != nil
+            var entries = threads.scripts.current.map { script in
+                NativeMenuEntry(ProjectScripts.menuLabel(script), symbol: "play", isEnabled: shown) { threads.scripts.run(script) }
+            }
+            if entries.isEmpty { entries.append(NativeMenuEntry("No Project Actions", symbol: "play", isEnabled: false) {}) }
+            entries.append(.separator)
+            entries.append(NativeMenuEntry(threads.terminal.isOpen ? "Hide Terminal" : "Show Terminal", symbol: "terminal", isEnabled: shown) {
+                threads.panel.onTerminalToggle?()
+            })
+            entries.append(NativeMenuEntry("Open New Terminal", symbol: "plus", isEnabled: shown) { threads.terminal.openNew() })
+            return entries
+        }
         presentation.actions = actions
         return presentation
     }

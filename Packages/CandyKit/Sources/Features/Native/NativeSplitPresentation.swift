@@ -12,7 +12,61 @@ public struct NativeToolbarActions {
     public var settings: () -> Void = {}
     /// Whether Files, Git and Terminal apply now: a thread or draft shows in the detail column.
     public var threadShown: () -> Bool = { false }
+    /// The Git and Terminal menus (T3 Mobile ThreadGitControls.tsx:280-410), built each time one opens.
+    public var gitMenu: () -> [NativeMenuEntry] = { [] }
+    public var terminalMenu: () -> [NativeMenuEntry] = { [] }
     public init() {}
+}
+
+/// One item of a toolbar menu; nil title is a separator.
+@MainActor
+public struct NativeMenuEntry {
+    public var title: String?
+    public var symbol: String?
+    public var isEnabled = true
+    public var action: () -> Void = {}
+    public init(_ title: String, symbol: String? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+        self.title = title; self.symbol = symbol; self.isEnabled = isEnabled; self.action = action
+    }
+    private init() {}
+    public static let separator = NativeMenuEntry()
+}
+
+/// Builds a toolbar menu from its entries when it opens, so nothing is kept or refreshed while it is closed.
+@MainActor
+final class NativeToolbarMenu: NSObject, NSMenuDelegate {
+    let menu = NSMenu()
+    private let entries: () -> [NativeMenuEntry]
+    private var actions: [() -> Void] = []
+
+    init(_ entries: @escaping () -> [NativeMenuEntry]) {
+        self.entries = entries
+        super.init()
+        menu.delegate = self
+        menu.autoenablesItems = false
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        actions = []
+        // The toolbar item shows its menu as a pull-down, which keeps the first item as its title.
+        menu.addItem(NSMenuItem(title: "", action: nil, keyEquivalent: ""))
+        for entry in entries() {
+            guard let title = entry.title else { menu.addItem(.separator()); continue }
+            let item = NSMenuItem(title: title, action: #selector(pick(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = actions.count
+            item.isEnabled = entry.isEnabled
+            item.image = entry.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            menu.addItem(item)
+            actions.append(entry.action)
+        }
+    }
+
+    @objc private func pick(_ sender: NSMenuItem) {
+        guard actions.indices.contains(sender.tag) else { return }
+        actions[sender.tag]()
+    }
 }
 
 /// Glass Native's main window (docs/glass-native.md): a unified toolbar over a split view with the sidebar,
@@ -33,6 +87,10 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     public let toolbar: NSToolbar
     public var actions = NativeToolbarActions()
     private let rootController = NativeRootController()
+    private var collapseObservation: NSKeyValueObservation?
+    private weak var sidebarToggleItem: NSToolbarItem?
+    private lazy var gitMenu = NativeToolbarMenu { [weak self] in self?.actions.gitMenu() ?? [] }
+    private lazy var terminalMenu = NativeToolbarMenu { [weak self] in self?.actions.terminalMenu() ?? [] }
     private let sidebarColumn: NativeColumnController
     private let detailColumn: NativeColumnController
     /// The sidebar's bottom accessory with New chat and Settings (macOS 26), hidden while Settings' navigation shows.
@@ -68,6 +126,10 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             if #available(macOS 26.1, *) { accessory.preferredScrollEdgeEffectStyle = .soft }
             sidebarItem.addBottomAlignedAccessoryViewController(accessory)
             sidebarAccessory = accessory
+        }
+        // The toggle's glyph follows the sidebar (useThreadHeaderOptions.tsx:31-89). KVO fires only on a change.
+        collapseObservation = sidebarItem.observe(\.isCollapsed) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.updateSidebarToggle() }
         }
         rootController.addChild(split)
         rootController.view.addSubview(split.view)
@@ -140,13 +202,39 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         switch id {
         case .sidebarTrackingSeparator:
             return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 0)
-        case Self.sidebarToggle: return item(id, "sidebar.left", "Toggle Sidebar", #selector(pressSidebar))
-        case Self.newThread: return item(id, "square.and.pencil", "New Thread", #selector(pressNewThread))
+        case Self.sidebarToggle:
+            let toggle = item(id, "sidebar.left", "Toggle Sidebar", #selector(pressSidebar))
+            sidebarToggleItem = toggle
+            updateSidebarToggle()
+            return toggle
+        case Self.newThread: return item(id, "square.and.pencil", "New Task", #selector(pressNewThread))
         case Self.files: return item(id, "folder", "Files", #selector(pressFiles))
-        case Self.git: return item(id, "point.topleft.down.curvedto.point.bottomright.up", "Git", #selector(pressGit))
-        case Self.terminal: return item(id, "terminal", "Terminal", #selector(pressTerminal))
+        case Self.git: return menuItem(id, "point.topleft.down.curvedto.point.bottomright.up", "Git", gitMenu)
+        case Self.terminal: return menuItem(id, "terminal", "Terminal", terminalMenu)
         default: return nil
         }
+    }
+
+    /// "Maximize content" while the sidebar shows, "Show thread sidebar" while it is hidden.
+    private func updateSidebarToggle() {
+        guard let toggle = sidebarToggleItem else { return }
+        let open = !sidebarItem.isCollapsed
+        let label = open ? "Maximize Content" : "Show Thread Sidebar"
+        toggle.image = NSImage(systemSymbolName: open ? "arrow.up.left.and.arrow.down.right" : "sidebar.left", accessibilityDescription: label)
+        toggle.label = label
+        toggle.toolTip = label
+    }
+
+    /// A toolbar button that opens a menu, as T3 Mobile's Git and Terminal header items do.
+    private func menuItem(_ id: NSToolbarItem.Identifier, _ symbol: String, _ label: String, _ menu: NativeToolbarMenu) -> NSToolbarItem {
+        let item = NSMenuToolbarItem(itemIdentifier: id)
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        item.label = label
+        item.toolTip = label
+        item.isBordered = true
+        item.showsIndicator = false
+        item.menu = menu.menu
+        return item
     }
 
     private func item(_ id: NSToolbarItem.Identifier, _ symbol: String, _ label: String, _ action: Selector) -> NSToolbarItem {
@@ -163,13 +251,12 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     @objc private func pressSidebar() { toggleSidebar() }
     @objc private func pressNewThread() { actions.newThread() }
     @objc private func pressFiles() { actions.files() }
-    @objc private func pressGit() { actions.git() }
-    @objc private func pressTerminal() { actions.terminal() }
 
-    /// AppKit asks on window updates (after events), never while idle.
+    /// AppKit asks on window updates (after events), never while idle. The Git and Terminal menus disable their
+    /// own entries.
     public func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case Self.files, Self.git, Self.terminal: actions.threadShown()
+        case Self.files: actions.threadShown()
         default: true
         }
     }
@@ -257,8 +344,14 @@ final class NativeColumnView: DSView {
         super.layout()
         surface?.frame = bounds
         let top = safeAreaInsets.top
-        // The detail's page starts under the toolbar. The sidebar's content keeps its own 52pt titlebar row
-        // (hidden in this mode) and lines that row up with the toolbar, so its search starts just below it.
+        // The thread runs up behind the toolbar and scrolls under it; other pages start below it. The sidebar's
+        // content keeps its own 52pt titlebar row (hidden in this mode) and lines that row up with the toolbar, so
+        // its search starts just below it.
+        if detail, let page = content as? ToolbarUnderlapping {
+            page.toolbarInset = top
+            content?.frame = bounds
+            return
+        }
         let y = detail ? top : top - ThreadHeaderView.height
         content?.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y))
     }

@@ -284,6 +284,13 @@ final class TerminalController {
         self.state = state; refresh(); focusActive(drawerHost, id)
     }
 
+    /// Glass Native's Terminal menu: whether the drawer shows, and "Open new terminal".
+    var isOpen: Bool { threadId != nil && state.open }
+    func openNew() {
+        guard threadId != nil else { return }
+        newTerminal()
+    }
+
     /// `toggleTerminalVisibility` (ChatView.tsx:4781-4830): opening a thread with no terminals
     /// opens `term-1` on the server first.
     func toggle() {
