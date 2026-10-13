@@ -60,6 +60,18 @@ struct ModelPickerTests {
         #expect(!on.interactionModeEnabled(provider))
     }
 
+    /// `applyProviderInstanceSettings` with a project (providerInstances.ts:197-209, 2994).
+    @Test func projectProviderSwitchesApplyToThePicker() throws {
+        let providers = try Self.recordedConfig().providers
+        let settings = ServerSettingsValues(.object(["projectSettingsOverrides": .object([
+            "p1": .object(["providerInstances": .object(["claudeAgent": .object(["enabled": .bool(false)])])]),
+        ])]))
+        #expect(ProviderCatalog(providers, settings: settings, projectId: "p1").entry("claudeAgent")?.isVisibleInPicker == false)
+        #expect(ProviderCatalog(providers, settings: settings, projectId: "p2").entry("claudeAgent")?.isVisibleInPicker == true)
+        #expect(ProviderCatalog(providers, settings: settings, projectId: nil).entry("claudeAgent")?.isVisibleInPicker == true)
+        #expect(ProviderCatalog(providers, settings: settings, projectId: "p1").resolveInstance(["claudeAgent"])?.id != "claudeAgent")
+    }
+
     @Test func pickerAppliesHiddenModelsAndExplicitOrder() throws {
         let config = try Self.recordedConfig()
         let catalog = ProviderCatalog(config.providers)

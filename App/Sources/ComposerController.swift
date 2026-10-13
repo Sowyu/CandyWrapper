@@ -1331,7 +1331,8 @@ final class ComposerController {
         }
         let project = snapshot?.projects.first { $0.id == projectId }
         let context = ComposerSelectionContext(
-            catalog: ProviderCatalog(serverConfig.providers), thread: thread, projectDefaultModel: project?.defaultModelSelection,
+            catalog: ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: projectId?.localId.rawValue),
+            thread: thread, projectDefaultModel: project?.defaultModelSelection,
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
             supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection),
@@ -1745,7 +1746,8 @@ final class ComposerController {
                 return
             }
         }
-        let catalog = ProviderCatalog(serverConfig.providers)
+        // The project's provider switches apply to the fan-out too (ChatView.tsx:3245-3249).
+        let catalog = ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: ProjectId(session.projectId).localId.rawValue)
         for s in selections where catalog.entry(s.instanceId)?.isReady != true {
             threadErrors.set(key, "Provider for \(s.model) is unavailable.")
             refresh()

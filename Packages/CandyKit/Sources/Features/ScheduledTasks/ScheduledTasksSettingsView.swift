@@ -323,12 +323,14 @@ final class ScheduledTaskEditor {
     }
 
     var providers: [ServerProvider] { context.configs[environmentId]?.providers ?? [] }
+    /// The picked project's provider switches apply (ScheduledTasksSettings.tsx:828-832, 2994).
+    var catalog: ProviderCatalog { ProviderCatalog(providers, settings: environment?.settings, projectId: selectedProjectId.isEmpty ? nil : selectedProjectId) }
 
     /// The picked model, else `scheduledTaskDefaultModel`: the project's or environment's default when available,
     /// else the catalog's default model.
     var activeSelection: (instanceId: String, model: String)? {
         if let s = ScheduledTaskLogic.splitModelKey(draft.modelKey) { return s }
-        let catalog = ProviderCatalog(providers)
+        let catalog = self.catalog
         let available = catalog.entries.filter { $0.isSelectable }
         let settings = environment?.settings
         let member = projects.first { $0.projectId == selectedProjectId }
@@ -842,7 +844,7 @@ final class ScheduledTaskModelPicker: DSView {
         refresh()
     }
 
-    private var catalog: ProviderCatalog { ProviderCatalog(editor?.providers ?? []) }
+    private var catalog: ProviderCatalog { editor?.catalog ?? ProviderCatalog([]) }
 
     func refresh() {
         guard let editor else { return }

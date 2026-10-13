@@ -539,7 +539,12 @@ final class SettingsModelPickerControl: DSView {
         traits.action = { [weak self] in self?.openTraits() }
     }
 
-    private var catalog: ProviderCatalog { ProviderCatalog(context.providers) }
+    /// At a project scope the project's provider switches apply (ProjectDefaultsSettings.tsx:66-72, 2994).
+    private var catalog: ProviderCatalog {
+        let target = context.scope.target
+        let settings = target.flatMap { t in context.scope.environments.first { $0.id == t.environmentId }?.settings }
+        return ProviderCatalog(context.providers, settings: settings, projectId: target?.projectId)
+    }
 
     /// The selection shown: the setting, else the first ready provider's default (`resolveDefaultProviderModelSelection`).
     private var selection: (ProviderInstanceEntry, String)? {
