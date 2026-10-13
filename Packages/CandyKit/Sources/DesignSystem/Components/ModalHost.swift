@@ -253,11 +253,30 @@ public final class ModalHost: DSView {
     /// 10 MB per dialog at 2x, and the allocator kept the freed buffers dirty. Drawing straight at a quarter
     /// moved thin text and borders by up to 10 levels under the tint; the half-size pass keeps them within 5.
     // ponytail: frozen snapshot, content under the backdrop stops updating while the dialog is open; live blur (NSVisualEffectView) if that ever shows
-    public static func blurredSnapshot(of view: NSView) -> CGImage? {
+    /// True while `blurredSnapshot` draws the window. A view whose backing store relies on its layer's background
+    /// (the terminal clears its cells to transparent) paints that background itself then.
+    public private(set) static var isTakingSnapshot = false
+
+    /// `excluding`: a subview left out, such as an open overlay taking a fresh backdrop. The other subviews draw one by
+    /// one at their frames, so the overlay keeps the first responder and never leaves the screen.
+    public static func blurredSnapshot(of view: NSView, excluding excluded: NSView? = nil) -> CGImage? {
         let size = view.bounds.size
         guard let half = context(Int(size.width / 2), Int(size.height / 2)) else { return nil }
         half.scaleBy(x: CGFloat(half.width) / max(1, size.width), y: CGFloat(half.height) / max(1, size.height))
-        view.displayIgnoringOpacity(view.bounds, in: NSGraphicsContext(cgContext: half, flipped: false))
+        isTakingSnapshot = true
+        defer { isTakingSnapshot = false }
+        let context = NSGraphicsContext(cgContext: half, flipped: false)
+        if let excluded {
+            for sub in view.subviews where sub !== excluded && !sub.isHidden {
+                let frame = sub.frame
+                half.saveGState()
+                half.translateBy(x: frame.minX, y: view.isFlipped ? size.height - frame.maxY : frame.minY)
+                sub.displayIgnoringOpacity(sub.bounds, in: context)
+                half.restoreGState()
+            }
+        } else {
+            view.displayIgnoringOpacity(view.bounds, in: context)
+        }
         return half.makeImage().flatMap { blurred($0, pointSize: size) }
     }
 
