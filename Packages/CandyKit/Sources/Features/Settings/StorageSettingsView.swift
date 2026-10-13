@@ -1,23 +1,42 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import T3Store
 
 /// Settings > Storage (StorageSettings.tsx): worktree location and cleanup rules, artifact and log
 /// retention. At a project scope only the worktree cleanup policy (Inherit, Off, Custom) and its rules show.
+/// From 2994 (`storageCleanupRun`) the "keep worktrees when" rule and the Cleanup section with the last run.
 public final class StorageSettingsView: ScopedSettingsPage {
     private let notice = SettingsNoticeView("")
     private var worktrees: SettingsSectionView!
     private var artifacts: SettingsSectionView!
     private var locationRow: SettingsRowView!
     private var modeRow: SettingsRowView!
+    private var keepRow: SettingsRowView!
     private var ruleRows: [SettingsRowView] = []
+    private var cleanup: SettingsSectionView!
+    private var deleteRow: SettingsRowView!
+    private let deleteButton = ButtonView("Delete now", variant: .outline, size: .sm)
+    private let lastRun = CleanupLastRunView()
+    /// The latest report per environment from `server.getStorageCleanupReport`; a key with nil means no run yet.
+    private var reports: [String: StorageCleanupReport?] = [:]
+    private var reportTasks: [String: Task<Void, Never>] = [:]
+    private var deleting = false
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
         worktrees = buildWorktrees()
         artifacts = buildArtifacts()
-        body = [notice, worktrees, artifacts]
+        cleanup = buildCleanup()
+        body = [notice, worktrees, artifacts, cleanup]
         binder.add { [weak self] in self?.update() }
+    }
+
+    deinit { reportTasks.values.forEach { $0.cancel() } }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncReports()
     }
 
     private var isProject: Bool { context.scope.isProjectScope }
@@ -59,7 +78,126 @@ public final class StorageSettingsView: ScopedSettingsPage {
             select.selectedIndex = mixedModes ? nil : ["inherit", "off", "custom"].firstIndex(of: m)
         }
         for r in ruleRows { r.isHidden = isProject && (mixedModes || m != "custom") }
+        // StorageSettings.tsx:572-575: the keep rule needs `storageCleanupRun` on every connected environment.
+        keepRow.isHidden = (isProject && (mixedModes || m != "custom")) || !scope.connected.allSatisfy { $0.capabilities.contains("storageCleanupRun") }
         worktrees.group.rows = worktrees.group.rows
+        setHidden(cleanup, message != nil || isProject || supported.isEmpty)
+        syncReports()
+        updateCleanup()
+    }
+
+    // MARK: Cleanup (StorageSettings.tsx:231-404)
+
+    /// Connected environments that can run cleanup and report on it.
+    private var supported: [SettingsScopeEnvironment] { context.scope.connected.filter { $0.capabilities.contains("storageCleanupRun") } }
+
+    /// Follows each supported environment's report stream while the page shows; drops the rest.
+    private func syncReports() {
+        let want = window == nil || isProject ? [] : Set(supported.map(\.id))
+        for (id, task) in reportTasks where !want.contains(id) {
+            task.cancel()
+            reportTasks[id] = nil
+            reports[id] = nil
+        }
+        for id in want where reportTasks[id] == nil {
+            reportTasks[id] = context.subscribe?(id, "server.getStorageCleanupReport", .object([:])) { [weak self] value in
+                guard let self, self.reportTasks[id] != nil else { return }
+                self.reports[id] = .some(StorageCleanupReport(json: value))
+                self.updateCleanup()
+            }
+        }
+    }
+
+    /// `hasRules` (StorageSettings.tsx:265-283): any retention or worktree rule on, at the environment or in a custom project policy.
+    private var hasRules: Bool {
+        func enabled(_ r: [String: JSONValue]) -> Bool {
+            (r["worktreeAfterDays"].map { $0 != .null } ?? false) || r["worktreeOnMerge"]?.boolValue == true
+                || r["worktreeOnDelete"]?.boolValue == true || r["worktreeUnchanged"]?.boolValue == true
+        }
+        return supported.contains { e in
+            guard let s = e.settings else { return false }
+            let storage = s["storageCleanup"]
+            if storage["browserArtifactsAfterDays"].map({ $0 != .null }) ?? false { return true }
+            if storage["logsAfterDays"].map({ $0 != .null }) ?? false { return true }
+            if enabled(ProjectSettings.worktreeCleanup(s, projectId: nil)) { return true }
+            return (s["projectSettingsOverrides"].objectValue ?? [:]).values.contains { o in
+                o["worktreeCleanup"]?["mode"]?.stringValue == "custom" && enabled(o["worktreeCleanup"]?["rules"]?.objectValue ?? [:])
+            }
+        }
+    }
+
+    private func updateCleanup() {
+        guard cleanup != nil else { return }
+        let envs = supported
+        let multi = envs.count > 1
+        let nowMs = TimestampFormat.nowMs()
+        // ponytail: the "Last run 3m ago" label refreshes with the page, not on T3's 60 s tick; add a tick if it looks stale
+        let lines = envs.map { e -> String in
+            let text: String
+            switch reports[e.id] {
+            case .some(.some(let r)):
+                let failed = r.failed > 0 ? " \(r.failed) \(r.failed == 1 ? "item" : "items") couldn't be removed." : ""
+                text = "Last run \(TimestampFormat.formatRelativeTimeLabel(r.finishedAt, nowMs: nowMs)). \(StorageCleanupReport.formatBytes(r.bytesFreed)) recovered.\(failed)"
+            case .some(.none): text = "Cleanup hasn't run yet."
+            case .none: text = "Loading last run…"
+            }
+            return (multi ? "\(e.label): " : "") + text
+        }
+        let rules = hasRules
+        deleteRow.detail = rules ? lines.joined(separator: "\n") : "Turn on a cleanup rule to use this."
+        deleteButton.title = deleting ? "Deleting…" : "Delete now"
+        deleteButton.isEnabled = !deleting && rules && envs.contains(where: \.canWrite)
+        deleteRow.needsLayout = true
+
+        let labeled = context.scope.connected.count > 1
+        let shown = envs.compactMap { e in reports[e.id].flatMap { $0 }.map { (e, $0) } }
+        lastRun.isHidden = shown.isEmpty
+        lastRun.summary = shown.map { e, r in
+            (labeled ? "\(e.label): " : "") + "\(r.removed) removed, \(r.kept) kept" + (r.failed > 0 ? ", \(r.failed) failed" : "")
+        }.joined(separator: " · ")
+        lastRun.results = shown.flatMap { e, r in CleanupLastRunView.rows(r, environmentLabel: labeled ? e.label : nil) }
+        cleanup.group.rows = cleanup.group.rows
+        onHeightChange?()
+    }
+
+    /// `deleteNow`: runs cleanup on every supported environment this connection may write, toasting failures.
+    private func deleteNow() {
+        guard !deleting, let request = context.request else { return }
+        let targets = supported.filter(\.canWrite)
+        guard !targets.isEmpty else { return }
+        deleting = true
+        updateCleanup()
+        var remaining = targets.count
+        for e in targets {
+            Task { @MainActor [weak self] in
+                do {
+                    let value = try await request(e.id, "server.runStorageCleanup", .object([:]))
+                    if let report = StorageCleanupReport(json: value) {
+                        if self?.reportTasks[e.id] != nil { self?.reports[e.id] = .some(report) }
+                        if let failure = report.entries.first(where: { $0.outcome == "failed" }) {
+                            self?.context.toast?("Cleanup failed on \(e.label)", failure.reason, .error)
+                        }
+                    }
+                } catch is CancellationError {
+                } catch {
+                    self?.context.toast?("Could not run cleanup on \(e.label)", "\(error)", .error)
+                }
+                remaining -= 1
+                if remaining == 0 { self?.deleting = false }
+                self?.updateCleanup()
+            }
+        }
+    }
+
+    private func buildCleanup() -> SettingsSectionView {
+        deleteButton.action = { [weak self] in self?.deleteNow() }
+        deleteRow = row("storage-delete-now", detail: "", control: deleteButton)
+        lastRun.onHeightChange = { [weak self] in self?.onHeightChange?() }
+        anchors["storage-cleanup-last-run"] = lastRun
+        // `SettingsSection variant="plain"`: the Delete now card and the folded Last run card, `space-y-1`.
+        let s = SettingsSectionView(title: "Cleanup", rows: [SettingsGroupView(rows: [deleteRow]), lastRun], variant: .plain)
+        anchors["storage-cleanup"] = s
+        return s
     }
 
     /// `ruleStatus`: "Mixed across selected machines" when targets disagree.
@@ -128,7 +266,30 @@ public final class StorageSettingsView: ScopedSettingsPage {
                                 "Remove worktrees whose pull request is merged and whose commits are included in the default branch.", key: "worktreeOnMerge")
         let unchanged = ruleSwitch("Delete unchanged worktrees", "Remove worktrees with no commits beyond the default branch.", key: "worktreeUnchanged")
         ruleRows = [onDelete, inactive, merged, unchanged]
-        return section("storage-worktrees", "Worktrees", [locationRow, modeRow] + ruleRows)
+        keepRow = keepWhenRow()
+        return section("storage-worktrees", "Worktrees", [locationRow, modeRow] + ruleRows + [keepRow])
+    }
+
+    /// "Keep worktrees with local changes" (StorageSettings.tsx:572-614): a select of `WorktreeKeepWhen`, "Mixed" when targets disagree.
+    private func keepWhenRow() -> SettingsRowView {
+        let cases = WorktreeKeepWhen.allCases
+        let select = settingsSelect(cases.map(\.label), width: nil)
+        select.placeholder = "Mixed"
+        select.setAccessibilityLabel("Keep worktrees with local changes")
+        let r = row("storage-worktree-keep-when", detail: "", control: select)
+        r.accessories = [ResetSlot(label: "")]
+        select.onChange = { [weak self] i in self?.updateWorktree(["worktreeKeepWhen": .string(cases[i].rawValue)]) }
+        binder.add { [weak self, weak select, weak r] in
+            guard let self else { return }
+            let keep = self.settings(self.server)["worktreeKeepWhen"]?.stringValue.flatMap(WorktreeKeepWhen.init(rawValue:)) ?? .uncommittedChanges
+            let mixed = self.status("worktreeKeepWhen")
+            select?.selectedIndex = mixed == nil ? cases.firstIndex(of: keep) : nil
+            r?.detail = keep.detail
+            r?.status = mixed
+            r?.inertReason = self.isProject ? nil : self.context.scope.inertReason
+            r?.needsLayout = true
+        }
+        return r
     }
 
     private func buildArtifacts() -> SettingsSectionView {

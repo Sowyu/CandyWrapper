@@ -12,7 +12,8 @@ struct SettingsLogicTests {
     @Test func catalogMatchesT3() {
         let ids = SettingsSearch.items.map(\.id)
         #expect(Set(ids).count == ids.count)
-        #expect(ids.first == "storage-worktrees")
+        // 2994's catalog starts with the storage keep rule and Delete now (settingsSearch.ts:167-183).
+        #expect(Array(ids.prefix(3)) == ["storage-worktree-keep-when", "storage-delete-now", "storage-worktrees"])
         #expect(SettingsSearch.title("time-format") == "Time format")
         // Keybinding commands follow the "keybindings" item, one per static command.
         let k = ids.firstIndex(of: "keybindings")!

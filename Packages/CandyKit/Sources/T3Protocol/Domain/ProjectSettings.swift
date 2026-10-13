@@ -114,11 +114,17 @@ public enum ProjectSettings {
         let policy = resolve(settings, projectId: projectId).settings["worktreeCleanup"]
         switch policy["mode"]?.stringValue {
         case "custom": return policy["rules"]?.objectValue ?? [:]
-        case "off": return ["worktreeAfterDays": .null, "worktreeOnMerge": .bool(false), "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false)]
+        case "off":
+            var rules: [String: JSONValue] = ["worktreeAfterDays": .null, "worktreeOnMerge": .bool(false), "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false)]
+            // 2994 keeps the environment's `worktreeKeepWhen` (shared projectSettings.ts:275-282). 2861 servers have none.
+            if let keep = settings["storageCleanup"].objectValue?["worktreeKeepWhen"] { rules["worktreeKeepWhen"] = keep }
+            return rules
         default:
             let storage = settings["storageCleanup"].objectValue ?? [:]
             // `StorageCleanupSettings` decoding defaults for absent rules.
-            return Dictionary(uniqueKeysWithValues: worktreeRuleKeys.map { ($0, storage[$0] ?? ($0 == "worktreeAfterDays" ? .null : .bool(false))) })
+            var rules = Dictionary(uniqueKeysWithValues: worktreeRuleKeys.map { ($0, storage[$0] ?? ($0 == "worktreeAfterDays" ? .null : .bool(false))) })
+            if let keep = storage["worktreeKeepWhen"] { rules["worktreeKeepWhen"] = keep }
+            return rules
         }
     }
 
