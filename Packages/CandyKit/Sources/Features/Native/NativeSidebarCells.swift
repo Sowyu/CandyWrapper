@@ -88,6 +88,29 @@ class NativeSidebarCell: NSTableCellView {
     }
 
     static func set(_ field: NSTextField, _ text: String) { if field.stringValue != text { field.stringValue = text } }
+
+    /// Shows or hides a subview that is made the first time the row shows it; returns it while shown.
+    func reveal<V: NSView>(_ slot: inout V?, _ shown: Bool, _ make: () -> V) -> V? {
+        if shown, slot == nil {
+            let view = make()
+            addSubview(view)
+            slot = view
+        }
+        slot?.isHidden = !shown
+        return shown ? slot : nil
+    }
+
+    func adding<V: NSView>(_ view: V) -> V {
+        addSubview(view)
+        return view
+    }
+
+    /// A 10pt row glyph, such as the pin.
+    static func glyph(_ symbol: String) -> NSImageView {
+        let v = NativeSidebarMetrics.imageView()
+        v.image = NativeSidebarMetrics.symbol(symbol, size: 10)
+        return v
+    }
 }
 
 /// The card row for pinned, active and Working threads (Sidebar.tsx:1955-2217, classic `SidebarCardRowView`):
@@ -96,41 +119,46 @@ class NativeSidebarCell: NSTableCellView {
 final class NativeThreadCardCell: NativeSidebarCell {
     let favicon = ProjectMonogramView()
     let project = NativeSidebarMetrics.label(SB.font(12, .medium))
-    let pin = NativeSidebarMetrics.imageView()
-    let statusIcon = NativeSidebarMetrics.imageView()
-    let status = NativeSidebarMetrics.label(SB.font(12, .medium))
     let duration = NativeSidebarMetrics.label(SB.tabular(12))
     let title = NativeSidebarMetrics.label(SB.font(14, .medium))
-    let worktree = NativeSidebarMetrics.imageView()
     let branch = NativeSidebarMetrics.label(SB.font(12))
-    let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
-    let terminal = TerminalStatusGlyph()
-    let pullRequest = PullRequestBadgeView()
-    let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let provider = ProviderGlyphView()
-    /// T3's hover actions in the status slot: Snooze, then Settle with its word (Sidebar.tsx:2027-2094).
-    let settle = NativeIconButton("checkmark", "Settle thread", text: "Settle", pointSize: 11)
-    let snooze = NativeIconButton("clock", "Snooze thread", pointSize: 12)
+    /// Glyphs most cards don't show are made the first time a row needs them: every view in the window costs
+    /// memory and a share of the split view's layout engine, hidden or not.
+    private(set) var pin: NSImageView?
+    private(set) var statusIcon: NSImageView?
+    private(set) var status: NSTextField?
+    private(set) var worktree: NSImageView?
+    private(set) var scratchMachine: EnvironmentMachineGlyphView?
+    private(set) var terminal: TerminalStatusGlyph?
+    private(set) var pullRequest: PullRequestBadgeView?
+    private(set) var machine: EnvironmentMachineGlyphView?
+    /// T3's hover actions in the status slot: Snooze, then Settle with its word (Sidebar.tsx:2027-2094). Made on
+    /// the row's first hover.
+    private(set) var settle: NativeIconButton?
+    private(set) var snooze: NativeIconButton?
     private var showsActions = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        pin.image = NativeSidebarMetrics.symbol("pin", size: 10)
-        worktree.image = NativeSidebarMetrics.symbol("folder", size: 10)
-        terminal.isHidden = true
-        for v in [favicon, project, pin, statusIcon, status, duration, title, worktree, branch, scratchMachine, terminal, pullRequest,
-                  machine, provider, snooze, settle] as [NSView] { addSubview(v) }
-        settle.isHidden = true
-        snooze.isHidden = true
-        settle.target = self
-        settle.action = #selector(pressSettle)
-        snooze.target = self
-        snooze.action = #selector(pressSnooze)
+        for v in [favicon, project, duration, title, branch, provider] as [NSView] { addSubview(v) }
         textField = title
     }
 
+    private func makeActions() {
+        let snooze = NativeIconButton("clock", "Snooze thread", pointSize: 12)
+        let settle = NativeIconButton("checkmark", "Settle thread", text: "Settle", pointSize: 11)
+        for (b, action) in [(snooze, #selector(pressSnooze)), (settle, #selector(pressSettle))] {
+            b.target = self
+            b.action = action
+            addSubview(b)
+        }
+        self.snooze = snooze
+        self.settle = settle
+    }
+
     @objc private func pressSettle() { if let r = row { list?.actions.settle(r.id) } }
-    @objc private func pressSnooze() { if let r = row { list?.actions.snooze(r.id, snooze) } }
+    @objc private func pressSnooze() { if let r = row, let snooze { list?.actions.snooze(r.id, snooze) } }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -146,31 +174,34 @@ final class NativeThreadCardCell: NativeSidebarCell {
         Self.set(project, r.projectLabel ?? "")
         project.font = SB.font(12, r.recedes ? .regular : .medium)
         project.textColor = ink(SB.c(\.secondaryLabel))
-        pin.isHidden = !r.isPinned
-        pin.contentTintColor = ink(SB.c(\.mutedForeground))
+        if let pin = reveal(&pin, r.isPinned, { Self.glyph("pin") }) { pin.contentTintColor = ink(SB.c(\.mutedForeground)) }
+        // The status and the actions trade places on hover; a woken row keeps its status (Sidebar.tsx:2027).
+        showsActions = hovered && !r.isRenaming && list.settlementSupported() && r.topStatus != .woke
+        if showsActions, settle == nil { makeActions() }
+        settle?.isHidden = !showsActions
+        snooze?.isHidden = !showsActions || !(r.action == .settle && r.canSnooze && list.snoozeSupported())
         if let top = r.topStatus {
             let color = ink(SB.status(top))
-            statusIcon.image = NativeSidebarMetrics.statusSymbol(top).flatMap { NativeSidebarMetrics.symbol($0, size: 12, weight: .medium) }
-            statusIcon.contentTintColor = color
-            Self.set(status, r.statusLabel ?? "")
-            status.textColor = color
+            let symbol = NativeSidebarMetrics.statusSymbol(top).flatMap { NativeSidebarMetrics.symbol($0, size: 12, weight: .medium) }
+            if let icon = reveal(&statusIcon, symbol != nil && !showsActions, NativeSidebarMetrics.imageView) {
+                icon.image = symbol
+                icon.contentTintColor = color
+            }
+            if let status = reveal(&status, !showsActions, { NativeSidebarMetrics.label(SB.font(12, .medium)) }) {
+                Self.set(status, r.statusLabel ?? "")
+                status.textColor = color
+            }
             Self.set(duration, r.status == .working ? r.workingStartedMs.map {
                 SidebarModel.formatWorkingDurationLabel(elapsedMs: Double(list.nowMs - $0)) } ?? "" : "")
             duration.font = SB.tabular(12, .medium)
             duration.textColor = color
         } else {
-            statusIcon.image = nil
-            Self.set(status, "")
+            statusIcon?.isHidden = true
+            status?.isHidden = true
             Self.set(duration, r.timeLabel)
             duration.font = SB.tabular(12)
             duration.textColor = ink(SB.c(\.secondaryLabel))
         }
-        // The status and the actions trade places on hover; a woken row keeps its status (Sidebar.tsx:2027).
-        showsActions = hovered && !r.isRenaming && list.settlementSupported() && r.topStatus != .woke
-        settle.isHidden = !showsActions
-        snooze.isHidden = !showsActions || !(r.action == .settle && r.canSnooze && list.snoozeSupported())
-        statusIcon.isHidden = statusIcon.image == nil || showsActions
-        status.isHidden = showsActions
         duration.isHidden = showsActions
         Self.set(title, r.isRenaming ? "" : r.title)
         title.font = SB.font(14, r.recedes ? .regular : .medium)
@@ -181,18 +212,26 @@ final class NativeThreadCardCell: NativeSidebarCell {
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         Self.set(branch, r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : ""))
         branch.textColor = ink(SB.c(\.mutedForeground, 0.4))
-        worktree.isHidden = !(r.branch != nil && r.hasWorktree)
-        worktree.contentTintColor = ink(SB.c(\.mutedForeground, 0.4))
-        scratchMachine.kind = showsScratch ? r.scratchMachine : nil
-        scratchMachine.isHidden = !showsScratch
-        scratchMachine.color = ink(SB.c(\.mutedForeground, 0.4))
-        terminal.count = r.terminalProcessCount
-        pullRequest.badge = r.pullRequestBadge
-        pullRequest.onClick = { [weak list] in list?.actions.openPullRequest(r.id) }
-        pullRequest.onOpenURL = { [weak list] url in list?.actions.openPullRequestURL(r.id, url) }
-        machine.kind = r.environmentMachine
-        machine.isHidden = r.environmentMachine == nil || showsScratch
-        machine.color = ink(SB.c(\.sidebarMutedForeground, 0.7))
+        if let worktree = reveal(&worktree, r.branch != nil && r.hasWorktree, { Self.glyph("folder") }) {
+            worktree.contentTintColor = ink(SB.c(\.mutedForeground, 0.4))
+        }
+        if let scratch = reveal(&scratchMachine, showsScratch, { EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12)) }) {
+            scratch.kind = r.scratchMachine
+            scratch.color = ink(SB.c(\.mutedForeground, 0.4))
+        }
+        // These two hide themselves while they have nothing to show.
+        if r.terminalProcessCount > 0, terminal == nil { terminal = adding(TerminalStatusGlyph()) }
+        terminal?.count = r.terminalProcessCount
+        if r.pullRequestBadge != nil, pullRequest == nil { pullRequest = adding(PullRequestBadgeView()) }
+        if let pullRequest {
+            pullRequest.badge = r.pullRequestBadge
+            pullRequest.onClick = { [weak list] in list?.actions.openPullRequest(r.id) }
+            pullRequest.onOpenURL = { [weak list] url in list?.actions.openPullRequestURL(r.id, url) }
+        }
+        if let machine = reveal(&machine, r.environmentMachine != nil && !showsScratch, { EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14)) }) {
+            machine.kind = r.environmentMachine
+            machine.color = ink(SB.c(\.sidebarMutedForeground, 0.7))
+        }
         provider.driver = r.providerIcon
         // Background work fades as a whole row (`opacity-70`, Sidebar.tsx:1596-1598).
         alphaValue = r.recedes && r.status == .working ? 0.7 : 1
@@ -215,18 +254,19 @@ final class NativeThreadCardCell: NativeSidebarCell {
         var x = left
         if !favicon.isHidden { favicon.frame = NSRect(x: x, y: top + 2, width: 16, height: 16); x += 16 + 6 }
         var sx = right
+        let statusText = status.flatMap { $0.isHidden ? nil : $0 }.map(\.stringValue) ?? ""
         if !duration.stringValue.isEmpty {
             let dw = ceil(duration.intrinsicContentSize.width) + 4
             duration.frame = NSRect(x: sx - dw, y: top + 2, width: dw, height: 16)
-            sx -= dw + (status.stringValue.isEmpty ? 0 : 4)
+            sx -= dw + (statusText.isEmpty ? 0 : 4)
         }
-        if !status.stringValue.isEmpty {
+        if let status, !statusText.isEmpty {
             let lw = ceil(status.intrinsicContentSize.width) + 4
             status.frame = NSRect(x: sx - lw, y: top + 2, width: lw, height: 16)
             sx -= lw
-            if !statusIcon.isHidden { statusIcon.frame = NSRect(x: sx - 4 - 14, y: top + 3, width: 14, height: 14); sx -= 18 }
+            if let statusIcon, !statusIcon.isHidden { statusIcon.frame = NSRect(x: sx - 4 - 14, y: top + 3, width: 14, height: 14); sx -= 18 }
         }
-        if showsActions {
+        if showsActions, let settle, let snooze {
             // `-mr-1` on Settle; the buttons fill the 20pt line.
             let sw = ceil(settle.intrinsicContentSize.width) + 12
             settle.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
@@ -234,21 +274,21 @@ final class NativeThreadCardCell: NativeSidebarCell {
             sx = (snooze.isHidden ? settle : snooze).frame.minX
         }
         var slotRight = right - max(32, right - sx) // `min-w-8`
-        if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
+        if let pin, !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
         project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
         title.frame = NSRect(x: left, y: top + 24, width: right - left, height: 20)
         let y3 = top + 46
         provider.frame = NSRect(x: right - 14, y: y3 + 1, width: 14, height: 14)
         var trailing = right - 14
-        if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
-        if !pullRequest.isHidden {
+        if let machine, !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
+        if let pullRequest, !pullRequest.isHidden {
             let pw = pullRequest.preferredWidth
             pullRequest.frame = NSRect(x: trailing - 6 - pw, y: y3, width: pw, height: 16); trailing -= pw + 6
         }
-        if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
+        if let terminal, !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
-        if !worktree.isHidden { worktree.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
-        if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
+        if let worktree, !worktree.isHidden { worktree.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
+        if let scratchMachine, !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
     }
 
@@ -260,19 +300,18 @@ final class NativeThreadCardCell: NativeSidebarCell {
 final class NativeThreadSlimCell: NativeSidebarCell {
     let favicon = ProjectMonogramView()
     let title = NativeSidebarMetrics.label(SB.font(14))
-    let pin = NativeSidebarMetrics.imageView()
-    let terminal = TerminalStatusGlyph()
-    let pullRequest = PullRequestBadgeView()
     let time = NativeSidebarMetrics.label(SB.tabular(12))
+    /// Made the first time the row shows them, as on cards.
+    private(set) var pin: NSImageView?
+    private(set) var terminal: TerminalStatusGlyph?
+    private(set) var pullRequest: PullRequestBadgeView?
     /// The row's hover action in the time's place: Wake, Un-settle or Settle (Sidebar.tsx:1903-1937).
     private var actionButton: NativeIconButton?
     private var actionKind: SidebarRowModel.Action?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        pin.image = NativeSidebarMetrics.symbol("pin", size: 10)
-        terminal.isHidden = true
-        for v in [favicon, title, pin, terminal, pullRequest, time] as [NSView] { addSubview(v) }
+        for v in [favicon, title, time] as [NSView] { addSubview(v) }
         textField = title
     }
 
@@ -304,15 +343,21 @@ final class NativeThreadSlimCell: NativeSidebarCell {
             : r.isActive || r.isWoke || r.status == .input ? SB.c(\.foreground)
             : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7))
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
-        pin.isHidden = !r.isPinned
-        pin.contentTintColor = ink(SB.c(\.mutedForeground))
-        terminal.count = r.terminalProcessCount
-        pullRequest.badge = r.pullRequestBadge
-        pullRequest.onClick = { [weak list] in list?.actions.openPullRequest(r.id) }
-        pullRequest.onOpenURL = { [weak list] url in list?.actions.openPullRequestURL(r.id, url) }
+        if let pin = reveal(&pin, r.isPinned, { Self.glyph("pin") }) { pin.contentTintColor = ink(SB.c(\.mutedForeground)) }
+        // These two hide themselves while they have nothing to show.
+        if r.terminalProcessCount > 0, terminal == nil { terminal = adding(TerminalStatusGlyph()) }
+        terminal?.count = r.terminalProcessCount
+        if r.pullRequestBadge != nil, pullRequest == nil { pullRequest = adding(PullRequestBadgeView()) }
+        if let pullRequest {
+            pullRequest.badge = r.pullRequestBadge
+            pullRequest.onClick = { [weak list] in list?.actions.openPullRequest(r.id) }
+            pullRequest.onOpenURL = { [weak list] url in list?.actions.openPullRequestURL(r.id, url) }
+        }
         Self.set(time, r.snoozeLabel ?? r.timeLabel)
         time.textColor = ink(r.snoozeLabel != nil ? SB.c(\.infoForeground) : SB.c(\.secondaryLabel))
-        if actionKind != r.action {
+        let acts = hovered && !r.isRenaming
+        // The hover action is made on the row's first hover, and again when the row's action changes.
+        if actionKind != r.action, acts || actionButton != nil {
             actionButton?.removeFromSuperview()
             let b = switch r.action {
             case .unsnooze: NativeIconButton("alarm", "Wake thread now", pointSize: 11)
@@ -325,7 +370,6 @@ final class NativeThreadSlimCell: NativeSidebarCell {
             actionButton = b
             actionKind = r.action
         }
-        let acts = hovered && !r.isRenaming
         actionButton?.isHidden = !acts
         time.isHidden = acts && !r.isWoke
         setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil].compactMap { $0 }.joined(separator: ", "))
@@ -341,12 +385,12 @@ final class NativeThreadSlimCell: NativeSidebarCell {
         time.frame = NSRect(x: w - pad - tw, y: (h - 16) / 2, width: tw, height: 16)
         actionButton?.frame = NSRect(x: w - pad + 4 - 24, y: (h - 24) / 2, width: 24, height: 24) // `-mr-1`
         var right = w - pad - max(32, tw) - 10
-        if !pullRequest.isHidden {
+        if let pullRequest, !pullRequest.isHidden {
             let pw = pullRequest.preferredWidth
             pullRequest.frame = NSRect(x: right - pw, y: (h - 16) / 2, width: pw, height: 16); right -= pw + 10
         }
-        if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
-        if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
+        if let terminal, !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
+        if let pin, !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
         title.frame = NSRect(x: x, y: (h - 20) / 2, width: max(0, right - x), height: 20)
     }
 

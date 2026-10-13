@@ -48,9 +48,9 @@ enum NativeSpec {
         return image
     }
 
+    /// The search row's and footer's glyph, from the shared cache. The button carries the label.
     static func icon(_ symbol: String, _ label: String) -> NSImage? {
-        NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: iconPointSize, weight: iconWeight))
+        NativeSidebarMetrics.symbol(symbol, size: iconPointSize, weight: iconWeight)
     }
 }
 
@@ -63,10 +63,15 @@ final class NativeIconButton: NSButton {
     private var tracking: NSTrackingArea?
 
     /// `text` puts a word after the glyph, as on the rows' Settle button.
-    init(_ symbol: String, _ label: String, text: String? = nil, pointSize: CGFloat = NativeSpec.iconPointSize) {
+    /// The glyph comes from the shared symbol cache: a fresh symbol image per button costs about 40 KB in its
+    /// representation and raster, and every card has two of these.
+    convenience init(_ symbol: String, _ label: String, text: String? = nil, pointSize: CGFloat = NativeSpec.iconPointSize) {
+        self.init(image: NativeSidebarMetrics.symbol(symbol, size: pointSize, weight: NativeSpec.iconWeight), label, text: text)
+    }
+
+    init(image: NSImage?, _ label: String, text: String? = nil) {
         super.init(frame: NSRect(x: 0, y: 0, width: NativeSpec.iconButton, height: NativeSpec.iconButton))
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize, weight: NativeSpec.iconWeight))
+        self.image = image
         isBordered = false
         bezelStyle = .accessoryBarAction
         if let text {
@@ -183,14 +188,19 @@ final class NativeSidebarChrome: NSView, NSSearchFieldDelegate {
 /// and Usage as icon buttons, or Back on a utility page.
 final class NativeSidebarFooter: NSView {
     let settings = NativeIconButton("gearshape", "Settings")
-    let pullRequests: NativeIconButton = {
-        let b = NativeIconButton("arrow.triangle.pull", "Pull Requests")
-        b.image = NativeSpec.lucide(.gitPullRequestArrow, "Pull Requests")
-        return b
-    }()
+    let pullRequests = NativeIconButton(image: NativeSpec.lucide(.gitPullRequestArrow, "Pull Requests"), "Pull Requests")
     let usage = NativeIconButton("chart.bar", "Usage")
-    let back = NSButton(title: "Back", image: NSImage(systemSymbolName: "arrow.left", accessibilityDescription: nil)!, target: nil, action: nil)
-    var showsBack = false { didSet { needsLayout = true } }
+    /// Back shows only on Pull Requests and Usage, so it is made the first time one opens.
+    private(set) var back: NSButton?
+    /// Set once by the sidebar, for Back when it is made.
+    weak var backTarget: AnyObject?
+    var backAction: Selector?
+    var showsBack = false {
+        didSet {
+            if showsBack, back == nil { makeBack() }
+            needsLayout = true
+        }
+    }
     var showsPullRequests = true { didSet { needsLayout = true } }
     /// Room the update pill takes at the right end.
     var trailingRoom: CGFloat = 0 { didSet { needsLayout = true } }
@@ -199,13 +209,19 @@ final class NativeSidebarFooter: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        back.imagePosition = .imageLeading
-        back.alignment = .left
-        back.bezelStyle = .accessoryBarAction
-        back.isBordered = false
-        back.contentTintColor = SB.c(\.mutedForeground)
-        back.font = SB.font(13)
-        for v in [settings, pullRequests, usage, back] as [NSView] { addSubview(v) }
+        for v in [settings, pullRequests, usage] as [NSView] { addSubview(v) }
+    }
+
+    private func makeBack() {
+        let b = NSButton(title: "Back", image: NSImage(systemSymbolName: "arrow.left", accessibilityDescription: nil)!, target: backTarget, action: backAction)
+        b.imagePosition = .imageLeading
+        b.alignment = .left
+        b.bezelStyle = .accessoryBarAction
+        b.isBordered = false
+        b.contentTintColor = SB.c(\.mutedForeground)
+        b.font = SB.font(13)
+        addSubview(b)
+        back = b
     }
 
     @available(*, unavailable)
@@ -222,7 +238,7 @@ final class NativeSidebarFooter: NSView {
             b.frame = NSRect(x: x, y: y, width: side, height: side)
             x += side + 4
         }
-        back.isHidden = !showsBack
-        back.frame = NSRect(x: NativeSpec.edge, y: y, width: max(0, bounds.width - 2 * NativeSpec.edge - trailingRoom), height: side)
+        back?.isHidden = !showsBack
+        back?.frame = NSRect(x: NativeSpec.edge, y: y, width: max(0, bounds.width - 2 * NativeSpec.edge - trailingRoom), height: side)
     }
 }

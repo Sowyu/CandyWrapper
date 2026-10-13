@@ -103,6 +103,12 @@ struct NativeSidebarTests {
         let row = try #require(native.rowIndex(snap.threads[1_400].id))
         let cell = try #require(native.table.view(atColumn: 0, row: row, makeIfNecessary: false) as? NativeThreadCardCell)
         #expect(cell.title.stringValue == "Renamed on screen")
+        // Hover's Settle and Snooze are made on the first hover, not with every card.
+        #expect(cell.settle == nil)
+        cell.hovered = true
+        #expect(cell.settle?.isHidden == false)
+        cell.hovered = false
+        #expect(cell.settle?.isHidden == true)
         // T3 desktop's card: 82pt with the row gap, in builder order.
         #expect(native.table.rect(ofRow: row).height == 82)
         // The cell fits the list's width, inside the source list's insets.
