@@ -44,7 +44,15 @@ public final class ThemeLibrary {
     /// Off while a development flag pins the window appearance (`--appearance`).
     public var controlsAppearance = true
 
-    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    /// `CANDY_THEME=<id>` pins the theme over the stored choice and its light and dark mix, for perf runs and
+    /// snapshots. The stored choice stays as it was.
+    public static let environmentPin: String? = ProcessInfo.processInfo.environment["CANDY_THEME"].flatMap { $0.isEmpty ? nil : $0 }
+    let pinned: String?
+
+    public init(defaults: UserDefaults = .standard, pinned: String? = ThemeLibrary.environmentPin) {
+        self.defaults = defaults
+        self.pinned = pinned
+    }
 
     /// Applies the saved choice and follows the contrast and glass settings from then on.
     public func start() {
@@ -59,7 +67,7 @@ public final class ThemeLibrary {
 
     /// "system", "light", "dark" or a theme id (`readThemePreference`, canonical ids).
     public var preference: String {
-        let raw = defaults.string(forKey: Self.preferenceKey) ?? "system"
+        let raw = pinned ?? defaults.string(forKey: Self.preferenceKey) ?? "system"
         let canonical = raw == "t3-chat-dark" ? raw : ThemePalette.normalizedId(raw)
         return ["system", "light", "dark"].contains(canonical) || definition(canonical) != nil ? canonical : "system"
     }
@@ -71,7 +79,7 @@ public final class ThemeLibrary {
 
     /// `parseThemeHalves`: halves naming a theme that can't render that side are dropped.
     public var halves: Halves {
-        let raw = rawHalves
+        let raw = pinned == nil ? rawHalves : Halves()
         var out = Halves()
         for a in ThemeAppearance.allCases {
             if let id = raw[a], let d = definition(id), d.colors(for: a) != nil { out[a] = d.id }
@@ -338,6 +346,11 @@ public final class ThemeLibrary {
             if a == .light { input.light = half } else { input.dark = half }
         }
         return (input, desktopAppearance())
+    }
+
+    /// Whether the main window shows the native presentation: Glass Native paints either appearance.
+    public var usesNativePresentation: Bool {
+        ThemeAppearance.allCases.contains { owner(of: $0) == ThemeDefinition.glassNative.id }
     }
 
     /// The appearance on screen now (T3's `resolvedTheme`).
