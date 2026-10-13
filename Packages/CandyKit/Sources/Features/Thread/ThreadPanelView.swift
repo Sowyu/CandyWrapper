@@ -431,7 +431,7 @@ public final class ThreadPanelView: DSView {
             // The panel opens on Changes (`selectGitScope(activeThreadRef, "branch")`, ChatView.tsx:5828-5833);
             // without git scopes, on the finished turn.
             var next = panelState; next.open(.diff)
-            setPanelState(next); onPanelChange?(next, [])
+            setPanelState(next, animated: true); onPanelChange?(next, [])
             if diffPanel.selectsGitScopes { diffPanel.selectGitScope(.branch) }
             else if let run = latest?.id { diffPanel.open(runId: run, filePath: nil) }
         }
@@ -577,6 +577,10 @@ public final class ThreadPanelView: DSView {
         maximize.isHidden = true
         maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
         addSubview(maximize)
+        for slide in [panelSlide, terminalSlide] {
+            slide.onFrame = { [weak self] _ in self?.layoutNow() }
+            slide.onEnd = { [weak self] in self?.slideEnded() }
+        }
         detailsCard.isHidden = true
         addSubview(detailsCard)
         addSubview(toasts)
@@ -778,26 +782,23 @@ public final class ThreadPanelView: DSView {
         }
     }
 
-    /// Shows `state` without telling `onPanelChange` (restoring a thread's state).
-    public func setPanelState(_ state: RightPanelState) {
+    /// Shows `state` without telling `onPanelChange` (restoring a thread's state). `animated`: a user
+    /// action, so an inline panel that opens or closes slides; restored state shows at once
+    /// (`usePanelNavigationSuppression`, panelAnimations.ts:11-32).
+    public func setPanelState(_ state: RightPanelState, animated: Bool = false) {
         let wasOpen = rightPanel.isHidden == false
         let diffWasShown = wasOpen && panelState.active?.kind == .diff
-        panelState = state
         let open = state.isOpen
+        let slides = animated && open != wasOpen && viewportWidth > 980
+        // A closing panel gives back its surfaces at once (`RightPanelView.apply`); a still image of it slides away.
+        if slides, !open { panelGhost = ghost(of: rightPanel, replacing: panelGhost) }
+        if open { dropGhost(&panelGhost) }
+        panelState = state
         if !open { setMaximized(false) }
         rightPanel.isHidden = !open
         rightPanel.apply(state)
-        maximize.isHidden = !open
         header.toggles[2].isPressed = open
-        if open != wasOpen {
-            // The terminal and panel toggles move to the panel's tab bar and back, at the same place.
-            // A thread switch hides the header's subviews until its projection arrives; the
-            // toggles leaving the header must not stay hidden.
-            for toggle in header.toggles.dropFirst() {
-                (open ? self : header).addSubview(toggle)
-                toggle.isHidden = !open && model.projection == nil
-            }
-        }
+        placePanelToggles()
         // The panel asks for a diff only while it shows. Generic openings show Changes; a timeline click
         // opens its own turn instead (ChatView.tsx:2304-2313).
         if open, state.active?.kind == .diff {
@@ -806,10 +807,78 @@ public final class ThreadPanelView: DSView {
         }
         needsLayout = true
         header.needsLayout = true
-        if open && !wasOpen && SettingsPanelMotion.duration > 0 {
-            layoutSubtreeIfNeeded()
-            SettingsPanelMotion.reveal(rightPanel, offset: CGSize(width: rightPanel.bounds.width, height: 0))
+        if open != wasOpen || panelSlide.isRunning {
+            panelSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
+            layoutNow()
         }
+    }
+
+    /// The terminal and panel toggles sit on the panel's tab bar while the panel shows, closing slide
+    /// included, and in the header otherwise, at the same place: T3 pins them to the window's top right
+    /// (`panelLayoutControls`, `fixed`, ChatView.tsx:11203-11211).
+    private func placePanelToggles() {
+        let inPanel = rightPanelOpen || panelGhost != nil
+        guard (header.toggles[2].superview === self) != inPanel else { return }
+        // A thread switch hides the header's subviews until its projection arrives; the toggles leaving
+        // the header must not stay hidden.
+        for toggle in header.toggles.dropFirst() {
+            (inPanel ? self : header).addSubview(toggle)
+            toggle.isHidden = !inPanel && model.projection == nil
+        }
+        header.needsLayout = true
+    }
+
+    /// How far open the inline right panel and the terminal drawer show, 0 to 1. T3 transitions the panel's
+    /// `width` (PreviewPanelShell.tsx:118-127) and the drawer's `grid-template-rows` (ChatView.tsx:1321-1326)
+    /// with `ease-out` over `panelAnimationDurationMs`; the chat column is `flex-1` beside and above them
+    /// (ChatView.tsx:11273-11277), so it reflows every frame. The panel's content keeps its width and rides
+    /// the moving left edge (a `calc(width - 1px)` box in an `overflow-clip` host, PreviewPanelShell.tsx:135-139);
+    /// the drawer's keeps its height under its moving top edge (`min-h-0 overflow-clip`, ChatView.tsx:1328).
+    let panelSlide = PanelSlide(value: 0)
+    let terminalSlide = PanelSlide(value: 0)
+    /// A still image of the closing panel or drawer, which gives back its content at once.
+    private var panelGhost: CALayer?
+    private var terminalGhost: CALayer?
+
+    private func ghost(of view: NSView, replacing old: CALayer?) -> CALayer? {
+        if let old { return old } // closing again mid-close keeps the image it has
+        guard !view.isHidden, view.bounds.width > 0, view.bounds.height > 0,
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let ghost = CALayer()
+        ghost.actions = ["position": NSNull(), "bounds": NSNull(), "frame": NSNull()]
+        ghost.contents = bitmap.cgImage
+        ghost.contentsScale = window?.backingScaleFactor ?? 2
+        ghost.frame = view.frame
+        // Under every subview: the toggles stay on top, and nothing else covers the room the panel leaves.
+        ghost.zPosition = -1
+        layer?.addSublayer(ghost)
+        return ghost
+    }
+
+    private func dropGhost(_ ghost: inout CALayer?) {
+        ghost?.removeFromSuperlayer()
+        ghost = nil
+    }
+
+    private func layoutNow() {
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
+    private func slideEnded() {
+        if !panelSlide.isRunning { dropGhost(&panelGhost) }
+        if !terminalSlide.isRunning { dropGhost(&terminalGhost) }
+        placePanelToggles()
+        layoutNow()
+        HoverSync.setNeedsSync(window)
+    }
+
+    /// A panel leaving its window mid-slide lands where it was going; the display links stop with it.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard newWindow == nil else { return }
+        for slide in [panelSlide, terminalSlide] where slide.isRunning { slide.jump(to: slide.target) }
     }
 
     /// A user action on the panel: applies it and reports the new state.
@@ -818,14 +887,10 @@ public final class ThreadPanelView: DSView {
         let closed = change(&next)
         guard next != panelState || !closed.isEmpty else { return }
         panelActionRevision += 1
-        let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : Double(ClientSettingsStore.shared.current.int("panelAnimationDurationMs")) / 1000
+        let duration = SettingsPanelMotion.duration
         let animateSheet = viewportWidth <= 980 && !rightPanelMaximized && next.isOpen != panelState.isOpen && duration > 0
         if animateSheet, !next.isOpen { animateClosingSheet(duration: duration) }
-        // The inline panel slides back out when the panel animation setting is on.
-        if !animateSheet, !next.isOpen, panelState.isOpen, !rightPanel.isHidden {
-            SettingsPanelMotion.dismiss(rightPanel, offset: CGSize(width: rightPanel.bounds.width, height: 0))
-        }
-        setPanelState(next)
+        setPanelState(next, animated: !animateSheet)
         if animateSheet, next.isOpen {
             layoutSubtreeIfNeeded()
             animateSheetLayer(rightPanel.layer, opening: true, duration: duration)
@@ -866,22 +931,23 @@ public final class ThreadPanelView: DSView {
         setPanelState(next)
     }
 
-    /// Shows or hides the terminal drawer at `height`.
+    /// Shows or hides the terminal drawer at `height`. Opening or closing slides, except on a thread switch,
+    /// which shows the new thread's drawer at once (`usePanelNavigationSuppression`).
     public func setTerminal(open: Bool, height: CGFloat) {
         guard open != terminalOpen || height != terminalHeight else { return }
         let wasOpen = terminalOpen
-        // Closing slides the drawer down out of view; a thread switch shows the new state at once.
-        if wasOpen, !open, !switchingThread {
-            SettingsPanelMotion.dismiss(terminalDrawer, offset: CGSize(width: 0, height: terminalDrawer.bounds.height))
-        }
+        let slides = open != wasOpen && !switchingThread
+        // The controller empties a closed drawer right after this; a still image of it slides down.
+        if slides, !open { terminalGhost = ghost(of: terminalDrawer, replacing: terminalGhost) }
+        if open { dropGhost(&terminalGhost) }
         terminalOpen = open
         terminalHeight = height
         terminalDrawer.isHidden = !open
         header.toggles[1].isPressed = open
         needsLayout = true
-        if open && !wasOpen && SettingsPanelMotion.duration > 0 {
-            layoutSubtreeIfNeeded()
-            SettingsPanelMotion.reveal(terminalDrawer, offset: CGSize(width: 0, height: terminalDrawer.bounds.height))
+        if open != wasOpen || terminalSlide.isRunning {
+            terminalSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
+            layoutNow()
         }
     }
 
@@ -1215,7 +1281,11 @@ public final class ThreadPanelView: DSView {
         let panelWidth = !rightPanelOpen ? 0 : rightPanelMaximized ? bounds.width
             : sheet ? RightPanelSheetBackdropView.width(viewport: viewportWidth, container: bounds.width)
             : RightPanelView.width(viewport: viewportWidth, container: bounds.width, preferred: preferredPanelWidth)
-        let chat = sheet ? bounds.width : max(0, bounds.width - panelWidth)
+        // Mid-slide the panel shows the open share of its width, on whole device pixels so the chat stays sharp.
+        let scale = window?.backingScaleFactor ?? 2
+        let shownPanel = sheet || !panelSlide.isRunning ? panelWidth
+            : ((rightPanelOpen ? panelWidth : panelGhost?.bounds.width ?? 0) * panelSlide.value * scale).rounded() / scale
+        let chat = sheet ? bounds.width : max(0, bounds.width - shownPanel)
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
@@ -1228,11 +1298,17 @@ public final class ThreadPanelView: DSView {
         // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
         // the column above it keeps at least the header.
         let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - ThreadHeaderView.height)) : 0
-        let chatHeight = bounds.height - drawer
+        let shownDrawer = !terminalSlide.isRunning ? drawer
+            : ((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) * terminalSlide.value * scale).rounded() / scale
+        let chatHeight = bounds.height - shownDrawer
         terminalDrawer.isHidden = drawer == 0
+        // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
         terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
+        terminalGhost?.frame.origin.y = chatHeight
         timeline.frame = NSRect(x: 0, y: ThreadHeaderView.height, width: chat, height: max(0, chatHeight - ThreadHeaderView.height))
-        rightPanel.frame = NSRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
+        // Mid-slide the panel keeps its width and runs past the window's right edge.
+        rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: 0, width: panelWidth, height: bounds.height)
+        panelGhost?.frame.origin.x = chat
         if rightPanelSheetOpen != sheetWasOpen {
             sheetWasOpen = rightPanelSheetOpen
             if sheetWasOpen {
@@ -1254,10 +1330,12 @@ public final class ThreadPanelView: DSView {
             }
         }
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
-        // The sheet has no maximize control (ChatView.tsx:11211-11232).
-        maximize.isHidden = !rightPanelOpen || sheet
+        // The sheet has no maximize control (ChatView.tsx:11211-11232). It fades with the slide, `transition-opacity`
+        // over the same duration and curve (ChatView.tsx:11213-11224).
+        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil)
+        maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
         panelResize.frame = NSRect(x: chat - 4, y: 0, width: 8, height: bounds.height)
-        if rightPanelOpen {
+        if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
             var x = bounds.width - 12 - 1
             for control in [header.toggles[2], header.toggles[1], maximize] {
