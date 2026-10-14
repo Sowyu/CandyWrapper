@@ -12,9 +12,11 @@ import T3Protocol
 /// snapshot winning (cachePersistence.ts). A thread's deletion removes its entry and removing an
 /// environment clears all of its entries. T3 has no size limit; this cache has one.
 ///
-/// One file per thread, `<dir>/<environment>/<thread>.lzfse`: the typed projection as JSON,
+/// One file per thread, `<dir>/<environment>/<thread>.lz4`: the typed projection as JSON,
 /// without the turn items the visible rows already carry (like the server's compact snapshot),
-/// LZFSE compressed. Nothing stays in memory: a file is read, decoded and dropped when its thread
+/// LZ4 compressed. LZ4 compresses the huge thread's window in 1 ms against LZFSE's 13 ms, to a
+/// file twice the size (360 KB), and both decompress in under 1 ms. The next write's eviction pass
+/// removes `.lzfse` files from before 2026-10-15. Nothing stays in memory: a file is read, decoded and dropped when its thread
 /// opens. The projection holds no credentials; tokens live in the Keychain. Files are written without
 /// a sync (`CacheFile`); a file a power loss tore fails to decode, `load` removes it, and the thread
 /// opens from the network.
@@ -81,7 +83,7 @@ public actor ThreadCache {
 
     public nonisolated func fileURL(_ key: Key) -> URL {
         directory.appending(path: Self.safe(key.environmentId), directoryHint: .isDirectory)
-            .appending(path: Self.safe(key.threadId.rawValue) + ".lzfse")
+            .appending(path: Self.safe(key.threadId.rawValue) + ".lz4")
     }
 
     /// Ids are UUID-like; anything else becomes `_`. Two ids that collide here fail the header
@@ -97,7 +99,7 @@ public actor ThreadCache {
     public nonisolated func load(_ key: Key) -> ThreadDetailSnapshot? {
         let url = fileURL(key)
         guard let mapped = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
-        guard let data = try? (mapped as NSData).decompressed(using: .lzfse) as Data,
+        guard let data = try? (mapped as NSData).decompressed(using: .lz4) as Data,
               let stored = try? JSONValue(parsing: data).decode(as: Stored.self),
               stored.version == Self.currentVersion, stored.environmentId == key.environmentId, stored.threadId == key.threadId
         else {
@@ -169,8 +171,8 @@ public actor ThreadCache {
         let threadId = stored.projection.thread.id
         let local = Set(stored.projection.visibleTurnItems.lazy.filter { $0.isLocal || $0.sourceThreadId == threadId }.map(\.item.id))
         compact.projection.turnItems.removeAll { local.contains($0.id) }
-        guard let json = try? Self.encoder.encode(compact),
-              let data = try? (json as NSData).compressed(using: .lzfse) as Data
+        guard let json = try? JSONValueEncoder().encode(compact).utf8,
+              let data = try? (json as NSData).compressed(using: .lz4) as Data
         else { return }
         guard data.count <= maxEntryBytes else {
             try? FileManager.default.removeItem(at: url)
@@ -189,6 +191,7 @@ public actor ThreadCache {
         var files: [(url: URL, size: Int, date: Date)] = []
         for case let url as URL in walker {
             guard let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+            if url.pathExtension == "lzfse" { try? FileManager.default.removeItem(at: url); continue }
             files.append((url, v.fileSize ?? 0, v.contentModificationDate ?? .distantPast))
         }
         var total = files.reduce(0) { $0 + $1.size }
@@ -198,6 +201,4 @@ public actor ThreadCache {
             total -= file.size
         }
     }
-
-    private static let encoder = JSONEncoder()
 }
