@@ -232,6 +232,14 @@ def foreign_apps(own=None):
     return pids
 
 
+def origin_running():
+    """The user's Origin energy harness holds the screen lock (scripts/wait-origin)."""
+    try:
+        return open("/tmp/cw-screen.lock/owner").read().split()[0] == "origin-run"
+    except (OSError, IndexError):
+        return False
+
+
 def busy_processes():
     names = set()
     for line in run(["ps", "-axo", "comm="]).splitlines():
@@ -357,6 +365,9 @@ class App:
         binary = app_path + "/Contents/MacOS/CandyWrapper"
         deadline = time.time() + 15
         while time.time() < deadline and self.pid is None:
+            # run-app first waits out an Origin energy run that started after the quiet wait, up to 15 minutes.
+            if origin_running():
+                deadline = time.time() + 15
             now = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
             if now and now != before:
                 command = subprocess.run(["ps", "-o", "command=", "-p", now], stdout=subprocess.PIPE, universal_newlines=True).stdout
