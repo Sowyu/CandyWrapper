@@ -81,7 +81,7 @@ public final class SidebarLayoutView: DSView {
 
     public private(set) var isOpen = true
     /// The Glass theme's frost under everything, present only while it shows.
-    private var glassBackdrop: WindowGlassBackdropView?
+    private var glassBackdrop: WallpaperBackdropView?
     /// Preferred width; the drawn width is this clamped to the window (`effectiveWidth`).
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
