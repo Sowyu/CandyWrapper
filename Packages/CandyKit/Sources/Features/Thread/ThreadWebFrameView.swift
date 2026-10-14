@@ -63,6 +63,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     private var frameLoads = 0
     /// The last time the reader clicked or typed in the frame: links open only right after that.
     private(set) var lastUserActivity = Date.distantPast
+    /// An HTML render was told which app shortcuts it may pass on.
+    var shortcutsPosted = false
 
     override var isFlipped: Bool { true }
 
@@ -96,6 +98,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         webView = web
         hostLoaded = false
         frameLoads = 0
+        shortcutsPosted = false
         web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
         if page.kind == .agent { ThreadWebFrameBudget.add(self) }
     }
@@ -285,4 +288,18 @@ enum ThreadWebFrameBudget {
 
     /// For tests and the memory report.
     static var count: Int { live.count }
+}
+
+/// Keyboard focus in a framed page, for the app's shortcut dispatcher.
+@MainActor
+public enum ThreadWebFrames {
+    /// An agent page or file preview has the keyboard, as a focused iframe does.
+    public static func holdKeyboard(in window: NSWindow?) -> Bool {
+        var view = window?.firstResponder as? NSView
+        while let v = view {
+            if v is ThreadWebView { return true }
+            view = v.superview
+        }
+        return false
+    }
 }

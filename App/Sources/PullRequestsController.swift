@@ -1108,7 +1108,13 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
 
     func openLink(_ url: URL, from markdown: MarkdownView) {
         let modifiers = NSApp.currentEvent?.modifierFlags ?? []
-        if modifiers.contains(.command) || modifiers.contains(.control) { NSWorkspace.shared.open(url); return }
+        openChatLink(url, modified: modifiers.contains(.command) || modifiers.contains(.control))
+    }
+
+    /// A chat link (and an HTML render's link, BrowserDocumentFrame.tsx in 3105): Cmd or Ctrl goes to the system
+    /// browser, a pull request opens in the panel, anything else follows "Open links in".
+    func openChatLink(_ url: URL, modified: Bool) {
+        if modified { NSWorkspace.shared.open(url); return }
         // A pull request a project here reads opens in the panel (`useOpenChangeRequestLink`).
         if let target = previewTarget(url) {
             panel.mutatePanel {

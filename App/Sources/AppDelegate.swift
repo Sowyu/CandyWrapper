@@ -366,6 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.permissionNotice.openConnections = { [weak settings] in settings?.open(); settings?.show(.connections) }
         threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
         let shortcuts = Shortcuts(window: window)
+        threads.panel.model.onFrameShortcut = { [weak shortcuts] stroke in shortcuts?.run(stroke) }
         let palette = PaletteCommands(window: window, sidebar: sidebar, environments: environments, threads: threads,
                                       commands: commands, settings: settings)
         shortcuts.context = { [weak window, weak threads, weak commands] in

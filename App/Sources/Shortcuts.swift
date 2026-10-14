@@ -130,10 +130,22 @@ final class Shortcuts {
         onKeyDown?()
         // A shortcut recorder takes every key while it captures.
         if (window?.firstResponder as? ShortcutCaptureResponder)?.isCapturing == true { return false }
+        // A focused agent page or file preview keeps its keys, as a focused iframe does in T3. An HTML render passes
+        // app shortcuts back itself (`run(_:)`, BrowserDocumentFrame.tsx in 3105).
+        if ThreadWebFrames.holdKeyboard(in: window) { return false }
         let paletteOpen = paletteOpen()
         if !paletteOpen, keyHandlers.contains(where: { $0(event) }) { return true }
-        guard let command = ActiveKeymap.resolve(event, context: context()) else { return false }
-        let invocation = Invocation(command: command, isRepeat: event.isARepeat)
+        guard let stroke = KeyStroke(event) else { return false }
+        return run(stroke, paletteOpen: paletteOpen)
+    }
+
+    /// Runs the command a key resolves to: a key event, or a chord a focused HTML render replayed (the replay
+    /// dispatches on the frame element and bubbles to the window's listeners, where T3 resolves it).
+    @discardableResult
+    func run(_ stroke: KeyStroke, paletteOpen: Bool? = nil) -> Bool {
+        let paletteOpen = paletteOpen ?? self.paletteOpen()
+        guard let command = ActiveKeymap.keymap.resolve(stroke, context: context()) else { return false }
+        let invocation = Invocation(command: command, isRepeat: stroke.isRepeat)
         if paletteOpen {
             if !Self.commandsWhilePaletteOpen.contains(command) { return paletteCommand?(invocation) ?? false }
         }
