@@ -657,7 +657,11 @@ final class NativeSidebarTableView: NSTableView {
         super.mouseDown(with: event)
     }
 
+    /// AppKit asks the table for its menu on a right click over a popup that covers it, such as the project
+    /// filter's list, so the table answers only when the click lands on it.
     override func menu(for event: NSEvent) -> NSMenu? {
+        guard let frame = window?.contentView?.superview,
+              frame.hitTest(event.locationInWindow)?.isDescendant(of: self) == true else { return nil }
         let row = row(at: convert(event.locationInWindow, from: nil))
         guard row >= 0 else { return nil }
         list?.hoverEnded()
