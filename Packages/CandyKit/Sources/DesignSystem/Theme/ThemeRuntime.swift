@@ -45,6 +45,9 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     /// CandyWrapper's Glass theme on each side: stock colors over a frosted window (`WindowGlass`).
     public var glassLight = false
     public var glassDark = false
+    /// Classic Glass (not Glass Native) on each side: every surface a frosted pane too (`WindowGlass.frosted`).
+    public var frostLight = false
+    public var frostDark = false
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -68,7 +71,11 @@ public enum ThemeRuntime {
     /// Whether the Glass theme frosts the window in each appearance.
     nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
 
+    /// Whether classic Glass frosts every surface in each appearance.
+    nonisolated(unsafe) public private(set) static var frost = (light: false, dark: false)
+
     public nonisolated static func isGlass(dark: Bool) -> Bool { dark ? glass.dark : glass.light }
+    public nonisolated static func isFrost(dark: Bool) -> Bool { dark ? frost.dark : frost.light }
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -80,6 +87,7 @@ public enum ThemeRuntime {
         var changed = false
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
+            || next.frostLight != old.frostLight || next.frostDark != old.frostDark
             || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
@@ -93,6 +101,10 @@ public enum ThemeRuntime {
         }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
             glass = (next.glassLight, next.glassDark)
+            changed = true
+        }
+        if next.frostLight != old.frostLight || next.frostDark != old.frostDark {
+            frost = (next.frostLight, next.frostDark)
             changed = true
         }
         guard changed else { return }
@@ -142,14 +154,17 @@ public enum ThemeRuntime {
                 }
             })
         }
-        func glass(_ palette: Palette, dark: Bool) -> Palette {
+        func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             guard dark ? input.glassDark : input.glassLight else { return palette }
-            return WindowGlass.readableMuted(palette, dark: dark, opacity: Double(input.glassOpacity) / 100)
+            let opacity = Double(input.glassOpacity) / 100
+            guard dark ? input.frostDark : input.frostLight else { return WindowGlass.readableMuted(palette, dark: dark, opacity: opacity) }
+            let readable = WindowGlass.frostReadable(palette, dark: dark, sidebar: sidebar, opacity: opacity)
+            return WindowGlass.frosted(readable, dark: dark, sidebar: sidebar, opacity: opacity)
         }
-        return ThemePalettes(light: glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false),
-                             dark: glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true),
-                             sidebarLight: glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false),
-                             sidebarDark: glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true))
+        return ThemePalettes(light: glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false),
+                             dark: glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false),
+                             sidebarLight: glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true),
+                             sidebarDark: glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }

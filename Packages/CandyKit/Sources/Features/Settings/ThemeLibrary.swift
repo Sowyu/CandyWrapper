@@ -339,6 +339,11 @@ public final class ThemeLibrary {
             if d.isWindowGlass {
                 // Glass wears the stock palette exactly; only the window changes.
                 if a == .light { input.glassLight = true } else { input.glassDark = true }
+                // Classic Glass also frosts every surface. Glass Native keeps T3's surfaces on its own glass, and
+                // a mix that shows the native window keeps them on the classic side too.
+                if !d.isGlassNative && !usesNativePresentation {
+                    if a == .light { input.frostLight = true } else { input.frostDark = true }
+                }
                 continue
             }
             // `applyThemePalette` falls back to the base colors for a side the theme lacks.

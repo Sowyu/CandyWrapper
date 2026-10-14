@@ -25,6 +25,11 @@ extension TokenColor {
     var nsColor: NSColor {
         NSColor(displayP3Red: displayP3.x, green: displayP3.y, blue: displayP3.z, alpha: displayP3.w)
     }
+
+    /// The same color at `alpha` times its own alpha.
+    func withAlpha(_ alpha: Double) -> TokenColor {
+        TokenColor(srgb: SIMD4(srgb.x, srgb.y, srgb.z, srgb.w * alpha), displayP3: SIMD4(displayP3.x, displayP3.y, displayP3.z, displayP3.w * alpha))
+    }
 }
 
 /// A color that follows the effective appearance of whatever draws it.
