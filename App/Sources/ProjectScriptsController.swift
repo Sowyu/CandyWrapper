@@ -73,15 +73,29 @@ final class ProjectScriptsController {
     private func loadProjectFile(_ env: String, cwd: String) {
         let key = env + "\u{0}" + cwd
         guard fileScripts?.key != key else { return }
+        // A workspace read in the last 5 minutes isn't read again on a thread switch: T3's file query
+        // atom stays cached that long after its last reader goes (client-runtime state/runtime.ts:543).
+        let now = ContinuousClock.now
+        recentFiles = recentFiles.filter { now - $0.value.at < Self.fileReuse }
+        if let hit = recentFiles[key] {
+            fileScripts = (key, hit.scripts)
+            return
+        }
         fileScripts = (key, [])
         fileTask?.cancel()
         fileTask = Task { [weak self] in
-            guard let read = self?.readFile, let reply = await read(env, cwd, T3ProjectFile.fileName), !reply.truncated,
-                  let file = T3ProjectFile.parse(reply.contents), !Task.isCancelled, let self, self.fileScripts?.key == key else { return }
-            self.fileScripts = (key, file.scripts)
+            guard let read = self?.readFile else { return }
+            let reply = await read(env, cwd, T3ProjectFile.fileName)
+            guard !Task.isCancelled, let self, self.fileScripts?.key == key else { return }
+            let scripts = reply.flatMap { $0.truncated ? nil : T3ProjectFile.parse($0.contents) }?.scripts ?? []
+            self.recentFiles[key] = (ContinuousClock.now, scripts)
+            guard !scripts.isEmpty else { return }
+            self.fileScripts = (key, scripts)
             self.refresh()
         }
     }
+    private var recentFiles: [String: (at: ContinuousClock.Instant, scripts: [T3ProjectFile.Script])] = [:]
+    private static let fileReuse: Duration = .seconds(5 * 60)
 
     private func project(_ threadId: ThreadId) -> ProjectShell? {
         guard let snapshot = sidebar?.snapshot, let thread = thread(threadId) else { return nil }

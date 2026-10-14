@@ -82,24 +82,42 @@ final class DevicePanelController {
     private var visible: Bool {
         !panel.isHiddenOrHasHiddenAncestor && (floating || (panel.panelState.isOpen && panel.panelState.active?.kind == .device)) && panel.window?.occlusionState.contains(.visible) == true
     }
+    /// The environment `subscription` follows. T3 keys device state by environment alone
+    /// (state/device.ts:33-39, `input: {}`), so a thread switch within one environment keeps the stream.
+    private var subscribedEnvironment: String?
+    /// `device.list` went out while the panel shows. DevicePanel.tsx:46-49 lists once the panel is
+    /// visible, the state has loaded and the host isn't disabled; a hidden panel never lists.
+    private var listedWhileVisible = false
     func sync() {
         let next = files?.currentThreadId
         if next != thread {
-            stopStream(); subscription?.cancel(); subscription = nil; load?.cancel()
+            stopStream(); load?.cancel()
             floating = false; panel.deviceMiniPlayerShown = false
-            thread = next; state = nil; selected = nil
+            thread = next; selected = nil
         }
         guard let thread, let env = thread.environmentId, let shell = environments.session(env) else {
-            stopStream(); subscription?.cancel(); subscription = nil; load?.cancel(); return
+            stopStream(); subscription?.cancel(); subscription = nil; subscribedEnvironment = nil; state = nil; load?.cancel(); return
         }
-        if subscription == nil {
+        if subscription == nil || subscribedEnvironment != env {
+            subscription?.cancel(); state = nil; listedWhileVisible = false
+            subscribedEnvironment = env
             subscription = shell.supervisor.subscribe("subscribeDeviceState", payload: { .object([:]) }, handler: { [weak self] event in
                 guard case .value(let json) = event, let state = try? JSONValueDecoder().decode(DevicePanelState.self, from: json) else { return }
-                await MainActor.run { guard self?.thread == thread else { return }; self?.receive(state) }
+                await MainActor.run { guard self?.subscribedEnvironment == env else { return }; self?.receive(state) }
             })
-            request("device.list", visible ? [:] : ["inspectOnly": .bool(true)])
+        } else if let state, previousSessions[thread] == nil {
+            // The first state a thread sees is its baseline, as the first value of a new stream was.
+            receive(state)
+            return
         }
+        listIfShown()
         render()
+    }
+    private func listIfShown() {
+        guard visible else { listedWhileVisible = false; return }
+        guard !listedWhileVisible, let state, state.hostStatus != "disabled" else { return }
+        listedWhileVisible = true
+        request("device.list", [:])
     }
     /// ChatView.tsx:5471-5524: the first snapshot is a baseline, never a request to reopen tabs.
     private func receive(_ state: DevicePanelState) {
@@ -119,6 +137,7 @@ final class DevicePanelController {
                 }
             }
         }
+        listIfShown()
         render()
     }
     private func selectDevice(_ device: DevicePanelDevice) {
