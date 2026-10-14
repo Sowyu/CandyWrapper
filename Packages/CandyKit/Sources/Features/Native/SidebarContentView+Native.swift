@@ -24,8 +24,7 @@ extension SidebarContentView {
             addSubview(native)
             addSubview(chrome)
             addSubview(footer)
-            footer.backTarget = self
-            footer.backAction = #selector(footerPressed(_:))
+            footer.onBack = { [weak self] in self?.actions.back() }
             footer.showsBack = isOnUtilityPage
             footer.showsPullRequests = showsPullRequests
             list.setItems([], animated: false)
