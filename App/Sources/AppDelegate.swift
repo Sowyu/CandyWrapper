@@ -185,6 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           environments: environments, t3: t3Connect)
         presenter.settings = settings
         settings.composer = threads.composer
+        settings.serverUpdates = threads.serverUpdates
+        threads.serverUpdates.toasts = { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts }
+        threads.serverUpdates.window = { [weak window] in window }
+        threads.serverUpdates.isOwnServer = { [weak self] id in self?.server?.ownsLocalServer(id) == true }
         // The desktop bridge's ChatGPT callback (providerAuth.ts:16-47): the window comes forward once the browser returns.
         settings.pageContext.receiveProviderAuthCallback = { [weak self] url in
             guard let self else { throw CancellationError() }

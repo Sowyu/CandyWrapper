@@ -131,6 +131,7 @@ final class Environments {
     /// This client's session per environment (`GET /api/auth/session`), read once per connected session.
     private var authSessions: [String: AuthSessionState] = [:]
     func setAuthSession(_ session: AuthSessionState?, for environmentId: String) { authSessions[environmentId] = session }
+    func authSession(_ environmentId: String) -> AuthSessionState? { authSessions[environmentId] }
 
     /// `readEnvironmentScope(id, orchestration:operate)`: whether this connection may change threads.
     // ponytail: a session not read yet (or a failed read) counts as allowed, where T3 blocks until it reads

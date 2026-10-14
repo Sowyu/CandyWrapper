@@ -324,10 +324,13 @@ final class ThreadController {
     /// The environment the connection banner speaks for, and since when it is unavailable.
     private var bannerEnvironment: (id: String, since: Date)?
     private var bannerTimer: DispatchWorkItem?
+    /// Server updates for every environment; the composer notice speaks for the open thread's.
+    let serverUpdates: ServerUpdates
 
     init(sidebar: SidebarContentView, window: NSWindow, environments: Environments) {
         self.sidebar = sidebar
         self.environments = environments
+        serverUpdates = ServerUpdates(environments: environments)
         panel.projectIconForTitle = { [weak sidebar] title in
             sidebar?.snapshot?.projects.first { $0.title == title }.map(ProjectIconSource.init)
         }
@@ -350,7 +353,10 @@ final class ThreadController {
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
         clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
-        composer.onTargetChange = { [weak self] in self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.onRouteChange?() }
+        composer.onTargetChange = { [weak self] in
+            self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
+            self?.onRouteChange?()
+        }
         // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
         // instance's name when instances need telling apart (`shouldShowInstanceBadge`), and earlier providers.
         sidebar.actions.hoverProvider = { [weak self] thread in
@@ -672,6 +678,9 @@ final class ThreadController {
         environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
         environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
         environments.observe { [weak self] in self?.updateEnvironmentBanner() }
+        serverUpdates.observe { [weak self] in self?.updateEnvironmentBanner() }
+        serverUpdates.continueThreads = { [weak composer] env in composer?.config(env)?.settings.raw["continueThreadsAfterServerUpdate"]?.boolValue == true }
+        panel.onServerUpdateAction = { [weak self] index in self?.serverUpdateAction(index) }
         panel.environmentBanner.reconnect.action = { [weak self] in
             guard let self, let id = self.bannerEnvironment?.id else { return }
             self.environments.reconnect(id)
@@ -742,6 +751,7 @@ final class ThreadController {
     private func sessionChanged(_ environmentId: String) {
         migrationToast.sessionChanged(environmentId)
         permissionNotice.sessionChanged(environmentId)
+        serverUpdates.sessionChanged(environmentId)
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
         clones.sessionChanged(environmentId)
@@ -932,6 +942,7 @@ final class ThreadController {
     private func updateEnvironmentBanner() {
         bannerTimer?.cancel()
         bannerTimer = nil
+        updateServerUpdateNotice()
         let banner = panel.environmentBanner
         guard let id = session?.environmentId, let state = environments.state(id),
               state.status != .connected, state.status != .available else {
@@ -944,7 +955,10 @@ final class ThreadController {
         let reconnecting = state.status == .connecting || state.status == .reconnecting
         let remote = id != environments.primaryId
         var wake: TimeInterval?
-        if reconnecting && elapsed < 2 {
+        // The server restarts during an update, and the update notice already shows it (ChatView.tsx:3116-3121).
+        if reconnecting && serverUpdates.state(id).isRunning {
+            panel.showsEnvironmentBanner = false
+        } else if reconnecting && elapsed < 2 {
             panel.showsEnvironmentBanner = false
             wake = 2 - elapsed
         } else {
@@ -959,6 +973,57 @@ final class ThreadController {
             let item = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.updateEnvironmentBanner() } }
             bannerTimer = item
             DispatchQueue.main.asyncAfter(deadline: .now() + wake + 0.05, execute: item)
+        }
+    }
+
+    /// The open thread's server version item (ChatView.tsx:3060-3222): "Server update available" while the
+    /// server runs an older T3 and nobody dismissed that pair of versions, then the update's progress or failure.
+    private func updateServerUpdateNotice() {
+        guard let id = session?.environmentId ?? composer.targetEnvironmentId else { panel.serverUpdateNotice = nil; return }
+        let state = serverUpdates.state(id)
+        let label = environments.environmentIds.count > 1 ? "\(environments.label(id) ?? id) server" : "server"
+        let mismatch = serverUpdates.mismatch(id)
+        let show: Bool
+        switch state {
+        case .idle: show = mismatch != nil && !serverUpdates.isDismissed(id)
+        case .running: show = true
+        case .failed: show = !serverUpdates.isFailureDismissed(id)
+        }
+        guard show else { panel.serverUpdateNotice = nil; return }
+        let caps = serverUpdates.capabilities(id)
+        let offer = serverUpdates.offer(id, serverLabel: label)
+        var action: String?
+        var guidance: String?
+        switch offer {
+        case .update?: action = state.isFailed ? "Retry" : "Update"
+        case .manual(let manual)?: action = manual.label
+        case .ownServer?: guidance = ServerUpdateCopy.ownServerGuidance
+        case .desktopManual?, nil: break
+        }
+        if guidance == nil, let cap = caps.selfUpdate, cap != .desktopManaged || !caps.desktopAppUpdate { guidance = ServerUpdateCopy.guidance(cap) }
+        let status: ComposerServerUpdateNotice.Status
+        switch state {
+        case .running(let stage, _, _): status = .running(stage)
+        case .failed(_, _, _, let message): status = .failed(message)
+        case .idle: status = .available(serverVersion: mismatch?.server ?? "", clientVersion: mismatch?.client ?? "")
+        }
+        var actionEnabled = true
+        if case .update? = offer { actionEnabled = serverUpdates.canUpdate(id) }
+        panel.serverUpdateNotice = ComposerServerUpdateNotice(serverLabel: label, status: status, guidance: state == .idle ? guidance : nil,
+                                                              action: action, actionEnabled: actionEnabled,
+                                                              dismissible: state.isFailed || serverUpdates.dismissalKey(id) != nil)
+    }
+
+    private func serverUpdateAction(_ index: Int?) {
+        guard let id = session?.environmentId ?? composer.targetEnvironmentId, let notice = panel.serverUpdateNotice else { return }
+        guard index != nil else { return serverUpdates.dismiss(id) }
+        switch serverUpdates.offer(id, serverLabel: notice.serverLabel) {
+        case .update?: serverUpdates.request(id, serverLabel: notice.serverLabel)
+        case .manual(let manual)?:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(manual.command, forType: .string)
+            panel.toasts.show(ToastView(title: manual.toastTitle, message: manual.toastDescription, kind: .success))
+        default: break
         }
     }
 
@@ -1032,7 +1097,10 @@ final class ThreadController {
     /// The legacy thread migration toast on the primary environment.
     lazy var permissionNotice: ThreadPermissionUpdateNotice = {
         let notice = ThreadPermissionUpdateNotice(environments: environments, toasts: panel.toasts)
-        notice.onGrants = { [weak self] _ in self?.composer.grantsChanged() }
+        notice.onGrants = { [weak self] _ in
+            self?.composer.grantsChanged()
+            self?.serverUpdates.changed()
+        }
         return notice
     }()
     private lazy var migrationToast = LegacyThreadMigrationToast(environments: environments, toasts: panel.toasts)

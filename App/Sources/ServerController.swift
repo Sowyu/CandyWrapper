@@ -46,6 +46,9 @@ final class ServerController {
 
     private var lastEnvironmentKey: String { "localServer.lastEnvironmentId." + home.path }
 
+    /// The environment is the server this app started, not T3's service or desktop app.
+    func ownsLocalServer(_ id: String) -> Bool { ownsServer && id == environmentId }
+
     func start() {
         if let id = UserDefaults.standard.string(forKey: lastEnvironmentKey) { showCached(id) }
         observeWindow()

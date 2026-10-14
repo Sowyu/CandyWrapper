@@ -54,6 +54,10 @@ final class SettingsController {
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
     var modal: ModalHost?
+    /// Version skew and server updates, shared with the composer notice.
+    var serverUpdates: ServerUpdates? {
+        didSet { serverUpdates?.observe { [weak self] in self?.refresh() } }
+    }
 
     // Host access (SettingsHostAccess.swift).
     var hosts: [String: HostInfo] = [:]
@@ -133,6 +137,12 @@ final class SettingsController {
             self?.refresh()
         }
         actions.setLoadPreference = { [weak self] id, weight in self?.setLoadPreference(id, weight) }
+        actions.updateServer = { [weak self] id in
+            guard let self else { return }
+            let label = id == environments.primaryId ? connections.model.thisMachine?.label : environments.label(id)
+            serverUpdates?.request(id, serverLabel: label.map { "\($0) server" } ?? "server")
+        }
+        actions.updateAll = { [weak self] in self?.serverUpdates?.updateAll() }
         connections.actions = actions
         nav.onSignIn = { [weak self] in
             guard let self, let window = self.window else { return }
@@ -257,15 +267,38 @@ final class SettingsController {
             }
             // `environmentMcpUrl`: the route in use, else the first, at `/mcp`.
             let mcpBase = inUse ?? r.httpBaseURL
-            return ConnectionsPageModel.Environment(
-                id: r.environmentId, label: r.label, machine: environments.machine(r.environmentId) ?? r.machine ?? "server",
+            // The row's version note and update control (ConnectionsSettings.tsx:1548-1612, 1716-1741).
+            let id = r.environmentId
+            let update = serverUpdates?.state(id) ?? .idle
+            let mismatch = serverUpdates?.mismatch(id)
+            var resuming = false
+            if case .running(.resuming, _, _) = update { resuming = true }
+            let subtitle = [transport(r, inUse: inUse), resuming ? "Restarting" : status.text, r.enabled ? mismatch?.server : nil]
+                .compactMap { $0 }.joined(separator: " · ")
+            var tooltip = EnvironmentRowStatus.tooltip(enabled: r.enabled, state: state)
+            if let mismatch { tooltip += "\nUpdate available: \(mismatch.server) → \(mismatch.client)" }
+            var updateAction: ConnectionsPageModel.UpdateAction?
+            if r.enabled, state?.status == .connected, mismatch != nil, !update.isRunning, let updates = serverUpdates {
+                switch updates.offer(id, serverLabel: "\(r.label) server") {
+                case .update?: updateAction = .update(update.isFailed ? "Retry update" : "Update", enabled: updates.canUpdate(id))
+                case .manual(let manual)?: updateAction = .copy(manual)
+                case .desktopManual?, .ownServer?: updateAction = .desktopManual
+                case nil: break
+                }
+            }
+            var row = ConnectionsPageModel.Environment(
+                id: id, label: r.label, machine: environments.machine(id) ?? r.machine ?? "server",
                 enabled: r.enabled, unsupported: state?.status == .unsupported,
-                subtitle: transport(r, inUse: inUse) + " · " + status.text,
-                statusIsError: status.isError, tooltip: EnvironmentRowStatus.tooltip(enabled: r.enabled, state: state),
+                subtitle: subtitle,
+                statusIsError: status.isError && !resuming, tooltip: tooltip,
                 routes: routes, mcpURL: EnvironmentRoute.origin(mcpBase) + "/mcp",
-                removing: environments.removing.contains(r.environmentId),
-                permissions: permissions(r.environmentId, routeContext: true), iconMenu: iconMenu(r.environmentId))
+                removing: environments.removing.contains(id),
+                permissions: permissions(id, routeContext: true), iconMenu: iconMenu(id))
+            row.updateAction = updateAction
+            row.updateProgress = update
+            return row
         }
+        m.canUpdateAll = !(serverUpdates?.updateAllTargets().isEmpty ?? true)
         m.cloudEnabled = true
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
         m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)

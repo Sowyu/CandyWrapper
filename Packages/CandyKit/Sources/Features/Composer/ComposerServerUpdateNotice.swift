@@ -1,28 +1,60 @@
 import Foundation
+import T3Protocol
 
-/// ComposerServerUpdateStatus.tsx:34-74 and ServerUpdateAction.tsx:33-44; stack priority from ChatView.tsx:3156.
-/// The updater owns this state; the composer only presents it.
+/// The composer's server version item (ChatView.tsx:3143-3222, ComposerServerUpdateStatus.tsx:10-65,
+/// ServerUpdateAction.tsx:33-44): "Server update available" with its versions as tooltip, then
+/// "Updating server · Downloading…" under a spinner, or "Could not update server · <reason>".
+/// The app's updater owns the state; the composer only presents it.
 public struct ComposerServerUpdateNotice: Equatable {
-    public enum Stage: String { case downloading, installing, resuming }
-    public enum Status: Equatable { case running(Stage), failed(String) }
+    public enum Status: Equatable {
+        /// `serverVersion → clientVersion` in the title's tooltip.
+        case available(serverVersion: String, clientVersion: String)
+        case running(ServerUpdateStage)
+        case failed(String)
+    }
     public var serverLabel: String
     public var status: Status
-    public init(serverLabel: String = "server", status: Status) { self.serverLabel = serverLabel; self.status = status }
+    /// `serverUpdateGuidance`, shown while idle for a server that can't take "Update" from here.
+    public var guidance: String?
+    /// The update button's label ("Update", "Retry", or a copy command), nil for none.
+    public var action: String?
+    /// "Dismiss update notice". Never while an update runs.
+    public var dismissible: Bool
+    /// The update needs `environment:maintain`; a copy command never does.
+    public var actionEnabled: Bool
+
+    public init(serverLabel: String = "server", status: Status, guidance: String? = nil, action: String? = nil, actionEnabled: Bool = true,
+                dismissible: Bool? = nil) {
+        self.serverLabel = serverLabel; self.status = status; self.guidance = guidance; self.action = action; self.actionEnabled = actionEnabled
+        if case .running = status { self.dismissible = false } else { self.dismissible = dismissible ?? true }
+    }
+
     public var title: String {
-        switch status { case .running: "Updating \(serverLabel)"; case .failed: "Could not update \(serverLabel)" }
+        switch status {
+        case .available: "Server update available"
+        case .running: "Updating \(serverLabel)"
+        case .failed: "Could not update \(serverLabel)"
+        }
     }
     public var detail: String {
         switch status {
-        case .running(.downloading), .running(.installing): "Downloading…"
-        case .running(.resuming): "Restarting…"
+        case .available(let server, let client): "\(serverLabel) \(server) → \(client)"
+        case .running(let stage): ServerUpdateCopy.stageLabel(stage)
         case .failed(let message): message
         }
     }
     @MainActor var content: ComposerNoticeBannerView.Content {
+        let dismiss = dismissible ? "Dismiss update notice" : nil
         switch status {
-        case .running: .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, priority: .urgent)
-        case .failed: .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail,
-                            dismissLabel: "Dismiss update notice", priority: .notice)
+        case .available:
+            return .init(variant: .neutral, icon: .download, title: title, description: guidance, actions: action.map { [$0] } ?? [],
+                         dismissLabel: dismiss, priority: .notice, titleTooltip: detail)
+        case .running:
+            // Update progress outranks passive notices.
+            return .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, priority: .urgent, spinner: true)
+        case .failed:
+            return .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail, actions: action.map { [$0] } ?? [],
+                         dismissLabel: dismiss, priority: .notice, iconIsError: true)
         }
     }
 }

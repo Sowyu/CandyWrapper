@@ -3,8 +3,15 @@ import T3Protocol
 
 /// apps/web/src/versionSkew.ts:46-108, 131-143. A newer server is not an update warning.
 public enum ServerVersionSkewLogic {
-    /// The official source version this client implements; update with T3_VERSION.
-    public static let clientVersion = "0.0.46-nightly.20261009.2861"
+    /// The official source version this client implements; update with T3_VERSION. A Debug build takes
+    /// `--t3-client-version <version>`, so a sandbox server can be updated to a newer runtime.
+    public static let clientVersion: String = {
+        #if DEBUG
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--t3-client-version"), i + 1 < args.count { return args[i + 1] }
+        #endif
+        return "0.0.46-nightly.20261009.2861"
+    }()
     public static let hint = "Version mismatch. Try syncing the client and server to the same T3 Code version."
     private struct Version {
         let core: [Int], pre: [String]
