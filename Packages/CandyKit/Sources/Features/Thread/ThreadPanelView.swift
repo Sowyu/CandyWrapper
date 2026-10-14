@@ -1311,7 +1311,9 @@ public final class ThreadPanelView: DSView {
         let menuShown = menus.isOpen && !composer.isHidden
         commandMenu.isHidden = !menuShown
         if menuShown {
-            let h = min(commandMenu.preferredHeight, max(96, y - 24 + ComposerBannerView.overlap))
+            // Glass Native: the room starts under the toolbar, which draws over the content.
+            let top = hidesCustomChrome ? toolbarInset : 0
+            let h = min(commandMenu.preferredHeight, max(96, y - top - 24 + ComposerBannerView.overlap))
             commandMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
                                        width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
         }
