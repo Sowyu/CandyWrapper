@@ -121,6 +121,9 @@ public enum KeepalivePolicy: Sendable, Equatable {
 /// one: NWPathMonitor path changes, system wake, app activation (each runs a `server.probe`
 /// with T3's timeouts), and the kernel failing the TCP socket. That keeps idle wakeups at zero.
 /// Effect's 5 s ping would cost 0.2 wakeups per second for nothing on a direct route.
+/// While the owner expects traffic (`setExpectingTraffic`, a running turn) and the app is
+/// active, the connection checks a quiet socket as T3 does, so a turn that stops streaming
+/// because the network died shows "reconnecting" within 15 to 20 s instead of looking live.
 /// Relay routes (T3 Connect via Cloudflare tunnels) can sit behind proxies that drop idle
 /// sockets after about 100 s, so pass `.ping(interval: .seconds(80))` there; it pings only
 /// while the app is active.
@@ -155,6 +158,7 @@ public actor ConnectionSupervisor {
     private var desired = false
     private var online = true
     private var appActive = true
+    private var expectingTraffic = false
     private var failures = 0
     private var skipNextDelay = false
     private var connection: RPCConnection?
@@ -242,8 +246,30 @@ public actor ConnectionSupervisor {
         }
     }
 
+    /// NWPathMonitor saw other interfaces or gateways while online: another Wi-Fi, a hotspot, a VPN.
+    /// A socket opened on the previous network may now be unroutable. T3's "network-changed"
+    /// wakeup: a quick probe of a live session, or a retry now from the first rung
+    /// (client-runtime connection/wakeups.ts:10-25, supervisor.ts:582-596).
+    public func networkPathChanged() {
+        guard online else { return }
+        failures = 0
+        if connection != nil {
+            probe(timeout: Self.quickProbeTimeout)
+        } else if attemptTask == nil {
+            cancelTimer()
+            evaluate()
+        }
+    }
+
+    /// A turn runs on this environment, so frames should keep coming. See the type's comment.
+    public func setExpectingTraffic(_ on: Bool) {
+        guard on != expectingTraffic else { return }
+        expectingTraffic = on
+        applyWatch()
+    }
+
     public func wakeup(_ reason: ConnectionWakeup) {
-        if reason == .applicationActive { appActive = true }
+        if reason == .applicationActive { appActive = true; applyWatch() }
         failures = 0
         if connection != nil {
             probe(timeout: reason == .systemWake ? Self.quickProbeTimeout : Self.probeTimeout)
@@ -258,6 +284,14 @@ public actor ConnectionSupervisor {
         appActive = false
         pingTask?.cancel()
         pingTask = nil
+        applyWatch()
+    }
+
+    /// The user isn't looking while the app is inactive, and activation probes anyway.
+    private func applyWatch() {
+        guard let connection else { return }
+        let on = expectingTraffic && appActive
+        Task { await connection.setWatched(on) }
     }
 
     /// Starts NWPathMonitor and wake and activation observers. The app calls this once.
@@ -362,6 +396,7 @@ public actor ConnectionSupervisor {
             }
             resumeWaiters()
             startPinging()
+            applyWatch()
         case .failure(let error):
             if error is CancellationError { evaluate(); return }
             switch ConnectionFailure.classify(error) {

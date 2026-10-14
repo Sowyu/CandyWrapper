@@ -2,6 +2,8 @@
 
 What the user decided and why, newest first. Check here before changing anything these cover.
 
+- 2026-10-14, agent decision for the user's optimisation pass: no T3-style idle pings on direct routes. T3 pings every 5 s and drops a socket after 15 s without a frame (rpc/protocol.ts:10-12), which also turns any server stall over 15 s into a "reconnecting" banner. CandyWrapper checks a quiet socket only while a reply is owed or a thread runs on that environment and the app is active, and probes on wake, app activation and network changes. That catches a dead network during a turn within 14 to 16 s and costs 0.19 extra wakeups/s only while a turn runs; idle stays at zero. The price: an idle, frontmost window on a silently dead remote network keeps showing "Connected" until the next send, wake, activation, network change or turn. Revisit if the user reports stale idle windows (docs/perf/README.md, "Connection in bad moments").
+
 - 2026-10-14: the user removed Glass Native (Experimental), shipped in v1.1.0: "remove native glass its useless". A stored Glass Native choice falls back to Glass. Fixes made during its work that apply to every theme stay.
 - 2026-10-14: classic Glass takes the user's Origin technique: a pre-blurred copy of the desktop picture, lined up with the real wallpaper behind the window, instead of the live behind-window blur. The user offered it as "it might be better".
 - 2026-10-14: CandyWrapper should not depend on T3 Code being installed ("i do kinda want candy wrapper to be independent of t3 code"). It installs and updates its own copy of T3's server runtime and starts that when no T3 server is already running for the home. This replaces the proposal below. Threads stay in the same T3 home, so the official app keeps seeing them.

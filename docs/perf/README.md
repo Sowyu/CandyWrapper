@@ -164,6 +164,30 @@ The cold thread cache write is still 96 ms. Its extra 35 ms is `evict()` listing
 
 On the internal SSD `PerfBenchmarks/hugeThreadCache` gave 54.7 ms to write and 45.7 ms to load, against 55.5 and 44.2 ms in the fff9d87 run. Three `scripts/perf-review` runs of this change were stopped when the user's Origin energy runs took the machine, so it has no full review yet.
 
+## Connection in bad moments (2026-10-14)
+
+A 3105 server on a copy of the sandbox home (port 47395), reached through a Python TCP proxy that can blackhole both directions without closing anything, like dead Wi-Fi or a lost NAT entry. A headless client built on `T3Client` and `T3Store` subscribed the shell and one 62-message thread and logged every state change. `kill -STOP` froze the server. Times are from the fault to the state change.
+
+| Scenario | Before | After | T3 3105 |
+|---|---|---|---|
+| Server frozen 5 s, 20 s, 90 s, nothing in flight | stays "Connected", catches up on CONT | same | drops after 15 s and shows "reconnecting" |
+| Server frozen 20 s with a request in flight | dropped after 10.4 s | dropped after 15.8 s | 15 s |
+| Server frozen 20 s while a turn runs | stays "Connected", looks live | dropped after 15.6 s | 15 s |
+| Server `kill -9` | dropped within 10 ms, reconnected on the next backoff retry after the server came back | same | same |
+| Network blackholed, idle | "Connected" for good | same, by choice (below) | 15 to 20 s |
+| Network blackholed while a turn runs | "Connected" for good, turn looks stuck | dropped after 13.7 s | 15 to 20 s |
+| Network blackholed, then a send | send failed after 10.4 s, text put back | 15.7 s | 15 s |
+| Blackholed, then system wake | dropped after 3.2 s (quick probe) | same | 15 to 20 s, it has no wake signal |
+| Another network while online (Wi-Fi to hotspot) | ignored until a send | quick probe, 3 s | quick probe where the browser reports a network type |
+
+Resync after every reconnect resumes from the last sequence: the shell resubscribes with `afterSequence` and the thread with its `lastSequence`. The first connect read 39,031 bytes; each reconnect read 1,017 to 1,028 bytes and had live state in under 10 ms of the socket opening. Nothing is refetched in full, which matches T3.
+
+Sends while disconnected. Before, the composer only blocked a send when the environment had no session at all, and a session lives on while it reconnects. A send during "reconnecting" went out, failed at once with a transport error, and the text quietly came back into the composer with no message. Now the composer follows the connection state as T3 does (ChatView.tsx:2676-2677, 8897-8907): the send button is disabled with "Environment disconnected", and Enter shows "Not connected: message not sent". Drafts are local, so editing one offline loses nothing.
+
+Cost of the turn watch: the client checks a quiet socket only while a thread runs on that environment and the app is active. Measured with `powermetrics` over 60 s on the headless client: 0.13 wakeups/s and 0.01 ms/s CPU idle, 0.32 wakeups/s and 0.08 ms/s CPU watched. Idle with nothing running stays at zero added wakeups. The reasons for not pinging while idle are in docs/decisions.md.
+
+Sleep and wake, from the code since this Mac can't sleep. `NSWorkspace.didWakeNotification` runs a 3 s `server.probe` (PlatformSignals.swift), so a socket that died during sleep is replaced within 3 s of wake. If Wi-Fi is still joining, the reconnect fails fast and the NWPathMonitor update to "satisfied" retries at once from the first rung. A loopback server answers the probe and the session survives sleep. A half-open socket with no wake, path change, activation, send or running turn is found only on the next of those, never by the kernel, because an idle socket sends nothing and URLSession offers no TCP keepalive.
+
 ## Opening a thread (2026-10-10)
 
 `CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.
