@@ -15,6 +15,9 @@ public final class ThreadLineageController {
     private let bar = ProviderSubagentBarView()
     private let parentLink = TimelineParentLinkView()
     private let statusLine = ThreadStatusLineView()
+    /// The pending handoff row over the status line (ChatView.tsx:11588-11603).
+    private let pendingHandoff = HandoffDividerView()
+    private let footer = FooterStack()
     /// Wake or Un-settle in flight, for the thread it was asked for.
     private var statusBusy: ThreadId?
 
@@ -30,6 +33,10 @@ public final class ThreadLineageController {
     public var openThread: ((ThreadId) -> Void)?
     public var localVisit: ((ThreadId) -> T3Timestamp?)?
     public var acknowledgeWake: ((ThreadId, T3Timestamp) -> Void)?
+    /// The composer's model for the next send.
+    public var selectedModel: (() -> ModelSelection?)?
+    /// The open thread's shell as of the last `sync`.
+    private var shell: ThreadShell?
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
@@ -97,13 +104,27 @@ public final class ThreadLineageController {
             panel.header.parentThreadTitle = nil
         }
         updateBar(projection, shell: byId[thread.id], parent: thread.lineage?.parentThreadId, env: env)
-        updateStatusLine(all.first { $0.id == threadId })
+        shell = all.first { $0.id == threadId }
+        syncFooter()
+    }
+
+    /// The footer under the last row: a pending context handoff when the composer's model needs one
+    /// (`resolvePendingHandoff`, ChatView.tsx:7744-7757), then the snoozed or settled status line.
+    public func syncFooter() {
+        guard let threadId, let env = threadId.environmentId, let projection else { return }
+        let providers = providers?(env) ?? []
+        let handoff = HandoffEndpoints.pending(projection.runs, selection: selectedModel?(), providers: providers,
+                                                threadModel: shell?.modelSelection)
+        if let handoff { pendingHandoff.configure(handoff, providers: providers, pending: true) }
+        let status = updateStatusLine(shell)
+        footer.set(handoff == nil ? nil : pendingHandoff, status ? statusLine : nil)
+        panel.timeline.setFooter(footer.height > 0 ? footer : nil, height: footer.height)
     }
 
     /// The timeline footer for a snoozed or settled thread (ChatView.tsx:7613-7646).
     // ponytail: relative times refresh on pushed state and navigation, add a shared visible clock only if idle wakeup measurements allow it
-    private func updateStatusLine(_ shell: ThreadShell?) {
-        guard let shell, let threadId else { panel.timeline.setFooter(nil, height: 0); return }
+    private func updateStatusLine(_ shell: ThreadShell?) -> Bool {
+        guard let shell, let threadId else { return false }
         let now = TimestampFormat.nowMs()
         let busy = statusBusy == threadId
         if SidebarModel.effectiveSnoozed(SidebarThread(shell), nowMs: now) {
@@ -125,11 +146,10 @@ public final class ThreadLineageController {
             statusLine.actionLabel = "Dismiss"
             statusLine.onAction = { [weak self] in self?.acknowledgeWake?(threadId, wake); self?.sync() }
         } else {
-            panel.timeline.setFooter(nil, height: 0)
-            return
+            return false
         }
         statusLine.actionEnabled = !busy
-        panel.timeline.setFooter(statusLine, height: ThreadStatusLineView.height)
+        return true
     }
 
     private func statusAction(_ command: JSONValue, _ failure: String) {
@@ -283,5 +303,26 @@ public enum ThreadRelationshipCommands {
     public static func interrupt(_ threadId: ThreadId, runId: RunId, commandId: String = ThreadCommands.newCommandId()) -> JSONValue {
         .object(["type": .string("run.interrupt"), "commandId": .string(commandId), "threadId": .string(threadId.rawValue),
                  "runId": .string(runId.rawValue), "holdQueue": .bool(true)])
+    }
+}
+
+/// The timeline footer's rows, stacked.
+@MainActor
+private final class FooterStack: DSView {
+    private var rows: [(NSView, CGFloat)] = []
+    var height: CGFloat { rows.reduce(0) { $0 + $1.1 } }
+
+    func set(_ handoff: HandoffDividerView?, _ status: ThreadStatusLineView?) {
+        let next = [handoff.map { ($0 as NSView, HandoffDividerView.height) }, status.map { ($0 as NSView, ThreadStatusLineView.height) }].compactMap { $0 }
+        for (v, _) in rows where !next.contains(where: { $0.0 === v }) { v.removeFromSuperview() }
+        rows = next
+        for (v, _) in rows where v.superview !== self { addSubview(v) }
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        var y: CGFloat = 0
+        for (v, h) in rows { v.frame = NSRect(x: 0, y: y, width: bounds.width, height: h); y += h }
     }
 }

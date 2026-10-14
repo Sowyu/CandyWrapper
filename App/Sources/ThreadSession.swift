@@ -470,6 +470,8 @@ final class ThreadController {
             }
         }
         lineage.providers = { [weak composer] env in composer?.providers(env) ?? [] }
+        lineage.selectedModel = { [weak composer] in composer?.selectedModel }
+        composer.onModelChange = { [weak self] in self?.lineage.syncFooter() }
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
         let prCapabilities = PullRequestCapabilities(environments: environments)

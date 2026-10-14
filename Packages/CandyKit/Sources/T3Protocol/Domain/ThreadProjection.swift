@@ -64,6 +64,9 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var id: RunId
     public var threadId: ThreadId
     public var ordinal: Int
+    /// The run's provider and model (orchestrationV2.ts:547-548); handoff rows name them.
+    public var providerInstanceId: ProviderInstanceId?
+    public var modelSelection: ModelSelection?
     public var rootNodeId: NodeId?
     public var activeAttemptId: RunAttemptId?
     public var checkpointId: CheckpointId?
