@@ -441,9 +441,79 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             writerPicker.refresh()
             writerGroup?.invalidateIntrinsicContentSize()
         }
-        let s = section("source-control-text-generation", "Text generation", [naming, prefixRow, instructionsRow, styleRow, templatesRow, writerRow])
+        let s = section("source-control-text-generation", "Text generation",
+                        [naming, prefixRow, instructionsRow, styleRow, templatesRow, writerRow] + reviewGuideRows())
         binder.add { [weak s] in s?.group.rows = s?.group.rows ?? [] }
         return s
+    }
+
+    /// Review guides, a server beta (SourceControlWritingSettings.tsx:439-570 at 3105): the switch, then while it's on
+    /// the model (picker, traits from e688034b5, switch) and the instructions. CW has no Guide tab itself.
+    private func reviewGuideRows() -> [SettingsRowView] {
+        let enabled = SwitchView(isOn: false)
+        enabled.setAccessibilityLabel("Review guides")
+        let enabledRow = row("review-guides",
+                             detail: "Adds a Guide tab to pull requests: an agent writes a tour of the change, stop by stop, with the calls a maintainer should make.",
+                             control: enabled)
+        _ = bindServerRow(enabledRow, keys: ["reviewGuidesEnabled"], reset: nil)
+        enabled.onChange = { [weak self] on in self?.context.patchServer(["reviewGuidesEnabled": .bool(on)]) }
+
+        let modelSwitch = SwitchView(isOn: false)
+        modelSwitch.setAccessibilityLabel("Use a separate review guide model")
+        let picker = SettingsModelPickerControl(context: context, key: "reviewGuideModelSelection")
+        let group = SettingsControlGroup([picker, modelSwitch])
+        let modelRow = row("review-guide-model",
+                           detail: "Model that reads a pull request to write its review guide. It reads the change itself over many steps, so a stronger model helps. Off uses the source control writer model.",
+                           control: group)
+        _ = bindServerRow(modelRow, keys: ["reviewGuideModelSelection"], reset: nil)
+        modelSwitch.onChange = { [weak self] on in
+            guard let self else { return }
+            // On starts from the writer model with its options (`activeSelection`).
+            let writer = self.server["sourceControlWriterModelSelection"]
+            self.context.patchServer(["reviewGuideModelSelection": on ? (writer != .null ? writer : self.server["textGenerationModelSelection"]) : .null])
+        }
+
+        let instructions = TextareaView(placeholder: "", size: .default)
+        instructions.setAccessibilityLabel("Review guide instructions")
+        let instructionsRow = row("review-guide-instructions",
+                                  detail: "Your preferences for review guides: what to show first, dwell on, or skip. The guide's format and coverage stay the same.")
+        instructionsRow.footer = TextareaFooter(instructions)
+        _ = bindServerRow(instructionsRow, keys: ["reviewGuideInstructions"], reset: "review guide instructions")
+        var edited = false
+        instructions.onChange = { [weak self] _ in edited = true; self?.onHeightChange?() }
+        onBlur(instructions) { [weak self] text in
+            guard let self else { return }
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if edited, self.context.scope.isMixed(["reviewGuideInstructions"]) || value != self.server.string("reviewGuideInstructions") {
+                self.context.patchServer(["reviewGuideInstructions": .string(value)])
+            }
+            edited = false
+        }
+
+        binder.add { [weak self, weak enabled, weak modelSwitch, weak picker, weak group, weak modelRow, weak instructionsRow, weak instructions] in
+            guard let self, let enabled, let modelSwitch, let picker else { return }
+            let scope = self.context.scope
+            let enabledMixed = scope.isMixed(["reviewGuidesEnabled"])
+            enabled.isMixed = enabledMixed
+            enabled.isOn = !enabledMixed && self.server.bool("reviewGuidesEnabled")
+            let shown = enabledMixed || enabled.isOn
+            modelRow?.isHidden = !shown
+            instructionsRow?.isHidden = !shown
+            let modelMixed = scope.isMixed(["reviewGuideModelSelection"])
+            let uses = self.server["reviewGuideModelSelection"] != .null
+            modelSwitch.isMixed = modelMixed
+            modelSwitch.isOn = !modelMixed && uses
+            picker.isHidden = !(uses || modelMixed)
+            picker.refresh()
+            group?.invalidateIntrinsicContentSize()
+            if let instructions, !instructions.state.focused {
+                let mixed = scope.isMixed(["reviewGuideInstructions"])
+                instructions.text = mixed ? "" : self.server.string("reviewGuideInstructions")
+                instructions.placeholder = mixed ? "Mixed. Enter instructions to apply to all selected targets."
+                    : "Show service interfaces before implementations. Skip test files unless they change behavior. Keep summaries to two sentences."
+            }
+        }
+        return [enabledRow, modelRow, instructionsRow]
     }
 
     private func fieldMixed(_ field: String) -> Bool {

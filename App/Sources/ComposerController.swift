@@ -432,6 +432,9 @@ final class ComposerController {
     var onConfigChange: ((String) -> Void)?
     /// More listeners for config changes (the Usage page's limits).
     var configObservers: [(String) -> Void] = []
+    /// A question is about to take the editor: an open citation comment saves into the prompt first
+    /// (T3 3105 9fb4ddb2d, ComposerPromptEditorTiptap.tsx `saveCitationDraft`).
+    var onEditorTaken: (() -> Void)?
     /// Every environment's config, for the Usage page.
     var allConfigs: [String: ServerProviderConfig] { serverConfigs }
     /// An environment's last `server.getConfig` snapshot with its updates.
@@ -1257,6 +1260,7 @@ final class ComposerController {
             if questionRequestId == nil {
                 // The editor becomes the answer field; an open queued edit closes first.
                 if queuedEdit != nil { endEdit() }
+                onEditorTaken?()
                 flushPrompt()
             }
             questionRequestId = input.requestId
@@ -2356,6 +2360,13 @@ extension ComposerController {
             byQuestion[String(key.dropFirst(prefix.count))] = .array(uploaded)
         }
         if !byQuestion.isEmpty { fields["attachmentsByQuestionId"] = .object(byQuestion) }
+        if case .object(var answers)? = fields["answers"] {
+            for (id, answer) in answers {
+                guard case .string(let text) = answer else { continue }
+                answers[id] = .string(ComposerContext.projectAnswer(text, records: contextRecords(for: text)))
+            }
+            fields["answers"] = .object(answers)
+        }
         respond(.object(fields), failure: ComposerFeedback.Failure.userInput)
     }
 }
@@ -3049,6 +3060,11 @@ extension ComposerController {
             references.append(ComposerContext.reference(ComposerContext.threadReference(threadId: local, title: shell.title)))
         }
         guard !references.isEmpty else { return true }
+        // An open question takes the chips into its answer, when it takes typed text (T3 3105 34f845832).
+        if questionRequestId != nil, !panel.questionPanel.editorEnabled || panel.questionPanel.isResponding || shell == nil {
+            _ = panel.toasts.show(ToastView(title: "Unable to add thread", message: "The composer is busy; try again once it is ready.", kind: .error))
+            return true
+        }
         composer.insertAtCaret(references.joined(separator: " ") + " ")
         composer.focus()
         return true

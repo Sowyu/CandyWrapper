@@ -67,7 +67,7 @@ public final class PopoverView: DSView, PopupContent {
         dropShadow.update(boxSize: bounds.size)
     }
 
-    /// Opens under `trigger`: bottom, center, 4px, scale .98 and fade in over 150ms, no exit motion.
+    /// Opens under `trigger`: bottom, center, 4px, scale .98 and fade in over 150ms, and the same out (T3 3105 f570294df).
     @discardableResult
     public func show(from trigger: NSView, placement: PopupPlacement = .popover) -> OpenPopup? {
         trigger.popupHost?.open(self, trigger: trigger, placement: placement, motion: .popover)

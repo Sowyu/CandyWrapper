@@ -191,6 +191,10 @@ public struct ServerSettingsValues: Equatable, Sendable {
             "mode": .string("repo_conventions"), "customInstructions": .string(""), "followChangeRequestTemplates": .bool(true),
         ])),
         "sourceControlWriterModelSelection": SettingSpec(.any, .null),
+        // Review guides, a server beta (settings.ts:1286-1302).
+        "reviewGuidesEnabled": SettingSpec(.bool, .bool(false)),
+        "reviewGuideModelSelection": SettingSpec(.any, .null),
+        "reviewGuideInstructions": SettingSpec(.string(maxLength: 65_536), .string("")),
         "enableAgentBrowserAccess": SettingSpec(.bool, .bool(true)),
         "enableAgentDeviceAccess": SettingSpec(.bool, .bool(false)),
         "enableDeviceSupport": SettingSpec(.bool, .bool(false)),

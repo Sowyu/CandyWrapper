@@ -10,6 +10,7 @@
 		0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */; };
 		1047A050AEFA93C1A6FF1E13 /* ProjectCloneController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */; };
 		1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */; };
+		22BAE8FD1FB7AF45000DBED7 /* UpdateEverything.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */; };
 		237342D7C8F16250C670D589 /* BrowserController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */; };
 		27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */; };
 		357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */; };
@@ -70,6 +71,7 @@
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
 		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
+		34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateEverything.swift; sourceTree = "<group>"; };
 		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		3C298150579592D845F630EC /* SidebarCheckoutStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCheckoutStatus.swift; sourceTree = "<group>"; };
@@ -195,6 +197,7 @@
 				7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */,
 				C28281CD4D81D6A990C1B210 /* ThreadSession.swift */,
 				9180310B966F99CABD99C1F5 /* UpdateController.swift */,
+				34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */,
 				BBB0D6148904169BEA6E6F1B /* UpdateUI.swift */,
 				35F79E1B4BAC92B09DE28732 /* UsageController.swift */,
 				EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */,
@@ -377,6 +380,7 @@
 				7AEB67D7EED3460CC950037F /* ThreadNotificationCoordinator.swift in Sources */,
 				5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */,
 				B423C6F5B35C38DA8DE052DC /* UpdateController.swift in Sources */,
+				22BAE8FD1FB7AF45000DBED7 /* UpdateEverything.swift in Sources */,
 				5D653CB7F6940DE308D95ABD /* UpdateUI.swift in Sources */,
 				87959F581610CF381EEC6C11 /* UsageController.swift in Sources */,
 				A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */,

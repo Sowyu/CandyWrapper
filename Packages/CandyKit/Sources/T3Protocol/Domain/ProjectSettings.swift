@@ -9,11 +9,12 @@ import Foundation
 public enum ProjectSettingSource: String, Sendable, Equatable { case environment, project, t3json = "t3.json" }
 
 public enum ProjectSettings {
-    /// `PROJECT_SCOPED_SERVER_SETTING_KEYS` (settings.ts:1027-1050).
+    /// `PROJECT_SCOPED_SERVER_SETTING_KEYS` (settings.ts:966-990 at 3105).
     public static let scopedKeys: [String] = [
         "worktreeCleanup", "defaultModelSelection", "defaultRuntimeMode", "defaultThreadEnvMode", "newWorktreesStartFromOrigin",
         "worktreeSubmodules", "defaultAutoPull", "defaultProjectScripts", "enableAgentBrowserAccess", "enableAgentDeviceAccess",
-        "textGenerationModelSelection", "sourceControlWriterModelSelection", "sourceControlWritingStyle", "removeAgentCreditsOnMerge",
+        "textGenerationModelSelection", "sourceControlWriterModelSelection", "reviewGuideModelSelection", "reviewGuideInstructions",
+        "sourceControlWritingStyle", "removeAgentCreditsOnMerge",
         "branchNamingMode", "branchNamePrefix", "branchNameInstructions", "pullRequestMergeMethod", "sidebarAutoSettleOnMerge",
         "sidebarAutoSettleAfterDays", "continueThreadsAfterServerUpdate", "responseStreamingMode",
     ]
@@ -22,7 +23,7 @@ public enum ProjectSettings {
     public static func isScoped(_ key: String) -> Bool { scopedSet.contains(key) }
 
     /// `NULLABLE_PROJECT_SETTINGS_OVERRIDES` (settings.ts:1093-1102): null is a real override value only here.
-    public static let nullableKeys: Set<String> = ["defaultModelSelection", "sourceControlWriterModelSelection", "pullRequestMergeMethod",
+    public static let nullableKeys: Set<String> = ["defaultModelSelection", "sourceControlWriterModelSelection", "reviewGuideModelSelection", "pullRequestMergeMethod",
                                                     "sidebarAutoSettleAfterDays"]
 
     /// The project aggregate's own model and workspace fields, which count until the server folds them

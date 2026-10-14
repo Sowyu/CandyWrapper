@@ -733,6 +733,25 @@ public enum ComposerContext {
         }
     }
 
+    /// `projectPendingUserInputAnswer` (pendingUserInput.ts, T3 3105 34f845832): a question's answer is plain text,
+    /// so its thread chips go as `[title](t3-thread://v1/<id>)` links with the real thread ids.
+    public static func projectAnswer(_ answer: String, records: [String: JSONValue]) -> String {
+        let ns = NSMutableString(string: answer)
+        for t in ComposerInlineTokens.collect(answer).reversed() {
+            guard case .context(let kind, let id, let label) = t.kind, kind == "thread",
+                  let threadId = records[id]?["threadId"]?.stringValue else { continue }
+            ns.replaceCharacters(in: t.range, with: threadLink(threadId, label: label))
+        }
+        return ns as String
+    }
+
+    /// `formatThreadLink` (packages/shared/src/threadLinks.ts:38-44).
+    public static func threadLink(_ threadId: String, label: String) -> String {
+        let cleaned = label.replacingOccurrences(of: #"[\[\]\\\r\n]"#, with: " ", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return "[\(cleaned.isEmpty ? threadId : cleaned)](t3-thread://v1/\(threadId))"
+    }
+
     /// The prompt without context links (`stripInlineContextReferences`): what "has content" reads.
     public static func stripReferences(_ prompt: String) -> String {
         let ns = NSMutableString(string: prompt)

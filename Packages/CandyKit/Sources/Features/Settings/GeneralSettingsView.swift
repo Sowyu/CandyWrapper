@@ -387,7 +387,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         let checkTip = TooltipController.attach(to: check, text: "")
         check.action = { [weak self] in self?.context.updateButton?() }
         let version = VersionTitleView()
-        let versionRow = row(nil, title: "Version", detail: "Current version of the application.", control: check)
+        let versionRow = row("app-version", title: "Version", detail: "Current version of the application.", control: check)
         versionRow.accessories = [version]
         binder.add { [weak self, weak check, weak versionRow] in
             guard let self, let check, let versionRow else { return }
@@ -413,7 +413,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             if track.selectedIndex != index { track.selectedIndex = index }
             track.isEnabled = !self.context.changingUpdateTrack
         }
-        let trackRow = row(nil, title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
+        let trackRow = row("update-track", title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)

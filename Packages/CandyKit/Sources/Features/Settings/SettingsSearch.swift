@@ -59,25 +59,10 @@ public enum SettingsSearch {
     /// `SETTINGS_SEARCH_ITEMS` in result order.
     public static let items: [SettingsSearchItem] = catalogEntries.flatMap { entry -> [SettingsSearchItem] in
         switch entry {
-        case .item(let item) where item.id == "storage-worktrees": storage2994 + [item]
-        case .item(let item) where item.id == "privacy-policy": [item, telemetry2994]
         case .item(let item): [item]
         case .keybindings: keybindingItems
         }
     }
-
-    // Items from the 2994 catalog for rows built ahead of the pinned tag, in 2994's order. The generated catalog
-    // follows `T3_VERSION`; drop these when it moves to 2994.
-    /// settingsSearch.ts:167-183.
-    static let storage2994: [SettingsSearchItem] = [
-        SettingsSearchItem(id: "storage-worktree-keep-when", title: "Keep worktrees with local changes", to: .storage, targetId: "storage-worktrees",
-                           scope: .projectDefaults, searchTerms: ["any local files uncommitted changes edited tracked files ignored env build output cleanup"]),
-        SettingsSearchItem(id: "storage-delete-now", title: "Delete now", to: .storage, scope: .environmentDefaults,
-                           searchTerms: ["storage cleanup run now results report removed kept failed"]),
-    ]
-    /// settingsSearch.ts:579-586.
-    static let telemetry2994 = SettingsSearchItem(id: "telemetry-export", title: "OpenTelemetry export", to: .diagnostics, targetId: "telemetry-export",
-                                                  scope: .environment, searchTerms: ["OTel OTLP telemetry export endpoints logs traces metrics Grafana"])
 
     public static func item(_ id: String) -> SettingsSearchItem? { items.first { $0.id == id } }
     /// `searchableSetting(id).title`.

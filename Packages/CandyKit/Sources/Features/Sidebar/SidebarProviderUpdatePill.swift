@@ -18,6 +18,8 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
     static let displayNames = ["antigravity": "Antigravity", "codex": "Codex", "claudeAgent": "Claude", "cursor": "Cursor", "grok": "Grok",
                                "muse": "Muse Code", "acpRegistry": "ACP Registry", "pi": "Pi", "opencode": "OpenCode"]
     static func name(_ driver: String) -> String { displayNames[driver] ?? driver }
+    /// `PROVIDER_DISPLAY_NAMES[driver] ?? driver`.
+    public static func displayName(_ driver: String) -> String { name(driver) }
     static func version(_ v: String) -> String { v.hasPrefix("v") ? v : "v\(v)" }
 
     /// `formatProviderList`: "A and B", "A, B, and C".

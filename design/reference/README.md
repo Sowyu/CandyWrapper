@@ -14,7 +14,7 @@ Plans are in `plans/`. `plans/capture-reference-extended.swift` is the repo capt
 | 03d | Command thread | 03d-kitchen-sink-commands | Thread that ran ls, git status, failing ls | Short, no scroll. Commands are inside the collapsed "Worked for" row |
 | 04 | New-thread draft | 04-new-thread-draft | Path `/` | Default model Claude Fable 5.1 |
 | 05 | Approval request | 05-approval-request | Supervised thread, file create, approval left open | File change approval, composer replaced |
-| 06 | User input request | 06-user-input-request | Thread using AskUserQuestion, left unanswered | 1/2 question with 4 options |
+| 06 | User input request | 06-user-input-request | Thread using AskUserQuestion, left unanswered | 1/2 question with 4 options. Recaptured 2026-10-14 from the 3105 web client (sandbox-3105, port 47393), because 3105 renders the question as Markdown (ComposerPendingUserInputPanel.tsx:257-262). Same questions, asked again in thread f0fb2cc2; the turn is still running, so the composer shows Stop |
 | 07 | Palette default | 07-palette-default | Cmd+K | |
 | 08 | Palette search | 08-palette-search | Cmd+K, type "hello" | |
 | 09 | Diff split | 09-diff-split | Cmd+D, Changes menu, Uncommitted, split button | See diff caveat |

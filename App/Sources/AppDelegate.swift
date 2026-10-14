@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
     private var updates: UpdateUI?
+    private var updateEverything: UpdateEverything?
     private var updater: UpdateController?
     private let codexAuth = CodexAuthCallbackReceiver()
     private var chatGptWelcome: ChatGptWelcomeCoordinator?
@@ -233,6 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates = UpdateUI(updater: updater, window: window, pill: sidebar.updatePill, settings: settings,
                            toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                            showWindow: { [weak window] in window?.makeKeyAndOrderFront(nil) })
+        let everything = UpdateEverything(updater: updater, environments: environments, serverUpdates: threads.serverUpdates,
+                                          pill: sidebar.updatePill, window: window,
+                                          toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
+                                          providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
+        updateEverything = everything
+        threads.composer.configObservers.append { [weak everything] _ in everything?.providersChanged() }
         if !Self.isPreview { updater.start() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)

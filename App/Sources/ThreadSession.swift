@@ -575,10 +575,16 @@ final class ThreadController {
                 composer.text = text
                 current = with
             }
-            AssistantCitationCommentPopup.present(citation, anchor: anchor, save: { edited, send in
+            let popup = AssistantCitationCommentPopup.present(citation, anchor: anchor, save: { edited, send in
                 replace(edited.markdown)
                 if send { composer.submit() }
             }, remove: { replace("") }, restoreFocus: { composer.focus() })
+            // A question taking the editor closes the comment the way a click outside does, which saves an
+            // unsaved comment into the prompt that comes back afterwards (T3 3105 9fb4ddb2d).
+            self.composer.onEditorTaken = { [weak popup, weak composer] in
+                guard let popup, let host = composer?.popupHost else { return }
+                host.close(popup, returnFocus: false)
+            }
         }
         // Save to workspace (ProposedPlanCard.tsx:105-163): `projects.writeFile` under the thread's workspace root.
         panel.model.onSavePlanToWorkspace = { [weak self] contents, filename in
