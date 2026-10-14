@@ -102,6 +102,20 @@ final class ThemeRuntimeTests: XCTestCase {
         XCTAssertEqual(srgb(), before)
     }
 
+    /// Settings > Appearance > Light from Dark left every unchanged card painted in the old scheme's colors.
+    func testAppearanceChangeRepaintsBoxDecorations() {
+        let view = DSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+        let box = BoxDecorationLayer()
+        box.host = view
+        view.layer?.addSublayer(box)
+        box.layout(boxSize: view.bounds.size)
+        box.boxStyle.fill = Themed.color(\.card, 0.6)
+        box.displayIfNeeded()
+        XCTAssertFalse(box.needsDisplay())
+        view.viewDidChangeEffectiveAppearance()
+        XCTAssertTrue(box.needsDisplay())
+    }
+
     /// T3 Code's own palette as a theme (the editor's default draft) paints what the stock tokens paint.
     func testStandardColorsAsAThemeMatchTheStockLook() {
         for (dark, stock) in [(false, Tokens.light), (true, Tokens.dark)] {
