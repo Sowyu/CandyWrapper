@@ -66,6 +66,7 @@ public actor RPCConnection {
     private var pingOutstanding = false
     /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
     private var watched = false
+    private let traceNumber = RPCTrace.connectionNumber()
 
     public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
         self.socket = socket
@@ -77,11 +78,13 @@ public actor RPCConnection {
     public func start() {
         guard receiveTask == nil else { return }
         let socket = socket
+        let traceNumber = traceNumber
         receiveTask = Task.detached { [weak self] in
             while true {
                 let messages: [RPCServerMessage]
+                let frame: Data
                 do {
-                    let frame = try await socket.receive()
+                    frame = try await socket.receive()
                     if OpenTiming.active {
                         // The socket hands over whole messages: first and last byte arrive before this line.
                         OpenTiming.mark("frame received", "\(frame.count) bytes")
@@ -100,6 +103,7 @@ public actor RPCConnection {
                     return
                 }
                 PerfCounters.received(messages.count)
+                if RPCTrace.enabled { RPCTrace.write(traceNumber, "rx", RPCTrace.describe(messages), String(frame.count)) }
                 guard let self else { return }
                 await self.handle(messages)
             }
@@ -191,6 +195,13 @@ public actor RPCConnection {
 
     private func write(_ message: RPCClientMessage) {
         guard closedWith == nil, let data = try? RPCFrame.encode(message) else { return }
+        if RPCTrace.enabled {
+            switch message {
+            case .request(let r): RPCTrace.write(traceNumber, "req", "\(r.id)", r.tag, String(data.count))
+            case .interrupt(let id): RPCTrace.write(traceNumber, "int", "\(id)")
+            default: break
+            }
+        }
         outbox.yield(data)
     }
 

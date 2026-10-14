@@ -188,6 +188,54 @@ Cost of the turn watch: the client checks a quiet socket only while a thread run
 
 Sleep and wake, from the code since this Mac can't sleep. `NSWorkspace.didWakeNotification` runs a 3 s `server.probe` (PlatformSignals.swift), so a socket that died during sleep is replaced within 3 s of wake. If Wi-Fi is still joining, the reconnect fails fast and the NWPathMonitor update to "satisfied" retries at once from the first rung. A loopback server answers the probe and the session survives sleep. A half-open socket with no wake, path change, activation, send or running turn is found only on the next of those, never by the kernel, because an idle socket sends nothing and URLSession offers no TCP keepalive.
 
+## Server load and cold start (2026-10-14)
+
+On a big database and a slow disk the T3 server is the bottleneck, so this pass counted what CandyWrapper asks of it and how long its own runtime takes to come up.
+
+Method: copies of `load-home-a` (1,063 threads, threads of 2,000 to 5,000 messages) and `perf-home-pristine`, each with its own 3105 server started the `scripts/sandbox-server` way on ports 47431 to 47434, and a Debug build. `CANDY_RPC_TRACE=<file>` (new, passed through `scripts/run-app`) writes one line per RPC request, received frame and interrupt from `RPCConnection`. T3's own `userdata/logs/server.trace.ndjson` gives server time: every `ws.rpc.*` and HTTP span, and every `sqlite` span with its query, which I added up per nearest RPC or HTTP ancestor. Request counts are exact. Latencies come from a shared machine with three other agents, so the A/B timings below were interleaved.
+
+What each action asks, home A:
+
+| Action | Before | After | T3's web client |
+|---|---|---|---|
+| Launch | 11 requests, 382 KB in | same | the same subscriptions (client-runtime state/server.ts:437, :551, shell.ts:334, terminal.ts:65, vcs.ts:287, sourceControl.ts:72) |
+| First thread open | 8 requests | 7 | subscribeThread, preview.list (usePreviewSession.ts:31-38), the composer's refreshProviders (ChatComposer.tsx:2300-2345), t3.json (ThreadDetailsPanel.tsx:68) |
+| Six quick thread switches across two projects | 32 requests, 14 interrupts | 16 requests, 8 interrupts | about the same as after |
+| Settings > Archive | 2 `getArchivedShellSnapshot` | 1 | 1 |
+| Search, Settings pages, opening a diff, a turn | unchanged | | the same |
+
+Each thread switch used to resubscribe `subscribeDeviceState` and call `device.list`. T3 keys device state by environment (apps/web/src/state/device.ts:33-39, payload `{}`), so one stream serves every thread, and it lists devices only while the device panel shows (DevicePanel.tsx:46-49). Switching back to a project also re-ran `vcs.listRefs` (a `git for-each-ref`, 46 to 70 ms on the server) and re-read `t3.json`. T3 keeps refs 30 s (vcs.ts:37) and file queries 5 minutes (runtime.ts:543). Settings > Archive loaded twice, once from `refresh` and again from `didShow`.
+
+A streamed claude-haiku-5-5 turn made 4 `thread.visit` commands, at send, at completion and on T3's 10 s trailing throttle (ChatView.tsx:2938-3000), which matches T3. Scrolling back 1,350 turns in the 5,000 message thread fetched 68 history pages over HTTP: 476 SQLite queries, 598 ms of server time, about 14 ms a page. T3 fetches the same pages, one per "Load earlier turns" click (MessagesTimeline.tsx:1712-1726). CandyWrapper fetches them as the user scrolls near the top, so the count follows the distance scrolled. The heaviest payloads at launch and on the first open of a workspace are `server.refreshProviders` and the config push it causes, 127 to 170 KB each, which T3's composer asks for too, at most once per 5 minutes per workspace.
+
+### Priority of CandyWrapper's own server
+
+CandyWrapper put the server it starts into Darwin background (`PRIO_DARWIN_BG`) whenever no run was active, to save energy. Background priority throttles disk I/O, which is the slow part on a big database and a slow disk, and it applied while the user clicked through threads. With the file cache purged before each request, the bounded snapshot of the 5,000 message thread took 62, 63 and 72 ms at normal priority and 159, 126 and 239 ms in background, interleaved. T3's desktop app never lowers its backend's priority (DesktopBackendManager.ts sets none). The server now stays at normal priority while CandyWrapper is the active app and drops to background only when the app is inactive and no run is active (`ServerLifecycle` rule 6). Checked on a running app: base priority 37 frontmost, 4 behind Finder, 37 again.
+
+### Cold start on CandyWrapper's own runtime
+
+`CANDY_LAUNCH_TIMING` now marks `window built`, `server spawned`, `server answered` and `server resolved` too. Launches with no server running on a copy of home A, after one start had migrated it, six before and three after:
+
+| Milestone, seconds after process start | Before | After |
+|---|---|---|
+| Cached sidebar and window | 0.19 to 0.24 | 0.20 to 0.22 |
+| Server spawned | 0.30 to 0.38 | 0.25 to 0.27 |
+| Server answered its descriptor | 2.94 to 3.19 | 1.15 to 1.16 |
+| Live sidebar | 3.02 to 3.07 | 1.30 |
+
+One after-run read 2.0 s because its window took 0.64 s to build on a busy machine. Spawn to answer was 1.0 s there too.
+
+The server accepts connections a moment before it answers them, and a request that lands in that gap waits out its whole timeout. `waitForDescriptor` polled with a 2 s timeout, so nearly every cold start lost about 1.7 s. `curl` polling the same server every 150 ms showed it: one attempt hung for its full 3 s, the next answered in 2.5 ms. The probe now starts at 250 ms and doubles after each timeout up to 2 s. T3's desktop polls with a 1 s probe timeout (DesktopBackendManager.ts:66-68), so it pays up to a second of the same gap.
+
+The other checks:
+
+- The cached sidebar shows with the window, 0.2 s after launch, before the server is spawned.
+- The server spawns 50 ms after the window is built. Spawning before the window would save at most 0.15 s and needs `finishPendingRestore` off the main actor first.
+- CandyWrapper starts `t3 serve` with the desktop's bootstrap (`--bootstrap-fd 3`, `mode: "desktop"`). The SQLite settings live in the server code, so they are the same. The desktop runs the backend under Electron's Node with a V8 compile cache (DesktopBackendConfiguration.ts:586-596). The `t3` runtime is a Node single executable built with `useCodeCache: false` (apps/server/vite.config.ts:91-95). `NODE_COMPILE_CACHE` made no difference, 1.48 to 1.51 s against 1.49 to 1.55 s, because it covers only the few modules loaded from disk.
+- The server reads the login shell's PATH on every start (os-jank.ts:20-43) unless the bootstrap says `shellEnvironmentPrepared`, as the desktop's does. CandyWrapper doesn't read the login shell itself, so it leaves that to the server.
+
+Left alone: `subscribeVcsStatus` still resubscribes when a switch changes the workspace, where T3 keeps the old stream 10 s (vcs.ts:40). The server caches the status, so that costs little.
+
 ## Opening a thread (2026-10-10)
 
 `CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.
