@@ -103,8 +103,12 @@ public final class ThreadViewModel {
     public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
     /// A signed URL for an attachment shown inline as HTML (`assets.createUrl`, `disposition: inline`).
     public var webAssetURL: (@MainActor (_ attachmentId: String, _ fileName: String) async -> URL?)?
-    /// "Open in panel" on an HTML render: its URL and file name.
-    public var onOpenHtmlRender: (@MainActor (URL, String) -> Void)?
+    /// A link an HTML render asked to open, and whether Cmd or Ctrl was down: it opens like a chat link.
+    public var onOpenWebLink: (@MainActor (URL, _ modified: Bool) -> Void)?
+    /// An app shortcut a focused HTML render passed on (`t3/notifications/keydown`).
+    public var onFrameShortcut: (@MainActor (KeyStroke) -> Void)?
+    /// An error toast: title and message.
+    public var showError: (@MainActor (String, String) -> Void)?
     /// Opens another thread of this environment by its local id (`onOpenThread`): a created thread's
     /// "Open chat", a subagent card, a fork divider, "Sent by another agent".
     public var onOpenThread: (@MainActor (ThreadId) -> Void)?

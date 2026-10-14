@@ -76,13 +76,15 @@ public struct HtmlRenderTheme: Sendable, Equatable {
         return h
     }
 
-    /// `readHtmlRenderLinkRequest` (:296-307): a `ui/open-link` request with an http(s) URL.
-    public static func linkRequest(_ data: JSONValue) -> (id: JSONValue, url: String)? {
+    /// `readHtmlRenderLinkRequest` (htmlRender.ts:290-312 in 3105): a `ui/open-link` request with an http(s) URL and
+    /// the click's Cmd or Ctrl, which a 3105 server's page reports so a modified click leaves for the browser.
+    public static func linkRequest(_ data: JSONValue) -> (id: JSONValue, url: String, modified: Bool)? {
         guard data["jsonrpc"]?.stringValue == "2.0", data["method"]?.stringValue == "ui/open-link", let id = data["id"],
               id.stringValue != nil || id.doubleValue != nil,
               let url = data["params"]?["url"]?.stringValue, url.range(of: "^https?://", options: [.regularExpression, .caseInsensitive]) != nil
         else { return nil }
-        return (id, url)
+        let params = data["params"]
+        return (id, url, params?["metaKey"]?.boolValue == true || params?["ctrlKey"]?.boolValue == true)
     }
 
     /// `htmlRenderResult`: the empty result for a page's request.

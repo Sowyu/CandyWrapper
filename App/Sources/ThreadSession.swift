@@ -416,7 +416,8 @@ final class ThreadController {
             self.webAssets[id] = (url, expires)
             return url
         }
-        panel.model.onOpenHtmlRender = { [weak self] url, _ in self?.browser.openURL(url.absoluteString) }
+        panel.model.onOpenWebLink = { [weak self] url, modified in self?.pullRequests.openChatLink(url, modified: modified) }
+        panel.model.showError = { [weak panel] title, message in _ = panel?.toasts.show(ToastView(title: title, message: message, kind: .error)) }
         panel.model.onRetryWorkspacePreparation = { [weak self] runId in
             guard let self, let id = self.openThreadId, !self.retryingPreparations.contains(runId) else { return }
             self.retryingPreparations.insert(runId)

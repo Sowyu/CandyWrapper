@@ -5,7 +5,7 @@ import T3Store
 
 /// `HtmlRenderTimelineRow` (MessagesTimeline.tsx:2957-2971, HtmlRenderFrame.tsx): the agent's page in `px-1`, on the
 /// thread's own background, at the server's measured height for this width until the page reports its own.
-/// Loading and failure hold the same box. "Open in panel" shows on hover. 8pt under it (`pb-2`).
+/// Loading and failure hold the same box. "Open full screen" shows on hover (T3 3105 aba3a6ddc). 8pt under it (`pb-2`).
 final class HtmlRenderRowView: TimelineRowView {
     private let frameView = ThreadWebFrameView()
     private let failed = LabelView("", font: TL.font(12))
@@ -23,12 +23,9 @@ final class HtmlRenderRowView: TimelineRowView {
         addSubview(failed)
         open.iconSize = 14
         open.alphaValue = 0
-        open.setAccessibilityLabel("Open in panel")
-        _ = TooltipController.attach(to: open, text: "Open in panel", placement: PopupPlacement(side: .left, align: .center, sideOffset: 4))
-        open.action = { [weak self] in
-            guard let self, let src = self.src, let ref = self.reference else { return }
-            self.context.model?.onOpenHtmlRender?(src, ref.fileName)
-        }
+        open.setAccessibilityLabel("Open full screen")
+        _ = TooltipController.attach(to: open, text: "Open full screen", placement: PopupPlacement(side: .left, align: .center, sideOffset: 4))
+        open.action = { [weak self] in self?.openFullScreen() }
         addSubview(open)
         frameView.onMessage = { [weak self] in self?.received($0) }
         frameView.onEvicted = { [weak self] in self?.src = nil }
@@ -91,13 +88,44 @@ final class HtmlRenderRowView: TimelineRowView {
 
     private func received(_ data: JSONValue) {
         guard let item else { return }
-        if let h = HtmlRenderTheme.contentHeight(data) {
-            context.model?.setWebContentHeight(item.id, h)
+        if let h = HtmlRenderTheme.contentHeight(data) { context.model?.setWebContentHeight(item.id, h) }
+        Self.handle(data, frame: frameView, model: context.model)
+    }
+
+    /// `HtmlRenderDocument`'s messages, in the row and the full screen dialog (files/BrowserDocumentFrame.tsx in 3105).
+    /// A loaded page learns the app shortcuts it may pass on. A link opens like a chat link, and a passed-on chord
+    /// runs its command; both only while the frame has focus and the reader just used it, as T3 checks user activation.
+    // ponytail: a live page keeps the shortcut list from its load; repost on ActiveKeymap changes if people edit keybindings with a render open
+    static func handle(_ data: JSONValue, frame: ThreadWebFrameView, model: ThreadViewModel?) {
+        if HtmlRenderTheme.contentHeight(data) != nil, !frame.shortcutsPosted {
+            frame.shortcutsPosted = true
+            frame.post(HtmlRenderShortcuts.message())
         } else if let link = HtmlRenderTheme.linkRequest(data) {
-            // Opens only while the frame has focus and the reader just used it, as T3 checks user activation.
-            guard frameView.userIsActive, let url = SafeExternalURL.parse(link.url) else { return }
-            NSWorkspace.shared.open(url)
-            frameView.post(HtmlRenderTheme.result(link.id))
+            guard frame.userIsActive, let url = SafeExternalURL.parse(link.url) else { return }
+            if let open = model?.onOpenWebLink { open(url, link.modified) } else { NSWorkspace.shared.open(url) }
+            frame.post(HtmlRenderTheme.result(link.id))
+        } else if frame.userIsActive, let stroke = HtmlRenderShortcuts.keyDown(data) {
+            model?.onFrameShortcut?(stroke)
+        }
+    }
+
+    /// "Open full screen": a fresh URL (one near expiry is minted again), else T3's "Page unavailable" toast.
+    private func openFullScreen() {
+        guard let ref = reference else { return }
+        let id = ref.attachmentId
+        Task { [weak self] in
+            let url = await self?.context.model?.webAssetURL?(id, ref.fileName)
+            guard let self, let window = self.window, self.reference?.attachmentId == id else { return }
+            guard let url else {
+                self.context.model?.showError?("Page unavailable", "Reconnect to the environment and try again.")
+                return
+            }
+            let dark = self.effectiveAppearance.isDark
+            let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
+            let model = self.context.model
+            HtmlRenderDialogView(page: .init(src: themed, title: ref.title, dark: dark)) { data, frame in
+                Self.handle(data, frame: frame, model: model)
+            }.present(in: window)
         }
     }
 
