@@ -727,6 +727,16 @@ public final class SidebarContentView: DSView {
         scheduleLabelTimer()
     }
 
+    /// Glass Native's toolbar takes the brand as soon as it's built, even while Settings' nav fills the sidebar
+    /// column and this view stays classic. A switch back to classic from there frees the toolbar, so the brand comes
+    /// home when the classic sidebar shows again.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow != nil, !hidesCustomChrome, brand.superview !== self, scrollArea.superview === self {
+            addSubview(brand, positioned: .above, relativeTo: scrollArea)
+        }
+    }
+
     /// A sidebar shown again after a collapse catches up a tick it skipped while hidden.
     public override func viewDidUnhide() {
         super.viewDidUnhide()
