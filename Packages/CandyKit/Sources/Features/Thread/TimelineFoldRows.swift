@@ -168,6 +168,8 @@ final class EventRowView: TimelineRowView {
     private let card = FillView()
     /// The divider's button when it opens a thread (`rounded-full border border-border/70 bg-background`).
     private let pill = TimelineParentLinkPill()
+    /// A handoff row draws its own divider with the models.
+    private var handoff: HandoffDividerView?
     private var icon = IconView(name: .wrench, size: 14)
     private var iconName = IconName.wrench
     private var iconSize: CGFloat = 14
@@ -320,6 +322,15 @@ final class EventRowView: TimelineRowView {
         detail.isHidden = divider || look == .line || look == .createdCard || (detailText ?? "").isEmpty
         detailInline.isHidden = !divider || (detailText ?? "").isEmpty
         label.text = text
+        // The handoff divider names its models (V2LifecycleRow.tsx:127-135).
+        if p.item.type == .handoff {
+            if handoff == nil { let v = HandoffDividerView(); addSubview(v); handoff = v }
+            handoff?.configure(HandoffEndpoints.resolve(p.item, runs: context.model?.projection?.runs ?? []),
+                               providers: context.model?.providers ?? [], failed: p.item.status == .failed)
+        }
+        handoff?.isHidden = p.item.type != .handoff
+        for v in [leftRule, rightRule, icon, label] as [NSView] where p.item.type == .handoff { v.isHidden = true }
+        if p.item.type != .handoff { icon.isHidden = false; label.isHidden = false }
         switch look {
         case .divider:
             label.font = TL.font(11, .medium)
@@ -394,6 +405,7 @@ final class EventRowView: TimelineRowView {
         case .divider:
             // `gap-1.5 rounded-full px-2 py-1`, max 320px, centered between two rules with `gap-2`; with an
             // action the pill is a bordered button with `px-2.5`.
+            handoff?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: HandoffDividerView.height)
             let pad: CGFloat = pill.isHidden ? 8 : 11
             let lw = ceil(label.textWidth), dw = detailInline.isHidden ? 0 : ceil(detailInline.textWidth) + 4
             let pw = min(320, pad + 12 + 6 + lw + dw + pad)

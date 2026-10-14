@@ -71,6 +71,10 @@ final class ComposerController {
     var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
     /// The target changed (a thread or draft opened, or the draft's workspace changed).
     var onTargetChange: (() -> Void)?
+    /// The provider or model pick changed: the pending handoff row follows it (ChatView.tsx:7744-7757).
+    var onModelChange: (() -> Void)?
+    /// The model the next send uses.
+    var selectedModel: ModelSelection? { pickers.current.modelSelection }
     /// After each refresh (a keystroke, a projection, a target change): the branch change notice follows the prompt.
     var onRefresh: (() -> Void)?
     /// `composerDraftHasUserContent` (composerDraftStore.ts:426-441): typed text or an attachment.
@@ -242,6 +246,7 @@ final class ComposerController {
         pickers.onChange = { [weak self] _ in
             self?.composer.needsLayout = true
             self?.onTargetChange?()
+            self?.onModelChange?()
         }
         let queue = panel.queue
         queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
@@ -1344,6 +1349,8 @@ final class ComposerController {
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.update(draftKey: draftKey ?? "", context: context)
+        panel.model.providers = serverConfig.providers
+        onModelChange?()
         // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
         // is known one button replaces the cluster (:5473-5487). It opens setup for the requested
         // instance, else (on an unstarted thread) for the first instance that can install or sign in.

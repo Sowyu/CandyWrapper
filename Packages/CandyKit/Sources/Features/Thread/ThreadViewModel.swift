@@ -113,6 +113,15 @@ public final class ThreadViewModel {
     /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     public var mcpApp: McpAppActions?
+    /// The environment's providers: handoff dividers name their models by them (V2LifecycleRow.tsx:592-640).
+    public var providers: [ServerProvider] = [] {
+        didSet {
+            guard providers != oldValue else { return }
+            for item in items {
+                if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff { refreshRow(item.id) }
+            }
+        }
+    }
     private var webContentHeights: [String: Double] = [:]
     private var closedApps: Set<String> = []
 
