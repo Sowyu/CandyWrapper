@@ -114,7 +114,7 @@ struct SidebarSearchTests {
         c.clearSearch()
         // A key whose group is gone scopes nothing.
         c.setProjectScope("gone")
-        #expect(keys(c).contains("thread:r3") && c.filterButton.icon == .folder)
+        #expect(keys(c).contains("thread:r3") && c.filterButton.icon == .listFilter)
         // A scoped project without threads.
         let empty = content(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo"), SidebarPreview.project("p9", "lonely")],
                                                     threads: [SidebarPreview.thread("x", "X", project: "p1", kind: .read, minutesAgo: 2)]))
