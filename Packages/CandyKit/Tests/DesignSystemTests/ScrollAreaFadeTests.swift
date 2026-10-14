@@ -23,4 +23,27 @@ struct ScrollAreaFadeTests {
             #expect(mask.frame.height == clip.bounds.height)
         }
     }
+
+    /// A document that sizes itself to the clip, as the diff list and file trees do.
+    final class ClipSized: NSView {
+        var laidOutWidth: CGFloat = 0
+        override var isFlipped: Bool { true }
+        override func layout() {
+            super.layout()
+            laidOutWidth = enclosingScrollView?.contentView.bounds.width ?? 0
+        }
+    }
+
+    /// A maximized diff panel kept its old width: a new clip width never laid the document out again.
+    @Test func newClipWidthLaysTheDocumentOut() {
+        let document = ClipSized(frame: NSRect(x: 0, y: 0, width: 200, height: 600))
+        let area = ScrollAreaView(documentView: document)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        area.frame = NSRect(x: 0, y: 0, width: 200, height: 300)
+        window.contentView?.addSubview(area)
+        area.layoutSubtreeIfNeeded()
+        area.frame.size.width = 500
+        area.layoutSubtreeIfNeeded()
+        #expect(document.laidOutWidth == 500)
+    }
 }
