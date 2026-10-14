@@ -17,6 +17,7 @@
 # Usage: scripts/run-app [--live] [app arguments]
 set -eu
 here="$(cd "$(dirname "$0")/.." && pwd)"
+"$here/scripts/wait-origin"
 version="$(sed 's/^v//' "$here/T3_VERSION")"
 app="${CANDY_APP:-/tmp/cw-dd/Build/Products/Debug/CandyWrapper.app}"
 bin=/tmp/candywrapper-bin

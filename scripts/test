@@ -1,0 +1,6 @@
+#!/bin/zsh
+# Runs the CandyKit tests after any Origin energy run ends. Arguments go to `swift test`,
+# for example `scripts/test --filter SidebarFidelityTests`.
+here="${0:A:h}"
+"$here/wait-origin"
+cd "$here/../Packages/CandyKit" && exec swift test "$@"
