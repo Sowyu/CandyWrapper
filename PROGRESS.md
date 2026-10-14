@@ -11,8 +11,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-1. Glass Native (Experimental): phases 1 to 3, the design polish, phase 5 and the perf fixes are done (`docs/glass-native.md`). Left, in order:
-   - Phase 6: a bug hunt over every action in native mode next to classic, and a familiarity pass against T3 desktop. (taken 2026-10-14)
+1. Glass Native (Experimental) is done: all six phases, two bug hunt rounds, a familiarity pass and two code reviews (`docs/glass-native.md`, Status). One check is open: `bench.huge_update_stream` went from 0.73 to 1.07 ms against v1.0.0 (`docs/perf/2026-10-14-fff9d87-w1.md`). An agent is bisecting it. (taken 2026-10-14)
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
