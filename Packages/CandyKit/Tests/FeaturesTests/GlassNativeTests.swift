@@ -182,6 +182,32 @@ struct GlassNativeTests {
         #expect(page.bounds.size == page.frame.size)
     }
 
+    /// A theme round trip made from Settings (classic, Glass Native, classic) gives the brand back to the
+    /// thread sidebar, which stayed classic out of the window while Settings' nav filled the column.
+    @Test func theBrandComesHomeAfterARoundTripFromSettings() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
+                              styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let defaults = UserDefaults(suiteName: "cw.glassnative.brand.\(UUID().uuidString)")!
+        let sidebar = SidebarContentView()
+        let nav = DSView(), page = DSView()
+        let classic = SidebarLayoutView(defaults: defaults)
+        classic.sidebarContent = nav
+        classic.mainContent = page
+        classic.install(in: window)
+        let native = NativeSplitPresentation(autosaveName: nil)
+        native.adoptBrand(of: sidebar)
+        MainPresentationSwap.swap(from: classic, to: native, in: window)
+        #expect(sidebar.brand.superview !== sidebar && !sidebar.hidesCustomChrome)
+        let back = SidebarLayoutView(defaults: defaults)
+        MainPresentationSwap.swap(from: native, to: back, in: window)
+        // Settings closes and puts the thread sidebar back.
+        back.sidebarContent = sidebar
+        #expect(sidebar.brand.superview === sidebar)
+        window.toolbar = nil
+        window.contentView = nil
+    }
+
     /// Classic's header keeps its panel toggles hidden while no thread shows, through layouts and a round trip
     /// to Glass Native, so they and the details shortcut stay off before a thread loads.
     @Test func classicHeaderTogglesStayHiddenWithoutAThread() {
