@@ -45,6 +45,7 @@ final class RunningThreadKeepAlive {
 
     func update() {
         let running = runningThreads()
+        watchRunningEnvironments(running)
         let open = openThread()
         // ponytail: drops a stream when the shell reports the stop, T3 waits for the detail stream to show it too; add the detail check if reopened threads miss their last events
         for (id, entry) in kept where !running.contains(id) || id == open {
@@ -66,6 +67,22 @@ final class RunningThreadKeepAlive {
                 await store.apply([item])
             })
             kept[id] = Kept(store: store, relay: relay, subscription: subscription)
+        }
+    }
+
+    /// The supervisor each environment last heard from, and what it heard.
+    private var watching: [String: (supervisor: ObjectIdentifier, on: Bool)] = [:]
+
+    /// A running turn should keep streaming, so its environment's socket gets checked when it goes quiet
+    /// (`ConnectionSupervisor.setExpectingTraffic`). Idle environments stay at zero wakeups.
+    private func watchRunningEnvironments(_ running: Set<ThreadId>) {
+        let busy = Set(running.compactMap(\.environmentId))
+        for env in environments.environmentIds {
+            guard let supervisor = environments.session(env)?.supervisor else { watching[env] = nil; continue }
+            let entry = (supervisor: ObjectIdentifier(supervisor), on: busy.contains(env))
+            if let old = watching[env], old.supervisor == entry.supervisor, old.on == entry.on { continue }
+            watching[env] = entry
+            Task { await supervisor.setExpectingTraffic(entry.on) }
         }
     }
 

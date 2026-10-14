@@ -7,11 +7,20 @@ final class PlatformSignals: @unchecked Sendable {
     // @unchecked: every stored property is set once in init and only read afterwards.
     private let monitor = NWPathMonitor()
     private var tokens: [(NotificationCenter, NSObjectProtocol)] = []
+    /// Only the monitor's queue touches it.
+    private var lastPath: PathKey?
 
     init(supervisor: ConnectionSupervisor) {
-        monitor.pathUpdateHandler = { [weak supervisor] path in
+        monitor.pathUpdateHandler = { [weak self, weak supervisor] path in
             let online = path.status == .satisfied
-            Task { await supervisor?.networkChanged(online: online) }
+            let key = PathKey(path)
+            // The first update reports the network the session started on.
+            let moved = online && self?.lastPath.map { $0 != key } == true
+            self?.lastPath = key
+            Task {
+                await supervisor?.networkChanged(online: online)
+                if moved { await supervisor?.networkPathChanged() }
+            }
         }
         monitor.start(queue: DispatchQueue(label: "dev.candywrapper.t3.path", qos: .utility))
 
@@ -33,5 +42,18 @@ final class PlatformSignals: @unchecked Sendable {
     deinit {
         monitor.cancel()
         for (center, token) in tokens { center.removeObserver(token) }
+    }
+}
+
+/// What makes one network different from another for a socket: the interfaces in use and their
+/// gateways. Updates for cost or constraint flags on the same network compare equal.
+// ponytail: two Wi-Fi networks with the same router address look the same; key on the SSID if that shows up
+struct PathKey: Equatable {
+    let interfaces: [String]
+    let gateways: [String]
+
+    init(_ path: NWPath) {
+        interfaces = path.availableInterfaces.map(\.name)
+        gateways = path.gateways.map { "\($0)" }.sorted()
     }
 }

@@ -181,4 +181,43 @@ struct RPCConnectionTests {
         #expect(pings(socket2) == 0)
         consumer.cancel(); consumer2.cancel()
     }
+
+    /// T3 allows 15 s, three of its 5 s ping intervals, without any frame (rpc/protocol.ts:10-12).
+    @Test func aServerBusyForTwoIntervalsIsNotDropped() async throws {
+        let (c, socket) = await makeWatchedConnection()
+        let call = Task { try await c.request("server.getConfig") }
+        // Silent for two and a half intervals: the old watchdog closed after two.
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(await !c.isClosed)
+        socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
+        _ = try await call.value
+        #expect(await !c.isClosed)
+    }
+
+    @Test func aWatchedIdleSocketIsCheckedAndAnUnwatchedOneIsNot() async throws {
+        let (idle, idleSocket) = await makeWatchedConnection()
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(idleSocket.sent.isEmpty, "nothing owed, nothing watched: no traffic")
+        #expect(await !idle.isClosed)
+
+        // Watched and answering: open, with pings only while quiet.
+        await idle.setWatched(true)
+        for n in 1...2 {
+            #expect(await eventually { pings(idleSocket) == n })
+            idleSocket.deliver(.pong)
+        }
+        #expect(await !idle.isClosed)
+        await idle.setWatched(false)
+        try await Task.sleep(for: .milliseconds(150))
+        let after = pings(idleSocket)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(pings(idleSocket) == after, "unwatched again: the watchdog stopped")
+
+        // Watched and silent: closed.
+        let (dead, deadSocket) = await makeWatchedConnection()
+        await dead.setWatched(true)
+        #expect(await eventually { pings(deadSocket) == 1 })
+        #expect(await eventually { await dead.isClosed })
+        #expect(await dead.waitUntilClosed() == .transport(.pingTimedOut))
+    }
 }

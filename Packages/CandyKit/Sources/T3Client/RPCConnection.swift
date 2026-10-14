@@ -50,17 +50,22 @@ public actor RPCConnection {
     private var writeTask: Task<Void, Never>?
     private let outbox: AsyncStream<Data>.Continuation
     private let outboxStream: AsyncStream<Data>
-    /// Liveness while a reply is owed. Effect's client pings every 5 s and drops a socket whose
-    /// Pong misses the next tick (makePinger, effect-smol RpcClient.ts:1205-1227). CandyWrapper
-    /// sends no idle pings (see `ConnectionSupervisor`), so a socket that dies without a close it
-    /// can see would wedge every call and stream for good: a peer that half-closes in the middle
-    /// of a frame leaves URLSession's `receive()` waiting forever. So while a unary call or a
-    /// stream's first answer is outstanding, `livenessInterval` without any inbound frame sends
-    /// a Ping, and a Pong still missing after another interval closes the socket, which makes the
-    /// supervisor reconnect. Nothing runs while nothing is owed.
+    /// Liveness while a reply is owed or traffic is expected. T3's client pings every 5 s and drops
+    /// a socket that brings no frame for 15 s (client-runtime rpc/protocol.ts:10-12, session.ts:203).
+    /// CandyWrapper sends no idle pings (see `ConnectionSupervisor`), so a socket that dies without a
+    /// close it can see would wedge every call and stream for good: a peer that half-closes in the
+    /// middle of a frame, or a network that drops packets, leaves URLSession's `receive()` waiting
+    /// forever. So while a unary call or a stream's first answer is outstanding, or the owner set
+    /// `watched` because a turn is running, `livenessInterval` without any inbound frame sends a
+    /// Ping, and three intervals without any frame (T3's 15 s) close the socket, which makes the
+    /// supervisor reconnect. A server busy for less than that never trips it. Nothing runs while
+    /// nothing is owed or watched.
     private let livenessInterval: Duration
     private var lastInbound = ContinuousClock.now
     private var watchdog: Task<Void, Never>?
+    private var pingOutstanding = false
+    /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
+    private var watched = false
 
     public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
         self.socket = socket
@@ -165,6 +170,12 @@ public actor RPCConnection {
 
     public var isClosed: Bool { closedWith != nil }
 
+    /// Keeps the liveness watchdog running while `on`, even with nothing owed.
+    public func setWatched(_ on: Bool) {
+        watched = on
+        if on { armWatchdog() }
+    }
+
     /// Returns when the connection is closed, with the reason.
     public func waitUntilClosed() async -> RPCClientError {
         if let closedWith { return closedWith }
@@ -242,7 +253,8 @@ public actor RPCConnection {
 
     private func handle(_ messages: [RPCServerMessage]) {
         lastInbound = ContinuousClock.now
-        defer { if watchdog != nil, !owesReply { watchdog?.cancel(); watchdog = nil } }
+        pingOutstanding = false
+        defer { if watchdog != nil, !needsWatchdog { watchdog?.cancel(); watchdog = nil } }
         for message in messages {
             switch message {
             case .chunk(let id, let values):
@@ -268,6 +280,9 @@ public actor RPCConnection {
             case .clientProtocolError(let e):
                 failPending(.protocolError(e))
             case .pong:
+                // The server answered in order, so every stream subscribed before is being served.
+                // A quiet one (a terminal, a status feed) owes nothing more.
+                for state in streams.values { state.answered = true }
                 let waiters = pongWaiters.values
                 pongWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -281,9 +296,13 @@ public actor RPCConnection {
 
     /// A unary call, or a stream that has had neither a chunk nor its exit yet.
     private var owesReply: Bool { !unary.isEmpty || streams.values.contains { !$0.answered && $0.end == nil } }
+    private var needsWatchdog: Bool { watched || owesReply }
 
     private func armWatchdog() {
         guard watchdog == nil, closedWith == nil else { return }
+        // The silence counts from when a reply became owed, not from the last frame of an idle hour.
+        lastInbound = ContinuousClock.now
+        pingOutstanding = false
         let interval = livenessInterval
         watchdog = Task { [weak self] in
             while true {
@@ -294,26 +313,21 @@ public actor RPCConnection {
     }
 
     /// One watchdog step; false ends the watchdog. Pings only after a quiet interval, so a socket
-    /// that keeps delivering frames, or a slow call on a live socket, costs one Ping per interval.
-    private func livenessTick() async -> Bool {
-        guard closedWith == nil, owesReply else { watchdog = nil; return false }
-        guard ContinuousClock.now - lastInbound >= livenessInterval else { return true }
-        do {
-            try await ping(timeout: livenessInterval)
-            // The socket works. A subscription that stays quiet (a terminal, a status feed) owes
-            // nothing more, so only unary calls keep the watchdog going.
-            for state in streams.values { state.answered = true }
-            if owesReply { return true }
-            watchdog = nil
-            return false
-        } catch RPCTransportError.pingTimedOut {
+    /// that keeps delivering frames costs nothing, and a slow call on a live socket costs one Ping
+    /// per interval.
+    private func livenessTick() -> Bool {
+        guard closedWith == nil, needsWatchdog else { watchdog = nil; return false }
+        let quiet = ContinuousClock.now - lastInbound
+        if quiet >= livenessInterval * 3 {
             watchdog = nil
             shutDown(.transport(.pingTimedOut))
             return false
-        } catch {
-            // Cancelled because the reply arrived, or the socket closed meanwhile.
-            return false
         }
+        if quiet >= livenessInterval, !pingOutstanding {
+            pingOutstanding = true
+            write(.ping)
+        }
+        return true
     }
 
     private func finish(_ id: RPCRequestID, _ state: StreamState, _ end: Result<Void, RPCClientError>) {

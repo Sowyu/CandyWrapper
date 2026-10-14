@@ -154,6 +154,18 @@ struct SupervisorTests {
         await s.disconnect()
     }
 
+    /// Another Wi-Fi while online: T3's "network-changed" quick probe (wakeups.ts:10-12, supervisor.ts:593).
+    @Test func aNetworkPathChangeProbesTheLiveSession() async {
+        let h = Harness([.succeed])
+        let s = ConnectionSupervisor(dependencies: h.dependencies)
+        await s.connect()
+        #expect(await eventually { await s.state.phase == .connected })
+        let socket = h.lastSocket!
+        await s.networkPathChanged()
+        #expect(await eventually { socket.sent.contains { if case .request(let r) = $0 { r.tag == "server.probe" } else { false } } })
+        await s.disconnect()
+    }
+
     @Test func failedProbeReconnectsWithoutWaiting() async {
         let h = Harness([.succeed, .succeed])
         let s = ConnectionSupervisor(dependencies: h.dependencies)
