@@ -139,6 +139,35 @@ Left:
 - The first open of a huge reply parses it on the main thread (0.13 s). Parsing off the main thread before the rows apply would fix it.
 - Opening Settings and the first window draw 55 to 75 ms of glyphs and layers in Core Animation's commit, once each.
 
+## Optimisation pass (2026-10-14)
+
+The classic client's share of the pre-release pass (task `classic`). Baseline: `2026-10-15-810aa19-w1`. Final: `2026-10-15-e72162b-w1`, which also holds other agents' commits from the same night (server priority, palette, thread re-parse, stall logging).
+
+| Metric | 810aa19 | e72162b | Commit |
+|---|---|---|---|
+| `bench.huge_full_parse` | 118.1 ms | 40.7 ms | 60603ed |
+| `bench.huge_open_parse` | 52.2 ms | 16.6 ms | 60603ed |
+| `bench.decode_fixtures` | 23.5 ms | 9.8 ms | 60603ed |
+| `bench.huge_cache_write` | 60.2 ms | 30.1 ms | 0c4f9ec |
+| `bench.huge_cache_load` | 48.4 ms | 24.3 ms | 60603ed, 0c4f9ec |
+| `size.shipped_bundle_mb` | 31.1 MB | 30.2 MB | e72162b, measurement only |
+
+`JSONScanner` (60603ed) reads frame bytes straight into `JSONValue`. JSONSerialization built every node twice, an NSObject and then the enum, and the conversion cost as much as the parse. The scanner keeps JSONSerialization's quirks: fragments, a BOM, one trailing comma, the first of duplicate keys.
+
+The thread cache (0c4f9ec) writes through `JSONValueEncoder`, which builds a `JSONValue` tree and takes the raw wire objects as they are, then `JSONValue.utf8`. That is 27 ms against JSONEncoder's 43 ms on the huge window. LZ4 compresses it in 1 ms against LZFSE's 13 ms, to a file about twice the size, and both decompress in under 1 ms. In a Debug build the tree encoder is slower than JSONEncoder (10.5 against 1.4 ms on the recorded thread), which broke a cache test that slept 100 ms. f25aa6b made `ThreadStore` chain its cache tasks so a flush writes the newest state, and the test now awaits the flush.
+
+The shipped bundle didn't shrink. `scripts/release` already thins Sparkle to arm64, and the review now counts it the same way. The rest is the 22.5 MB stripped binary, spread over thousands of functions with none above 30 KB, plus 6.6 MB of resources, all in use: the terminal's Nerd Font, Sparkle, the app icon at 1024 px in two scales, the grain, Mermaid and the wallpaper.
+
+These didn't pay off:
+
+- `markdown_parse_lines` is 35 ms, and Foundation's `AttributedString(markdown:)` takes all of it. A plain-text fast path would have to match cmark-gfm exactly, so I left it.
+- `markdown_layout` spreads its 48 ms over TextKit 2 and CoreText shaping. `glyphOffsets` shapes a line again for each chip and link, about 13%. Caching it per box would hold memory for every line of every visible message.
+- `huge_full_decode` spends its 31 ms on dictionary lookups, retains and Codable overhead, with no single hot spot.
+- `launch.window_ms` is mostly AppKit. Of the 62 ms in `showMainWindow`, `NSWindow` init takes 25 ms and `ThreadController.init` 24 ms across many views. The browser panel built at launch costs 4 ms, which is below the metric's noise.
+- `big_thread.after_scroll_peak_mb` is about 51 MB of graphics memory on top of the 45 MB the app holds while `--perf-scroll` sits at the top of "Numbers 1 to 1000". I added a canvas that backs only the visible part of a tall `MarkdownView`, and a Debug A/B gave 111 to 113 MB before and 120 MB after, so I dropped it. Limiting `prepareContent(in:)` to the visible rect changed nothing either. A layer dump at the top shows about 49 MB of backed layer area, including a 1,183 pt message, so the next step is per-row backing, not the long message.
+
+`big_thread.scroll_cpu_ms` (276 to 365 ms) and the open first frames (56 to 68 ms, cached 44 to 69 ms) moved up with overlapping ranges, so the verdicts are "same". The 810aa19 baseline's 276 ms was low next to e34f91c's 346 ms. Six other commits landed between the two runs, so rerun before reading either as a regression.
+
 ## Sidebar updates (2026-10-13)
 
 `CANDY_SIDEBAR_TIMING=1` (passed through `scripts/run-app`) prints `sidebar rebuild <ms>, <items> items, <n> rows built` for every sidebar update; `CANDY_SIDEBAR_TIMING=nocache` builds the list from scratch each time, for a before. Numbers and method: `docs/research/m10-load-2026-10-12.md`, "Sidebar updates".
