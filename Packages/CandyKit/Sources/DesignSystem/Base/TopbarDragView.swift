@@ -20,8 +20,10 @@ open class TopbarDragView: DSView {
             // the sidebar toggle, where the toolbar's breadcrumb starts. In full screen the header sits below the
             // toolbar, clear of them.
             if window.styleMask.contains(.fullScreen) { return 20 }
+            // The toolbar's edge is in window points; under View > Zoom the header draws at the column's scale.
             let x = convert(NSPoint.zero, to: nil).x
-            return x < Self.nativeToolbarContentLeft ? max(20, Self.nativeToolbarContentLeft - x) : 20
+            let scale = convert(NSSize(width: 1, height: 0), to: nil).width
+            return x < Self.nativeToolbarContentLeft ? max(20, (Self.nativeToolbarContentLeft - x) / scale) : 20
         }
         // T3 measures from the viewport, which is the sidebar layout's frame (the window's content in the app).
         var layout = superview
