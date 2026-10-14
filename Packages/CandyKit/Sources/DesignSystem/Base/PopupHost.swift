@@ -194,11 +194,14 @@ public protocol PopupContent: NSView {
     func popupHandleKey(_ key: PopupKey) -> Bool
     /// Natural size, before the host caps it to the available space.
     var popupSize: CGSize { get }
+    /// The surface's corner radius, for the blur classic Glass puts under every popup.
+    var frostRadius: CGFloat { get }
 }
 
 public extension PopupContent {
     func popupHandleKey(_ key: PopupKey) -> Bool { false }
     var popupSize: CGSize { intrinsicContentSize }
+    var frostRadius: CGFloat { 10 }
 }
 
 /// T3's popup motion: `data-starting-style` / `data-ending-style` scale and opacity, 150ms.
@@ -253,14 +256,27 @@ public final class OpenPopup {
 
 /// Holds one popup; its layer carries the scale and opacity transitions around the transform origin.
 final class PopupContainer: DSView {
+    /// Classic Glass's blur under the popup's frosted surface (`WindowGlass.syncPaneBlur`).
+    private var paneBlur: BackdropBlurView?
     override var mouseDownCanMoveWindow: Bool { false }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncBlur()
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncBlur()
+    }
+    private func syncBlur() {
+        paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: (subviews.last as? PopupContent)?.frostRadius ?? 10)
+    }
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         return bounds.contains(local) ? super.hitTest(point) : nil
     }
     override func layout() {
         super.layout()
-        subviews.first?.frame = bounds
+        for view in subviews { view.frame = bounds }
     }
 }
 

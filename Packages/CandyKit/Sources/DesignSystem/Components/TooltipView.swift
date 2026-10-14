@@ -8,6 +8,7 @@ public final class TooltipView: DSView, PopupContent {
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
     private let label = LabelView()
+    public var frostRadius: CGFloat { 8 }
 
     public init(_ text: String, variant: Variant = .default) {
         self.variant = variant

@@ -257,8 +257,18 @@ public final class ToastView: DSView {
 
     public override func updateLayer() { restyle() }
 
+
+    /// Classic Glass's blur under the frosted pane (`WindowGlass.syncPaneBlur`).
+    private var paneBlur: BackdropBlurView?
+    private func syncPaneBlur() { paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: 10) }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncPaneBlur()
+    }
+
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        syncPaneBlur()
         decoration.setNeedsDisplay()
     }
 
@@ -267,7 +277,7 @@ public final class ToastView: DSView {
         box.radius = 10
         // ponytail: `dropdown-glass` is popover at 83.6% blurred over whatever is behind; drawn as that alpha over
         // --background, which is what it gives over a plain window. Real blur if toasts sit over busy content.
-        box.fill = Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: PopupSurface.dropdownGlassAlpha)
+        box.fill = WindowGlass.floating(stock: Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: PopupSurface.dropdownGlassAlpha))
         box.border = Themed.color(\.contrastForeground, 0.1)
         box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)),
                        BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]
