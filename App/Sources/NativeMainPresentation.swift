@@ -26,6 +26,7 @@ final class MainPresentationController {
         let presentation = make(native: native)
         presentation.sidebarContent = sidebar
         presentation.mainContent = main
+        window.nativeZoom = (presentation as? NativeSplitPresentation).map { presentation in { [weak presentation] in presentation?.contentScale = $0 } }
         window.nativeChrome = native
         presentation.install(in: window)
         current = presentation
@@ -79,6 +80,7 @@ final class MainPresentationController {
         let native = ThemeLibrary.shared.usesNativePresentation
         guard native != isNative else { return }
         let next = make(native: native)
+        window.nativeZoom = (next as? NativeSplitPresentation).map { presentation in { [weak presentation] in presentation?.contentScale = $0 } }
         MainPresentationSwap.swap(from: current, to: next, in: window)
         window.nativeChrome = native
         current = next

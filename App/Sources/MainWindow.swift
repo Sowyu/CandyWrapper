@@ -17,12 +17,10 @@ final class MainWindow: NSWindow, NativeChromeWindow {
     var nativeChrome = false {
         didSet {
             guard nativeChrome != oldValue else { return }
-            // ponytail: workspace zoom is off in Glass Native, where scaling the root's bounds would scale the split
-            // view too; add per-column scaling once the native views land (phases 2 to 5)
+            applyWorkspaceZoom()
             guard !nativeChrome else { return }
             title = "CandyWrapper"
             subtitle = ""
-            applyWorkspaceZoom()
             layoutTrafficLights()
         }
     }
@@ -33,9 +31,13 @@ final class MainWindow: NSWindow, NativeChromeWindow {
         workspaceZoom = min(5, max(-3, level))
         applyWorkspaceZoom()
     }
+    /// Glass Native scales each column's content rather than the window's content view, which holds the split
+    /// view. The presentation controller sets it.
+    var nativeZoom: ((CGFloat) -> Void)?
     private func applyWorkspaceZoom() {
-        guard !nativeChrome, let contentView else { return }
         let scale = pow(1.2, workspaceZoom)
+        if nativeChrome { nativeZoom?(scale); return }
+        guard let contentView else { return }
         contentView.bounds.size = NSSize(width: contentView.frame.width / scale, height: contentView.frame.height / scale)
         contentView.needsLayout = true
     }

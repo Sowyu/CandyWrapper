@@ -123,6 +123,15 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     /// toolbar places it, and so it shows when the switch happens with Settings' nav in the sidebar.
     public func adoptBrand(of sidebar: SidebarContentView) { brandHost.brand = sidebar.brand }
 
+    /// View > Zoom's scale. Each column scales its content, as classic scales the window's content view.
+    // ponytail: the toolbar and the column widths keep the system's size, scale them if zoomed toolbars matter
+    public var contentScale: CGFloat = 1 {
+        didSet {
+            guard contentScale != oldValue else { return }
+            for column in [sidebarColumn, detailColumn] { (column.view as! NativeColumnView).scale = contentScale }
+        }
+    }
+
     public var isSidebarOpen: Bool { !sidebarItem.isCollapsed }
     public func toggleSidebar() { split.toggleSidebar(nil) }
 
@@ -441,6 +450,10 @@ final class NativeColumnView: DSView {
     private let surface: GrainSurfaceView?
     private var backdrop: WindowGlassBackdropView?
 
+    var scale: CGFloat = 1 {
+        didSet { if scale != oldValue { needsLayout = true } }
+    }
+
     var content: NSView? {
         didSet {
             guard content !== oldValue else { return }
@@ -489,14 +502,28 @@ final class NativeColumnView: DSView {
         // below it. Settings and the utility pages put their 52pt header row in the toolbar's row, where T3 has it
         // and the toolbar shows no title of its own; in full screen the toolbar covers that row, so they start
         // below it.
+        // Under View > Zoom the content draws at `scale` in the same frame, so the insets are in its own points.
         if detail, let page = content as? ToolbarUnderlapping {
-            page.toolbarInset = top
-            content?.frame = bounds
+            page.toolbarInset = top / scale
+            place(bounds)
             return
         }
         let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
-        let y = detail && fullScreen ? top : top - ThreadHeaderView.height
-        content?.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y))
+        let y = detail && fullScreen ? top : top - ThreadHeaderView.height * scale
+        place(NSRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y)))
+    }
+
+    /// A view that leaves, for classic's layout or another page, leaves unscaled.
+    override func willRemoveSubview(_ subview: NSView) {
+        super.willRemoveSubview(subview)
+        if subview === content, subview.bounds.size != subview.frame.size { subview.bounds = NSRect(origin: .zero, size: subview.frame.size) }
+    }
+
+    private func place(_ frame: NSRect) {
+        guard let content else { return }
+        content.frame = frame
+        let size = NSSize(width: frame.width / scale, height: frame.height / scale)
+        if content.bounds.size != size { content.bounds.size = size }
     }
 }
 
