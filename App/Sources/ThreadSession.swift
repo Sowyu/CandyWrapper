@@ -238,24 +238,16 @@ final class ThreadSession {
 
     struct DiffLoadError: LocalizedError { var errorDescription: String? }
 
-    /// `review.getDiffPreview` for the diff panel's Changes and Uncommitted scopes.
-    /// A checkout outside the server's workspace root is refused; T3 then asks again at the server's own cwd
-    /// (`shouldRetryBranchDiffAtEnvironmentCwd`, DiffPanel.tsx:354-374).
+    /// `review.getDiffPreview` for the diff panel's Changes and Uncommitted scopes. A refusal reaches the panel,
+    /// which shows its message over "No patch available" (DiffPanel.tsx:1074-1076 in Nightly 2994). Nightly 2994
+    /// dropped 2861's retry at the server's cwd (2861 DiffPanel.tsx:354-374), which showed another repo's diff.
     nonisolated static func gitDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.GitLoader {
         { cwd, baseRef, ignoreWhitespace in
-            func preview(_ cwd: String) async throws -> ReviewDiffPreview {
+            do {
                 let json = try await supervisor.request(ReviewDiffPreview.method,
                                                         payload: ReviewDiffPreview.input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
                 return try JSONDecoder().decode(ReviewDiffPreview.self, from: JSONEncoder().encode(json))
-            }
-            do {
-                return try await preview(cwd)
             } catch let error as RPCClientError {
-                if error.description.contains("configured workspace root"),
-                   let serverCwd = try? await supervisor.request("server.getConfig")["cwd"]?.stringValue, serverCwd != cwd,
-                   let fallback = try? await preview(serverCwd) {
-                    return fallback
-                }
                 throw DiffLoadError(errorDescription: error.description)
             }
         }
