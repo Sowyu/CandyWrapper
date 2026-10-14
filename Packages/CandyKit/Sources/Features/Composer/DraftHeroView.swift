@@ -11,10 +11,15 @@ public final class DraftHeroView: DSView {
     /// 36 + 8 + 24.
     public static let height: CGFloat = 68
 
-    public var projectTitle = "" { didSet { if projectTitle != oldValue { needsDisplay = true } } }
+    /// The height at `width`: the headline wraps as T3's `h1` does when the column is narrower than it.
+    public func height(forWidth width: CGFloat) -> CGFloat {
+        isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
+    }
+
+    public var projectTitle = "" { didSet { if projectTitle != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
     /// A draft in the scratch project: "What should we work on?" with the picker, "No project", on the
     /// line below (DraftHeroHeadline.tsx:244-246, 326, 366-383).
-    public var isScratch = false { didSet { if isScratch != oldValue { needsDisplay = true } } }
+    public var isScratch = false { didSet { if isScratch != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
     /// The project name was clicked; show the project menu under `anchor`.
     public var onPickProject: ((NSView) -> Void)?
 
@@ -60,21 +65,52 @@ public final class DraftHeroView: DSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         if isScratch { drawScratch(ctx); return }
-        let (string, range) = pieces()
-        let line = TextLine(string)
-        let x = ((bounds.width - line.width) / 2).rounded()
-        let baseline = line.baseline(top: 0, lineHeight: 36)
-        draw(line.line, at: CGPoint(x: x, y: baseline), in: ctx)
-        // The project name's extent and its underline (`underline-offset-4`, `decoration-from-font`).
-        let x0 = CTLineGetOffsetForStringIndex(line.line, range.location, nil)
-        let x1 = CTLineGetOffsetForStringIndex(line.line, range.location + range.length, nil)
-        projectAnchor.frame = NSRect(x: x + x0, y: 0, width: x1 - x0, height: 36)
-        drawUnderline(ctx, font: Self.projectFont, from: x + x0, to: x + x1, baseline: baseline)
+        let (_, range) = pieces()
+        let lines = headlineLines(width: bounds.width)
+        for (i, piece) in lines.enumerated() {
+            let line = piece.line
+            let top = CGFloat(i) * 36
+            let x = ((bounds.width - line.width) / 2).rounded()
+            let baseline = line.baseline(top: top, lineHeight: 36)
+            draw(line.line, at: CGPoint(x: x, y: baseline), in: ctx)
+            // The project name's extent and its underline (`underline-offset-4`, `decoration-from-font`).
+            guard range.location >= piece.start, range.location < piece.start + piece.length else { continue }
+            let x0 = CTLineGetOffsetForStringIndex(line.line, range.location, nil)
+            let x1 = CTLineGetOffsetForStringIndex(line.line, min(range.location + range.length, piece.start + piece.length), nil)
+            projectAnchor.frame = NSRect(x: x + x0, y: top, width: x1 - x0, height: 36)
+            drawUnderline(ctx, font: Self.projectFont, from: x + x0, to: x + x1, baseline: baseline)
+        }
+        let subTop = CGFloat(lines.count - 1) * 36 + 44
 
         // ponytail: "or start without a project" is drawn but inert; scratch threads come with the project picker work
         let sub = TextLine(NSAttributedString(string: "or start without a project",
                                               attributes: [.font: Self.subFont, .foregroundColor: Themed.color(\.mutedForeground)]))
-        draw(sub.line, at: CGPoint(x: ((bounds.width - sub.width) / 2).rounded(), y: sub.baseline(top: 44, lineHeight: 24)), in: ctx)
+        draw(sub.line, at: CGPoint(x: ((bounds.width - sub.width) / 2).rounded(), y: sub.baseline(top: subTop, lineHeight: 24)), in: ctx)
+    }
+
+    /// The headline as one line when it fits, or broken at spaces as the browser wraps it, never inside the
+    /// project picker (an `inline-flex` box). Each line's width leaves out its trailing space, so it centers.
+    func headlineLines(width: CGFloat) -> [(line: TextLine, start: Int, length: Int)] {
+        let (string, project) = pieces()
+        let whole = TextLine(string)
+        guard whole.width > width, width > 0 else { return [(whole, 0, string.length)] }
+        let typesetter = CTTypesetterCreateWithAttributedString(string)
+        var result: [(line: TextLine, start: Int, length: Int)] = []
+        var start = 0
+        while start < string.length {
+            var count = CTTypesetterSuggestLineBreak(typesetter, start, Double(width))
+            if count <= 0 { count = string.length - start }
+            let end = start + count, projectEnd = project.location + project.length
+            if end > project.location, end < projectEnd {
+                // The picker moves whole to the next line, or, starting this one, keeps its "?" with it.
+                count = project.location > start ? project.location - start : min(string.length, projectEnd + 1) - start
+            }
+            let piece = string.attributedSubstring(from: NSRange(location: start, length: count))
+            let trimmed = piece.string.hasSuffix(" ") ? piece.attributedSubstring(from: NSRange(location: 0, length: piece.length - 1)) : piece
+            result.append((TextLine(trimmed), start, trimmed.length))
+            start += count
+        }
+        return result
     }
 
     private func drawScratch(_ ctx: CGContext) {

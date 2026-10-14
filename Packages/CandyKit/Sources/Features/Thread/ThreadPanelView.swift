@@ -1295,7 +1295,8 @@ public final class ThreadPanelView: DSView {
             let stack = composerShown && chat > 0 ? ComposerBannerStackItem.ordered(bannerStackItems(docked: false, composerVisible: true)) : []
             let notice = (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0)
                 + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
-            hero.frame = NSRect(x: x, y: y - 16 - notice - DraftHeroView.height, width: width, height: DraftHeroView.height)
+            let heroHeight = hero.height(forWidth: width)
+            hero.frame = NSRect(x: x, y: y - 16 - notice - heroHeight, width: width, height: heroHeight)
         } else {
             y = chatHeight - 20 - height
         }
