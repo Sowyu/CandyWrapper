@@ -171,7 +171,6 @@ extension SettingsController {
             case .update?: control = .update(state.isFailed ? "Retry update" : "Update to \(mismatch.client)", enabled: updates.canUpdate(id))
             case .manual(let manual)?: control = .copyCommand(manual)
             case .desktopManual?: control = .text(ServerUpdateCopy.desktopManual)
-            case .ownServer?: control = .text(ServerUpdateCopy.ownServerManual)
             case nil: break
             }
         } else if state == .idle, known {

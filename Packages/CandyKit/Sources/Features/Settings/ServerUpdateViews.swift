@@ -35,10 +35,6 @@ public enum ServerUpdateCopy {
 
     /// A desktop app too old for the remote trigger.
     public static let desktopManual = "Update the desktop app on that machine to update this server."
-    /// CandyWrapper's own server: it runs the T3 Code installed on this Mac and picks up a new one when
-    /// it starts again.
-    public static let ownServerManual = "Update T3 Code on this Mac, then reopen CandyWrapper to restart its server."
-    public static let ownServerGuidance = "Update T3 Code on this Mac"
 
     /// The manual path's button and toast (ServerUpdateAction.tsx:232-252, 293-300).
     public struct Manual: Equatable {
@@ -66,8 +62,6 @@ public enum ServerUpdateOffer: Equatable {
     case manual(ServerUpdateCopy.Manual)
     /// A desktop app that can't be driven remotely: only the instruction.
     case desktopManual
-    /// The server CandyWrapper started on this Mac: update T3 Code, then reopen the app (docs/decisions.md).
-    case ownServer
 
     /// `ServerUpdateAction`'s branches.
     public init(_ capabilities: ServerUpdateCapabilities, targetVersion: String, serverLabel: String) {

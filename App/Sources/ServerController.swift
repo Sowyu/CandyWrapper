@@ -119,7 +119,7 @@ final class ServerController {
             return nil
         }
         do {
-            guard let binary = LocalServerDiscovery.resolveBinary(home: home, path: Self.userPath) else { throw Self.notInstalled }
+            guard let binary = LocalServerDiscovery.resolveBinary(home: home, path: Self.userPath) ?? Self.store.active()?.binary else { throw Self.notInstalled }
             let code = try await LocalServerLauncher.mintPairingCode(binary: binary, home: home, path: Self.userPath)
             let (_, result) = try await EnvironmentHTTP(baseURL: server.origin).pair(code: code, identity: identity)
             let credentials = self.credentials, id = server.descriptor.environmentId
@@ -154,6 +154,12 @@ final class ServerController {
     private func phaseChanged() async {
         let phase = await lifecycle.phase
         ownsServer = phase == .running(owned: true)
+        // The started server ran its migrations: raise this home's floor and note how far that version goes.
+        if ownsServer, let version = Self.startingVersion {
+            Self.startingVersion = nil
+            let home = self.home
+            Task.detached { Self.records.recordStart(version, home: home, migration: HomeRecords.databaseMigration(home: home)) }
+        }
         guard phase == .stopping || phase == .stopped, !connecting else { return }
         latestIsLive = false
         session?.stop()
@@ -268,15 +274,82 @@ final class ServerController {
         return (inherited + usual).filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: ":")
     }()
 
+    // MARK: Runtimes
+
+    /// CandyWrapper's own runtimes. `CANDY_RUNTIMES` points a development build at another folder.
+    nonisolated static let store: RuntimeStore = ProcessInfo.processInfo.environment["CANDY_RUNTIMES"]
+        .map { RuntimeStore(root: URL(filePath: $0, directoryHint: .isDirectory)) } ?? .standard
+    nonisolated static var records: HomeRecords { HomeRecords(file: store.root.appending(path: "homes.json")) }
+    /// The version the last start chose, recorded once that server is up.
+    private nonisolated(unsafe) static var startingVersion: String?
+    /// Shows install progress; set by the app.
+    var onInstallProgress: ((String, RuntimeStore.Progress?) -> Void)?
+
+    /// The T3 Code desktop app's version, when it is installed. It runs its own server on `~/.t3`.
+    nonisolated static func desktopAppVersion() -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.t3tools.t3code") else { return nil }
+        return Bundle(url: url)?.infoDictionary?["CFBundleShortVersionString"] as? String
+    }
+
+    /// The runtime a start uses (docs/decisions.md, 2026-10-14): T3's installed runtime when newer than
+    /// ours, else ours, installing it on first need; never one older than what already used the home.
+    nonisolated static func runtime(home: URL, development: Bool, path: String,
+                                    progress: @escaping @Sendable (String, RuntimeStore.Progress?) -> Void) async throws -> URL {
+        let others = home.standardizedFileURL == LocalServerDiscovery.defaultHome.standardizedFileURL ? [desktopAppVersion()].compactMap { $0 } : []
+        let floor = records.floor(home: home, others: others)
+        guard let wanted = T3Version(ServerVersionSkewLogic.clientVersion) else { throw ConnectionFailure.blocked(.configuration, "This build names no T3 version to run.") }
+        let t3 = LocalServerDiscovery.installedRuntime(home: home)
+        // A development home (the sandbox) may run the `t3` on PATH that scripts/run-app links, without a download.
+        if development, t3 == nil, store.active() == nil, let binary = LocalServerDiscovery.resolveBinary(home: home, path: path) {
+            startingVersion = nil
+            return binary
+        }
+        let (version, binary): (T3Version, URL)
+        switch RuntimeChoice.decide(t3: t3, ours: store.active(), wanted: wanted, floor: floor) {
+        case .t3(let v, let b), .ours(let v, let b): (version, binary) = (v, b)
+        case .install(let v):
+            progress(v.raw, .downloading(received: 0, total: nil))
+            defer { progress(v.raw, nil) }
+            let b: URL
+            do { b = try await store.install(v.raw) { progress(v.raw, $0) } } catch {
+                throw ConnectionFailure.blocked(.configuration, "Could not install T3 Code \(v) for CandyWrapper: \(error)")
+            }
+            try store.activate(v.raw)
+            (version, binary) = (v, b)
+        }
+        if let refusal = records.refusal(candidate: version, home: home, floor: floor, migration: HomeRecords.databaseMigration(home: home)) {
+            throw ConnectionFailure.blocked(.configuration, refusal)
+        }
+        startingVersion = version.raw
+        return binary
+    }
+
+    /// The update button for our own server: install `target`, make it active, restart the server on it.
+    func updateOwnRuntime(to target: String, onStage: @escaping @MainActor (ServerUpdateStage) -> Void) async throws {
+        onStage(.downloading)
+        _ = try await Self.store.install(target)
+        onStage(.installing)
+        try Self.store.activate(target)
+        onStage(.resuming)
+        await lifecycle.shutdown()
+        connect()
+    }
+
     private func makeLifecycle() -> LocalServerLifecycle {
-        let home = self.home, path = Self.userPath, notInstalled = Self.notInstalled
+        let home = self.home, path = Self.userPath
+        // A development run that names a runtime folder tests the real install, so it skips the PATH shortcut.
+        let environment = ProcessInfo.processInfo.environment
+        let development = (environment["CANDY_T3_HOME"] != nil || AppDelegate.isTestBuild) && environment["CANDY_RUNTIMES"] == nil
         let log = URL.libraryDirectory.appending(path: "Logs/CandyWrapper/t3-server.log")
         // One record per home, so test builds on other homes never adopt or stop each other's server.
         let record = URL.applicationSupportDirectory.appending(path: "CandyWrapper/" + Self.ownerRecordName(home: home))
         // The server's environment is built from scratch; pass T3's telemetry switch through.
         let telemetry = ProcessInfo.processInfo.environment["T3CODE_TELEMETRY_ENABLED"]
+        let progress: @Sendable (String, RuntimeStore.Progress?) -> Void = { [weak self] version, p in
+            Task { @MainActor in self?.onInstallProgress?(version, p) }
+        }
         return .live(home: home, identity: identity, credentials: credentials, configuration: {
-            guard let binary = LocalServerDiscovery.resolveBinary(home: home, path: path) else { throw notInstalled }
+            let binary = try await Self.runtime(home: home, development: development, path: path, progress: progress)
             try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
             var config = LocalServerConfiguration(binary: binary, home: home, path: path)
             // ponytail: append-only log, rotate it if it grows past a few MB

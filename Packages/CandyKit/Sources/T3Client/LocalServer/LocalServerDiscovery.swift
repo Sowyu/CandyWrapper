@@ -117,6 +117,14 @@ public enum LocalServerDiscovery {
         return version
     }
 
+    /// T3's installed runtime for the home: its service's active version and that version's `t3`.
+    public static func installedRuntime(home: URL) -> (T3Version, URL)? {
+        guard let data = try? Data(contentsOf: home.appending(path: "runtime/service-state.json")),
+              let raw = parseActiveVersion(data), let version = T3Version(raw) else { return nil }
+        let binary = home.appending(path: "runtime/versions/\(raw)/t3")
+        return FileManager.default.isExecutableFile(atPath: binary.path) ? (version, binary) : nil
+    }
+
     /// The installed runtime's `t3`, else `t3` on `path`. Nil when neither is executable.
     public static func resolveBinary(home: URL, path: String) -> URL? {
         let fm = FileManager.default
