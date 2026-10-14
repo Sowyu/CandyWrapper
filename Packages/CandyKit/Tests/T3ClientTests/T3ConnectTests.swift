@@ -356,6 +356,9 @@ struct RelayErrorMappingTests {
              .blocked(.permission, "Relay has no active link for this environment. The environment server may not have re-established its link yet.")),
             (error(403, #"{"_tag":"RelayEnvironmentConnectNotAuthorizedError","code":"environment_connect_not_authorized","traceId":"t"}"#),
              .blocked(.permission, "Relay rejected the environment connection request.")),
+            // A host swapping tunnels: retried, not blocked (a143fa3c5, connection/errors.ts:48-56).
+            (error(403, #"{"_tag":"RelayEnvironmentConnectNotAuthorizedError","code":"environment_connect_not_authorized","reason":"managed_endpoint_allocation_not_ready","traceId":"t"}"#),
+             .transient("The environment's T3 Connect tunnel is still being set up.")),
             (error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_request_failed","traceId":"t"}"#),
              .transient("Relay could not reach the environment endpoint (endpoint_request_failed).")),
             (error(504, #"{"_tag":"RelayEnvironmentEndpointTimedOutError","code":"environment_endpoint_timed_out","traceId":"t"}"#),

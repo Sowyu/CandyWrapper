@@ -88,6 +88,10 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
             case "RelayAuthInvalidError", "RelayEnvironmentLinkProofExpiredError",
                  "RelayAgentActivityPublishProofExpiredError", "RelayAgentActivityPublishProofInvalidError":
                 return .blocked(.authentication, description)
+            // A host swapping in a new tunnel leaves its allocation unready until the tunnel is up, and
+            // nothing on this side changes when it is, so retry (connection/errors.ts:48-56).
+            case "RelayEnvironmentConnectNotAuthorizedError" where body.reason == "managed_endpoint_allocation_not_ready":
+                return .transient(description)
             case "RelayEnvironmentConnectNotAuthorizedError", "RelayEnvironmentLinkProofInvalidError",
                  "RelayEnvironmentLinkLimitExceededError":
                 return .blocked(.permission, description)
@@ -117,6 +121,7 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
             if reason == "environment_link_not_found" {
                 return "Relay has no active link for this environment. The environment server may not have re-established its link yet."
             }
+            if reason == "managed_endpoint_allocation_not_ready" { return "The environment's T3 Connect tunnel is still being set up." }
             return body.reason.map { "Relay rejected the environment connection request (\($0))." }
                 ?? "Relay rejected the environment connection request."
         case "RelayEnvironmentEndpointUnavailableError": return "Relay could not reach the environment endpoint (\(reason))."
