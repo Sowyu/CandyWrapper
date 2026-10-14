@@ -55,23 +55,10 @@ public struct ThemeDefinition: Equatable, Sendable {
     public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
                                               colors: standardLightColors, variants: [.dark: standardDarkColors])
 
-    /// Glass with the main window in a native AppKit presentation (docs/glass-native.md): the same stock tokens,
-    /// frost and opacity slider as Glass, and a toolbar and split view in place of T3's custom chrome.
-    public static let glassNative = ThemeDefinition(id: "candywrapper-glass-native", label: "Glass Native (Experimental)", appearance: .light,
-                                                    colors: standardLightColors, variants: [.dark: standardDarkColors])
+    /// The theme picker's fixed cards: T3's built-ins, then Glass.
+    public static let pickerBuiltIns = builtIns + [glass]
 
-    /// Glass Native needs macOS 26's glass. Below it the card is hidden and a stored choice reads as Glass.
-    public static let glassNativeAvailable: Bool = {
-        if #available(macOS 26, *) { return true }
-        return false
-    }()
-
-    /// The theme picker's fixed cards: T3's built-ins, then Glass and Glass Native.
-    public static let pickerBuiltIns = builtIns + [glass] + (glassNativeAvailable ? [glassNative] : [])
-
-    /// Stock tokens over a frosted window: Glass and Glass Native.
-    public var isWindowGlass: Bool { id == Self.glass.id || id == Self.glassNative.id }
-    public var isGlassNative: Bool { id == Self.glassNative.id }
+    public var isWindowGlass: Bool { id == Self.glass.id }
 }
 
 /// The theme library's rules and color math.
@@ -80,14 +67,12 @@ public enum ThemePalette {
     public static let reservedIds: Set<String> = ["system", "light", "dark", "t3-chat", "grove", "ocean", "ember", "iris",
                                                   "t3-chat-dark", "t3-grove", "t3-ocean", "t3-ember", "t3-iris",
                                                   "candywrapper-glass", "candywrapper-glass-native"]
-    static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris"]
+    static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris",
+                               "candywrapper-glass-native": "candywrapper-glass"]
 
-    /// `normalizeThemeId` (308-310).
-    /// Below macOS 26 Glass Native reads as Glass.
-    public static func normalizedId(_ id: String, glassNativeAvailable: Bool = ThemeDefinition.glassNativeAvailable) -> String {
-        if id == ThemeDefinition.glassNative.id && !glassNativeAvailable { return ThemeDefinition.glass.id }
-        return legacyAliases[id] ?? id
-    }
+    /// `normalizeThemeId` (308-310), plus CandyWrapper's removed Glass Native, which reads as Glass (decided
+    /// 2026-10-14, docs/decisions.md). Its id stays reserved so no custom theme takes it.
+    public static func normalizedId(_ id: String) -> String { legacyAliases[id] ?? id }
 
     /// `isThemeId` (110-112).
     public static func isThemeId(_ id: String) -> Bool { id.wholeMatch(of: #/[a-z0-9](?:[a-z0-9-]{0,47})/#) != nil }

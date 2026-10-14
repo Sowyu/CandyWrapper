@@ -33,8 +33,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
     private lazy var performanceHUD = PerformanceHUD(events: PerfCounters.takeEvents, setCounting: PerfCounters.setCounting)
     private var desktopManaged: DesktopManagedController?
-    /// The main window's layout, classic or Glass Native.
-    private var presenter: MainPresentationController?
     private var updates: UpdateUI?
     private var updater: UpdateController?
     private let codexAuth = CodexAuthCallbackReceiver()
@@ -179,12 +177,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.threads = threads
         threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }
         let main: NSView = Self.threadPreview() ?? threads.panel
-        let presenter = MainPresentationController(window: window, sidebar: sidebar, main: main, threads: threads, environments: environments)
-        self.presenter = presenter
-        sidebar.actions.toggleSidebar = { [weak presenter] in presenter?.current.toggleSidebar() }
-        let settings = SettingsController(window: window, layout: presenter.current, threadSidebar: sidebar, threadPanel: main,
+        let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
+        // Every T3 main route covers the inset's grain with a flat `bg-background` (ChatView.tsx:11246,
+        // settings.tsx:122, _chat.index.tsx:128), so the official main panel is flat #0a0a0a in dark mode.
+        layout.main.showsGrain = false
+        window.contentView = layout
+        sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
+        let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main,
                                           environments: environments, t3: t3Connect)
-        presenter.settings = settings
         settings.composer = threads.composer
         settings.serverUpdates = threads.serverUpdates
         threads.serverUpdates.toasts = { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts }
@@ -214,9 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
-        let commands = SidebarCommands(sidebar: sidebar, window: window, layout: presenter.current, environments: environments, threads: threads)
+        let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
-        presenter.commands = commands
         commands.closeSettings = { [weak settings] in settings?.close(record: false) }
         settings.onThreadViewReturn = { [weak threads] in threads?.focusComposerOnReturn() }
         threads.panel.header.onNewThreadInProject = { [weak threads] in threads?.newThread() }
@@ -234,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                            toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                            showWindow: { [weak window] in window?.makeKeyAndOrderFront(nil) })
         if !Self.isPreview { updater.start() }
-        installShortcuts(window: window, presenter: presenter, sidebar: sidebar, environments: environments, threads: threads,
+        installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)
         installNotifications(window: window, environments: environments, threads: threads, commands: commands, settings: settings)
         // T3's desktop keeps running threads streaming (RunningThreadKeepAlive.tsx); a preview never connects.
@@ -248,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         slowRPCObserver = NotificationCenter.default.addObserver(forName: SlowRPCRequestTracker.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateSlowRPCToast() }
         }
-        installQuitHold(window: window, presenter: presenter)
+        installQuitHold(window: window, layout: layout)
         openIn = OpenInController(card: threads.panel.lazyDetailsCard, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
@@ -331,13 +330,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Hold-to-quit on Cmd+Q in the main window (`makeQuitShortcutHandler`, DesktopWindow.ts:642-679) and its overlay.
-    private func installQuitHold(window: NSWindow, presenter: MainPresentationController) {
+    private func installQuitHold(window: NSWindow, layout: NSView) {
         var shownMode: QuitHoldController.Mode?
         let controller = QuitHoldController(
             getMode: { QuitHoldController.Mode(rawValue: ClientSettingsStore.shared.current.string("confirmQuit")) ?? .hold },
-            notify: { [weak self, weak presenter] hint in
+            notify: { [weak self, weak layout] hint in
                 guard let self else { return }
-                let layout = presenter?.current.root
                 switch hint {
                 case .down(let mode):
                     shownMode = mode
@@ -362,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// One keyboard shortcut dispatcher for the window, fed by T3's keybindings (`Shortcuts`).
-    private func installShortcuts(window: NSWindow, presenter: MainPresentationController, sidebar: SidebarContentView, environments: Environments,
+    private func installShortcuts(window: NSWindow, layout: SidebarLayoutView, sidebar: SidebarContentView, environments: Environments,
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
         threads.permissionNotice.openConnections = { [weak settings] in settings?.open(); settings?.show(.connections) }
         threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
@@ -382,7 +380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The theme editor floats above every page (ThemeEditorHost above the router).
         let editor = ThemeEditorController.shared
-        editor.host = presenter.current.root
+        editor.host = layout
         editor.toast = { [weak settings, weak threads] title, message, kind in
             if settings?.isOpen == true { settings?.toast(title, message, kind) } else {
                 threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
@@ -394,8 +392,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         // `sidebar.toggle` (AppSidebarLayout.tsx:96-135).
-        shortcuts.on("sidebar.toggle") { [weak presenter] _ in
-            presenter?.current.toggleSidebar()
+        shortcuts.on("sidebar.toggle") { [weak layout] _ in
+            layout?.toggle()
             return true
         }
         // The scope popup's settings button, the thread menu's Project settings (`/projects/$projectKey`).
@@ -445,10 +443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case nil: return nil
             }
         }
-        let record: () -> Void = { [weak history, weak threads, weak presenter] in
+        let record: () -> Void = { [weak history, weak threads] in
             history?.record(currentRoute())
             threads?.syncVisit()
-            presenter?.updateTitle()
         }
         threads.onRouteChange = record
         settings.onRouteChange = record
@@ -503,8 +500,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let sidebar, settings?.isOpen != true, commands?.isUsagePageOpen != true else { return false }
             return sidebar.escapeClearsSelection(event)
         }
-        // Glass Native: Cmd+F in the sidebar goes to its search field.
-        shortcuts.onKey { [weak sidebar] event in sidebar?.focusSearch(event) ?? false }
         shortcuts.onKey { [weak panel = threads.panel] event in
             guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
                   let panel, panel.panelState.isOpen, panel.panelState.active?.kind == .diff,

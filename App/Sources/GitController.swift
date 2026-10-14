@@ -485,12 +485,8 @@ final class GitController {
 
     /// The composer's strip menus hand focus back to the prompt when they close, as the composer's own
     /// controls do in T3 (`openControl`, ChatComposer.tsx:6449-6470); the trigger keeps none.
-    /// Glass Native's `NSMenu` has no popup: it has closed by the time `show` returns, so focus moves now.
     private func returnFocusToComposer(_ popup: OpenPopup?, from anchor: NSView) {
-        guard let popup else {
-            if anchor.window?.firstResponder === anchor { composer.focusComposer() }
-            return
-        }
+        guard let popup else { return }
         let previous = popup.onClose
         popup.onClose = { [weak self, weak anchor] in
             previous?()

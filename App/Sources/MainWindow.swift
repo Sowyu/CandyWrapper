@@ -6,24 +6,10 @@ import DesignSystem
 /// traffic lights at x 16, centered in the 52px workspace top bar; 1100x780 default,
 /// 840x620 minimum; initial background #0a0a0a dark or #ffffff light.
 @MainActor
-final class MainWindow: NSWindow, NativeChromeWindow {
+final class MainWindow: NSWindow {
     /// `MACOS_WORKSPACE_TOPBAR_HEIGHT` and the traffic light x from DesktopWindow.ts:38 and :268.
     static let topbarHeight: CGFloat = 52
     static let trafficLightX: CGFloat = 16
-
-    /// Glass Native: a unified toolbar with the system's own traffic lights and title, in place of T3's
-    /// hidden-inset titlebar. `MainPresentation.install` sets the toolbar and the title's visibility. The titlebar
-    /// stays transparent, so the detail's frost runs up behind the toolbar.
-    var nativeChrome = false {
-        didSet {
-            guard nativeChrome != oldValue else { return }
-            applyWorkspaceZoom()
-            guard !nativeChrome else { return }
-            title = "CandyWrapper"
-            subtitle = ""
-            layoutTrafficLights()
-        }
-    }
 
     private var workspaceZoom: Double = 0
     func changeWorkspaceZoom(_ delta: Double) { setWorkspaceZoom(workspaceZoom + delta) }
@@ -31,12 +17,8 @@ final class MainWindow: NSWindow, NativeChromeWindow {
         workspaceZoom = min(5, max(-3, level))
         applyWorkspaceZoom()
     }
-    /// Glass Native scales each column's content rather than the window's content view, which holds the split
-    /// view. The presentation controller sets it.
-    var nativeZoom: ((CGFloat) -> Void)?
     private func applyWorkspaceZoom() {
         let scale = pow(1.2, workspaceZoom)
-        if nativeChrome { nativeZoom?(scale); return }
         guard let contentView else { return }
         contentView.bounds.size = NSSize(width: contentView.frame.width / scale, height: contentView.frame.height / scale)
         contentView.needsLayout = true
@@ -53,8 +35,7 @@ final class MainWindow: NSWindow, NativeChromeWindow {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                    backing: .buffered, defer: false)
-        // The content minimum, not `minSize`: AppKit adds a toolbar's extra height to a frame minimum, which made
-        // Glass Native's 52 pt toolbar a 640 pt minimum. Content and frame are the same size here.
+        // Content and frame are the same size with a full-size content view.
         contentMinSize = NSSize(width: 840, height: 620)
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
@@ -97,7 +78,7 @@ final class MainWindow: NSWindow, NativeChromeWindow {
     /// Electron's hiddenInset positioning: grow the title bar container to the top bar's height,
     /// then place the buttons at x 16 with the system's spacing, vertically centered.
     func layoutTrafficLights() {
-        guard !nativeChrome, !styleMask.contains(.fullScreen),
+        guard !styleMask.contains(.fullScreen),
               let close = standardWindowButton(.closeButton),
               let mini = standardWindowButton(.miniaturizeButton),
               let zoom = standardWindowButton(.zoomButton),

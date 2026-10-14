@@ -3,30 +3,15 @@ import Testing
 @testable import DesignSystem
 @testable import Features
 
-/// Classic Glass's frost (docs/design.md "Glass"): only classic Glass frosts, its panes thin with the slider, and its
+/// Glass's frost (docs/design.md "Glass"): its panes thin with the slider, and its
 /// text keeps its ratio against the worst base the slider allows.
 @MainActor
 struct GlassFrostTests {
-    @Test func onlyClassicGlassFrosts() {
-        let defaults = UserDefaults(suiteName: "cw.glassfrost.tests.\(UUID().uuidString)")!
-        let library = ThemeLibrary(defaults: defaults, pinned: nil)
-        defaults.set(ThemeDefinition.glass.id, forKey: "theme.preference")
-        var (input, _) = library.runtimeInput(client: .defaults)
-        #expect(input.frostLight && input.frostDark)
-        defaults.set(ThemeDefinition.glassNative.id, forKey: "theme.preference")
-        (input, _) = library.runtimeInput(client: .defaults)
-        #expect(input.glassLight && !input.frostLight && !input.frostDark)
-        // Glass Native's palette is what it was before the frost.
-        #expect(ThemeRuntime.resolve(input).isSame(as: {
-            var plain = input; plain.frostLight = false; plain.frostDark = false; return ThemeRuntime.resolve(plain)
-        }()))
-    }
-
     @Test func textKeepsItsRatioAtEveryOpacity() {
         for dark in [false, true] {
             for opacity in stride(from: 0.1, through: 1.0, by: 0.1) {
                 var input = ThemeRuntimeInput(glassOpacity: Int((opacity * 100).rounded()))
-                input.glassLight = true; input.glassDark = true; input.frostLight = true; input.frostDark = true
+                input.glassLight = true; input.glassDark = true
                 let palette = ThemeRuntime.resolve(input).palette(dark: dark, sidebar: false)
                 let lb = WindowGlass.linear(WindowGlass.frostWorstBackground(palette.background, dark: dark, opacity: opacity))
                 func ratio(_ c: TokenColor) -> Double {
