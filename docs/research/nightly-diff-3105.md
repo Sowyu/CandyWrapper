@@ -8,7 +8,7 @@ Theo's 2026-10-14 post ("Shipped a ton of perf improvements to the sqlite db ...
 
 ### Breaks
 
-None. A CW build pinned to 2861 works against a 3105 server (checked on a sandbox, part 5).
+None. A CW build pinned to 2861 decodes everything a 3105 server sends. The 3105-pinned build ran a Claude Haiku turn on a 3105 sandbox and loaded the sidebar and composer on 2994 and 2861 sandboxes (part 5).
 
 ### Degrades
 
@@ -61,6 +61,16 @@ None. A CW build pinned to 2861 works against a 3105 server (checked on a sandbo
 1. The runtime CW installs and its update button target `ServerVersionSkewLogic.clientVersion` (Features/Settings/ServerVersionSkewLogic.swift:8-14, App/Sources/ServerController.swift:300, ServerUpdates.swift:251). That was still 2861, so a fresh install and the update button got 2861, without the SQLite fixes, even though the app runs fine on 2994 and 3105. Re-pinning moves it.
 2. CW never starts a second server where it can see one (`LocalServerDiscovery.discover`), but it could not see a server that holds the owner lock before it writes `server-runtime.json`. And an owner-refused start (exit 78) showed "The T3 server exited during startup (status 78)."
 3. CW's own-runtime update installs, activates, stops and starts. Nothing went back to the previous runtime when the new one failed to start, and nothing protected the database from a trial that migrated it and then died.
+
+### Done on 2026-10-14
+
+- Re-pinned to 3105, so a fresh install and the update button get 3105. On a throwaway home the Version row offered "Update to 0.0.46-nightly.20261014.3105" over a 2994 runtime, and the update installed it, snapshotted and discarded the database backup, and reconnected.
+- Discovery reads the owner lock with `F_GETLK`, which takes no lock (`LocalServerDiscovery.ownerLockHolder`). With another process holding the lock and no `server-runtime.json`, the app started no server and said "running but not responding"; once the lock went, it started its own.
+- Exit 78 reads as T3's ServerAlreadyRunningError, and the lifecycle reuses the server that took the home.
+- A slow start is no longer killed after 60 s. The readiness wait follows T3's 30-minute trial deadline and ends at once if the server exits.
+- The own-runtime update refuses when the backup won't fit, snapshots the database while no server runs, and on a failed start restores it and goes back to the previous runtime (`DatabaseBackup`, `ServerController.updateOwnRuntime`). The failure path is unit tested, not run on screen.
+- Service updates wait 32 minutes. Relay tunnel setup is retried. The reconnect grace restarts like T3's. Images over 2000 px fit the edge. The meter no longer says 1000k.
+- Not needed: the relay 504 text (e6626ee16) only reaches T3's environment link flow, which CW doesn't have. CW never waited for the config snapshot during setup, so 5bba76443 has nothing to change.
 
 ## 5. Method
 

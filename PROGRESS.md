@@ -12,7 +12,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## Open tasks
 
 1. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
-2. Catch up to Nightly 0.0.46-nightly.20261014.3105 by `docs/nightly-catch-up.md`, first T3's SQLite and reconnect fixes (Theo, 2026-10-14: "If you saw reconnecting banners, like, ever, that should now be resolved on nightly"), the one-database-owner rule (#16102) against CandyWrapper's own runtime, and the client-side reconnect and image fixes. The scheduled catch-up should skip this run. (taken 2026-10-14)
+2. Match the rest of Nightly 3105's UI, most visible first, by `docs/research/nightly-diff-3105.md` part 2. The wire, the reconnect and server-owner fixes and the client fixes are done (2026-10-14). Left: the pending context handoff row when a model pick needs one (item 1), full-screen visual replies (2), the timeline fixes in item 3 including the stepped Thinking shimmer (`steps(30)`, index.css:604), the "Subagent needs input" banner, which CandyWrapper lacks altogether (ChatView.tsx:7461-7497, threadShell.ts:33-45), the composer and settings items (4, 7), "Update everything" in the sidebar pill (5), the secret input placeholder (part 1 item 3) and the host-image file access message (11).
 3. Apply T3's SQLite lessons (#19205, #19226, #19304, #19305, #19324, #18471) to CandyWrapper's own databases and caches. (taken 2026-10-14)
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
