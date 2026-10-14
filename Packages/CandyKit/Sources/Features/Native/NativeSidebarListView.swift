@@ -233,6 +233,16 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         if let row = keys.firstIndex(of: key) { table.scrollRowToVisible(row) }
     }
 
+    var topVisibleKey: String? {
+        let range = table.rows(in: table.visibleRect)
+        return range.length > 0 && keys.indices.contains(range.location) ? keys[range.location] : nil
+    }
+
+    func scrollItemToTop(_ key: String) {
+        guard let row = keys.firstIndex(of: key) else { return }
+        table.scroll(table.rect(ofRow: row).origin)
+    }
+
     func rowIndex(_ id: ThreadId) -> Int? {
         keys.firstIndex(of: "thread:\(id.rawValue)")
     }
