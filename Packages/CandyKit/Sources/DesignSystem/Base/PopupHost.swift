@@ -215,8 +215,10 @@ public struct PopupMotion: Sendable, Equatable {
     public static let none = PopupMotion(enterScale: nil, exitScale: nil)
     /// Popover: scale .98 + opacity 0 both ways. T3 3105 f570294df (ui/popover.tsx:92) added the ending style.
     public static let popover = PopupMotion(enterScale: 0.98, exitScale: 0.98)
-    /// Tooltip and PreviewCard: scale .98 + opacity 0 both ways.
+    /// Tooltip: scale .98 + opacity 0 both ways.
     public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98, glides: true)
+    /// PreviewCard: the same, but its positioner has no transition (preview-card.tsx:26), so it moves at once.
+    public static let previewCard = PopupMotion(enterScale: 0.98, exitScale: 0.98)
 }
 
 /// One open popup.

@@ -93,6 +93,6 @@ public final class PullRequestLinkPreviewView: DSView, PopupContent {
     @discardableResult
     public func present(over anchor: NSView) -> OpenPopup? {
         anchor.popupHost?.open(self, trigger: anchor, placement: PopupPlacement(side: .top, align: .center, sideOffset: 6, fallbackAxisSide: .end),
-                               motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
+                               motion: .previewCard, pressesTrigger: false, returnsFocus: false, passive: true)
     }
 }
