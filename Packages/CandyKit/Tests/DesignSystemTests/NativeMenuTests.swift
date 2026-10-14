@@ -25,6 +25,8 @@ struct NativeMenuTests {
         #expect(menu.items.count == 5) // the trailing separator is dropped
         #expect(menu.items[0].isSectionHeader)
         #expect(menu.items[1].keyEquivalent == "o" && menu.items[1].image?.isTemplate == true)
+        // macOS 27 hides item images unless they ask to show.
+        if #available(macOS 27, *) { #expect(menu.items[1].preferredImageVisibility == .visible) }
         #expect(menu.items[3].state == .on)
         #expect(!menu.items[4].isEnabled)
         for i in [1, 3] { _ = (menu.items[i].target as? NSObject)?.perform(menu.items[i].action, with: menu.items[i]) }

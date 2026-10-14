@@ -56,6 +56,9 @@ public enum NativeMenu {
                     .font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.systemRed])
             }
             native.image = image(for: item)
+            // macOS 27 hides menu item images unless asked (NSMenuItem.h, `preferredImageVisibility`); T3's menus
+            // show their icons.
+            if native.image != nil, #available(macOS 27, *) { native.preferredImageVisibility = .visible }
             if let shortcut = item.shortcut, let key = keyEquivalent(shortcut) {
                 native.keyEquivalent = key.key
                 native.keyEquivalentModifierMask = key.modifiers
