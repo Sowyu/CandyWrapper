@@ -36,7 +36,7 @@ public final class SidebarNoProjectsHeroView: DSView {
         empty.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: ((bounds.height - h) / 2).rounded(), width: w, height: h)
     }
 
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
 }
 
 /// `mt-6 flex justify-center gap-2`: the hero's buttons, centered.

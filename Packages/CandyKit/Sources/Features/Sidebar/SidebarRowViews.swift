@@ -314,6 +314,9 @@ class SidebarRowBase: ControlView {
         surface.shadowOffset = CGSize(width: 0, height: -6)
     }
 
+    /// Classic Glass's edge and highlight on the open or selected row's pane.
+    var paneEdge: GlassEdgeLayer?
+
     static func composite(_ top: NSColor, over bottom: NSColor) -> NSColor {
         guard let t = top.usingColorSpace(.sRGB), let b = bottom.usingColorSpace(.sRGB) else { return bottom }
         let a = t.alphaComponent
@@ -537,6 +540,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
+        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: 8, show: r.isActive || r.isSelected)
         CATransaction.commit()
         // Background work fades as a whole row (`opacity-70 transition-opacity`, full on hover, Sidebar.tsx:1596-1598).
         HoverReveal.fade(self, to: r.recedes && r.status == .working && !hovered ? 0.7 : 1)
@@ -745,6 +749,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
+        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: 8, show: r.isActive || r.isSelected)
         CATransaction.commit()
         let unsettle = r.action == .unsettle
         // Dimmed favicon at rest, restored on hover.
