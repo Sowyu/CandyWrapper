@@ -211,8 +211,8 @@ public struct PopupMotion: Sendable, Equatable {
     public var duration: CFTimeInterval = Motion.Durations.default
 
     public static let none = PopupMotion(enterScale: nil, exitScale: nil)
-    /// Popover: scale .98 + opacity 0 on enter, no ending style.
-    public static let popover = PopupMotion(enterScale: 0.98, exitScale: nil)
+    /// Popover: scale .98 + opacity 0 both ways. T3 3105 f570294df (ui/popover.tsx:92) added the ending style.
+    public static let popover = PopupMotion(enterScale: 0.98, exitScale: 0.98)
     /// Tooltip and PreviewCard: scale .98 + opacity 0 both ways.
     public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98)
 }

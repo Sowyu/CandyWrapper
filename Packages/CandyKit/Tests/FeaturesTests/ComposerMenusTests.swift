@@ -188,6 +188,15 @@ struct ComposerMenusTests {
         #expect(ComposerContext.stripReferences(prompt).trimmingCharacters(in: .whitespaces) == "look")
     }
 
+    @Test func questionAnswersSendThreadChipsAsThreadLinks() {
+        let thread = ComposerContext.threadRecord(threadId: "abc", title: "Login", environmentId: "env")
+        let answer = "see [Login](t3-context://v1/thread/thread_abc) and [Gone](t3-context://v1/thread/thread_zzz)"
+        #expect(ComposerContext.projectAnswer(answer, records: ["thread_abc": thread])
+            == "see [Login](t3-thread://v1/abc) and [Gone](t3-context://v1/thread/thread_zzz)")
+        #expect(ComposerContext.threadLink("abc", label: "a [b]\nc") == "[a b c](t3-thread://v1/abc)")
+        #expect(ComposerContext.threadLink("abc", label: " ") == "[abc](t3-thread://v1/abc)")
+    }
+
     @Test func clipboardFragmentRoundTrip() throws {
         let thread = ComposerContext.threadRecord(threadId: "abc", title: "Login", environmentId: "env")
         let text = "see [Login](t3-context://v1/thread/thread_abc) <b>"

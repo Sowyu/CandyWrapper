@@ -19,6 +19,8 @@ final class ServerUpdates {
     /// The failed update the user dismissed per environment (`dismissServerUpdateFailure`): only that attempt.
     private var dismissedFailures: [String: ServerUpdateState] = [:]
     private var updatingAll = false
+    /// Why the last quiet update of an environment failed ("Update everything" reads it).
+    private var quietFailures: [String: String] = [:]
 
     /// The toast stack in view: Settings while it shows, else the thread panel.
     var toasts: () -> ToastViewport? = { nil }
@@ -139,7 +141,17 @@ final class ServerUpdates {
         }
     }
 
-    private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle) {
+    /// `updateServer(server, { quiet: true })` for "Update everything": no toasts; nil once the server runs the
+    /// new version, else why it doesn't.
+    func updateQuietly(_ environmentId: String, serverLabel: String) async -> String? {
+        quietFailures[environmentId] = nil
+        start(environmentId, serverLabel: serverLabel, quiet: true)
+        guard let task = tasks[environmentId] else { return "Server update did not start." }
+        await task.value
+        return quietFailures.removeValue(forKey: environmentId)
+    }
+
+    private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle, quiet: Bool = false) {
         guard tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId),
               let mismatch = mismatch(environmentId) else { return }
         let caps = capabilities(environmentId)
@@ -148,7 +160,8 @@ final class ServerUpdates {
         states[environmentId] = .running(stage: .downloading, fromVersion: from, targetVersion: mismatch.client)
         changed()
         if caps.selfUpdate == .desktopManaged, !caps.desktopAppUpdate, isOwnServer(environmentId), let updateOwnServer {
-            return startOwn(environmentId, target: mismatch.client, from: from, serverLabel: serverLabel, failureTitle: failureTitle, update: updateOwnServer)
+            return startOwn(environmentId, target: mismatch.client, from: from, serverLabel: serverLabel, failureTitle: failureTitle, quiet: quiet,
+                            update: updateOwnServer)
         }
         tasks[environmentId] = Task { [weak self] in
             do {
@@ -161,17 +174,20 @@ final class ServerUpdates {
                 }
                 guard let self else { return }
                 states[environmentId] = .idle
-                toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
-                                message: ServerUpdateCopy.successDescription(caps.selfUpdate, targetVersion: result.targetVersion), kind: .success))
+                if !quiet {
+                    toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
+                                    message: ServerUpdateCopy.successDescription(caps.selfUpdate, targetVersion: result.targetVersion), kind: .success))
+                }
             } catch is CancellationError {
                 self?.states[environmentId] = .idle
+                if quiet { self?.quietFailures[environmentId] = "Server update was interrupted." }
             } catch {
                 guard let self else { return }
                 let message = (error as? ServerUpdater.Failure)?.message ?? "Server update failed."
                 var stage = ServerUpdateStage.downloading, target = mismatch.client
                 if case .running(let s, _, let t)? = states[environmentId] { stage = s; target = t }
                 states[environmentId] = .failed(stage: stage, fromVersion: from, targetVersion: target, message: message)
-                toast(ToastView(title: failureTitle, message: message, kind: .error))
+                if quiet { quietFailures[environmentId] = message } else { toast(ToastView(title: failureTitle, message: message, kind: .error)) }
             }
             self?.tasks[environmentId] = nil
             self?.changed()
@@ -180,7 +196,7 @@ final class ServerUpdates {
 
     /// Our own server: install the version into CandyWrapper's runtimes, restart on it, and wait for its
     /// `welcome` to name it, for as long as T3 waits for a service update.
-    private func startOwn(_ environmentId: String, target: String, from: String, serverLabel: String, failureTitle: String,
+    private func startOwn(_ environmentId: String, target: String, from: String, serverLabel: String, failureTitle: String, quiet: Bool,
                           update: @escaping (String, @escaping @MainActor (ServerUpdateStage) -> Void) async throws -> Void) {
         tasks[environmentId] = Task { [weak self] in
             do {
@@ -196,17 +212,20 @@ final class ServerUpdates {
                 }
                 guard let self else { return }
                 states[environmentId] = .idle
-                toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
-                                message: ServerUpdateCopy.successDescription(nil, targetVersion: target), kind: .success))
+                if !quiet {
+                    toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
+                                    message: ServerUpdateCopy.successDescription(nil, targetVersion: target), kind: .success))
+                }
             } catch is CancellationError {
                 self?.states[environmentId] = .idle
+                if quiet { self?.quietFailures[environmentId] = "Server update was interrupted." }
             } catch {
                 guard let self else { return }
                 let message = (error as? ServerUpdater.Failure)?.message ?? "Server update failed: \(error)"
                 var stage = ServerUpdateStage.downloading
                 if case .running(let s, _, _)? = states[environmentId] { stage = s }
                 states[environmentId] = .failed(stage: stage, fromVersion: from, targetVersion: target, message: message)
-                toast(ToastView(title: failureTitle, message: message, kind: .error))
+                if quiet { quietFailures[environmentId] = message } else { toast(ToastView(title: failureTitle, message: message, kind: .error)) }
             }
             self?.tasks[environmentId] = nil
             self?.changed()

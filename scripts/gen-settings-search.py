@@ -17,7 +17,8 @@ STRING = r'"(?:[^"\\]|\\.)*"'
 FLAGS = ["desktopOnly", "macOnly", "windowsOnly", "cloudOnly", "environmentOnly", "providerSettingsOnly",
          "macProviderSettingsOnly", "localBackendManagementOnly", "localEnvironmentOnly", "wslAvailableOnly",
          "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement"]
-PATHS = {"/settings/projects": "projects", "/settings/general": "general", "/settings/appearance": "appearance",
+PATHS = {"/settings/projects": "projects", "/settings/general": "general", "/settings/diagnostics": "diagnostics",
+         "/settings/appearance": "appearance",
          "/settings/keybindings": "keybindings", "/settings/snap-shot": "snapShots", "/settings/providers": "providers",
          "/settings/integrations": "integrations", "/settings/scheduled-tasks": "scheduledTasks",
          "/settings/source-control": "sourceControl", "/settings/storage": "storage", "/settings/connections": "connections",

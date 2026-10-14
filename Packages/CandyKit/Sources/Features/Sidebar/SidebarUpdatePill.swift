@@ -8,7 +8,7 @@ import DesignSystem
 /// popover takes the tooltip's place (:159-162, 362-415). The app owns the update state and the actions.
 public final class SidebarUpdatePillView: ControlView {
     /// The icon `resolveSidebarUpdatePresentation` picks (SidebarUpdatePill.tsx:64-89).
-    enum IconStatus: Equatable { case idle, checking, available, downloading, downloaded }
+    enum IconStatus: Equatable { case idle, checking, available, downloading, downloaded, everything }
 
     /// Nil until the app has read the updater's state (`useDesktopUpdateState`).
     public var update: DesktopUpdateState? { didSet { if update != oldValue { stateChanged(from: oldValue) } } }
@@ -19,6 +19,12 @@ public final class SidebarUpdatePillView: ControlView {
     public var onInstall: (() -> Void)?
     /// A release link in the notes popover (`openDesktopUpdateReleaseNotes`).
     public var onOpenURL: ((String) -> Void)?
+    /// "Update this app, 2 servers, and 3 providers" while other machines or providers have updates
+    /// (`useUpdateEverything`, T3 3105 d83929ad0); a click then asks to update everything.
+    public var everythingSummary: String? { didSet { if everythingSummary != oldValue { refresh() } } }
+    /// A running pass: its tooltip lines (`useUpdateRunTooltip`) and whether this app installs last.
+    public var run: (tooltip: String, installsLocal: Bool)? { didSet { if run?.tooltip != oldValue?.tooltip || run?.installsLocal != oldValue?.installsLocal { refresh() } } }
+    public var onEverything: (() -> Void)?
 
     /// `isCheckAnimationLatched`: the spin finishes its turn after the check ends (:126-132, 291-298).
     private(set) var checkLatched = false
@@ -76,24 +82,33 @@ public final class SidebarUpdatePillView: ControlView {
     private var isDownloading: Bool { update?.status == .downloading }
     /// `shouldShowDesktopUpdateCheckIcon` (DesktopUpdateStatusIcon.tsx:20-30).
     var showCheckIcon: Bool { update?.status == .checking || (checkLatched && !Motion.reduced) }
-    var showUpdateDetails: Bool { buttonAction != .none || isDownloading }
+    /// `runsEverything`: remote work waits and this app isn't downloading.
+    var showsEverything: Bool { everythingSummary != nil && !isDownloading }
+    var showUpdateDetails: Bool { buttonAction != .none || showsEverything || run != nil || isDownloading }
+    /// `resolveSidebarUpdatePresentation` (SidebarUpdatePill.tsx:87-118 at 3105).
     var iconStatus: IconStatus {
         if showCheckIcon { return .checking }
-        if buttonAction == .install { return .downloaded }
         if isDownloading { return .downloading }
+        if let run { return run.installsLocal && buttonAction == .install ? .downloaded : .everything }
+        if showsEverything { return .everything }
+        if buttonAction == .install { return .downloaded }
         return buttonAction == .download ? .available : .idle
     }
     private var showUpdateIconState: Bool { showUpdateDetails && !showCheckIcon }
     var tooltipText: String {
+        if let run { return run.tooltip }
+        if showsEverything, let everythingSummary { return everythingSummary }
         if showUpdateDetails { return update.map(DesktopUpdateLogic.buttonTooltip) ?? "Update available" }
         return showCheckIcon ? "Checking for updates…" : "Check for updates"
     }
     private var disabled: Bool {
         if showCheckIcon { return true }
+        if showsEverything { return false }
         return showUpdateDetails ? DesktopUpdateLogic.isButtonDisabled(update) : !DesktopUpdateLogic.canCheck(update)
     }
-    var isInteractionDisabled: Bool { disabled || isActionPending }
-    var showsReleaseNotes: Bool { DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
+    var isInteractionDisabled: Bool { disabled || isActionPending || run != nil }
+    /// During a run the tooltip shows its progress instead of release notes.
+    var showsReleaseNotes: Bool { run == nil && DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
 
     private func stateChanged(from old: DesktopUpdateState?) {
         // :126-132: a check that starts latches the spin.
@@ -193,6 +208,8 @@ public final class SidebarUpdatePillView: ControlView {
         case .idle, .checking: .refreshCw
         case .available, .downloading: .download
         case .downloaded: .rotateCw
+        // Matches the server update icon in Connections; the download arrow stays for this app's own file.
+        case .everything: .circleArrowUp
         }
         let g = IconView(name: name, size: 16)
         iconBox.addSubview(g, positioned: .below, relativeTo: nil)
@@ -314,7 +331,9 @@ public final class SidebarUpdatePillView: ControlView {
     // MARK: Action (SidebarUpdatePill.tsx:176-289)
 
     public override func performAction() {
-        guard update != nil, !isInteractionDisabled else { return }
+        guard !isInteractionDisabled else { return }
+        if showsEverything { onEverything?(); return }
+        guard update != nil else { return }
         switch buttonAction {
         case .download: onDownload?()
         case .install: onInstall?()
