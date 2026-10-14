@@ -47,7 +47,7 @@ public class PullRequestAnnotationCardView: DSView, DiffAnnotationContent {
     }
 
     public override func updateLayer() {
-        card.layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        card.layer?.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         card.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
         card.layer?.shadowColor = NSColor.black.withAlphaComponent(0.05).cgColor
     }
@@ -158,7 +158,7 @@ public final class PullRequestDraftCommentView: DSView, DiffAnnotationContent {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         hint.color = Themed.color(\.mutedForeground, 0.7)
     }
 }

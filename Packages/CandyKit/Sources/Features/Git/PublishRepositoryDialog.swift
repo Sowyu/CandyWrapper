@@ -304,7 +304,7 @@ final class PublishBodyView: DSView {
         var box = BoxStyle()
         box.radius = 8
         box.border = Themed.color(\.input)
-        box.fill = Themed.color(\.background)
+        box.fill = WindowGlass.paneFill
         repoBox.boxStyle = box
         hostLabel.color = Themed.color(\.contrastMutedForeground)
         (hostIcon as? IconView)?.strokeColor = Themed.color(\.contrastMutedForeground)
@@ -426,12 +426,12 @@ final class PublishChoiceCard: ControlView {
         var box = BoxStyle()
         box.radius = 10
         if selected {
-            box.fill = dark ? Themed.color(\.primary, 0.1) : Themed.color(\.background)
+            box.fill = dark ? Themed.color(\.primary, 0.1) : WindowGlass.paneFill
             box.border = dark ? .clear : Themed.color(\.primary)
             box.shadows = [BoxShadow(spread: dark ? 1 : 2, color: Themed.color(\.primary, dark ? 0.3 : 0.35))]
         } else {
             let hover = ready && state.hovered
-            box.fill = dark ? (hover ? Themed.color(\.accent) : Themed.white(0.035)) : (hover ? Themed.color(\.muted, 0.5) : Themed.color(\.background))
+            box.fill = dark ? (hover ? Themed.color(\.accent) : Themed.white(0.035)) : (hover ? Themed.color(\.muted, 0.5) : WindowGlass.paneFill)
             box.border = dark ? .clear : Themed.color(\.border)
         }
         decoration.boxStyle = box

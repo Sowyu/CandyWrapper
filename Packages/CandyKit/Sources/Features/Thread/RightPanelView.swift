@@ -505,7 +505,7 @@ final class GlyphImageView: NSImageView {
 }
 
 enum NativePanelGround {
-    static func color(_ native: Bool) -> NSColor { native ? WindowGlass.inset : Themed.color(\.background) }
+    static func color(_ native: Bool) -> NSColor { native ? WindowGlass.inset : WindowGlass.ground }
 }
 
 /// One panel tab: `h-6 max-w-36 rounded-md pl-1.5 pr-2 gap-0.5 text-xs`, the identity glyph that

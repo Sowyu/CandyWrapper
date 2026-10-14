@@ -802,7 +802,7 @@ final class ScheduledTaskWeekdaysView: DSView {
         ctx.saveGState()
         ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: Themed.black(0.05).cgColor)
         ctx.addPath(shape)
-        ctx.setFillColor((dark ? Themed.color(\.input, 0.32) : Themed.color(\.background)).cgColor(in: self))
+        ctx.setFillColor((dark ? Themed.color(\.input, 0.32) : WindowGlass.paneFill).cgColor(in: self))
         ctx.fillPath()
         ctx.restoreGState()
         ctx.saveGState()

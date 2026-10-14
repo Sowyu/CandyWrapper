@@ -155,7 +155,7 @@ public final class DeviceToolsDrawerView: DSView {
         }
         content.frame = NSRect(x: 0, y: 0, width: width, height: y + 8)
     }
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
 }
 
 public enum DeviceToolsActions {
