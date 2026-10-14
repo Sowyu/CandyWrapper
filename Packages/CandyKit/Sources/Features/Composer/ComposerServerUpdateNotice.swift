@@ -22,10 +22,13 @@ public struct ComposerServerUpdateNotice: Equatable {
     public var dismissible: Bool
     /// The update needs `environment:maintain`; a copy command never does.
     public var actionEnabled: Bool
+    /// The button's `title`, like "Disconnect server"'s.
+    public var actionTooltip: String?
 
     public init(serverLabel: String = "server", status: Status, guidance: String? = nil, action: String? = nil, actionEnabled: Bool = true,
-                dismissible: Bool? = nil) {
+                actionTooltip: String? = nil, dismissible: Bool? = nil) {
         self.serverLabel = serverLabel; self.status = status; self.guidance = guidance; self.action = action; self.actionEnabled = actionEnabled
+        self.actionTooltip = actionTooltip
         if case .running = status { self.dismissible = false } else { self.dismissible = dismissible ?? true }
     }
 
@@ -50,8 +53,9 @@ public struct ComposerServerUpdateNotice: Equatable {
             return .init(variant: .neutral, icon: .download, title: title, description: guidance, actions: action.map { [$0] } ?? [],
                          dismissLabel: dismiss, priority: .notice, titleTooltip: detail)
         case .running:
-            // Update progress outranks passive notices.
-            return .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, priority: .urgent, spinner: true)
+            // Update progress outranks passive notices. Its only action is "Disconnect server".
+            return .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, actions: action.map { [$0] } ?? [],
+                         priority: .urgent, spinner: true, actionTooltip: actionTooltip)
         case .failed:
             return .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail, actions: action.map { [$0] } ?? [],
                          dismissLabel: dismiss, priority: .notice, iconIsError: true)

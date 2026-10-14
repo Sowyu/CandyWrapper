@@ -326,6 +326,9 @@ final class ThreadController {
     private var bannerTimer: DispatchWorkItem?
     /// Server updates for every environment; the composer notice speaks for the open thread's.
     let serverUpdates: ServerUpdates
+    /// The running update's notice offers "Disconnect server": a remote machine unavailable for 20 s.
+    private var updateDisconnect = false
+    private var disconnecting = false
 
     init(sidebar: SidebarContentView, window: NSWindow, environments: Environments) {
         self.sidebar = sidebar
@@ -942,7 +945,8 @@ final class ThreadController {
     private func updateEnvironmentBanner() {
         bannerTimer?.cancel()
         bannerTimer = nil
-        updateServerUpdateNotice()
+        updateDisconnect = false
+        defer { updateServerUpdateNotice() }
         let banner = panel.environmentBanner
         guard let id = session?.environmentId, let state = environments.state(id),
               state.status != .connected, state.status != .available else {
@@ -956,8 +960,11 @@ final class ThreadController {
         let remote = id != environments.primaryId
         var wake: TimeInterval?
         // The server restarts during an update, and the update notice already shows it (ChatView.tsx:3116-3121).
+        // Its "Disconnect server" comes after the same 20 s on a remote machine (`disconnectAction`, :3096-3109).
         if reconnecting && serverUpdates.state(id).isRunning {
             panel.showsEnvironmentBanner = false
+            updateDisconnect = remote && elapsed >= 20
+            if remote && elapsed < 20 { wake = 20 - elapsed }
         } else if reconnecting && elapsed < 2 {
             panel.showsEnvironmentBanner = false
             wake = 2 - elapsed
@@ -1009,14 +1016,17 @@ final class ThreadController {
         }
         var actionEnabled = true
         if case .update? = offer { actionEnabled = serverUpdates.canUpdate(id) }
+        if state.isRunning { action = updateDisconnect && session?.environmentId == id ? "Disconnect server" : nil; actionEnabled = !disconnecting }
         panel.serverUpdateNotice = ComposerServerUpdateNotice(serverLabel: label, status: status, guidance: state == .idle ? guidance : nil,
                                                               action: action, actionEnabled: actionEnabled,
+                                                              actionTooltip: state.isRunning ? "Hide this server's threads. Switch it on again in Connections." : nil,
                                                               dismissible: state.isFailed || serverUpdates.dismissalKey(id) != nil)
     }
 
     private func serverUpdateAction(_ index: Int?) {
         guard let id = session?.environmentId ?? composer.targetEnvironmentId, let notice = panel.serverUpdateNotice else { return }
         guard index != nil else { return serverUpdates.dismiss(id) }
+        if case .running = notice.status { return disconnect(id) }
         switch serverUpdates.offer(id, serverLabel: notice.serverLabel) {
         case .update?: serverUpdates.request(id, serverLabel: notice.serverLabel)
         case .manual(let manual)?:
@@ -1030,8 +1040,10 @@ final class ThreadController {
     /// "Disconnect server": switches the machine off and goes to the index, as T3 navigates to "/".
     private func disconnect(_ environmentId: String) {
         panel.environmentBanner.disconnect.isEnabled = false
+        disconnecting = true
+        updateServerUpdateNotice()
         Task {
-            defer { panel.environmentBanner.disconnect.isEnabled = true }
+            defer { panel.environmentBanner.disconnect.isEnabled = true; disconnecting = false; updateServerUpdateNotice() }
             do {
                 try await environments.setEnabled(environmentId, false)
             } catch {

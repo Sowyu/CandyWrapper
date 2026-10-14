@@ -140,7 +140,10 @@ final class SettingsController {
         actions.updateServer = { [weak self] id in
             guard let self else { return }
             let label = id == environments.primaryId ? connections.model.thisMachine?.label : environments.label(id)
-            serverUpdates?.request(id, serverLabel: label.map { "\($0) server" } ?? "server")
+            let serverLabel = label.map { "\($0) server" } ?? "server"
+            if serverUpdates?.outdatedHost(id) != nil { serverUpdates?.updateOutdated(id, serverLabel: serverLabel) } else {
+                serverUpdates?.request(id, serverLabel: serverLabel)
+            }
         }
         actions.updateAll = { [weak self] in self?.serverUpdates?.updateAll() }
         connections.actions = actions
@@ -278,6 +281,11 @@ final class SettingsController {
             var tooltip = EnvironmentRowStatus.tooltip(enabled: r.enabled, state: state)
             if let mismatch { tooltip += "\nUpdate available: \(mismatch.server) → \(mismatch.client)" }
             var updateAction: ConnectionsPageModel.UpdateAction?
+            // A host too old to connect (ConnectionsSettings.tsx:1716-1726): "Update" in place of the icon.
+            if state?.status == .unsupported, !update.isRunning, serverUpdates?.outdatedHost(id) != nil,
+               environments.session(id)?.token.isEmpty == false {
+                updateAction = .outdated(update.isFailed ? "Retry update" : "Update")
+            }
             if r.enabled, state?.status == .connected, mismatch != nil, !update.isRunning, let updates = serverUpdates {
                 switch updates.offer(id, serverLabel: "\(r.label) server") {
                 case .update?: updateAction = .update(update.isFailed ? "Retry update" : "Update", enabled: updates.canUpdate(id))

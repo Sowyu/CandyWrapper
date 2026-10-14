@@ -163,6 +163,46 @@ struct ServerUpdaterTests {
         await #expect(throws: ServerUpdater.Failure("The server did not resume on t3@\(new).")) { try await update.value }
     }
 
+    /// A protocol 1 host (0.0.45): a bare socket carries the update, then the descriptor proves the restart
+    /// (outdatedHostUpdate.ts:49-205).
+    @Test func anOutdatedHostUpdatesOverABareSocket() async throws {
+        let socket = FakeSocket()
+        let connection = RPCConnection(socket: socket)
+        await connection.start()
+        final class Descriptors: @unchecked Sendable {
+            let lock = NSLock(); var answers: [Int?]
+            init(_ a: [Int?]) { answers = a }
+            func next() throws -> EnvironmentDescriptor {
+                let v = lock.withLock { answers.count > 1 ? answers.removeFirst() : answers[0] }
+                guard let v else { throw URLError(.cannotConnectToHost) }
+                let json = #"{"environmentId":"env","label":"box","serverVersion":"\#(v == 2 ? "2.0.0" : "0.0.45")","orchestrationProtocolVersion":\#(v),"capabilities":{}}"#
+                return try JSONDecoder().decode(EnvironmentDescriptor.self, from: Data(json.utf8))
+            }
+        }
+        let descriptors = Descriptors([1, nil, 2])
+        let stages = Stages()
+        let caps = ServerUpdateCapabilities(["serverSelfUpdate": .string("boot-service"), "serverSelfUpdateProgress": .bool(true)])
+        let update = Task {
+            try await ServerUpdater.runOutdated(connect: { connection }, descriptor: { try descriptors.next() }, environmentId: "env", label: "box",
+                                                targetVersion: "2.0.0", capabilities: caps, pollInterval: .milliseconds(10)) { s, _ in stages.add(s) }
+        }
+        let call = try #require(await request(socket, "server.updateServerWithProgress"))
+        #expect(call.payload == .object(["targetVersion": .string("2.0.0")]))
+        socket.deliver(.chunk(requestId: call.id, values: [.object(["type": .string("complete"),
+                                                                     "result": .object(["targetVersion": .string("2.0.0"), "method": .string("boot-service")])])]))
+        socket.close()
+        #expect(try await update.value == "2.0.0")
+        #expect(stages.all == [.downloading, .resuming])
+    }
+
+    @Test func anOutdatedHostThatCannotUpdateItselfSaysSo() async {
+        await #expect(throws: ServerUpdater.Failure("Update T3 Code on box manually; it cannot update itself.")) {
+            try await ServerUpdater.runOutdated(connect: { throw CancellationError() }, descriptor: { throw CancellationError() },
+                                                environmentId: "env", label: "box", targetVersion: "2.0.0",
+                                                capabilities: ServerUpdateCapabilities()) { _, _ in }
+        }
+    }
+
     @Test func aStreamThatEndsWithoutCompleteFails() async throws {
         let (s, h) = await connected(1)
         let caps = ServerUpdateCapabilities(["serverSelfUpdate": .string("boot-service"), "serverSelfUpdateProgress": .bool(true)])

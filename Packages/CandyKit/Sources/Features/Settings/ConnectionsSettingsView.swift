@@ -118,6 +118,8 @@ public struct ConnectionsPageModel: Equatable {
         case copy(ServerUpdateCopy.Manual)
         /// A desktop app too old for the remote trigger: only the instruction.
         case desktopManual
+        /// `OutdatedServerUpdateAction`: an outline "Update" or "Retry update" for a host too old to connect.
+        case outdated(String)
     }
 
     public init(thisMachine: Machine? = nil, environments: [Environment] = [], cloudEnabled: Bool = true) {
@@ -649,6 +651,7 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     private lazy var updateText = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private lazy var progress = ServerUpdateProgressView(frame: NSRect(x: 0, y: 0, width: 0, height: 16))
     private var showsProgress = false
+    private var outdatedButton: ButtonView?
     var onUpdate: (() -> Void)?
 
     var routesOpen = false { didSet { routesList.isHidden = !routesOpen; routesButton.isOpen = routesOpen; needsLayout = true } }
@@ -730,9 +733,21 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
             updateText.lineHeight = 16
             updateText.text = ServerUpdateCopy.desktopManual
             install(updateText)
-        case nil:
+        case .outdated?, nil:
             updateButton.removeFromSuperview()
             updateText.removeFromSuperview()
+        }
+        if case .outdated(let label)? = env.updateAction {
+            if outdatedButton?.title != label {
+                outdatedButton?.removeFromSuperview()
+                let b = ButtonView(label, variant: .outline, size: .xs)
+                b.action = { [weak self] in self?.onUpdate?() }
+                outdatedButton = b
+            }
+            install(outdatedButton!)
+        } else {
+            outdatedButton?.removeFromSuperview()
+            outdatedButton = nil
         }
         showsProgress = env.updateProgress != .idle
         if showsProgress {
@@ -771,7 +786,11 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         x -= 4 + ts.width
         toggle.frame = NSRect(x: x, y: 10 + (36 - ts.height) / 2, width: ts.width, height: ts.height)
         // The controls column (`flex items-center gap-1`): the update control comes before the switch.
-        if updateButton.superview === self {
+        if let b = outdatedButton, b.superview === self {
+            let s = b.intrinsicContentSize
+            x -= 4 + s.width
+            b.frame = NSRect(x: x, y: 10 + (36 - s.height) / 2, width: s.width, height: s.height)
+        } else if updateButton.superview === self {
             x -= 4 + 24
             updateButton.frame = NSRect(x: x, y: 10 + (36 - 24) / 2, width: 24, height: 24)
         } else if updateText.superview === self {

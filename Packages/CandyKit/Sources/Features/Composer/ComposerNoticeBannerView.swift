@@ -31,15 +31,17 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var spinner: Bool
         /// The icon in `text-error`, like the failed server update.
         public var iconIsError: Bool
+        /// The buttons' `title` tooltip.
+        public var actionTooltip: String?
         public init(variant: Variant, icon: IconName, title: String, description: String? = nil, actions: [String] = [],
                     dismissLabel: String? = nil, dismissible: Bool? = nil, compact: Bool = false,
                     priority: ComposerBannerStackItem.Priority? = nil, titlePrefix: String? = nil, titleCode: Bool = false,
-                    titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false) {
+                    titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false, actionTooltip: String? = nil) {
             self.variant = variant; self.icon = icon; self.title = title; self.description = description
             self.actions = actions; self.dismissLabel = dismissLabel; self.dismissible = dismissible ?? (dismissLabel != nil)
             self.compact = compact; self.priority = priority
             self.titlePrefix = titlePrefix; self.titleCode = titleCode; self.titleTooltip = titleTooltip
-            self.spinner = spinner; self.iconIsError = iconIsError
+            self.spinner = spinner; self.iconIsError = iconIsError; self.actionTooltip = actionTooltip
         }
         /// `aria-label={item.dismissLabel ?? "Dismiss warning"}`.
         public var resolvedDismissLabel: String { dismissLabel ?? "Dismiss warning" }
@@ -117,6 +119,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         buttons = content.actions.enumerated().map { index, label in
             let b = ButtonView(label, variant: .ghost, size: .xs)
             b.smoothsFont = false
+            b.toolTip = content.actionTooltip
             b.action = { [weak self] in self?.onAction?(index) }
             addSubview(b)
             return b
