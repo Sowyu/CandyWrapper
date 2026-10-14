@@ -13,6 +13,7 @@ extension SidebarContentView {
     }
 
     func applyPresentation() {
+        let top = presenter.topVisibleKey
         if hidesCustomChrome, nativeList == nil {
             let native = NativeSidebarListView(frame: bounds)
             let chrome = NativeSidebarChrome(frame: .zero)
@@ -57,6 +58,10 @@ extension SidebarContentView {
         needsLayout = true
         rebuild(animated: false)
         updateScopeTrigger()
+        if let top {
+            layoutSubtreeIfNeeded()
+            presenter.scrollItemToTop(top)
+        }
     }
 
     func wireNative() {

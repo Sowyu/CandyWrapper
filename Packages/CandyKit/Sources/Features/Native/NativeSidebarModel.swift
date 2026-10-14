@@ -14,6 +14,9 @@ protocol SidebarItemsPresenting: NSView {
     func patchItems(_ patch: [(index: Int, item: SidebarItem)]) -> Bool
     var visibleRowModels: [SidebarRowModel] { get }
     func scrollItemToVisible(_ key: String)
+    /// The first item on screen, and scrolling an item to the top: a theme switch keeps the sidebar's place.
+    var topVisibleKey: String? { get }
+    func scrollItemToTop(_ key: String)
     func refreshHoverCard()
 }
 
