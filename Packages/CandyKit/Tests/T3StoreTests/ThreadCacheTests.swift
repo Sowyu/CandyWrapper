@@ -58,6 +58,22 @@ import Testing
         #expect(cache.fileURL(ThreadCache.Key(environmentId: "env/1", threadId: "t")) == cache.fileURL(ThreadCache.Key(environmentId: "env_1", threadId: "t")))
     }
 
+    /// LZFSE files from before the LZ4 format go at the next write.
+    @Test func aWriteRemovesOldLZFSEFiles() async throws {
+        let dir = Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let p = try #require(try Self.settled().first?.projection)
+        let cache = ThreadCache(directory: dir)
+        let key = ThreadCache.Key(environmentId: "env-1", threadId: "a")
+        let old = cache.fileURL(key).deletingLastPathComponent().appending(path: "b.lzfse")
+        try FileManager.default.createDirectory(at: old.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(count: 64).write(to: old)
+        await cache.offer(key, sequence: 1, projection: p, history: ThreadHistoryMeta())
+        await cache.flush(key)
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(cache.load(key) != nil)
+    }
+
     @Test func staysUnderItsByteLimitDroppingTheLeastRecentlyUsed() async throws {
         let dir = Self.tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
