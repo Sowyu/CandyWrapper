@@ -231,7 +231,7 @@ public final class AddEnvironmentFormView: DSView {
             var i = BoxStyle()
             i.radius = 8
             i.border = isSelected ? Themed.color(\.primary, 0.3) : Themed.color(\.border, 0.7)
-            i.fill = isSelected ? Themed.color(\.primary, 0.1) : Themed.color(\.background)
+            i.fill = isSelected ? Themed.color(\.primary, 0.1) : WindowGlass.paneFill
             iconBox.boxStyle = i
             icon.strokeColor = isSelected ? Themed.color(\.primary) : state.hovered ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
         }

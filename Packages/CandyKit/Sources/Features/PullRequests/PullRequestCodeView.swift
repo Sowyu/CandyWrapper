@@ -323,7 +323,7 @@ public final class PullRequestCodeView: DSView {
     }
 
     public override func updateLayer() {
-        toolbarFill.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        toolbarFill.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         orphanRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         counts.color = Themed.color(\.mutedForeground)

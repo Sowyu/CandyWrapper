@@ -70,7 +70,7 @@ final class ThemeEditorPanelView: DSView {
         // ponytail: `dialog-glass` blurs what is behind at --glass-opacity; drawn as solid --background like DialogView
         var box = BoxStyle()
         box.radius = 12
-        box.fill = Themed.color(\.background)
+        box.fill = WindowGlass.paneFill
         box.border = Themed.pick(light: Themed.color(\.contrastForeground, 0.1), dark: Themed.white(0.08))
         box.shadows = [
             BoxShadow(y: 1, color: Themed.pick(light: .clear, dark: Themed.white(0.04)), inset: true),
@@ -854,7 +854,7 @@ final class ThemeMonoFieldBox: DSView {
     private func restyle() {
         var box = BoxStyle()
         box.radius = 8
-        box.fill = Themed.color(\.background)
+        box.fill = WindowGlass.paneFill
         box.border = Themed.color(\.input)
         decoration.boxStyle = box
     }

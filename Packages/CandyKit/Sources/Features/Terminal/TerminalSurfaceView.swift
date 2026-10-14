@@ -120,7 +120,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     /// Resolve under the view's appearance: SwiftTerm stores plain RGB.
     func theme(dark: Bool) -> Theme {
         let fixed = { (color: NSColor) -> NSColor in NSColor(cgColor: color.cgColor(in: self)) ?? color }
-        return Theme(background: fixed(Themed.color(\.background)), foreground: fixed(Themed.color(\.foreground)),
+        return Theme(background: fixed(WindowGlass.pick(stock: Themed.color(\.background), frost: .clear)), foreground: fixed(Themed.color(\.foreground)),
                      cursor: dark ? NSColor(srgbRed: 180 / 255, green: 203 / 255, blue: 1, alpha: 1)
                                   : NSColor(srgbRed: 38 / 255, green: 56 / 255, blue: 78 / 255, alpha: 1),
                      selection: dark ? NSColor(srgbRed: 180 / 255, green: 203 / 255, blue: 1, alpha: 0.25)

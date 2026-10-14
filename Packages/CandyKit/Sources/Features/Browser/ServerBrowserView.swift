@@ -606,7 +606,7 @@ final class OverlayCard: DSView {
         super.layout()
         var style = BoxStyle()
         style.radius = 10
-        style.fill = Themed.color(\.background)
+        style.fill = WindowGlass.paneFill
         style.border = Themed.color(\.border)
         style.shadows = [BoxShadow(y: 10, blur: 15, spread: -3, color: Themed.black(0.1)), BoxShadow(y: 4, blur: 6, spread: -4, color: Themed.black(0.1))]
         decoration.boxStyle = style

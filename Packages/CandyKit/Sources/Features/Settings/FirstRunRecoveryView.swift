@@ -24,7 +24,7 @@ public final class FirstRunRecoveryView: DSView {
         subviews.forEach { $0.isHidden = reason == .pending }
         needsLayout = true
     }
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
     public override func layout() {
         super.layout()
         let y = (bounds.height - 112) / 2

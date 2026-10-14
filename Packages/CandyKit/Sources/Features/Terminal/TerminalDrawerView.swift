@@ -119,7 +119,7 @@ public final class TerminalDrawerView: DSView {
 
     public override func updateLayer() {
         // The split container is `bg-(--terminal-background)`, the app's background.
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.pick(stock: Themed.color(\.background), frost: WindowGlass.denseFill).cgColor(in: self)
         // Glass Native: T3's `border-border/80` edge (6% white in dark) disappears where the frost meets the solid
         // terminal, so the edge is 12% white in dark and 10% black in light, the user bubble's hairline strength.
         let edge = nativeChrome ? Themed.pick(light: NSColor.black.withAlphaComponent(0.1), dark: NSColor.white.withAlphaComponent(0.12))
@@ -242,7 +242,7 @@ public final class TerminalActionCluster: DSView {
     public override func updateLayer() {
         var style = BoxStyle()
         style.radius = 8
-        style.fill = Themed.color(\.background)
+        style.fill = WindowGlass.paneFill
         style.border = Themed.color(\.border, 0.8)
         // `shadow-xs`: 0 1px 2px rgb(0 0 0 / 5%).
         style.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]

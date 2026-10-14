@@ -177,7 +177,7 @@ public final class InputGroupView: DSView {
             box.border = s.focused ? (s.invalid ? Themed.color(\.destructive, 0.64) : Themed.color(\.ring))
                 : (s.invalid ? Themed.color(\.destructive, 0.36) : .clear)
             if s.focused {
-                box.fill = Themed.color(\.background)
+                box.fill = WindowGlass.paneFill
             } else if s.hovered {
                 box.fill = Themed.color(\.muted, 0.4)
             }

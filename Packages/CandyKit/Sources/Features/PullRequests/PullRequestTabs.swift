@@ -734,7 +734,7 @@ final class CommentCard: DSView, FocusWithinObserver {
         chevron.strokeColor = Themed.color(\.mutedForeground)
         location.color = Themed.color(\.mutedForeground)
         outdated.color = Themed.color(\.mutedForeground)
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         headFill.backgroundColor = Themed.color(\.muted, 0.25).cgColor(in: self)
         login.color = Themed.color(\.foreground)
         time.color = Themed.color(\.mutedForeground)
@@ -877,7 +877,7 @@ final class TimelineMarker: DSView {
         icon?.frame = NSRect(x: 9, y: 9, width: 14, height: 14)
     }
     override func updateLayer() {
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         icon?.strokeColor = Themed.color(\.mutedForeground)
     }
 }

@@ -107,7 +107,7 @@ public final class CommitSummaryView: BoxView {
         super.init(frame: .zero)
         var box = BoxStyle()
         box.radius = 14
-        box.fill = Themed.pick(light: Themed.color(\.background), dark: Themed.white(0.035))
+        box.fill = Themed.pick(light: WindowGlass.paneFill, dark: Themed.white(0.035))
         box.shadows = [BoxShadow(spread: 1, color: Themed.pick(light: Themed.black(0.05), dark: Themed.white(0.05)))]
         boxStyle = box
         branchName.text = branch ?? "(detached HEAD)"
