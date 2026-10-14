@@ -32,6 +32,24 @@ struct RightPanelTabDragTests {
                                   windowNumber: tab.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
     }
 
+    /// Glass Native at 1100 pt: the detail beside the 320 pt sidebar is 780 wide and the panel 420. Three tabs fit
+    /// left of the toolbar's toggles without the overflow arrows, as they do in classic.
+    @Test func nativeStripFitsThreeTabsAtTheNarrowDefault() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 780, height: 800))
+        panel.hidesCustomChrome = true
+        panel.referenceViewportWidth = 1100
+        window.contentView = panel
+        panel.mutatePanel { $0.open(.diff); $0.openTerminal("term-1"); $0.open(.files); $0.activate("diff"); return [] }
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.rightPanel.frame.width == 420)
+        let shown = tabs(panel.rightPanel)
+        let strip = try #require(shown.first?.superview)
+        #expect(shown.count == 3)
+        #expect(shown.allSatisfy { $0.frame.maxX <= strip.bounds.width })
+        #expect(strip.convert(strip.bounds, to: panel.rightPanel).maxX <= panel.rightPanel.bounds.width - RightPanelView.nativeToolbarReserve)
+    }
+
     @Test func dragReordersAndReportsTheNewOrder() throws {
         let (window, panel) = makePanel()
         _ = window

@@ -9,8 +9,9 @@ import T3Store
 final class RightPanelView: DSView {
     static let tabBarHeight: CGFloat = 52
     /// Room the tab strip leaves at its right: classic's window controls, or Glass Native's toolbar toggles with
-    /// Maximize and the 8 pt toolbar margin.
-    static let classicReserve: CGFloat = 112, nativeToolbarReserve: CGFloat = 176
+    /// Maximize (four 28 pt segments, 140 pt on the toolbar), the toolbar's 10 pt margin and an 8 pt gap. At the
+    /// narrowest default width, 420 pt beside the native sidebar, three tabs fit as they do in classic.
+    static let classicReserve: CGFloat = 112, nativeToolbarReserve: CGFloat = 158
     var trailingReserve: CGFloat = classicReserve { didSet { if trailingReserve != oldValue { needsLayout = true } } }
     /// `PREVIEW_PANEL_DEFAULT_WIDTH`, `_MIN_WIDTH` and the sibling column's floor
     /// (usePreviewPanelInlineSize.ts).
