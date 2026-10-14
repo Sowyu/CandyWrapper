@@ -137,6 +137,7 @@ public final class CommandPaletteController {
 
     /// Rebuilds the rows from the source for the current view and query.
     public func refresh() {
+        refreshPending = false
         if let mode, let custom = mode.custom {
             if view.inputAccessory !== custom.accessory { view.inputAccessory = custom.accessory }
             displayed = []
@@ -241,7 +242,19 @@ public final class CommandPaletteController {
         // `nextQuery === "" && currentView?.initialQuery`: an empty initial query keeps its page.
         if mode == nil, text.isEmpty, !(stack.last?.initialQuery ?? "").isEmpty { pop(); return }
         onQueryChange?(text)
-        refresh()
+        // The typed glyph commits first and the rows follow on the next turn, so a key never waits for the search
+        // (14 to 30 ms a key with 1,000 threads), and keys that arrive together search once.
+        if !refreshPending {
+            refreshPending = true
+            AfterCommit.run { [weak self] in self?.flushRefresh() }
+        }
+    }
+
+    private var refreshPending = false
+
+    /// A search still waiting from the last key runs now, so Enter, the arrows and jumps act on its rows.
+    func flushRefresh() {
+        if refreshPending { refresh() }
     }
 
     private func setQuery(_ text: String) {
@@ -272,6 +285,7 @@ public final class CommandPaletteController {
     /// The input's editing commands: arrows move the highlight, Return runs it, Backspace on an
     /// empty query leaves a submenu, Escape closes (CommandPalette.tsx:3160-3201).
     func handleCommand(_ selector: Selector) -> Bool {
+        flushRefresh()
         if let custom = mode?.custom, selector != #selector(NSResponder.cancelOperation(_:)) { return custom.onCommand(selector) }
         switch selector {
         case #selector(NSResponder.moveDown(_:)):
@@ -330,6 +344,7 @@ public final class CommandPaletteController {
     /// `thread.jump.N` runs the item showing that shortcut. Returns true when used.
     public func handleJump(_ command: String) -> Bool {
         guard Keymap.jumpIndex(command, prefix: "thread.jump.") != nil else { return false }
+        flushRefresh()
         if let item = flat.first(where: { $0.shortcutCommand == command }) { execute(item) }
         return true
     }

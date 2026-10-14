@@ -47,6 +47,20 @@ import DesignSystem
         #expect(values(groups) == ["a"])
     }
 
+    /// The ASCII fast path gives what the Unicode path gives.
+    @Test func asciiNormalizeMatchesUnicodePath() {
+        func slow(_ s: String) -> String {
+            String(String.UnicodeScalarView(s.decomposedStringWithCompatibilityMapping.unicodeScalars
+                .filter { !CharacterSet.nonBaseCharacters.contains($0) })).lowercased()
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        for s in ["", "   ", "Update Deps ROMEO 200", "\tA\n\r b\u{0B}\u{0C}c  ", "~!@#$%^&*()_+{}|:\"<>?`-=[]\\;',./ Z", "x"] {
+            #expect(PaletteSearch.normalizeASCII(s) == slow(s))
+        }
+        #expect(PaletteSearch.normalizeASCII("Café") == nil)
+        #expect(PaletteSearch.normalizeASCII("a\u{1F}b") == nil)
+    }
+
     @Test func actionsFilterAndRecentThreads() {
         let root = [
             PaletteGroup(value: "actions", label: "Actions", items: [action("new", ["new thread"]), action("usage", ["usage"])]),
@@ -115,6 +129,17 @@ import DesignSystem
         let files = [PaletteGroup(value: "files", label: "demo-repo", items: [action("a.py", ["a.py"]) {}, action("b.md", ["b.md"]) {}])]
         palette.setMode(.init(name: "files", placeholder: "Search files\u{2026}", footerActionLabel: "Open file") { _ in (files, "") })
         #expect(palette.view.highlightedIndex == 0)
+    }
+
+    /// A key's search waits for the glyph to commit, but Enter right after it runs the row that search finds.
+    @Test func enterAfterTypingRunsTheFilteredRow() {
+        var ran: [String] = []
+        let root = [PaletteGroup(value: "actions", label: "Actions", items: [action("alpha", ["Alpha"]) { ran.append("alpha") },
+                                                                             action("beta", ["Beta"]) { ran.append("beta") }])]
+        let palette = CommandPaletteController(source: .init(rootGroups: { root }))
+        palette.view.input.onChange?("bet")
+        _ = palette.handleCommand(#selector(NSResponder.insertNewline(_:)))
+        #expect(ran == ["beta"])
     }
 
     @Test func jumpRunsTheItemShowingThatShortcut() {

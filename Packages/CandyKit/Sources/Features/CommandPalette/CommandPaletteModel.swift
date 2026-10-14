@@ -92,10 +92,36 @@ public enum PaletteSearch {
 
     /// `normalizeSearchText` (lib/utils.ts:22-24): NFKD without marks, lowercased, single spaces.
     public static func normalize(_ value: String) -> String {
+        // Printable ASCII, tabs and line breaks have nothing to decompose: lowercase and collapse spaces in one
+        // pass. The palette runs this over every thread's terms on each key, and the Unicode path took 0.4 s
+        // for 1,000 threads.
+        if let ascii = normalizeASCII(value) { return ascii }
         let folded = value.decomposedStringWithCompatibilityMapping.unicodeScalars
             .filter { !CharacterSet.nonBaseCharacters.contains($0) }
         return String(String.UnicodeScalarView(folded)).lowercased()
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// `normalize` for text of bytes 0x09 to 0x0D and 0x20 to 0x7E, or nil for anything else.
+    static func normalizeASCII(_ value: String) -> String? {
+        var value = value
+        return value.withUTF8 { bytes -> String? in
+            var out = [UInt8]()
+            out.reserveCapacity(bytes.count)
+            var pendingSpace = false
+            for b in bytes {
+                switch b {
+                case 0x09...0x0D, 0x20:
+                    pendingSpace = !out.isEmpty
+                case 0x21...0x7E:
+                    if pendingSpace { out.append(0x20); pendingSpace = false }
+                    out.append(b >= 0x41 && b <= 0x5A ? b + 0x20 : b)
+                default:
+                    return nil
+                }
+            }
+            return String(decoding: out, as: UTF8.self)
+        }
     }
 
     /// `rankSearchFieldMatch` (CommandPalette.logic.ts:416-438).
