@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if handOffToRunningInstance() { return }
+        if !CommandLine.arguments.contains("--server") { ServerController.prefetchCachedSidebar() }
         // The View menu carries its own Toggle Full Screen (DesktopApplicationMenu.ts:258-268).
         UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")
         NSApp.mainMenu = makeMainMenu()

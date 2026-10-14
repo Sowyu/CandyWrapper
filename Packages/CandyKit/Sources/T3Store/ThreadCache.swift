@@ -15,7 +15,9 @@ import T3Protocol
 /// One file per thread, `<dir>/<environment>/<thread>.lzfse`: the typed projection as JSON,
 /// without the turn items the visible rows already carry (like the server's compact snapshot),
 /// LZFSE compressed. Nothing stays in memory: a file is read, decoded and dropped when its thread
-/// opens. The projection holds no credentials; tokens live in the Keychain.
+/// opens. The projection holds no credentials; tokens live in the Keychain. Files are written without
+/// a sync (`CacheFile`); a file a power loss tore fails to decode, `load` removes it, and the thread
+/// opens from the network.
 public actor ThreadCache {
     public static let currentVersion = 1
 
@@ -176,8 +178,7 @@ public actor ThreadCache {
         }
         let fm = FileManager.default
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
-        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        guard (try? CacheFile.write(data, to: url)) != nil else { return }
         evict()
     }
 

@@ -126,6 +126,44 @@ What made images slow: a message's image cell joined its window before it had a 
 
 The slow link is bandwidth-bound: 16 MB at 20 Mbit/s takes 6.4 s, and T3's attachment route serves only the original bytes (apps/server/src/http.ts:395-423), so a faster first open there would need a thumbnail route on the server. Sent attachment cells and draft tiles keep their decoded image in a 48 MB `NSCache`, which the system empties under memory pressure. The fetched copies on disk stay under 512 MB, with the least recently read dropped at launch.
 
+## The app's own caches on a slow disk (2026-10-14)
+
+T3 shipped seven SQLite fixes on 2026-10-14. Here is what each changed and what it means for CandyWrapper's own storage:
+
+- `a74ce48f9` (#19205) sets `synchronous = NORMAL` in WAL mode, so a commit no longer fsyncs the WAL on the event loop. An app crash loses nothing, and a power loss can roll back commits since the last checkpoint.
+- `614b432a7` (#19304) sets `checkpoint_fullfsync = ON`, because checkpoints are now the only sync and plain `fsync()` on macOS doesn't flush the drive cache.
+- `5fc1c5cb4` (#19324) runs checkpoints on a worker so a slow flush can't stall clients.
+- `8659fcf14` (#19226) moves thread list reads to a reader worker, off the event loop and the writer.
+- `4cd0076ec` (#19305) runs any statement that binds more than 64 KiB on a throwaway statement, so cached statements don't pin large payloads.
+- `fb8d0fc19` (#18471) runs `PRAGMA optimize = 0x10012` on open, so the planner has index statistics.
+- `acb90279e` (#19310) closes the Cursor provider's SQLite handles after each call.
+
+CandyWrapper opens no SQLite database of its own. `RuntimeChoice.databaseMigration` reads one row from the server's database read only, closes it with `defer`, and runs only while no server owns the home. `URLSession.shared` keeps CFNetwork's `Cache.db` in `~/Library/Caches/<bundle id>`, which is already WAL and under 400 KB. The app's own stores are files:
+
+- `ShellCache` holds one JSON file per environment, about 1 MB for 1,580 threads.
+- `ThreadCache` holds one LZFSE file per thread, 32 MB in total.
+- The attachment copies in `~/Library/Caches/CandyWrapper/attachments` are pruned once at launch on a utility queue.
+- `PromptStash`, `EnvironmentCatalog` and `RuntimeStore` hold user data that can't be rebuilt, and they write rarely, so they keep their sync.
+
+Method: a 2 GB APFS sparse image throttled with `sudo dmc start /Volumes/<name> "5400 HDD"` (26 ms access time, 100 MB/s). `CW_DISK_BENCH=<dir on the volume> swift test -c release -Xswiftc -enable-testing --filter DiskCacheBenchmarks` writes and reads the M10 load's 1,580-thread shell snapshot and the huge thread's window, the latter into a cache already holding 2,000 small files. A second run with `CW_DISK_BENCH_PHASE=load`, after `hdiutil detach` and `attach` and `dmc start` again, reads cold. `sudo fs_usage -w -f filesys swiftpm-testing-helper` counted the syscalls.
+
+`Data.write` calls `fsync` on every write, atomic or not, which is the same per-commit sync T3 removed. The 1 MB shell snapshot spent 113 ms of its 128 ms write in `fsync`, and the first write of a run waited 8.7 s while the disk flushed. Quitting waits for that write (`ServerController.shouldTerminate`), so a slow disk held up quit. Both caches now write through `CacheFile`, which writes a temporary file beside the target and renames it over without a sync. A power loss can leave the newest file empty or torn. `ThreadCache.load` fails to decompress or decode it, removes it and the thread opens from the network. `ShellCache.load` returns nil, the sidebar waits for the server, and the next save replaces the file. `CacheFileTests` checks both with zeroed, halved and empty files.
+
+The cached sidebar was read and decoded on the main thread before the window's first frame (`ServerController.showCached`). `AppDelegate` now starts that read on a background thread at the top of `applicationDidFinishLaunching`, and `showCached` takes the result, waiting only for what is left. Building the menu, theme and window between the two took 68 to 100 ms in three launches of a Debug build, more than the 51 ms cold read, so the read no longer delays the first frame.
+
+| 5400 rpm profile | Before (a88adc9) | After |
+|---|---|---|
+| Shell cache write, 1,580 threads | 128 ms, first 8.7 s | 15.6 ms |
+| Thread cache write, huge window, warm | 80 ms | 61 ms |
+| Thread cache write, huge window, cold metadata | 96 ms | 96 ms |
+| `fsync` calls per cache write | 1 | 0 |
+| Shell cache load, warm / cold, on the main thread | 16 / 50 ms | 16 / 51 ms, overlapped with launch |
+| Thread cache load, warm / cold, on the `ThreadStore` actor | 44 / 66 ms | 45 / 67 ms |
+
+The cold thread cache write is still 96 ms. Its extra 35 ms is `evict()` listing the cache's directory with cold metadata, off the main thread at utility priority, at most once per 10 s per changing thread. A running byte total would skip that listing; add it if writes show up in a profile. The cold thread load costs 20 ms of disk on top of 44 ms of decompressing and decoding, and the decode is the larger part on any disk.
+
+On the internal SSD `PerfBenchmarks/hugeThreadCache` gave 54.7 ms to write and 45.7 ms to load, against 55.5 and 44.2 ms in the fff9d87 run. Three `scripts/perf-review` runs of this change were stopped when the user's Origin energy runs took the machine, so it has no full review yet.
+
 ## Opening a thread (2026-10-10)
 
 `CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.

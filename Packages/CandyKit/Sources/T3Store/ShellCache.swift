@@ -6,7 +6,9 @@ import T3Protocol
 /// `snapshotSequence`.
 ///
 /// Saves are debounced: `noteChanged` records the latest snapshot, and one sleeping task writes
-/// it once changes have been quiet for `quietPeriod`. Nothing runs while nothing changes.
+/// it once changes have been quiet for `quietPeriod`. Nothing runs while nothing changes. Files are
+/// written without a sync (`CacheFile`); one a power loss tore fails to decode, loads as nil, and the
+/// next save replaces it.
 public actor ShellCache {
     public struct Entry: Codable, Sendable, Equatable {
         public static let currentVersion = 1
@@ -50,6 +52,35 @@ public actor ShellCache {
         return entry
     }
 
+    /// Starts `load` on a background thread, so the read and the decode overlap the app building its
+    /// window. A 1,580-thread snapshot took 16 ms on the main thread warm and 50 ms cold on a 5400 rpm disk.
+    public nonisolated func prefetch(environmentId: String) -> Prefetch {
+        Prefetch(cache: self, environmentId: environmentId)
+    }
+
+    public final class Prefetch: @unchecked Sendable {
+        public let environmentId: String
+        private let done = DispatchSemaphore(value: 0)
+        // Written once before `done` signals, read only after it.
+        private var entry: Entry?
+
+        init(cache: ShellCache, environmentId: String) {
+            self.environmentId = environmentId
+            // The main thread waits on this, so it runs at the main thread's priority.
+            DispatchQueue.global(qos: .userInteractive).async { [self] in
+                entry = cache.load(environmentId: environmentId)
+                done.signal()
+            }
+        }
+
+        /// The loaded entry, waiting for the read if it still runs.
+        public func take() -> Entry? {
+            done.wait()
+            done.signal()
+            return entry
+        }
+    }
+
     public func noteChanged(_ snapshot: ShellSnapshot, environmentId: String) {
         pending[environmentId] = snapshot
         lastChange = .now
@@ -88,7 +119,7 @@ public actor ShellCache {
         for (environmentId, snapshot) in batch {
             let entry = Entry(version: Entry.currentVersion, environmentId: environmentId, savedAt: Date(), snapshot: snapshot)
             guard let data = try? Self.encoder.encode(entry) else { continue }
-            try? data.write(to: fileURL(environmentId: environmentId), options: [.atomic])
+            try? CacheFile.write(data, to: fileURL(environmentId: environmentId))
         }
     }
 
