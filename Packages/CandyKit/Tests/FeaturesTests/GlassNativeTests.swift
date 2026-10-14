@@ -145,6 +145,19 @@ struct GlassNativeTests {
         window.contentViewController = nil
     }
 
+    /// View > Zoom scales a column's content in place, and the content leaves the column unscaled.
+    @Test func zoomScalesTheColumnsContent() {
+        let column = NativeColumnView(detail: false)
+        column.frame = NSRect(x: 0, y: 0, width: 300, height: 600)
+        let content = NSView()
+        column.content = content
+        column.scale = 1.2
+        column.layoutSubtreeIfNeeded()
+        #expect(abs(content.bounds.width - content.frame.width / 1.2) < 0.01)
+        NSView().addSubview(content)
+        #expect(content.bounds.size == content.frame.size)
+    }
+
     /// Classic's header keeps its panel toggles hidden while no thread shows, through layouts and a round trip
     /// to Glass Native, so they and the details shortcut stay off before a thread loads.
     @Test func classicHeaderTogglesStayHiddenWithoutAThread() {
