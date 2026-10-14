@@ -27,7 +27,8 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         for button in [project, parent] {
             button.isBordered = false
             button.target = self
-            button.font = .systemFont(ofSize: 14, weight: .regular)
+            // Every crumb is `font-medium`, the project in `text-muted-foreground` (WorkspaceBreadcrumb.tsx:52-57).
+            button.font = .systemFont(ofSize: 14, weight: .medium)
             button.contentTintColor = .secondaryLabelColor
             button.lineBreakMode = .byTruncatingTail
             addSubview(button)
@@ -134,7 +135,7 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
     /// As wide as its crumbs, up to 640, so the toolbar gives the title the room T3's header would.
     public override var intrinsicContentSize: NSSize {
         let views: [NSView] = [project, slash, parent, parentSlash, editor.isHidden ? title : editor]
-        let width = views.filter { !$0.isHidden }.reduce(CGFloat(0)) { $0 + ceil($1 === editor ? 240 : $1.intrinsicContentSize.width) + 6 }
+        let width = views.filter { !$0.isHidden }.reduce(CGFloat(0)) { $0 + ceil($1 === editor ? 240 : $1.intrinsicContentSize.width) + Self.gap }
         // Slack, because the toolbar rounds the item narrower than the sum by a few points.
         return NSSize(width: min(640, max(120, width + 24 + (favicon.isHidden ? 0 : 20))), height: 28)
     }
@@ -149,6 +150,9 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         placeCrumbs()
     }
 
+    /// The crumbs' `gap-3` (WorkspaceBreadcrumb.tsx:16); the favicon keeps its `gap-1.5` to the name.
+    private static let gap: CGFloat = 12
+
     private func placeCrumbs() {
         var x: CGFloat = 0
         let h = bounds.height
@@ -157,7 +161,7 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
             let size = view.intrinsicContentSize
             let w = min(ceil(size.width), max(0, maxWidth))
             view.frame = NSRect(x: x, y: ((h - size.height) / 2).rounded(), width: w, height: size.height)
-            x += w + 6
+            x += w + Self.gap
         }
         let room = bounds.width
         if !favicon.isHidden {
@@ -176,8 +180,9 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
     }
 }
 
-/// The breadcrumb's title: semibold, a chevron after it, a click opens the thread menu (ThreadHeaderTitleView's
-/// clicks, sent through the header's `onThreadMenu`).
+/// The breadcrumb's title: medium, a chevron after it that shows on hover only (ChatHeader.tsx:346-350, `opacity-0`
+/// until `group-hover`), a click opens the thread menu (ThreadHeaderTitleView's clicks, sent through the header's
+/// `onThreadMenu`).
 final class NativeBreadcrumbTitle: NSView {
     var onClick: ((NSEvent) -> Void)?
     var isInteractive = true
@@ -195,7 +200,8 @@ final class NativeBreadcrumbTitle: NSView {
         label.lineBreakMode = .byTruncatingTail
         chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
-        chevron.contentTintColor = .tertiaryLabelColor
+        chevron.contentTintColor = .secondaryLabelColor
+        chevron.alphaValue = 0
         addSubview(label)
         addSubview(chevron)
         setAccessibilityRole(.button)
@@ -224,6 +230,14 @@ final class NativeBreadcrumbTitle: NSView {
         label.frame = NSRect(x: 0, y: 0, width: w, height: bounds.height)
         chevron.frame = NSRect(x: w + 3, y: (bounds.height - 10) / 2, width: 10, height: 10)
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { chevron.alphaValue = 1 }
+    override func mouseExited(with event: NSEvent) { chevron.alphaValue = 0 }
 
     /// A single click waits out the double-click interval before the menu opens, as the classic title does.
     private var pending: DispatchWorkItem?
