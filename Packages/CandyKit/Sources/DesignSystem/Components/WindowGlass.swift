@@ -1,8 +1,8 @@
 import AppKit
 
-/// CandyWrapper's Glass theme (not in T3): the stock palette over a window the system frosts. A behind-window
-/// `NSVisualEffectView` under the whole layout does the blur in the window server, so the app never computes
-/// it and nothing here redraws when the desktop behind changes. The base surfaces (main panel and sidebar)
+/// CandyWrapper's Glass theme (not in T3): the stock palette over a frosted window. Under the whole layout sits the
+/// desktop picture, blurred once (`WallpaperBackdropView`), or the window server's live blur where that can't be
+/// used, so nothing here redraws when the desktop behind changes. The base surfaces (main panel and sidebar)
 /// paint their stock color at `frostBaseAlpha`, and views that repeat the main background over them go clear, so one
 /// tint covers the blur everywhere. Popovers, menus and dialogs keep their own fills.
 public enum WindowGlass {
@@ -249,13 +249,14 @@ public enum WindowGlass {
     @MainActor
     public static func isActive(for view: NSView) -> Bool { ThemeRuntime.isGlass(dark: view.effectiveAppearance.isDark) }
 
-    /// Puts the frost under `view`'s subviews while Glass frosts its window and takes it out otherwise. Pass the
+    /// Puts the frost under `view`'s subviews while Glass frosts its window and takes it out otherwise: the
+    /// pre-blurred desktop picture, or the real blur where that can't be used (`WallpaperBackdropView`). Pass the
     /// backdrop it returned last time.
     @MainActor
-    public static func syncBackdrop(_ backdrop: WindowGlassBackdropView?, in view: NSView) -> WindowGlassBackdropView? {
+    public static func syncBackdrop(_ backdrop: WallpaperBackdropView?, in view: NSView) -> WallpaperBackdropView? {
         let on = view.window != nil && isActive(for: view)
         if on, backdrop == nil {
-            let made = WindowGlassBackdropView(frame: view.bounds)
+            let made = WallpaperBackdropView(frame: view.bounds)
             view.addSubview(made, positioned: .below, relativeTo: nil)
             return made
         }
@@ -267,7 +268,7 @@ public enum WindowGlass {
     }
 }
 
-/// The frost itself: a behind-window visual effect view that keeps the system's material and blur but paints
+/// The real frost, `WallpaperBackdropView`'s fallback: a behind-window visual effect view that keeps the system's material and blur but paints
 /// nothing of its own on top. The window server composites it; it has no backing store in this process.
 public final class WindowGlassBackdropView: NSVisualEffectView {
     public override init(frame frameRect: NSRect) {
