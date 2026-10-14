@@ -128,6 +128,7 @@ public enum LocalServerLauncher {
                     "--base-dir", config.home.path, "--bootstrap-fd", "3"]
         let pid = try spawn(executable: config.binary.path, arguments: args, environment: config.environment(),
                             fd3Payload: envelope, stderrPath: config.logFile?.path)
+        LaunchTiming.mark("server spawned")
         let watcher = ChildExitWatcher(pid: pid)
         guard let processIdentity = ProcessIdentity.of(pid) else {
             _ = await watcher.waitForExit(timeout: .seconds(1))
@@ -136,6 +137,7 @@ public enum LocalServerLauncher {
         let origin = URL(string: "http://127.0.0.1:\(port)")!
         do {
             let descriptor = try await waitForDescriptor(origin: origin, watcher: watcher, timeout: config.readinessTimeout)
+            LaunchTiming.mark("server answered")
             guard descriptor.isCompatible else {
                 throw LocalServerLaunchError.incompatible("orchestration protocol \(descriptor.protocolVersion)")
             }
@@ -277,15 +279,24 @@ public enum LocalServerLauncher {
 
     private static func waitForDescriptor(origin: URL, watcher: ChildExitWatcher, timeout: Duration) async throws -> EnvironmentDescriptor {
         var http = EnvironmentHTTP(baseURL: origin)
-        http.timeout = 2
+        // The server accepts connections a moment before it can answer them, and a request that lands
+        // in that gap is never answered: it waits out its whole timeout. With 2 s, spawn to answer took
+        // 2.6 to 2.9 s on a large home, 0.9 s with short probes (docs/perf/README.md, "Server load and
+        // cold start"). A ready server answers this in a few ms, so probes start at 250 ms and double
+        // after each timeout up to 2 s, for a server too busy to answer quickly.
+        // T3's desktop polls every 100 ms with a 1 s probe timeout (DesktopBackendManager.ts:66-68).
+        http.timeout = 0.25
         let deadline = ContinuousClock.now + timeout
         let slowAfter = ContinuousClock.now + .seconds(10)
-        // ponytail: 150 ms readiness poll during startup only, like the desktop's own loop
-        // (DesktopBackendManager.ts:378-399), then 1 s once a large database makes startup slow.
-        // A stdout "ready" parser would save a few ms.
+        // ponytail: 150 ms readiness poll during startup only, then 1 s once a large database makes
+        // startup slow. A stdout "ready" parser would save a few ms.
         while ContinuousClock.now < deadline {
             if let status = watcher.exitStatus { throw LocalServerLaunchError.exitedDuringStartup(status) }
-            if let descriptor = try? await http.descriptor() { return descriptor }
+            do {
+                return try await http.descriptor()
+            } catch EnvironmentHTTPError.timedOut {
+                http.timeout = min(http.timeout * 2, 2)
+            } catch {}
             try await Task.sleep(for: ContinuousClock.now < slowAfter ? .milliseconds(150) : .seconds(1))
         }
         throw LocalServerLaunchError.notReady

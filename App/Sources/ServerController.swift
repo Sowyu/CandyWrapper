@@ -93,6 +93,7 @@ final class ServerController {
             defer { connecting = false }
             do {
                 guard let (origin, descriptor, token) = try await resolveServer() else { return }
+                LaunchTiming.mark("server resolved")
                 let id = descriptor.environmentId
                 let key = origin.absoluteString + " " + token
                 guard key != sessionKey || session == nil else { return }
@@ -199,6 +200,12 @@ final class ServerController {
                 MainActor.assumeIsolated { self?.windowChanged() }
             })
         }
+        // The server leaves background priority while the app is frontmost (ServerLifecycle rule 6).
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: NSApp, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reportActivity() }
+            })
+        }
     }
 
     private func windowChanged() {
@@ -212,6 +219,7 @@ final class ServerController {
         let activity = LocalServerLifecycle.Activity(
             windowVisible: window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false,
             windowKey: window?.isKeyWindow ?? false,
+            appActive: NSApp.isActive,
             activeRuns: threads.count { $0.activeRunId != nil },
             pendingRequests: threads.count { $0.pendingRuntimeRequest != nil },
             // ponytail: no terminals yet, count them when the terminal drawer lands
@@ -494,23 +502,5 @@ final class ServerController {
         default: alert.informativeText = ConnectionFailure.classify(error).detail
         }
         alert.beginSheetModal(for: window)
-    }
-}
-
-/// Development: with CANDY_LAUNCH_TIMING set, prints each launch milestone once to stderr as
-/// seconds since the process started (docs/benchmarks.md).
-@MainActor
-enum LaunchTiming {
-    private static let enabled = ProcessInfo.processInfo.environment["CANDY_LAUNCH_TIMING"] != nil
-    private static var seen = Set<String>()
-
-    static func mark(_ label: String) {
-        guard enabled, seen.insert(label).inserted else { return }
-        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.stride
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return }
-        let start = info.kp_proc.p_un.__p_starttime
-        let elapsed = Date().timeIntervalSince1970 - (Double(start.tv_sec) + Double(start.tv_usec) / 1e6)
-        FileHandle.standardError.write(Data(String(format: "launch-timing %@ %.3f s\n", label, elapsed).utf8))
     }
 }

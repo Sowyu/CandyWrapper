@@ -192,6 +192,16 @@ struct ServerLifecycleTests {
         #expect(await eventually { await rec.priority.map(\.1) == [true, false, true] })
     }
 
+    @Test func runsAtNormalPriorityWhileTheAppIsActive() async throws {
+        let lc = make()
+        _ = try await lc.ensureRunning()
+        #expect(await eventually { await rec.priority.map(\.1) == [true] })
+        await lc.update(.init(windowVisible: true, windowKey: true, appActive: true))
+        #expect(await eventually { await rec.priority.map(\.1) == [true, false] })
+        await lc.update(.init(windowVisible: true))
+        #expect(await eventually { await rec.priority.map(\.1) == [true, false, true] })
+    }
+
     @Test func aFailedLaunchLeavesItStoppedAndTheNextActionRetries() async throws {
         await rec.set(failNextLaunch: true)
         let lc = make()

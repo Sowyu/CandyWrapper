@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quitOnSIGTERM()
         DispatchQueue.global(qos: .utility).async { ComposerController.pruneAttachmentCache() }
         showMainWindow()
+        LaunchTiming.mark("window built")
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
         if CommandLine.arguments.contains("--pull-request-sample") { PullRequestsGallery.openWindow() }
         NSApp.activate()
