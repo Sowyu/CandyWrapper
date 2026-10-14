@@ -2,6 +2,14 @@
 # Exits 1 when building would eat disk the user needs: under 40 GB free, or over 25 GB of CandyWrapper
 # builds in /tmp. Warns while a Zen browser build (mach) runs, since both then build slower.
 # Run it before building and before launching agents. scripts/build-test-app runs it.
+# While Origin's energy harness measures, it holds the screen lock as origin-run for up to about 6
+# minutes, and a build in that window spoils the measurement, so this waits for it first.
+# ponytail: fixed 10 minute cap, raise it if Origin's runs get longer.
+for i in {1..60}; do
+  [[ "$(cut -d' ' -f1 /tmp/cw-screen.lock/owner 2>/dev/null)" == origin-run ]] || break
+  (( i == 1 )) && print "an Origin energy measurement has the screen: waiting for it, at most 10 minutes"
+  sleep 10
+done
 free=$(df -g /System/Volumes/Data | awk 'NR==2 {print $4}')
 ours=$(du -sk /tmp/cw-* 2>/dev/null | awk '{s+=$1} END {printf "%d", s/1048576}')
 mach=$(ps -axo command | grep -E '(^|/)mach (build|package)|/mach build' | grep -v grep | wc -l | tr -d ' ')
