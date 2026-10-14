@@ -230,13 +230,25 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
 /// the size they are drawn (`CGImageSourceCreateThumbnailAtIndex`), so a 40 MP photo never sits
 /// in memory at full size.
 public enum ComposerImageIO {
-    /// `MAX_DIMENSION` for re-encoded images.
-    static let maxDimension: CGFloat = 2048
+    /// `IMAGE_ATTACHMENT_MAX_EDGE` (client-runtime imageAttachmentSize.ts, adb04202b): the longest edge a
+    /// PNG or JPEG attachment keeps, and `MAX_DIMENSION` for re-encoded images. Anthropic rejects an image
+    /// over 2000 px on a side once a request holds more than 20 images, so one large paste broke every
+    /// later Claude request in its thread.
+    static let maxDimension: CGFloat = 2000
     /// `QUALITY_STEPS`, then `FALLBACK_SCALE_STEPS`.
     static let qualitySteps: [CGFloat] = [0.92, 0.85, 0.78, 0.68]
     static let fallbackScales: [CGFloat] = [0.75, 0.55]
     /// `MAX_STASH_IMAGE_DATA_URL_CHARS`.
     public static let maxStashImageDataURLChars = 1_300_000
+
+    /// `downscalableImageMimeType`: the formats re-encoded in place. GIF, WebP and SVG stay as attached.
+    static func downscalableType(_ mimeType: String) -> UTType? {
+        switch mimeType.lowercased() {
+        case "image/png": .png
+        case "image/jpeg", "image/jpg": .jpeg
+        default: nil
+        }
+    }
 
     /// Pixel size without decoding.
     public static func pixelSize(_ url: URL) -> CGSize? {
@@ -270,36 +282,51 @@ public enum ComposerImageIO {
 
     public enum PrepareFailure: Error, Equatable { case tooLarge, unreadable }
 
-    /// `prepareImageForAttachment`: HEIC and HEIF become JPEG; an image over `maxBytes` is
-    /// re-encoded down the quality ladder, then at smaller scales. Files within the limit pass
-    /// through byte for byte. Returns the file to upload, its name and type.
+    /// `prepareImageForAttachment`: HEIC and HEIF become JPEG. A PNG or JPEG longer than `maxDimension`
+    /// is scaled to it in its own format, so a PNG keeps its transparency (`fitImageToMaxEdge`). An image
+    /// still over `maxBytes` is re-encoded down the quality ladder, then at smaller scales. Other files
+    /// within the limit pass through byte for byte. Returns the file to upload, its name and type.
     public static func prepare(_ url: URL, name: String, mimeType: String, maxBytes: Int, workDir: URL) async throws
         -> (url: URL, name: String, mimeType: String, sizeBytes: Int)
     {
         try await Task.detached(priority: .userInitiated) {
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             let heic = ComposerAttachmentRules.isHeic(name: name, mimeType: mimeType)
-            if !heic, size <= maxBytes { return (url, name, mimeType, size) }
+            let fitType: UTType? = heic ? .jpeg : downscalableType(mimeType)
+            let pixels = pixelSize(url)
+            let longSide = pixels.map { max($0.width, $0.height) }
+            let oversized = fitType != nil && (longSide ?? 0) > maxDimension
+            if !heic, !oversized, size <= maxBytes { return (url, name, mimeType, size) }
             if size > ComposerAttachmentRules.maxCompressibleSourceBytes { throw PrepareFailure.tooLarge }
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw PrepareFailure.unreadable }
-            // ponytail: re-encodes to JPEG (T3 prefers WebP, which ImageIO cannot write); transparency is lost on oversized PNGs
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), let longSide else { throw PrepareFailure.unreadable }
             let base = (name as NSString).deletingPathExtension.isEmpty ? "image" : (name as NSString).deletingPathExtension
-            let outName = base + ".jpg"
-            let out = workDir.appendingPathComponent(UUID().uuidString + ".jpg")
-            guard let pixels = pixelSize(url) else { throw PrepareFailure.unreadable }
-            let longSide = max(pixels.width, pixels.height)
-            // A HEIC first converts at full size and the first quality (`heicTo`); anything still
-            // over the limit walks the ladder at `MAX_DIMENSION` and below.
-            var passes: [(side: CGFloat, qualities: [CGFloat])] = heic ? [(longSide, [qualitySteps[0]])] : []
-            passes += ([1] + fallbackScales).map { (min(longSide, maxDimension) * $0, qualitySteps) }
-            for (side, qualities) in passes {
+            func image(side: CGFloat) throws -> CGImage {
                 let options: [CFString: Any] = [
                     kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                     kCGImageSourceThumbnailMaxPixelSize: max(1, Int(side)),
                 ]
                 guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw PrepareFailure.unreadable }
-                for quality in qualities {
-                    guard let data = encodeJPEG(image, quality: quality) else { throw PrepareFailure.unreadable }
+                return image
+            }
+            // A HEIC converts at the first quality (`heicTo`), then fits the edge like any JPEG; a PNG or JPEG
+            // over the edge is scaled in its own format.
+            if let fitType, heic || oversized {
+                let fitted = try image(side: min(longSide, maxDimension))
+                guard let data = encode(fitted, type: fitType, quality: qualitySteps[0]) else { throw PrepareFailure.unreadable }
+                if data.count <= maxBytes {
+                    let ext = fitType == .png ? "png" : "jpg"
+                    let out = workDir.appendingPathComponent(UUID().uuidString + "." + ext)
+                    try data.write(to: out)
+                    return (out, heic ? base + ".jpg" : name, fitType.preferredMIMEType ?? mimeType, data.count)
+                }
+            }
+            // ponytail: re-encodes to JPEG (T3 prefers WebP, which ImageIO cannot write); transparency is lost on oversized PNGs
+            let outName = base + ".jpg"
+            let out = workDir.appendingPathComponent(UUID().uuidString + ".jpg")
+            for scale in [1] + fallbackScales {
+                let scaled = try image(side: min(longSide, maxDimension) * scale)
+                for quality in qualitySteps {
+                    guard let data = encodeJPEG(scaled, quality: quality) else { throw PrepareFailure.unreadable }
                     if data.count <= maxBytes {
                         try data.write(to: out)
                         return (out, outName, "image/jpeg", data.count)
@@ -308,6 +335,14 @@ public enum ComposerImageIO {
             }
             throw PrepareFailure.tooLarge
         }.value
+    }
+
+    static func encode(_ image: CGImage, type: UTType, quality: CGFloat) -> Data? {
+        if type == .jpeg { return encodeJPEG(image, quality: quality) }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, image, nil)
+        return CGImageDestinationFinalize(dest) ? data as Data : nil
     }
 
     static func encodeJPEG(_ image: CGImage, quality: CGFloat) -> Data? {

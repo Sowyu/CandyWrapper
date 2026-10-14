@@ -52,7 +52,8 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
         guard value.isFinite else { return "0" }
         if value < 1_000 { return String(Int(value.rounded())) }
         if value < 10_000 { return decimal(value / 1_000) + "k" }
-        if value < 1_000_000 { return String(Int((value / 1_000).rounded())) + "k" }
+        // Anything from 999,500 rounds to 1000k, so it belongs to the next unit (contextWindow.ts:174-177).
+        if value < 999_500 { return String(Int((value / 1_000).rounded())) + "k" }
         return decimal(value / 1_000_000) + "m"
     }
     private static func decimal(_ value: Double) -> String {

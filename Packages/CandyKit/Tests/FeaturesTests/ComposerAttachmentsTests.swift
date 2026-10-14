@@ -191,4 +191,24 @@ struct ComposerAttachmentsTests {
         let thumb = await ComposerImageIO.thumbnail(png, side: 128, cover: true)
         #expect(thumb.map { min($0.width, $0.height) } == 128)
     }
+
+    /// adb04202b: a PNG over 2000 px on a side is scaled to 2000 px and stays a PNG with its alpha,
+    /// even when it was already under the byte limit.
+    @Test func oversizedImagesFitTheEdgeInTheirOwnFormat() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prep-edge-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3000, pixelsHigh: 1000, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let png = dir.appendingPathComponent("wide.png")
+        try rep.representation(using: .png, properties: [:])!.write(to: png)
+        let fitted = try await ComposerImageIO.prepare(png, name: "wide.png", mimeType: "image/png", maxBytes: 10 << 20, workDir: dir)
+        #expect(fitted.url != png)
+        #expect(fitted.name == "wide.png")
+        #expect(fitted.mimeType == "image/png")
+        #expect(ComposerImageIO.pixelSize(fitted.url) == CGSize(width: 2000, height: 667))
+        // 2000 px on the long edge already fits and passes through untouched.
+        let edge = try await ComposerImageIO.prepare(fitted.url, name: "wide.png", mimeType: "image/png", maxBytes: 10 << 20, workDir: dir)
+        #expect(edge.url == fitted.url)
+    }
 }
