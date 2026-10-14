@@ -35,16 +35,29 @@ final class ServerController {
     init(environments: Environments, window: NSWindow) {
         self.environments = environments
         self.window = window
-        // Development: CANDY_T3_HOME points at a sandbox home instead of ~/.t3.
-        // A test build relaunched by its updater gets no environment; its own defaults can name the home
-        // (`defaults write <test bundle id> CandyT3Home <path>`), so it never falls back to ~/.t3.
-        let development = ProcessInfo.processInfo.environment["CANDY_T3_HOME"]
-            ?? (AppDelegate.isTestBuild ? UserDefaults.standard.string(forKey: "CandyT3Home") : nil)
-        home = development.map { URL(filePath: $0, directoryHint: .isDirectory) } ?? LocalServerDiscovery.defaultHome
+        home = Self.home
         identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
     }
 
-    private var lastEnvironmentKey: String { "localServer.lastEnvironmentId." + home.path }
+    private var lastEnvironmentKey: String { Self.lastEnvironmentKey(home) }
+    private static func lastEnvironmentKey(_ home: URL) -> String { "localServer.lastEnvironmentId." + home.path }
+
+    /// Development: CANDY_T3_HOME points at a sandbox home instead of ~/.t3.
+    /// A test build relaunched by its updater gets no environment; its own defaults can name the home
+    /// (`defaults write <test bundle id> CandyT3Home <path>`), so it never falls back to ~/.t3.
+    private static var home: URL {
+        let development = ProcessInfo.processInfo.environment["CANDY_T3_HOME"]
+            ?? (AppDelegate.isTestBuild ? UserDefaults.standard.string(forKey: "CandyT3Home") : nil)
+        return development.map { URL(filePath: $0, directoryHint: .isDirectory) } ?? LocalServerDiscovery.defaultHome
+    }
+
+    private static var prefetched: ShellCache.Prefetch?
+
+    /// Starts reading the last environment's cached sidebar at the top of launch; `start` picks it up.
+    static func prefetchCachedSidebar() {
+        guard let id = UserDefaults.standard.string(forKey: lastEnvironmentKey(home)) else { return }
+        prefetched = ShellCache().prefetch(environmentId: id)
+    }
 
     /// The environment is the server this app started, not T3's service or desktop app.
     func ownsLocalServer(_ id: String) -> Bool { ownsServer && id == environmentId }
@@ -57,7 +70,9 @@ final class ServerController {
 
     private func showCached(_ id: String) {
         environmentId = id
-        latest = cache.load(environmentId: id)?.snapshot
+        let prefetch = Self.prefetched
+        Self.prefetched = nil
+        latest = (prefetch?.environmentId == id ? prefetch?.take() : cache.load(environmentId: id))?.snapshot
         latestIsLive = false
         environments.showCachedPrimary(id, latest)
         if latest != nil { LaunchTiming.mark("cached sidebar") }

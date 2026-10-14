@@ -148,7 +148,7 @@ private func copy(_ value: JSONValue, _ k: Int, key: String? = nil) -> JSONValue
 /// (10 user turns or 75 rows; the recording has 3 turns and 19 rows), while runs, attempts, nodes,
 /// checkpoints, requests and provider turns cover the whole thread, as `buildBoundedThreadProjection`
 /// sends them (threadHistoryPaging.ts:458). `window == copies` is the whole history loaded.
-private func syntheticThreadFrame(copies: Int, window: Int, reply: String? = nil) throws -> (frame: Data, threadId: String) {
+func syntheticThreadFrame(copies: Int, window: Int, reply: String? = nil) throws -> (frame: Data, threadId: String) {
     let base = try largestSnapshot()
     guard case .object(var snapshot) = base, case .object(var projection)? = base["projection"] else { throw CancellationError() }
     let control = ["runs", "attempts", "nodes", "checkpoints", "runtimeRequests", "providerTurns"]
