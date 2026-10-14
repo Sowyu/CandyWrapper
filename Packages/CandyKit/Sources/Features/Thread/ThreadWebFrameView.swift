@@ -57,6 +57,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     var onNavigatedAway: (() -> Void)?
     /// The budget took the web view back.
     var onEvicted: (() -> Void)?
+    /// Whether the frame counts against `ThreadWebFrameBudget`. The full screen dialog's doesn't: opening it would
+    /// blank the oldest render on screen, and a live turn's new renders would blank the dialog.
+    var budgeted = true
     private(set) var webView: ThreadWebView?
     private var page: Page?
     private var hostLoaded = false
@@ -100,7 +103,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         frameLoads = 0
         shortcutsPosted = false
         web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
-        if page.kind == .agent { ThreadWebFrameBudget.add(self) }
+        if page.kind == .agent, budgeted { ThreadWebFrameBudget.add(self) }
     }
 
     /// Tears the web view down; its content process goes when no other view uses it.

@@ -52,6 +52,7 @@ final class HtmlRenderDialogView: DSView {
         reset.action = { [weak self] in self?.setZoom(1) }
         zoomIn.action = { [weak self] in self?.setZoom((self?.zoom ?? 1) + 0.25) }
         for b in [zoomOut, reset, zoomIn] { addSubview(b) }
+        frameView.budgeted = false
         frameView.onMessage = { [weak self] data in
             guard let self else { return }
             onMessage(data, self.frameView)

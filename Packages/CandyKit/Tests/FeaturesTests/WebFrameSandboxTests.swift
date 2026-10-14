@@ -73,4 +73,16 @@ struct WebFrameSandboxTests {
         frame.release()
         #expect(frame.webView == nil)
     }
+
+    /// The full screen dialog keeps the bridge but takes no budget slot, so it never blanks a render on screen.
+    @Test func unbudgetedAgentFrameKeepsItsBridge() throws {
+        let before = ThreadWebFrameBudget.count
+        let frame = F(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        frame.budgeted = false
+        frame.activate(.init(src: src, title: "reply", dark: false))
+        let web = try #require(frame.webView)
+        #expect(!web.configuration.userContentController.userScripts.isEmpty)
+        #expect(ThreadWebFrameBudget.count == before)
+        frame.release()
+    }
 }
