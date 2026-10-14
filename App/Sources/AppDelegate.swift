@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         ThemeLibrary.shared.start()
         quitOnSIGTERM()
+        DispatchQueue.global(qos: .utility).async { ComposerController.pruneAttachmentCache() }
         showMainWindow()
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
         if CommandLine.arguments.contains("--pull-request-sample") { PullRequestsGallery.openWindow() }

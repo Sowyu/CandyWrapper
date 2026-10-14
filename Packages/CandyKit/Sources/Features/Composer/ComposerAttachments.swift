@@ -261,7 +261,10 @@ public enum ComposerImageIO {
                 kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixel),
             ]
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            let start = ContinuousClock.now
+            let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            ImageTiming.mark("decode", "\(url.lastPathComponent) \(maxPixel) took \(ContinuousClock.now - start)")
+            return image
         }.value
     }
 

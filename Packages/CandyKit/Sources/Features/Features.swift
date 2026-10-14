@@ -9,6 +9,7 @@ import WebKit
 public enum ForceReloadCaches {
     public static func clear() {
         MarkdownImages.clear()
+        AsyncImageView.clearMemory()
         MarkdownFavicons.clear()
         MarkdownContextChips.thumbnails = [:]
         MarkdownContextChips.failed = []
