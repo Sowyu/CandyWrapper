@@ -314,7 +314,6 @@ public final class MarkdownLayout {
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
-        var native: Bool
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
@@ -328,19 +327,18 @@ public final class MarkdownLayout {
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false, native: Bool = false,
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
                 reusing previous: MarkdownLayout? = nil) {
         self.width = width
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
-        builder.native = native
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
-                           runsShell: runsShell, native: native)
+                           runsShell: runsShell)
         var resume: (layout: MarkdownLayout, blocks: Int)?
         if let previous, previous.width == width, previous.reuseKey == key {
             let blocks = document.blocks, old = previous.rootBlocks
@@ -403,8 +401,6 @@ private struct Builder {
     var contexts: MarkdownContextChips?
     var cwd: String?
     var runsShell = false
-    /// Glass Native: code blocks are solid cards on the frost (docs/glass-native.md).
-    var native = false
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -764,16 +760,11 @@ private struct Builder {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
-        // Glass Native: the same box on the solid card color, so code reads over the frost.
-        if native {
-            box.items.append(.box(frame, fill: NativeTimeline.card, border: Themed.color(\.border), radius: 10))
-        } else {
-            // Classic Glass: a dense pane, so code reads as on a solid card.
-            box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
-                                                                frost: WindowGlass.denseFill),
-                                  border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
-                                  radius: 10))
-        }
+        // Classic Glass: a dense pane, so code reads as on a solid card.
+        box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
+                                                            frost: WindowGlass.denseFill),
+                              border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
+                              radius: 10))
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
         // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),

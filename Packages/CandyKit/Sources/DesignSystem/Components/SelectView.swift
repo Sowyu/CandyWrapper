@@ -181,13 +181,6 @@ public final class SelectView: ControlView {
             items.append(item)
         }
         let selectedRow = selectedIndex.flatMap { s in optionAt.first { $0.value == s }?.key }
-        if usesNativeChrome, NativeMenu.canExpress(items, select: true) {
-            for (row, i) in optionAt { items[row].action = { [weak self] in self?.selectedIndex = i; self?.onChange?(i) } }
-            var placement = PopupPlacement.dropdown
-            if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
-            NativeMenu.popUpSelect(items, from: self, selectedRow: selectedRow, aligned: alignItemWithTrigger, placement: placement)
-            return
-        }
         let list = MenuPopupView(items: items, style: .select)
         list.minimumWidth = bounds.width
         list.onChoose = { [weak self] row in

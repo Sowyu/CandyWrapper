@@ -489,11 +489,10 @@ struct PerfBenchmarks {
         #expect(count > 0)
     }
 
-    /// The sidebar at the M10 load's 1,580 threads with the settled shelf open, in the classic list and in Glass
-    /// Native's table: a hinted one-thread rename, a minute's clock step and the settled shelf opening or closing,
-    /// each with the layout that follows.
+    /// The sidebar at the M10 load's 1,580 threads with the settled shelf open: a hinted one-thread rename, a
+    /// minute's clock step and the settled shelf opening or closing, each with the layout that follows.
     @MainActor @Test func sidebarUpdates() {
-        for native in [false, true] {
+        do {
             var now = SidebarPreview.referenceNow
             var snap = SidebarLoadTests.loadSnapshot()
             let content = SidebarContentView()
@@ -502,12 +501,11 @@ struct PerfBenchmarks {
             window.isReleasedWhenClosed = false
             window.contentView = content
             content.frame = NSRect(x: 0, y: 0, width: 320, height: 780)
-            content.hidesCustomChrome = native
             content.state.settledExpanded = true
             content.state.settledVisibleCount = 2_000
             content.setSnapshot(snap, animated: false)
             content.layoutSubtreeIfNeeded()
-            let style = native ? "native" : "classic"
+            let style = "classic"
             var flip = false
             measure("sidebar_rename_1580_\(style)", runs: 15) {
                 flip.toggle()

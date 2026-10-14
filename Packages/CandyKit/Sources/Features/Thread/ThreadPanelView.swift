@@ -25,7 +25,6 @@ public final class ThreadHeaderView: TopbarDragView {
             parentCrumb.title = parentThreadTitle ?? ""
             updateParentVisibility()
             needsLayout = true
-            onTitlesChange?()
         }
     }
     public var onOpenParent: (@MainActor () -> Void)? { didSet { parentCrumb.action = onOpenParent } }
@@ -39,18 +38,8 @@ public final class ThreadHeaderView: TopbarDragView {
     public var onThreadMenu: ((NSEvent, NSView) -> Void)?
     public var onRenameThread: ((String) -> Void)?
     public var onEmptyTitle: (() -> Void)?
-    /// The project or thread title changed, for a toolbar that shows them in place of this header.
-    public var onTitlesChange: (@MainActor () -> Void)?
-    /// Glass Native's toolbar breadcrumb edits the title in its own field while this header is hidden.
-    public var renameInPlace: (@MainActor () -> Void)?
-    /// A rename typed elsewhere (the toolbar breadcrumb): empty asks `onEmptyTitle`, a new title `onRenameThread`.
-    public func commitRename(_ text: String) {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty { onEmptyTitle?() } else if value != threadTitle { onRenameThread?(value) }
-    }
     public func beginTitleRename() {
         guard onRenameThread != nil else { return }
-        if let renameInPlace, isHidden { return renameInPlace() }
         titleEditor.text = threadTitle
         titleEditor.isHidden = false
         needsLayout = true
@@ -78,7 +67,6 @@ public final class ThreadHeaderView: TopbarDragView {
             if favicon.source?.title != newValue { favicon.source = nil }
             favicon.projectTitle = newValue
             needsLayout = true
-            onTitlesChange?()
         }
     }
 
@@ -88,7 +76,6 @@ public final class ThreadHeaderView: TopbarDragView {
         set {
             guard newValue != favicon.source else { return }
             favicon.source = newValue
-            onTitlesChange?()
         }
     }
 
@@ -121,7 +108,6 @@ public final class ThreadHeaderView: TopbarDragView {
             title.text = newValue
             titleHit.setAccessibilityLabel("Thread actions for \(newValue)")
             needsLayout = true
-            onTitlesChange?()
         }
     }
 
@@ -300,46 +286,7 @@ public final class ThreadPanelView: DSView {
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
-    /// Glass Native's toolbar shows the title and the panel buttons, so the chat column starts at the top.
-    /// It also turns on Glass Native's material: the native row style and solid request panels with native buttons.
-    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyPresentation() } } }
-    /// The height of the window's toolbar over this view (Glass Native). The timeline scrolls under it; the rest
-    /// of the chat column starts below it.
-    public var toolbarInset: CGFloat = 0 { didSet { if toolbarInset != oldValue { needsLayout = true } } }
-    private var chatTop: CGFloat { hidesCustomChrome ? toolbarInset : ThreadHeaderView.height }
-
-    /// The right panel can maximize now (open, not a sheet): Glass Native's toolbar shows its Maximize button.
-    public var onMaximizableChange: ((Bool) -> Void)?
-    /// Thread details, the terminal drawer, the right panel or its maximized state changed: Glass Native's
-    /// toolbar toggles show their on states.
-    public var onPanelTogglesChange: (() -> Void)?
-    /// What `onMaximizableChange` last reported, for a toolbar made after it (a switch to Glass Native).
-    public private(set) var isMaximizable = false
-    /// Glass Native: the chat column's right edge in window coordinates while the right panel sits inline beside it,
-    /// else nil. The toolbar's breadcrumb ends there, as T3's header ends at the panel (ChatHeader.tsx:255-259).
-    /// `onPanelTogglesChange` reports a change.
-    public private(set) var chatTrailingEdge: CGFloat?
-    /// The soft edge where the rows scroll under the toolbar, made while Glass Native shows.
-    private var scrollFade: ToolbarScrollFade?
-
-    private func applyPresentation() {
-        let native = hidesCustomChrome
-        timeline.style = native ? .native : .classic
-        approvalPanel.nativeCard = native
-        lazyQuestionPanel.set(\.nativeCard, native)
-        composer.nativeGlass = native
-        rightPanel.nativeChrome = native
-        lazyTerminalDrawer.set(\.nativeChrome, native)
-        if native, scrollFade == nil {
-            scrollFade = ToolbarScrollFade(on: timeline.scrollView)
-        } else if !native {
-            scrollFade?.remove()
-            scrollFade = nil
-            // Glass Native hid the toggles that sit on the right panel's tab bar; the header's own follow the thread.
-            for toggle in header.toggles where toggle.superview === self { toggle.isHidden = false }
-        }
-        needsLayout = true
-    }
+    private var chatTop: CGFloat { ThreadHeaderView.height }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
     /// The notice banners are built the first time they show; wire them through the lazy holders.
@@ -751,7 +698,6 @@ public final class ThreadPanelView: DSView {
         if open { detailsCard.isHidden = false } else { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
         needsLayout = true
-        onPanelTogglesChange?()
     }
 
     /// Watches for the outside press or Escape that closes the popover, only while it shows.
@@ -776,8 +722,6 @@ public final class ThreadPanelView: DSView {
         if event.type == .keyDown {
             guard event.keyCode == 53 else { return } // Escape
         } else {
-            // The toolbar's controls, the details toggle among them, handle their own presses.
-            if event.locationInWindow.y > window.contentLayoutRect.maxY { return }
             if let card = lazyDetailsCard.loaded, !card.isHidden, card.bounds.contains(card.convert(event.locationInWindow, from: nil)) { return }
             let toggle = header.toggles[0]
             if toggle.window === window, toggle.bounds.contains(toggle.convert(event.locationInWindow, from: nil)) { return }
@@ -793,8 +737,6 @@ public final class ThreadPanelView: DSView {
         header.toggles[0].isPressed = detailsOpen
         if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
-        // Layout calls this; the toolbar's items change after the window's layout pass, not inside it.
-        DispatchQueue.main.async { [weak self] in self?.onPanelTogglesChange?() }
     }
 
     /// T3 closes the popover when the card turns inline (ThreadDetailsCard.tsx:81-85), and on another thread it
@@ -1099,7 +1041,6 @@ public final class ThreadPanelView: DSView {
         if open { terminalDrawer.isHidden = false } else { lazyTerminalDrawer.loaded?.isHidden = true }
         header.toggles[1].isPressed = open
         needsLayout = true
-        onPanelTogglesChange?()
         if open != wasOpen || terminalSlide.isRunning {
             terminalSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
             layoutNow()
@@ -1160,7 +1101,6 @@ public final class ThreadPanelView: DSView {
         maximize.setAccessibilityLabel(label)
         maximize.toolTip = label
         needsLayout = true
-        onPanelTogglesChange?()
     }
 
     /// A press that nothing under it takes (empty timeline, header or page space) blurs the prompt, as a
@@ -1322,9 +1262,7 @@ public final class ThreadPanelView: DSView {
         let menuShown = menus.isOpen && !composer.isHidden
         commandMenu.isHidden = !menuShown
         if menuShown {
-            // Glass Native: the room starts under the toolbar, which draws over the content.
-            let top = hidesCustomChrome ? toolbarInset : 0
-            let h = min(commandMenu.preferredHeight, max(96, y - top - 24 + ComposerBannerView.overlap))
+            let h = min(commandMenu.preferredHeight, max(96, y - 24 + ComposerBannerView.overlap))
             commandMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
                                        width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
         }
@@ -1461,24 +1399,13 @@ public final class ThreadPanelView: DSView {
         let shownPanel = sheet || !panelSlide.isRunning ? panelWidth
             : ((rightPanelOpen ? panelWidth : panelGhost?.bounds.width ?? 0) * panelSlide.value * scale).rounded() / scale
         let chat = sheet ? bounds.width : max(0, bounds.width - shownPanel)
-        // The panel's resting width, not the slide's, so the toolbar resizes the breadcrumb once per open or close.
-        let edge: CGFloat? = hidesCustomChrome && rightPanelOpen && !sheet && !rightPanelMaximized && window != nil
-            ? convert(NSPoint(x: max(0, bounds.width - panelWidth), y: 0), to: nil).x : nil
-        if edge != chatTrailingEdge {
-            chatTrailingEdge = edge
-            DispatchQueue.main.async { [weak self] in self?.onPanelTogglesChange?() }
-        }
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
-        // Glass Native: the right panel starts below the toolbar, its tabs clear of it.
-        // Glass Native: the panel runs up under the toolbar, so its tabs share the toolbar's row as T3's share the
-        // header row with the panel toggles; the toggles' room at the right stays clear.
         let panelTop: CGFloat = 0
-        rightPanel.trailingReserve = hidesCustomChrome ? RightPanelView.nativeToolbarReserve : RightPanelView.classicReserve
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
-        header.isHidden = chat == 0 || hidesCustomChrome
+        header.isHidden = chat == 0
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
         fileDropOverlay.frame = NSRect(x: 8, y: chatTop + 8, width: max(0, chat - 16), height: max(0, bounds.height - chatTop - 16))
@@ -1494,12 +1421,7 @@ public final class ThreadPanelView: DSView {
             terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         }
         terminalGhost?.frame.origin.y = chatHeight
-        // Glass Native: the rows scroll under the toolbar and start below it.
-        let timelineTop = hidesCustomChrome ? 0 : chatTop
-        timeline.chromeTop = hidesCustomChrome ? toolbarInset : 0
-        timeline.frame = NSRect(x: 0, y: timelineTop, width: chat, height: max(0, chatHeight - timelineTop))
-        // The timeline's scroll view fills the timeline.
-        scrollFade?.update(toolbar: toolbarInset - timeline.frame.minY, size: timeline.frame.size)
+        timeline.frame = NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
         panelGhost?.frame.origin.x = chat
@@ -1526,18 +1448,7 @@ public final class ThreadPanelView: DSView {
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
         // The sheet has no maximize control (ChatView.tsx:11211-11232). It fades with the slide, `transition-opacity`
         // over the same duration and curve (ChatView.tsx:11213-11224).
-        // Glass Native's toolbar holds the panel toggles and Maximize, so the in-panel copies stay hidden.
-        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil) || hidesCustomChrome
-        let maximizable = !sheet && rightPanelOpen
-        if maximizable != isMaximizable {
-            isMaximizable = maximizable
-            // After the window's layout pass: the toolbar swaps an item for it, which must not happen inside it.
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isMaximizable == maximizable else { return }
-                self.onMaximizableChange?(maximizable)
-            }
-        }
-        if hidesCustomChrome { for toggle in header.toggles where toggle.superview === self { toggle.isHidden = true } }
+        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil)
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
         panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {

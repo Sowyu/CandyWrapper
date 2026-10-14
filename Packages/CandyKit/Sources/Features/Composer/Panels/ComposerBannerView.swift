@@ -26,11 +26,6 @@ public class ComposerBannerView: DSView {
     /// notices the banner stack shows above the column when it expands.
     public enum Placement { case attached, floating }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true } } }
-    /// Glass Native: the same docked shape on a solid card fill with no blur, so the request reads over the frost.
-    public var nativeCard = false {
-        didSet { if nativeCard != oldValue { blur.isHidden = nativeCard; needsLayout = true; needsDisplay = true; nativeCardDidChange() } }
-    }
-    func nativeCardDidChange() {}
     /// The `ComposerBanner.Dismiss` X, if this banner has one; the banner stack disables it while
     /// the banner leaves.
     public var dismissControl: ButtonView? { nil }
@@ -63,13 +58,11 @@ public class ComposerBannerView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.layer?.backgroundColor = (nativeCard ? NativeTimeline.card : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8)).cgColor(in: self)
+        surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         switch variant {
         case .neutral:
             tint.backgroundColor = nil
-            // Glass Native's solid card keeps a full `border` hairline, so it reads at any Glass opacity.
-            surface.layer?.borderColor = nativeCard ? Themed.color(\.border).cgColor(in: self)
-                : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+            surface.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         case .warning:
             tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)
@@ -77,7 +70,7 @@ public class ComposerBannerView: DSView {
             tint.backgroundColor = Themed.color(\.error, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.error, 0.32).cgColor(in: self)
         }
-        seam.isHidden = !dark || nativeCard
+        seam.isHidden = !dark
         seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
         CATransaction.commit()
     }

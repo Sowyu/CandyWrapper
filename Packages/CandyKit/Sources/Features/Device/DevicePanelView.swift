@@ -164,11 +164,7 @@ public final class DevicePanelView: DSView {
         toolsDrawer?.frame = NSRect(x: max(0, bounds.width - 320), y: 40, width: min(320, bounds.width), height: max(0, bounds.height - 40))
         done.frame = NSRect(x: bounds.width - 84, y: 84, width: 60, height: 28)
     }
-    /// Glass Native: the list and the empty state sit on the detail's frost; the screen stays solid.
-    public var nativeChrome = false {
-        didSet { if nativeChrome != oldValue { empty.nativeChrome = nativeChrome; needsDisplay = true } }
-    }
-    public override func updateLayer() { layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
 }
 
 /// Frames have already been decoded. The layer retains only the newest image.

@@ -1,3 +1,5 @@
+The user removed Glass Native on 2026-10-14 ("remove native glass its useless"). A stored choice now reads as Glass (docs/decisions.md).
+
 # Glass Native (experimental)
 
 A theme card the user asked for on 2026-10-13: "just glass BUT its a fully redesigned t3 code ui with native elements like the t3 code version for ipad os or vision os", "still incredibly optimised and possibly even faster". Picking it swaps the main window's custom-drawn T3 look for a native AppKit presentation modeled on T3 Code Mobile's iPad layout, with Liquid Glass chrome. Every other theme keeps today's look pixel for pixel.

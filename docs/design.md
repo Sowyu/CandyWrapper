@@ -120,7 +120,7 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 
 ## Glass
 
-The classic Glass theme (`candywrapper-glass`) is CandyWrapper's own, so its material is ours. Layout, sizes, wording and behavior stay T3's; only the surfaces change. Glass Native keeps the system material and T3's surfaces, and every other theme is untouched: the code below runs only while `ThemeRuntime.isFrost` is true. It all lives in `WindowGlass` (DesignSystem/Components/WindowGlass.swift), and views use its colors and helpers instead of their own copies.
+The classic Glass theme (`candywrapper-glass`) is CandyWrapper's own, so its material is ours. Layout, sizes, wording and behavior stay T3's; only the surfaces change. Every other theme is untouched: the code below runs only while `ThemeRuntime.isGlass` is true. It all lives in `WindowGlass` (DesignSystem/Components/WindowGlass.swift), and views use its colors and helpers instead of their own copies.
 
 One frost covers the window: a behind-window blur with the system material's tint layers hidden (`WindowGlassBackdropView.clear`), so the desktop shows through blurred and saturated, and our tints set all the density. Every surface on it is a tinted pane. Depth comes from how dense a pane is, never from soft shadows.
 

@@ -354,16 +354,12 @@ public final class PopupHost: DSView {
             anchor = popup.anchorRect ?? .zero
         }
         var size = popup.content.popupSize
-        // Glass Native's toolbar covers the content's top 52pt and draws over anything under it, so popups keep
-        // below it; classic's whole window is T3's viewport.
-        var area = bounds
-        if usesNativeChrome, let window { area = bounds.intersection(convert(window.contentLayoutRect, from: nil)) }
-        var result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
+        var result = PopupPositioner.place(size: size, anchor: anchor, in: bounds, popup.placement)
         // `max-h-(--available-height)`: the popup never grows past the space on its side.
-        let limit = result.side.isVertical ? result.available.height : area.height - 2 * popup.placement.collisionPadding
+        let limit = result.side.isVertical ? result.available.height : bounds.height - 2 * popup.placement.collisionPadding
         if size.height > limit, limit > 0 {
             size.height = limit
-            result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
+            result = PopupPositioner.place(size: size, anchor: anchor, in: bounds, popup.placement)
         }
         popup.result = result
         let frame = result.frame

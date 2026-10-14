@@ -366,7 +366,6 @@ public final class CommandPaletteOverlay: DSView {
     private weak var previousResponder: NSResponder?
     private var isClosing = false
     private var snapshotPending = false
-    private var glass: NSView?
     /// The blurred window content behind the palette.
     var backdrop: CGImage? { blurred.contents.map { $0 as! CGImage } }
 
@@ -385,14 +384,6 @@ public final class CommandPaletteOverlay: DSView {
     public func present(in window: NSWindow) {
         guard let container = window.contentView else { return }
         previousResponder = window.firstResponder
-        // Glass Native: Liquid Glass under the palette, as a sibling. Inside the palette, behind its scroll view, the
-        // glass outlined every row. Built per open, gone with the overlay.
-        if (window as? NativeChromeWindow)?.nativeChrome == true, glass == nil,
-           let glass = NativePopupMaterial.makeGlass(radius: 18) {
-            addSubview(glass, positioned: .below, relativeTo: controller.view)
-            self.glass = glass
-            controller.view.nativeGlass = true
-        }
         blurred.contents = ModalHost.blurredSnapshot(of: container)
         frame = container.bounds
         autoresizingMask = [.width, .height]
@@ -450,7 +441,6 @@ public final class CommandPaletteOverlay: DSView {
         let top = max(16, (bounds.height * 0.1).rounded())
         let height = min(controller.view.intrinsicContentSize.height, bounds.height - 2 * top)
         controller.view.frame = NSRect(x: ((bounds.width - width) / 2).rounded(), y: top, width: width, height: height)
-        glass?.frame = controller.view.frame
     }
 
     public override func updateLayer() {
@@ -479,14 +469,10 @@ public final class CommandPaletteOverlay: DSView {
         hidden = CATransform3DTranslate(hidden, -f.width / 2, -f.height / 2, 0)
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion?() } }
-        var targets: [(CALayer, String, Any, Any)] = [
-            (layer, "opacity", entering ? 0 : 1, entering ? 1 : 0),
+        for (target, key, from, to) in [
+            (layer, "opacity", entering ? 0 : 1, entering ? 1 : 0) as (CALayer, String, Any, Any),
             (panelLayer, "transform", entering ? hidden : CATransform3DIdentity, entering ? CATransform3DIdentity : hidden),
-        ]
-        if let glassLayer = glass?.layer {
-            targets.append((glassLayer, "transform", entering ? hidden : CATransform3DIdentity, entering ? CATransform3DIdentity : hidden))
-        }
-        for (target, key, from, to) in targets {
+        ] {
             let a = CABasicAnimation(keyPath: key)
             a.fromValue = from
             a.toValue = to

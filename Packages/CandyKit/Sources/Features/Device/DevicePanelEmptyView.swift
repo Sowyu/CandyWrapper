@@ -23,7 +23,5 @@ public final class DevicePanelEmptyView: DSView {
         message.frame = NSRect(x: (bounds.width - width) / 2, y: y + 48, width: width, height: textHeight)
         refresh.frame = NSRect(x: (bounds.width - button.width) / 2, y: y + 72 + textHeight, width: button.width, height: button.height)
     }
-    /// Glass Native: on the detail's frost.
-    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsDisplay = true } } }
-    public override func updateLayer() { layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
 }

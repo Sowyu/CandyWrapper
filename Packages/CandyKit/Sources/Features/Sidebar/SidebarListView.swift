@@ -600,18 +600,6 @@ public final class SidebarListView: DSView {
         tile(oldTops: nil)
     }
 
-    var topVisibleKey: String? {
-        guard !items.isEmpty, visibleRect.height > 0 else { return nil }
-        let i = lowerBound(visibleRect.minY)
-        return items.indices.contains(i) ? items[i].key : nil
-    }
-
-    func scrollItemToTop(_ key: String) {
-        guard let i = indexByKey[key] else { return }
-        scroll(frame(at: i).origin)
-        tile(oldTops: nil)
-    }
-
     /// The row view for a key if it is laid out (tests, previews).
     func view(forKey key: String) -> SidebarRowBase? { visible[key] }
     var poolSizes: [SidebarItem.Kind: Int] { pools.mapValues(\.count) }

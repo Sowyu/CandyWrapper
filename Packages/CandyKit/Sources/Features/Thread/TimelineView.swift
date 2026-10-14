@@ -141,62 +141,17 @@ public final class TimelineView: DSView {
         let lane = laneFrame
         let host = worktreeSetup.isHidden ? parked : document
         if worktreeSetup.superview !== host { host.addSubview(worktreeSetup) }
-        let top = chromeTop
-        header?.frame = NSRect(x: TL.snap(lane.x), y: top, width: lane.width, height: headerHeight)
+        header?.frame = NSRect(x: TL.snap(lane.x), y: 0, width: lane.width, height: headerHeight)
         let height = worktreeSetup.height(forWidth: lane.width)
-        worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: top + headerHeight + 12, width: lane.width, height: height)
+        worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: headerHeight + 12, width: lane.width, height: height)
         if setupHeight != height { setupHeight = height; updateTopInset() }
         layoutEmptyPlaceholder()
     }
 
-    private func updateTopInset() { topInset = 24 + chromeTop + headerHeight + setupHeight }
-
-    // MARK: Glass Native
-
-    /// The row style. Changing it measures every row again; the rows, their order and the scroll position stay.
-    public var style: TimelineStyle = .classic {
-        didSet {
-            guard style != oldValue else { return }
-            // A thread read at its end stays at its end in the other style.
-            endAfterRestyle = followsEnd || maxScroll - viewport.minY <= 1
-            context.style = style
-            applyScrollerStyle()
-            measured.removeAll()
-            reconfigureVisible()
-            updateTopInset()
-            laidOutWidth = -1
-            needsLayout = true
-        }
-    }
-
-    private var endAfterRestyle = false
-
-    /// Glass Native uses the system's overlay scroller, which hides while idle, kept between the toolbar and the
-    /// composer. Always overlay, as T3's bar never takes a lane: a legacy scroller narrows the clip view, and the
-    /// timeline then measures its rows again at the narrower width. Classic keeps T3's always-drawn bar.
-    private func applyScrollerStyle() {
-        if style == .native {
-            scrollView.verticalScroller = NSScroller()
-            scrollView.scrollerStyle = .overlay
-            scrollView.hasVerticalScroller = true
-            scrollView.autohidesScrollers = true
-        } else {
-            scrollView.useT3Scrollbars(.native, reservesLane: false)
-            scrollView.scrollerInsets = NSEdgeInsetsZero
-        }
-        updateScrollerInsets()
-    }
-
-    private func updateScrollerInsets() {
-        guard style == .native else { return }
-        scrollView.scrollerInsets = NSEdgeInsets(top: chromeTop, left: 0, bottom: bottomInset, right: 0)
-    }
-
-    /// Room the window's toolbar takes over the top of the timeline (Glass Native): the rows scroll under it.
-    public var chromeTop: CGFloat = 0 { didSet { if chromeTop != oldValue { updateTopInset(); layoutHeader(); updateScrollerInsets() } } }
+    private func updateTopInset() { topInset = 24 + headerHeight + setupHeight }
 
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
-    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true; updateScrollerInsets() } } }
+    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
 
     /// A loaded server thread (T3's `hideEmptyPlaceholder` is false): with nothing to list, the timeline
     /// says so (MessagesTimeline.tsx:1541-1562). Drafts and loading threads leave it off.
@@ -620,13 +575,6 @@ public final class TimelineView: DSView {
             restore(anchor)
         }
         tile(relayoutAll: true)
-        if endAfterRestyle, window != nil {
-            endAfterRestyle = false
-            followsEnd = true
-            setScroll(maxScroll)
-            tile()
-            updatePill()
-        }
         layoutPill()
         layoutHeader()
         layoutMinimap()
