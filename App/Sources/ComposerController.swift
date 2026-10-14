@@ -357,6 +357,8 @@ final class ComposerController {
         }
         setUpMenus()
         setUpAttachments()
+        // The send gate follows the connection, not only the session (`activeEnvironmentUnavailable`).
+        environments.observe { [weak self] in self?.syncSendBlock() }
         refresh()
     }
 
@@ -372,8 +374,13 @@ final class ComposerController {
         return out
     }
 
-    /// The session (shell) of the target's environment. Nil while that environment is disconnected.
+    /// The session (shell) of the target's environment. Nil without a session; a session stays while it
+    /// reconnects, so `connected` says whether a send can go out.
     private var shell: ShellSession? { environments.session(targetEnvironmentId) }
+
+    /// `activeEnvironmentConnectionPhase === "connected"` (ChatView.tsx:2676-2677). A send while the socket
+    /// is down would fail at once and only put the text back, so T3 refuses it with a toast instead.
+    private var connected: Bool { shell != nil && targetEnvironmentId.flatMap { environments.state($0) }?.status == .connected }
 
     var targetEnvironmentId: String? {
         switch target {
@@ -1476,7 +1483,7 @@ final class ComposerController {
             return
         }
         // `activeEnvironmentUnavailable` (ChatView.tsx:8797-8811).
-        if shell == nil, target != nil, pendingMessageId == nil {
+        if !connected, target != nil, pendingMessageId == nil {
             toastEnvironmentUnavailable()
             return
         }
@@ -3573,7 +3580,7 @@ extension ComposerController {
     /// reason, else the attachment upload's. A lost environment is separate (`isEnvironmentUnavailable`).
     private func syncSendBlock() {
         // `isEnvironmentUnavailable` covers a missing provider too (ChatComposer.tsx:7651-7655, ComposerPrimaryActions.tsx:290-291).
-        composer.environmentUnavailable = shell == nil || noProviderAvailable
+        composer.environmentUnavailable = !connected || noProviderAvailable
         var block = ComposerLogic.SendBlock(rewinding: threadRewindBusy, projectClone: projectCloneSendBlock)
         if case .thread(let id) = target {
             block.detailLoading = syncStatus.key == id.rawValue && syncStatus.value == .loading
