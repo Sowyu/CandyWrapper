@@ -151,7 +151,7 @@ public final class TimelineView: DSView {
     private func updateTopInset() { topInset = 24 + headerHeight + setupHeight }
 
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
-    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); needsLayout = true } } }
+    public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); layoutEmptyPlaceholder(); needsLayout = true } } }
 
     /// A loaded server thread (T3's `hideEmptyPlaceholder` is false): with nothing to list, the timeline
     /// says so (MessagesTimeline.tsx:1541-1562). Drafts and loading threads leave it off.
@@ -173,8 +173,12 @@ public final class TimelineView: DSView {
             return l
         }()
         label.isHidden = false
-        let w = min(ceil(label.textWidth) + 1, bounds.width)
-        label.frame = NSRect(x: ((bounds.width - w) / 2 * 2).rounded() / 2, y: ((bounds.height - 20) / 2 * 2).rounded() / 2, width: w, height: 20)
+        // Centered in the chat lane above the composer (`paddingBottom: contentInsetEndAdjustment` and the lane insets,
+        // MessagesTimeline.tsx:1615-1618, T3 3105 aaf83eedd).
+        let lane = laneFrame
+        let w = min(ceil(label.textWidth) + 1, lane.width)
+        let h = max(20, bounds.height - bottomInset)
+        label.frame = NSRect(x: ((lane.x + (lane.width - w) / 2) * 2).rounded() / 2, y: ((h - 20) / 2 * 2).rounded() / 2, width: w, height: 20)
     }
     /// True while the viewport is at the end; new content then keeps it there.
     public private(set) var followsEnd = true
@@ -219,6 +223,7 @@ public final class TimelineView: DSView {
         addSubview(scrollView)
         addSubview(minimap)
         minimap.onSelect = { [weak self] id in self?.revealFindEntry(id) }
+        minimap.onWheel = { [weak self] event in self?.scrollView.scrollWheel(with: event) }
         let clip = scrollView.contentView
         clip.postsBoundsChangedNotifications = true
         clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in

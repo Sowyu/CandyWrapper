@@ -571,10 +571,21 @@ final class ReasoningTraceView: DSView {
     private lazy var scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `max-h-96 overflow-auto` (WorkLog.tsx:130)
     private var views: [MarkdownView] = []
     private var count = 0
+    /// `followLive` (WorkLog.tsx:132-152 in 3105, 9a5dc7564): while a thought streams, the box stays scrolled to its
+    /// newest text. Scrolling up more than 4pt from the end pauses that until the reader returns to the end.
+    private var followLive = false
+    private var atLiveEdge = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(scroll)
+        NotificationCenter.default.addObserver(self, selector: #selector(didScroll), name: NSView.boundsDidChangeNotification,
+                                               object: scroll.scrollView.contentView)
+    }
+
+    @objc private func didScroll() {
+        let clip = scroll.scrollView.contentView.bounds
+        atLiveEdge = document.frame.height - clip.maxY <= 4
     }
 
     func set(_ items: [Item], context: TimelineContext) {
@@ -585,6 +596,7 @@ final class ReasoningTraceView: DSView {
             views.append(m)
         }
         count = items.count
+        followLive = items.contains { $0.streaming }
         for (i, v) in views.enumerated() { v.isHidden = i >= count }
         for (v, item) in zip(views, items) {
             v.cwd = context.markdownCwd
@@ -611,6 +623,9 @@ final class ReasoningTraceView: DSView {
             let h = v.height(forWidth: inner)
             v.frame = NSRect(x: 2, y: y, width: inner, height: h)
             y += h + 12
+        }
+        if followLive, atLiveEdge, document.frame.height > bounds.height {
+            scroll.scroll(to: NSPoint(x: 0, y: document.frame.height - bounds.height))
         }
     }
 }
