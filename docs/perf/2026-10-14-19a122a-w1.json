@@ -1,0 +1,279 @@
+{
+ "baseline": "2026-10-14-fff9d87-w1.json",
+ "commit": "19a122a",
+ "created": "2026-10-14T10:27:43",
+ "idle_seconds": 30,
+ "load_average": [
+  2.08837890625,
+  2.93310546875,
+  3.8984375
+ ],
+ "machine": "Mac16,10",
+ "metrics": {
+  "big_thread.after_scroll_footprint_mb": {
+   "max": 46.15716552734375,
+   "median": 43.32904052734375,
+   "min": 42.813438415527344,
+   "values": [
+    46.15716552734375,
+    42.813438415527344,
+    43.32904052734375
+   ]
+  },
+  "big_thread.after_scroll_peak_mb": {
+   "max": 102.00091552734375,
+   "median": 98.45404052734375,
+   "min": 98.09468841552734,
+   "values": [
+    102.00091552734375,
+    98.09468841552734,
+    98.45404052734375
+   ]
+  },
+  "big_thread.footprint_mb": {
+   "max": 36.094642639160156,
+   "median": 34.67274475097656,
+   "min": 34.563392639160156,
+   "values": [
+    36.094642639160156,
+    34.563392639160156,
+    34.67274475097656
+   ]
+  },
+  "big_thread.peak_footprint_mb": {
+   "max": 36.188392639160156,
+   "median": 34.92274475097656,
+   "min": 34.829017639160156,
+   "values": [
+    36.188392639160156,
+    34.829017639160156,
+    34.92274475097656
+   ]
+  },
+  "big_thread.scroll_cpu_ms": {
+   "max": 342.85425,
+   "median": 290.839583,
+   "min": 134.519833,
+   "values": [
+    134.519833,
+    342.85425,
+    290.839583
+   ]
+  },
+  "idle.cpu_pct": {
+   "max": 0.05145509713735979,
+   "median": 0.039868334443629846,
+   "min": 0.03764803697657517,
+   "values": [
+    0.05145509713735979,
+    0.039868334443629846,
+    0.03764803697657517
+   ]
+  },
+  "idle.footprint_mb": {
+   "max": 34.344642639160156,
+   "median": 32.891517639160156,
+   "min": 31.875869750976562,
+   "values": [
+    34.344642639160156,
+    31.875869750976562,
+    32.891517639160156
+   ]
+  },
+  "idle.interrupt_wakeups_per_s": {
+   "max": 0.4662610473912208,
+   "median": 0.4329497759110242,
+   "min": 0.366501972383907,
+   "values": [
+    0.4662610473912208,
+    0.366501972383907,
+    0.4329497759110242
+   ]
+  },
+  "idle.package_idle_wakeups_per_s": {
+   "max": 0.19991016675485837,
+   "median": 0.09991308158383304,
+   "min": 0.06660765783246526,
+   "values": [
+    0.09991308158383304,
+    0.19991016675485837,
+    0.06660765783246526
+   ]
+  },
+  "idle.peak_footprint_mb": {
+   "max": 34.485267639160156,
+   "median": 33.141517639160156,
+   "min": 32.485267639160156,
+   "values": [
+    34.485267639160156,
+    32.485267639160156,
+    33.141517639160156
+   ]
+  },
+  "launch.live_sidebar_ms": {
+   "max": 830.0,
+   "median": 229.0,
+   "min": 209.0,
+   "values": [
+    830.0,
+    209.0,
+    229.0
+   ]
+  },
+  "launch.window_ms": {
+   "max": 786,
+   "median": 207,
+   "min": 175,
+   "values": [
+    786,
+    175,
+    207
+   ]
+  },
+  "open.big_cache_first_frame_ms": {
+   "max": 56.5,
+   "median": 47.5,
+   "min": 45.2,
+   "values": [
+    56.5,
+    47.5,
+    45.2
+   ]
+  },
+  "open.big_first_frame_ms": {
+   "max": 63.2,
+   "median": 62.5,
+   "min": 46.6,
+   "values": [
+    62.5,
+    46.6,
+    63.2
+   ]
+  },
+  "open.big_reopen_first_frame_ms": {
+   "max": 54.3,
+   "median": 28.6,
+   "min": 28.5,
+   "values": [
+    28.5,
+    54.3,
+    28.6
+   ]
+  },
+  "size.binary_mb": {
+   "max": 42.84223937988281,
+   "median": 42.84223937988281,
+   "min": 42.84223937988281,
+   "values": [
+    42.84223937988281
+   ]
+  },
+  "size.bundle_mb": {
+   "max": 51.43555927276611,
+   "median": 51.43555927276611,
+   "min": 51.43555927276611,
+   "values": [
+    51.43555927276611
+   ]
+  },
+  "size.shipped_bundle_mb": {
+   "max": 30.770047187805176,
+   "median": 30.770047187805176,
+   "min": 30.770047187805176,
+   "values": [
+    30.770047187805176
+   ]
+  },
+  "size.stripped_binary_mb": {
+   "max": 22.176727294921875,
+   "median": 22.176727294921875,
+   "min": 22.176727294921875,
+   "values": [
+    22.176727294921875
+   ]
+  }
+ },
+ "notes": [
+  "idle run 2 overlapped another CandyWrapper app",
+  "big-thread run 1 overlapped another CandyWrapper app",
+  "big-thread run 2 overlapped another CandyWrapper app",
+  "the machine was not quiet before every scenario within 10 minutes; see quiet.waits"
+ ],
+ "quiet": {
+  "max_load": 3.0,
+  "noisy": true,
+  "waits": [
+   {
+    "before": "idle-0",
+    "load": 2.28,
+    "load_before": 6.4,
+    "quiet": true,
+    "waited_s": 594
+   },
+   {
+    "before": "idle-1",
+    "load": 2.11,
+    "load_before": 2.11,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "idle-2",
+    "load": 2.91,
+    "load_before": 2.39,
+    "quiet": true,
+    "waited_s": 191
+   },
+   {
+    "apps": [],
+    "before": "big-0",
+    "busy": [
+     "swiftpm-testing-helper"
+    ],
+    "load": 5.51,
+    "load_before": 2.59,
+    "quiet": false,
+    "waited_s": 604
+   },
+   {
+    "before": "big-1",
+    "load": 1.87,
+    "load_before": 4.64,
+    "quiet": true,
+    "waited_s": 211
+   },
+   {
+    "before": "big-2",
+    "load": 2.54,
+    "load_before": 1.78,
+    "quiet": true,
+    "waited_s": 30
+   },
+   {
+    "before": "open-0",
+    "load": 1.93,
+    "load_before": 2.03,
+    "quiet": true,
+    "waited_s": 30
+   },
+   {
+    "before": "open-1",
+    "load": 1.83,
+    "load_before": 1.83,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-2",
+    "load": 2.03,
+    "load_before": 2.03,
+    "quiet": true,
+    "waited_s": 0
+   }
+  ]
+ },
+ "regressions": [],
+ "repeat": 3,
+ "source": "/tmp/cw-perf/src-19a122a",
+ "workload": 1
+}
