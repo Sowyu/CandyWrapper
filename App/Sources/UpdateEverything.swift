@@ -224,15 +224,16 @@ final class UpdateEverything {
         for m in run?.machines ?? [] where !m.updatesServer { settle(m.environmentId, failed: failedProviderMachines.contains(m.environmentId)) }
         if var r = run { r.phase = .servers; run = r }
         var serverOutcomes: [(updated: Bool, line: String?)] = []
-        await withTaskGroup(of: (String, String, String?).self) { group in
+        await withTaskGroup(of: (String, String, ServerUpdates.QuietOutcome).self) { group in
             for s in plan.servers {
                 group.addTask { [serverUpdates] in
                     (s.environmentId, s.label, await serverUpdates.updateQuietly(s.environmentId, serverLabel: s.label))
                 }
             }
-            for await (env, label, failure) in group {
+            for await (env, label, outcome) in group {
+                let failure: String? = if case .failed(let why) = outcome { why } else { nil }
                 settle(env, failed: failure != nil || failedProviderMachines.contains(env))
-                serverOutcomes.append((failure == nil, failure.map { "\(label): \($0)" }))
+                serverOutcomes.append((outcome == .updated, failure.map { "\(label): \($0)" }))
             }
         }
         let local: (ready: Bool, failure: String?) = await download?.value ?? (true, nil)
