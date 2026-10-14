@@ -165,6 +165,44 @@ public final class ButtonView: ControlView {
         }
     }
 
+    /// `AnimatedWidth` (AnimatedWidth.tsx, T3 3105 6a68bee34): call after the frame changed from `oldWidth` with the
+    /// right edge kept. The box grows or shrinks to its new width over 150 ms `ease-out`, the leading icon and the
+    /// label ride its left edge, and a growing label is clipped where its slot ends, not ellipsized.
+    public func animateWidth(from oldWidth: CGFloat) {
+        layoutSubtreeIfNeeded()
+        let d = bounds.width - oldWidth
+        guard d != 0, window != nil, !Motion.reduced else { return }
+        let timing = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1) // Tailwind 4 `ease-out`
+        func slide(_ layer: CALayer?, _ key: String, from: CGFloat, to: CGFloat) {
+            guard let layer else { return }
+            let a = CABasicAnimation(keyPath: key)
+            a.fromValue = from
+            a.toValue = to
+            a.duration = 0.15
+            a.timingFunction = timing
+            layer.add(a, forKey: "animatedWidth.\(key)")
+        }
+        // A running style fade (the press, the focus ring) draws its old snapshot at the old size: it snaps instead.
+        decoration.removeAnimation(forKey: kCATransition)
+        slide(decoration, "bounds.size.width", from: decoration.bounds.width - d, to: decoration.bounds.width)
+        slide(decoration, "position.x", from: decoration.position.x + d / 2, to: decoration.position.x)
+        for view in [leadingIconView, title?.isEmpty == false ? label : nil].compactMap({ $0 }) {
+            slide(view.layer, "position.x", from: view.layer!.position.x + d, to: view.layer!.position.x)
+        }
+        guard d > 0, let labelLayer = label.layer, label.superview === self else { return }
+        // The label slot ends where it ends at rest; the moving label shows only up to there.
+        let mask = CALayer()
+        mask.backgroundColor = NSColor.black.cgColor
+        mask.frame = CGRect(x: -bounds.width, y: -bounds.height, width: bounds.width + labelLayer.bounds.width, height: 3 * bounds.height)
+        labelLayer.mask = mask
+        CATransaction.begin()
+        // Core Animation runs the completion on the main thread.
+        nonisolated(unsafe) let held = (labelLayer, mask)
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { if held.0.mask === held.1 { held.0.mask = nil } } }
+        slide(mask, "position.x", from: mask.position.x - d, to: mask.position.x)
+        CATransaction.commit()
+    }
+
     /// The label's width, or the widest reserved title's.
     private var labelSlotWidth: CGFloat {
         reservedTitles.reduce(label.textWidth) { widest, title in

@@ -528,8 +528,10 @@ public final class PullRequestDetailView: DSView {
     /// The header's merge or auto-merge button, confirmed in place (2994 PullRequestDetailPanel.tsx:2025-2141):
     /// the first press relabels it "Confirm …?", the second runs it. Its label slot holds both labels' width.
     private func confirmButton(_ action: String, method: String, normal: String, armed: String, pending: String) -> ButtonView {
-        let label = actionPending ? pending : inlineConfirm.isArmed(action, slot: "header") ? armed : normal
-        let b = ButtonView(label, icon: .gitMerge, variant: .default, size: .xs)
+        let isArmed = !actionPending && inlineConfirm.isArmed(action, slot: "header")
+        let label = actionPending ? pending : isArmed ? armed : normal
+        // An armed button shows a check (`CheckIcon`, PullRequestDetailPanel.tsx:2048-2052 and 2120-2124 in 3105).
+        let b = ButtonView(label, icon: isArmed ? .check : .gitMerge, variant: .default, size: .xs)
         b.iconSize = 14
         // The method label holds the width; a longer label widens it (T3 3105 6a68bee34, 9c9ae43d8).
         b.reservedTitles = [normal]
@@ -546,6 +548,7 @@ public final class PullRequestDetailView: DSView {
             self.primaryWidthFrom = b?.frame.width
             self.needsLayout = true
             b?.title = armed
+            b?.icon = .check
             b?.toolTip = armed
             b?.setAccessibilityLabel(armed)
         }
@@ -979,16 +982,8 @@ public final class PullRequestDetailView: DSView {
         if let primary {
             let pw = ceil(primary.intrinsicContentSize.width)
             let target = NSRect(x: r - pw, y: 2, width: pw, height: 24)
-            if let from = primaryWidthFrom, from != pw, window != nil, !Motion.reduced {
-                primary.frame = NSRect(x: r - from, y: 2, width: from, height: 24)
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.15
-                    ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1) // Tailwind 4 `ease-out`
-                    primary.animator().frame = target
-                }
-            } else {
-                primary.frame = target
-            }
+            primary.frame = target
+            if let from = primaryWidthFrom, from != pw { (primary as? ButtonView)?.animateWidth(from: from) }
             primaryWidthFrom = nil
             r -= pw + 4
         }
