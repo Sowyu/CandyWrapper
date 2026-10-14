@@ -64,7 +64,10 @@ final class MainPresentationController {
         presentation.breadcrumb = breadcrumb
         presentation.setMaximizeShown(threads.panel.isMaximizable)
         threads.panel.onMaximizableChange = { [weak presentation] in presentation?.setMaximizeShown($0) }
-        threads.panel.onPanelTogglesChange = { [weak presentation] in presentation?.syncPanelStates() }
+        threads.panel.onPanelTogglesChange = { [weak presentation, weak self] in
+            presentation?.syncPanelStates()
+            if let self { self.breadcrumb.trailingEdge = self.threads.panel.chatTrailingEdge }
+        }
         return presentation
     }
 
