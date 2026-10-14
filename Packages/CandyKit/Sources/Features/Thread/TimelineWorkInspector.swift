@@ -119,12 +119,17 @@ struct WorkDetail: Hashable {
 
     /// The entry's inspector. `output` is the fetch state of an output the stream left out;
     /// `checkpointStatus` reads `useV2ItemSupport`'s checkpoint for its id.
-    static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState? = nil,
+    @MainActor static func of(_ e: WorkLogEntry, label: String, workspaceRoot: String?, output: ToolOutputState? = nil,
                    checkpointStatus: ((String) -> String?)? = nil) -> WorkDetail {
         var d = body(e, label: label, workspaceRoot: workspaceRoot, output: output, checkpointStatus: checkpointStatus)
         // The image a read viewed sits above the rest in `WorkLogDetails kind="media"` (`mt-1`, MessagesTimeline.tsx:5504-5520,
         // :5723-5734); the panel below keeps its `mt-0.5`. The detail box starts 2pt below the line.
-        if let path = WorkLog.viewedImagePath(e), case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: workspaceRoot) {
+        // T3 also shows the tool result's own images (:5764-5770), so a read of an image shows it twice, and when the
+        // file is gone the preview keeps a large "Image unavailable" slot (ChatMarkdown.tsx:1491-1510). Here the
+        // result's image wins: the file preview waits for the fetched output and shows only when that has no image,
+        // and a preview that failed takes no space.
+        if let path = WorkLog.viewedImagePath(e), case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: workspaceRoot),
+           !d.showsImageOutput(output), !MarkdownImages.failed.contains(MarkdownImageSource.workspaceFile(file).key) {
             if !d.blocks.isEmpty { d.blocks[0].gap = 2 }
             d.blocks.insert(Block(text: "", kind: .image(.file(file, workspaceRoot: workspaceRoot)), gap: 2), at: 0)
         }
@@ -160,6 +165,15 @@ struct WorkDetail: Hashable {
         case .fetched(.output(let text?, _)) where !text.isEmpty: mono(text, .output)
         case .fetched(.output(_, let count)): if count == 0 { mono("No output.", .note) }
         case .fetched(.mismatch), nil: break
+        }
+    }
+
+    /// The tool result carries an image, or may once its withheld output arrives.
+    func showsImageOutput(_ output: ToolOutputState?) -> Bool {
+        if blocks.contains(where: { if case .image(.toolOutput) = $0.kind { true } else { false } }) { return true }
+        switch output {
+        case .fetched?, .failed?: return false
+        case .loading?, nil: return fetches
         }
     }
 
@@ -477,6 +491,8 @@ final class WorkDetailView: DSView {
             guard let self, let view, let key = view.key, self.imageViews[key] === view else { return }
             guard view.image == nil else { self.window?.invalidateCursorRects(for: self); return }
             MarkdownImages.failed.insert(key)
+            // A viewed file that failed leaves the row: the timeline measures and configures it again.
+            if case .file? = self.image(for: key) { NotificationCenter.default.post(name: MarkdownImages.didMeasure, object: nil, userInfo: ["key": key]) }
             self.cache = nil
             self.needsLayout = true
             self.needsDisplay = true
