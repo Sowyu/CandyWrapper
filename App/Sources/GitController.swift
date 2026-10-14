@@ -53,6 +53,10 @@ final class GitController {
     private var refs: [VcsRef] = []
     private var refsLoaded = false
     private var refsKey: String?
+    /// Refs per workspace, kept for `VCS_REFS_IDLE_TTL_MS` (client-runtime state/vcs.ts:37) so switching
+    /// between threads of a few workspaces doesn't run `git for-each-ref` on every switch.
+    private var refsCache: [String: (at: ContinuousClock.Instant, refs: [VcsRef])] = [:]
+    private static let refsReuse: Duration = .seconds(30)
     private var optimisticBranch: String?
     private var branchActionPending = false
 
@@ -144,12 +148,14 @@ final class GitController {
             refsLoaded = false
             refsKey = nil
             subscribeStatus()
-            loadRefs()
+            loadRefs(reuseWithin: Self.refsReuse)
         }
         render()
     }
 
     func sessionChanged(_ environmentId: String) {
+        // A new connection refetches refs (vcs.ts:183-189 refreshes on each connection generation).
+        refsCache.removeAll()
         guard target?.environmentId == environmentId else { return }
         statusKey = nil
         refresh()
@@ -233,14 +239,25 @@ final class GitController {
 
     // MARK: Refs
 
-    private func loadRefs() {
+    /// With `reuseWithin`, refs fetched that recently for the same workspace stand in for a request.
+    private func loadRefs(reuseWithin: Duration? = nil) {
         guard let target, let shell else { return }
         let key = statusKey
         refsKey = key
+        let now = ContinuousClock.now
+        refsCache = refsCache.filter { now - $0.value.at < Self.refsReuse }
+        if let reuseWithin, let key, let hit = refsCache[key], now - hit.at < reuseWithin {
+            refs = hit.refs
+            refsLoaded = true
+            seedWorktreeBase()
+            return
+        }
         Task { [weak self] in
             let value = try? await shell.supervisor.request(VcsRPC.listRefs, payload: VcsRPC.listRefsInput(cwd: target.cwd))
             guard let self, self.refsKey == key else { return }
-            self.refs = (try? value?.decode(as: VcsListRefsResult.self))?.refs ?? []
+            let result = try? value?.decode(as: VcsListRefsResult.self)
+            if let result, let key { self.refsCache[key] = (ContinuousClock.now, result.refs) }
+            self.refs = result?.refs ?? []
             self.refsLoaded = true
             self.seedWorktreeBase()
             self.render()

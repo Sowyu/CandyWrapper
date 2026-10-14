@@ -77,7 +77,10 @@ public final class ArchiveSettingsView: ScopedSettingsPage {
         binder.add { [weak self] in self?.update() }
     }
 
-    public override func didShow() { reload() }
+    /// Showing the page reloads, unless the first `refresh` already asked these environments.
+    public override func didShow() {
+        if !(loading && loadedFor == context.scope.connected.map(\.id)) { reload() }
+    }
 
     public override func refresh() {
         let ids = context.scope.connected.map(\.id)
