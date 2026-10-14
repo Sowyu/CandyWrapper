@@ -323,6 +323,9 @@ final class ThreadController {
     private var restored = false
     /// The environment the connection banner speaks for, and since when it is unavailable.
     private var bannerEnvironment: (id: String, since: Date)?
+    /// When the open environment last entered connecting or reconnecting. T3's 2 s grace restarts each
+    /// time (ChatView.tsx:2680-2697), so an error or offline spell doesn't skip the next grace.
+    private var reconnectingSince: (id: String, since: Date)?
     private var bannerTimer: DispatchWorkItem?
     /// Server updates for every environment; the composer notice speaks for the open thread's.
     let serverUpdates: ServerUpdates
@@ -952,12 +955,15 @@ final class ThreadController {
         guard let id = session?.environmentId, let state = environments.state(id),
               state.status != .connected, state.status != .available else {
             bannerEnvironment = nil
+            reconnectingSince = nil
             panel.showsEnvironmentBanner = false
             return
         }
         if bannerEnvironment?.id != id { bannerEnvironment = (id, Date()) }
         let elapsed = Date().timeIntervalSince(bannerEnvironment!.since)
         let reconnecting = state.status == .connecting || state.status == .reconnecting
+        if !reconnecting { reconnectingSince = nil } else if reconnectingSince?.id != id { reconnectingSince = (id, Date()) }
+        let reconnectingFor = reconnectingSince.map { Date().timeIntervalSince($0.since) } ?? 0
         let remote = id != environments.primaryId
         var wake: TimeInterval?
         // The server restarts during an update, and the update notice already shows it (ChatView.tsx:3116-3121).
@@ -966,9 +972,9 @@ final class ThreadController {
             panel.showsEnvironmentBanner = false
             updateDisconnect = remote && elapsed >= 20
             if remote && elapsed < 20 { wake = 20 - elapsed }
-        } else if reconnecting && elapsed < 2 {
+        } else if reconnecting && reconnectingFor < 2 {
             panel.showsEnvironmentBanner = false
-            wake = 2 - elapsed
+            wake = 2 - reconnectingFor
         } else {
             banner.text = "\(environments.label(id) ?? "Remote") is \(reconnecting ? "reconnecting" : "offline")"
             banner.isError = state.status == .error
