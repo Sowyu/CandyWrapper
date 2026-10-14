@@ -191,10 +191,9 @@ final class NativeSidebarFooter: NSView {
     let pullRequests = NativeIconButton(image: NativeSpec.lucide(.gitPullRequestArrow, "Pull Requests"), "Pull Requests")
     let usage = NativeIconButton("chart.bar", "Usage")
     /// Back shows only on Pull Requests and Usage, so it is made the first time one opens.
-    private(set) var back: NSButton?
+    private(set) var back: SidebarMenuButtonView?
     /// Set once by the sidebar, for Back when it is made.
-    weak var backTarget: AnyObject?
-    var backAction: Selector?
+    var onBack: (() -> Void)?
     var showsBack = false {
         didSet {
             if showsBack, back == nil { makeBack() }
@@ -213,13 +212,10 @@ final class NativeSidebarFooter: NSView {
     }
 
     private func makeBack() {
-        let b = NSButton(title: "Back", image: NSImage(systemSymbolName: "arrow.left", accessibilityDescription: nil)!, target: backTarget, action: backAction)
-        b.imagePosition = .imageLeading
-        b.alignment = .left
-        b.bezelStyle = .accessoryBarAction
-        b.isBordered = false
-        b.contentTintColor = SB.c(\.mutedForeground)
-        b.font = SB.font(13)
+        // T3's `SidebarMenuButton` (SidebarChrome.tsx:204-212): 14 pt text and a 16 pt arrow on the rows' 18 pt line, the same
+        // row Settings shows in this window. An `NSButton` drew 13 pt text with its arrow at the fill's edge.
+        let b = SidebarMenuButtonView("Back", icon: .arrowLeft)
+        b.action = { [weak self] in self?.onBack?() }
         addSubview(b)
         back = b
     }
