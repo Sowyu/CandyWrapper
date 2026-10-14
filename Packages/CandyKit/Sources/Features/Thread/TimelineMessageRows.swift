@@ -761,6 +761,7 @@ final class UserMessageAttachmentsView: DSView {
         let loader = model?.attachmentImage
         cells = images.enumerated().map { i, image in
             let cell = AsyncImageView()
+            cell.cacheable = true
             cell.layer?.cornerRadius = 10
             cell.layer?.borderWidth = 1
             cell.fallback.font = DSFont.ui(11)

@@ -3,7 +3,9 @@ import DesignSystem
 import T3Protocol
 
 /// An image drawn from a loader that decodes off the main thread at display size (`object-cover`
-/// by default). Nothing is decoded until the view sits in a window.
+/// by default). Nothing is decoded until the view sits in a window with a size, and a view that
+/// leaves its window lets go of its pixels. A `cacheable` view keeps its decode in `memory`, so the
+/// same image drawn again, say after switching threads and back, shows in the same frame.
 public final class AsyncImageView: DSView {
     /// Decodes for a pixel side; called once per `key`.
     public typealias Loader = @Sendable (_ side: Int) async -> CGImage?
@@ -19,6 +21,24 @@ public final class AsyncImageView: DSView {
     public override func rightMouseDown(with event: NSEvent) { onContextMenu?(event, self) }
     /// The pixel side to decode at; by default the view's own size at the screen's scale.
     public var requestedSide: Int?
+    /// Set when `key` always names the same pixels, like a sent attachment's id or a draft copy's
+    /// path: decodes then go through `memory`. Leave it off for keys whose bytes can change, like a
+    /// workspace file path.
+    public var cacheable = false
+    /// `image` came from `memory` at a smaller side and a sharp decode is on its way.
+    private var placeholder = false
+
+    final class Cached { let image: CGImage; let side: Int; init(_ image: CGImage, side: Int) { self.image = image; self.side = side } }
+    /// Decoded display-size images of `cacheable` views by key and fit. NSCache drops entries under
+    /// memory pressure; the cost bound holds about 200 message-cell thumbnails.
+    static let memory: NSCache<NSString, Cached> = {
+        let cache = NSCache<NSString, Cached>()
+        cache.name = "AsyncImageView.memory"
+        cache.totalCostLimit = 48 << 20
+        return cache
+    }()
+    public static func clearMemory() { memory.removeAllObjects() }
+    private var memoryKey: NSString? { key.map { "\($0)|\(cover ? "cover" : "fit")" as NSString } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -36,30 +56,58 @@ public final class AsyncImageView: DSView {
         self.loader = loader
         task?.cancel()
         task = nil
-        image = nil
-        layer?.contents = nil
-        fallback.isHidden = false
+        show(nil)
         start()
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
-            task?.cancel(); task = nil; image = nil; layer?.contents = nil
-            fallback.isHidden = false
+            if let key, image != nil { ImageTiming.mark("drop", key) }
+            task?.cancel(); task = nil; show(nil)
         } else { start() }
     }
 
+    /// A view placed in its window before its frame waits for the frame: decoding then would pick
+    /// the 16pt floor and stay blurry.
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        start()
+    }
+
+    /// The side `start` decodes at, nil while there is no size to decode for.
+    var decodeSide: Int? {
+        if let requestedSide { return requestedSide }
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return Int((max(bounds.width, bounds.height, 16) * (window?.backingScaleFactor ?? 2)).rounded(.up))
+    }
+
+    private func show(_ image: CGImage?, placeholder: Bool = false) {
+        self.image = image
+        self.placeholder = placeholder
+        layer?.contents = image
+        fallback.isHidden = image != nil
+    }
+
     private func start() {
-        guard window != nil, task == nil, image == nil, let loader, let key else { return }
-        let scale = window?.backingScaleFactor ?? 2
-        let side = requestedSide ?? Int((max(bounds.width, bounds.height, 16) * scale).rounded(.up))
+        guard window != nil, task == nil, image == nil || placeholder, let loader, let key, let side = decodeSide else { return }
+        let memoryKey = cacheable ? memoryKey : nil
+        if let memoryKey, image == nil, let hit = Self.memory.object(forKey: memoryKey) {
+            show(hit.image, placeholder: hit.side < side)
+            ImageTiming.mark("memory", "\(key) \(hit.side)/\(side)")
+            onLoad?()
+            if hit.side >= side { return }
+        }
+        ImageTiming.mark("request", "\(key) \(side)")
         task = Task { [weak self] in
             let image = await loader(side)
             guard let self, !Task.isCancelled, self.key == key else { return }
-            self.image = image
-            self.layer?.contents = image
-            self.fallback.isHidden = image != nil
+            ImageTiming.mark("pixels", "\(key) \(side)")
+            if let image, let memoryKey {
+                Self.memory.setObject(Cached(image, side: side), forKey: memoryKey, cost: image.bytesPerRow * image.height)
+            }
+            // A failed sharp decode keeps the smaller picture it had.
+            if image != nil || !self.placeholder { self.show(image) } else { self.placeholder = false }
             self.onLoad?()
         }
     }
@@ -165,6 +213,7 @@ public final class ComposerImageShelfView: DSView {
             layer?.cornerRadius = 10
             layer?.masksToBounds = true
             layer?.borderWidth = 1
+            image.cacheable = true
             addSubview(image)
             progress.alignment = .center
             progress.lineHeight = 14

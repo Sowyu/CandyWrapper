@@ -776,6 +776,7 @@ final class ThreadController {
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
         OpenTiming.begin(id.rawValue)
+        ImageTiming.mark("open", id.rawValue)
         hideNoActiveThread()
         let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()

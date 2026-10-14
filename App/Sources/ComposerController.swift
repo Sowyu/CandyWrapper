@@ -155,6 +155,8 @@ final class ComposerController {
     private var preparingImages: [String: Int] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
     private var sentFiles: [String: URL] = [:]
+    /// Server copies being fetched, so a cell and a chip asking for one image share one download.
+    private var attachmentFetches: [String: Task<URL?, Never>] = [:]
     /// The prompt stash (`usePromptStashStore`), shared by every thread and environment like T3's.
     private lazy var stash = PromptStashStore(directory: Self.supportDirectory.appendingPathComponent("PromptStash", isDirectory: true))
     private var stashInFlight: Set<String> = []
@@ -2729,7 +2731,7 @@ extension ComposerController {
     static var attachmentWorkDirectory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperAttachments", isDirectory: true)
     }
-    static var attachmentCacheDirectory: URL {
+    nonisolated static var attachmentCacheDirectory: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("CandyWrapper/attachments", isDirectory: true)
     }
 
@@ -3428,26 +3430,57 @@ extension ComposerController {
     }
 
     /// A sent image's bytes on disk: the file it was sent from, else the server copy, fetched once
-    /// through `assets.createUrl` (resource `attachment`) into the cache directory.
+    /// through `assets.createUrl` (resource `attachment`) into the cache directory. T3 leans on the
+    /// browser's cache for the same bytes (`private, max-age=3600`, apps/server/src/http.ts:420-423).
     fileprivate func attachmentSource(_ attachmentId: String) async -> URL? {
         if let local = sentFiles[attachmentId], FileManager.default.fileExists(atPath: local.path) { return local }
         let safe = attachmentId.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
         let cached = Self.attachmentCacheDirectory.appendingPathComponent(safe)
         if FileManager.default.fileExists(atPath: cached.path) { return cached }
+        if let running = attachmentFetches[attachmentId] { return await running.value }
         guard case .thread(let threadId) = target, let shell = environments.session(threadId.environmentId) else { return nil }
         let supervisor = shell.supervisor, base = shell.http.baseURL
-        do {
-            let result = try await supervisor.request("assets.createUrl", payload: .object([
-                "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
-            guard case .string(let relative)? = result["relativeUrl"], let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return nil }
-            let (temp, response) = try await URLSession.shared.download(from: url)
-            guard ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
-            try? FileManager.default.createDirectory(at: Self.attachmentCacheDirectory, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: cached)
-            try FileManager.default.moveItem(at: temp, to: cached)
-            return cached
-        } catch {
-            return nil
+        let fetch = Task<URL?, Never> {
+            do {
+                ImageTiming.mark("fetch", attachmentId)
+                await ImageTiming.simulateLink()
+                let result = try await supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+                guard case .string(let relative)? = result["relativeUrl"], let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return nil }
+                let (temp, response) = try await URLSession.shared.download(from: url)
+                guard ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
+                if ImageTiming.slowLink != nil {
+                    await ImageTiming.simulateLink(bytes: (try? temp.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                }
+                ImageTiming.mark("fetched", attachmentId)
+                try? FileManager.default.createDirectory(at: Self.attachmentCacheDirectory, withIntermediateDirectories: true)
+                try? FileManager.default.removeItem(at: cached)
+                try FileManager.default.moveItem(at: temp, to: cached)
+                return cached
+            } catch {
+                return nil
+            }
+        }
+        attachmentFetches[attachmentId] = fetch
+        let url = await fetch.value
+        attachmentFetches[attachmentId] = nil
+        return url
+    }
+
+    /// Keeps the fetched attachment copies under `limit` bytes, dropping the least recently read first.
+    /// Runs once at launch, off the main thread.
+    nonisolated static func pruneAttachmentCache(limit: Int = 512 << 20) {
+        let keys: [URLResourceKey] = [.fileSizeKey, .contentAccessDateKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(at: attachmentCacheDirectory, includingPropertiesForKeys: keys) else { return }
+        var entries = files.compactMap { url -> (url: URL, size: Int, read: Date)? in
+            guard let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+            return (url, values.fileSize ?? 0, values.contentAccessDate ?? .distantPast)
+        }
+        var total = entries.reduce(0) { $0 + $1.size }
+        entries.sort { $0.read < $1.read }
+        for entry in entries where total > limit {
+            try? FileManager.default.removeItem(at: entry.url)
+            total -= entry.size
         }
     }
 
