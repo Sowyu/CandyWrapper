@@ -104,7 +104,10 @@ public enum ProvidersLogic {
     public static func displayModels(live: [ServerProviderModel], custom: [(slug: String, name: String, raw: JSONValue)],
                                      favorites: Set<String>, hidden: Set<String>, order: [String]) -> [DisplayModel] {
         var models = live.filter { !$0.isCustom }.map { DisplayModel(slug: $0.slug, name: $0.name, isCustom: false, capabilities: capabilities($0)) }
-        models += custom.map { c in
+        // A custom entry with a built-in slug only renames that built-in on the server, so the built-in row already
+        // shows it (ProviderInstanceCard.tsx:183-199, T3 3105 ffb4af8d5).
+        let builtIn = Set(models.map(\.slug))
+        models += custom.filter { !builtIn.contains($0.slug) }.map { c in
             DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map(capabilities) ?? [])
         }
         let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
@@ -155,7 +158,7 @@ public enum ProvidersLogic {
     }
 
     /// Runtime fields per driver (each driver's settings schema, `providerSettingsForm` annotations, in `order`).
-    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false; public var options: [(String, String)] = []; public var defaultValue = "" }
+    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false; public var redacted = false; public var options: [(String, String)] = []; public var defaultValue = "" }
     public static func fields(_ driver: String, config: JSONValue? = nil) -> [Field] {
         func binary(_ name: String, _ detail: String) -> Field { Field(key: "binaryPath", title: "Binary path", detail: detail, placeholder: name) }
         switch driver {
@@ -183,7 +186,7 @@ public enum ProvidersLogic {
                                  Field(key: "serverPassword", title: "Server password", detail: "Stored in plain text on disk.", placeholder: "Optional", secret: true)]
         case "antigravity": return [
             Field(key: "authMethod", title: "Sign-in method", detail: "Google accounts use your subscription; API keys and Agent Platform bill usage.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
-            Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true),
+            Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true, redacted: true),
             Field(key: "gcpProject", title: "GCP project", detail: "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.", placeholder: "my-project-id"),
             Field(key: "gcpLocation", title: "GCP location", detail: "Region for Gemini Enterprise or Agent Platform.", placeholder: "us-central1"),
             binary("Automatic", "Custom ACP executable. Leave empty to select automatically.")]
@@ -754,12 +757,16 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                     }
                     control = select
                 } else if f.secret {
-                    let input = SecureInputView(placeholder: f.placeholder)
-                    input.text = saved
+                    // `SecretInput` (settings/SecretInput.tsx, T3 3105 d514a8c61): a value the server stores apart arrives
+                    // redacted, so the field stays empty with "Stored secret, enter a new value to replace", and an
+                    // empty commit keeps it.
+                    let configured = f.redacted && !saved.isEmpty
+                    let input = SecureInputView(placeholder: configured ? "Stored secret, enter a new value to replace" : f.placeholder)
+                    input.text = f.redacted ? "" : saved
                     input.frame.size = NSSize(width: 224, height: 32)
                     input.isEnabled = !readOnly
                     input.onSubmit = { [weak self, weak input] in
-                        guard let input else { return }
+                        guard let input, !(configured && input.text.isEmpty) else { return }
                         self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: input.text), env: env.id)
                     }
                     control = input

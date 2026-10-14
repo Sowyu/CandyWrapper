@@ -462,7 +462,7 @@ public final class MarkdownView: DSView {
                                             load: MarkdownImages.loader(source), reference: reference))
                     imageKeys.insert(key)
                     let sized = MarkdownImages.sizes[key] != nil && !failed
-                    placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt) : "", reference?.tooltip ?? (alt.isEmpty ? "image" : alt)))
+                    placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt, detail: MarkdownImages.missingFileAccess.contains(key) ? MarkdownImages.missingFileAccessMessage : nil) : "", reference?.tooltip ?? (alt.isEmpty ? "image" : alt)))
                 case .image(let image, let rect):
                     imageItems.append(.init(key: "diagram-\(imageItems.count)-\(ObjectIdentifier(image))", name: "Diagram", load: { _ in image }))
                     placed.append((rect, 10, "Image unavailable. The file may have been moved or deleted.", nil))
@@ -779,12 +779,32 @@ public final class MarkdownView: DSView {
         let tooLong = captured.text.utf16.count > 8000
         let button = AssistantSelectionToolbar.button(tooLong: tooLong)
         let point = convert(event.locationInWindow, from: nil), size = button.intrinsicContentSize
-        button.frame = NSRect(x: max(0, min(point.x + 8, bounds.width - size.width)),
-                              y: max(0, min(point.y + 8, bounds.height - size.height)), width: size.width, height: size.height)
-        let anchor = AssistantSelectionAnchor(view: self, rect: lastLineRect(range) ?? NSRect(origin: point, size: .zero))
+        let last = lastLineRect(range)
+        // The pointer anchors the button only when it let go on the selected text; past it (a drag that ended in the
+        // margin) the button sits under the selection's last line (AssistantSelectionToolbar.tsx:64-81, T3 3105 55fc13ff6;
+        // `resolveSelectionActionPosition`, lib/selectionActions.ts:5-26).
+        let onText = selectedLineRects(range).contains { $0.insetBy(dx: -8, dy: -8).contains(point) }
+        let preferred = onText || last == nil ? NSPoint(x: point.x + 8, y: point.y + 8) : NSPoint(x: last!.maxX, y: last!.maxY + 4)
+        button.frame = NSRect(x: max(0, min(preferred.x, bounds.width - size.width)),
+                              y: max(0, min(preferred.y, bounds.height - size.height)), width: size.width, height: size.height)
+        let anchor = AssistantSelectionAnchor(view: self, rect: last ?? NSRect(origin: point, size: .zero))
         button.action = { [weak self] in self?.clearAssistantSelection(); self?.onCiteSelection?(captured, anchor) }
         citeButton?.removeFromSuperview(); citeButton = button; addSubview(button)
     }
+    /// Every line box the selection covers (`range.getClientRects()`).
+    private func selectedLineRects(_ range: NSRange) -> [NSRect] {
+        var rects: [NSRect] = []
+        for (box, origin, offset) in selectionBoxes {
+            let overlap = NSIntersectionRange(range, NSRange(location: offset, length: (box.text as NSString).length))
+            guard overlap.length > 0 else { continue }
+            for span in box.spans(NSRange(location: overlap.location - offset, length: overlap.length)) {
+                rects.append(NSRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
+                                    width: max(1, span.x1 - span.x0), height: box.lineHeight))
+            }
+        }
+        return rects
+    }
+
     /// The selection's last line box: a multi-line selection anchors its comment where the pointer let go
     /// (AssistantCitationChip.tsx:92-102).
     private func lastLineRect(_ range: NSRange) -> NSRect? {

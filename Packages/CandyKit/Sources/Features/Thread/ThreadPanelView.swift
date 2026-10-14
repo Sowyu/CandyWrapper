@@ -292,6 +292,10 @@ public final class ThreadPanelView: DSView {
     /// The notice banners are built the first time they show; wire them through the lazy holders.
     public let lazyNoticeBanner = LazyView { ComposerNoticeBannerView() }
     public let lazyGoalBanner = LazyView { ComposerNoticeBannerView() }
+    /// "Subagent needs input" (ChatView.tsx:7462-7497), keyed by the first child like T3's `child-input:<id>`.
+    public let lazyChildInputBanner = LazyView { ComposerNoticeBannerView() }
+    public var childInputBanner: ComposerNoticeBannerView { lazyChildInputBanner.view }
+    public var childInputKey: String? { didSet { if childInputKey != oldValue { needsLayout = true } } }
     public let lazyRecoveryBanner = LazyView { ComposerNoticeBannerView() }
     public var noticeBanner: ComposerNoticeBannerView { lazyNoticeBanner.view }
     public var goalBanner: ComposerNoticeBannerView { lazyGoalBanner.view }
@@ -382,6 +386,7 @@ public final class ThreadPanelView: DSView {
                                                  height: { _ in EnvironmentBannerView.height }))
         }
         if serverUpdateNotice != nil && composerVisible { items.append(notice("server-version", serverUpdateBanner)) }
+        if docked, let key = childInputKey { items.append(notice("child-input:" + key, childInputBanner)) }
         if docked && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
         if docked, let key = branchMismatchKey { items.append(notice("branch-mismatch:" + key, branchBanner)) }
         return items
@@ -606,6 +611,7 @@ public final class ThreadPanelView: DSView {
         // Each banner goes where it always sat back to front: queue, goal, recovery, plan, tasks;
         // server update, notice, environment banner.
         lazyBranchBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyGoalBanner.loaded, self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
+        lazyChildInputBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyGoalBanner.loaded, self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyGoalBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyRecoveryBanner.loaded, self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyRecoveryBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.lazyPlanFollowUpBanner.loaded, self?.tasksView]) }
         lazyPlanFollowUpBanner.onLoad = { [weak self] in self?.insertAccessory($0, under: [self?.tasksView]) }
@@ -1330,7 +1336,8 @@ public final class ThreadPanelView: DSView {
         }
         let ordered = ComposerBannerStackItem.ordered(items)
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
-                                                 lazyGoalBanner.loaded, lazyRecoveryBanner.loaded, lazyBranchBanner.loaded, usageLimitsBanner]
+                                                 lazyChildInputBanner.loaded, lazyGoalBanner.loaded, lazyRecoveryBanner.loaded,
+                                                 lazyBranchBanner.loaded, usageLimitsBanner]
         for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
         bannerStack.update(ordered)
         let front = ordered.first

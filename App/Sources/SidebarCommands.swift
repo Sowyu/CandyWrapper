@@ -196,12 +196,12 @@ final class SidebarCommands {
             guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil, !self.isUsagePageOpen else { return false }
             return self.ledger.undoLatest()
         }
-        // `thread.settle` settles the open thread, or unsettles a settled one. The view stays on the thread
-        // (`settleThread(activeThreadRef)`, ChatView.tsx:8010-8030); only the sidebar's settle moves on.
+        // `thread.settle` settles the open thread and moves to the next one like the sidebar's Settle button, or
+        // unsettles a settled one (ChatView.tsx:8104-8116, settleAndAdvance.ts, T3 3105 6edd44f40).
         shortcuts.on("thread.settle") { [weak self] _ in
             guard let self, self.threads.panel.window != nil else { return false }
             if let id = self.threads.openThreadId, let thread = self.shell(id) {
-                if thread.settledOverride == .settled { self.unsettle(id) } else { self.settle(id, navigates: false) }
+                if thread.settledOverride == .settled { self.unsettle(id) } else { self.settle(id) }
             }
             return true
         }

@@ -44,7 +44,6 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         terminal.bellStyle = .none
         terminal.optionAsMetaKey = false
         terminal.lineSpacing = Self.lineSpacing(for: terminal.font)
-        terminal.installColors(Self.palette)
         terminal.hidesScroller = true
         terminal.onScrollerUpdate = { [weak self] in self?.syncScrollbar() }
         addSubview(terminal)
@@ -102,13 +101,15 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         return (target - 0.001) / natural
     }
 
-    /// libghostty's default 16 colors (Tomorrow Night), which T3 keeps: it sets no palette. Read
-    /// from the shipped ghostty-vt.wasm; SwiftTerm derives the 256-color cube the same way.
-    static let palette: [SwiftTerm.Color] = [
-        0x1d1f21, 0xcc6666, 0xb5bd68, 0xf0c674, 0x81a2be, 0xb294bb, 0x8abeb7, 0xc5c8c6,
-        0x666666, 0xd54e53, 0xb9ca4a, 0xe7c547, 0x7aa6da, 0xc397d8, 0x70c0b1, 0xeaeaea,
-    ].map { (rgb: Int) in
-        SwiftTerm.Color(red: UInt16((rgb >> 16) & 0xff) * 257, green: UInt16((rgb >> 8) & 0xff) * 257, blue: UInt16(rgb & 0xff) * 257)
+    /// VS Code's default ANSI colors per appearance (ThreadTerminalDrawer.tsx `TERMINAL_PALETTES`, T3 3105 37e2acda5);
+    /// before that T3 kept libghostty's Tomorrow Night, which looked washed out. Colors 16 to 255 keep their defaults.
+    static func palette(dark: Bool) -> [SwiftTerm.Color] {
+        (dark ? [0x000000, 0xcd3131, 0x0dbc79, 0xe5e510, 0x2472c8, 0xbc3fbc, 0x11a8cd, 0xe5e5e5,
+                 0x666666, 0xf14c4c, 0x23d18b, 0xf5f543, 0x3b8eea, 0xd670d6, 0x29b8db, 0xe5e5e5]
+              : [0x000000, 0xcd3131, 0x107c10, 0x949800, 0x0451a5, 0xbc05bc, 0x0598bc, 0x555555,
+                 0x666666, 0xcd3131, 0x14ce14, 0xb5ba00, 0x0451a5, 0xbc05bc, 0x0598bc, 0xa5a5a5]).map { (rgb: Int) in
+            SwiftTerm.Color(red: UInt16((rgb >> 16) & 0xff) * 257, green: UInt16((rgb >> 8) & 0xff) * 257, blue: UInt16(rgb & 0xff) * 257)
+        }
     }
 
     /// `--terminal-*` (index.css:1146-1149, 1187-1188): the app's background and foreground, a navy
@@ -134,6 +135,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         guard dark != appliedDark else { return }
         appliedDark = dark
         let theme = theme(dark: dark)
+        terminal.installColors(Self.palette(dark: dark))
         terminal.nativeBackgroundColor = theme.background
         terminal.nativeForegroundColor = theme.foreground
         terminal.caretColor = theme.cursor

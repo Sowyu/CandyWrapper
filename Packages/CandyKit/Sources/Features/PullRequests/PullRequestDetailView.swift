@@ -91,6 +91,9 @@ public final class PullRequestDetailView: DSView {
     private let numberIcon = IconView(name: .externalLink, size: 10)
     private let checkout = ButtonView("Check out", icon: .gitBranch, variant: .outline, size: .xs).menuTrigger()
     private var primary: NSView?
+    /// The merge or auto-merge button's width before a relabel, which the next layout animates from (`AnimatedWidth`,
+    /// `transition-[width] duration-150 ease-out`, T3 3105 6a68bee34 and 9c9ae43d8).
+    private var primaryWidthFrom: CGFloat?
     /// Merge, auto-merge, close and revert confirm in place (`useInlineActionConfirm`).
     let inlineConfirm = InlineActionConfirm()
     let more = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconXs).menuTrigger()
@@ -452,6 +455,13 @@ public final class PullRequestDetailView: DSView {
 
     /// The header's merge slot (`resolvePullRequestPrimaryControl`).
     private func rebuildActions() {
+        let previous = (primary as? ButtonView).flatMap { b in b.reservedTitles.isEmpty ? nil : (b.reservedTitles, b.frame.width) }
+        defer {
+            // The same confirm button relabeled (armed, pending or back): its width animates.
+            if let previous, let b = primary as? ButtonView, b.reservedTitles == previous.0 {
+                primaryWidthFrom = previous.1
+            }
+        }
         primary?.removeFromSuperview()
         primary = nil
         guard let d = detail else { stackButton.isHidden = true; stackMergeButton.isHidden = true; return }
@@ -521,7 +531,8 @@ public final class PullRequestDetailView: DSView {
         let label = actionPending ? pending : inlineConfirm.isArmed(action, slot: "header") ? armed : normal
         let b = ButtonView(label, icon: .gitMerge, variant: .default, size: .xs)
         b.iconSize = 14
-        b.reservedTitles = [normal, armed]
+        // The method label holds the width; a longer label widens it (T3 3105 6a68bee34, 9c9ae43d8).
+        b.reservedTitles = [normal]
         b.isEnabled = !actionPending
         b.toolTip = label
         b.setAccessibilityLabel(label)
@@ -532,6 +543,8 @@ public final class PullRequestDetailView: DSView {
                                                      onDisarm: { [weak self] in self?.rebuildActions() })
             if confirmed { self.onAction?(action, method); self.rebuildActions(); return }
             // Relabel in place: a rebuilt button would drop the hover under the pointer.
+            self.primaryWidthFrom = b?.frame.width
+            self.needsLayout = true
             b?.title = armed
             b?.toolTip = armed
             b?.setAccessibilityLabel(armed)
@@ -965,7 +978,19 @@ public final class PullRequestDetailView: DSView {
         }
         if let primary {
             let pw = ceil(primary.intrinsicContentSize.width)
-            primary.frame = NSRect(x: r - pw, y: 2, width: pw, height: 24); r -= pw + 4
+            let target = NSRect(x: r - pw, y: 2, width: pw, height: 24)
+            if let from = primaryWidthFrom, from != pw, window != nil, !Motion.reduced {
+                primary.frame = NSRect(x: r - from, y: 2, width: from, height: 24)
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.15
+                    ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1) // Tailwind 4 `ease-out`
+                    primary.animator().frame = target
+                }
+            } else {
+                primary.frame = target
+            }
+            primaryWidthFrom = nil
+            r -= pw + 4
         }
         if !stackMergeButton.isHidden {
             let sw = ceil(stackMergeButton.intrinsicContentSize.width)

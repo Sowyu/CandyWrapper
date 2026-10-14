@@ -77,6 +77,7 @@ public final class ThreadLineageController {
             panel.timeline.setHeader(nil, height: 0)
             panel.timeline.setFooter(nil, height: 0)
             panel.header.parentThreadTitle = nil
+            panel.childInputKey = nil
             return
         }
         let all = shells?() ?? []
@@ -106,6 +107,21 @@ public final class ThreadLineageController {
         updateBar(projection, shell: byId[thread.id], parent: thread.lineage?.parentThreadId, env: env)
         shell = all.first { $0.id == threadId }
         syncFooter()
+        updateChildInputs(all, threadId: threadId)
+    }
+
+    /// `childInputBannerItem` (ChatView.tsx:7462-7497): subagents waiting on a question, unless this thread waits on
+    /// the user itself. Hidden subagent rows still ask through their parent.
+    // ponytail: the children's titles are plain text where T3 makes each an inline button; Open question opens the first
+    private func updateChildInputs(_ all: [ThreadShell], threadId: ThreadId) {
+        let children = shell?.pendingRuntimeRequest == nil ? ChildThreadInputs.pending(for: threadId, in: all) : []
+        guard let first = children.first else { panel.childInputKey = nil; return }
+        panel.childInputBanner.apply(.init(variant: .neutral, icon: .messageCircle,
+                                           title: children.count == 1 ? "Subagent needs input" : "\(children.count) subagents need input",
+                                           description: children.map(\.title).joined(separator: ", "), actions: ["Open question"],
+                                           priority: .activity))
+        panel.childInputBanner.onAction = { [weak self] index in if index == 0 { self?.openThread?(first.id) } }
+        panel.childInputKey = first.id.rawValue
     }
 
     /// The footer under the last row: a pending context handoff when the composer's model needs one

@@ -77,7 +77,7 @@ public enum MarkdownImages {
     public static let didMeasure = Notification.Name("MarkdownImages.didMeasure")
 
     /// Force Reload: images measure and load again.
-    static func clear() { sizes = [:]; failed = [] }
+    static func clear() { sizes = [:]; failed = []; missingFileAccess = [] }
 
     static func record(_ size: CGSize, for key: String) {
         guard size.width > 0, size.height > 0, sizes[key] != size else { return }
@@ -174,7 +174,15 @@ public enum MarkdownImages {
 
     /// The failed slot's label (`ChatMarkdownMediaUnavailableLabel`, ChatMarkdown.tsx:1345-1357).
     // ponytail: no TriangleAlert icon before the label; add it when the slot draws its own label
-    static func unavailableLabel(_ alt: String) -> String { alt.isEmpty ? "Image unavailable" : "Image unavailable · " + alt }
+    /// With the reason when it is known, like a connection without `filesystem:read` (T3 3105 4cf8243f8).
+    static func unavailableLabel(_ alt: String, detail: String? = nil) -> String {
+        (["Image unavailable", alt, detail ?? ""] as [String]).filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// `MISSING_FILE_ACCESS_MESSAGE` (packages/client-runtime/src/state/assets.ts:89).
+    public static let missingFileAccessMessage = "This connection cannot read host files. Pair again with a new link to view it."
+    /// Host file keys (`media-file:<path>`) the server refused because the session lacks `filesystem:read`.
+    public static var missingFileAccess: Set<String> = []
 }
 
 /// The authored media location behind an image, for its tooltip and menu (client-runtime/src/mediaReference.ts).
