@@ -313,7 +313,8 @@ public final class ThreadPanelView: DSView {
     /// Thread details, the terminal drawer, the right panel or its maximized state changed: Glass Native's
     /// toolbar toggles show their on states.
     public var onPanelTogglesChange: (() -> Void)?
-    private var reportedMaximizable = false
+    /// What `onMaximizableChange` last reported, for a toolbar made after it (a switch to Glass Native).
+    public private(set) var isMaximizable = false
     /// The soft edge where the rows scroll under the toolbar, made while Glass Native shows.
     private var scrollFade: ToolbarScrollFade?
 
@@ -1508,8 +1509,8 @@ public final class ThreadPanelView: DSView {
         // Glass Native's toolbar holds the panel toggles and Maximize, so the in-panel copies stay hidden.
         maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil) || hidesCustomChrome
         let maximizable = !sheet && rightPanelOpen
-        if maximizable != reportedMaximizable {
-            reportedMaximizable = maximizable
+        if maximizable != isMaximizable {
+            isMaximizable = maximizable
             onMaximizableChange?(maximizable)
         }
         if hidesCustomChrome { for toggle in header.toggles where toggle.superview === self { toggle.isHidden = true } }

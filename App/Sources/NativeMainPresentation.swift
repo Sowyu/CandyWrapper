@@ -61,7 +61,7 @@ final class MainPresentationController {
         }
         presentation.actions = actions
         presentation.breadcrumb = breadcrumb
-        presentation.setMaximizeShown(threads.panel.rightPanelOpen)
+        presentation.setMaximizeShown(threads.panel.isMaximizable)
         threads.panel.onMaximizableChange = { [weak presentation] in presentation?.setMaximizeShown($0) }
         threads.panel.onPanelTogglesChange = { [weak presentation] in presentation?.syncPanelStates() }
         return presentation
