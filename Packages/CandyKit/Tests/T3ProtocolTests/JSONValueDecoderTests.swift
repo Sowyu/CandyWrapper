@@ -55,6 +55,27 @@ struct JSONValueDecoderTests {
 
     /// Strings come out of the CFString bytes: ASCII, short (tagged) and long, escaped NUL, Latin-1,
     /// CJK, emoji (surrogate pairs) and non-ASCII keys must match JSONDecoder.
+    /// The scanner accepts and rejects what JSONSerialization did, and agrees on the values.
+    @Test func scannerAcceptsWhatJSONSerializationAccepts() throws {
+        let inputs = [" 1 ", "\u{FEFF}{\"a\":1}", "[]", "{}", " [ 1 , 2 ] ", "\"x\"", "true", "null", "-0.5e-3", "1E+2",
+                      "123456789012345678901234567890", "{\"a\":1,\"a\":2}", "[1e308, -1e-308, 0.1, 9007199254740993]",
+                      "", " ", "[1,]", "{\"a\":1,}", "[01]", "[1.]", "[.5]", "[-]", "[1e]", "[+1]", "tru", "nul", "[1] x",
+                      "{\"a\" 1}", "{a:1}", "[\"a\tb\"]", "[\"\\x\"]", "[\"\\u12\"]", "[\"open", "[", "{", "{\"a\":}", "[NaN]"]
+        for text in inputs {
+            let data = Data(text.utf8)
+            let reference = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
+            let scanned = try? JSONValue(parsing: data)
+            #expect((reference == nil) == (scanned == nil), "\(text)")
+            if let reference, let scanned {
+                let back = try JSONSerialization.data(withJSONObject: reference, options: .fragmentsAllowed)
+                #expect(scanned == (try JSONDecoder().decode(JSONValue.self, from: back)), "\(text)")
+            }
+        }
+        #expect(try JSONValue(parsing: Data(#"["\ud83c", "\udf6c x", "\ud83c\u0041"]"#.utf8)) == .array([.string("\u{FFFD}"), .string("\u{FFFD} x"), .string("\u{FFFD}A")]))
+        #expect((try? JSONValue(parsing: Data((String(repeating: "[", count: 600) + String(repeating: "]", count: 600)).utf8))) == nil)
+        #expect(try JSONValue(parsing: Data((String(repeating: "[", count: 500) + String(repeating: "]", count: 500)).utf8)) != .null)
+    }
+
     @Test func stringsMatchJSONDecoder() throws {
         let long = String(repeating: "plain ascii text ", count: 400)
         let values = ["", "a", "short", long, "nul\\u0000inside", "\\u0000", "caf\\u00e9", "café " + long, "日本語のテキスト",
