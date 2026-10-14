@@ -100,6 +100,19 @@ The system's blue emphasized selection never shows. Text keeps its T3 colors on 
 
 Phase 1 is done (2026-10-13). Phase 2, the native sidebar, is done (2026-10-13, see "Phase 2" below).
 
+### Hidden panels (2026-10-14)
+
+`ThreadPanelView` builds the details card, the terminal drawer, the stash menu and the question panel the first time each shows, through `LazyView`, in every theme. Controllers wire them with `configure` and fill them only while they are loaded. State pushed before then waits in `LazyView.set` or is rendered again when the panel is built. A closed panel stays built and hidden. The thread header stays, because the native breadcrumb reads it. The context strip stays too, because the git and composer controllers read its Run on control's state.
+
+Release builds of d6d8ba7 and the change on top of it (4eb7f99), launch and idle only, Glass and Glass Native interleaved, three launches each. Other agents were building and running apps, so every run but one was marked noisy and launch to window swung from 443 to 1,331 ms. Medians:
+
+| | Glass before | Glass after | Glass Native before | Glass Native after |
+|---|---|---|---|---|
+| Footprint at rest | 35.6 MB (33.9 to 36.0) | 34.1 MB (32.2 to 34.3) | 45.5 MB (43.4 to 45.9) | 43.8 MB (41.7 to 44.1) |
+| Launch to window | 771 ms (462 to 963) | 870 ms (443 to 1,331) | 1,070 ms (798 to 1,072) | 1,003 ms (503 to 1,079) |
+
+The launch numbers are noise and show no change either way. The audit's 2.5 and 3.9 MB also counted the header, the context strip and the timeline's hidden recycled rows, which are still built.
+
 ### Phase 5a (2026-10-14)
 
 Menus, the command palette and the composer's dark contrast. Screenshots are in `/tmp/cw-peek/menus-*`.
@@ -320,7 +333,7 @@ Fixes tried that saved nothing measurable: the sidebar accessory's buttons witho
 
 The target, within 2 MB and 10 ms of Glass, is out of reach while Glass Native uses `NSToolbar` and `NSSplitViewController`: those two cost 6.3 MB and 45 ms here, and the same in an empty AppKit window. Bigger fixes, with what each would save:
 
-1. Create the thread panel's hidden panels on first show: 2.5 MB in both themes and 3.9 MB in Glass Native, so the gap shrinks by 1.4 MB, plus a few ms of the first layout. It touches `ThreadPanelView` and the panels' callers (`detailsCard` alone has 54).
+1. Done (2026-10-14), see "Hidden panels" under Status: the details card, terminal drawer, stash menu and question panel are built on first show. The header (the breadcrumb reads it) and the context strip (controllers read its Run on state) stay. Measured 1.5 MB in Glass and 1.7 MB in Glass Native.
 2. Bring the native sidebar to classic's cost: up to 2.7 MB and 15 ms. Dropping the hidden classic chrome in native mode is about 0.2 MB of it.
 3. Lay the split out by frames with our own sidebar glass instead of `NSSplitViewController`: 2.7 MB and 15 to 20 ms, but it gives up the system sidebar glass, its collapse animation and the tracking separator. A design call.
 4. The toolbar has no saving short of dropping `NSToolbar`, 3.6 MB and 20 to 30 ms.
