@@ -121,11 +121,20 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         return true
     }
 
+    /// Where the crumbs must end, in window coordinates: the chat column's edge while the right panel sits inline,
+    /// as T3's header ends at the panel. Nil lets them run to 640.
+    public var trailingEdge: CGFloat? {
+        didSet { if trailingEdge != oldValue { resize() } }
+    }
+
     /// The toolbar measures the item once; an explicit width it follows when the crumbs change.
     private lazy var widthConstraint = widthAnchor.constraint(equalToConstant: 200)
     private func resize() {
         invalidateIntrinsicContentSize()
-        let width = intrinsicContentSize.width
+        var width = intrinsicContentSize.width
+        if let edge = trailingEdge, window != nil {
+            width = min(width, max(120, edge - convert(NSPoint.zero, to: nil).x - 16))
+        }
         if widthConstraint.constant != width { widthConstraint.constant = width }
         if frame.width != width { setFrameSize(NSSize(width: width, height: 28)) }
         superview?.needsLayout = true

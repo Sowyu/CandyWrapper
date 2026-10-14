@@ -315,6 +315,10 @@ public final class ThreadPanelView: DSView {
     public var onPanelTogglesChange: (() -> Void)?
     /// What `onMaximizableChange` last reported, for a toolbar made after it (a switch to Glass Native).
     public private(set) var isMaximizable = false
+    /// Glass Native: the chat column's right edge in window coordinates while the right panel sits inline beside it,
+    /// else nil. The toolbar's breadcrumb ends there, as T3's header ends at the panel (ChatHeader.tsx:255-259).
+    /// `onPanelTogglesChange` reports a change.
+    public private(set) var chatTrailingEdge: CGFloat?
     /// The soft edge where the rows scroll under the toolbar, made while Glass Native shows.
     private var scrollFade: ToolbarScrollFade?
 
@@ -1454,6 +1458,13 @@ public final class ThreadPanelView: DSView {
         let shownPanel = sheet || !panelSlide.isRunning ? panelWidth
             : ((rightPanelOpen ? panelWidth : panelGhost?.bounds.width ?? 0) * panelSlide.value * scale).rounded() / scale
         let chat = sheet ? bounds.width : max(0, bounds.width - shownPanel)
+        // The panel's resting width, not the slide's, so the toolbar resizes the breadcrumb once per open or close.
+        let edge: CGFloat? = hidesCustomChrome && rightPanelOpen && !sheet && !rightPanelMaximized && window != nil
+            ? convert(NSPoint(x: max(0, bounds.width - panelWidth), y: 0), to: nil).x : nil
+        if edge != chatTrailingEdge {
+            chatTrailingEdge = edge
+            DispatchQueue.main.async { [weak self] in self?.onPanelTogglesChange?() }
+        }
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
         // Glass Native: the right panel starts below the toolbar, its tabs clear of it.
