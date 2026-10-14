@@ -99,6 +99,11 @@ actor Recorder {
 
 typealias Lifecycle = ServerLifecycle<FakeServer>
 
+actor Counter {
+    private var value = 0
+    func next() -> Int { value += 1; return value }
+}
+
 struct ServerLifecycleTests {
     let scheduler = ManualScheduler()
     let rec = Recorder()
@@ -194,6 +199,23 @@ struct ServerLifecycleTests {
         #expect(await lc.phase == .stopped)
         #expect(try await lc.ensureRunning().isOwned)
         #expect(await rec.launches == 2)
+    }
+
+    // 570542662: a server that took the home between discovery and our start refuses ours with exit 78.
+    @Test func aHomeTakenDuringOurStartIsReused() async throws {
+        let rec = self.rec, other = try Self.liveLookingServer()
+        let discoveries = Counter()
+        let lc = Lifecycle(dependencies: .init(
+            discover: { await discoveries.next() == 1 ? nil : other },
+            launch: { _ = try await rec.launch(); throw LocalServerLaunchError.stateDirOwned(home: "/tmp/home") },
+            stop: { await rec.stop($0) },
+            setBackground: { _, _ in },
+            scheduler: scheduler), idleTimeout: .seconds(600), remoteAccess: false)
+        let server = try await lc.ensureRunning()
+        #expect(!server.isOwned)
+        #expect(await lc.phase == .running(owned: false))
+        #expect(await rec.launches == 1)
+        #expect(LocalServerLaunchError.stateDirOwned(home: "/h").description.hasPrefix("A T3 Code server already owns /h."))
     }
 
     @Test func aServerThatCantBeUsedIsNeverJoinedByOurs() async throws {

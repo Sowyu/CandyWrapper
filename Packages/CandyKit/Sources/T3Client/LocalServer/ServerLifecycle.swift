@@ -242,6 +242,15 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
         let owned: Owned
         do {
             owned = try await deps.launch()
+        } catch LocalServerLaunchError.stateDirOwned(let home) {
+            // Another server took the home between discovery and our start (570542662): use it instead.
+            if let running = try? await deps.discover() {
+                server = .reused(running)
+                phase = .running(owned: false)
+                return .reused(running)
+            }
+            phase = .stopped
+            throw LocalServerLaunchError.stateDirOwned(home: home)
         } catch {
             phase = .stopped
             throw error

@@ -81,9 +81,11 @@ struct LocalServerIntegrationTests {
         #expect(session.authenticated)
         #expect(first.descriptor.isCompatible)
 
-        // Discovery sees it, so a second app launch would reuse it instead of starting another.
-        let found = await LocalServerDiscovery.findRunning(home: Self.home)
-        #expect(found?.runtime.pid == first.pid)
+        // Discovery sees it, so a second app launch would reuse it instead of starting another. A 3093+
+        // server answers its descriptor before it writes `server-runtime.json` (server.ts:766-790), and
+        // holds the owner lock from the start, so discovery waits on the lock in between.
+        #expect(LocalServerDiscovery.ownerLockHolder(home: Self.home).map { $0 == first.pid } ?? true)
+        #expect(await eventually(seconds: 10) { await LocalServerDiscovery.findRunning(home: Self.home)?.runtime.pid == first.pid })
 
         // 2. Connect over WebSocket RPC with the bearer.
         let supervisor = ConnectionSupervisor(dependencies: .init(connect: ConnectionSupervisor.directConnector(

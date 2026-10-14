@@ -18,6 +18,30 @@ struct LocalServerDiscoveryTests {
         #expect(throws: (any Error).self) { try LocalServerDiscovery.parseRuntimeState(Data("{}".utf8)) }
     }
 
+    /// The owner lock as a 3105 server holds it (serverOwnership.ts): an exclusive transaction on
+    /// `server-owner.sqlite`, here from another process, since a process never sees its own POSIX locks.
+    @Test func seesTheOwnerLockWithoutTakingIt() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "t3home-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home.appending(path: "userdata"), withIntermediateDirectories: true)
+        #expect(LocalServerDiscovery.ownerLockHolder(home: home) == nil)
+        let owner = Process()
+        owner.executableURL = URL(filePath: "/usr/bin/python3")
+        owner.arguments = ["-I", "-c", "import sqlite3,sys,time; c=sqlite3.connect(sys.argv[1],isolation_level=None); c.execute('PRAGMA busy_timeout=0'); c.execute('BEGIN EXCLUSIVE'); print('held',flush=True); time.sleep(30)",
+                           home.appending(path: "userdata/server-owner.sqlite").path]
+        let out = Pipe()
+        owner.standardOutput = out
+        try owner.run()
+        defer { owner.terminate(); owner.waitUntilExit() }
+        _ = out.fileHandleForReading.availableData
+        #expect(LocalServerDiscovery.ownerLockHolder(home: home) == owner.processIdentifier)
+        // Asking twice proves the probe took nothing: the holder still holds it.
+        #expect(LocalServerDiscovery.ownerLockHolder(home: home) == owner.processIdentifier)
+        owner.terminate()
+        owner.waitUntilExit()
+        #expect(LocalServerDiscovery.ownerLockHolder(home: home) == nil)
+    }
+
     @Test func parsesActiveVersionAndRejectsPathTricks() {
         let state = #"{"protocol":3,"activeVersion":"0.0.46-nightly.20261009.2861","update":{"status":"committed"}}"#
         #expect(LocalServerDiscovery.parseActiveVersion(Data(state.utf8)) == "0.0.46-nightly.20261009.2861")

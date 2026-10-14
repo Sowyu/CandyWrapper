@@ -325,14 +325,47 @@ final class ServerController {
     }
 
     /// The update button for our own server: install `target`, make it active, restart the server on it.
+    /// Guarded the way T3's service launcher guards an update (serviceLauncher.ts, 570542662, 3417bc385):
+    /// a database backup that won't fit refuses the update before the server stops, the database is
+    /// snapshotted while no server runs, and a version that fails to start puts the snapshot back and
+    /// starts the previous version again.
     func updateOwnRuntime(to target: String, onStage: @escaping @MainActor (ServerUpdateStage) -> Void) async throws {
         onStage(.downloading)
         _ = try await Self.store.install(target)
         onStage(.installing)
+        let database = DatabaseBackup.database(home: home)
+        let backupRoot = Self.store.root.appending(path: "db-backup", directoryHint: .isDirectory)
+        // Off the main thread: a backup that can't clone copies the whole database.
+        if let blocker = await Task.detached(operation: { DatabaseBackup.blocker(database: database, root: backupRoot) }).value {
+            throw ServerUpdater.Failure(blocker)
+        }
+        let previous = Self.store.state().active
         try Self.store.activate(target)
         onStage(.resuming)
         await lifecycle.shutdown()
-        connect()
+        let backup: DatabaseBackup?
+        do {
+            let directory = backupRoot.appending(path: Self.ownerRecordName(home: home))
+            backup = try await Task.detached { try DatabaseBackup.make(database: database, in: directory) }.value
+        } catch {
+            if let previous { try? Self.store.activate(previous) }
+            connect()
+            throw ServerUpdater.Failure("Could not back up the database before updating: \(error.localizedDescription). The update was not applied.")
+        }
+        do {
+            _ = try await lifecycle.ensureRunning()
+            backup?.discard()
+            connect()
+        } catch {
+            // `launch` stops a server that fails to start, so nothing has the database open here.
+            let restored = await Task.detached { (try? backup?.restore()) != nil }.value
+            backup?.discard()
+            if let previous { try? Self.store.activate(previous) }
+            connect()
+            let reason = (error as? LocalServerLaunchError)?.description ?? ConnectionFailure.classify(error).detail
+            let back = previous.map { " CandyWrapper went back to T3 Code \($0)\(restored ? " and restored its database" : "")." } ?? ""
+            throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason)\(back)")
+        }
     }
 
     private func makeLifecycle() -> LocalServerLifecycle {
