@@ -92,7 +92,7 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     // MARK: Glass Native
 
-    /// T3's buttons, labels and order as AppKit push buttons, Approve the prominent default. The other decisions
+    /// T3's buttons, labels and order as AppKit push buttons, Approve the prominent one. The other decisions
     /// open from the ellipsis as an `NSMenu`.
     private var nativeButtons: [(ApprovalDecision, NSButton)] = []
 
@@ -122,10 +122,9 @@ public final class ApprovalPanelView: ComposerBannerView {
                 button.imagePosition = .imageLeading
                 button.toolTip = warning
             }
-            if option.decision == .accept {
-                button.keyEquivalent = "\r"
-                if #available(macOS 26, *) { button.tintProminence = .primary }
-            }
+            // Prominent, but no Return key equivalent: T3 binds no key to Approve (ComposerPendingApprovalActions.tsx),
+            // and a bare Return reaching the window would approve a command.
+            if option.decision == .accept, #available(macOS 26, *) { button.tintProminence = .primary }
             button.tag = nativeButtons.count
             addSubview(button)
             nativeButtons.append((option.decision, button))

@@ -118,6 +118,8 @@ struct NativeTimelineTests {
         panel.configure(PendingApproval(requestId: "r", requestKind: .command, detail: "ls"), pendingCount: 1, threadId: "t")
         let titles = panel.subviews.compactMap { ($0 as? NSButton).flatMap { $0.isHidden ? nil : $0.title } }
         #expect(titles == ApprovalOption.defaults.filter { $0.decision == .decline || $0.decision == .accept }.map(\.label))
+        // No key approves: a Return that reaches the window must not run the agent's command.
+        #expect(panel.subviews.compactMap { $0 as? NSButton }.allSatisfy { $0.keyEquivalent.isEmpty })
     }
 
     @Test func theBreadcrumbFollowsTheHeader() {
