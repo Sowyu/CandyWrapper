@@ -60,18 +60,23 @@ enum NativeSidebarRules {
     }
 
     /// Where a dragged thread lands when dropped above display row `index`: next to a pinned row it joins the
-    /// pins, next to an active row the inbox. Nil elsewhere (the shelves take no drops here; the menu settles).
-    static func dropTarget(_ rows: [(id: ThreadId, section: SidebarSection)?], moving: ThreadId, at index: Int) -> SidebarDropTarget? {
+    /// pins, next to an active row the inbox, and anywhere under the Settled shelf's header (row `settledHeader`)
+    /// it settles, as classic's planner reads the section off the shelf header above the slot
+    /// (`SidebarSortPlanner.section(at:in:)`, T3's `sectionAtSidebarSlot`). Nil elsewhere: the Working and
+    /// Snoozed shelves take no drops.
+    static func dropTarget(_ rows: [(id: ThreadId, section: SidebarSection)?], moving: ThreadId, at index: Int,
+                           settledHeader: Int? = nil) -> SidebarDropTarget? {
         func section(_ i: Int) -> SidebarSection? { rows.indices.contains(i) ? rows[i]?.section : nil }
         let above = section(index - 1), below = section(index)
         let target: SidebarSection
         if above == .pinned || below == .pinned { target = .pinned }
         else if above == .active || below == .active { target = .active }
+        else if let settledHeader, index > settledHeader { target = .settled }
         else { return nil }
         func ids(_ s: SidebarSection) -> [ThreadId] { rows.compactMap { $0?.section == s && $0?.id != moving ? $0?.id : nil } }
         var pinned = ids(.pinned), active = ids(.active)
         let position = rows[..<min(index, rows.count)].filter { $0?.section == target && $0?.id != moving }.count
-        if target == .pinned { pinned.insert(moving, at: position) } else { active.insert(moving, at: position) }
+        if target == .pinned { pinned.insert(moving, at: position) } else if target == .active { active.insert(moving, at: position) }
         return SidebarDropTarget(section: target, pinnedOrder: pinned, activeOrder: active)
     }
 }

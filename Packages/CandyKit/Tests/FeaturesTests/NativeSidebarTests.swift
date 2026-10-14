@@ -32,7 +32,8 @@ struct NativeSidebarTests {
         #expect(R.swipeActions(Self.row("s", .settled), settlement: false, snooze: true) == [.archive])
     }
 
-    /// A drop next to a pin joins the pins at that place; next to an inbox row, the inbox; elsewhere nothing.
+    /// A drop next to a pin joins the pins at that place; next to an inbox row, the inbox; under the Settled shelf's
+    /// header, the settled shelf; elsewhere nothing.
     @Test func dropTargets() {
         let rows: [(id: ThreadId, section: SidebarSection)?] = [
             (ThreadId("p1"), .pinned), (ThreadId("p2"), .pinned), (ThreadId("a1"), .active), (ThreadId("a2"), .active), nil,
@@ -45,6 +46,12 @@ struct NativeSidebarTests {
         let move = NativeSidebarRules.dropTarget(rows, moving: ThreadId("a1"), at: 4)
         #expect(move?.section == .active && move?.activeOrder.map(\.rawValue) == ["a2", "a1"])
         #expect(NativeSidebarRules.dropTarget(rows, moving: ThreadId("a1"), at: 6) == nil)
+        // Under the Settled shelf's header a drop settles, as in classic; just above it stays in the inbox.
+        for index in [5, 6] {
+            let settle = NativeSidebarRules.dropTarget(rows, moving: ThreadId("a1"), at: index, settledHeader: 4)
+            #expect(settle?.section == .settled && settle?.activeOrder.map(\.rawValue) == ["a2"] && settle?.pinnedOrder.count == 2)
+        }
+        #expect(NativeSidebarRules.dropTarget(rows, moving: ThreadId("p1"), at: 4, settledHeader: 4)?.section == .active)
     }
 
     /// A shelf opening inserts one block after the common head; a settle moves one row; a reshuffle reloads.
