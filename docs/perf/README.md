@@ -110,6 +110,22 @@ Other spread inside one run: the first launch of a fresh build is cold (window 4
 
 The same variable makes `PanelSlide` print `slide frame <gap> ms after the last, <work> ms of work, value <v>` for every display frame of a sidebar slide. With panel animations at 400 ms, a Release build and the 2,000 message thread open, both directions took 24 frames 16.7 ms apart, with 1 to 4 ms of layout per frame (the main panel reflows on each one, as T3's does). A `screencapture -v` recording showed the main panel's content column moving on every frame, and the window after a close and open slide matched the screenshot taken before it pixel for pixel. Idle afterwards the app sat at 0.6% CPU and 2.8 wakeups a second with five servers connected: no display link outlives a slide.
 
+## Images (2026-10-14)
+
+`CANDY_IMAGE_TIMING=1` prints `image-timing <ms since launch> <event> <detail>` for thread opens and for each image: `request` with the pixel side, `fetch` and `fetched` for server copies, `decode`, `memory` for a cache hit, `pixels`, and `drop` when a view lets go of its image. `CANDY_SLOW_LINK=<rtt ms>:<Mbit/s>` delays attachment fetches as one shared remote link would, which stands in for T3 Connect. Both pass through `scripts/run-app`. The runs used `--open-thread <other> --perf-open 6 <photo thread>`, which opens the photo thread, the other thread and the photo thread again 2 s apart. The photo thread holds three 4000 px JPEGs (1.7, 2.5 and 4.0 MB) and a 2400 px PNG (7.7 MB). All times are from the click and come from Debug builds on the 1x virtual screen.
+
+What made images slow: a message's image cell joined its window before it had a frame, so it decoded at the 16pt floor and stayed blurry, and a cell rebuilt after a thread switch decoded again behind its file name. Decoding always ran off the main thread. The main thread only assigns the layer's contents.
+
+| Case | Before (fff9d87) | After |
+|---|---|---|
+| First open, bytes fetched from the local server | 16 px pixels at 41 to 104 ms, never sharp | sharp pixels at 66 to 126 ms |
+| Relaunch, bytes in the disk cache | 16 px pixels at 29 to 76 ms, never sharp | sharp pixels at 52 to 100 ms |
+| Switch back to a thread whose image row was rebuilt | file name shown, pixels 32 ms after the new cell | cached pixels in the same pass, no decode |
+| Switch back to a thread whose row view was kept | instant | instant |
+| First open over 100 ms RTT and 20 Mbit/s | 16 px pixels at 1.0, 2.1, 3.6 and 7.0 s | sharp pixels at 1.0, 2.0, 3.7 and 7.0 s |
+
+The slow link is bandwidth-bound: 16 MB at 20 Mbit/s takes 6.4 s, and T3's attachment route serves only the original bytes (apps/server/src/http.ts:395-423), so a faster first open there would need a thumbnail route on the server. Sent attachment cells and draft tiles keep their decoded image in a 48 MB `NSCache`, which the system empties under memory pressure. The fetched copies on disk stay under 512 MB, with the least recently read dropped at launch.
+
 ## Opening a thread (2026-10-10)
 
 `CANDY_THREAD_TIMING=1` (passed through `scripts/run-app`) prints `thread-timing <ms since open> <stage> <detail>` for one open: request sent, every frame received (bytes) and parsed, typed decode with the snapshot's counts, reducer, panel pull, timeline entries, rows, apply and tile, layout, and the first display refresh. History pages print their own fetch time. URLSessionWebSocketTask hands over whole messages, so the first and last byte of a frame can't be told apart; `request sent` to `frame received` is server time plus transfer.
