@@ -57,7 +57,10 @@ extension LaunchedLocalServer: OwnedLocalServer {}
 ///    no visible or key window, no runs, no pending requests and no running terminals.
 /// 4. `ensureRunning()` restarts it when the user acts.
 /// 5. With remote access on, never idle-stop.
-/// 6. Ours runs at background priority while no run is active.
+/// 6. Ours runs at background priority while no run is active and the app isn't active. Darwin
+///    background throttles disk reads, which made a bounded thread snapshot 2 to 3 times slower,
+///    so the server the user is clicking through runs at normal priority, as T3's desktop backend
+///    always does (DesktopBackendManager.ts sets no priority).
 ///
 /// No polling: one timer per idle deadline, armed when the app goes idle and cancelled when
 /// anything wakes it.
@@ -65,15 +68,18 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
     public struct Activity: Sendable, Equatable {
         public var windowVisible: Bool
         public var windowKey: Bool
+        /// The app is frontmost: the user may ask the server something at any moment.
+        public var appActive: Bool
         public var activeRuns: Int
         /// Approvals and user-input questions waiting on the user.
         public var pendingRequests: Int
         public var runningTerminals: Int
 
-        public init(windowVisible: Bool = false, windowKey: Bool = false, activeRuns: Int = 0,
+        public init(windowVisible: Bool = false, windowKey: Bool = false, appActive: Bool = false, activeRuns: Int = 0,
                     pendingRequests: Int = 0, runningTerminals: Int = 0) {
             self.windowVisible = windowVisible
             self.windowKey = windowKey
+            self.appActive = appActive
             self.activeRuns = activeRuns
             self.pendingRequests = pendingRequests
             self.runningTerminals = runningTerminals
@@ -300,7 +306,7 @@ public actor ServerLifecycle<Owned: OwnedLocalServer> {
 
     private func applyPriority() {
         guard case .owned(let owned) = server else { return }
-        let background = activity.activeRuns == 0
+        let background = activity.activeRuns == 0 && !activity.appActive
         guard background != isBackground else { return }
         isBackground = background
         deps.setBackground(owned, background)
