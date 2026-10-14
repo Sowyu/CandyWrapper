@@ -170,6 +170,29 @@ struct NativeSidebarTests {
         #expect(rowHeight() == NativeSidebarMetrics.height(.row(card)))
     }
 
+    /// A right click on a popup over the list, like the project filter's, opens no thread menu underneath.
+    @Test func rightClickOnACoveringPopupOpensNoThreadMenu() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 600))
+        window.contentView = root
+        let native = NativeSidebarListView(frame: root.bounds)
+        root.addSubview(native)
+        native.setItems([.row(Self.row("a", .active)), .row(Self.row("b", .active))], animated: false, generation: nil)
+        native.layoutSubtreeIfNeeded()
+        var menus = 0
+        native.actions.contextMenu = { _, _, _ in menus += 1 }
+        let point = native.table.convert(NSPoint(x: 100, y: native.table.rect(ofRow: 0).midY), to: nil)
+        let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0,
+                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        _ = native.table.menu(for: event)
+        #expect(menus == 1)
+        root.addSubview(NSView(frame: root.bounds))
+        _ = native.table.menu(for: event)
+        #expect(menus == 1)
+        window.contentView = nil
+    }
+
     /// A theme switch keeps the sidebar's place: the first row on screen stays first, both ways.
     @Test func themeSwitchKeepsTheSidebarsPlace() throws {
         let snap = SidebarLoadTests.loadSnapshot()
