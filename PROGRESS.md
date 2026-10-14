@@ -11,6 +11,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+1. Remove Glass Native (Experimental), the user's call on 2026-10-14. (taken 2026-10-14)
+2. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
 1. Done 2026-10-14: classic Glass is frosted on every surface, with readable contrast at every opacity (`docs/design.md`, Glass). Approval and question cards and toasts weren't checked on screen.
 2. Done 2026-10-14: the server update button (T3's flow, hosts too old to connect, Disconnect), and CandyWrapper installs and updates its own T3 runtime (`docs/decisions.md`). Open question for the user: a notice when an older official T3 Code app is installed next to a newer runtime.
 
