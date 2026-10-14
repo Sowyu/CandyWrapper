@@ -100,6 +100,28 @@ The system's blue emphasized selection never shows. Text keeps its T3 colors on 
 
 Phase 1 is done (2026-10-13). Phase 2, the native sidebar, is done (2026-10-13, see "Phase 2" below).
 
+### Sidebar cost and brand (2026-10-14)
+
+A `malloc_history -callTree` of the native sidebar at rest put most of its cost in three places. Every card made its hover Settle and Snooze buttons up front, and each button built a fresh SF Symbol image, about 40 KB with its representation and raster. Cards also made the pin, status, worktree, machine, terminal and pull request views that most rows never show. Each of those views also took a share of the split view's layout engine.
+
+- Settle and Snooze on cards and the slim rows' hover action are made on the row's first hover (b5e3ece).
+- The pin, status icon and label, worktree, machines, terminal and pull request views are made when a row first shows them.
+- Icon buttons take their glyph from the shared symbol cache, and footer Back is made on the first utility page.
+- Classic's scroll area, search row, footer buttons and trigger leave the window in native mode and come back on a switch to classic.
+
+The table's row setup fell from 2.7 MB to 1.3 MB of live allocations, and the card cells' own from 1.05 MB to 0.23 MB. What is left is the search field (about 0.6 MB, most of it its symbol images), the first load of each distinct symbol, and eight visible cards' labels.
+
+The brand sits in the toolbar's row, after the sidebar toggle as T3's wordmark follows its trigger (SidebarChrome.tsx:51-66): the candy glyph and "Wrapper", 140 pt from the window's edge on the toggle's 26 pt center line. It goes home on click and hides with the sidebar (8d210d1). Screenshots are in `/tmp/cw-peek/sidebar-*.png`.
+
+Release builds of d6d8ba7 and 8d210d1 ran perf-review's launch and idle scenario, Glass and Glass Native interleaved, three launches each. Other agents were compiling (load 15 to 25) through the first round and part of the second, so launch to window means something only in the last round, at load 1.3 to 2.1. Medians:
+
+| | Glass before | Glass after | Glass Native before | Glass Native after |
+|---|---|---|---|---|
+| Footprint at rest | 35.1 MB (33.6 to 35.5) | 33.9 MB (33.7 to 34.1) | 44.6 MB (44.0 to 45.4) | 43.1 MB (42.9 to 43.2) |
+| Launch to window, quiet round | 175 ms | 188 ms | 251 ms | 241 ms |
+
+Glass Native is about 1.5 MB lighter at rest, and its gap to Glass fell from about 10.3 to 9.2 MB in the quiet round. The launch change is inside the noise. The sidebar is not at classic's cost yet: an `NSSearchField` and `NSTextField` labels cost more than classic's drawn ones, and those are the native controls the Direction asks for.
+
 ### Hidden panels (2026-10-14)
 
 `ThreadPanelView` builds the details card, the terminal drawer, the stash menu and the question panel the first time each shows, through `LazyView`, in every theme. Controllers wire them with `configure` and fill them only while they are loaded. State pushed before then waits in `LazyView.set` or is rendered again when the panel is built. A closed panel stays built and hidden. The thread header stays, because the native breadcrumb reads it. The context strip stays too, because the git and composer controllers read its Run on control's state.
@@ -334,7 +356,7 @@ Fixes tried that saved nothing measurable: the sidebar accessory's buttons witho
 The target, within 2 MB and 10 ms of Glass, is out of reach while Glass Native uses `NSToolbar` and `NSSplitViewController`: those two cost 6.3 MB and 45 ms here, and the same in an empty AppKit window. Bigger fixes, with what each would save:
 
 1. Done (2026-10-14), see "Hidden panels" under Status: the details card, terminal drawer, stash menu and question panel are built on first show. The header (the breadcrumb reads it) and the context strip (controllers read its Run on state) stay. Measured 1.5 MB in Glass and 1.7 MB in Glass Native.
-2. Bring the native sidebar to classic's cost: up to 2.7 MB and 15 ms. Dropping the hidden classic chrome in native mode is about 0.2 MB of it.
+2. Done (2026-10-14), see "Sidebar cost and brand" under Status: hover buttons and rare glyphs are made on first need, symbol images are shared and classic's chrome leaves the window. Measured 1.5 MB in Glass Native; the search field and labels keep it above classic's cost.
 3. Lay the split out by frames with our own sidebar glass instead of `NSSplitViewController`: 2.7 MB and 15 to 20 ms, but it gives up the system sidebar glass, its collapse animation and the tracking separator. A design call.
 4. The toolbar has no saving short of dropping `NSToolbar`, 3.6 MB and 20 to 30 ms.
 
