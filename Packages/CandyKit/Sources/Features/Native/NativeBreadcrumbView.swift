@@ -149,6 +149,11 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         return NSSize(width: min(640, max(120, width + 24 + (favicon.isHidden ? 0 : 20))), height: 28)
     }
 
+    /// Takes no clicks while a dialog covers the window (`NativeSplitPresentation.syncInert`).
+    public var isInert = false
+
+    public override func hitTest(_ point: NSPoint) -> NSView? { isInert ? nil : super.hitTest(point) }
+
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         placeCrumbs()
