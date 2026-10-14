@@ -68,7 +68,9 @@ public enum LocalServerDiscovery {
         let deadline = ContinuousClock.now + wait
         while true {
             if let running = await findRunning(home: home) { return running }
-            let alive = runtimeProcessAlive(home: home)
+            // A 3105+ server holds the owner lock from before it opens the database, so a server still
+            // migrating counts as running before it writes `server-runtime.json`.
+            let alive = runtimeProcessAlive(home: home) || ownerLockHolder(home: home) != nil
             let serviceOwned = serviceHome(plist: servicePlist)?.standardizedFileURL.path == home.standardizedFileURL.path
             guard alive || serviceOwned else { return nil }
             guard ContinuousClock.now < deadline else {
@@ -90,6 +92,20 @@ public enum LocalServerDiscovery {
             return false
         }
         return true
+    }
+
+    /// The process holding T3's one-owner lock on `home`, or nil (serverOwnership.ts, 570542662). A server
+    /// keeps an exclusive SQLite transaction open on `<home>/userdata/server-owner.sqlite` for its whole
+    /// life, so the file carries a POSIX write lock in SQLite's lock range. `F_GETLK` reports it without
+    /// taking any lock, so asking can never make that server, or one starting, fail with exit 78.
+    public static func ownerLockHolder(home: URL) -> pid_t? {
+        let fd = open(home.appending(path: "userdata/server-owner.sqlite").path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        // SQLite's unix VFS locks bytes from PENDING_BYTE (0x40000000): the pending, reserved and shared bytes.
+        var lock = flock(l_start: 0x4000_0000, l_len: 512, l_pid: 0, l_type: Int16(F_WRLCK), l_whence: Int16(SEEK_SET))
+        guard fcntl(fd, F_GETLK, &lock) == 0, lock.l_type != Int16(F_UNLCK) else { return nil }
+        return lock.l_pid
     }
 
     /// T3's launch agent (apps/server/src/cloud/bootService.ts:43, 302-316).

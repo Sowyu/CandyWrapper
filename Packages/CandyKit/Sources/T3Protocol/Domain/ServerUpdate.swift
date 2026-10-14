@@ -144,8 +144,11 @@ public enum ServerUpdateState: Equatable, Sendable {
 
 /// The update rules that don't need a socket (state/server.ts:130-178).
 public enum ServerUpdateLogic {
-    /// Covers the launcher's 120 s trial and a restart of the old version after a rollback.
-    public static let resumeTimeout: Duration = .seconds(240)
+    /// `SERVER_UPDATE_RESUME_TIMEOUT` (state/server.ts:130-132): the launcher's 30-minute trial deadline,
+    /// which migrations on a large database can need, and a restart of the old version after a rollback.
+    public static let resumeTimeout: Duration = .seconds(32 * 60)
+    /// `OUTDATED_HOST_RESTART_TIMEOUT` (connection/outdatedHostUpdate.ts:32).
+    public static let outdatedRestartTimeout: Duration = .seconds(240)
 
     /// `server.updateServer` input: an exact version, and the opt-in to continue running turns.
     public static func input(targetVersion: String, continueRunningThreads: Bool) -> JSONValue {

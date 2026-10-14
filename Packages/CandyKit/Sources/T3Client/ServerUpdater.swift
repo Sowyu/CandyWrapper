@@ -11,7 +11,7 @@ import T3Protocol
 ///    relaunches the app, so a dropped socket is success.
 /// 3. "Restarting…": reconnect attempts stay about a second apart, and the `ready` lifecycle event of
 ///    the new process must carry the launcher's committed outcome (or the target version), within
-///    4 minutes. A desktop app that came back on the old version gets the commit again, up to 3 times.
+///    32 minutes. A desktop app that came back on the old version gets the commit again, up to 3 times.
 public enum ServerUpdater {
     /// The message T3 shows in the failure toast and the progress row.
     public struct Failure: Error, Equatable, CustomStringConvertible {
@@ -114,7 +114,7 @@ public enum ServerUpdater {
     public static func runOutdated(connect: @escaping @Sendable () async throws -> RPCConnection,
                                    descriptor: @escaping @Sendable () async throws -> EnvironmentDescriptor,
                                    environmentId: String, label: String, targetVersion: String,
-                                   capabilities: ServerUpdateCapabilities, restartTimeout: Duration = ServerUpdateLogic.resumeTimeout,
+                                   capabilities: ServerUpdateCapabilities, restartTimeout: Duration = ServerUpdateLogic.outdatedRestartTimeout,
                                    pollInterval: Duration = .seconds(1),
                                    onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> String {
         guard capabilities.canUpdateRemotely else { throw Failure("Update T3 Code on \(label) manually; it cannot update itself.") }

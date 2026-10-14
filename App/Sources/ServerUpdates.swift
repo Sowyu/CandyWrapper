@@ -179,7 +179,7 @@ final class ServerUpdates {
     }
 
     /// Our own server: install the version into CandyWrapper's runtimes, restart on it, and wait for its
-    /// `welcome` to name it, for at most 4 minutes.
+    /// `welcome` to name it, for as long as T3 waits for a service update.
     private func startOwn(_ environmentId: String, target: String, from: String, serverLabel: String, failureTitle: String,
                           update: @escaping (String, @escaping @MainActor (ServerUpdateStage) -> Void) async throws -> Void) {
         tasks[environmentId] = Task { [weak self] in

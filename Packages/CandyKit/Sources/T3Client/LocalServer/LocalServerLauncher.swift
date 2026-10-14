@@ -21,8 +21,11 @@ public struct LocalServerConfiguration: Sendable {
     /// stderr goes here (appended). stdout is discarded: `t3 serve` prints a 5-minute admin
     /// pairing token there.
     public var logFile: URL?
-    /// How long to wait for the descriptor to answer.
-    public var readinessTimeout: Duration = .seconds(60)
+    /// How long to wait for the descriptor to answer while the server lives. T3's desktop app never stops
+    /// a backend for starting slowly (DesktopBackendManager.ts:615-636), because migrations and SQLite's
+    /// optimize on a large database block startup; T3's service launcher gives a trial 30 minutes
+    /// (serviceLauncher.ts:42). An exit still ends the wait at once.
+    public var readinessTimeout: Duration = .seconds(30 * 60)
 
     public init(binary: URL, home: URL, port: Int? = nil, path: String) {
         self.binary = binary
@@ -85,6 +88,11 @@ public enum LocalServerLaunchError: Error, Sendable, Equatable, CustomStringConv
     case notReady
     case bootstrapRejected(String)
     case incompatible(String)
+    /// Exit 78 (`SERVER_EXIT_CODE_STATE_DIR_OWNED`, desktopBootstrap.ts:6): another server owns the home.
+    case stateDirOwned(home: String)
+
+    /// The server's own exit code for a home another server owns.
+    public static let stateDirOwnedExitCode: Int32 = 78
 
     public var description: String {
         switch self {
@@ -93,6 +101,8 @@ public enum LocalServerLaunchError: Error, Sendable, Equatable, CustomStringConv
         case .notReady: "The T3 server did not become ready."
         case .bootstrapRejected(let m): "The T3 server rejected the bootstrap credential: \(m)"
         case .incompatible(let m): "The T3 server is not compatible: \(m)"
+        // ServerAlreadyRunningError (serverOwnership.ts:24-36).
+        case .stateDirOwned(let home): "A T3 Code server already owns \(home). Stop that server, or use a separate T3 home and pair with it, then retry. No server was stopped."
         }
     }
 }
@@ -121,7 +131,7 @@ public enum LocalServerLauncher {
         let watcher = ChildExitWatcher(pid: pid)
         guard let processIdentity = ProcessIdentity.of(pid) else {
             _ = await watcher.waitForExit(timeout: .seconds(1))
-            throw LocalServerLaunchError.exitedDuringStartup(watcher.exitStatus ?? -1)
+            throw startupExit(watcher.exitStatus ?? -1, home: config.home)
         }
         let origin = URL(string: "http://127.0.0.1:\(port)")!
         do {
@@ -134,10 +144,16 @@ public enum LocalServerLauncher {
             try? credentials?.save(token: token, environmentId: descriptor.environmentId)
             return LaunchedLocalServer(pid: pid, identity: processIdentity, origin: origin, home: config.home,
                                        descriptor: descriptor, accessToken: token, watcher: watcher)
+        } catch LocalServerLaunchError.exitedDuringStartup(let status) {
+            throw startupExit(status, home: config.home)
         } catch {
             await terminate(pid: pid, identity: processIdentity, watcher: watcher, timeout: .seconds(10))
             throw error
         }
+    }
+
+    static func startupExit(_ status: Int32, home: URL) -> LocalServerLaunchError {
+        status == LocalServerLaunchError.stateDirOwnedExitCode ? .stateDirOwned(home: home.path) : .exitedDuringStartup(status)
     }
 
     /// SIGTERM, wait up to `timeout` (T3's own exit timeout is 90 s), then SIGKILL the process
@@ -263,12 +279,14 @@ public enum LocalServerLauncher {
         var http = EnvironmentHTTP(baseURL: origin)
         http.timeout = 2
         let deadline = ContinuousClock.now + timeout
+        let slowAfter = ContinuousClock.now + .seconds(10)
         // ponytail: 150 ms readiness poll during startup only, like the desktop's own loop
-        // (DesktopBackendManager.ts:378-399). A stdout "ready" parser would save a few ms.
+        // (DesktopBackendManager.ts:378-399), then 1 s once a large database makes startup slow.
+        // A stdout "ready" parser would save a few ms.
         while ContinuousClock.now < deadline {
             if let status = watcher.exitStatus { throw LocalServerLaunchError.exitedDuringStartup(status) }
             if let descriptor = try? await http.descriptor() { return descriptor }
-            try await Task.sleep(for: .milliseconds(150))
+            try await Task.sleep(for: ContinuousClock.now < slowAfter ? .milliseconds(150) : .seconds(1))
         }
         throw LocalServerLaunchError.notReady
     }
