@@ -300,6 +300,8 @@ public final class ComposerView: DSView {
     let previousCompact = ButtonView(nil, icon: .chevronLeft, variant: .outline, size: .iconSm)
     /// The backdrop blur under the glass fill.
     private let blur = BackdropBlurView()
+    /// Classic Glass's top highlight on the composer's pane.
+    private var glassEdge: GlassEdgeLayer?
     private var separators: [SeparatorView] = []
     private var alternateHeld = false
     private var editorHeight = ComposerView.editorMin
@@ -719,7 +721,10 @@ public final class ComposerView: DSView {
         if nativeGlass, dark { outline.layer?.borderColor = Themed.color(\.border).cgColor(in: self) }
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
-        shadowLayer.shadowOpacity = dark || nativeGlass ? 0 : 0.4
+        // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
+        let frost = WindowGlass.isFrost(for: self)
+        shadowLayer.shadowOpacity = dark || nativeGlass || frost ? 0 : 0.4
+        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: Self.radius, edge: false, show: !nativeGlass)
         CATransaction.commit()
         if #available(macOS 26, *), let surface = glassSurface as? NSGlassEffectView {
             surface.tintColor = Themed.color(light: \.card, Double(ThemeRuntime.glassOpacity),

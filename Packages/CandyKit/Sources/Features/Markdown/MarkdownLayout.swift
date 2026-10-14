@@ -768,8 +768,11 @@ private struct Builder {
         if native {
             box.items.append(.box(frame, fill: NativeTimeline.card, border: Themed.color(\.border), radius: 10))
         } else {
-            box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
-                                  border: Themed.color(light: \.border, 0.7, dark: \.border, 0), radius: 10))
+            // Classic Glass: a dense pane, so code reads as on a solid card.
+            box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
+                                                                frost: WindowGlass.denseFill),
+                                  border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
+                                  radius: 10))
         }
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
@@ -938,6 +941,9 @@ private struct Builder {
             box.items.append(.box(CGRect(x: 0, y: y, width: tableWidth, height: 1), fill: rule, border: nil, radius: 0))
             y += 1
         }
+        // Classic Glass sets the table on a dense pane; the stock look paints nothing there.
+        box.items.insert(.box(CGRect(x: 0, y: 0, width: min(width, tableWidth), height: y), fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
+                              border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
         if tableWidth > width {
             box.items.insert(.clip(CGRect(x: 0, y: 0, width: width, height: y)), at: 0)
             box.items.append(.endClip)
