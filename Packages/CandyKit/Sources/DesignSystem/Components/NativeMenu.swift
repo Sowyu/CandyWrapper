@@ -16,14 +16,18 @@ public extension NSView {
 @MainActor
 public enum NativeMenu {
     /// An `NSMenu` holds every item but rows with their own controls, a favicon view, a wrapping note, a
-    /// trailing badge or detail, and rows that keep the menu open (inline confirms). Those menus stay custom.
-    public static func canExpress(_ items: [MenuItem]) -> Bool {
+    /// trailing badge or detail, trailing text that isn't a shortcut, and rows that keep the menu open: inline
+    /// confirms, checkboxes, and radios outside a select that don't close on click (`MenuView.activate`, as Base
+    /// UI's CheckboxItem and RadioItem). An `NSMenu` closes on every pick, so those menus stay custom.
+    public static func canExpress(_ items: [MenuItem], select: Bool = false) -> Bool {
         items.allSatisfy { item in
             if item.accessory != nil || item.leading != nil || item.keepsOpen || item.runsInPlace
                 || item.badge != nil || item.trailingDetail != nil { return false }
+            if let shortcut = item.shortcut, keyEquivalent(shortcut) == nil { return false }
             switch item.kind {
-            case .note: return false
-            case .submenu(let children): return canExpress(children)
+            case .note, .checkbox: return false
+            case .radio: return select || item.closesOnClick
+            case .submenu(let children): return canExpress(children, select: select)
             default: return true
             }
         }

@@ -21,7 +21,6 @@ struct NativeMenuTests {
         let items: [MenuItem] = [.label("Section"), open, .separator,
                                  .checkbox("Wrap", checked: true) { hits.append("wrap \($0)") },
                                  MenuItem("Gone", disabled: true), .separator]
-        #expect(NativeMenu.canExpress(items))
         let menu = NativeMenu.make(items)
         #expect(menu.items.count == 5) // the trailing separator is dropped
         #expect(menu.items[0].isSectionHeader)
@@ -47,5 +46,18 @@ struct NativeMenuTests {
         #expect(!NativeMenu.canExpress([confirm]))
         #expect(!NativeMenu.canExpress([.note("Read only")]))
         #expect(!NativeMenu.canExpress([.submenu("More", [confirm])]))
+    }
+
+    /// Classic keeps the menu open on a checkbox and on a radio that doesn't close on click, and shows trailing
+    /// text like "Anyone": an NSMenu would close on each and turn the text into nothing or a live key.
+    @Test func stayOpenRowsAndTrailingTextStayCustom() {
+        #expect(NativeMenu.canExpress([MenuItem("Open", shortcut: "⌘O"), .separator, MenuItem("Gone", disabled: true)]))
+        #expect(!NativeMenu.canExpress([.checkbox("Wrap", checked: true) { _ in }]))
+        #expect(!NativeMenu.canExpress([MenuItem("Author", shortcut: "Anyone")]))
+        var radio = MenuItem("Newest", kind: .radio(true))
+        #expect(!NativeMenu.canExpress([radio]))
+        #expect(NativeMenu.canExpress([radio], select: true))
+        radio.closesOnClick = true
+        #expect(NativeMenu.canExpress([radio]))
     }
 }
