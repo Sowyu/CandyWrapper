@@ -28,3 +28,28 @@ Phase 6, half 2: the thread, the composer, the panels, the menus and the palette
 - For the shell half: in Settings, a search result left General highlighted beside Appearance; after Settings closes the footer's gear stays highlighted; the forked thread and its parent both showed a selection fill.
 - Not walked for lack of time: pasting an image, $ skills, the stash, queue and steer during a turn, Files search, Pull request and Device panels, and the huge synthetic perf thread, which lives only on the perf server.
 - The full suite passed once after these fixes, fidelity tests included. ThreadCacheTests and LocalServerIntegrationTests, which flaked once for the 5a agent, passed.
+
+## Round 2 (2026-10-14)
+
+I walked the items round 1 left, in a Debug build with `CANDY_THEME=candywrapper-glass-native` and then classic Glass, on the sandbox server at 47391 with a 1100 pt window. Six real turns on `claude-haiku-5-5`. Screenshots are in `/tmp/cw-peek/hunt2-thread-*.png`.
+
+### Fixed
+
+1. A refused diff request showed another repo's diff. The panel retried a `review.getDiffPreview` the server refused ("must stay within the configured workspace root") at the server's own cwd, which 2861's web client did (DiffPanel.tsx:354-374). Nightly 2994 dropped that retry, since its server accepts every registered project root (ReviewService.ts:95-113), and shows the error in `text-error/80` above "No patch available for this selection." (DiffPanel.tsx:342-353, 1074-1076). `ThreadSession.gitDiffLoader` now passes the error through and `DiffPanelView` shows it, in every theme. The panel's error display already had `LaunchAndDiffStateTests.failedTurnDiffShowsErrorAndNoPatch`. 6859d40, `hunt2-thread-diff-error-after.png`.
+2. The stash menu kept its old height after a delete, leaving an empty band under the last row. Both themes. `ComposerStashMenuView` rebuilt its rows but never asked its host to lay it out again from `preferredHeight`. Test `ComposerAttachmentsTests.stashMenuAsksItsHostToResize`. 1b5adc6, `hunt2-thread-stash-delete-before/after.png`.
+3. Native mode: three right panel tabs overflowed into the scroll arrows. At 1100 pt the native sidebar's 320 pt leaves the panel 420 pt (classic gets 484 beside its 256 pt sidebar), and the strip reserved 176 pt for the toolbar's 152 pt control. The control's segments now take T3's 28 pt button width (`size-7`) with unscaled glyphs, 140 pt in all, and the reserve is 158. Diff, Terminal 1 and Files fit with no arrows. The toggles stay where they were. Test `RightPanelTabDragTests.nativeStripFitsThreeTabsAtTheNarrowDefault`, which fails at 176. 8a81a53, `hunt2-thread-tabstrip-before/after.png`.
+
+### Checked, no bug
+
+- Pasting an image shows its thumbnail, and its remove button clears it.
+- `$` opens the skills menu, and Escape closes it.
+- Cmd+S stashes, the badge counts, Cmd+S on an empty composer restores one entry or lists several, and the menu's delete works.
+- Enter during a turn queues the message under a "Queued" header with Edit, Steer and remove. Stop interrupts the turn. Haiku finished before Steer could land, so I saw steered messages only from history, where their "Steer" labels render.
+- After a stop the send button shows a play glyph, "Resume thread", while the prompt is empty. T3 does the same: `resumableRunId` is the interrupted run (ChatView.tsx:2147-2150, 11616), and `ComposerPrimaryActions.tsx:270-280, 337-339` swaps in `PlayIcon`. Classic shares the button.
+- Files search filters with T3's fuzzy match. The Device panel draws its cards on the frost.
+- "Numbers 1 to 1000 as words", the sandbox's longest thread: scrolling to the top and back, and rail jumps, drew nothing wrong under the toolbar fade.
+
+### Left
+
+- The Device panel showed "Enable the device hub" in native mode and "Allow agent control" with Done in classic a few minutes later, with a longer Android error. Both come from the server's device state, and I didn't toggle anything, so I put it down to the shared sandbox changing. Not confirmed.
+- The huge synthetic perf thread exists only inside the benchmarks, so I walked the sandbox's longest real thread instead.
