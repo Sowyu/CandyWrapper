@@ -54,3 +54,35 @@ Each switch built a new list at the top. Both lists now report the first item on
 - Glass Native's sidebar is 280 pt at its minimum against classic's 208 at 840 pt, so the detail column is narrower than classic's at T3's minimum window. That follows the phase 1 spec.
 - The window's minimum height comes out at 640, not 620, in both modes.
 - I didn't walk drag to reorder, Snooze, Wake, Pin from the menu, the Settled shelf or arrow-key navigation in the list on screen in this pass.
+
+## Round 2
+
+I walked what round 1 left, plus the sidebar actions and the menu bar, in a Debug build (`dev.candywrapper.test.gn-hunt2-shell`) against the sandbox server, at 840x620 and in full screen. Screenshots are in `/tmp/cw-peek/hunt2-shell-*.png`.
+
+### Fixed
+
+- The minimum height was 640. AppKit adds a toolbar's extra height to `minSize`, so Glass Native's 52 pt unified toolbar turned T3's 620 (DesktopAppSettings.ts:61) into 640. `MainWindow` now sets `contentMinSize`, which is the frame here and stays 620 through toolbar changes. Classic was 620 all along; round 1 measured it after a switch. Commit a16c0c8. After: `hunt2-shell-minsize-after.png`.
+- With the sidebar collapsed in full screen, the breadcrumb started 110 pt right of the toggle. The sidebar tracking separator keeps the items after it where the toggle sits beside the traffic lights, and in full screen the toggle moves left without them. The separator now leaves the toolbar while the sidebar is collapsed, and windowed the breadcrumb lands where it did. Commit 8613bb3, test `collapsedSidebarDropsTheTrackingSeparator`. Before and after: `hunt2-shell-fullscreen-collapsed-before.png`, `hunt2-shell-fullscreen-collapsed-after.png`.
+- Dragging a row onto the Settled shelf did nothing. Classic settles it, since T3's `sectionAtSidebarSlot` reads the section off the shelf header. The native drop rule now settles a drop on or under the Settled header. Commit 6ac2090, test `dropTargets`. Before and after: `hunt2-shell-drag-settle-before.png`, `hunt2-shell-drag-settle-after.png`.
+- A right click on a row of the project filter's popup opened the thread menu of the row under the popup, because AppKit asked the native table for its menu. The table now answers only when the click lands on it. Commit d2d3e1a, test `rightClickOnACoveringPopupOpensNoThreadMenu`. Before: `hunt2-shell-project-rclick-before.png`.
+- The toolbar took clicks while a dialog showed, so the sidebar toggle collapsed the sidebar behind the Delete confirm. T3's backdrop covers its header. The toolbar's items now turn off while a `ModalHost` shows. Commit aa39659, test `dialogsMakeTheToolbarInert`. After: `hunt2-shell-dialog-toolbar-after.png`.
+- View > Actual Size, Zoom In and Zoom Out did nothing in native mode, a ponytail from phase 1. Each column now scales its content as classic scales the window's content view. The toolbar and the column widths keep the system's size, marked with a ponytail. Commit fa15543, test `zoomScalesTheColumnsContent`. After: `hunt2-shell-zoom-native-after.png`.
+
+- The native sidebar was 320 pt by default, between 280 and 380, which pushed the chat and narrowed the composer. It now takes T3's widths from threadSidebarWidth.ts: 256 by default, at least 208 raised to the toolbar brand's right edge plus 12 so the brand never overflows into the ">>" menu, and at most the window less 640. At 840 pt that is about 240. The split view's autosave name changed, so a width saved under the old default resets. Test `sidebarTakesT3sWidths`. After: `hunt2-shell-sidebar-256.png` at 1100, `hunt2-shell-sidebar-840.png`, `hunt2-shell-sidebar-840-light.png` and `hunt2-shell-sidebar-fullscreen.png`.
+
+### Checked and fine
+
+- Pin and Unpin from the menu work, with the undo notice. I restored the pins to MCP hub fork, then MCP hub.
+- A pinned row dragged into the inbox unpins, as classic's planner does.
+- Snooze lists In 1 hour, In 3 hours, This evening, Tomorrow, Next week and Custom. Snoozing shows the Snoozed shelf, and Wake from the menu brings the row back and removes the shelf.
+- The Settled shelf opens and closes from its header, with Show N more.
+- Arrow keys walk the list and open each thread while the list keeps focus. Cmd+2 opened the second row.
+- Delete opens T3's confirm (`hunt2-shell-delete-confirm-native.png`). I cancelled it.
+- T3's menu bar has no thread commands (`DesktopApplicationMenu.ts`). Reload, Force Reload, Toggle Full Screen and the Window menu work the same in both modes and show the same shortcuts (`hunt2-shell-view-menu-native.png`).
+- Cmd+B in the composer stays with the editor in both modes, as T3's sidebar toggle skips editable fields (AppSidebarLayout.tsx:105-112).
+- Neither mode's sidebar has project headers, so there is no project header menu to walk. The project filter's popup keeps classic's per-project settings buttons.
+
+### Left
+
+- A dialog's backdrop can't dim the native toolbar the way T3's dims its header. The items turn off instead.
+- A jump shortcut doesn't scroll the sidebar to the thread it opens, in either mode.
