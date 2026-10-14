@@ -128,6 +128,23 @@ struct GlassNativeTests {
         window.contentViewController = nil
     }
 
+    /// The native sidebar takes T3's widths: 256 by default, at least 208, at most the window less 640.
+    @Test func sidebarTakesT3sWidths() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
+                              styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let native = NativeSplitPresentation(autosaveName: nil)
+        native.install(in: window)
+        #expect(NativeSplitPresentation.sidebarPreferred == 256)
+        let minimum = native.sidebarItem.minimumThickness
+        #expect(minimum >= 208 && native.sidebarItem.maximumThickness == max(minimum, 1100 - 640))
+        window.setContentSize(NSSize(width: 840, height: 780))
+        native.root.frame.size = NSSize(width: 840, height: 780)
+        #expect(native.sidebarItem.maximumThickness == native.sidebarItem.minimumThickness)
+        window.toolbar = nil
+        window.contentViewController = nil
+    }
+
     /// A dialog makes the toolbar inert, as T3's backdrop covers its header, and closing it gives the clicks back.
     @Test func dialogsMakeTheToolbarInert() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),

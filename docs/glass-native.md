@@ -72,7 +72,7 @@ The system's blue emphasized selection never shows. Text keeps its T3 colors on 
 
 - Theme id `candywrapper-glass-native`, label "Glass Native (Experimental)". It uses Glass's palette rules: stock T3 tokens, the frosted window and the same opacity slider. Add the id to `ThemePalette.reservedIds`. The choice lives in UserDefaults like every theme and never reaches the server.
 - `MainWindow` gets a native mode with a unified `NSToolbar`, a transparent titlebar and a full-size content view. The content is an `NSSplitViewController` with three items:
-  - The sidebar, from `sidebarWithViewController`: min 280, max 380, preferred 320.
+  - The sidebar, from `sidebarWithViewController`, at T3's widths (threadSidebarWidth.ts): 256 by default, at least 208 or wide enough for the toolbar's brand, at most the window less 640.
   - The detail: min 320.
   - The inspector, from `inspectorWithViewController`: hidden until Files, Git, Diff or Pull requests open.
 - Switching the theme at runtime rebuilds the window's content in the other presentation. The controllers and stores (`ThreadController`, `ThreadSession`, `ComposerController`, `SidebarCommands`, `SettingsController`) stay. Only views and the references to them change.

@@ -47,12 +47,14 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     private let sidebarColumn: NativeColumnController
     private let detailColumn: NativeColumnController
 
-    /// T3 Mobile's column metrics (createWorkspaceStackNavigator.ios.tsx:198-203).
-    public static let sidebarMinimum: CGFloat = 280, sidebarMaximum: CGFloat = 380, sidebarPreferred: CGFloat = 320
+    /// T3 desktop's sidebar widths (threadSidebarWidth.ts), as classic's `SidebarMetrics`: 256 by default, at
+    /// least 208 or the brand's width, and at most the window less 640 for the main content.
+    public static let sidebarPreferred = SidebarMetrics.defaultWidth
     public static let detailMinimum: CGFloat = 320
 
-    /// `autosaveName` keeps the sidebar's width and collapsed state; nil keeps nothing (tests).
-    public init(autosaveName: String? = "CandyGlassNative") {
+    /// `autosaveName` keeps the sidebar's width and collapsed state; nil keeps nothing (tests). The name changed when
+    /// the default went from 320 to T3's 256, so a width saved under the old default doesn't stay.
+    public init(autosaveName: String? = "CandyGlassNative.t3width") {
         let sidebarColumn = NativeColumnController(detail: false), detailColumn = NativeColumnController(detail: true)
         self.sidebarColumn = sidebarColumn
         self.detailColumn = detailColumn
@@ -61,8 +63,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         inspectorItem = NSSplitViewItem(inspectorWithViewController: NSViewController.empty())
         toolbar = NSToolbar(identifier: "CandyGlassNative")
         super.init()
-        sidebarItem.minimumThickness = Self.sidebarMinimum
-        sidebarItem.maximumThickness = Self.sidebarMaximum
+        sidebarItem.minimumThickness = SidebarMetrics.minWidth
         sidebarItem.canCollapse = true
         detailItem.minimumThickness = Self.detailMinimum
         inspectorItem.isCollapsed = true
@@ -82,6 +83,22 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             MainActor.assumeIsolated { self?.syncBrand() }
         }
         (rootController.view as! NativeRootView).onSubviewsChange = { [weak self] in self?.syncInert() }
+        (rootController.view as! NativeRootView).onResize = { [weak self] in self?.syncSidebarLimits() }
+        brandHost.onWidthChange = { [weak self] in self?.syncSidebarLimits() }
+        syncSidebarLimits()
+    }
+
+    /// `resolveThreadSidebarMinimumWidth` and `resolveThreadSidebarMaximumWidth`. T3 raises the minimum to the brand's
+    /// right edge plus the header's 12 pt padding (SidebarChrome.tsx's `SidebarBrandWidthProbe`), so the brand never
+    /// clips. Here the brand follows the toolbar's sidebar toggle, whose item ends at 136 pt beside the traffic lights
+    /// and at 50 in full screen (measured on macOS 27); a narrower sidebar sends the brand to the overflow menu.
+    func syncSidebarLimits() {
+        let fullScreen = rootController.view.window?.styleMask.contains(.fullScreen) ?? false
+        let brand = brandHost.brand == nil ? 0 : (fullScreen ? 50 : 136) + 4 + brandHost.intrinsicContentSize.width + 12
+        let rules = SidebarWidth(brandWidth: brand)
+        let maximum = rules.maximum(viewport: rootController.view.bounds.width)
+        if sidebarItem.minimumThickness != rules.minimum { sidebarItem.minimumThickness = rules.minimum }
+        if sidebarItem.maximumThickness != maximum { sidebarItem.maximumThickness = maximum }
     }
 
     /// True while a dialog shows. base-ui's modal backdrop covers T3's whole window, its header included, and makes
@@ -350,6 +367,8 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
 /// that when it goes back to the classic sidebar.
 final class NativeBrandHost: NSView {
     var isInert = false
+    /// The brand's width changed; the sidebar's minimum follows it.
+    var onWidthChange: (() -> Void)?
     override func hitTest(_ point: NSPoint) -> NSView? { isInert ? nil : super.hitTest(point) }
 
     weak var brand: NSView? {
@@ -368,6 +387,7 @@ final class NativeBrandHost: NSView {
             width.constant = w
             setFrameSize(NSSize(width: w, height: 28))
             invalidateIntrinsicContentSize()
+            onWidthChange?()
         }
         brand.frame = NSRect(x: 0, y: 0, width: w, height: 28)
     }
@@ -413,6 +433,12 @@ final class NativeRootController: NSViewController {
 /// The window's content view. Dialogs and other overlays come and go on it.
 final class NativeRootView: DSView {
     var onSubviewsChange: (() -> Void)?
+    var onResize: (() -> Void)?
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if changed { onResize?() }
+    }
     override func didAddSubview(_ subview: NSView) {
         super.didAddSubview(subview)
         onSubviewsChange?()
