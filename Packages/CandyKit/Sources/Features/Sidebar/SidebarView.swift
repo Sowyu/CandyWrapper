@@ -66,7 +66,7 @@ public final class SidebarContentView: DSView {
     private let environmentPill = BadgeView("Nightly", variant: .secondary, size: .sm)
     let brand = SidebarBrandView()
     let search = SidebarSearchFieldView()
-    let filterButton = SidebarContentView.headerButton(.folder, "Filter threads by project")
+    let filterButton = SidebarContentView.headerButton(.listFilter, "Filter threads by project")
     let addProjectButton = SidebarContentView.headerButton(.folderPlus, "Add project")
     let newThreadButton = SidebarContentView.headerButton(.squarePen, "New thread")
     let settingsButton = SidebarContentView.footerButton(.settings, "Settings")
@@ -625,7 +625,7 @@ public final class SidebarContentView: DSView {
         let group = scopedGroup
         filterMonogram.isHidden = group == nil
         if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
-        if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .folder : nil }
+        if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .listFilter : nil }
         let label = group.map { "Filter threads by project: \($0.label)" } ?? "Filter threads by project"
         filterButton.setAccessibilityLabel(label)
         filterButton.toolTip = label
