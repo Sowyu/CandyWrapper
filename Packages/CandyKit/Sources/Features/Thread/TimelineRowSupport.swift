@@ -121,9 +121,28 @@ final class TimelineContext {
             document = parse.document
         } else {
             streamingParses[key] = nil
-            document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks)
+            document = Self.settled(text, lineBreaks: lineBreaks)
         }
         documents[key] = (text, lineBreaks, document)
+        return document
+    }
+
+    /// Long settled messages keep their parse across threads, so switching back to a thread with a 1 MB reply
+    /// doesn't parse it again on the main thread (0.13 s each time).
+    // ponytail: the last 8 texts of 16 KB or more, FIFO; parse off the main thread if first opens of huge replies matter
+    private static var settledParses: [Int: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
+    private static var settledOrder: [Int] = []
+
+    private static func settled(_ text: String, lineBreaks: Bool) -> MarkdownDocument {
+        guard text.utf8.count >= 16_384 else { return MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks) }
+        var hasher = Hasher()
+        hasher.combine(text)
+        hasher.combine(lineBreaks)
+        let hash = hasher.finalize()
+        if let hit = settledParses[hash], hit.breaks == lineBreaks, hit.text == text { return hit.document }
+        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks)
+        if settledParses.updateValue((text, lineBreaks, document), forKey: hash) == nil { settledOrder.append(hash) }
+        if settledOrder.count > 8 { settledParses[settledOrder.removeFirst()] = nil }
         return document
     }
 

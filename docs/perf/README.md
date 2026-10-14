@@ -104,6 +104,41 @@ Idle CPU and package idle wakeups looked worse in the two saved runs, but an int
 
 Other spread inside one run: the first launch of a fresh build is cold (window 445 ms against 150 ms warm; the median hides it), footprint varies by 0.5 MB, scroll CPU by 8%, micro-benchmarks by 1 to 2%. No run overlapped another CandyWrapper app besides the user's demo app. Load average during the runs was 2.1 to 2.6 (the user's live T3 server and agents).
 
+## Stalls and dropped frames (2026-10-14)
+
+The other numbers here are averages, so a 300 ms freeze once a minute never shows in them. `CANDY_STALLS=1` (passed through `scripts/run-app`, any build) starts `StallMonitor` (`App/Sources/StallMonitor.swift`), which prints `stall-monitor on` and then:
+
+- `stall <ms> ms` for every main run loop pass of 50 ms or more, wake to sleep, Core Animation's commit included, followed by `sample <ms>` stacks of the main thread that a watchdog thread takes 50 ms into the pass and every 100 ms after.
+- `frame-gap <ms> ms <n> dropped <reason>` when the display link misses two or more refreshes during scrolling, typing, dragging, a resize or `--perf-scroll`.
+- `key-latency <ms> ms` from a key event's timestamp to the end of the pass that handled it, after its frame committed.
+
+Off, nothing is installed. On and idle, the watchdog waits on a semaphore and the display link runs only for half a second after input, so it adds no wakeups. Frames carry the image and offset next to the symbol, so `atos` can resolve a stripped build. `scripts/perf-review` now sets it and reports `launch`, `big_thread`, `open` and `stream` `.stall_max_ms` and `.stall_count_50ms`, plus `big_thread.dropped_frames`.
+
+Method: Release builds of 810aa19 plus the monitor (before) and of this change (after), run alternately twice each against a copy of `load-home-a` (1,063 threads, the 5,000 message thread, a 315 KB markdown reply, an 18,000 line code reply) on its own server, while three other agents built and tested. A script drove each run through the same clicks and keys: open five big threads, 18 quick switches between six threads, 71 characters typed and deleted in the 5,000 message thread's composer, ⌘K searches, Change theme to Glass and back through the palette, and a resize through 12 widths with the code reply open. Counts are of passes over 50 ms.
+
+| Scenario | Before | After |
+|---|---|---|
+| ⌘K, typing "update deps romeo" and deleting it | 2 and 3 stalls, max 378 and 310 ms; key latency median 35 ms, max 222 ms | no stalls; median 10.5 to 11 ms, max 31 to 35 ms |
+| Theme to Glass and back through ⌘K | 2 stalls each, max 270 and 279 ms | none |
+| Resize with the 18,000 line code reply open | 3 stalls each, max 85 and 89 ms, 10 frames dropped | none, 4 frames dropped |
+| 18 switches between six big threads | 6 stalls each, 853 and 894 ms in all | 3 stalls each, 450 and 465 ms in all, max 151 to 157 ms |
+| First open of the five big threads | 2 stalls, 326 and 328 ms in all | 2 stalls, 320 to 424 ms in all |
+| Typing in the 5,000 message thread | 0 or 1 stall; key latency median 9 to 10 ms, p95 18 ms | none; median 10 to 13 ms, p95 18 to 21 ms |
+
+What they were, from the samples:
+
+1. Every key in ⌘K ran `PaletteSearch.normalize` (NFKD, mark filtering, lowercasing) over every thread's search terms, rebuilt the root groups, sorted the projects by copying each of the 1,063 thread shells into per-project arrays, and searched settings, all before the typed glyph could commit. ASCII text now normalizes in one byte pass (same result, `asciiNormalizeMatchesUnicodePath`), the project sort keeps the newest timestamp per group without copying shells, and the search runs right after the key's frame commits (`AfterCommit`), so keys that arrive together search once. Enter, the arrows and jumps run a pending search first (`enterAfterTypingRunsTheFilteredRow`).
+2. Every layout of a code block lexed and colored its whole text again, so each new width during a resize lexed the 18,000 line reply (0.1 s). Colored code of 2,000 UTF-16 units or more is kept for the last 16 blocks; the colors are dynamic, so neither width nor appearance changes it.
+3. Switching back to a thread parsed its long replies again, since the timeline forgets its parses on a thread change (0.13 s for the 1.1 MB reply). Settled texts of 16 KB or more keep their parse for the last 8.
+
+Checked and clean: the sidebar scrolled through 1,063 threads, scrolling the 5,000 message thread (one 79 ms pass waiting on the GPU in `CABackingStoreGetFrontTexture`), two streamed claude-haiku-5-5 turns, the "Huge diff" thread's Diff panel with its 4,130 line file expanded and scrolled, three image threads opened twice each and scrolled, and the frame parse and typed decode, which run off the main thread (`RPCConnection`).
+
+Left:
+
+- Opening a thread with the 315 KB, 800 paragraph reply still lays it out on the main thread, about 150 ms each time, since a recycled row view drops its layout. A shared layout cache would have to key on the font, the theme and Glass as well; worth it if users with replies that long notice.
+- The first open of a huge reply parses it on the main thread (0.13 s). Parsing off the main thread before the rows apply would fix it.
+- Opening Settings and the first window draw 55 to 75 ms of glyphs and layers in Core Animation's commit, once each.
+
 ## Sidebar updates (2026-10-13)
 
 `CANDY_SIDEBAR_TIMING=1` (passed through `scripts/run-app`) prints `sidebar rebuild <ms>, <items> items, <n> rows built` for every sidebar update; `CANDY_SIDEBAR_TIMING=nocache` builds the list from scratch each time, for a before. Numbers and method: `docs/research/m10-load-2026-10-12.md`, "Sidebar updates".
