@@ -150,7 +150,10 @@ public final class ApprovalPanelView: ComposerBannerView {
             item.tag = i
             item.isEnabled = !isResponding
             item.toolTip = option.warning
-            if option.warning != nil { item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil) }
+            if option.warning != nil {
+                item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
+                if #available(macOS 27, *) { item.preferredImageVisibility = .visible }
+            }
             menu.addItem(item)
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: more.isFlipped ? 0 : more.bounds.maxY), in: more)
