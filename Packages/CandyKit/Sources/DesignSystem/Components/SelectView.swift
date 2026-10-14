@@ -181,7 +181,7 @@ public final class SelectView: ControlView {
             items.append(item)
         }
         let selectedRow = selectedIndex.flatMap { s in optionAt.first { $0.value == s }?.key }
-        if usesNativeChrome, NativeMenu.canExpress(items) {
+        if usesNativeChrome, NativeMenu.canExpress(items, select: true) {
             for (row, i) in optionAt { items[row].action = { [weak self] in self?.selectedIndex = i; self?.onChange?(i) } }
             var placement = PopupPlacement.dropdown
             if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
