@@ -582,6 +582,14 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         items.map { if case .row(let r) = $0 { (r.id, r.section) } else { nil } }
     }
 
+    private var settledHeader: Int? {
+        items.firstIndex { if case .shelfHeader(.settled, _, _) = $0 { true } else { false } }
+    }
+
+    private func dropTarget(_ id: ThreadId, at row: Int) -> SidebarDropTarget? {
+        NativeSidebarRules.dropTarget(sortRows, moving: id, at: row, settledHeader: settledHeader)
+    }
+
     private func section(of id: ThreadId) -> SidebarSection? {
         rowIndex(id).flatMap { if case .row(let r)? = item(atRow: $0) { r.section } else { nil } }
     }
@@ -589,8 +597,15 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
     func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int,
                    proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
         if info.draggingSource as? NSTableView === table {
-            guard dropOperation == .above, let id = draggedId, let from = section(of: id),
-                  let target = NativeSidebarRules.dropTarget(sortRows, moving: id, at: row), canSortDrop(id, from, target) else { return [] }
+            // A drop on the Settled shelf's header lands just under it, among the settled rows.
+            var row = row
+            if dropOperation == .on {
+                guard let header = settledHeader, row == header else { return [] }
+                row = header + 1
+                tableView.setDropRow(row, dropOperation: .above)
+            }
+            guard let id = draggedId, let from = section(of: id), let target = dropTarget(id, at: row),
+                  canSortDrop(id, from, target) else { return [] }
             return .move
         }
         guard info.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return [] }
@@ -602,7 +617,7 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
 
     func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
         if info.draggingSource as? NSTableView === table {
-            guard let id = draggedId, let from = section(of: id), let target = NativeSidebarRules.dropTarget(sortRows, moving: id, at: row) else { return false }
+            guard let id = draggedId, let from = section(of: id), let target = dropTarget(id, at: row) else { return false }
             onSortDrop(id, from, target)
             return true
         }
