@@ -51,7 +51,9 @@ final class MainWindow: NSWindow, NativeChromeWindow {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                    backing: .buffered, defer: false)
-        minSize = NSSize(width: 840, height: 620)
+        // The content minimum, not `minSize`: AppKit adds a toolbar's extra height to a frame minimum, which made
+        // Glass Native's 52 pt toolbar a 640 pt minimum. Content and frame are the same size here.
+        contentMinSize = NSSize(width: 840, height: 620)
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
         title = "CandyWrapper"
