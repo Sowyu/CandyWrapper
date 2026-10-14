@@ -79,17 +79,6 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// The PNG drawn once into a premultiplied bitmap. ImageIO hands back a lazily decoded, unpremultiplied image,
-    /// which Core Animation decodes later on its own; that late redraw of the diagram's rect skipped what lay above
-    /// it, so a diagram under the full screen visual reply showed through its dimmed backdrop.
-    nonisolated static func decoded(_ image: CGImage) -> CGImage? {
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return context.makeImage()
-    }
-
     nonisolated static func decode(_ reply: Swift.Result<Any, Error>) -> Result {
         switch reply {
         case .failure(let error): return .failed(message: error.localizedDescription, retryable: true)
@@ -105,7 +94,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
                   let w = o["width"] as? Double, let h = o["height"] as? Double else {
                 return .failed(message: "The diagram could not be rendered.", retryable: false)
             }
-            return .rendered(decoded(image) ?? image, CGSize(width: w, height: h))
+            return .rendered(image, CGSize(width: w, height: h))
         }
     }
 
