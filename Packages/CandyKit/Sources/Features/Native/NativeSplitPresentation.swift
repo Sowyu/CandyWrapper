@@ -137,9 +137,19 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     private weak var brandItem: NSToolbarItem?
     private var collapseObservation: NSKeyValueObservation?
 
-    /// The brand hides with the sidebar, as T3's does.
+    /// The brand hides with the sidebar, as T3's does, and the breadcrumb then follows the toggle as T3's header
+    /// does. A tracking separator over a collapsed sidebar keeps the items after it where the toggle sits beside
+    /// the traffic lights, about 110 pt right of the toggle in full screen, so it leaves while the sidebar is
+    /// collapsed.
     private func syncBrand() {
-        if #available(macOS 15, *), let item = brandItem, item.isHidden != sidebarItem.isCollapsed { item.isHidden = sidebarItem.isCollapsed }
+        let collapsed = sidebarItem.isCollapsed
+        if #available(macOS 15, *), let item = brandItem, item.isHidden != collapsed { item.isHidden = collapsed }
+        let separator = toolbar.items.firstIndex { $0.itemIdentifier == .sidebarTrackingSeparator }
+        if collapsed, let separator {
+            toolbar.removeItem(at: separator)
+        } else if !collapsed, separator == nil, let brand = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.brand }) {
+            toolbar.insertItem(withItemIdentifier: .sidebarTrackingSeparator, at: brand + 1)
+        }
     }
     private weak var panels: NSSegmentedControl?
     private weak var panelsItem: NSToolbarItem?
