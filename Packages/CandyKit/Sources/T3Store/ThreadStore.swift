@@ -28,6 +28,8 @@ public actor ThreadStore {
     private let cache: ThreadCache?
     private let cacheKey: ThreadCache.Key
     private var cacheRead = false
+    /// The last offer or removal sent to the cache.
+    private var cacheTask: Task<Void, Never>?
     /// The sequence and paging state last loaded from or offered to the cache.
     private var cached: (sequence: Int, history: ThreadHistoryMeta)?
 
@@ -59,8 +61,10 @@ public actor ThreadStore {
         return true
     }
 
-    /// Writes the queued snapshot now; the thread's view closed.
+    /// Writes the queued snapshot now; the thread's view closed. Waits for the offers and removals
+    /// already sent first, so the newest state is the one written.
     public func flushCache() async {
+        await cacheTask?.value
         await cache?.flush(cacheKey)
     }
 
@@ -154,7 +158,8 @@ public actor ThreadStore {
         let key = cacheKey
         if changes.deleted {
             cached = nil
-            Task { await cache.remove(key) }
+            let previous = cacheTask
+            cacheTask = Task { await previous?.value; await cache.remove(key) }
             return
         }
         guard let projection = reducer.projection, let sequence = reducer.lastSequence,
@@ -165,6 +170,8 @@ public actor ThreadStore {
         history.error = nil
         if let cached, cached.sequence == sequence, cached.history == history { return }
         cached = (sequence, history)
-        Task { await cache.offer(key, sequence: sequence, projection: projection, history: history) }
+        // Chained, so an offer never overtakes an earlier one or a removal.
+        let previous = cacheTask
+        cacheTask = Task { await previous?.value; await cache.offer(key, sequence: sequence, projection: projection, history: history) }
     }
 }
