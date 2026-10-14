@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if handOffToRunningInstance() { return }
+        StallMonitor.start()
         if !CommandLine.arguments.contains("--server") { ServerController.prefetchCachedSidebar() }
         // The View menu carries its own Toggle Full Screen (DesktopApplicationMenu.ts:258-268).
         UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")
@@ -892,6 +893,7 @@ enum PerfScroll {
             if up { step(scroll, up: false, left: 140) } else { FileHandle.standardError.write(Data("perf-scroll done\n".utf8)) }
             return
         }
+        StallMonitor.arm("perf-scroll")
         let clip = scroll.contentView
         let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - clip.bounds.height)
         // Toward the start of the document: y shrinks in a flipped document, grows in an unflipped one.

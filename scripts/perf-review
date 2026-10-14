@@ -83,6 +83,16 @@ THRESHOLDS = {
     "open.big_first_frame_ms": (0.25, 34, "ms"),
     "open.big_reopen_first_frame_ms": (0.25, 34, "ms"),
     "open.big_cache_first_frame_ms": (0.25, 34, "ms"),
+    # Main thread passes of 50 ms or more (CANDY_STALLS) and display refreshes missed while scrolling.
+    "launch.stall_max_ms": (0.25, 34, "ms"),
+    "launch.stall_count_50ms": (0.50, 2, ""),
+    "big_thread.stall_max_ms": (0.25, 34, "ms"),
+    "big_thread.stall_count_50ms": (0.50, 2, ""),
+    "big_thread.dropped_frames": (0.50, 10, ""),
+    "open.stall_max_ms": (0.25, 34, "ms"),
+    "open.stall_count_50ms": (0.50, 2, ""),
+    "stream.stall_max_ms": (0.25, 34, "ms"),
+    "stream.stall_count_50ms": (0.50, 2, ""),
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),
@@ -357,7 +367,7 @@ class App:
         self.log_path = "%s/app-%s.log" % (WORK, tag)
         before = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
         subprocess.call(["defaults", "delete", PERF_BUNDLE_ID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", CANDY_THREAD_CACHE=PERF_THREAD_CACHE)
+        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", CANDY_STALLS="1", CANDY_THREAD_CACHE=PERF_THREAD_CACHE)
         env.update(env_extra or {})
         self.proc = subprocess.Popen([REPO + "/scripts/run-app", "--server", SERVER, "--token-file", TOKEN, "--fake-t3-connect"] + extra_args,
                                      env=env, stdout=open(self.log_path, "w"), stderr=subprocess.STDOUT, start_new_session=True)
@@ -387,6 +397,17 @@ class App:
             if time.time() >= deadline:
                 return None
             time.sleep(0.1)
+
+    def stalls(self, metrics, prefix, frames=False):
+        """Stall counts from the app's CANDY_STALLS lines; builds without the monitor add nothing."""
+        text = open(self.log_path).read()
+        if "stall-monitor on" not in text:
+            return
+        stalls = [float(x) for x in re.findall(r"^stall ([0-9.]+) ms", text, re.M)]
+        add(metrics, prefix + ".stall_max_ms", max(stalls, default=0.0))
+        add(metrics, prefix + ".stall_count_50ms", len(stalls))
+        if frames:
+            add(metrics, prefix + ".dropped_frames", sum(int(x) for x in re.findall(r"^frame-gap [0-9.]+ ms (\d+) dropped", text, re.M)))
 
     def rusage(self):
         return probe("rusage", self.pid)[0]
@@ -443,6 +464,7 @@ def scenario_idle(app_path, metrics, idle_seconds, i, noise):
         add(metrics, "idle.peak_footprint_mb", mb(b["peak_footprint"]))
     finally:
         app.stop()
+    app.stalls(metrics, "launch")
 
 
 def scenario_big_thread(app_path, metrics, i, noise):
@@ -471,6 +493,7 @@ def scenario_big_thread(app_path, metrics, i, noise):
             noise.append("big-thread run %d overlapped another CandyWrapper app" % i)
     finally:
         app.stop()
+    app.stalls(metrics, "big_thread", frames=True)
 
 
 def open_frames(app_path, tag, cache_dir, noise):
@@ -495,7 +518,7 @@ def open_frames(app_path, tag, cache_dir, noise):
         if foreign_apps(app.pid):
             noise.append("%s overlapped another CandyWrapper app" % tag)
         time.sleep(1)  # the cache writes the big thread 0.5 s after it settles and when its view closes
-        return frames, app.log_path
+        return frames, app
     finally:
         app.stop()
 
@@ -506,12 +529,13 @@ def scenario_open(app_path, metrics, i, noise):
     cache_dir = "%s/thread-cache-%d" % (WORK, i)
     shutil.rmtree(cache_dir, ignore_errors=True)
     # Opens in order: the small thread at launch, big, small, big again.
-    frames, _ = open_frames(app_path, "open-%d" % i, cache_dir, noise)
+    frames, app = open_frames(app_path, "open-%d" % i, cache_dir, noise)
+    app.stalls(metrics, "open")
     if len(frames) >= 4:
         add(metrics, "open.big_first_frame_ms", float(frames[1]))
         add(metrics, "open.big_reopen_first_frame_ms", float(frames[3]))
-    frames, log_path = open_frames(app_path, "open-cached-%d" % i, cache_dir, noise)
-    log_text = open(log_path).read()
+    frames, app = open_frames(app_path, "open-cached-%d" % i, cache_dir, noise)
+    log_text = open(app.log_path).read()
     if "disk cache restored" not in log_text:
         noise.append("open-cached-%d: no open painted from the disk cache (a build without it?)" % i)
     elif len(frames) >= 2:
@@ -542,6 +566,7 @@ def scenario_stream(app_path, metrics, sha, noise):
             noise.append("stream run overlapped another CandyWrapper app")
     finally:
         app.stop()
+    app.stalls(metrics, "stream")
 
 
 # MARK: report
