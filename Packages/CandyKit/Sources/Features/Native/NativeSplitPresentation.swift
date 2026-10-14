@@ -542,7 +542,9 @@ final class NativeColumnView: DSView {
     /// A view that leaves, for classic's layout or another page, leaves unscaled.
     override func willRemoveSubview(_ subview: NSView) {
         super.willRemoveSubview(subview)
-        if subview === content, subview.bounds.size != subview.frame.size { subview.bounds = NSRect(origin: .zero, size: subview.frame.size) }
+        // `content` already holds the next view when its setter removes the old one, so this checks every subview.
+        // The surface and the backdrop are never scaled.
+        if subview.bounds.size != subview.frame.size { subview.bounds = NSRect(origin: .zero, size: subview.frame.size) }
     }
 
     private func place(_ frame: NSRect) {
