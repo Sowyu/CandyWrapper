@@ -83,7 +83,12 @@ private final class ThemedColorCache: @unchecked Sendable {
         if generation != current { generation = current; lightColor = nil; darkColor = nil }
         if let c = isDark ? darkColor : lightColor { return c }
         let palette = ThemeRuntime.palettes.palette(dark: isDark, sidebar: sidebar)
-        let c = palette[keyPath: isDark ? dark : light].nsColor.multiplyingAlpha(isDark ? darkAlpha : lightAlpha)
+        let key = isDark ? dark : light
+        var alpha = isDark ? darkAlpha : lightAlpha
+        // Classic Glass: T3's faint muted text (`text-muted-foreground/70`, a branch at `/40`) reads at full strength, since the
+        // frost already pushed muted text as far toward the background as 4.5:1 allows (WindowGlass.frostReadable).
+        if alpha >= 0.35, alpha < 1, ThemeRuntime.isFrost(dark: isDark), WindowGlass.frostFullStrength.contains(key) { alpha = 1 }
+        let c = palette[keyPath: key].nsColor.multiplyingAlpha(alpha)
         if isDark { darkColor = c } else { lightColor = c }
         return c
     }

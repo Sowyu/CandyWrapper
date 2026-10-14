@@ -118,6 +118,30 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 | `NightlySkyArt` behind the sidebar header on Nightly servers | The teddy-and-milk corner of "Candy Town" by Aya_Lu ([Pixabay](https://pixabay.com/illustrations/candy-town-city-buildings-8579300/), Pixabay Content License) as a duotone under a white title and toggle: #170a26 to #a45e8c in dark mode, #22103a to #dc8fbd in light mode. Chosen 2026-10-10; the first dark palette (#2a1240 to #ffc4df, plum title) was too light for dark mode. `scripts/gen-candy-art.swift` bakes the 8-bit luma from the 1280px public download; the app maps it and paints the duotone | `StageBackdropView`, `SidebarBrandView`, `SidebarTriggerView.mediaTint` |
 | `StageBackdropButtonArt`: the Nightly sky in the send button | The teddy from the same art, a circle of 196 source pixels with both ears in and its face above the arrow. The duotone follows the sidebar (light art in dark mode, deeper art in light mode); the arrow stays white with a soft plum halo. Chosen 2026-10-10 | `StageBackdropView.compact`, `ComposerPrimaryButton` |
 
+## Glass
+
+The classic Glass theme (`candywrapper-glass`) is CandyWrapper's own, so its material is ours. Layout, sizes, wording and behavior stay T3's; only the surfaces change. Glass Native keeps the system material and T3's surfaces, and every other theme is untouched: the code below runs only while `ThemeRuntime.isFrost` is true. It all lives in `WindowGlass` (DesignSystem/Components/WindowGlass.swift), and views use its colors and helpers instead of their own copies.
+
+One frost covers the window: a behind-window blur with the system material's tint layers hidden (`WindowGlassBackdropView.clear`), so the desktop shows through blurred and saturated, and our tints set all the density. Every surface on it is a tinted pane. Depth comes from how dense a pane is, never from soft shadows.
+
+| Level | What | Light | Dark |
+|---|---|---|---|
+| Base | Sidebar, main panel, right panel, settings pages | `--sidebar` or `--background` at `frostBaseAlpha` | the same |
+| Pane | Cards, bubbles, the composer, selected rows, inputs, pills (`--card`, `--surface-raised`, `--toolbar-control`, `--sidebar-row-selected`, `--sidebar-row-active`) | the token, white, at 0.40 + 0.35 x opacity | the token, near black, at 0.35 + 0.40 x opacity |
+| Dense | Code blocks, tables, the terminal (`--code-background`, `--terminal-background`) | 0.65 + 0.30 x opacity | 0.60 + 0.35 x opacity |
+| Floating | Menus, popovers, tooltips, the command palette, dialogs, toasts (`--popover`) | 0.70 + 0.25 x opacity, over its own within-window blur | the same |
+
+- `frostBaseAlpha` is 0.6 + 0.37 x opacity^1.5: 61% at 10, 69% at 40, 86% at the default 80 and 97% at 100. The floor keeps body text at 4.5:1 over a dark desktop in light mode and a bright one in dark mode.
+- Light fills and lines T3 paints opaque a step off the background (`--accent`, `--muted`, `--secondary`, `--border`, `--input` and their sidebar twins) become the black or white overlay that paints the same color over the stock background, so a hover tints whatever pane it sits on. Dark already paints them as white overlays.
+- A pane's edge is T3's border where it has one, else 1px of black at 7% (light) or white at 8% (dark). Its top highlight is 1px of white at 75% (light) or 7% (dark) just inside the top edge, clipped to the corners. `BoxStyle.pane` asks for both on a box without a border, and `GlassEdgeLayer` paints them on plain layers.
+- Radius stays T3's: 8 to 10 on cards and rows, 18 on dialogs, 6 to 10 on buttons.
+- Drop shadows cap at `0 2px 8px`, black at 8% (light) or 25% (dark). The composer's soft shadow goes.
+- A floating pane gets a `BackdropBlurView` under it (`syncPaneBlur`), so sharp text behind it blurs away instead of showing through the tint. Only open popups, dialogs and toasts have one, so at most a few exist and none while idle.
+- Text never relies on the frost: `frostReadable` moves each text color, in linear light so colored text keeps its hue, until it keeps 5:1 (text) or 3.3:1 (icons) against the worst base the slider allows, modeled as the base tint over a desktop at 10% gray (light) or 85% gray (dark). T3's faded muted text (`/70`, `/40`, the placeholder at 75%) paints at full strength.
+- Motion is unchanged: fills and colors fade as T3's do, within 100 to 200 ms.
+
+Measured over a busy striped and blocked backdrop, worst-case background next to the text, on 2026-10-14 (`/tmp` tooling, see the commit): body text 10.4:1 (light) and 6.8:1 (dark) at 10%, 13.1:1 and 13.6:1 at 80%. Muted text 6.5:1 and 5.0:1 at 10%, 5.5:1 and 4.8:1 at 80%. Icons 6.1:1 and 4.1:1 at 10%, 4.0:1 and 3.8:1 at 80%.
+
 ## Known gaps
 
 - Pixel snapping assumes a 2x backing store, as on every Retina Mac. On a 1x screen (this Mac mini's virtual display) edges can be half a point off. Use the window's backing scale where the code says `ponytail: 2x`.

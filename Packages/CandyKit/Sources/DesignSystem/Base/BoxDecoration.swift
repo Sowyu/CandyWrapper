@@ -40,6 +40,9 @@ public struct BoxStyle: Equatable {
     public var borderEdges: Edges?
     /// Which corners take `radius`: `.bottom` is `rounded-b-*`.
     public var corners = Corners.all
+    /// A frosted pane under classic Glass (a message bubble, a card without a border): it takes a hairline edge and the
+    /// top highlight even where T3 draws no border. Bordered see-through boxes get the highlight anyway.
+    public var pane = false
 
     public struct Edges: Equatable, Sendable {
         public var top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat
@@ -184,8 +187,13 @@ enum BoxPainter {
         let paddingRadius = max(0, style.radius - max(e.top, e.left, e.bottom, e.right))
         let paddingPath = shape(paddingBox, paddingRadius)
 
+        // Classic Glass frosts every box: soft drop shadows shrink to a hairline's worth, since depth comes from
+        // the panes' density (docs/design.md "Glass").
+        let frost = WindowGlass.frostDrawing()
+        let outerShadows = frost ? style.shadows.map(WindowGlass.frostShadow) : style.shadows
+
         // 1. Outer shadows, last entry painted first.
-        for shadow in style.shadows.reversed() where !shadow.inset {
+        for shadow in outerShadows.reversed() where !shadow.inset {
             let (rect, radius) = spreadRect(box, style.radius, shadow.spread)
             let shadowShape = shape(rect.offsetBy(dx: shadow.x, dy: shadow.y * ySign), radius)
             ctx.saveGState()
@@ -226,6 +234,27 @@ enum BoxPainter {
             ctx.addPath(ring)
             ctx.setFillColor(border.cgColor)
             ctx.fillPath(using: .evenOdd)
+        }
+
+        // 4b. A frosted pane's top highlight: a bordered box with a see-through fill catches light on its top edge.
+        if frost, style.pane, style.border == nil {
+            let ring = CGMutablePath()
+            ring.addPath(borderPath)
+            ring.addPath(shape(box.insetBy(dx: 1, dy: 1), max(0, style.radius - 1)))
+            ctx.addPath(ring)
+            ctx.setFillColor(WindowGlass.edge.cgColor)
+            ctx.fillPath(using: .evenOdd)
+        }
+        if frost, style.pane || style.border != nil, style.borderEdges == nil, let fill = style.fill, case let a = fill.cgColor.alpha, a > 0, a < 1,
+           box.height >= 16, style.corners.contains(.topLeft) || style.corners.contains(.topRight) || style.radius == 0 {
+            ctx.saveGState()
+            ctx.addPath(paddingPath)
+            ctx.clip()
+            let inner = style.border == nil ? box.insetBy(dx: 1, dy: 1) : paddingBox
+            let y = flipped ? inner.minY : inner.maxY - 1
+            ctx.setFillColor(WindowGlass.highlight.cgColor)
+            ctx.fill(CGRect(x: inner.minX, y: y, width: inner.width, height: 1))
+            ctx.restoreGState()
         }
 
         // 5. `::before` outer shadows: the pseudo element covers the padding box with radius - 1.
