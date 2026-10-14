@@ -116,6 +116,20 @@ struct ComposerAttachmentsTests {
         #expect(ComposerContext.referencedIds("see \(a.reference) ") == ["image_d1"])
     }
 
+    /// Deleting an entry shrinks the open menu: its host lays it out again from `preferredHeight`.
+    @Test func stashMenuAsksItsHostToResize() {
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+        let menu = ComposerStashMenuView()
+        host.addSubview(menu)
+        menu.entries = [PromptStashEntry(id: "1", createdAt: "", prompt: "a"), PromptStashEntry(id: "2", createdAt: "", prompt: "b")]
+        let two = menu.preferredHeight()
+        host.layoutSubtreeIfNeeded()
+        #expect(!host.needsLayout)
+        menu.entries = [PromptStashEntry(id: "1", createdAt: "", prompt: "a")]
+        #expect(host.needsLayout)
+        #expect(menu.preferredHeight() == two - 25)
+    }
+
     @Test func stashSnippetAndBudget() {
         var e = PromptStashEntry(id: "1", createdAt: "2026-10-10T10:00:00.000Z", prompt: "  fix\n\n the   bug  ")
         #expect(e.snippet == "fix the bug")

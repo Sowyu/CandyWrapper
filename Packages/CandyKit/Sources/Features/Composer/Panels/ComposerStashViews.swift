@@ -163,6 +163,8 @@ public final class ComposerStashMenuView: ComposerBannerView {
         if highlightedId == nil || !entries.contains(where: { $0.id == highlightedId }) { highlightedId = entries.first?.id }
         updateHighlight()
         needsLayout = true
+        // The host sizes the menu from `preferredHeight`, so a deleted entry must shrink it there too.
+        superview?.needsLayout = true
     }
 
     func highlight(_ id: String) {
