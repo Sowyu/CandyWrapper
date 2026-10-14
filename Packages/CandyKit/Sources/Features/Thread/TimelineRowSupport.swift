@@ -285,6 +285,9 @@ final class FillView: DSView {
     }
     var border: NSColor? { didSet { needsDisplay = true } }
     var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius } }
+    /// A frosted pane under classic Glass (a user bubble): edge and highlight even without a border.
+    var pane = false { didSet { needsDisplay = true } }
+    private var paneEdge: GlassEdgeLayer?
 
     /// The fill takes no clicks; what sits inside it (a user bubble's file chips) still does.
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -297,6 +300,8 @@ final class FillView: DSView {
         layer?.borderColor = border?.cgColor(in: self)
         layer?.borderWidth = border == nil ? 0 : 1
         layer?.cornerRadius = radius
+        paneEdge = WindowGlass.syncEdge(paneEdge, on: layer, in: self, radius: radius, edge: border == nil,
+                                        show: fill != nil && (pane || border != nil))
     }
 }
 

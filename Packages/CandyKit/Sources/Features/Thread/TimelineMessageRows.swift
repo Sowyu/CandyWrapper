@@ -146,6 +146,7 @@ final class UserMessageRowView: TimelineRowView {
         super.init(frame: frameRect)
         bubble.fill = TL.c(\.messageSurface)
         bubble.radius = 18
+        bubble.pane = true
         addSubview(attribution)
         addSubview(marker)
         addSubview(bubble)

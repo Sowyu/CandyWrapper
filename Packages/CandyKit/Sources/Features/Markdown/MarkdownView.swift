@@ -1041,6 +1041,15 @@ public final class MarkdownView: DSView {
             ctx.addPath(path(inner, max(0, radius - 1)))
             ctx.fillPath(using: .evenOdd)
         }
+        // Classic Glass: a pane (code block, table) catches light along its top edge.
+        if radius >= 8, rect.height >= 24, let fill, fill.cgColor(in: self).alpha > 0, WindowGlass.isFrost(for: self) {
+            ctx.saveGState()
+            ctx.addPath(path(inner, max(0, radius - 1)))
+            ctx.clip()
+            ctx.setFillColor(WindowGlass.highlight.cgColor(in: self))
+            ctx.fill(CGRect(x: inner.minX, y: isFlipped ? inner.minY : inner.maxY - 1, width: inner.width, height: 1))
+            ctx.restoreGState()
+        }
     }
 
     /// Chromium's disabled checkbox, sampled from the reference renders: 13px, 2px radius, 1px border;
