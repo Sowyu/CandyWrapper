@@ -13,7 +13,7 @@ import T3Store
 final class SidebarCommands {
     private weak var sidebar: SidebarContentView?
     private weak var window: NSWindow?
-    weak var layout: MainPresentation?
+    private weak var layout: SidebarLayoutView?
     private let environments: Environments
     private let threads: ThreadController
     let ledger = ThreadUndoLedger()
@@ -52,7 +52,7 @@ final class SidebarCommands {
     /// Thread menu items this client does not have yet.
     static let unbuiltMenuItems: Set<String> = []
 
-    init(sidebar: SidebarContentView, window: NSWindow, layout: MainPresentation, environments: Environments, threads: ThreadController) {
+    init(sidebar: SidebarContentView, window: NSWindow, layout: SidebarLayoutView, environments: Environments, threads: ThreadController) {
         self.sidebar = sidebar
         self.window = window
         self.layout = layout
@@ -522,7 +522,6 @@ final class SidebarCommands {
 
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
-        if layout is NativeSplitPresentation { return showNativeSnoozeMenu(id, anchor: anchor) }
         var items = SnoozePresets.resolve(now: Date()).map { preset in
             MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
         }
@@ -531,19 +530,6 @@ final class SidebarCommands {
             self?.requestCustomSnooze { wake in self?.snooze(id, until: wake) }
         })
         MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
-    }
-
-    /// Glass Native's swipe Snooze: a native menu titled "Snooze until", as T3 Mobile's (thread-swipe-actions.tsx).
-    private func showNativeSnoozeMenu(_ id: ThreadId, anchor: NSView) {
-        let presets = SnoozePresets.resolve(now: Date())
-        let items = presets.map { ThreadMenuItem("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))") }
-            + [ThreadMenuItem("snooze:custom", "Custom…", separatorBefore: true)]
-        let menu = NativeItemContextMenu.make(items) { [weak self] choice in
-            if choice == "snooze:custom" { self?.requestCustomSnooze { wake in self?.snooze(id, until: wake) }; return }
-            if let preset = presets.first(where: { "snooze:\($0.id)" == choice }) { self?.snooze(id, preset) }
-        }
-        menu.insertItem(NSMenuItem.sectionHeader(title: "Snooze until"), at: 0)
-        menu.popUp(positioning: nil, at: NSPoint(x: anchor.bounds.maxX - 8, y: anchor.bounds.midY), in: anchor)
     }
 
     // MARK: Thread menu (Sidebar.tsx:4566-4840)

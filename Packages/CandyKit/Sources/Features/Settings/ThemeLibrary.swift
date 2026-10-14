@@ -337,13 +337,8 @@ public final class ThemeLibrary {
         for a in ThemeAppearance.allCases {
             guard let id = owner(of: a), let d = definition(id) else { continue }
             if d.isWindowGlass {
-                // Glass wears the stock palette exactly; only the window changes.
+                // Glass wears the stock palette over a frosted window and frosts every surface.
                 if a == .light { input.glassLight = true } else { input.glassDark = true }
-                // Classic Glass also frosts every surface. Glass Native keeps T3's surfaces on its own glass, and
-                // a mix that shows the native window keeps them on the classic side too.
-                if !d.isGlassNative && !usesNativePresentation {
-                    if a == .light { input.frostLight = true } else { input.frostDark = true }
-                }
                 continue
             }
             // `applyThemePalette` falls back to the base colors for a side the theme lacks.
@@ -351,11 +346,6 @@ public final class ThemeLibrary {
             if a == .light { input.light = half } else { input.dark = half }
         }
         return (input, desktopAppearance())
-    }
-
-    /// Whether the main window shows the native presentation: Glass Native paints either appearance.
-    public var usesNativePresentation: Bool {
-        ThemeAppearance.allCases.contains { owner(of: $0) == ThemeDefinition.glassNative.id }
     }
 
     /// The appearance on screen now (T3's `resolvedTheme`).

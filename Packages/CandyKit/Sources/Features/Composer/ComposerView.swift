@@ -722,7 +722,7 @@ public final class ComposerView: DSView {
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
-        let frost = WindowGlass.isFrost(for: self)
+        let frost = WindowGlass.isActive(for: self)
         shadowLayer.shadowOpacity = dark || nativeGlass || frost ? 0 : 0.4
         glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: Self.radius, edge: false, show: !nativeGlass)
         CATransaction.commit()

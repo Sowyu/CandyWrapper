@@ -1042,7 +1042,7 @@ public final class MarkdownView: DSView {
             ctx.fillPath(using: .evenOdd)
         }
         // Classic Glass: a pane (code block, table) catches light along its top edge.
-        if radius >= 8, rect.height >= 24, let fill, fill.cgColor(in: self).alpha > 0, WindowGlass.isFrost(for: self) {
+        if radius >= 8, rect.height >= 24, let fill, fill.cgColor(in: self).alpha > 0, WindowGlass.isActive(for: self) {
             ctx.saveGState()
             ctx.addPath(path(inner, max(0, radius - 1)))
             ctx.clip()
