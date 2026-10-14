@@ -115,6 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainWindow?.makeKeyAndOrderFront(nil)
             sidebarCommands?.closeUtilityPage()
             settings?.openPairingLink(host: host, code: code)
+        case .promptLink(let link):
+            NSApp.activate()
+            mainWindow?.makeKeyAndOrderFront(nil)
+            palette?.openPromptLink(link)
         case nil:
             mainWindow?.makeKeyAndOrderFront(nil)
         }

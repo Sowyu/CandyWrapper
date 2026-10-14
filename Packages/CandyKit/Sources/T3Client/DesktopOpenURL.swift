@@ -1,4 +1,5 @@
 import Foundation
+import T3Protocol
 
 /// What the app does with a URL macOS hands it (`open-url` and `second-instance` in
 /// apps/desktop/src/app/DesktopClerk.ts:139-196). T3 registers `t3code` (development builds `t3code-dev`).
@@ -9,10 +10,13 @@ public enum DesktopOpenURL: Equatable, Sendable {
     case resume(ProviderAuthReturn)
     /// A pairing link (`https://host/pair#token=...` or the hosted `?host=...#token=...`), opened with the app.
     case pairing(host: String, code: String)
+    /// `t3code://new?prompt=...` or `t3code://threads/<env>/<thread>?prompt=...` on the app's own scheme (promptLinks.ts).
+    case promptLink(PromptLinks.Link)
 
     /// Classifies `value`; nil for anything T3 would ignore. `scheme` is the app's registered scheme.
     public static func parse(_ value: String, scheme: String = "t3code") -> DesktopOpenURL? {
         if let handoff = CodexAuthHandoff.read(value, scheme: scheme) { return .codexAuthHandoff(handoff) }
+        if let link = PromptLinks.read(value, scheme: scheme) { return .promptLink(link) }
         if let destination = ProviderAuthReturn.sanitize(value, desktopSchemes: ProviderAuthReturn.desktopSchemes.union([scheme])),
            destination.scheme == scheme {
             return .resume(destination)

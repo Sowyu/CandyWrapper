@@ -87,6 +87,65 @@ final class ComposerController {
 
     func focusComposer() { DispatchQueue.main.async { [weak self] in self?.composer.focus() } }
 
+    // MARK: Prompt links (promptLinks/linkedPrompt.ts, NewThreadLinkView.tsx in T3 3105)
+
+    private var linkedPromptToast: Int?
+
+    /// `warnAboutHiddenCharacters`: stays until dismissed.
+    func warnAboutHiddenCharacters(_ prompt: PromptLinks.Prompt) {
+        let n = prompt.hiddenCharacters
+        guard n > 0 else { return }
+        panel.toasts.show(ToastView(title: "This prompt had hidden characters, it may be malicious",
+                                    message: "CandyWrapper removed \(n) hidden character\(n == 1 ? "" : "s"). Read the prompt before you send it.",
+                                    kind: .warning), timeout: 0)
+    }
+
+    /// `placeLinkedPrompt`: the open thread's or draft's composer takes the prompt to read and send. Text the user
+    /// already typed there is replaced only from the toast's "Replace draft". `notes` say what the link didn't get.
+    func placeLinkedPrompt(_ prompt: PromptLinks.Prompt, notes: [String] = []) {
+        warnAboutHiddenCharacters(prompt)
+        guard let key = draftKey else { return }
+        flushPrompt()
+        let place = { [weak self] in
+            guard let self else { return }
+            if self.draftKey == key, self.questionRequestId == nil, self.queuedEdit == nil {
+                self.composer.text = prompt.text
+                self.remember(prompt.text)
+                self.focusComposer()
+            } else {
+                self.prompts[key] = prompt.text
+                self.scheduleSave()
+            }
+            self.panel.toasts.show(ToastView(title: "Prompt added from a link",
+                                             message: (["Read it before you send."] + notes).joined(separator: " "), kind: .info))
+        }
+        let existing = prompts[key] ?? ""
+        if existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || existing == prompt.text { place(); return }
+        if let old = linkedPromptToast { panel.toasts.dismiss(old) }
+        linkedPromptToast = panel.toasts.show(ToastView(
+            title: "Linked prompt ready", message: "This thread already has a draft. Replace it with the linked prompt?", kind: .info,
+            actionTitle: "Replace draft", action: { [weak self] in
+                if let id = self?.linkedPromptToast { self?.panel.toasts.dismiss(id) }
+                place()
+            }), timeout: 0)
+    }
+
+    /// `resolvePromptLinkModelSelection` (client-runtime promptLinks.ts:72-105) picked into the open draft. Returns
+    /// the note when the link's model isn't used (NewThreadLinkView.tsx:121-127).
+    func pickLinkedModel(provider: String, model: String?) -> String? {
+        let driver = provider == "claude" ? "claudeagent" : provider
+        let usable = pickers.context.catalog.entries.map(\.provider)
+            .filter { $0.driver.lowercased() == driver && $0.enabled && $0.availability != "unavailable" }
+        let instance = usable.first { $0.status == .ready } ?? usable.first { $0.status == .warning }
+        let requested = instance.flatMap { i in model.flatMap { ThreadRelationships.resolveModel(i.models, $0)?.slug } }
+        guard let instance, let slug = requested ?? (instance.models.first { $0.isDefault == true } ?? instance.models.first)?.slug else {
+            return "The link asked for \(provider), which is not set up here, so your default model is used."
+        }
+        pickers.select(instance.instanceId, model: slug)
+        guard let model, requested == nil else { return nil }
+        return "The link asked for \(model), which \(provider) does not offer here, so its default model is used."
+    }
+
     /// Changes the open draft's workspace picks and stores them.
     func updateDraft(_ change: (inout DraftSession) -> Void) {
         guard case .draft(var session) = target else { return }
