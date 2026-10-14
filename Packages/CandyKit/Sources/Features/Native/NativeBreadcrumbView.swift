@@ -127,13 +127,25 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
         didSet { if trailingEdge != oldValue { resize() } }
     }
 
+    /// The window x the clamp last used. The sidebar moves the breadcrumb without moving the panel's edge.
+    private var clampedAtX: CGFloat?
+
+    /// Clamps again if the breadcrumb moved since the last clamp: the sidebar collapsed, opened or was dragged.
+    public func refreshClamp() {
+        guard trailingEdge != nil, window != nil, convert(NSPoint.zero, to: nil).x != clampedAtX else { return }
+        resize()
+    }
+
     /// The toolbar measures the item once; an explicit width it follows when the crumbs change.
     private lazy var widthConstraint = widthAnchor.constraint(equalToConstant: 200)
     private func resize() {
         invalidateIntrinsicContentSize()
         var width = intrinsicContentSize.width
+        clampedAtX = nil
         if let edge = trailingEdge, window != nil {
-            width = min(width, max(120, edge - convert(NSPoint.zero, to: nil).x - 16))
+            let x = convert(NSPoint.zero, to: nil).x
+            clampedAtX = x
+            width = min(width, max(120, edge - x - 16))
         }
         if widthConstraint.constant != width { widthConstraint.constant = width }
         if frame.width != width { setFrameSize(NSSize(width: width, height: 28)) }
@@ -162,6 +174,10 @@ public final class NativeBreadcrumbView: NSView, NSTextFieldDelegate {
     public override func layout() {
         super.layout()
         placeCrumbs()
+        // Out of the layout pass, because the clamp marks the toolbar for layout.
+        if trailingEdge != nil, window != nil, convert(NSPoint.zero, to: nil).x != clampedAtX {
+            DispatchQueue.main.async { [weak self] in self?.refreshClamp() }
+        }
     }
 
     /// The crumbs' `gap-3` (WorkspaceBreadcrumb.tsx:16); the favicon keeps its `gap-1.5` to the name.

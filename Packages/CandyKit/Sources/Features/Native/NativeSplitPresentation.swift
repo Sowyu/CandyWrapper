@@ -86,6 +86,23 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         (rootController.view as! NativeRootView).onResize = { [weak self] in self?.syncSidebarLimits() }
         brandHost.onWidthChange = { [weak self] in self?.syncSidebarLimits() }
         syncSidebarLimits()
+        // The sidebar's edge moves the breadcrumb but not the right panel's, so its clamp at the panel runs again.
+        splitResizeObserver = NotificationCenter.default.addObserver(
+            forName: NSSplitView.didResizeSubviewsNotification, object: split.splitView, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshBreadcrumbClamp() }
+        }
+    }
+
+    isolated deinit {
+        if let splitResizeObserver { NotificationCenter.default.removeObserver(splitResizeObserver) }
+    }
+
+    private var splitResizeObserver: NSObjectProtocol?
+
+    /// After the toolbar has placed its items for the sidebar's new width.
+    private func refreshBreadcrumbClamp() {
+        DispatchQueue.main.async { [weak self] in (self?.breadcrumb as? NativeBreadcrumbView)?.refreshClamp() }
     }
 
     /// `resolveThreadSidebarMinimumWidth` and `resolveThreadSidebarMaximumWidth`. T3 raises the minimum to the brand's
@@ -194,6 +211,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         } else if !collapsed, separator == nil, let brand = toolbar.items.firstIndex(where: { $0.itemIdentifier == Self.brand }) {
             toolbar.insertItem(withItemIdentifier: .sidebarTrackingSeparator, at: brand + 1)
         }
+        refreshBreadcrumbClamp()
     }
     private weak var panels: NSSegmentedControl?
     private weak var panelsItem: NSToolbarItem?
