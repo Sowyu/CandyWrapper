@@ -178,6 +178,9 @@ public final class ComposerPickers {
     /// `modelPicker.jump.N` while the picker is open.
     public func jumpModel(_ index: Int) { modelPicker?.jump(index) }
 
+    /// A pick made for the user, like a prompt link's model.
+    public func select(_ id: ProviderInstanceId, model slug: String) { pickModel(id, slug) }
+
     private func pickModel(_ id: ProviderInstanceId, _ slug: String) {
         closeOpenPopup()
         if let reason = store.pickModel(draftKey, instance: id, model: slug, context) {

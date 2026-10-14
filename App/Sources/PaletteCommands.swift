@@ -28,6 +28,8 @@ final class PaletteCommands {
     /// Go to file's server results (`useProjectFilePickerQuery`): the query they answer.
     private var picker: (query: String, entries: [ProjectEntry]?)?
     private var pickerTask: Task<Void, Never>?
+    /// A prompt link's "You don't have owner/name" toast.
+    private var linkToast: Int?
 
     init(window: NSWindow, sidebar: SidebarContentView, environments: Environments, threads: ThreadController,
          commands: SidebarCommands, settings: SettingsController) {
@@ -568,7 +570,7 @@ final class PaletteCommands {
     private func isScratch(_ project: ProjectShell) -> Bool { threads.composer.isScratch(project) }
 
     /// `startScratchThread`: `projects.ensureScratch`, wait for the project in the shell (10 s), then a draft in it.
-    func startScratchThread(_ env: String) {
+    func startScratchThread(_ env: String, then opened: (@MainActor () -> Void)? = nil) {
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -583,6 +585,7 @@ final class PaletteCommands {
                 }
                 guard let project else { throw SidebarCommands.CommandMessage(errorDescription: "The scratch project did not load.") }
                 self.newThread(in: project)
+                opened?()
             } catch {
                 let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
                 self.threads.panel.toasts.show(ToastView(title: "Could not start without a project", message: message ?? "An error occurred.", kind: .error))
@@ -827,5 +830,153 @@ enum AppearanceMode: String, CaseIterable {
     @MainActor func apply() {
         ThemeLibrary.shared.setAppearanceMode(rawValue)
         NotificationCenter.default.post(name: Self.didChange, object: nil)
+    }
+}
+
+// MARK: - Prompt links (promptLinks/NewThreadLinkView.tsx and ThreadLinkPrompt.tsx in T3 3105)
+
+extension PaletteCommands {
+    /// A prompt link: a thread link puts its prompt in that thread's composer; a `/new` link opens a draft in the
+    /// project its repository names, else without a project, or the thread behind its pull request. Nothing is sent.
+    func openPromptLink(_ link: PromptLinks.Link, attempt: Int = 0) {
+        switch link {
+        case .thread(let env, let local, let prompt):
+            showThreadView()
+            threads.open(ThreadId(EnvironmentScope.key(env, local)))
+            switch prompt {
+            case .failure(let failure): linkError("Could not open the linked prompt", failure.message)
+            case .success(let prompt?): threads.composer.placeLinkedPrompt(prompt)
+            case .success(nil): break
+            }
+        case .newThread(.failure(let failure)):
+            linkError("Could not open the link", failure.message)
+        case .newThread(.success(let new)):
+            // A cold launch from a link: the projects come with the first shell (`allReachableShellsLiveAtom`).
+            // ponytail: waits for any shell, not every machine's; wait per environment if links land on the wrong machine
+            if snapshot == nil, attempt < 40 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.openPromptLink(link, attempt: attempt + 1) }
+                return
+            }
+            openNewThreadLink(new)
+        }
+    }
+
+    private func openNewThreadLink(_ link: PromptLinks.NewThread) {
+        let all = snapshot?.threads ?? []
+        if case .pullRequest(let pr, let prompt) = link, let thread = PromptLinks.thread(in: all, for: pr) {
+            showThreadView()
+            threads.open(thread.id)
+            if let prompt { threads.composer.placeLinkedPrompt(prompt) }
+            return
+        }
+        let repository: PromptLinks.Repository? = switch link {
+        case .new(_, let repository, _, _): repository
+        case .pullRequest(let pr, _): pr.repository
+        }
+        guard let repository else { openLinkWithoutProject(link); return }
+        let projects = SidebarModel.sortProjectsForSidebar((snapshot?.projects ?? []).filter { !isScratch($0) }, threads: all, order: .updatedAt)
+        guard let project = PromptLinks.project(in: projects, for: repository) else { offerClone(repository, link: link); return }
+        newThread(in: project)
+        if case .pullRequest(let pr, let prompt) = link {
+            // T3 asks before it checks out (PullRequestLinkCheckout); here the checkout dialog asks, with the pull request filled in.
+            if let prompt { threads.composer.placeLinkedPrompt(prompt) }
+            DispatchQueue.main.async { [weak self] in self?.threads.git.openPullRequestDialog(pr.url) }
+            return
+        }
+        placeLinkDraft(link)
+    }
+
+    /// The draft that just opened takes the link's model and prompt (`openDraft`).
+    private func placeLinkDraft(_ link: PromptLinks.NewThread, extra: String? = nil) {
+        var notes: [String] = []
+        var prompt: PromptLinks.Prompt?
+        switch link {
+        case .new(let p, _, let provider, let model):
+            prompt = p
+            if let provider, let note = threads.composer.pickLinkedModel(provider: provider, model: model) { notes.append(note) }
+        case .pullRequest(_, let p): prompt = p
+        }
+        let text = [prompt?.text, extra].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        guard !text.isEmpty else { return }
+        threads.composer.placeLinkedPrompt(PromptLinks.Prompt(text: text, hiddenCharacters: prompt?.hiddenCharacters ?? 0), notes: notes)
+    }
+
+    /// The machine the user worked on last (`lastActiveEnvironmentId`).
+    private var lastActiveEnvironmentId: String? {
+        (snapshot?.threads ?? []).max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) }?.id.environmentId ?? environments.primaryId
+    }
+
+    /// `openWithoutProject`: "No project" on the machine the user last worked on.
+    private func openLinkWithoutProject(_ link: PromptLinks.NewThread) {
+        guard let env = scratchEnvironmentId(lastActiveEnvironmentId) ?? scratchEnvironmentId(nil) else {
+            linkError("Could not open the link", "None of your machines can start a thread without a project right now.")
+            return
+        }
+        // Without its repository, a pull request link still says which one it meant.
+        let extra: String? = if case .pullRequest(let pr, _) = link { pr.url } else { nil }
+        startScratchThread(env) { [weak self] in self?.placeLinkDraft(link, extra: extra) }
+    }
+
+    /// "You don't have owner/name" (NewThreadLinkView.tsx:286-300), as a toast: clone it, or start without a project.
+    private func offerClone(_ repository: PromptLinks.Repository, link: PromptLinks.NewThread) {
+        let name = "\(repository.owner)/\(repository.name)"
+        let toast = ToastView(title: "You don't have \(name)", message: "Clone it to work on it here, or start without a project.", kind: .info,
+                              actionTitle: "Clone \(name)", action: { [weak self] in
+                                  self?.dismissLinkToast()
+                                  self?.cloneLinkRepository(repository, link: link)
+                              }, secondaryTitle: "Use without project", secondaryAction: { [weak self] in
+                                  self?.dismissLinkToast()
+                                  self?.openLinkWithoutProject(link)
+                              })
+        dismissLinkToast()
+        linkToast = threads.panel.toasts.show(toast, timeout: 0)
+    }
+
+    private func dismissLinkToast() {
+        if let id = linkToast { threads.panel.toasts.dismiss(id) }
+        linkToast = nil
+    }
+
+    /// `cloneRepository`: `projectClone.start` into the machine's new-projects folder, then the draft, which waits for the clone.
+    private func cloneLinkRepository(_ repository: PromptLinks.Repository, link: PromptLinks.NewThread) {
+        guard let env = lastActiveEnvironmentId, let config = threads.composer.config(env), let root = config.newProjectsRoot,
+              config.capabilities.contains("projectCloneTracking") else {
+            linkError("Could not open the link", "This machine cannot clone from a link. Update it, or clone the repository from the command palette.")
+            return
+        }
+        let projectId = UUID().uuidString.lowercased()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.environments.request(env, "projectClone.start", .object([
+                    "projectId": .string(projectId), "title": .string(repository.name), "createdAt": .string(T3Timestamp(Date()).raw),
+                    "remoteUrl": .string("https://github.com/\(repository.owner)/\(repository.name).git"),
+                    "destinationPath": .string(PaletteAddProjectPaths.cloneDestinationPath(root, repository.name)),
+                ]))
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+                self.linkError("Clone failed", message ?? "An error occurred.")
+                return
+            }
+            let id = ProjectId(EnvironmentScope.key(env, projectId))
+            for _ in 0..<50 {
+                if let project = self.snapshot?.projects.first(where: { $0.id == id }) {
+                    // A pull request checks out from the cloned repository, which is not there yet.
+                    if case .pullRequest = link {
+                        self.linkError("Cloning \(repository.owner)/\(repository.name)", "Open this link again when the clone finishes.", kind: .info)
+                        return
+                    }
+                    self.newThread(in: project)
+                    self.placeLinkDraft(link)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            self.linkError("Could not open the link", "The clone started, but its project did not appear.")
+        }
+    }
+
+    private func linkError(_ title: String, _ message: String, kind: ToastQueue.Kind = .error) {
+        threads.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
     }
 }
