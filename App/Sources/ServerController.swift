@@ -402,7 +402,9 @@ final class ServerController {
                     return (false, error.localizedDescription)
                 }
             }.value
-            Self.goBack(to: previous)
+            // After a failed restore the new runtime stays active: the database may be the one it migrated, and an
+            // older server must not open that. A pending restore goes back once it goes through.
+            if rollback.failure == nil { Self.goBack(to: previous) }
             let reason = (error as? LocalServerLaunchError)?.description ?? ConnectionFailure.classify(error).detail
             if let failure = rollback.failure {
                 let again = DatabaseBackup.pending(database: database, in: directory) != nil ? ", and CandyWrapper tries again before it starts a server" : ""
@@ -426,6 +428,9 @@ final class ServerController {
     /// before, before any server starts on the home, as T3's launcher does (`databaseRestorePending`,
     /// serviceLauncher.ts:580-583). A server another app started meanwhile keeps the database it has
     /// (`#idleWhileStateDirOwned`). Until the backup is gone, no server starts.
+    // ponytail: the marker can't tell whether another app's server wrote to the home while CandyWrapper wasn't
+    // running, so a crash in the moment between a finished restore and the marker's removal, followed by another
+    // app writing, would restore over that; stamp the restored files' identity in the marker if anyone hits it
     private func finishPendingRestore() async throws {
         guard let backup = DatabaseBackup.pending(database: DatabaseBackup.database(home: home), in: backupDirectory) else { return }
         let home = self.home
