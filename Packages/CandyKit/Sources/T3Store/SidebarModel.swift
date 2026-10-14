@@ -824,15 +824,25 @@ public enum SidebarModel {
     public static func sortLogicalProjectsForSidebar(
         _ groups: [ProjectGroup], threads: [ThreadShell], order: SortOrder
     ) -> [ProjectGroup] {
+        sortLogicalProjects(groups, threads: threads, order: order) { $0.archivedAt == nil }
+    }
+
+    private static func sortLogicalProjects(
+        _ groups: [ProjectGroup], threads: [ThreadShell], order: SortOrder, counts: (ThreadShell) -> Bool
+    ) -> [ProjectGroup] {
         var groupByProject: [ProjectId: String] = [:]
         for group in groups { for id in group.memberProjectIds { groupByProject[id] = group.key } }
-        var threadsByGroup: [String: [ThreadShell]] = [:]
-        for thread in threads where thread.archivedAt == nil {
-            if let key = groupByProject[thread.projectId] { threadsByGroup[key, default: []].append(thread) }
+        // The newest thread per group, without copying the large shells into per-group arrays (the palette
+        // runs this on every key; with 1,000 threads the copies took most of a 0.26 s stall).
+        var newestByGroup: [String: Double] = [:]
+        for thread in threads where counts(thread) {
+            if let key = groupByProject[thread.projectId] {
+                newestByGroup[key] = max(newestByGroup[key] ?? -.infinity, getThreadSortTimestamp(thread, order))
+            }
         }
         return sortProjectsByActivity(
             groups, order: order,
-            timestamp: { getProjectSortTimestamp($0.representative, threads: threadsByGroup[$0.key] ?? [], order: order) },
+            timestamp: { newestByGroup[$0.key] ?? getProjectSortTimestamp($0.representative, threads: [], order: order) },
             ties: { l, r in
                 let byTitle = localeCompare(l.representative.title, r.representative.title)
                 return byTitle != 0 ? byTitle < 0 : localeCompare(l.key, r.key) < 0
@@ -844,8 +854,7 @@ public enum SidebarModel {
     public static func sortSidebarV2ProjectGroups(
         _ groups: [ProjectGroup], threads: [ThreadShell], order: SortOrder
     ) -> [ProjectGroup] {
-        sortLogicalProjectsForSidebar(
-            groups, threads: threads.filter { $0.archivedAt == nil && !isSidebarSubagentThread($0) }, order: order)
+        sortLogicalProjects(groups, threads: threads, order: order) { $0.archivedAt == nil && !isSidebarSubagentThread($0) }
     }
 }
 
