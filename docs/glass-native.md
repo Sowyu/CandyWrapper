@@ -100,6 +100,33 @@ The system's blue emphasized selection never shows. Text keeps its T3 colors on 
 
 Phase 1 is done (2026-10-13). Phase 2, the native sidebar, is done (2026-10-13, see "Phase 2" below).
 
+All six phases are done as of 2026-10-14. Phase 4's floating pill composer was dropped for T3 desktop's composer on glass (see the polish pass).
+
+### Phase 6, bug hunt and familiarity (2026-10-14)
+
+Two rounds of bug hunting per half, a familiarity pass against `design/reference/` and two code reviews fixed about 30 bugs. The notes are in `docs/research/glass-native-hunt-shell-2026-10-14.md`, `docs/research/glass-native-hunt-thread-2026-10-14.md` and `docs/research/glass-native-familiarity-2026-10-14.md`. Decisions made on the way:
+
+- The sidebar takes T3's widths: 256 by default, at least 208 or the brand's width, at most the window less 640.
+- The panel toggles stay one group at the top right. T3 moves three of them into the right panel's header while it's open, which lands in nearly the same place.
+- A light and dark mix with Glass Native on one side keeps the native layout on both, so the window doesn't rebuild when macOS switches appearance.
+- The toolbar can't be dimmed under a dialog as T3 dims its header, so its items turn off instead.
+
+Left: steer was only seen in history, because haiku finished each turn before a steer arrived.
+
+Performance, Release builds of fff9d87 with `scripts/perf-review --no-bench`, `CANDY_THEME` set, three launches each:
+
+| | Glass | Glass Native |
+|---|---|---|
+| Launch to window | 180 ms | 229 ms |
+| Footprint at rest | 33.5 MB | 42.4 MB |
+| Idle CPU | 0.045% | 0.045% |
+| Package idle wakeups | 0.10/s | 0.23/s |
+| Huge thread scroll CPU | 329 ms | 340 ms |
+| After scroll footprint | 43.2 MB | 52.5 MB |
+| Big thread first frame | 74 ms | 49 ms |
+
+The gap, about 9 MB and 50 ms, is what the system toolbar and split view cost (see the perf audit), which the user chose to keep on 2026-10-14.
+
 ### Sidebar cost and brand (2026-10-14)
 
 A `malloc_history -callTree` of the native sidebar at rest put most of its cost in three places. Every card made its hover Settle and Snooze buttons up front, and each button built a fresh SF Symbol image, about 40 KB with its representation and raster. Cards also made the pin, status, worktree, machine, terminal and pull request views that most rows never show. Each of those views also took a share of the split view's layout engine.
