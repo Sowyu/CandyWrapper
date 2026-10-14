@@ -80,6 +80,8 @@ open class DSView: NSView {
         super.viewDidChangeEffectiveAppearance()
         themeGeneration = ThemeRuntime.generation
         needsDisplay = true
+        // A light and dark switch keeps every box style equal, so nothing else repaints a decoration's contents.
+        for sub in layer?.sublayers ?? [] where sub is ThemeRedrawingLayer { sub.setNeedsDisplay() }
     }
 
     /// Detached and recycled views catch up when they return to a window.
