@@ -141,14 +141,17 @@ final class ServerUpdates {
         }
     }
 
-    /// `updateServer(server, { quiet: true })` for "Update everything": no toasts; nil once the server runs the
-    /// new version, else why it doesn't.
-    func updateQuietly(_ environmentId: String, serverLabel: String) async -> String? {
+    enum QuietOutcome: Equatable { case updated, skipped, failed(String) }
+
+    /// `updateServer(server, { quiet: true })` for "Update everything": no toasts. A server that can't update now,
+    /// or already is, is skipped rather than joined (ServerUpdateAction.tsx:84-87).
+    func updateQuietly(_ environmentId: String, serverLabel: String) async -> QuietOutcome {
+        guard tasks[environmentId] == nil else { return .skipped }
         quietFailures[environmentId] = nil
         start(environmentId, serverLabel: serverLabel, quiet: true)
-        guard let task = tasks[environmentId] else { return "Server update did not start." }
+        guard let task = tasks[environmentId] else { return .skipped }
         await task.value
-        return quietFailures.removeValue(forKey: environmentId)
+        return quietFailures.removeValue(forKey: environmentId).map { .failed($0) } ?? .updated
     }
 
     private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle, quiet: Bool = false) {
