@@ -1,75 +1,13 @@
 import Foundation
 
-// One parse per frame: JSONSerialization builds the tree (no thrown errors on the happy path),
-// `JSONValue(foundation:)` converts it with a type switch, and `JSONValueDecoder` reads typed
-// models straight from the tree. A `JSONValue` field decoded this way takes its node in O(1).
+// One parse per frame: `JSONScanner` builds the tree straight from the bytes, and
+// `JSONValueDecoder` reads typed models from it. A `JSONValue` field decoded this way takes its
+// node in O(1).
 
 extension JSONValue {
-    /// Parses JSON text. Invalid JSON throws `DecodingError.dataCorrupted`, like `JSONDecoder`.
+    /// Parses UTF-8 JSON text. Invalid JSON throws `DecodingError.dataCorrupted`, like `JSONDecoder`.
     public init(parsing data: Data) throws {
-        let object: Any
-        do {
-            object = try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
-        } catch {
-            throw DecodingError.dataCorrupted(.init(
-                codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: error))
-        }
-        self.init(foundation: object)
-    }
-
-    /// Converts a JSONSerialization tree. Booleans are the CFBoolean singletons; every other
-    /// NSNumber becomes a Double, as `JSONDecoder` did for `JSONValue`.
-    init(foundation object: Any) {
-        let cf = object as AnyObject
-        switch CFGetTypeID(cf) {
-        case Self.dictionaryType:
-            let d = unsafeDowncast(cf, to: NSDictionary.self)
-            var o = [String: JSONValue](minimumCapacity: d.count)
-            d.enumerateKeysAndObjects { k, v, _ in o[JSONValue.native(k as AnyObject)] = JSONValue(foundation: v) }
-            self = .object(o)
-        case Self.stringType:
-            self = .string(JSONValue.native(cf))
-        case Self.arrayType:
-            let a = unsafeDowncast(cf, to: NSArray.self)
-            var out: [JSONValue] = []
-            out.reserveCapacity(a.count)
-            for v in a { out.append(JSONValue(foundation: v)) }
-            self = .array(out)
-        case Self.booleanType:
-            self = .bool(unsafeDowncast(cf, to: NSNumber.self).boolValue)
-        case Self.numberType:
-            self = .number(unsafeDowncast(cf, to: NSNumber.self).doubleValue)
-        default:
-            self = .null
-        }
-    }
-
-    private static let dictionaryType = CFDictionaryGetTypeID()
-    private static let stringType = CFStringGetTypeID()
-    private static let arrayType = CFArrayGetTypeID()
-    private static let booleanType = CFBooleanGetTypeID()
-    private static let numberType = CFNumberGetTypeID()
-
-    /// A native Swift string from a JSONSerialization string: bridged NSStrings hash and compare
-    /// through CoreFoundation, native ones are fast, and up to 15 UTF-8 bytes are stored inline.
-    /// The bytes are copied straight out of the CFString; going through `as String` and
-    /// `makeContiguousUTF8` made a bridged string first and cost about twice as much.
-    private static func native(_ object: AnyObject) -> String {
-        let s = unsafeDowncast(object, to: CFString.self)
-        let length = CFStringGetLength(s)
-        // Eight-bit storage holds one byte per character; all below 0x80 it is ASCII, so UTF-8.
-        // Counting by length, not by NUL, keeps an escaped \u0000 inside the string.
-        if let p = CFStringGetCStringPtr(s, CFStringBuiltInEncodings.UTF8.rawValue) {
-            let bytes = UnsafeBufferPointer(start: UnsafeRawPointer(p).assumingMemoryBound(to: UInt8.self), count: length)
-            if !bytes.contains(where: { $0 >= 0x80 }) { return String(decoding: bytes, as: UTF8.self) }
-        }
-        var used: CFIndex = 0
-        let range = CFRange(location: 0, length: length)
-        CFStringGetBytes(s, range, CFStringBuiltInEncodings.UTF8.rawValue, 0, false, nil, 0, &used)
-        return String(unsafeUninitializedCapacity: used) { buffer in
-            CFStringGetBytes(s, range, CFStringBuiltInEncodings.UTF8.rawValue, 0, false, buffer.baseAddress, used, nil)
-            return used
-        }
+        self = try JSONScanner.parse(data)
     }
 
     /// Decodes a typed value from this tree, without a round trip through JSON text.
