@@ -350,8 +350,18 @@ public final class CommandPaletteView: DSView {
 
     // MARK: Style
 
+
+    /// Classic Glass's blur under the frosted pane (`WindowGlass.syncPaneBlur`).
+    private var paneBlur: BackdropBlurView?
+    private func syncPaneBlur() { paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: 18) }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncPaneBlur()
+    }
+
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        syncPaneBlur()
         restyle()
     }
 
@@ -364,7 +374,7 @@ public final class CommandPaletteView: DSView {
         // ponytail: solid --background instead of 80% plus backdrop blur; identical over T3's dialog backdrop tint
         var box = BoxStyle()
         box.radius = 18
-        box.fill = Themed.color(\.background)
+        box.fill = WindowGlass.floating(stock: Themed.color(\.background))
         box.border = Themed.pick(light: Themed.color(\.contrastForeground, 0.1), dark: Themed.white(0.08))
         box.shadows = [
             BoxShadow(y: 1, color: Themed.pick(light: .clear, dark: Themed.white(0.04)), inset: true),

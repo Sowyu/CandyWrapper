@@ -20,6 +20,7 @@ public final class AnchoredCopyToastView: DSView, PopupContent {
     private let label: LabelView
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
+    public var frostRadius: CGFloat { 6 }
     public init(_ text: String = "Copied!") {
         label = LabelView(text, font: DSFont.ui(12), color: PopupSurface.text)
         label.lineHeight = 16
