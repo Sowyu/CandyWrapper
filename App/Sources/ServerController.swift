@@ -27,6 +27,10 @@ final class ServerController {
     private var reported: LocalServerLifecycle.Activity?
     private var activityUpdate: Task<Void, Never>?
     private var connecting = false
+    private var connectTask: Task<Void, Never>?
+    /// While `updateOwnRuntime` swaps the runtime, nothing else starts a server on the home: not before its
+    /// database backup is taken, and not while a failed version's restore runs.
+    private var updatingRuntime = false
     /// Mirrors the lifecycle phase for the synchronous quit check: our own server is up.
     private var ownsServer = false
     private var pairingDeclined = false
@@ -83,9 +87,9 @@ final class ServerController {
     /// Finds or starts the server and streams its shell. Cheap to call on every wake: a live
     /// session on the same server is left alone.
     func connect() {
-        guard !connecting else { return }
+        guard !connecting, !updatingRuntime else { return }
         connecting = true
-        Task {
+        connectTask = Task {
             defer { connecting = false }
             do {
                 guard let (origin, descriptor, token) = try await resolveServer() else { return }
@@ -106,6 +110,7 @@ final class ServerController {
     }
 
     private func resolveServer() async throws -> (URL, EnvironmentDescriptor, String)? {
+        try await finishPendingRestore()
         switch try await lifecycle.ensureRunning() {
         case .owned(let server):
             return (server.origin, server.descriptor, server.accessToken)
@@ -355,36 +360,89 @@ final class ServerController {
             throw ServerUpdater.Failure(blocker)
         }
         let previous = Self.store.state().active
-        try Self.store.activate(target)
         onStage(.resuming)
+        // No other connect starts a server on the home from here: one under way finishes, the server stops, and
+        // only then does the new runtime become the one a start picks.
+        updatingRuntime = true
+        defer {
+            updatingRuntime = false
+            connect()
+        }
+        await connectTask?.value
         await lifecycle.shutdown()
+        try Self.store.activate(target)
+        let directory = backupDirectory
         let backup: DatabaseBackup?
         do {
-            let directory = backupRoot.appending(path: Self.ownerRecordName(home: home))
             backup = try await Task.detached { try DatabaseBackup.make(database: database, in: directory) }.value
         } catch {
-            if let previous { try? Self.store.activate(previous) }
-            connect()
+            Self.goBack(to: previous)
             throw ServerUpdater.Failure("Could not back up the database before updating: \(error.localizedDescription). The update was not applied.")
         }
         do {
             _ = try await lifecycle.ensureRunning()
-            backup?.discard()
-            connect()
+            try? backup?.discard()
         } catch {
             // `launch` stops a server that fails to start. Another server may have taken the home meanwhile
-            // (a discovery error): its owner lock says so, and then the database stays as it is.
+            // (a discovery error): its owner lock says so, and then the database stays as it is, since that
+            // server may have written to it. A restore that fails stays pending and runs again on connect.
             let home = self.home
-            let restored = await Task.detached { () -> Bool in
-                guard LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) else { return false }
-                return (try? backup?.restore()) != nil
+            let rollback = await Task.detached { () -> (restored: Bool, failure: String?) in
+                guard let backup else { return (false, nil) }
+                do {
+                    guard LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) else {
+                        try backup.discard()
+                        return (false, nil)
+                    }
+                    try backup.restore(previous: previous)
+                    Self.goBack(to: previous)
+                    try backup.discard()
+                    return (true, nil)
+                } catch {
+                    return (false, error.localizedDescription)
+                }
             }.value
-            backup?.discard()
-            if let previous { try? Self.store.activate(previous) }
-            connect()
+            Self.goBack(to: previous)
             let reason = (error as? LocalServerLaunchError)?.description ?? ConnectionFailure.classify(error).detail
-            let back = previous.map { " CandyWrapper went back to T3 Code \($0)\(restored ? " and restored its database" : "")." } ?? ""
-            throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason)\(back)")
+            if let failure = rollback.failure {
+                let again = DatabaseBackup.pending(database: database, in: directory) != nil ? ", and CandyWrapper tries again before it starts a server" : ""
+                throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason) Putting its database back failed: \(failure). The copy saved before the update is in \(directory.path)\(again).")
+            }
+            let to = previous.map { "T3 Code \($0)" } ?? "the T3 Code it ran before"
+            throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason) CandyWrapper went back to \(to)\(rollback.restored ? " and restored its database" : "").")
+        }
+    }
+
+    /// The runtime a failed update goes back to: our previous one, or with none, T3's own.
+    nonisolated private static func goBack(to previous: String?) {
+        if let previous { try? store.activate(previous) } else { try? store.deactivate() }
+    }
+
+    private var backupDirectory: URL {
+        Self.store.root.appending(path: "db-backup/" + Self.ownerRecordName(home: home), directoryHint: .isDirectory)
+    }
+
+    /// A restore that failed or was cut off after an update runs again, and goes back to the runtime from
+    /// before, before any server starts on the home, as T3's launcher does (`databaseRestorePending`,
+    /// serviceLauncher.ts:580-583). A server another app started meanwhile keeps the database it has
+    /// (`#idleWhileStateDirOwned`). Until the backup is gone, no server starts.
+    private func finishPendingRestore() async throws {
+        guard let backup = DatabaseBackup.pending(database: DatabaseBackup.database(home: home), in: backupDirectory) else { return }
+        let home = self.home
+        let failure = await Task.detached { () -> String? in
+            do {
+                if LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) {
+                    try backup.restore()
+                }
+                Self.goBack(to: backup.previousRuntime)
+                try backup.discard()
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }.value
+        if let failure {
+            throw ConnectionFailure.blocked(.configuration, "Could not put back the database saved before a T3 Code update: \(failure). The copy is in \(backup.directory.path). CandyWrapper starts no server on this Mac until it is back.")
         }
     }
 

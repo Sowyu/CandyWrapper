@@ -72,6 +72,14 @@ public struct RuntimeStore: Sendable {
         cleanup()
     }
 
+    /// No active version, so the next start picks T3's own runtime again: an update that fails after one of
+    /// T3's runtimes ran the server goes back to it.
+    public func deactivate() throws {
+        var s = state()
+        s.active = nil
+        try write(s)
+    }
+
     /// Deletes every version folder but the active and previous ones, and any staging leftovers.
     public func cleanup() {
         let keep = Set([state().active, state().previous].compactMap { $0 })
