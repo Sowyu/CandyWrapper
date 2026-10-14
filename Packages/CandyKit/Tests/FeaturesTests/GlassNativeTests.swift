@@ -109,6 +109,25 @@ struct GlassNativeTests {
         window.contentView = nil
     }
 
+    /// The sidebar tracking separator leaves the toolbar while the sidebar is collapsed, so the breadcrumb follows
+    /// the toggle in full screen, and comes back after the brand when it opens.
+    @Test func collapsedSidebarDropsTheTrackingSeparator() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
+                              styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let native = NativeSplitPresentation(autosaveName: nil)
+        native.install(in: window)
+        func ids() -> [NSToolbarItem.Identifier] { native.toolbar.items.map(\.itemIdentifier) }
+        #expect(ids().contains(.sidebarTrackingSeparator))
+        native.sidebarItem.isCollapsed = true
+        #expect(!ids().contains(.sidebarTrackingSeparator))
+        native.sidebarItem.isCollapsed = false
+        let items = ids()
+        #expect(items.firstIndex(of: .sidebarTrackingSeparator) == items.firstIndex(of: NativeSplitPresentation.brand).map { $0 + 1 })
+        window.toolbar = nil
+        window.contentViewController = nil
+    }
+
     /// Classic's header keeps its panel toggles hidden while no thread shows, through layouts and a round trip
     /// to Glass Native, so they and the details shortcut stay off before a thread loads.
     @Test func classicHeaderTogglesStayHiddenWithoutAThread() {
