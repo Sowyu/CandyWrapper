@@ -622,8 +622,9 @@ final class PaletteAddProjectFlow {
             (self?.newProjectGroups(query) ?? [], "")
         }
         mode.autoHighlight = false
-        mode.onSubmit = { [weak self] query, highlighted, _ in
-            guard highlighted == nil else { return false }
+        // Cmd+Enter creates even with an option highlighted, where Enter runs the option (CommandPalette.tsx, T3 3105 446be6933).
+        mode.onSubmit = { [weak self] query, highlighted, flags in
+            guard highlighted == nil || flags.contains(.command) else { return false }
             self?.submitNewProject(query)
             return true
         }
@@ -633,7 +634,8 @@ final class PaletteAddProjectFlow {
         mode.accessory = submitButton { [weak self] in
             guard let self else { return ("Create", "Enter", false) }
             let name = self.controller?.query.trimmingCharacters(in: .whitespaces) ?? ""
-            return (self.busy ? "Creating" : "Create", "Enter", !name.isEmpty && !self.busy)
+            let highlighted = self.controller?.highlightedItemValue != nil
+            return (self.busy ? "Creating" : "Create", highlighted ? "\u{2318} Enter" : "Enter", !name.isEmpty && !self.busy)
         } action: { [weak self] in
             guard let query = self?.controller?.query else { return }
             self?.submitNewProject(query)
