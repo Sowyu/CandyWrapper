@@ -1,6 +1,6 @@
 # Glass Native plumbing: themes, window seams and macOS 26+ glass APIs
 
-A read-only map from 2026-10-13 for `docs/glass-native.md`. Line numbers are as of d553b78.
+A read-only map from 2026-10-13 for `docs/history/glass-native.md`. Line numbers are as of d553b78.
 
 ## Themes
 

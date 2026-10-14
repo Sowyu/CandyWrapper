@@ -102,9 +102,6 @@ final class TimelineContext {
     /// T3's `markdownCwd` (ChatView.tsx `gitCwd`): the thread's worktree, else the project root. File chips resolve against it.
     var markdownCwd: String? { model?.projection?.thread.worktreePath ?? model?.workspaceRoot }
     var now: () -> Date = Date.init
-    /// Glass Native's row style; the timeline sets it and measures every row again.
-    var style: TimelineStyle = .classic
-    var native: Bool { style == .native }
 
     private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
     /// The parse of each answer that is streaming, which the next token extends.

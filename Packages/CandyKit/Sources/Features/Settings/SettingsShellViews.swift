@@ -92,8 +92,6 @@ public final class SettingsSidebarView: DSView {
     public var onAccount: ((NSView) -> Void)?
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
-    /// Glass Native's toolbar takes the titlebar row (brand, toggle, stage).
-    public var hidesCustomChrome = false { didSet { if hidesCustomChrome != oldValue { applyStage() } } }
 
     public var selected: SettingsSection = .connections {
         didSet { for (section, item) in items { item.isActive = section == selected } }
@@ -243,13 +241,11 @@ public final class SettingsSidebarView: DSView {
     private func applyStage() {
         let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
         let artwork = mode == "artwork" && stage == .nightly
-        backdrop.isHidden = !artwork || hidesCustomChrome
+        backdrop.isHidden = !artwork
         brand.onBackdrop = artwork
         trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
         environmentPill.title = stage == .dev ? "Dev" : "Nightly"
-        environmentPill.isHidden = mode != "pill" || stage == .none || hidesCustomChrome
-        brand.isHidden = hidesCustomChrome
-        trigger.isHidden = hidesCustomChrome
+        environmentPill.isHidden = mode != "pill" || stage == .none
         needsLayout = true
     }
 

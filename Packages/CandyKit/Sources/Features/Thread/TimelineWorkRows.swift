@@ -102,10 +102,6 @@ final class WorkLineView: DSView {
     private var threadLink: ThreadStatusLineAction?
     private let threadLinkClose = LabelView("\u{201D}", font: TL.font(14), color: TL.c(\.secondaryLabel))
 
-    /// Glass Native: SF Symbols in place of the Lucide icons that have one. The symbol view is made the first
-    /// time a native line shows one.
-    var native = false
-    private var symbolView: SymbolView?
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
     /// The chevron cell is `invisible` (still 16px) when there is nothing to expand.
@@ -200,18 +196,6 @@ final class WorkLineView: DSView {
             label.base.color = style == .tool ? TL.c(\.secondaryLabel) : TL.c(\.foreground, 0.8)
             label.base.font = TL.font(14)
         }
-        // Glass Native: the SF Symbol for the same glyph, in the same cell and color.
-        let symbol = native ? NativeTimeline.symbol(icon) : nil
-        iconView.isHidden = symbol != nil
-        if let symbol {
-            let view = symbolView ?? SymbolView()
-            if symbolView == nil { symbolView = view; addSubview(view) }
-            view.symbol = symbol
-            view.color = iconView.strokeColor
-            view.isHidden = false
-        } else {
-            symbolView?.isHidden = true
-        }
         label.text = text
         label.shining = active
         time.text = TL.dayAwareTimestamp(timestamp, now: now)
@@ -224,7 +208,6 @@ final class WorkLineView: DSView {
         super.layout()
         let h: CGFloat = 24
         iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
-        symbolView?.frame = NSRect(x: 0, y: 0, width: 24, height: 24)
         // Trailing slot, right to left: chevron cell (16), timestamp.
         let chevronX = timeOnlyTrailing ? bounds.width + 3 : bounds.width - 16
         chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
@@ -265,7 +248,6 @@ class WorkRowBase: TimelineRowView {
             lines.append(l)
         }
         lines[i].isHidden = false
-        lines[i].native = context.native
         return lines[i]
     }
 

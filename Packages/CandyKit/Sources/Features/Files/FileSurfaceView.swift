@@ -86,8 +86,6 @@ public final class FileSurfaceView: DSView {
     private let removeButton = ButtonView(nil, icon: .trash2, variant: .ghost, size: .iconSm)
     private let closeButton = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
     private let headerBorder = CALayer()
-    /// Glass Native: the header and the explorer sit on the detail's frost, the file's body stays solid.
-    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsLayout = true; needsDisplay = true } } }
     private var copiedUntil: Date?
     private let noticeBar = CALayer()
     private let asideBorder = CALayer()
@@ -433,10 +431,8 @@ public final class FileSurfaceView: DSView {
         crumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12 + 8 - 8), height: h)
         attachmentCrumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12), height: h)
         var top = h + (dialogHeader ? 0 : 12)
-        // Glass Native: the header sits on the frost and the hairline tops the solid body.
-        headerBorder.isHidden = !dialogHeader && !nativeChrome
-        headerBorder.zPosition = 1
-        headerBorder.frame = CGRect(x: 0, y: top - 1, width: w, height: 1)
+        headerBorder.isHidden = !dialogHeader
+        headerBorder.frame = CGRect(x: 0, y: h - 1, width: w, height: 1)
         noticeBar.isHidden = notice.isHidden
         if !notice.isHidden {
             noticeBar.frame = CGRect(x: 0, y: top, width: w, height: 15 + 12 + 1)
@@ -459,12 +455,12 @@ public final class FileSurfaceView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
         noticeBar.backgroundColor = Themed.color(\.warningSurface).cgColor(in: self)
         noticeBar.borderColor = Themed.color(\.warning, 0.2).cgColor(in: self)
         notice.color = Themed.color(\.warningForeground)
         asideBorder.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
-        headerBorder.backgroundColor = Themed.color(\.border, nativeChrome ? 1 : 0.6).cgColor(in: self)
+        headerBorder.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
     }
 
     public override func viewDidHide() {

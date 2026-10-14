@@ -195,9 +195,6 @@ final class UserMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        markdown.native = context.native
-        // Below the default Glass opacity the frost nears the bubble's fill; a hairline keeps its shape.
-        bubble.border = context.native ? NativeTimeline.lowOpacityEdge : nil
         // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
         let model = context.model
         markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments,
@@ -375,7 +372,6 @@ final class AssistantMessageRowView: TimelineRowView {
             if m.streaming { markdown.document = MarkdownDocument(blocks: []) }
         }
         markdown.fadesNewBlocks = m.streaming
-        markdown.native = context.native
         if let summary, !summary.files.isEmpty {
             cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
             if card.superview == nil { addSubview(card) }

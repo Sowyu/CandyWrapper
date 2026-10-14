@@ -63,7 +63,6 @@ final class SidebarCommands {
         sidebar.actions.snooze = { [weak self] id, anchor in self?.showSnoozeMenu(id, anchor: anchor) }
         sidebar.actions.unsnooze = { [weak self] in self?.unsnooze($0) }
         sidebar.actions.unpin = { [weak self] in self?.unpin($0) }
-        sidebar.actions.archive = { [weak self] in self?.archive($0) }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
         sidebar.actions.undo = { [weak self] in self?.ledger.undoLatest() }
         sidebar.actions.addProject = { [weak self] in self?.addProject() }

@@ -95,30 +95,6 @@ public final class ComposerView: DSView {
     /// sides open, its bottom 2px from 22 to width - 22 (`contextSeamClasses`, ComposerSurface.tsx:51-53).
     public var joinsContextStrip = false { didSet { if joinsContextStrip != oldValue { needsLayout = true } } }
 
-    /// Glass Native: one Liquid Glass surface, in its container, in place of the backdrop blur, the 80% fill, the
-    /// outline and the shadow. Its tint follows the Glass opacity slider, as the classic fill does.
-    public var nativeGlass = false { didSet { if nativeGlass != oldValue { applyNativeGlass() } } }
-    private var glassContainer: NSView?
-    private weak var glassSurface: NSView?
-
-    private func applyNativeGlass() {
-        if nativeGlass, glassContainer == nil, #available(macOS 26, *) {
-            let container = NSGlassEffectContainerView()
-            let surface = NSGlassEffectView()
-            surface.cornerRadius = Self.radius
-            container.contentView = surface
-            addSubview(container, positioned: .below, relativeTo: blur)
-            glassContainer = container
-            glassSurface = surface
-        } else if !nativeGlass {
-            glassContainer?.removeFromSuperview()
-            glassContainer = nil
-        }
-        blur.isHidden = nativeGlass
-        needsDisplay = true
-        needsLayout = true
-    }
-
     /// A runtime request docked above (ChatComposer.tsx:6980, 7468, 7547-7553).
     public enum PendingState: Equatable, Sendable {
         case none
@@ -712,24 +688,15 @@ public final class ComposerView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        // The drop highlight stays on `glass`, so in native mode it stays and loses only its fill.
-        glass.layer?.backgroundColor = nativeGlass ? nil : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        glass.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
-        // Glass Native: in dark mode the glass barely parts from a plain dark detail, so it keeps T3's `border`
-        // hairline at the edge. Light mode's glass separates by its own shading.
-        outline.isHidden = nativeGlass && !dark
-        if nativeGlass, dark { outline.layer?.borderColor = Themed.color(\.border).cgColor(in: self) }
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
         let frost = WindowGlass.isActive(for: self)
-        shadowLayer.shadowOpacity = dark || nativeGlass || frost ? 0 : 0.4
-        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: Self.radius, edge: false, show: !nativeGlass)
+        shadowLayer.shadowOpacity = dark || frost ? 0 : 0.4
+        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: Self.radius, edge: false)
         CATransaction.commit()
-        if #available(macOS 26, *), let surface = glassSurface as? NSGlassEffectView {
-            surface.tintColor = Themed.color(light: \.card, Double(ThemeRuntime.glassOpacity),
-                                             dark: \.surfaceRaised, Double(ThemeRuntime.glassOpacity))
-        }
     }
 
     public override func layout() {
@@ -750,7 +717,6 @@ public final class ComposerView: DSView {
         blur.frame = box
         glass.frame = box
         outline.frame = box
-        glassContainer?.frame = box
         if joinsContextStrip {
             let mask = outline.layer?.mask as? CAShapeLayer ?? CAShapeLayer()
             let path = CGMutablePath()

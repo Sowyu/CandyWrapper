@@ -78,7 +78,6 @@ public final class ApprovalPanelView: ComposerBannerView {
             return (option, button)
         }
         more.isHidden = approval.menuOptions.isEmpty
-        if nativeCard { buildNativeButtons() }
         updateEnabled()
         needsLayout = true
     }
@@ -86,77 +85,7 @@ public final class ApprovalPanelView: ComposerBannerView {
     private func updateEnabled() {
         let canRespond = approval?.canRespond ?? false
         buttons.forEach { $0.1.isEnabled = !isResponding && canRespond }
-        nativeButtons.forEach { $0.1.isEnabled = !isResponding && canRespond }
         more.isEnabled = !isResponding
-    }
-
-    // MARK: Glass Native
-
-    /// T3's buttons, labels and order as AppKit push buttons, Approve the prominent one. The other decisions
-    /// open from the ellipsis as an `NSMenu`.
-    private var nativeButtons: [(ApprovalDecision, NSButton)] = []
-
-    override func nativeCardDidChange() {
-        if nativeCard {
-            buildNativeButtons()
-        } else {
-            nativeButtons.forEach { $0.1.removeFromSuperview() }
-            nativeButtons = []
-            buttons.forEach { $0.1.isHidden = false }
-        }
-        updateEnabled()
-        needsLayout = true
-    }
-
-    private func buildNativeButtons() {
-        nativeButtons.forEach { $0.1.removeFromSuperview() }
-        nativeButtons = []
-        buttons.forEach { $0.1.isHidden = true }
-        guard let approval else { return }
-        for option in approval.buttonOptions {
-            let button = NSButton(title: option.label, target: self, action: #selector(pressNative(_:)))
-            button.bezelStyle = .push
-            button.controlSize = .small
-            if let warning = option.warning {
-                button.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
-                button.imagePosition = .imageLeading
-                button.toolTip = warning
-            }
-            // Prominent, but no Return key equivalent: T3 binds no key to Approve (ComposerPendingApprovalActions.tsx),
-            // and a bare Return reaching the window would approve a command.
-            if option.decision == .accept, #available(macOS 26, *) { button.tintProminence = .primary }
-            button.tag = nativeButtons.count
-            addSubview(button)
-            nativeButtons.append((option.decision, button))
-        }
-    }
-
-    @objc private func pressNative(_ sender: NSButton) {
-        guard nativeButtons.indices.contains(sender.tag) else { return }
-        respond(nativeButtons[sender.tag].0)
-    }
-
-    @objc private func pickNativeMenu(_ sender: NSMenuItem) {
-        guard let approval, approval.menuOptions.indices.contains(sender.tag) else { return }
-        respond(approval.menuOptions[sender.tag].decision)
-    }
-
-    private func nativeMenu(_ approval: PendingApproval) {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        for (i, option) in approval.menuOptions.enumerated() {
-            let item = NSMenuItem(title: option.label, action: #selector(pickNativeMenu(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = i
-            item.isEnabled = !isResponding
-            item.toolTip = option.warning
-            if option.warning != nil {
-                item.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
-                if #available(macOS 27, *) { item.preferredImageVisibility = .visible }
-            }
-            menu.addItem(item)
-        }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: more.isFlipped ? 0 : more.bounds.maxY), in: more)
     }
 
     private func respond(_ decision: ApprovalDecision) {
@@ -167,7 +96,6 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     private func openMenu() {
         guard let approval else { return }
-        if nativeCard { return nativeMenu(approval) }
         let items = approval.menuOptions.map { option in
             var item = MenuItem(option.label, icon: option.warning == nil ? nil : .triangleAlert)
             item.isDisabled = isResponding
@@ -181,7 +109,7 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     // MARK: Layout
 
-    private var actionViews: [NSView] { (nativeCard ? nativeButtons.map(\.1) : buttons.map(\.1)) + (more.isHidden ? [] : [more]) }
+    private var actionViews: [NSView] { buttons.map(\.1) + (more.isHidden ? [] : [more]) }
 
     private var actionsWidth: CGFloat {
         let views = actionViews
@@ -199,7 +127,6 @@ public final class ApprovalPanelView: ComposerBannerView {
 
     /// The banner's full height at `width`, the 17px under the composer included.
     public func preferredHeight(width: CGFloat) -> CGFloat {
-        // The native card has no overlap; the 17 keeps the caller's arithmetic the same in both styles.
         let content = 16 + 4 + detailHeight(width: max(0, contentWidth(width)))
         let actionsRow: CGFloat = width < Self.narrow ? 12 + 24 : 0
         return Self.pad + content + actionsRow + Self.pad + Self.overlap
@@ -230,9 +157,7 @@ public final class ApprovalPanelView: ComposerBannerView {
         var ax = w - pad - actionsWidth
         for view in actionViews {
             let size = view.intrinsicContentSize
-            // A native push button keeps its own height, centered on the 24pt row.
-            let h = view is NSButton ? min(24, size.height) : 24
-            view.frame = NSRect(x: ax, y: ay + ((24 - h) / 2).rounded(), width: size.width, height: h)
+            view.frame = NSRect(x: ax, y: ay, width: size.width, height: 24)
             ax += size.width + 6
         }
     }

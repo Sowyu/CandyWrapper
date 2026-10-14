@@ -93,6 +93,16 @@ public final class SidebarLayoutView: DSView {
 
     public var effectiveWidth: CGFloat { widthRules.clamp(width, viewport: bounds.width) }
 
+    /// The main column's page: the thread panel, Settings or a utility page. Setting it takes the others out.
+    public var mainContent: NSView? {
+        get { main.subviews.first }
+        set {
+            for view in main.subviews where view !== newValue { view.removeFromSuperview() }
+            if let newValue, newValue.superview !== main { main.addSubview(newValue) }
+            needsLayout = true
+        }
+    }
+
     public init(sidebarContent: NSView? = nil, mainContent: NSView? = nil, defaults: UserDefaults = .standard, viewport: CGFloat = 1100) {
         self.defaults = defaults
         sidebar = SidebarContainerView()

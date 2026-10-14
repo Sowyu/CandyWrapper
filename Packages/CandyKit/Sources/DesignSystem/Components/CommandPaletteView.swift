@@ -365,10 +365,6 @@ public final class CommandPaletteView: DSView {
         restyle()
     }
 
-    /// Glass Native: the palette's surface is Liquid Glass (docs/glass-native.md, "Direction"), which the overlay puts
-    /// behind it. Only the material changes; the layout is T3's (ui/command.tsx:52-79, 100-115).
-    public var nativeGlass = false { didSet { if nativeGlass != oldValue { restyle() } } }
-
     private func restyle() {
         // `dialog-glass`, radius 18px (same box as DialogView).
         // ponytail: solid --background instead of 80% plus backdrop blur; identical over T3's dialog backdrop tint
@@ -381,11 +377,6 @@ public final class CommandPaletteView: DSView {
             BoxShadow(y: 24, blur: 64, spread: -24, color: Themed.pick(light: Themed.black(0.65), dark: .clear)),
             BoxShadow(y: 24, blur: 72, spread: -20, color: Themed.pick(light: .clear, dark: Themed.black(0.9))),
         ]
-        if nativeGlass {
-            // Glass Native: the same box on Liquid Glass, with its border and no fill or shadow of its own.
-            box.fill = nil
-            box.shadows = []
-        }
         decoration.boxStyle = box
         // Footer fill `bg-foreground/[0.025]`, bottom corners 17px, inside the 1px border.
         var footer = BoxStyle()
@@ -592,10 +583,6 @@ final class CommandRowView: DSView {
         if item.match != nil { matchLine.frame = NSRect(x: x, y: y, width: max(0, right - x), height: 16); y += 16 }
         detail.frame = NSRect(x: x, y: y, width: max(0, right - x), height: 16)
     }
-
-    /// Glass Native: the palette's surface is Liquid Glass (docs/glass-native.md, "Direction"), which the overlay puts
-    /// behind it. Only the material changes; the layout is T3's (ui/command.tsx:52-79, 100-115).
-    public var nativeGlass = false { didSet { if nativeGlass != oldValue { restyle() } } }
 
     private func restyle() {
         let fg = isHighlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)

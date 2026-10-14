@@ -8,11 +8,6 @@ import T3Store
 /// `ThreadPanelView` places them. Surfaces here: the diff, the files explorer and file tabs.
 final class RightPanelView: DSView {
     static let tabBarHeight: CGFloat = 52
-    /// Room the tab strip leaves at its right: classic's window controls, or Glass Native's toolbar toggles with
-    /// Maximize (four 28 pt segments, 140 pt on the toolbar), the toolbar's 10 pt margin and an 8 pt gap. At the
-    /// narrowest default width, 420 pt beside the native sidebar, three tabs fit as they do in classic.
-    static let classicReserve: CGFloat = 112, nativeToolbarReserve: CGFloat = 158
-    var trailingReserve: CGFloat = classicReserve { didSet { if trailingReserve != oldValue { needsLayout = true } } }
     /// `PREVIEW_PANEL_DEFAULT_WIDTH`, `_MIN_WIDTH` and the sibling column's floor
     /// (usePreviewPanelInlineSize.ts).
     static let defaultWidth: CGFloat = 540
@@ -23,23 +18,6 @@ final class RightPanelView: DSView {
     static func width(viewport: CGFloat, container: CGFloat, preferred: CGFloat = defaultWidth) -> CGFloat {
         let maxWidth = max(minWidth, min((viewport * 0.7).rounded(.down), container.rounded(.down) - 360))
         return min(max(preferred, minWidth), maxWidth)
-    }
-
-    /// Glass Native (docs/glass-native.md, Visual spec): the panel's chrome sits on the detail's frost and its glyphs
-    /// are SF Symbols. Code, diffs, the terminal, pages and device screens stay solid under a `border` hairline.
-    var nativeChrome = false {
-        didSet {
-            guard nativeChrome != oldValue else { return }
-            lazyDiff.set(\.nativeChrome, nativeChrome)
-            lazyFiles.set(\.nativeChrome, nativeChrome)
-            lazyFile.set(\.nativeChrome, nativeChrome)
-            lazyPullRequest.set(\.nativeChrome, nativeChrome)
-            lazyLauncher.set(\.nativeChrome, nativeChrome)
-            browser.nativeChrome = nativeChrome
-            terminal.nativeChrome = nativeChrome
-            device.nativeChrome = nativeChrome
-            apply(state)
-        }
     }
 
     var onRenameDevice: ((String, String) -> Void)?
@@ -204,47 +182,7 @@ final class RightPanelView: DSView {
             view.frame = NSRect(x: 0, y: 0, width: 12, height: 12)
             return view
         }
-        if nativeChrome, let symbol = Self.nativeSymbol(for: surface) { return Self.symbolView(symbol, size: 11) }
         return Self.icon(for: surface)
-    }
-
-    /// Glass Native's SF Symbol for a surface's Lucide glyph, where one means the same. Pull requests keep T3's
-    /// glyph in their state color, and files keep their file type icons.
-    static func nativeSymbol(for surface: RightPanelSurface) -> String? {
-        switch surface {
-        case .device, .deviceTarget: "iphone"
-        case .diff: "plus.forwardslash.minus"
-        case .files: "doc.on.doc"
-        case .pullRequests: "link"
-        case .browser: "globe"
-        case .terminal: "terminal"
-        default: nil
-        }
-    }
-
-    /// The same for the launcher's Lucide names.
-    static func nativeSymbol(for icon: IconName) -> String? {
-        switch icon {
-        case .smartphone: "iphone"
-        case .fileDiff: "plus.forwardslash.minus"
-        case .files: "doc.on.doc"
-        case .link, .link2: "link"
-        case .globe2: "globe"
-        case .terminalSquare: "terminal"
-        default: nil
-        }
-    }
-
-    /// An SF Symbol centered in a `size + 1` point slot; its owner tints it through `contentTintColor`.
-    static func symbolView(_ symbol: String, size: CGFloat) -> NSImageView {
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: size, weight: .regular))
-        let view = GlyphImageView(image: image ?? NSImage())
-        view.imageScaling = .scaleNone
-        view.contentTintColor = Themed.color(\.foreground)
-        view.frame = NSRect(x: 0, y: 0, width: size + 1, height: size + 1)
-        view.setAccessibilityElement(false)
-        return view
     }
 
     static func icon(for surface: RightPanelSurface) -> IconView {
@@ -450,7 +388,7 @@ final class RightPanelView: DSView {
         super.layout()
         // `border-l border-border`; the content is `width - 1` wide right of it.
         border.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - trailingReserve), height: Self.tabBarHeight)
+        strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - 112), height: Self.tabBarHeight)
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
         let overflow = total > strip.bounds.width
@@ -497,17 +435,6 @@ final class RightPanelView: DSView {
     }
 }
 
-/// Glass Native's ground for a right panel surface: the detail's frost under the chrome (clear while Glass frosts
-/// the window), and classic's solid `background` otherwise.
-/// A glyph that leaves clicks to the control it sits in.
-final class GlyphImageView: NSImageView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-enum NativePanelGround {
-    static func color(_ native: Bool) -> NSColor { native ? WindowGlass.inset : WindowGlass.ground }
-}
-
 /// One panel tab: `h-6 max-w-36 rounded-md pl-1.5 pr-2 gap-0.5 text-xs`, the identity glyph that
 /// turns into a close button on hover, the title; `bg-accent` when active, `hover:bg-accent/60`.
 final class PanelTabView: DSView {
@@ -534,12 +461,12 @@ final class PanelTabView: DSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
-    /// A lucide glyph, or Glass Native's SF Symbol, takes the tab's text color (`text-muted-foreground` until
+    /// A lucide glyph takes the tab's text color (`text-muted-foreground` until
     /// active); file icons keep theirs.
-    private let tintedIdentity: NSView?
+    private let tintedIdentity: IconView?
 
     init(title text: String, identity: NSView, tinted: Bool = false) {
-        tintedIdentity = tinted ? identity : nil
+        tintedIdentity = tinted ? identity as? IconView : nil
         title = LabelView(text, font: DSFont.ui(12))
         close = PanelTabCloseButton(identity: identity, label: "Close \(text)")
         super.init(frame: .zero)
@@ -561,8 +488,7 @@ final class PanelTabView: DSView {
 
     private func restyle() {
         title.color = Themed.color(isActive || hovered ? \.foreground : \.mutedForeground)
-        (tintedIdentity as? IconView)?.strokeColor = title.color
-        (tintedIdentity as? NSImageView)?.contentTintColor = title.color
+        tintedIdentity?.strokeColor = title.color
         needsDisplay = true
     }
 
@@ -663,8 +589,6 @@ final class SurfaceLauncherView: DSView {
     var browserAvailable = false { didSet { if browserAvailable != oldValue { rebuild() } } }
     var terminalAvailable = false { didSet { if terminalAvailable != oldValue { rebuild() } } }
     var browserProfiles: [(id: String, name: String)] = [] { didSet { rebuild() } }
-    /// Glass Native: SF Symbols in the rows.
-    var nativeChrome = false { didSet { if nativeChrome != oldValue { rebuild() } } }
     var onPick: ((RightPanelSurface.Kind) -> Void)?
     var onPickBrowserProfile: ((String) -> Void)?
     private let heading = LabelView("Open a surface", font: DSFont.ui(14, weight: .medium))
@@ -686,7 +610,7 @@ final class SurfaceLauncherView: DSView {
                             terminalAvailable: terminalAvailable).map { action in
             // The profile chooser beside the Browser row, once there is a choice (RightPanelTabs.tsx:526-555).
             let profiles = action.kind == .browser && browserProfiles.count > 1 ? browserProfiles : []
-            let row = LauncherRow(action, profiles: profiles, native: nativeChrome)
+            let row = LauncherRow(action, profiles: profiles)
             row.onClick = { [weak self] in if let kind = action.kind { self?.onPick?(kind) } }
             row.onProfile = { [weak self] id in self?.onPickBrowserProfile?(id) }
             return row
@@ -727,7 +651,7 @@ final class SurfaceLauncherView: DSView {
 
 final class LauncherRow: DSView {
     let action: SurfaceLauncherView.Action
-    private let icon: NSView
+    private let icon: IconView
     private let label: LabelView
     private let kbd: KbdView
     private let profiles: [(id: String, name: String)]
@@ -744,12 +668,10 @@ final class LauncherRow: DSView {
     private var tracking: NSTrackingArea?
     var onClick: (() -> Void)?
 
-    init(_ action: SurfaceLauncherView.Action, profiles: [(id: String, name: String)] = [], native: Bool = false) {
+    init(_ action: SurfaceLauncherView.Action, profiles: [(id: String, name: String)] = []) {
         self.action = action
         self.profiles = profiles
-        icon = native ? RightPanelView.nativeSymbol(for: action.icon).map { RightPanelView.symbolView($0, size: 14) }
-            ?? IconView(name: action.icon, size: 16, strokeColor: Themed.color(\.foreground))
-            : IconView(name: action.icon, size: 16, strokeColor: Themed.color(\.foreground))
+        icon = IconView(name: action.icon, size: 16, strokeColor: Themed.color(\.foreground))
         label = LabelView(action.label, font: DSFont.ui(14), color: Themed.color(\.foreground))
         kbd = KbdView(action.shortcut)
         super.init(frame: .zero)

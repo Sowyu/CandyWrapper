@@ -28,8 +28,6 @@ public final class FilesPanelView: DSView {
     public var onRefresh: (@MainActor () -> Void)?
     /// The inline subheader (the right panel's tab mode); off draws T3's 40px bordered row.
     public var inline = true { didSet { needsLayout = true } }
-    /// Glass Native: the subheader and the tree sit on the detail's frost.
-    public var nativeChrome = false { didSet { if nativeChrome != oldValue { needsDisplay = true } } }
 
     public var model: FileTreeModel {
         get { treeView.model }
@@ -145,7 +143,7 @@ public final class FilesPanelView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = NativePanelGround.color(nativeChrome).cgColor(in: self)
+        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         status.color = Themed.color(\.mutedForeground)
         errorButton.color = Themed.color(\.destructive)
