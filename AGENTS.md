@@ -53,7 +53,7 @@ Offscreen snapshots miss bugs that only show in a real window, so look at every 
 
 1. Run `scripts/sandbox-server`. It starts the sandbox server on port 47391, or reuses the one running.
 2. Build with `scripts/build-test-app <task>`. It prints the app's path, `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app`. The first build takes a few minutes, so allow 10.
-3. Other agents share the screen. Run `scripts/ui/screen-lock take <task>` before you launch your app, and give it back within 15 minutes with `scripts/ui/screen-lock give <task>`, after you quit your app.
+3. Other agents share the screen. Run `scripts/ui/screen-lock take <task>` before you launch your app, and give it back within 15 minutes with `scripts/ui/screen-lock give <task>`, after you quit your app. When `scripts/ui/screen-lock who` says `origin-run`, the user's Origin browser project is measuring energy: don't build, test, run perf or launch anything until it ends, and leave its "Origin quit unexpectedly" dialogs alone.
 4. Launch it in the background: `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
 5. Once it's up, read your app's PID from `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app.pid`. No other agent writes that file.
 6. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
