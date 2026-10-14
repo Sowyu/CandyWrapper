@@ -31,7 +31,7 @@ The sidebar has two vertical lines that everything hangs on:
 The toolbar is the window's 52 pt unified toolbar. Every item centers on the traffic lights, 26 pt down.
 
 - The sidebar toggle is a plain glyph right of the traffic lights, where T3's sits.
-- The breadcrumb is plain text: project at 14 regular in the secondary label color, the title at 14 medium.
+- The breadcrumb is plain text at 14 medium, the project in the secondary label color, crumbs 12 pt apart. The title's chevron shows on hover, and the crumbs end 16 pt before an inline right panel.
 - T3's panel toggles are one glass segmented control that shows each on state. Maximize joins it while the right panel is open.
 - Rows scroll under the toolbar and fade out from 16 pt below its bottom edge to 12 pt above it. There is no band, tint or line at rest.
 - New thread lives in the sidebar's search row, as in T3, not in the toolbar.
