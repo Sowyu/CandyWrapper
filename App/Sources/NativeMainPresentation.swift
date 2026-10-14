@@ -47,6 +47,7 @@ final class MainPresentationController {
             return layout
         }
         let presentation = NativeSplitPresentation()
+        if let sidebar { presentation.adoptBrand(of: sidebar) }
         var actions = NativeToolbarActions()
         actions.details = { [weak self] in self?.threads.panel.onDetailsToggle?() }
         actions.terminal = { [weak self] in self?.threads.panel.onTerminalToggle?() }

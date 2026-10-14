@@ -78,6 +78,9 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         toolbar.autosavesConfiguration = false
+        collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.syncBrand() }
+        }
     }
 
     // MARK: MainPresentation
@@ -86,13 +89,21 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
 
     public var sidebarContent: NSView? {
         get { sidebarColumn.content }
-        set { sidebarColumn.content = newValue }
+        set {
+            sidebarColumn.content = newValue
+            // The thread sidebar's brand moves to the toolbar and stays there while Settings' nav shows.
+            if let sidebar = newValue as? SidebarContentView { brandHost.brand = sidebar.brand }
+        }
     }
 
     public var mainContent: NSView? {
         get { detailColumn.content }
         set { detailColumn.content = newValue }
     }
+
+    /// Takes the thread sidebar's brand for the toolbar before the toolbar is built, so it has its width when the
+    /// toolbar places it, and so it shows when the switch happens with Settings' nav in the sidebar.
+    public func adoptBrand(of sidebar: SidebarContentView) { brandHost.brand = sidebar.brand }
 
     public var isSidebarOpen: Bool { !sidebarItem.isCollapsed }
     public func toggleSidebar() { split.toggleSidebar(nil) }
@@ -120,6 +131,16 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         didSet { breadcrumbItem?.view = breadcrumb }
     }
     private weak var breadcrumbItem: NSToolbarItem?
+    /// CandyWrapper's brand after the sidebar toggle, as T3's wordmark follows its trigger (SidebarChrome.tsx:51-66).
+    /// A toolbar item, so it follows the toggle in full screen too, where the toolbar covers the sidebar's top.
+    private let brandHost = NativeBrandHost()
+    private weak var brandItem: NSToolbarItem?
+    private var collapseObservation: NSKeyValueObservation?
+
+    /// The brand hides with the sidebar, as T3's does.
+    private func syncBrand() {
+        if #available(macOS 15, *), let item = brandItem, item.isHidden != sidebarItem.isCollapsed { item.isHidden = sidebarItem.isCollapsed }
+    }
     private weak var panels: NSSegmentedControl?
     private weak var panelsItem: NSToolbarItem?
     private var maximizeShown = false
@@ -160,12 +181,15 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         let shown = actions.threadShown()
         if #available(macOS 15, *), let item = panelsItem, item.isHidden == shown { item.isHidden = !shown }
         // A maximized panel covers the chat and runs its tabs where the breadcrumb sits; T3 hides the header then.
-        if #available(macOS 15, *), let item = breadcrumbItem, item.isHidden != states.maximized { item.isHidden = states.maximized }
+        // Settings and the utility pages show their own header row in the toolbar's place.
+        let hidesCrumbs = states.maximized || !shown
+        if #available(macOS 15, *), let item = breadcrumbItem, item.isHidden != hidesCrumbs { item.isHidden = hidesCrumbs }
     }
 
     // MARK: Toolbar
 
     static let sidebarToggle = NSToolbarItem.Identifier("candy.sidebar")
+    static let brand = NSToolbarItem.Identifier("candy.brand")
     static let title = NSToolbarItem.Identifier("candy.breadcrumb")
     static let panels = NSToolbarItem.Identifier("candy.panels")
     static let panelsWithMaximize = NSToolbarItem.Identifier("candy.panelsWithMaximize")
@@ -196,11 +220,11 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     }
 
     public func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.sidebarToggle, .sidebarTrackingSeparator, Self.title, .flexibleSpace, maximizeShown ? Self.panelsWithMaximize : Self.panels]
+        [Self.sidebarToggle, Self.brand, .sidebarTrackingSeparator, Self.title, .flexibleSpace, maximizeShown ? Self.panelsWithMaximize : Self.panels]
     }
 
     public func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.sidebarToggle, .sidebarTrackingSeparator, Self.title, .flexibleSpace, Self.panels, Self.panelsWithMaximize]
+        [Self.sidebarToggle, Self.brand, .sidebarTrackingSeparator, Self.title, .flexibleSpace, Self.panels, Self.panelsWithMaximize]
     }
 
     public func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
@@ -217,6 +241,15 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             item.isBordered = false
             item.target = self
             item.action = #selector(pressSidebar)
+            return item
+        case Self.brand:
+            let item = NSToolbarItem(itemIdentifier: id)
+            item.view = brandHost
+            item.label = "CandyWrapper"
+            item.isBordered = false
+            item.visibilityPriority = .low
+            brandItem = item
+            DispatchQueue.main.async { [weak self] in self?.syncBrand() }
             return item
         case Self.title:
             let item = NSToolbarItem(itemIdentifier: id)
@@ -264,6 +297,48 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         syncPanelStates()
     }
 
+}
+
+/// Holds the sidebar's brand in the toolbar at its own size. The brand lays itself out by frame, so it keeps
+/// that when it goes back to the classic sidebar.
+final class NativeBrandHost: NSView {
+    weak var brand: NSView? {
+        didSet {
+            guard let brand, brand.superview !== self else { return }
+            addSubview(brand)
+            fit()
+        }
+    }
+
+    /// The toolbar places the item by this width, so it must be right before the item goes in.
+    private func fit() {
+        guard let brand, brand.superview === self else { return }
+        let w = ceil(brand.intrinsicContentSize.width)
+        if width.constant != w {
+            width.constant = w
+            setFrameSize(NSSize(width: w, height: 28))
+            invalidateIntrinsicContentSize()
+        }
+        brand.frame = NSRect(x: 0, y: 0, width: w, height: 28)
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: width.constant, height: 28) }
+    private lazy var width = widthAnchor.constraint(equalToConstant: 0)
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 28))
+        translatesAutoresizingMaskIntoConstraints = false
+        width.isActive = true
+        heightAnchor.constraint(equalToConstant: 28).isActive = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func layout() {
+        super.layout()
+        fit()
+    }
 }
 
 /// A custom-view toolbar item that AppKit's validation, after events and never while idle, reaches.
@@ -354,15 +429,18 @@ final class NativeColumnView: DSView {
         super.layout()
         surface?.frame = bounds
         let top = safeAreaInsets.top
-        // The thread runs up behind the toolbar and scrolls under it; other pages start below it. The sidebar's
-        // content keeps its own 52pt titlebar row (hidden in this mode) and lines that row up with the toolbar, so
-        // its search starts just below it.
+        // The thread runs up behind the toolbar and scrolls under it. The sidebar's content keeps its own 52pt
+        // titlebar row (hidden in this mode) and lines that row up with the toolbar, so its search starts just
+        // below it. Settings and the utility pages put their 52pt header row in the toolbar's row, where T3 has it
+        // and the toolbar shows no title of its own; in full screen the toolbar covers that row, so they start
+        // below it.
         if detail, let page = content as? ToolbarUnderlapping {
             page.toolbarInset = top
             content?.frame = bounds
             return
         }
-        let y = detail ? top : top - ThreadHeaderView.height
+        let fullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        let y = detail && fullScreen ? top : top - ThreadHeaderView.height
         content?.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y))
     }
 }

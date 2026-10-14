@@ -43,6 +43,8 @@ extension SidebarContentView {
             nativeList = nil
             nativeChrome = nil
             nativeFooter = nil
+            // The native toolbar held the brand.
+            if brand.superview !== self { addSubview(brand) }
             addSubview(scrollArea, positioned: .below, relativeTo: brand)
             addSubview(trigger, positioned: .above, relativeTo: brand)
             for view in classicButtons { addSubview(view, positioned: .below, relativeTo: undoNotice) }
@@ -127,10 +129,6 @@ extension SidebarContentView {
     func layoutNative() {
         guard let native = nativeList, let chrome = nativeChrome, let footer = nativeFooter else { return }
         let w = bounds.width, h = bounds.height
-        // The brand in the toolbar's row, after the sidebar toggle as T3's follows its trigger (`gap-2`,
-        // SidebarChrome.tsx:51-66), on the toggle's 26pt center line.
-        let bs = brand.intrinsicContentSize
-        brand.frame = NSRect(x: NativeSpec.brandLeft, y: 12, width: min(bs.width, max(0, w - NativeSpec.brandLeft - 12)), height: 28)
         // The classic layout below the 52pt titlebar row the toolbar covers: the search row at 60, the list from 100,
         // the footer's 32pt buttons 4pt from the bottom with the notices stacked above them.
         chrome.frame = NSRect(x: 0, y: 60, width: w, height: 32)
