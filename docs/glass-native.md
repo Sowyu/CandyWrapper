@@ -166,6 +166,8 @@ The command palette sits on Liquid Glass at its classic 18 pt radius. The overla
 
 The composer keeps the `border` hairline in dark mode, where the glass alone sat almost black on the dark detail. Checked at Glass opacity 10, 40, 80 and 100; light mode keeps no outline.
 
+Performance, `scripts/perf-review --no-bench` with `CANDY_THEME=candywrapper-glass-native` on 1d72fcc (`docs/perf/2026-10-14-1d72fcc-w1.md`), load 2 to 9. Its baseline is the last three classic runs, so its WORSE flags are the known native gap. Against the polish pass's native numbers nothing rose: launch to window 244 ms against 276, footprint at rest 40.9 MB against 45.0, after scroll 51.7 MB against 54.2, idle CPU 0.046% and 0.13 package wakeups a second. Menus and the palette's glass exist only while open.
+
 ### Phase 5b, the panels (2026-10-14)
 
 The thread's panels keep T3 desktop's layout and take the Visual spec's material. Screenshots are in `/tmp/cw-peek/panels-*`.
