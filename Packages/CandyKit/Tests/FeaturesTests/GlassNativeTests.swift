@@ -128,6 +128,23 @@ struct GlassNativeTests {
         window.contentViewController = nil
     }
 
+    /// A dialog makes the toolbar inert, as T3's backdrop covers its header, and closing it gives the clicks back.
+    @Test func dialogsMakeTheToolbarInert() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
+                              styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let native = NativeSplitPresentation(autosaveName: nil)
+        native.install(in: window)
+        let toggle = native.toolbar.items.first { $0.itemIdentifier == NativeSplitPresentation.sidebarToggle }!
+        #expect(!native.isInert && native.validateToolbarItem(toggle))
+        let host = ModalHost.present(DialogView(kind: .alertDialog, title: "Delete thread?"), in: window, blurBackdrop: false)
+        #expect(native.isInert && !native.validateToolbarItem(toggle))
+        host.close(animated: false)
+        #expect(!native.isInert)
+        window.toolbar = nil
+        window.contentViewController = nil
+    }
+
     /// Classic's header keeps its panel toggles hidden while no thread shows, through layouts and a round trip
     /// to Glass Native, so they and the details shortcut stay off before a thread loads.
     @Test func classicHeaderTogglesStayHiddenWithoutAThread() {

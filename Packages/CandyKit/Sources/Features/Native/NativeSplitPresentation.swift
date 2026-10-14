@@ -81,6 +81,24 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
         collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.syncBrand() }
         }
+        (rootController.view as! NativeRootView).onSubviewsChange = { [weak self] in self?.syncInert() }
+    }
+
+    /// True while a dialog shows. base-ui's modal backdrop covers T3's whole window, its header included, and makes
+    /// everything outside the dialog inert. The toolbar draws above the content, out of `ModalHost`'s reach, so its
+    /// items turn off instead.
+    private(set) var isInert = false
+
+    private func syncInert() {
+        let inert = ModalHost.isPresented(in: rootController.view.window)
+        guard inert != isInert else { return }
+        isInert = inert
+        for item in toolbar.items {
+            if let control = item.view as? NSControl { control.isEnabled = !inert }
+        }
+        brandHost.isInert = inert
+        (breadcrumb as? NativeBreadcrumbView)?.isInert = inert
+        toolbar.validateVisibleItems()
     }
 
     // MARK: MainPresentation
@@ -290,6 +308,7 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
                 control.setImageScaling(.scaleNone, forSegment: i)
             }
             control.setAccessibilityLabel("Panels")
+            control.isEnabled = !isInert
             let item = NativeValidatedToolbarItem(itemIdentifier: id)
             item.view = control
             item.label = "Panels"
@@ -303,6 +322,8 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     }
 
     @objc private func pressSidebar() { toggleSidebar() }
+
+    @objc public func validateToolbarItem(_ item: NSToolbarItem) -> Bool { !isInert }
 
     /// The segment whose selection the click flipped runs its toggle; the panel's real state then decides what shows.
     @objc private func pressPanel(_ sender: Any?) {
@@ -319,6 +340,9 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
 /// Holds the sidebar's brand in the toolbar at its own size. The brand lays itself out by frame, so it keeps
 /// that when it goes back to the classic sidebar.
 final class NativeBrandHost: NSView {
+    var isInert = false
+    override func hitTest(_ point: NSPoint) -> NSView? { isInert ? nil : super.hitTest(point) }
+
     weak var brand: NSView? {
         didSet {
             guard let brand, brand.superview !== self else { return }
@@ -374,7 +398,21 @@ private extension NSViewController {
 
 /// The window's content: a plain flipped view, so overlays stack over the split view.
 final class NativeRootController: NSViewController {
-    override func loadView() { view = DSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 780)) }
+    override func loadView() { view = NativeRootView(frame: NSRect(x: 0, y: 0, width: 1100, height: 780)) }
+}
+
+/// The window's content view. Dialogs and other overlays come and go on it.
+final class NativeRootView: DSView {
+    var onSubviewsChange: (() -> Void)?
+    override func didAddSubview(_ subview: NSView) {
+        super.didAddSubview(subview)
+        onSubviewsChange?()
+    }
+    /// A closing dialog is still a subview here, and already reports itself closed.
+    override func willRemoveSubview(_ subview: NSView) {
+        super.willRemoveSubview(subview)
+        onSubviewsChange?()
+    }
 }
 
 /// One column's view controller. Its view hosts one content view and keeps the content clear of the toolbar.
