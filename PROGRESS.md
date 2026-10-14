@@ -34,6 +34,7 @@ Leave these alone during side-by-side checks.
 - Updates come from this repo's GitHub releases through Sparkle, and an update keeps agents on this Mac's server running.
 - Quitting asks first only while an agent runs on this Mac's own server.
 - Editing a project action without touching its shortcut keeps the shortcut, where T3 drops it.
+- A Read row's file preview that fails to load removes itself, and is skipped when the result already carries the image. T3 keeps an empty slot (ChatMarkdown.tsx:1491-1510). The user asked on 2026-10-14.
 
 ## Looks wrong, matches T3
 
