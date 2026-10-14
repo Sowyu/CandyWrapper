@@ -27,27 +27,9 @@ public enum ServerUpdater {
                            onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> ServerSelfUpdateResult {
         let input = ServerUpdateLogic.input(targetVersion: requested, continueRunningThreads: continueRunningThreads)
         // Without a session a lost unary call would pass for the handoff.
-        guard await supervisor.currentConnection != nil else { throw Failure("The server is not connected.") }
+        guard let connection = await supervisor.currentConnection else { throw Failure("The server is not connected.") }
         await onStage(.downloading, requested)
-        var result: ServerSelfUpdateResult
-        do {
-            if capabilities.progress {
-                result = try await streamUpdate(supervisor, input: input, targetVersion: requested, onStage: onStage)
-            } else {
-                do {
-                    result = try await supervisor.request("server.updateServer", payload: input).decode(as: ServerSelfUpdateResult.self)
-                } catch let error as RPCClientError where isHandoffLoss(error) {
-                    switch capabilities.selfUpdate {
-                    case .bootService?, .respawn?: result = ServerSelfUpdateResult(targetVersion: requested, method: capabilities.selfUpdate!.rawValue)
-                    default: throw error
-                    }
-                }
-            }
-        } catch let error as RPCClientError {
-            throw Failure(message(error))
-        } catch is DecodingError {
-            throw Failure("Server update failed.")
-        }
+        let result = try await handoff(connection, input: input, targetVersion: requested, capabilities: capabilities, onStage: onStage)
 
         var commitLostTransport = false
         // The generation before the commit: a lost commit waits for a session newer than it.
@@ -101,9 +83,79 @@ public enum ServerUpdater {
         throw Failure(ServerUpdateLogic.desktopNotInstalledMessage)
     }
 
-    private static func streamUpdate(_ supervisor: ConnectionSupervisor, input: JSONValue, targetVersion: String,
+    /// Asks the server to stage the update: the progress stream when it offers one, else the unary call,
+    /// whose answer an older launcher-backed server may drop with the socket.
+    private static func handoff(_ connection: RPCConnection, input: JSONValue, targetVersion: String, capabilities: ServerUpdateCapabilities,
+                                onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> ServerSelfUpdateResult {
+        do {
+            if capabilities.progress {
+                return try await streamUpdate(connection, input: input, targetVersion: targetVersion, onStage: onStage)
+            }
+            do {
+                return try await connection.request("server.updateServer", payload: input).decode(as: ServerSelfUpdateResult.self)
+            } catch let error as RPCClientError where isHandoffLoss(error) {
+                switch capabilities.selfUpdate {
+                case .bootService?, .respawn?: return ServerSelfUpdateResult(targetVersion: targetVersion, method: capabilities.selfUpdate!.rawValue)
+                default: throw error
+                }
+            }
+        } catch let error as RPCClientError {
+            throw Failure(message(error))
+        } catch is DecodingError {
+            throw Failure("Server update failed.")
+        }
+    }
+
+    /// `updateOutdatedHost` (client-runtime connection/outdatedHostUpdate.ts:49-205): a host on an older
+    /// orchestration protocol never gets a normal session, so `connect` opens a bare socket that only
+    /// carries the self-update calls, whose wire shape never changed. A desktop app's commit relaunches
+    /// it, so a dropped socket is success. Then `descriptor` is asked every second, for 4 minutes, until
+    /// the host answers on this client's protocol. Returns the version it came back on.
+    public static func runOutdated(connect: @escaping @Sendable () async throws -> RPCConnection,
+                                   descriptor: @escaping @Sendable () async throws -> EnvironmentDescriptor,
+                                   environmentId: String, label: String, targetVersion: String,
+                                   capabilities: ServerUpdateCapabilities, restartTimeout: Duration = ServerUpdateLogic.resumeTimeout,
+                                   pollInterval: Duration = .seconds(1),
+                                   onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> String {
+        guard capabilities.canUpdateRemotely else { throw Failure("Update T3 Code on \(label) manually; it cannot update itself.") }
+        await onStage(.downloading, targetVersion)
+        let connection: RPCConnection
+        do { connection = try await connect() } catch { throw Failure(String(describing: error)) }
+        defer { Task { await connection.close(reason: "outdated host update finished") } }
+        let input = ServerUpdateLogic.input(targetVersion: targetVersion, continueRunningThreads: false)
+        let result = try await handoff(connection, input: input, targetVersion: targetVersion, capabilities: capabilities, onStage: onStage)
+        if let token = result.desktopUpdateToken, result.method == "desktop-app" {
+            do {
+                _ = try await connection.request("server.commitDesktopUpdate", payload: .object(["requestId": .string(token)]))
+            } catch let error as RPCClientError {
+                guard isHandoffLoss(error) else { throw Failure(message(error)) }
+            }
+        }
+        await onStage(.resuming, result.targetVersion)
+        let resumed = try? await withTimeout(restartTimeout) { () -> EnvironmentDescriptor? in
+            while !Task.isCancelled {
+                if let d = try? await descriptor(), d.environmentId == environmentId, d.isCompatible { return d }
+                try await Task.sleep(for: pollInterval)
+            }
+            return nil
+        }
+        try Task.checkCancellation()
+        guard let resumed = resumed ?? nil else { throw Failure("\(label) did not come back on a compatible T3 Code version.") }
+        return resumed.serverVersion
+    }
+
+    /// The socket `runOutdated` uses: a fresh ticket and the upgrade, without the descriptor's protocol
+    /// check (a host from before protocol negotiation ignores the `orchestrationProtocol` parameter).
+    public static func bareConnection(http: EnvironmentHTTP, identity: ClientIdentity, token: String) async throws -> RPCConnection {
+        let ticket = try await http.webSocketTicket(token: token)
+        let socket = try await URLSessionRPCSocket.open(url: http.webSocketURL(ticket: ticket.ticket, identity: identity))
+        let connection = RPCConnection(socket: socket)
+        await connection.start()
+        return connection
+    }
+
+    private static func streamUpdate(_ connection: RPCConnection, input: JSONValue, targetVersion: String,
                                      onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> ServerSelfUpdateResult {
-        guard let connection = await supervisor.currentConnection else { throw RPCClientError.transport(.closed("not connected")) }
         var terminal: ServerSelfUpdateResult?
         do {
             for try await value in await connection.stream("server.updateServerWithProgress", payload: input) {

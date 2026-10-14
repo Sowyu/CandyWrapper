@@ -87,6 +87,12 @@ public enum Pairing {
             : "This client requires a newer server. Update T3 Code on \(descriptor.label) to connect."
     }
 
+    /// compatibility.ts `serverUpdateRequired`: the host speaks an older protocol and this client can drive
+    /// its update (`canSelfUpdate`).
+    public static func serverUpdateRequired(_ descriptor: EnvironmentDescriptor) -> Bool {
+        descriptor.protocolVersion < T3Protocol.orchestrationProtocolVersion && ServerUpdateCapabilities(descriptor.capabilities).canUpdateRemotely
+    }
+
     public struct Result: Sendable {
         public let descriptor: EnvironmentDescriptor
         public let baseURL: URL
@@ -105,8 +111,8 @@ public enum Pairing {
         if let expected = expectedEnvironmentId, descriptor.environmentId != expected {
             throw PairingError("That address reaches \(descriptor.label), a different machine. Add it as its own environment instead.")
         }
-        // ponytail: an older server that can update itself is refused here; T3 saves it so it can be updated (M9)
-        if let message = compatibilityError(descriptor) { throw PairingError(message) }
+        // An outdated server that can update itself is still saved, so it can be updated from here (onboarding.ts:126-130).
+        if let message = compatibilityError(descriptor), !serverUpdateRequired(descriptor) { throw PairingError(message) }
         let token: AccessTokenResult
         do {
             token = try await http.exchangeToken(TokenExchangeRequest(subjectToken: fields.code, clientLabel: identity.label))

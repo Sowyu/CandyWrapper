@@ -28,7 +28,14 @@ final class ServerUpdates {
     /// The server is one CandyWrapper started on this Mac (`ServerController`), not T3's.
     var isOwnServer: (String) -> Bool = { _ in false }
 
-    init(environments: Environments) { self.environments = environments }
+    /// Hosts that refused this client's protocol, by environment id: their HTTP descriptor, read once per refusal.
+    private var outdated: [String: EnvironmentDescriptor] = [:]
+    private var outdatedReads: Set<String> = []
+
+    init(environments: Environments) {
+        self.environments = environments
+        environments.observe { [weak self] in self?.readOutdatedHosts() }
+    }
 
     @discardableResult
     func observe(_ change: @escaping () -> Void) -> UUID {
@@ -166,6 +173,76 @@ final class ServerUpdates {
     }
 
     private func toast(_ view: ToastView) { _ = toasts()?.show(view) }
+
+    // MARK: Hosts too old to connect
+
+    /// A saved host on an older orchestration protocol: "Client not supported". Its descriptor tells whether
+    /// this client can update it (compatibility.ts `serverUpdateRequired`).
+    private func readOutdatedHosts() {
+        for id in environments.environmentIds {
+            guard environments.state(id)?.status == .unsupported else {
+                if outdated.removeValue(forKey: id) != nil { changed() }
+                continue
+            }
+            guard outdated[id] == nil, !outdatedReads.contains(id), let shell = environments.session(id) else { continue }
+            outdatedReads.insert(id)
+            let http = shell.http
+            Task { [weak self] in
+                let d = try? await http.descriptor()
+                guard let self else { return }
+                outdatedReads.remove(id)
+                if let d, environments.state(id)?.status == .unsupported { outdated[id] = d; changed() }
+            }
+        }
+    }
+
+    /// The host needs an update before this client can connect, and this client can run it.
+    func outdatedHost(_ environmentId: String) -> EnvironmentDescriptor? {
+        outdated[environmentId].flatMap { Pairing.serverUpdateRequired($0) ? $0 : nil }
+    }
+
+    /// `OutdatedServerUpdateAction`: the update over a bare socket, then the normal connection again.
+    // ponytail: direct routes only; a T3 Connect-only host shows no button until relay sockets can skip the protocol check
+    func updateOutdated(_ environmentId: String, serverLabel: String) {
+        guard tasks[environmentId] == nil, let d = outdatedHost(environmentId), let shell = environments.session(environmentId),
+              !shell.token.isEmpty else { return }
+        let http = shell.http, token = shell.token, from = d.serverVersion
+        let target = ServerVersionSkewLogic.clientVersion
+        let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
+        states[environmentId] = .running(stage: .downloading, fromVersion: from, targetVersion: target)
+        changed()
+        tasks[environmentId] = Task { [weak self] in
+            do {
+                let version = try await ServerUpdater.runOutdated(
+                    connect: { try await ServerUpdater.bareConnection(http: http, identity: identity, token: token) },
+                    descriptor: { try await http.descriptor() },
+                    environmentId: environmentId, label: d.label, targetVersion: target,
+                    capabilities: ServerUpdateCapabilities(d.capabilities)) { stage, t in
+                    await MainActor.run {
+                        self?.states[environmentId] = .running(stage: stage, fromVersion: from, targetVersion: t)
+                        self?.changed()
+                    }
+                }
+                guard let self else { return }
+                states[environmentId] = .idle
+                outdated[environmentId] = nil
+                environments.reconnect(environmentId)
+                toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
+                                message: ServerUpdateCopy.successDescription(nil, targetVersion: version), kind: .success))
+            } catch is CancellationError {
+                self?.states[environmentId] = .idle
+            } catch {
+                guard let self else { return }
+                let message = (error as? ServerUpdater.Failure)?.message ?? "Server update failed."
+                var stage = ServerUpdateStage.downloading
+                if case .running(let s, _, _)? = states[environmentId] { stage = s }
+                states[environmentId] = .failed(stage: stage, fromVersion: from, targetVersion: target, message: message)
+                toast(ToastView(title: ServerUpdateCopy.failureTitle, message: message, kind: .error))
+            }
+            self?.tasks[environmentId] = nil
+            self?.changed()
+        }
+    }
 
     // MARK: Dismissals
 
