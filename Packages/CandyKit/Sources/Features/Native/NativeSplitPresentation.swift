@@ -193,6 +193,8 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
     static let title = NSToolbarItem.Identifier("candy.breadcrumb")
     static let panels = NSToolbarItem.Identifier("candy.panels")
     static let panelsWithMaximize = NSToolbarItem.Identifier("candy.panelsWithMaximize")
+    /// Keep `RightPanelView.nativeToolbarReserve` in step: four segments are 140 pt wide on the toolbar.
+    static let segmentWidth: CGFloat = 28
 
     private struct PanelSegment {
         let symbol: String, label: String, state: KeyPath<NativePanelStates, Bool>
@@ -271,7 +273,12 @@ public final class NativeSplitPresentation: NSObject, MainPresentation, NSToolba
             // own color, so the tint is an opaque equivalent that keeps the glyph in the foreground color.
             control.selectedSegmentBezelColor = Themed.pick(light: NSColor(srgbRed: 0xe4 / 255, green: 0xe4 / 255, blue: 0xe7 / 255, alpha: 1),
                                                             dark: NSColor(white: 0.30, alpha: 1))
-            for (i, segment) in segments.enumerated() { control.setToolTip(segment.tip, forSegment: i) }
+            // T3's toggles are 28 px buttons (`size-7`). The system's wider segments took the right panel's tab room.
+            for (i, segment) in segments.enumerated() {
+                control.setToolTip(segment.tip, forSegment: i)
+                control.setWidth(Self.segmentWidth, forSegment: i)
+                control.setImageScaling(.scaleNone, forSegment: i)
+            }
             control.setAccessibilityLabel("Panels")
             let item = NativeValidatedToolbarItem(itemIdentifier: id)
             item.view = control
