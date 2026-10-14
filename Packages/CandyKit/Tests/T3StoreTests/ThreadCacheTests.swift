@@ -121,13 +121,12 @@ import Testing
         running.runs[running.runs.count - 1].status = .running
         let busy = ThreadStore(threadId: p.thread.id, cache: cache, environmentId: "env-1", onChange: {})
         await busy.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 9, projection: running, historyCursor: .null, hasMoreHistory: false, latestLocalTurnOrdinal: .null))
-        try await Task.sleep(for: .milliseconds(100))
+        await busy.flushCache()
         #expect(cache.load(key) == nil)
 
         let store = ThreadStore(threadId: p.thread.id, cache: cache, environmentId: "env-1", onChange: {})
         await store.applySnapshot(snapshot)
         await store.flushCache()
-        try await Task.sleep(for: .milliseconds(100))
         #expect(cache.load(key)?.snapshotSequence == 9)
 
         let cold = ThreadStore(threadId: p.thread.id, cache: cache, environmentId: "env-1", onChange: {})
@@ -139,7 +138,7 @@ import Testing
         let deleted = ThreadEvent(id: "e", type: .threadDeleted, threadId: p.thread.id, runId: nil,
                                   occurredAt: T3Timestamp("2026-01-02T00:00:00.000Z"), payload: .thread(p.thread))
         await cold.apply([.event(sequence: 10, event: deleted)])
-        try await Task.sleep(for: .milliseconds(100))
+        await cold.flushCache()
         #expect(cache.load(key) == nil)
     }
 }
