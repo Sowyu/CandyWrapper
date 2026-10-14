@@ -11,8 +11,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-2. Done 2026-10-14 (nightly-3105-ui3): Nightly 3105's UI by `docs/research/nightly-diff-3105.md` part 2. Prompt links open on the app's own scheme (10, 5fe7568e8, `PromptLinks`); the "Copy prompt link" actions are not ported. The Mermaid diagram "over" the full screen visual reply was the thread showing through the 75% scrim under a resting composer, so the speculative bitmap decode is reverted. Merge buttons show a check when armed and their width animation no longer smears. Checked on screen: "Subagent needs input" and its clearing (`/tmp/cw-peek/3105ui3-*`). Not checked: "Update everything" against a server that can update remotely.
-3. T3's SQLite lessons are applied to CandyWrapper's cache files (061a6d0, `docs/perf/README.md`). Left: a perf review against `docs/perf/2026-10-14-46681ff-w1.json`, which Origin's energy runs kept interrupting.
+1. T3's SQLite lessons are applied to CandyWrapper's cache files (061a6d0, `docs/perf/README.md`). Left: a perf review against `docs/perf/2026-10-14-46681ff-w1.json`, which Origin's energy runs kept interrupting.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
