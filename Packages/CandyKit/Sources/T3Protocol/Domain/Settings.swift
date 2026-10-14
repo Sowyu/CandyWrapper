@@ -160,7 +160,7 @@ public struct ServerSettingsValues: Equatable, Sendable {
     public static let fields: [String: SettingSpec] = [
         "responseStreamingMode": SettingSpec(.literals(["turn", "paragraph"]), .string("paragraph")),
         "enableProviderUpdateChecks": SettingSpec(.bool, .bool(true)),
-        "continueThreadsAfterServerUpdate": SettingSpec(.bool, .bool(false)),
+        "continueThreadsAfterServerUpdate": SettingSpec(.bool, .bool(true)),
         "sidebarAutoSettleAfterDays": SettingSpec(.nullableNumber(1...90), .number(3)),
         "snoozeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "autoResumeLimitedThreads": SettingSpec(.bool, .bool(false)),

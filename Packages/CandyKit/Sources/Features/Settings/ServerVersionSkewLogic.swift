@@ -10,7 +10,7 @@ public enum ServerVersionSkewLogic {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--t3-client-version"), i + 1 < args.count { return args[i + 1] }
         #endif
-        return "0.0.46-nightly.20261009.2861"
+        return "0.0.46-nightly.20261014.3105"
     }()
     public static let hint = "Version mismatch. Try syncing the client and server to the same T3 Code version."
     private struct Version {

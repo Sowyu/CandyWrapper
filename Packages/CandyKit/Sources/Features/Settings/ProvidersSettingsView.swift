@@ -183,7 +183,7 @@ public enum ProvidersLogic {
                                  Field(key: "serverPassword", title: "Server password", detail: "Stored in plain text on disk.", placeholder: "Optional", secret: true)]
         case "antigravity": return [
             Field(key: "authMethod", title: "Sign-in method", detail: "Google accounts use your subscription; API keys and Agent Platform bill usage.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
-            Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored in plain text.", placeholder: "Optional", secret: true),
+            Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true),
             Field(key: "gcpProject", title: "GCP project", detail: "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.", placeholder: "my-project-id"),
             Field(key: "gcpLocation", title: "GCP location", detail: "Region for Gemini Enterprise or Agent Platform.", placeholder: "us-central1"),
             binary("Automatic", "Custom ACP executable. Leave empty to select automatically.")]
