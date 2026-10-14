@@ -331,6 +331,8 @@ public final class ThreadPanelView: DSView {
         } else if !native {
             scrollFade?.remove()
             scrollFade = nil
+            // Glass Native hid the toggles that sit on the right panel's tab bar; the header's own follow the thread.
+            for toggle in header.toggles where toggle.superview === self { toggle.isHidden = false }
         }
         needsLayout = true
     }
@@ -784,7 +786,8 @@ public final class ThreadPanelView: DSView {
         header.toggles[0].isPressed = detailsOpen
         if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
-        onPanelTogglesChange?()
+        // Layout calls this; the toolbar's items change after the window's layout pass, not inside it.
+        DispatchQueue.main.async { [weak self] in self?.onPanelTogglesChange?() }
     }
 
     /// T3 closes the popover when the card turns inline (ThreadDetailsCard.tsx:81-85), and on another thread it
@@ -1513,10 +1516,13 @@ public final class ThreadPanelView: DSView {
         let maximizable = !sheet && rightPanelOpen
         if maximizable != isMaximizable {
             isMaximizable = maximizable
-            onMaximizableChange?(maximizable)
+            // After the window's layout pass: the toolbar swaps an item for it, which must not happen inside it.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isMaximizable == maximizable else { return }
+                self.onMaximizableChange?(maximizable)
+            }
         }
         if hidesCustomChrome { for toggle in header.toggles where toggle.superview === self { toggle.isHidden = true } }
-        else { header.toggles.forEach { $0.isHidden = false } }
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
         panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
