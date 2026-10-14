@@ -109,10 +109,14 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
         itemsGeneration = generation
         let oldItems = items, oldKeys = keys
         let newKeys = new.map(\.key)
+        let oldHeights = heights
         items = new
         keys = newKeys
         heights = new.map(height)
         if oldKeys == newKeys {
+            // `refresh` can't see a height change once `heights` holds the new ones, so note them here.
+            let resized = IndexSet(new.indices.filter { oldHeights.indices.contains($0) && oldHeights[$0] != heights[$0] })
+            if !resized.isEmpty { table.noteHeightOfRows(withIndexesChanged: resized) }
             for row in new.indices where oldItems[row] != new[row] {
                 refresh(row: row, old: oldItems[row])
             }
@@ -125,10 +129,14 @@ final class NativeSidebarListView: NSScrollView, SidebarItemsPresenting, NSTable
             table.removeRows(at: removed, withAnimation: fade ? .effectFade : [])
             table.insertRows(at: inserted, withAnimation: fade ? .effectFade : [])
             table.endUpdates()
+            var resized = IndexSet()
             for row in new.indices where !inserted.contains(row) {
-                guard let old = oldRow[newKeys[row]].map({ oldItems[$0] }), old != new[row] else { continue }
-                refresh(row: row, old: old)
+                guard let index = oldRow[newKeys[row]] else { continue }
+                if oldHeights.indices.contains(index), oldHeights[index] != heights[row] { resized.insert(row) }
+                guard oldItems[index] != new[row] else { continue }
+                refresh(row: row, old: oldItems[index])
             }
+            if !resized.isEmpty { table.noteHeightOfRows(withIndexesChanged: resized) }
         } else {
             // Too much moved (a new scope, a search): the table loads only the rows on screen.
             closeHoverCard()

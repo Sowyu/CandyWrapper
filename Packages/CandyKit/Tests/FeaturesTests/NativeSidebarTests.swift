@@ -146,4 +146,37 @@ struct NativeSidebarTests {
         #expect(content.nativeList == nil && native.superview == nil)
         #expect(content.list.items == SidebarListBuilder.items(snapshot: snap, state: content.state, nowMs: TimestampFormat.nowMs(SidebarPreview.referenceNow)))
     }
+
+    /// A row whose height changes at the same index (card to slim, or a search hit gaining its excerpt) takes the
+    /// new height, whether the keys stayed or rows came and went around it.
+    @Test func nativeListNotesHeightChangesInPlace() {
+        let native = NativeSidebarListView(frame: NSRect(x: 0, y: 0, width: 300, height: 600))
+        var card = Self.row("a", .active), other = Self.row("b", .active)
+        func rowHeight() -> CGFloat { native.table.rect(ofRow: 0).height - native.table.intercellSpacing.height }
+        native.setItems([.row(card), .row(other)], animated: false, generation: nil)
+        #expect(rowHeight() == NativeSidebarMetrics.height(.row(card)))
+        card.variant = .slim
+        native.setItems([.row(card), .row(other)], animated: false, generation: nil)
+        #expect(rowHeight() == NativeSidebarMetrics.height(.row(card)))
+        card.variant = .card
+        native.setItems([.row(card)], animated: false, generation: nil)
+        #expect(rowHeight() == NativeSidebarMetrics.height(.row(card)))
+    }
+
+    /// A theme switch keeps the sidebar's place: the first row on screen stays first, both ways.
+    @Test func themeSwitchKeepsTheSidebarsPlace() throws {
+        let snap = SidebarLoadTests.loadSnapshot()
+        let (content, window) = Self.nativeContent(snap, now: { SidebarPreview.referenceNow })
+        defer { window.contentView = nil }
+        let native = try #require(content.nativeList)
+        let key = native.items[300].key
+        native.scrollItemToTop(key)
+        #expect(native.topVisibleKey == key)
+        content.hidesCustomChrome = false
+        content.layoutSubtreeIfNeeded()
+        #expect(content.list.topVisibleKey == key)
+        content.hidesCustomChrome = true
+        content.layoutSubtreeIfNeeded()
+        #expect(content.nativeList?.topVisibleKey == key)
+    }
 }
