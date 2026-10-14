@@ -12,6 +12,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## Open tasks
 
 1. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
+2. Catch up to Nightly 0.0.46-nightly.20261014.3105 by `docs/nightly-catch-up.md`, first T3's SQLite and reconnect fixes (Theo, 2026-10-14: "If you saw reconnecting banners, like, ever, that should now be resolved on nightly"), the one-database-owner rule (#16102) against CandyWrapper's own runtime, and the client-side reconnect and image fixes. The scheduled catch-up should skip this run. (taken 2026-10-14)
+3. Apply T3's SQLite lessons (#19205, #19226, #19304, #19305, #19324, #18471) to CandyWrapper's own databases and caches. (taken 2026-10-14)
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
