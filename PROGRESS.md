@@ -11,8 +11,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-1. Remove Glass Native (Experimental), the user's call on 2026-10-14. (taken 2026-10-14)
-2. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
+1. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
