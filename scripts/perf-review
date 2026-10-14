@@ -190,8 +190,18 @@ def sizes(app):
     subprocess.call(["strip", "-x", "-S", stripped], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     built, small = os.path.getsize(binary), os.path.getsize(stripped)
     os.remove(stripped)
+    # scripts/release also thins Sparkle's three binaries to arm64; until 2026-10-15 their x86_64 halves counted.
+    thinned = 0
+    fw = app + "/Contents/Frameworks/Sparkle.framework/Versions/B/"
+    for rel in ["Sparkle", "Autoupdate", "Updater.app/Contents/MacOS/Updater"]:
+        thin = WORK + "/thin-binary"
+        if os.path.exists(fw + rel) and subprocess.call(["lipo", "-thin", "arm64", fw + rel, "-output", thin],
+                                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+            thinned += os.path.getsize(fw + rel) - os.path.getsize(thin)
+            os.remove(thin)
     return {"size.bundle_mb": [total / 1048576], "size.binary_mb": [built / 1048576],
-            "size.stripped_binary_mb": [small / 1048576], "size.shipped_bundle_mb": [(total - built + small) / 1048576]}
+            "size.stripped_binary_mb": [small / 1048576],
+            "size.shipped_bundle_mb": [(total - built + small - thinned) / 1048576]}
 
 
 # MARK: micro-benchmarks
