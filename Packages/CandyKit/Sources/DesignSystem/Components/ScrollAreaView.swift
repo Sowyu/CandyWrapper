@@ -41,7 +41,11 @@ public final class ScrollAreaView: DSView {
 
     public override func layout() {
         super.layout()
+        let width = scrollView.contentView.bounds.width
         scrollView.frame = bounds
+        // Documents that size themselves to the clip (the diff list, file trees) lay out only when asked, and
+        // a new clip width doesn't ask them: a maximized panel left the diff at its old width.
+        if scrollView.contentView.bounds.width != width { scrollView.documentView?.needsLayout = true }
         updateFades(force: true)
     }
 
