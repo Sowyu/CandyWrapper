@@ -4,6 +4,8 @@ Phase 6, half 1. I walked the window, the toolbar, the sidebar and the Settings,
 
 ## Fixed
 
+Commits: 2a8c9ca (brand and page headers), c62df52 (sidebar place), adcd957 (row heights), 8a0f32c (header toggles and toolbar callbacks), 3b1b3b7 (draft headline).
+
 ### The brand disappeared in full screen
 
 In full screen the toolbar lives in its own window over the top 52 pt of the content, and the brand was drawn in the sidebar at a measured x of 140 under it (`hunt-shell-brand-fullscreen-before.png`). The brand is now a toolbar item after the sidebar toggle (`NativeSplitPresentation`, `NativeBrandHost`), so the toolbar places it beside the toggle windowed and in full screen, and it hides with the sidebar. The presentation takes the brand before the toolbar is built, so a theme switch made with Settings open shows it too. The `NativeSpec.brandLeft` constant is gone. After: `hunt-shell-fullscreen-thread-after.png`, `hunt-shell-switch-native-settings-after.png`.
@@ -42,6 +44,7 @@ Each switch built a new list at the top. Both lists now report the first item on
 - The "on" look on the thread details toggle at launch is the glass segmented control's hover look under a resting pointer. The control's state was off.
 - Settings opens and closes in the detail column, Escape leaves it in both modes and after a switch. The first Escape after a switch can close a theme card's tooltip instead, as in classic.
 - The draft typed in the composer and the open thread survive switches both ways.
+- Command-click multi-select, the bulk menu ("Settle (2)", "Delete (2)"), the single-row menu, Rename from the menu, hover Settle with its undo notice, search with Return to open, the project filter, New thread's project chooser, and `thread.next` and `thread.jump.2` all work as in classic. Command-Z from the composer leaves a settle alone, as T3's `thread.undo` skips editable fields. Screenshots: `hunt-shell-multiselect-native.png`, `hunt-shell-context-multi-native.png`, `hunt-shell-rename-native.png`, `hunt-shell-settle-native.png`, `hunt-shell-search-native.png`.
 - Footer Back on Pull Requests and Usage spans the footer row, as classic's and T3's `SidebarMenuButton` do, so a click in the empty footer goes back.
 
 ## Left
@@ -50,4 +53,4 @@ Each switch built a new list at the top. Both lists now report the first item on
 - Glass Native shows its window when either appearance uses it (`ThemeLibrary.usesNativePresentation`). Picking Glass Native for light and Ember for dark gives the native window with Ember's dark palette. That is a choice for the user, not a bug fix.
 - Glass Native's sidebar is 280 pt at its minimum against classic's 208 at 840 pt, so the detail column is narrower than classic's at T3's minimum window. That follows the phase 1 spec.
 - The window's minimum height comes out at 640, not 620, in both modes.
-- I didn't get to multi-select, rename, the context menu, drag, Settle, Snooze, Wake, the Settled shelf, the project filter, search and keyboard navigation on screen in this pass.
+- I didn't walk drag to reorder, Snooze, Wake, Pin from the menu, the Settled shelf or arrow-key navigation in the list on screen in this pass.
