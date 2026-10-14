@@ -297,8 +297,14 @@ extension SettingsController {
             var failures: [String] = [], saved: [String] = []
             for w in plan.writes {
                 do {
+                    let previous = composer?.config(w.environmentId)?.settings.raw
                     let result = try await environments.request(w.environmentId, "server.updateSettings", .object(["patch": .object(w.patch)]))
                     composer?.applySettings(w.environmentId, result)
+                    // An older server drops a key it does not know and still succeeds (scopedSettings.ts, 8ac4b97da).
+                    if let previous, !SettingsScopeState.droppedKeys(w.patch, previous: previous, saved: result).isEmpty {
+                        failures.append("Could not save on \(w.label): This environment does not support this setting. Update T3 Code on it.")
+                        continue
+                    }
                     saved.append(w.label)
                 } catch {
                     failures.append("Could not save on \(w.label): \(Self.rpcMessage(error, fallback: "The save failed. Try reconnecting and saving again."))")
@@ -352,6 +358,14 @@ extension SettingsController {
                 }
             }
             if leave {
+                // `waitForProjectRemoval` (state/entities.ts, T3 3105 11fd54fcb): the delete returns before the shell
+                // stream drops the project, and the thread view would open a new draft in it meanwhile. 5 s at most.
+                // ponytail: checks the snapshot every 50 ms for those few seconds; observe the shell store if this grows callers
+                for _ in 0..<100 where members.contains(where: { m in
+                    environments.snapshot(m.environmentId)?.projects.contains { $0.id.rawValue == m.projectId } == true
+                }) {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
                 scopeSelection = SettingsScopeSelection(machine: scopeSelection.machine, project: nil)
                 close()
             } else {

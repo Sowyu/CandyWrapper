@@ -631,8 +631,21 @@ final class ThreadController {
         }
         MarkdownImages.resourceURL = { [weak self] resource in
             guard let self, let env = self.openThreadId?.environmentId, let shell = self.environments.session(env) else { return nil }
-            guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
-                  let relative = reply["relativeUrl"]?.stringValue,
+            let reply: JSONValue
+            do {
+                reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]))
+            } catch let error as RPCClientError {
+                // `blockedAssetUrlState` (client-runtime state/assets.ts:91-119): a session without `filesystem:read`
+                // says so instead of implying the file is gone.
+                if error.typedError?.tag == "EnvironmentAuthorizationError", error.typedError?.message?.contains(AuthScopes.filesystemRead) == true,
+                   resource["_tag"]?.stringValue == "media-file", let path = resource["path"]?.stringValue {
+                    MarkdownImages.missingFileAccess.insert("media-file:" + path)
+                }
+                return nil
+            } catch {
+                return nil
+            }
+            guard let relative = reply["relativeUrl"]?.stringValue,
                   let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { return nil }
             let size = reply["imageDimensions"].flatMap { d in
                 d["width"]?.doubleValue.flatMap { w in d["height"]?.doubleValue.map { CGSize(width: w, height: $0) } }

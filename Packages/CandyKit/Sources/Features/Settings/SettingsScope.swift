@@ -237,6 +237,23 @@ public struct SettingsScopeState: Equatable, Sendable {
         public var patch: [String: JSONValue]
     }
 
+    /// `droppedSettingKeys` (settings/scopedSettings.ts, T3 3105 8ac4b97da): an older server drops keys it does not
+    /// know, top-level or nested, and still succeeds. A key counts as dropped when the write asked for a change and
+    /// the saved settings still hold the old value. Objects compare field by field; a null clears; strings may come
+    /// back trimmed.
+    public static func droppedKeys(_ patch: [String: JSONValue], previous: JSONValue, saved: JSONValue) -> [String] {
+        func dropped(_ value: JSONValue?, _ before: JSONValue?, _ after: JSONValue?) -> Bool {
+            let before = before ?? .null, after = after ?? .null
+            guard let value, value != .null else { return before != .null && after == before }
+            if case .object(let fields) = value, before.arrayValue == nil, after.arrayValue == nil {
+                return fields.contains { key, next in dropped(next, before[key], after[key]) }
+            }
+            let unchanged = value.stringValue.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) == before.stringValue } ?? (value == before)
+            return !unchanged && after == before
+        }
+        return patch.keys.sorted().filter { dropped(patch[$0], previous[$0], saved[$0]) }
+    }
+
     /// `projectOverrideWrites`: one patch per environment that names each member's new override entry
     /// (null drops it). Environments without `projectSettingsOverrides` are skipped.
     private func overrideWrites(_ update: (_ current: [String: JSONValue], _ settings: ServerSettingsValues, _ projectId: String) -> [String: JSONValue]?) -> [Write] {
