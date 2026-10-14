@@ -171,7 +171,7 @@ public enum LocalServerLauncher {
     /// server. Nil when there's no handoff or the server is gone (the record goes too), or when it
     /// can't be reached; the record then stays, and `stopOrphan` leaves it alone.
     public static func adopt(recordedAt url: URL, home: URL, identity: ClientIdentity, credentials: CredentialStore?,
-                             configuration: () throws -> LocalServerConfiguration,
+                             configuration: () async throws -> LocalServerConfiguration,
                              wait: Duration = .seconds(20)) async -> LaunchedLocalServer? {
         guard let data = try? Data(contentsOf: url),
               let record = try? JSONDecoder().decode(OwnerRecord.self, from: data), record.handoff == true else { return nil }
@@ -184,7 +184,7 @@ public enum LocalServerLauncher {
               running.runtime.pid == record.server.pid else { return nil }
         let environmentId = running.descriptor.environmentId
         var token = try? credentials?.load(environmentId: environmentId)
-        if token == nil, let config = try? configuration(),
+        if token == nil, let config = try? await configuration(),
            let code = try? await mintPairingCode(binary: config.binary, home: home, path: config.path),
            let (_, result) = try? await EnvironmentHTTP(baseURL: running.origin).pair(code: code, identity: identity) {
             token = result.accessToken

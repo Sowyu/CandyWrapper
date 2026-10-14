@@ -332,7 +332,7 @@ extension ServerLifecycle where Owned == LaunchedLocalServer {
     /// so a runtime update between starts picks up the new binary. `ownerRecord` is where the
     /// app remembers the server it started (`LocalServerLauncher.OwnerRecord`).
     public static func live(home: URL, identity: ClientIdentity, credentials: CredentialStore?,
-                            configuration: @escaping @Sendable () throws -> LocalServerConfiguration,
+                            configuration: @escaping @Sendable () async throws -> LocalServerConfiguration,
                             idleTimeout: Duration = .seconds(600), remoteAccess: Bool, ownerRecord: URL? = nil,
                             onPhase: @escaping @Sendable (Phase) -> Void = { _ in }) -> ServerLifecycle {
         ServerLifecycle(dependencies: Dependencies(
@@ -341,7 +341,7 @@ extension ServerLifecycle where Owned == LaunchedLocalServer {
                 return try await LocalServerDiscovery.discover(home: home)
             },
             launch: {
-                let server = try await LocalServerLauncher.launch(try configuration(), identity: identity, credentials: credentials)
+                let server = try await LocalServerLauncher.launch(try await configuration(), identity: identity, credentials: credentials)
                 if let ownerRecord { LocalServerLauncher.recordOwnership(of: server, at: ownerRecord) }
                 return server
             },

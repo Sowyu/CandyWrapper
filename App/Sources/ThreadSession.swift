@@ -1004,7 +1004,6 @@ final class ThreadController {
         switch offer {
         case .update?: action = state.isFailed ? "Retry" : "Update"
         case .manual(let manual)?: action = manual.label
-        case .ownServer?: guidance = ServerUpdateCopy.ownServerGuidance
         case .desktopManual?, nil: break
         }
         if guidance == nil, let cap = caps.selfUpdate, cap != .desktopManaged || !caps.desktopAppUpdate { guidance = ServerUpdateCopy.guidance(cap) }

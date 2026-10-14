@@ -290,7 +290,7 @@ final class SettingsController {
                 switch updates.offer(id, serverLabel: "\(r.label) server") {
                 case .update?: updateAction = .update(update.isFailed ? "Retry update" : "Update", enabled: updates.canUpdate(id))
                 case .manual(let manual)?: updateAction = .copy(manual)
-                case .desktopManual?, .ownServer?: updateAction = .desktopManual
+                case .desktopManual?: updateAction = .desktopManual
                 case nil: break
                 }
             }

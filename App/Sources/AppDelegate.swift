@@ -189,6 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.serverUpdates.toasts = { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts }
         threads.serverUpdates.window = { [weak window] in window }
         threads.serverUpdates.isOwnServer = { [weak self] id in self?.server?.ownsLocalServer(id) == true }
+        threads.serverUpdates.updateOwnServer = { [weak self] target, stage in
+            guard let server = self?.server else { throw CancellationError() }
+            try await server.updateOwnRuntime(to: target, onStage: stage)
+        }
         // The desktop bridge's ChatGPT callback (providerAuth.ts:16-47): the window comes forward once the browser returns.
         settings.pageContext.receiveProviderAuthCallback = { [weak self] url in
             guard let self else { throw CancellationError() }
@@ -577,6 +581,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let server = ServerController(environments: environments, window: window)
+        // The first start on a Mac without T3 Code installs CandyWrapper's own runtime; a toast shows how far it got.
+        var installToast: (id: Int, view: ToastView)?
+        server.onInstallProgress = { [weak self] version, progress in
+            guard let toasts = self?.threads?.panel.toasts else { return }
+            guard let progress else {
+                if let t = installToast { toasts.dismiss(t.id) }
+                installToast = nil
+                return
+            }
+            let title = "Installing T3 Code \(version)"
+            let message: String = switch progress {
+            case .downloading(let received, let total?): "Downloading \(received / 1_000_000) of \(total / 1_000_000) MB…"
+            case .downloading: "Downloading…"
+            case .verifying: "Checking the download…"
+            case .extracting: "Unpacking…"
+            }
+            if let t = installToast { t.view.setText(title: title, message: message); return }
+            let view = ToastView(title: title, message: message, kind: .loading)
+            installToast = (toasts.show(view, timeout: 0), view)
+        }
         server.start()
         self.server = server
         environments.restoreSaved()
