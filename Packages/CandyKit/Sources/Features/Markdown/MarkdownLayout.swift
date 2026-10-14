@@ -730,12 +730,19 @@ private struct Builder {
         return box
     }
 
-    // MARK: Code blocks
+    /// A code block's text with its token colors. Neither depends on the width or the appearance (the colors are
+    /// dynamic), so long blocks keep theirs: a window resize or reopening the thread lays out again without lexing
+    /// again. Lexing an 18,000 line block took 0.1 s of every layout.
+    // ponytail: the last 16 blocks of 2,000 UTF-16 units or more; key by something cheaper than the text if it shows in profiles
+    @MainActor private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
+    @MainActor private static var coloredCodeOrder: [ColoredCodeKey] = []
+    struct ColoredCodeKey: Hashable { var code: String; var language: String; var font: NSFont }
 
     @MainActor
-    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool) -> Box {
-        let p = MarkdownStyle.codePadding
-        let font = DSFont.mono(MarkdownStyle.codeFontSize)
+    static func coloredCode(_ code: String, language: String, font: NSFont) -> NSAttributedString {
+        let cached = code.utf16.count >= 2_000
+        let key = ColoredCodeKey(code: code, language: language, font: font)
+        if cached, let hit = coloredCodeCache[key] { return hit }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineBreakStrategy = []
@@ -751,6 +758,21 @@ private struct Builder {
             string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
             if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
         }
+        guard cached else { return string }
+        let frozen = string.copy() as! NSAttributedString
+        coloredCodeCache[key] = frozen
+        coloredCodeOrder.append(key)
+        if coloredCodeOrder.count > 16 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
+        return frozen
+    }
+
+    // MARK: Code blocks
+
+    @MainActor
+    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool) -> Box {
+        let p = MarkdownStyle.codePadding
+        let font = DSFont.mono(MarkdownStyle.codeFontSize)
+        let string = Self.coloredCode(code, language: language, font: font)
         let inner = width - 2 - 2 * p.x
         let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
         // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
