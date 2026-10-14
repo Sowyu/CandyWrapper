@@ -132,4 +132,51 @@ struct ToolOutputFetchTests {
         let settled = view.height(forWidth: 600)
         #expect(abs(slot - settled - (256 - 162)) < 0.01, "slot \(slot), settled \(settled)")
     }
+
+    /// A Claude Read of an image outside the workspace: the result's own image shows once, and the file preview,
+    /// whose path may be gone by now, neither fetches nor leaves an "Image unavailable" card.
+    @Test func aReadImageShowsTheResultImageOnce() throws {
+        let path = "/tmp/pwshot-\(UUID().uuidString)/8-ground.png"
+        let at = "2026-10-14T10:00:00.000Z"
+        let item = try TurnItem(json: .object([
+            "id": .string("read-1"), "threadId": .string("t"), "type": .string("dynamic_tool"), "toolName": .string("Read"),
+            "input": .object(["file_path": .string(path)]), "outputOmitted": .bool(true), "ordinal": .number(1),
+            "status": .string("completed"), "startedAt": .string(at), "updatedAt": .string(at),
+        ]))
+        let row = ProjectedTurnItem(local: item)
+        let e = WorkLogEntry(id: "r", createdAt: T3Timestamp(at), label: "Read", detail: path, tone: .tool, viewedImagePath: path,
+                             requestKind: "file-read", itemType: .dynamicTool, projectedItem: row)
+        let root = "/Users/me/project"
+        func kinds(_ output: ToolOutputState?) -> [WorkDetail.Kind] {
+            WorkDetail.of(e, label: "Read", workspaceRoot: root, output: output).blocks.map(\.kind)
+        }
+        let file = WorkDetail.Kind.image(.file(path, workspaceRoot: root))
+        let result = WorkDetail.Kind.image(.toolOutput(.init(threadId: row.sourceThreadId, itemId: row.sourceItemId, index: 0)))
+        // Closed or loading: nothing fetches the file while the result may still carry the image.
+        #expect(!kinds(nil).contains(file))
+        #expect(!kinds(.loading).contains(file))
+        // The fetched item as the server answers it: Anthropic content with the image's bytes (the user's
+        // case), or the 2861 sandbox's file summary without them.
+        func fetched(_ output: JSONValue) throws -> ToolOutputState {
+            guard case .object(var o) = item.raw else { throw CancellationError() }
+            o["outputOmitted"] = .bool(false); o["output"] = output
+            return .fetched(TurnItemDetail.resolve(GetTurnItemResult(item: try TurnItem(json: .object(o))), wireType: .dynamicTool))
+        }
+        let withBytes = try fetched(.array([
+            .object(["type": .string("text"), "text": .string(path)]),
+            .object(["type": .string("image"), "source": .object(["type": .string("base64"), "media_type": .string("image/png"), "data": .string("iVBORw0KGgo=")])]),
+        ]))
+        let summary = try fetched(.object(["type": .string("image"), "file": .object(["type": .string("image/png"), "sizeBytes": .number(51712)])]))
+        // The result carries it: one image, the result's.
+        #expect(kinds(withBytes).filter { if case .image = $0 { true } else { false } } == [result])
+        // A result without the bytes falls back to the file, as T3 does, and a file that failed takes no space.
+        #expect(kinds(summary).first == file)
+        #expect(kinds(.fetched(.output(path))).first == file)
+        MarkdownImages.failed.insert("media-file:" + path)
+        defer { MarkdownImages.failed.remove("media-file:" + path) }
+        #expect(!kinds(.fetched(.output(path))).contains(file))
+        let view = WorkDetailView()
+        view.detail = WorkDetail.of(e, label: "Read", workspaceRoot: root, output: .fetched(.output(path)))
+        #expect(view.height(forWidth: 600) < 60)
+    }
 }
