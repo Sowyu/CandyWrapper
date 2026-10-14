@@ -173,6 +173,13 @@ struct GlassNativeTests {
         #expect(abs(content.bounds.width - content.frame.width / 1.2) < 0.01)
         NSView().addSubview(content)
         #expect(content.bounds.size == content.frame.size)
+        // The swap, Settings and the utility pages take content out through the setter.
+        let page = NSView()
+        column.content = page
+        column.layoutSubtreeIfNeeded()
+        #expect(page.bounds.size != page.frame.size)
+        column.content = nil
+        #expect(page.bounds.size == page.frame.size)
     }
 
     /// Classic's header keeps its panel toggles hidden while no thread shows, through layouts and a round trip
