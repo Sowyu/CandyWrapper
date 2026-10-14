@@ -403,6 +403,20 @@ public enum ThreadRelationships {
         /// "Lineage" or "Lineage · N running".
         public var title: String { runningCount > 0 ? "Lineage · \(runningCount) running" : "Lineage" }
         public init() {}
+
+        #if DEBUG
+        /// `count` settled subagent rows under "Previous agents", for checking a long Lineage on screen without
+        /// real turns (`CANDY_FAKE_LINEAGE=<count>` in a Debug app).
+        public static func syntheticPrevious(_ count: Int, current: ThreadId) -> [Row] {
+            (1...max(1, count)).map { i in
+                let id = ThreadId("synthetic-agent-\(i)")
+                let edge = ThreadRelationshipEdge(sourceThreadId: current, targetThreadId: id, kind: .subagent, status: "completed")
+                return Row(threadId: id, edge: edge, status: "idle", isParent: false, isSubagent: true, isMergeTarget: false,
+                           missing: false, title: "Synthetic agent \(i): check the details card scrolls", agent: nil, child: nil,
+                           relationship: "Subagent")
+            }
+        }
+        #endif
     }
 
     /// `relationshipLabel` (:156-162).

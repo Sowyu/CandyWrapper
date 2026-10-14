@@ -56,12 +56,12 @@ struct NightlyCompatFeaturesTests {
         v.provider = { _ in ("claudeAgent", "Claude") }
         v.lineage = lineage
         let folded = v.preferredHeight
-        let rowView = try #require(v.subviews.compactMap { $0 as? ThreadLineageRowView }.first)
+        let rowView = try #require(ThreadDetailsScrollTests.views(ThreadLineageRowView.self, in: v).first)
         let disclosure = try #require(rowView.disclosure)
         disclosure.action?()
         // Two phase headers, the running phase's two members open, the failed phase closed.
         #expect(v.preferredHeight == folded + 32 * 4)
-        #expect(v.subviews.compactMap { $0 as? ThreadLineageWorkflowMemberView }.map(\.member.title) == ["Scan sources", "Scan tests"])
+        #expect(ThreadDetailsScrollTests.views(ThreadLineageWorkflowMemberView.self, in: v).map(\.member.title) == ["Scan sources", "Scan tests"])
         v.frame = NSRect(x: 0, y: 0, width: 280, height: v.preferredHeight)
         v.layoutSubtreeIfNeeded()
         let image = Snapshot.image(of: v, size: v.frame.size, dark: true)
