@@ -11,7 +11,10 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-Nothing is open. Glass Native (Experimental) is done: all six phases, two bug hunt rounds, a familiarity pass and two code reviews (`docs/glass-native.md`, Status). It shipped in v1.1.0.
+1. Glass theme, classic not native: every surface frosted glass, premium, with readable contrast at every opacity. Asked 2026-10-14. (taken 2026-10-14)
+2. An update button for T3 servers that need updates, T3's `ServerUpdateAction` flow. Asked 2026-10-14. (taken 2026-10-14)
+
+Glass Native (Experimental) is done and shipped in v1.1.0 (`docs/glass-native.md`, Status).
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
