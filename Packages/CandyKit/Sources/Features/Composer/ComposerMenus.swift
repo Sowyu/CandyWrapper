@@ -40,6 +40,10 @@ public enum ComposerTriggers {
         var tokenStart = cursor
         while tokenStart > 0, !isWhitespace(ns.character(at: tokenStart - 1)) { tokenStart -= 1 }
         let token = ns.substring(with: NSRange(location: tokenStart, length: cursor - tokenStart))
+        // A `/` token mid-message searches commands and skills too (composer-logic.ts, T3 3105 a01c48f86).
+        if token.hasPrefix("/") {
+            return ComposerTrigger(kind: .slashCommand, query: String(token.dropFirst()), rangeStart: tokenStart, rangeEnd: cursor)
+        }
         if token.hasPrefix("#"), matches(pullRequestToken, token) {
             return ComposerTrigger(kind: .pullRequest, query: String(token.dropFirst()), rangeStart: tokenStart, rangeEnd: cursor)
         }

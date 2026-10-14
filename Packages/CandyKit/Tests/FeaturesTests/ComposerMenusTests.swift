@@ -13,6 +13,8 @@ struct ComposerMenusTests {
         #expect(ComposerTriggers.detect("/mo", cursor: 3) == ComposerTrigger(kind: .slashCommand, query: "mo", rangeStart: 0, rangeEnd: 3))
         #expect(ComposerTriggers.detect("hi\n/", cursor: 4) == ComposerTrigger(kind: .slashCommand, query: "", rangeStart: 3, rangeEnd: 4))
         #expect(ComposerTriggers.detect("/model x", cursor: 8) == nil)
+        // 3105 a01c48f86: a `/` token mid-message opens the command and skill menu.
+        #expect(ComposerTriggers.detect("please /rev", cursor: 11) == ComposerTrigger(kind: .slashCommand, query: "rev", rangeStart: 7, rangeEnd: 11))
         #expect(ComposerTriggers.detect("see @src/Ch", cursor: 11) == ComposerTrigger(kind: .path, query: "src/Ch", rangeStart: 4, rangeEnd: 11))
         #expect(ComposerTriggers.detect("use $ui", cursor: 7) == ComposerTrigger(kind: .skill, query: "ui", rangeStart: 4, rangeEnd: 7))
         #expect(ComposerTriggers.detect("use €ui", cursor: 7)?.kind == .skill)

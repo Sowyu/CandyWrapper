@@ -1251,6 +1251,7 @@ final class ComposerController {
             composer.pending = .approval
         } else if let input = requests.activeUserInput {
             let question = panel.questionPanel
+            question.markdownCwd = menuCwd
             question.configure(input, threadId: threadId.localId)
             question.isResponding = responding.contains(input.requestId)
             if questionRequestId == nil {

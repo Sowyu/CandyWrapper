@@ -62,7 +62,11 @@ public final class QuestionPanelView: ComposerBannerView {
 
     private let body = DSView()
     private lazy var scroll = ScrollAreaView(documentView: body, scrollFade: true)
-    private let questionText = glassBlock(font: DSFont.ui(14), color: Themed.color(\.foreground, 0.85), lineHeight: 20)
+    /// The question as chat Markdown, links clickable (`ChatMarkdown` with `text-foreground/85`, T3 3105 85272eeea).
+    private let questionText: MarkdownView = { let m = MarkdownView(frame: .zero); m.bodyColor = Themed.color(\.foreground, 0.85); return m }()
+    /// Resolves file links in the question (`gitCwd`).
+    public var markdownCwd: String? { didSet { questionText.cwd = markdownCwd } }
+    private var questionSource = ""
     private let multiHint = glassLabel("Select one or more options.", font: DSFont.ui(12), color: Themed.color(\.secondaryLabel), lineHeight: 16)
     private var rows: [OptionRow] = []
 
@@ -219,7 +223,7 @@ public final class QuestionPanelView: ComposerBannerView {
         dismiss.isEnabled = !isResponding
         scroll.isHidden = collapsed
 
-        questionText.text = question.question
+        if question.question != questionSource { questionSource = question.question; questionText.document = MarkdownDocument(parsing: question.question) }
         multiHint.isHidden = !question.multiSelect
         while rows.count < question.options.count {
             let row = OptionRow()
