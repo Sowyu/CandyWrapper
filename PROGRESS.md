@@ -13,10 +13,6 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 1. Remove Glass Native (Experimental), the user's call on 2026-10-14. (taken 2026-10-14)
 2. Classic Glass gets a pre-blurred wallpaper layer in place of the live blur, the user's Origin technique (`docs/decisions.md`). (taken 2026-10-14)
-1. Done 2026-10-14: classic Glass is frosted on every surface, with readable contrast at every opacity (`docs/design.md`, Glass). Approval and question cards and toasts weren't checked on screen.
-2. Done 2026-10-14: the server update button (T3's flow, hosts too old to connect, Disconnect), and CandyWrapper installs and updates its own T3 runtime (`docs/decisions.md`). Open question for the user: a notice when an older official T3 Code app is installed next to a newer runtime.
-
-Glass Native (Experimental) is done and shipped in v1.1.0 (`docs/glass-native.md`, Status).
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
 
@@ -26,6 +22,7 @@ The code also marks 267 known shortcuts with `// ponytail:`, each naming when to
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
+- Whether Settings should note an older official T3 Code app installed next to CandyWrapper's newer T3 runtime (asked 2026-10-14).
 
 ## Different from T3 on purpose
 
