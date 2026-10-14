@@ -357,8 +357,13 @@ final class ServerController {
             backup?.discard()
             connect()
         } catch {
-            // `launch` stops a server that fails to start, so nothing has the database open here.
-            let restored = await Task.detached { (try? backup?.restore()) != nil }.value
+            // `launch` stops a server that fails to start. Another server may have taken the home meanwhile
+            // (a discovery error): its owner lock says so, and then the database stays as it is.
+            let home = self.home
+            let restored = await Task.detached { () -> Bool in
+                guard LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) else { return false }
+                return (try? backup?.restore()) != nil
+            }.value
             backup?.discard()
             if let previous { try? Self.store.activate(previous) }
             connect()

@@ -82,7 +82,7 @@ public enum LocalServerDiscovery {
 
     /// The runtime file names a live process. A pid that an unrelated, newer process took over
     /// after a crash (the file outlives a killed server) doesn't count.
-    static func runtimeProcessAlive(home: URL) -> Bool {
+    public static func runtimeProcessAlive(home: URL) -> Bool {
         guard let data = try? Data(contentsOf: runtimeStateURL(home: home)),
               let runtime = try? parseRuntimeState(data), isProcessAlive(runtime.pid)
         else { return false }
