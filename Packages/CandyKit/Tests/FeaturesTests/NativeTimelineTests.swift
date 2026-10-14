@@ -138,4 +138,26 @@ struct NativeTimelineTests {
         crumb.show(page: "Settings")
         #expect(texts() == ["Settings"])
     }
+
+    /// The crumbs end at the right panel's edge, and clamp again when the sidebar moves them.
+    @Test func theBreadcrumbClampFollowsTheSidebar() {
+        let header = ThreadHeaderView(frame: .zero)
+        header.projectTitle = "demo-repo"
+        header.threadTitle = String(repeating: "A long thread title ", count: 20)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 100), styleMask: [.borderless], backing: .buffered, defer: false)
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 100))
+        window.contentView = holder
+        // The toolbar's item row, which the sidebar's edge moves.
+        let row = NSView(frame: NSRect(x: 140, y: 0, width: 900, height: 28))
+        holder.addSubview(row)
+        let crumb = NativeBreadcrumbView(header: header)
+        row.addSubview(crumb)
+        crumb.trailingEdge = 664
+        #expect(abs(crumb.frame.width - (664 - 140 - 16)) < 0.5)
+        // The sidebar opens: the breadcrumb moves right, the panel's edge stays.
+        row.setFrameOrigin(NSPoint(x: 260, y: 0))
+        crumb.refreshClamp()
+        #expect(abs(crumb.frame.width - (664 - 260 - 16)) < 0.5)
+        window.contentView = nil
+    }
 }
