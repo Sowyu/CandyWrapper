@@ -5,7 +5,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## State on 2026-10-14
 
 - Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`). Its side-by-side half was dropped on 2026-10-13 after keyboard shortcuts and part of the thread view.
-- The latest release is v1.1.0 (build 18), published 2026-10-14, which adds Glass Native (Experimental). v1.0.0 (build 17), the first full release, came out 2026-10-13. The user runs it daily on their MacBook and reports what they see.
+- The latest release is v1.2.0 (build 19), published 2026-10-14: frosted Glass, server updates, CandyWrapper's own T3 runtime, cached images. v1.1.0 (build 18) added Glass Native (Experimental) the same day. v1.0.0 (build 17), the first full release, came out 2026-10-13. The user runs it daily on their MacBook and reports what they see.
 - The app works with T3 servers 0.0.46-nightly.20261009.2861 (pinned in `T3_VERSION`) and 20261011.2994. Its UI is caught up with 2861, plus the 2994 features listed in `docs/research/nightly-diff-2994.md` part 2 items 1, 2, 5, 6, 8 and 9 (done 2026-10-13).
 - A scheduled T3 task runs `docs/nightly-catch-up.md` around 2am Melbourne time on Monday and Thursday mornings, in a new thread each time.
 
