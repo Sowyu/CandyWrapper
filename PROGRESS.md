@@ -11,7 +11,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-1. Glass Native (Experimental): phases 1 to 3 and the design polish are done (`docs/glass-native.md`). Left, in order:
+1. Glass Native (Experimental): phases 1 to 3, the design polish, phase 5 and the perf fixes are done (`docs/glass-native.md`). Left, in order:
    - Phase 6: a bug hunt over every action in native mode next to classic, and a familiarity pass against T3 desktop. (taken 2026-10-14)
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
