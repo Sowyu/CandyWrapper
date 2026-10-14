@@ -13,7 +13,6 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 1. Glass Native (Experimental): phases 1 to 3 and the design polish are done (`docs/glass-native.md`). Left, in order:
    - Phase 5a: native menus throughout and the glass command palette, in T3 desktop's layout, plus the composer's low contrast in dark mode. (taken 2026-10-14)
-   - Phase 5b: the right panel's surfaces (Files, Git, Diff, pull request files), the terminal drawer and the details card in T3 desktop's layout. (taken 2026-10-14)
    - Phase 6: a bug hunt over every action in native mode next to classic, and a familiarity pass against T3 desktop.
 
 The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`docs/decisions.md`).
