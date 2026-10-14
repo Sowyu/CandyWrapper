@@ -267,10 +267,17 @@ public final class SidebarContainerView: DSView {
 
     public override func layout() {
         super.layout()
-        // Inner fills the padding box; the border sits on the right 1px.
-        surface.frame = NSRect(x: 0, y: 0, width: bounds.width - 1, height: bounds.height)
+        // Inner fills the padding box; the border sits on the right 1px. Under Glass the frost runs under the border
+        // too, or that column showed the bare, saturated wallpaper as a bright line.
+        let box = NSRect(x: 0, y: 0, width: bounds.width - 1, height: bounds.height)
+        surface.frame = WindowGlass.isActive(for: self) ? bounds : box
         border.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
-        content?.frame = surface.frame
+        content?.frame = box
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
     }
 
     public override func updateLayer() {
