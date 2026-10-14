@@ -1,0 +1,10 @@
+#!/bin/zsh
+# Waits while the user's Origin energy harness holds the screen lock as origin-run, since a build, test,
+# perf run or app launch in that window spoils its measurement. Exits at once when the lock is anything else.
+# scripts/preflight, scripts/test, scripts/run-app and scripts/perf-review call it.
+# ponytail: fixed 15 minute cap, raise it if Origin's runs get longer.
+for i in {1..90}; do
+  [[ "$(cut -d' ' -f1 /tmp/cw-screen.lock/owner 2>/dev/null)" == origin-run ]] || exit 0
+  (( i == 1 )) && print -u2 "an Origin energy measurement has the screen: waiting for it, at most 15 minutes"
+  sleep 10
+done

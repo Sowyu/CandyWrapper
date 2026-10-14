@@ -244,6 +244,7 @@ def busy_processes():
 def wait_quiet(label, quiet, max_load, limit=600):
     """Waits until no compile or test process and no other CandyWrapper app runs and the 1-minute load
     average is under max_load, for at most limit seconds. Records the wait in quiet["waits"]."""
+    subprocess.call([os.path.join(REPO, "scripts", "wait-origin")])
     start = time.time()
     load_before = os.getloadavg()[0]
     while True:
