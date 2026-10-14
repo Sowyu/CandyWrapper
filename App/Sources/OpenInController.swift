@@ -99,7 +99,12 @@ final class OpenInController {
         let shortcut = ActiveKeymap.label(for: "editor.openFavorite")
         var items = options.map { option in
             var item = MenuItem(option.label, icon: Self.icon(option.id), shortcut: option.id == preferred ? shortcut : nil,
-                                disabled: cwd == nil) { [weak self] in self?.open(option.id) }
+                                disabled: cwd == nil) { [weak self] in
+                // Picking from the chevron's menu only makes the editor the preferred one; the main button opens it
+                // (OpenInPicker.tsx:340-352, T3 3105 a47decf23).
+                UserDefaults.standard.set(option.id, forKey: OpenInEditors.lastEditorKey)
+                self?.render()
+            }
             item.image = OpenInEditors.image(option.id)
             // `getOpenInIconClass("brand")`: `text-foreground opacity-100`.
             item.iconColor = Themed.color(\.foreground)
