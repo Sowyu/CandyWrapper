@@ -12,7 +12,6 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ## Open tasks
 
 1. Glass Native (Experimental): phases 1 to 3 and the design polish are done (`docs/glass-native.md`). Left, in order:
-   - Build the thread panel's hidden panels on first show, which saves 2.5 MB in every theme. See the "Perf audit" subsection. (taken 2026-10-14)
    - Bring the native sidebar to classic's cost, up to 2.7 MB, and put the candy brand at its top where T3 has its wordmark. (taken 2026-10-14)
    - Phase 5a: native menus throughout and the glass command palette, in T3 desktop's layout, plus the composer's low contrast in dark mode. (taken 2026-10-14)
    - Phase 5b: the right panel's surfaces (Files, Git, Diff, pull request files), the terminal drawer and the details card in T3 desktop's layout. (taken 2026-10-14)
