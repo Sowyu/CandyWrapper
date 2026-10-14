@@ -27,20 +27,26 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var titleCode: Bool
         /// A tooltip on the title (side top).
         public var titleTooltip: String?
+        /// A turning `Spinner` in place of the icon.
+        public var spinner: Bool
+        /// The icon in `text-error`, like the failed server update.
+        public var iconIsError: Bool
         public init(variant: Variant, icon: IconName, title: String, description: String? = nil, actions: [String] = [],
                     dismissLabel: String? = nil, dismissible: Bool? = nil, compact: Bool = false,
                     priority: ComposerBannerStackItem.Priority? = nil, titlePrefix: String? = nil, titleCode: Bool = false,
-                    titleTooltip: String? = nil) {
+                    titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false) {
             self.variant = variant; self.icon = icon; self.title = title; self.description = description
             self.actions = actions; self.dismissLabel = dismissLabel; self.dismissible = dismissible ?? (dismissLabel != nil)
             self.compact = compact; self.priority = priority
             self.titlePrefix = titlePrefix; self.titleCode = titleCode; self.titleTooltip = titleTooltip
+            self.spinner = spinner; self.iconIsError = iconIsError
         }
         /// `aria-label={item.dismissLabel ?? "Dismiss warning"}`.
         public var resolvedDismissLabel: String { dismissLabel ?? "Dismiss warning" }
     }
 
     private var iconView = IconView(name: .info, size: 12)
+    private var spinnerView: SpinnerView?
     private let prefix = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     private let title = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
     private let detail = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
@@ -85,8 +91,18 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         variant = content.variant
         iconView.removeFromSuperview()
         iconView = IconView(name: content.icon, size: 12)
-        iconView.strokeColor = Themed.color(\.mutedForeground)
+        iconView.strokeColor = content.iconIsError ? Themed.base("error") : Themed.color(\.mutedForeground)
+        iconView.isHidden = content.spinner
         addSubview(iconView)
+        if content.spinner {
+            let spinner = spinnerView ?? SpinnerView(size: .xs)
+            spinner.color = Themed.color(\.mutedForeground)
+            if spinner.superview == nil { addSubview(spinner) }
+            spinnerView = spinner
+        } else {
+            spinnerView?.removeFromSuperview()
+            spinnerView = nil
+        }
         prefix.text = content.titlePrefix ?? ""
         prefix.isHidden = content.titlePrefix == nil
         title.text = content.title
@@ -118,6 +134,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         super.layout()
         let rowY: CGFloat = 5
         iconView.frame = NSRect(x: 4 + 6, y: rowY + 6, width: 12, height: 12)
+        spinnerView?.frame = iconView.frame
         var right = bounds.width - 4
         for b in ([dismiss].filter { !$0.isHidden } + buttons.reversed()) {
             let s = b.intrinsicContentSize

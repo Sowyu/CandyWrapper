@@ -138,7 +138,9 @@ extension SettingsController {
     /// "This machine" in T3 desktop's order (ConnectionsSettings.tsx:3613-3734).
     func machineModel(_ id: String, descriptor d: EnvironmentDescriptor?) -> ConnectionsPageModel.Machine {
         let url = environments.routeInUse(id).map(EnvironmentRowStatus.displayURL)
-        let line = [d?.serverVersion, url].compactMap { $0 }.joined(separator: " · ")
+        // The welcome's descriptor follows a restart; the HTTP one is read when Settings opens.
+        let version = serverUpdates?.descriptor(id)?.serverVersion ?? d?.serverVersion
+        let line = [version, url].compactMap { $0 }.joined(separator: " · ")
         let canMaintain = grants(id, AuthScopes.environmentMaintain)
         let canReadRelay = grants(id, AuthScopes.relayRead)
         let canManageRelay = grants(id, AuthScopes.relayWrite)
@@ -148,12 +150,7 @@ extension SettingsController {
                           detail: "Run agents on this computer. Turn off to use T3 Code only with remote environments.",
                           control: .toggle(.init(isOn: true, isEnabled: false, tooltip: Self.bridgeTooltip, label: "Local environment"))))
         if canMaintain {
-            if ServerVersionSkewLogic.serverIsBehind(d?.serverVersion) {
-                rows.append(.init(id: "version", title: "Version", detail: line, status: ServerVersionSkewLogic.hint,
-                    control: .copyCommand(ServerVersionSkewLogic.manualCommand())))
-            } else {
-                rows.append(.version(line.isEmpty ? "Loading…" : line, upToDate: d != nil))
-            }
+            rows.append(versionRow(id, line: line, known: version != nil, label: d?.label ?? environments.label(id)))
             rows.append(networkAccessRow(id))
             rows.append(tailscaleRow())
             if canReadRelay || canManageRelay { rows += cloudRows(canReadRelay: canReadRelay, canManageRelay: canManageRelay) }
@@ -161,6 +158,27 @@ extension SettingsController {
         return ConnectionsPageModel.Machine(label: d?.label ?? environments.label(id) ?? "This machine",
                                             machine: environments.machine(id) ?? d?.platform?.machine ?? "desktop",
                                             rows: rows, permissions: permissions(id, routeContext: false), iconMenu: iconMenu(id))
+    }
+
+    /// The `Version` row (ConnectionsSettings.tsx:3655-3700): the update's progress in place of the version
+    /// line, then "Update to <version>", "Retry update", the manual path, or "Up to date".
+    private func versionRow(_ id: String, line: String, known: Bool, label: String?) -> ConnectionsPageModel.HostRow {
+        let state = serverUpdates?.state(id) ?? .idle
+        let serverLabel = label.map { "\($0) server" } ?? "server"
+        var control: ConnectionsPageModel.HostRow.Control = .none
+        if let updates = serverUpdates, let mismatch = updates.mismatch(id), !state.isRunning {
+            switch updates.offer(id, serverLabel: serverLabel) {
+            case .update?: control = .update(state.isFailed ? "Retry update" : "Update to \(mismatch.client)", enabled: updates.canUpdate(id))
+            case .manual(let manual)?: control = .copyCommand(manual)
+            case .desktopManual?: control = .text(ServerUpdateCopy.desktopManual)
+            case .ownServer?: control = .text(ServerUpdateCopy.ownServerManual)
+            case nil: break
+            }
+        } else if state == .idle, known {
+            control = .text("Up to date")
+        }
+        return .init(id: "version", title: "Version", detail: line.isEmpty ? "Loading…" : line, control: control,
+                     progress: state == .idle ? nil : state)
     }
 
     /// `Network access` from the server's auth policy: `remote-reachable` is on (the desktop bridge's

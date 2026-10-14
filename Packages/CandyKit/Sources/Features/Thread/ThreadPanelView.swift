@@ -364,20 +364,23 @@ public final class ThreadPanelView: DSView {
 
     private let lazyServerUpdateBanner = LazyView { ComposerNoticeBannerView() }
     private var serverUpdateBanner: ComposerNoticeBannerView { lazyServerUpdateBanner.view }
-    /// Fed by the server updater. Hidden views hold no update task or subscription.
-    // ponytail: the M9 updater has no operation state yet; connect its per-environment state here when it lands
+    /// Fed by the app's server updater for the open thread's environment. Hidden views hold no update
+    /// task or subscription.
     public var serverUpdateNotice: ComposerServerUpdateNotice? {
         didSet {
             guard serverUpdateNotice != oldValue else { return }
             if let notice = serverUpdateNotice {
                 serverUpdateBanner.apply(notice.content)
-                serverUpdateBanner.toolTip = notice.title + ": " + notice.detail
-                // The failed notice's X ("Dismiss update notice", ChatView.tsx:3209-3220).
-                serverUpdateBanner.onAction = { [weak self] index in if index == nil { self?.serverUpdateNotice = nil } }
+                serverUpdateBanner.disabledActions = notice.actionEnabled ? [] : [0]
+                // `ComposerServerUpdateStatus`'s tooltip; "available" has its own on the title.
+                if case .available = notice.status { serverUpdateBanner.toolTip = nil } else { serverUpdateBanner.toolTip = notice.title + ": " + notice.detail }
+                serverUpdateBanner.onAction = { [weak self] index in self?.onServerUpdateAction?(index) }
             }
             needsLayout = true
         }
     }
+    /// The notice's button (0), or its X (nil, "Dismiss update notice", ChatView.tsx:3209-3220).
+    public var onServerUpdateAction: ((Int?) -> Void)?
     public var showsNoticeBanner = false { didSet { if showsNoticeBanner != oldValue { needsLayout = true } } }
     /// The `/usage-limits` result, a notice in the banner stack. Its X plays the stack's exit, then clears it.
     public var usageLimitsBanner: UsageLimitsBannerView? {

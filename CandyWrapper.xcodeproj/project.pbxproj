@@ -18,6 +18,7 @@
 		3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */; };
 		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
 		46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FB4EFB4DBDAF423D7789DC /* GitController.swift */; };
+		472C78A43764067DA610C34E /* ServerUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */; };
 		4F0A678A7750FE0672129144 /* notification-completion.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */; };
 		50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21423E229A8AD862537E9ECA /* SettingsController.swift */; };
 		5268E62A48D11E088745C629 /* SidebarCheckoutStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C298150579592D845F630EC /* SidebarCheckoutStatus.swift */; };
@@ -97,6 +98,7 @@
 		A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
 		B0CD423A5F4F3C45815E791C /* NativeMainPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMainPresentation.swift; sourceTree = "<group>"; };
 		B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserController.swift; sourceTree = "<group>"; };
+		BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerUpdates.swift; sourceTree = "<group>"; };
 		BBB0D6148904169BEA6E6F1B /* UpdateUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateUI.swift; sourceTree = "<group>"; };
 		C28281CD4D81D6A990C1B210 /* ThreadSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadSession.swift; sourceTree = "<group>"; };
 		C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectScriptsController.swift; sourceTree = "<group>"; };
@@ -181,6 +183,7 @@
 				67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */,
 				CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */,
 				CDA413FF2F602E6306049C36 /* ServerController.swift */,
+				BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */,
 				21423E229A8AD862537E9ECA /* SettingsController.swift */,
 				E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */,
 				A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */,
@@ -363,6 +366,7 @@
 				A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */,
 				844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */,
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,
+				472C78A43764067DA610C34E /* ServerUpdates.swift in Sources */,
 				50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */,
 				66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */,
 				86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */,

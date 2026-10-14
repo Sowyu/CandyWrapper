@@ -25,7 +25,10 @@ extension ConnectionsPageModel {
             case toggle(HostSwitch)
             /// Muted `text-xs`, like `Up to date`.
             case text(String)
-            case copyCommand(String)
+            /// The manual update: copy the command, then T3's toast.
+            case copyCommand(ServerUpdateCopy.Manual)
+            /// `ServerUpdateAction size="sm"`: "Update to <version>" or "Retry update".
+            case update(String, enabled: Bool)
         }
         public var id: String
         public var title: String
@@ -33,8 +36,12 @@ extension ConnectionsPageModel {
         public var status: String?
         public var statusIsError: Bool
         public var control: Control
-        public init(id: String, title: String, detail: String? = nil, status: String? = nil, statusIsError: Bool = false, control: Control = .none) {
+        /// `ServerUpdateProgress` in place of the description while an update runs or after it failed.
+        public var progress: ServerUpdateState?
+        public init(id: String, title: String, detail: String? = nil, status: String? = nil, statusIsError: Bool = false, control: Control = .none,
+                    progress: ServerUpdateState? = nil) {
             self.id = id; self.title = title; self.detail = detail; self.status = status; self.statusIsError = statusIsError; self.control = control
+            self.progress = progress
         }
 
         /// The `Version` row: `<version> · <url>` and `Up to date`.

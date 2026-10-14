@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 /// What Settings > Connections shows. The app fills it from its environments; strings are final.
 public struct ConnectionsPageModel: Equatable {
@@ -50,6 +51,10 @@ public struct ConnectionsPageModel: Equatable {
         /// The `Permissions` disclosure's panel (`SessionPermissions` with `routeContext`).
         public var permissions: Permissions
         public var iconMenu: IconMenu?
+        /// `ServerUpdateAction appearance="icon"` before the switch, for a connected machine behind this client.
+        public var updateAction: UpdateAction?
+        /// `ServerUpdateProgress` under the subtitle while an update runs or after it failed.
+        public var updateProgress: ServerUpdateState = .idle
         public init(id: String, label: String, machine: String, enabled: Bool, unsupported: Bool = false, subtitle: String,
                     statusIsError: Bool, tooltip: String, routes: [Route], traceId: String? = nil, mcpURL: String? = nil, removing: Bool = false,
                     permissions: Permissions = Permissions(routeContext: true, grants: nil), iconMenu: IconMenu? = nil) {
@@ -103,6 +108,17 @@ public struct ConnectionsPageModel: Equatable {
     public var cloud: Cloud = .idle
     /// Load balancing, with two or more machines switched on.
     public var loadBalancing: LoadBalancing?
+    /// `ServerUpdatesAction` ("Update all") in the Environments header: some machine can take a remote update.
+    public var canUpdateAll = false
+
+    /// A saved machine's update control.
+    public enum UpdateAction: Equatable {
+        /// The circle-arrow-up button with "Update" or "Retry update" as its tooltip.
+        case update(String, enabled: Bool)
+        case copy(ServerUpdateCopy.Manual)
+        /// A desktop app too old for the remote trigger: only the instruction.
+        case desktopManual
+    }
 
     public init(thisMachine: Machine? = nil, environments: [Environment] = [], cloudEnabled: Bool = true) {
         self.thisMachine = thisMachine; self.environments = environments; self.cloudEnabled = cloudEnabled
@@ -149,6 +165,9 @@ public struct ConnectionsActions {
     /// Load balancing switched on or off, and one machine's preference weight.
     public var setLoadBalancing: (Bool) -> Void = { _ in }
     public var setLoadPreference: (String, Int) -> Void = { _, _ in }
+    /// A machine's "Update" (`ServerUpdateAction`) by environment id, and "Update all".
+    public var updateServer: (String) -> Void = { _ in }
+    public var updateAll: () -> Void = {}
     public init() {}
 }
 
@@ -190,6 +209,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private var openPermissions: Set<String> = []
     private let environmentsSection: SettingsSectionView
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
+    /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
+    let updateAllButton = ButtonView("Update all", variant: .ghostMuted, size: .xs)
+    private let headerButtons = HeaderButtonsView()
     private var rows: [String: EnvironmentRowView] = [:]
     private var openRoutes: Set<String> = []
     private var empty: (message: String, view: EmptyView)?
@@ -209,7 +231,10 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             tip?.hide()
             self?.actions.addEnvironment()
         }
-        environmentsSection.headerAction = addButton
+        updateAllButton.action = { [weak self] in self?.actions.updateAll() }
+        updateAllButton.isHidden = true
+        headerButtons.buttons = [updateAllButton, addButton]
+        environmentsSection.headerAction = headerButtons
         addSubview(environmentsSection)
         set(model)
     }
@@ -268,6 +293,11 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             groupRows.append(row)
         }
         rows = next
+        if updateAllButton.isHidden == model.canUpdateAll {
+            updateAllButton.isHidden = !model.canUpdateAll
+            headerButtons.invalidateIntrinsicContentSize()
+            environmentsSection.needsLayout = true
+        }
         openRoutes = openRoutes.filter { next[$0] != nil }
         openPermissions = openPermissions.filter { next[$0] != nil }
         // The T3 Connect rows (`CloudRemoteEnvironmentRows`) follow the saved ones. With nothing saved
@@ -318,7 +348,15 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
 
     private func configure(_ row: SettingsRowView, _ r: ConnectionsPageModel.HostRow) {
         row.title = r.title
-        row.detail = r.detail
+        if let progress = r.progress, progress != .idle {
+            let view = (row.detailView as? ServerUpdateProgressView) ?? ServerUpdateProgressView(frame: NSRect(x: 0, y: 0, width: 0, height: 16))
+            view.state = progress
+            row.detail = nil
+            if row.detailView !== view { row.detailView = view }
+        } else {
+            if row.detailView is ServerUpdateProgressView { row.detailView = nil }
+            row.detail = r.detail
+        }
         row.status = r.status
         row.statusIsError = r.statusIsError
         switch r.control {
@@ -330,10 +368,18 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             label.text = text
             label.frame.size = NSSize(width: ceil(label.textWidth) + 1, height: 16)
             if row.control !== label { row.control = label }
-        case .copyCommand(let command):
-            let button = ButtonView("Copy relaunch command", variant: .outline, size: .xs)
-            button.action = { [weak self] in self?.actions.copy(command, "Relaunch command copied", "Stop t3 on that machine, then relaunch with the same subcommand and options.") }
+        case .copyCommand(let manual):
+            let button = ButtonView(manual.label, variant: .outline, size: .sm)
+            button.action = { [weak self] in self?.actions.copy(manual.command, manual.toastTitle, manual.toastDescription) }
             row.control = button
+        case .update(let label, let enabled):
+            let button = (row.control as? ButtonView).flatMap { $0.title == label ? $0 : nil } ?? ButtonView(label, variant: .outline, size: .sm)
+            button.action = { [weak self] in
+                guard let self, let id = self.primaryId else { return }
+                self.actions.updateServer(id)
+            }
+            button.isEnabled = enabled
+            if row.control !== button { row.control = button }
         case .toggle(let s):
             let view = (row.control as? HostSwitchView) ?? HostSwitchView()
             view.configure(s)
@@ -356,6 +402,10 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         row.onReorder = { [weak self] urls in self?.actions.reorderRoutes(id, urls) }
         row.onSwitch = { [weak self] on in self?.actions.setEnabled(id, on) }
         row.onAddRoute = { [weak self] in self?.actions.addRoute(id) }
+        row.onUpdate = { [weak self] in
+            guard let self, let action = self.model.environments.first(where: { $0.id == id })?.updateAction else { return }
+            if case .copy(let manual) = action { self.actions.copy(manual.command, manual.toastTitle, manual.toastDescription) } else { self.actions.updateServer(id) }
+        }
         row.onRemoveRoute = { [weak self] route in self?.actions.removeRoute(id, route) }
         row.menuItems = { [weak self] in
             guard let self, let env = self.model.environments.first(where: { $0.id == id }) else { return [] }
@@ -587,6 +637,19 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     private var statusTip: TooltipController?
     private var switchTip: TooltipController?
     private var isError = false
+    /// `ServerUpdateAction appearance="icon"`: `icon-xs`, `ghost-muted`, a 14pt circle-arrow-up.
+    private lazy var updateButton: ButtonView = {
+        let b = ButtonView(nil, icon: .circleArrowUp, variant: .ghostMuted, size: .iconXs)
+        b.iconSize = 14
+        b.action = { [weak self] in self?.onUpdate?() }
+        updateTip = TooltipController.attach(to: b, text: "")
+        return b
+    }()
+    private var updateTip: TooltipController?
+    private lazy var updateText = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private lazy var progress = ServerUpdateProgressView(frame: NSRect(x: 0, y: 0, width: 0, height: 16))
+    private var showsProgress = false
+    var onUpdate: (() -> Void)?
 
     var routesOpen = false { didSet { routesList.isHidden = !routesOpen; routesButton.isOpen = routesOpen; needsLayout = true } }
     var permissionsOpen = false {
@@ -644,8 +707,44 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         permissions.configure(env.permissions)
         // `opacity-60` on the whole row while switched off.
         alphaValue = env.enabled && !env.unsupported ? 1 : 0.6
+        configureUpdate(env)
         needsLayout = true
     }
+
+    private func configureUpdate(_ env: ConnectionsPageModel.Environment) {
+        switch env.updateAction {
+        case .update(let label, let enabled)?:
+            install(updateButton)
+            updateButton.isEnabled = enabled
+            updateButton.setAccessibilityLabel("\(label) for \(env.label) server")
+            updateTip?.text = label
+            updateText.removeFromSuperview()
+        case .copy(let manual)?:
+            install(updateButton)
+            updateButton.isEnabled = true
+            updateButton.setAccessibilityLabel("\(manual.label) for \(env.label) server")
+            updateTip?.text = manual.label
+            updateText.removeFromSuperview()
+        case .desktopManual?:
+            updateButton.removeFromSuperview()
+            updateText.lineHeight = 16
+            updateText.text = ServerUpdateCopy.desktopManual
+            install(updateText)
+        case nil:
+            updateButton.removeFromSuperview()
+            updateText.removeFromSuperview()
+        }
+        showsProgress = env.updateProgress != .idle
+        if showsProgress {
+            progress.state = env.updateProgress
+            install(progress)
+        } else {
+            progress.state = .idle
+            progress.removeFromSuperview()
+        }
+    }
+
+    private func install(_ view: NSView) { if view.superview !== self { addSubview(view) } }
 
     /// The detail column (`col-span-2 col-start-2`): the text column plus the controls.
     private func detailWidth(_ width: CGFloat) -> CGFloat { max(0, width - 44 - 16) }
@@ -655,8 +754,11 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
 
     /// `px-4 py-2.5`, the 36pt text column; the routes list spans the text and control columns.
     func height(forWidth width: CGFloat) -> CGFloat {
-        10 + 36 + (routesOpen ? routesList.height(forWidth: detailWidth(width)) : 0) + permissionsHeight(width) + 10
+        10 + 36 + progressHeight + (routesOpen ? routesList.height(forWidth: detailWidth(width)) : 0) + permissionsHeight(width) + 10
     }
+
+    /// `below`: `mt-1` and one `text-xs` line.
+    private var progressHeight: CGFloat { showsProgress ? 4 + 16 : 0 }
 
     override func updateLayer() { permissionsRule.backgroundColor = Themed.color(\.border, 0.5).cgColor(in: self) }
 
@@ -668,6 +770,15 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         more.frame = NSRect(x: x, y: 10 + (36 - 24) / 2, width: 24, height: 24)
         x -= 4 + ts.width
         toggle.frame = NSRect(x: x, y: 10 + (36 - ts.height) / 2, width: ts.width, height: ts.height)
+        // The controls column (`flex items-center gap-1`): the update control comes before the switch.
+        if updateButton.superview === self {
+            x -= 4 + 24
+            updateButton.frame = NSRect(x: x, y: 10 + (36 - 24) / 2, width: 24, height: 24)
+        } else if updateText.superview === self {
+            let w = ceil(updateText.textWidth) + 1
+            x -= 4 + w
+            updateText.frame = NSRect(x: x, y: 10 + (36 - 16) / 2, width: w, height: 16)
+        }
         let textRight = x - 12
         glyph.frame = NSRect(x: 16, y: 10 + 10, width: 16, height: 16)
         let textX: CGFloat = 44
@@ -685,6 +796,11 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         permissionsButton.frame = NSRect(x: dot2.frame.maxX + 4, y: 30, width: permW, height: 16)
         let lw = detailWidth(w)
         var y: CGFloat = 46
+        if showsProgress {
+            // `mt-1 max-w-md`.
+            progress.frame = NSRect(x: textX, y: y + 4, width: min(448, textWidth), height: 16)
+            y += progressHeight
+        }
         if routesOpen {
             let h = routesList.height(forWidth: lw)
             routesList.frame = NSRect(x: textX, y: y, width: lw, height: h)
