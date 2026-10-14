@@ -321,7 +321,19 @@ open class ControlView: DSView {
     open override func becomeFirstResponder() -> Bool {
         // `:focus-visible`: show the ring only when focus arrived by keyboard.
         state.focusVisible = NSApp.currentEvent?.type == .keyDown
+        if state.focusVisible { scrollIntoView() }
         return true
+    }
+
+    /// The browser scrolls a control that takes keyboard focus into view, through every scrolling ancestor.
+    private func scrollIntoView() {
+        var view: NSView = self, rect = bounds
+        while let scroll = view.enclosingScrollView {
+            view.scrollToVisible(rect)
+            rect = scroll.convert(rect, from: view).intersection(scroll.bounds)
+            guard !rect.isEmpty else { return }
+            view = scroll
+        }
     }
 
     open override func resignFirstResponder() -> Bool {

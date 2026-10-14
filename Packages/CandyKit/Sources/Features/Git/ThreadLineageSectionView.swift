@@ -276,7 +276,7 @@ final class ThreadLineageRowView: ControlView {
 /// `ThreadRelationshipsPanel` (ThreadRelationshipsControl.tsx:196-579) in the thread details card: a section
 /// titled "Lineage" or "Lineage · N running" with the session menu, then the related rows, the active
 /// subagents, and the settled ones folded under "Previous agents (N)". Each group shows 6 rows, then
-/// "Show N more" adds 12 at a time.
+/// "Show N more" adds 12 at a time, in a list that stops at 13.5rem and scrolls (`ThreadLineageRowList`, :82-114).
 public final class ThreadLineageSectionView: DSView {
     public static let initialCount = 6
     public static let pageCount = 12
@@ -315,10 +315,12 @@ public final class ThreadLineageSectionView: DSView {
     private var phaseAccessories: [ThreadLineageWorkflowPhaseAccessory] = []
     private var rows: [ThreadLineageRowView] = []
     private var showMore: [(button: ThreadLineageShowMoreView, group: String)] = []
+    /// Each group's row list, kept across rebuilds so a pushed update doesn't scroll it back to the top.
+    private var lists: [String: ThreadLineageRowListView] = [:]
+    /// The list `add` and `addWorkflow` fill.
+    private var list: ThreadLineageRowListView?
     /// Each item's view and height, and how far it sits in (`ps-6.5` under an open workflow).
     private var layoutItems: [(view: NSView, height: CGFloat, indent: CGFloat)] = []
-    /// A workflow's phase headers, members and empty line, dropped on every rebuild.
-    private var workflowViews: [NSView] = []
 
     public var isEmpty: Bool { lineage.isEmpty }
 
@@ -354,13 +356,11 @@ public final class ThreadLineageSectionView: DSView {
     }
 
     private func rebuild() {
-        rows.forEach { $0.removeFromSuperview() }
+        lists.values.forEach { $0.removeAll() }
         showMore.forEach { $0.button.removeFromSuperview() }
-        workflowViews.forEach { $0.removeFromSuperview() }
         rows = []
         showMore = []
         layoutItems = []
-        workflowViews = []
         members = []
         phaseAccessories = []
         let turning = turningWorkflow
@@ -373,8 +373,14 @@ public final class ThreadLineageSectionView: DSView {
         let mergeLabel = mergeTargetTitle.map { "Merge back to \($0)" } ?? "Merge back to source conversation"
         let mergeTooltip = lineage.mergeRunId == nil ? "Complete a run in this fork before merging it back"
             : mergeTargetTitle.map { "Merge this conversation back into \($0)" } ?? "Merge this conversation back into its source"
+        var shownLists: Set<String> = []
         func add(_ group: String, _ list: [ThreadRelationships.Lineage.Row]) {
+            guard !list.isEmpty else { return }
             let count = visible[group] ?? Self.initialCount
+            let rowList = lists[group] ?? ThreadLineageRowListView()
+            if lists[group] == nil { lists[group] = rowList; addSubview(rowList) }
+            self.list = rowList
+            shownLists.insert(group)
             for r in list.prefix(count) {
                 let p = r.agent.flatMap { provider?($0.providerInstanceId) } ?? r.child.flatMap { provider?($0.providerInstanceId.rawValue) }
                 let driver = r.agent?.driver.isEmpty == false ? r.agent?.driver : p?.driver
@@ -399,14 +405,14 @@ public final class ThreadLineageSectionView: DSView {
                 } else {
                     v.stop?.action = { [weak self] in self?.onStop?(r.threadId) }
                 }
-                addSubview(v)
+                rowList.add(v, height: 32, indent: 0)
                 if turning == r.threadId { v.setWorkflowExpanded(open) }
                 rows.append(v)
-                layoutItems.append((v, 32, 0))
                 if let workflow = r.workflow, let agent = r.agent, open {
                     addWorkflow(workflow, row: r, coordinator: agent, driver: driver, providerName: p?.name ?? driver ?? "", nowMs: nowMs)
                 }
             }
+            layoutItems.append((rowList, rowList.preferredHeight, 0))
             let hidden = list.count - min(count, list.count)
             if hidden > 0 {
                 let b = ThreadLineageShowMoreView(count: min(hidden, Self.pageCount))
@@ -428,6 +434,11 @@ public final class ThreadLineageSectionView: DSView {
             layoutItems.append((previousHeader, 32, 0))
             if previousExpanded { add("previous", lineage.previous) }
         }
+        for (group, rowList) in lists where !shownLists.contains(group) {
+            rowList.removeFromSuperview()
+            lists[group] = nil
+        }
+        list = nil
         updateTimer()
         restyle()
         needsLayout = true
@@ -443,10 +454,8 @@ public final class ThreadLineageSectionView: DSView {
             let v = ThreadLineageWorkflowMemberView(m, coordinator: coordinator, driver: driver, providerName: providerName,
                                                     available: m.childThreadId.map(available.contains) ?? false, nowMs: nowMs)
             if let child = m.childThreadId { v.action = { [weak self] in self?.onOpen?(child) } }
-            addSubview(v)
-            workflowViews.append(v)
+            list?.add(v, height: 32, indent: 26)
             members.append(v)
-            layoutItems.append((v, 32, 26))
         }
         let phases = workflow.phases.filter { !$0.members.isEmpty }
         for phase in phases {
@@ -457,18 +466,13 @@ public final class ThreadLineageSectionView: DSView {
             header.accessory = accessory
             header.setAccessibilityLabel("\(open ? "Collapse" : "Expand") \(phase.title) phase, \(phase.statusLabel)")
             header.onToggle = { [weak self] on in self?.phaseOpen[key] = on; self?.rebuild() }
-            addSubview(header)
-            workflowViews.append(header)
+            list?.add(header, height: 32, indent: 26)
             phaseAccessories.append(accessory)
-            layoutItems.append((header, 32, 26))
             if open { phase.members.forEach(member) }
         }
         workflow.unphased.forEach(member)
         if phases.isEmpty && workflow.unphased.isEmpty {
-            let empty = ThreadLineageWorkflowEmptyView()
-            addSubview(empty)
-            workflowViews.append(empty)
-            layoutItems.append((empty, 28, 26))
+            list?.add(ThreadLineageWorkflowEmptyView(), height: 28, indent: 26)
         }
     }
 
@@ -570,5 +574,48 @@ final class ThreadLineageShowMoreView: ControlView {
         fill.frame = bounds
         icon.frame = NSRect(x: 10, y: bounds.height / 2 - 8, width: 16, height: 16)
         label.frame = NSRect(x: 36, y: bounds.height / 2 - 10, width: max(0, bounds.width - 46), height: 20)
+    }
+}
+
+/// `ThreadLineageRowList` (ThreadRelationshipsControl.tsx:82-114): a group's rows and open workflows in a
+/// `max-h-[13.5rem] overflow-y-auto overscroll-contain` list, so a long group can't push the rest of the card
+/// out of view. Plain overflow, so Chromium's styled bar rather than ScrollArea's.
+final class ThreadLineageRowListView: DSView {
+    static let maxHeight: CGFloat = 216
+    let area: ScrollAreaView
+    private let document = DSView()
+    private var items: [(view: NSView, height: CGFloat, indent: CGFloat)] = []
+
+    override init(frame frameRect: NSRect) {
+        area = ScrollAreaView(documentView: document, scrollbars: .native)
+        super.init(frame: frameRect)
+        addSubview(area)
+        setAccessibilityRole(.list)
+        setAccessibilityLabel("Related threads")
+    }
+
+    func add(_ view: NSView, height: CGFloat, indent: CGFloat) {
+        document.addSubview(view)
+        items.append((view, height, indent))
+        needsLayout = true
+    }
+
+    func removeAll() {
+        items.forEach { $0.view.removeFromSuperview() }
+        items = []
+    }
+
+    var contentHeight: CGFloat { items.reduce(0) { $0 + $1.height } }
+    var preferredHeight: CGFloat { min(contentHeight, Self.maxHeight) }
+
+    override func layout() {
+        super.layout()
+        area.frame = bounds
+        document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: contentHeight)
+        var y: CGFloat = 0
+        for (v, h, indent) in items {
+            v.frame = NSRect(x: indent, y: y, width: bounds.width - indent, height: h)
+            y += h
+        }
     }
 }

@@ -451,7 +451,7 @@ public final class ThreadDetailsCardView: DSView {
     /// then the rest of its links while expanded, then "Show N more" or "Show less". A row the host
     /// answered for is a `ThreadDetailsPrRowView` (two lines), the rest are `DetailsRowControl`s.
     public var pullRequestRows: [NSView] = [] {
-        didSet { oldValue.forEach { $0.removeFromSuperview() }; pullRequestRows.forEach(addSubview); relayout() }
+        didSet { oldValue.forEach { $0.removeFromSuperview() }; pullRequestRows.forEach(content.addSubview); relayout() }
     }
 
     /// Shows the Version Control section's rows for a repository; false shows "Initialize Git".
@@ -490,17 +490,28 @@ public final class ThreadDetailsCardView: DSView {
     private let automationsDivider = CALayer()
     /// Related threads and subagents (`ThreadRelationshipsPanel`), the last section; it draws its own rule.
     public let lineage = ThreadLineageSectionView()
+    /// The card's rows, inside the 1pt border. A card taller than the space it gets scrolls them under T3's
+    /// overlay bar with the edge fades (`ScrollArea scrollFade` in a `max-h` card, ThreadDetailsCard.tsx:122-135).
+    private let content = DSView()
+    public let scrollArea: ScrollAreaView
 
     public override init(frame frameRect: NSRect) {
+        scrollArea = ScrollAreaView(documentView: content, scrollFade: true)
         super.init(frame: frameRect)
         decoration.host = self
         layer?.addSublayer(decoration)
+        // `overflow-hidden rounded-3xl`: scrolled rows stay inside the border's rounded corners.
+        scrollArea.wantsLayer = true
+        scrollArea.layer?.cornerRadius = Self.innerRadius
+        scrollArea.layer?.masksToBounds = true
+        addSubview(scrollArea)
+        content.wantsLayer = true
         divider.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
-        layer?.addSublayer(divider)
+        content.layer?.addSublayer(divider)
         automationsDivider.actions = divider.actions
-        layer?.addSublayer(automationsDivider)
-        addSubview(automations)
-        addSubview(lineage)
+        content.layer?.addSublayer(automationsDivider)
+        content.addSubview(automations)
+        content.addSubview(lineage)
         lineage.onResize = { [weak self] in self?.relayout() }
         runContext.setAccessibilityLabel("Run context")
         branch.icons = [IconName.gitBranch.definition]
@@ -518,7 +529,7 @@ public final class ThreadDetailsCardView: DSView {
         addScript.isHidden = true
         addScript.icons = [IconName.plus.definition]
         addScript.text = "Add project script"
-        for v in [runContext, openIn, scripts, addScript, branch, gitActions, changes, initGit] as [NSView] { addSubview(v) }
+        for v in [runContext, openIn, scripts, addScript, branch, gitActions, changes, initGit] as [NSView] { content.addSubview(v) }
         // Compact shows the git actions only while one runs or reports success (GitActionsControl.tsx:1824).
         gitActions.primary.onStateChange = { [weak self] in self?.updateRows() }
         setAccessibilityRole(.group)
@@ -593,43 +604,51 @@ public final class ThreadDetailsCardView: DSView {
 
     public override var intrinsicContentSize: NSSize { NSSize(width: Self.width, height: preferredHeight) }
 
+    /// The box's 22pt radius less its 1pt border.
+    static let innerRadius: CGFloat = 21
+
+    /// Rows sit in card coordinates less the 1pt border, which `scrollArea` sits inside.
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        let inner = bounds.width - 2 - 16
-        var y: CGFloat = 1 + 8
+        scrollArea.frame = bounds.insetBy(dx: 1, dy: 1)
+        let width = bounds.width - 2, height = preferredHeight - 2
+        content.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let inner = width - 16
+        var y: CGFloat = 8
         if density == .full {
-            runContext.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            runContext.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32
         }
         if !openIn.isHidden {
-            openIn.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            openIn.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32
         }
         if let row = scriptsView {
-            row.frame = NSRect(x: 9, y: y, width: inner, height: 32)
+            row.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32
         }
         y += 10
         let rows = versionRows
         let separated = density == .full
         divider.isHidden = rows.isEmpty || !showsVersionControl || !separated
-        divider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)
+        divider.frame = CGRect(x: 0, y: y, width: width, height: 1)
         y += (separated ? 1 : 0) + 8
         for row in rows {
             let h = rowHeight(row)
-            row.frame = NSRect(x: 9, y: y, width: inner, height: h)
+            row.frame = NSRect(x: 8, y: y, width: inner, height: h)
             y += h
         }
         let full = density == .full
         let lineageHeight = full ? lineage.preferredHeight : 0
         lineage.isHidden = lineage.isEmpty || !full
-        lineage.frame = NSRect(x: 1, y: preferredHeight - lineageHeight, width: bounds.width - 2, height: lineageHeight)
-        y = automations.isEmpty || !full ? y : preferredHeight - lineageHeight - 1 - automations.preferredHeight
+        // The section's own bottom padding runs into the border's last point, as before the scroll area.
+        lineage.frame = NSRect(x: 0, y: height + 1 - lineageHeight, width: width, height: lineageHeight)
+        y = automations.isEmpty || !full ? y : height + 1 - lineageHeight - 1 - automations.preferredHeight
         automations.isHidden = automations.isEmpty || !full
         automationsDivider.isHidden = automations.isHidden
-        automationsDivider.frame = CGRect(x: 1, y: y, width: bounds.width - 2, height: 1)
-        automations.frame = NSRect(x: 1, y: y + 1, width: bounds.width - 2, height: automations.preferredHeight)
+        automationsDivider.frame = CGRect(x: 0, y: y, width: width, height: 1)
+        automations.frame = NSRect(x: 0, y: y + 1, width: width, height: automations.preferredHeight)
     }
 
     /// The card grows when the automations change.

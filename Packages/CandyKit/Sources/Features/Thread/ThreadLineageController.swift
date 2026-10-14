@@ -74,7 +74,12 @@ public final class ThreadLineageController {
         }
         let all = shells?() ?? []
         let local = ThreadRelationships.unscoped(ThreadRelationships.related(all, to: threadId, projection: projection), environmentId: env)
-        let lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection)
+        var lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection)
+        #if DEBUG
+        if let count = ProcessInfo.processInfo.environment["CANDY_FAKE_LINEAGE"].flatMap(Int.init) {
+            lineage.previous += ThreadRelationships.Lineage.syntheticPrevious(count, current: threadId.localId)
+        }
+        #endif
         let byId = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         card.set(\.lineage.mergeTargetTitle, lineage.mergeTarget.flatMap { byId[$0]?.title })
         card.set(\.lineage.lineage, lineage)
