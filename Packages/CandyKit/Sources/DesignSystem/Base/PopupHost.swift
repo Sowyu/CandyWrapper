@@ -209,12 +209,14 @@ public struct PopupMotion: Sendable, Equatable {
     public var enterScale: CGFloat?
     public var exitScale: CGFloat?
     public var duration: CFTimeInterval = Motion.Durations.default
+    /// Glides after a trigger that scrolls (`followTrigger`) instead of moving at once.
+    public var glides = false
 
     public static let none = PopupMotion(enterScale: nil, exitScale: nil)
     /// Popover: scale .98 + opacity 0 both ways. T3 3105 f570294df (ui/popover.tsx:92) added the ending style.
     public static let popover = PopupMotion(enterScale: 0.98, exitScale: 0.98)
     /// Tooltip and PreviewCard: scale .98 + opacity 0 both ways.
-    public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98)
+    public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98, glides: true)
 }
 
 /// One open popup.
@@ -387,7 +389,7 @@ public final class PopupHost: DSView {
                     }
                     let old = popup.container.layer.map { ($0.presentation() ?? $0).position }
                     self.reposition(popup)
-                    guard popup.motion == .tooltip, !Motion.reduced, let old, let layer = popup.container.layer, layer.position != old else { return }
+                    guard popup.motion.glides, !Motion.reduced, let old, let layer = popup.container.layer, layer.position != old else { return }
                     let a = CABasicAnimation(keyPath: "position")
                     a.fromValue = NSValue(point: old)
                     a.toValue = NSValue(point: layer.position)
