@@ -8,6 +8,9 @@ import Foundation
 public struct DatabaseBackup: Sendable {
     /// `DB_FILE_SUFFIXES`.
     static let suffixes = ["", "-wal", "-shm"]
+    /// `RESTORE_MARKER`: written before a restore touches the live files and removed first when the backup goes.
+    /// While it exists no server has run on the home since, so running the restore again is safe.
+    static let restoreMarker = "restore-pending"
 
     public let database: URL
     public let directory: URL
@@ -41,14 +44,20 @@ public struct DatabaseBackup: Sendable {
     public static func make(database: URL, in directory: URL) throws -> DatabaseBackup? {
         let fm = FileManager.default
         guard fm.fileExists(atPath: database.path) else { return nil }
+        // A backup whose restore never finished is the only good copy left.
+        if pending(database: database, in: directory) != nil {
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: directory.path,
+                NSLocalizedDescriptionKey: "The database saved before an earlier update is still waiting to be put back"])
+        }
         try? fm.removeItem(at: directory)
         let staging = directory.deletingLastPathComponent().appending(path: directory.lastPathComponent + ".staging")
         try? fm.removeItem(at: staging)
         try fm.createDirectory(at: staging, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         do {
             for suffix in suffixes where fm.fileExists(atPath: database.path + suffix) {
-                // copyItem clones on APFS, so a large database takes no time and no space.
-                try fm.copyItem(atPath: database.path + suffix, toPath: staging.appending(path: "database" + suffix).path)
+                // copyItem clones on APFS, so a large database takes no time and no space. It copies a symlink as
+                // a link, where `cp -c` follows it, so it gets the file a symlinked database resolves to.
+                try fm.copyItem(atPath: try restoreTarget(database.path + suffix), toPath: staging.appending(path: "database" + suffix).path)
             }
             try fm.moveItem(at: staging, to: directory)
         } catch {
@@ -59,24 +68,73 @@ public struct DatabaseBackup: Sendable {
     }
 
     /// `restoreDatabaseBackup`: puts every saved file back and removes a sidecar the backup didn't have.
-    /// Call it only once the server that used the database has exited.
-    // ponytail: no restore marker, so a crash mid-restore or mid-update leaves the backup unused on disk;
-    // recover it at the next launch if anyone hits that
-    public func restore() throws {
+    /// Call it only once the server that used the database has exited. It marks the backup first, with
+    /// `previous`, the runtime the failed update goes back to (nil for T3's own), so a restore that fails or
+    /// is cut off shows up in `pending` and runs again, and goes back, before a server starts on the home.
+    // ponytail: a crash after the backup but before any restore leaves it unmarked and unused on disk, where
+    // the next update replaces it; recover it at launch if anyone hits that
+    public func restore(previous: String? = nil) throws {
         let fm = FileManager.default
+        let marker = directory.appending(path: Self.restoreMarker)
+        if !fm.fileExists(atPath: marker.path) { try Data((previous ?? "").utf8).write(to: marker, options: .atomic) }
         for suffix in Self.suffixes {
             let live = database.path + suffix, saved = directory.appending(path: "database" + suffix).path
-            guard fm.fileExists(atPath: saved) else { try? fm.removeItem(atPath: live); continue }
-            // Copied beside the live file, then renamed over it, so a failed copy leaves the live file whole.
-            let incoming = live + ".candy-restore"
+            guard fm.fileExists(atPath: saved) else {
+                // It must go: SQLite would replay the failed version's WAL over the old file.
+                do { try fm.removeItem(atPath: live) } catch let error as CocoaError where error.code == .fileNoSuchFile {}
+                continue
+            }
+            // Into the file a symlinked database resolves to, keeping the link. Copied beside it, then renamed
+            // over it, so a failed copy leaves the live file whole.
+            let target = try Self.restoreTarget(live)
+            let incoming = target + ".candy-restore"
             try? fm.removeItem(atPath: incoming)
             try fm.copyItem(atPath: saved, toPath: incoming)
-            guard rename(incoming, live) == 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: live]) }
+            guard rename(incoming, target) == 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: target]) }
         }
     }
 
-    public func discard() {
-        try? FileManager.default.removeItem(at: directory)
+    /// The backup in `directory` when a restore of it started and never finished (`databaseRestorePending`).
+    public static func pending(database: URL, in directory: URL) -> DatabaseBackup? {
+        FileManager.default.fileExists(atPath: directory.appending(path: restoreMarker).path)
+            ? DatabaseBackup(database: database, directory: directory) : nil
+    }
+
+    /// The runtime the update that made this backup goes back to, from its restore marker: nil for T3's own.
+    public var previousRuntime: String? {
+        let text = (try? String(contentsOf: directory.appending(path: Self.restoreMarker), encoding: .utf8)) ?? ""
+        return text.isEmpty ? nil : text
+    }
+
+    /// `restoreTarget`: where `path`'s symlinks lead, even when the last target is missing. Any other failure,
+    /// a link loop included, throws rather than write over the link.
+    static func restoreTarget(_ path: String) throws -> String {
+        var current = path
+        for _ in 0..<40 {
+            if let real = realpath(current, nil) {
+                defer { free(real) }
+                return String(cString: real)
+            }
+            guard errno == ENOENT else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            guard let link = try? FileManager.default.destinationOfSymbolicLink(atPath: current) else { return current }
+            if link.hasPrefix("/") { current = link; continue }
+            // Joined without normalizing, so a `..` follows directory links the way the filesystem does.
+            guard let parent = realpath((current as NSString).deletingLastPathComponent, nil) else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            current = String(cString: parent) + "/" + link
+            free(parent)
+        }
+        throw POSIXError(.ELOOP)
+    }
+
+    /// Removes the backup. The restore marker goes first and has to, so a backup that is only partly removed
+    /// is never restored again over what a server wrote since.
+    public func discard() throws {
+        let fm = FileManager.default
+        let marker = directory.appending(path: Self.restoreMarker)
+        if fm.fileExists(atPath: marker.path) { try fm.removeItem(at: marker) }
+        try? fm.removeItem(at: directory)
     }
 
     private static func info(_ path: String) -> (size: Int64, device: dev_t, links: nlink_t)? {
