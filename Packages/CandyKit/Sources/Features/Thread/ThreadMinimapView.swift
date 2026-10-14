@@ -35,6 +35,11 @@ public final class ThreadMinimapView: DSView {
         if items != oldValue { needsDisplay = true }
     } }
     private var updatingPreview = false
+    /// Wheel over the strip scrolls the chat (`forwardWheelToTimeline`, T3 3105 c9181d81a).
+    var onWheel: ((NSEvent) -> Void)?
+    public override func scrollWheel(with event: NSEvent) {
+        if let onWheel { onWheel(event) } else { super.scrollWheel(with: event) }
+    }
     /// Text does not affect the strip geometry. Avoid comparing every item on each streamed token.
     func updatePreview(at index: Int, text: String, assistant: Bool) {
         guard items.indices.contains(index) else { return }

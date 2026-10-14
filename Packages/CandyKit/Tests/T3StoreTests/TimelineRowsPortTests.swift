@@ -613,6 +613,22 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         #expect(rows.map(\.id) == ["user-entry", "turn-fold:turn-1", "assistant-final-entry"])
     }
 
+    // 3105 9a01524f3 ("subagent continued by a later turn"): the resumed subagent keeps its first turn's place.
+    @Test func resumedSubagentFoldsWithTheTurnThatStartedIt() {
+        let rows = derive([
+            message("prompt-1", role: .user, run: "run-1", at: "2026-10-09T10:00:00Z"),
+            message("thought-1", role: .assistant, run: "run-1", at: "2026-10-09T10:00:01Z"),
+            Self.event("subagent", type: "subagent", run: "run-2", at: "2026-10-09T10:00:02Z"),
+            message("answer-1", role: .assistant, run: "run-1", at: "2026-10-09T10:00:03Z"),
+            message("prompt-2", role: .user, run: "run-2", at: "2026-10-09T10:00:30Z"),
+            message("answer-2", role: .assistant, run: "run-2", at: "2026-10-09T10:00:32Z"),
+            work("send-message", run: "run-2", at: "2026-10-09T10:00:33Z"),
+            message("closing-2", role: .assistant, run: "run-2", at: "2026-10-09T10:00:41Z"),
+        ])
+        #expect(rows.filter { kind($0) != "assistant-meta" }.map(\.id)
+                == ["prompt-1", "turn-fold:run-1", "answer-1", "prompt-2", "turn-fold:run-2", "closing-2"])
+    }
+
     // LT:2492
     @Test func doesNotTreatRunlessEntriesAsLiveWorkOnAThreadWithRuns() {
         let rows = derive([

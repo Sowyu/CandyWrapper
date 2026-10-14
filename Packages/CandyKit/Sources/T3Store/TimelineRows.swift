@@ -419,7 +419,12 @@ public enum TimelineRows {
         runlessWorkActive: Bool, liveSubagentEntryIds: Set<String>
     ) -> [String: TurnFold] {
         var interruptedRunIds = Set<RunId>()
-        for entry in entries {
+        // Where each run's prompt sits (T3 3105 9a01524f3, MessagesTimeline.logic.ts:1034-1040).
+        var promptIndexByRunId: [RunId: Int] = [:]
+        for (index, entry) in entries.enumerated() {
+            if startsResponse(entry), let runId = entry.message?.runId ?? entry.work?.runId, promptIndexByRunId[runId] == nil {
+                promptIndexByRunId[runId] = index
+            }
             if let item = entry.eventItem?.item, let runId = item.runId,
                 item.type == .runInterruptRequest || item.type == .runInterruptResult
             {
@@ -437,15 +442,20 @@ public enum TimelineRows {
         var groups: [RunId: Group] = [:]
         var runlessFailedKeys = Set<RunId>()
         var runlessKey: RunId?
+        var responseKey: RunId?
         var pendingBoundary: (createdAt: T3Timestamp, anchorEntryId: String)?
         for (index, entry) in entries.enumerated() {
             if startsResponse(entry) {
                 pendingBoundary = index + 1 < entries.count ? (entry.createdAt, entries[index + 1].id) : nil
                 let boundaryRunId = entry.message?.runId ?? entry.work?.runId
                 runlessKey = boundaryRunId == nil ? RunId("runless:\(entry.id)") : nil
+                responseKey = boundaryRunId ?? runlessKey
                 continue
             }
-            guard let runId = foldRunId(entry, runlessKey: runlessKey) else { continue }
+            guard let ownRunId = foldRunId(entry, runlessKey: runlessKey) else { continue }
+            // Resuming a subagent moves its item to the resuming run, but the item keeps its place in the turn that
+            // started it. It folds with that turn, so the later run's fold still opens under its own prompt.
+            let runId = responseKey.map { (promptIndexByRunId[ownRunId] ?? -1) > index ? $0 : ownRunId } ?? ownRunId
             if runId == runlessKey, failedItem(entry) != nil { runlessFailedKeys.insert(runId) }
             if groups[runId] == nil {
                 order.append(runId)

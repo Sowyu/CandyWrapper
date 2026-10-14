@@ -354,15 +354,16 @@ final class ShineLabelView: DSView {
         band.endPoint = CGPoint(x: 1, y: 0.5)
         bright.layer?.mask = band
         loop = LoopingAnimation(view: self, key: "shine", layer: { [weak self] in self?.shining == true ? self?.band : nil }) { [weak self] in
-            let a = CABasicAnimation(keyPath: "position.x")
             let width = self?.bright.bounds.width ?? 0
-            a.fromValue = -36
             // `focus` moves its band by the overlay's own width, the label plus 9rem.
-            a.toValue = self?.style == .focus ? width + 108 : width + 36
+            let from: CGFloat = -36, to = self?.style == .focus ? width + 108 : width + 36
+            // `steps(30)` (index.css:545, 604, T3 3105 6bbb72c61): 30 jumps per 2.2s pass, each held, not a frame-by-frame slide.
+            let a = CAKeyframeAnimation(keyPath: "position.x")
+            a.values = (0..<30).map { from + (to - from) * CGFloat($0) / 30 }
+            a.keyTimes = (0...30).map { NSNumber(value: Double($0) / 30) }
+            a.calculationMode = .discrete
             a.duration = 2.2
             a.repeatCount = .infinity
-            a.timingFunction = CAMediaTimingFunction(name: .linear)
-            // ponytail: linear, T3 uses steps(30); a keyframe animation with 30 discrete values matches it exactly
             return a
         }
     }
