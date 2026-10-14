@@ -11,7 +11,7 @@ scripts/perf-review --commit dd10f48 --baseline docs/perf/<file>.json
 scripts/perf-review --stream                 # adds one claude-haiku-5-5 turn (costs a real turn)
 ```
 
-About 12 minutes per build when the machine is quiet: 3 to 5 for the Release build, 2 for the micro-benchmarks, 5 for the app runs. Waits for a quiet machine come on top, up to 10 minutes each. Output goes to stderr as it runs; the table prints at the end.
+About 17 minutes per build when the machine is quiet: 3 to 5 for the Release build, 2 for the micro-benchmarks, 10 for the app runs, half of them the stall monitor's own launches. Waits for a quiet machine come on top, up to 10 minutes each. Output goes to stderr as it runs; the table prints at the end.
 
 ## Frozen workload and quiet machine (since 2026-10-10)
 
@@ -112,7 +112,9 @@ The other numbers here are averages, so a 300 ms freeze once a minute never show
 - `frame-gap <ms> ms <n> dropped <reason>` when the display link misses two or more refreshes during scrolling, typing, dragging, a resize or `--perf-scroll`.
 - `key-latency <ms> ms` from a key event's timestamp to the end of the pass that handled it, after its frame committed.
 
-Off, nothing is installed. On and idle, the watchdog waits on a semaphore and the display link runs only for half a second after input, so it adds no wakeups. Frames carry the image and offset next to the symbol, so `atos` can resolve a stripped build. `scripts/perf-review` now sets it and reports `launch`, `big_thread`, `open` and `stream` `.stall_max_ms` and `.stall_count_50ms`, plus `big_thread.dropped_frames`.
+Off, nothing is installed. On and idle, the watchdog waits on a semaphore and the display link runs only for half a second after input, so it adds no wakeups. Frames carry the image and offset next to the symbol, so `atos` can resolve a stripped build. `scripts/perf-review` reports `launch`, `big_thread` and `open` `.stall_max_ms` and `.stall_count_50ms`, plus `big_thread.dropped_frames`.
+
+The monitor isn't free while the app works, so the review measures stalls in launches of their own. On 2026-10-15, four interleaved launches each of caa57d8 with `CANDY_STALLS=1` and without gave `big_thread.scroll_cpu_ms` 363 to 392 ms (median 381) against 303 to 341 ms (median 338): the display link ticks every frame of `--perf-scroll` and the watchdog wakes on every run loop pass. Idle CPU, footprint, launch times and the open first frames didn't move beyond their noise, and idle interrupt wakeups rose from 0.35 to 0.47 per second. Since then each scenario run launches twice: once without the monitor for every other metric, then once with it, keeping only its stall metrics. The streaming turn runs without the monitor, so it has no stall metrics. Reviews from 2026-10-15 before this change (e72162b) took every metric with the monitor on, so their scroll CPU reads about 40 ms high.
 
 Method: Release builds of 810aa19 plus the monitor (before) and of this change (after), run alternately twice each against a copy of `load-home-a` (1,063 threads, the 5,000 message thread, a 315 KB markdown reply, an 18,000 line code reply) on its own server, while three other agents built and tested. A script drove each run through the same clicks and keys: open five big threads, 18 quick switches between six threads, 71 characters typed and deleted in the 5,000 message thread's composer, ⌘K searches, Change theme to Glass and back through the palette, and a resize through 12 widths with the code reply open. Counts are of passes over 50 ms.
 

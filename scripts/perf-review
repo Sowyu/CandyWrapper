@@ -42,6 +42,10 @@ SANDBOX = os.path.expanduser("~/CandyWrapper-research/sandbox")
 WORKLOAD = 1
 PRISTINE = os.path.join(os.path.dirname(SANDBOX), "perf-home-pristine")
 SERVER = None  # set by PerfServer.start
+# Whether App launches set CANDY_STALLS. The monitor's display link and watchdog cost about 43 ms of the
+# 340 ms big_thread.scroll_cpu_ms on 2026-10-15, so only launch() turns it on, for launches whose other
+# numbers it throws away.
+STALLS = False
 # The sandbox's session token; the pristine copy has the same auth tables, so it works there too.
 TOKEN = SANDBOX + "/session.token"
 # Compile and test processes (other agents); each scenario waits until none of them runs.
@@ -91,8 +95,6 @@ THRESHOLDS = {
     "big_thread.dropped_frames": (0.50, 10, ""),
     "open.stall_max_ms": (0.25, 34, "ms"),
     "open.stall_count_50ms": (0.50, 2, ""),
-    "stream.stall_max_ms": (0.25, 34, "ms"),
-    "stream.stall_count_50ms": (0.50, 2, ""),
     "stream.cpu_pct": (0.25, 1.0, "%"),
     "stream.interrupt_wakeups_per_s": (0.25, 5, "/s"),
     "stream.footprint_mb": (0.10, 3, "MB"),
@@ -377,7 +379,9 @@ class App:
         self.log_path = "%s/app-%s.log" % (WORK, tag)
         before = open(PID_FILE).read().strip() if os.path.exists(PID_FILE) else ""
         subprocess.call(["defaults", "delete", PERF_BUNDLE_ID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", CANDY_STALLS="1", CANDY_THREAD_CACHE=PERF_THREAD_CACHE)
+        env = dict(os.environ, CANDY_APP=app_path, CANDY_LAUNCH_TIMING="1", CANDY_THREAD_CACHE=PERF_THREAD_CACHE)
+        if STALLS:
+            env["CANDY_STALLS"] = "1"
         env.update(env_extra or {})
         self.proc = subprocess.Popen([REPO + "/scripts/run-app", "--server", SERVER, "--token-file", TOKEN, "--fake-t3-connect"] + extra_args,
                                      env=env, stdout=open(self.log_path, "w"), stderr=subprocess.STDOUT, start_new_session=True)
@@ -579,6 +583,22 @@ def scenario_stream(app_path, metrics, sha, noise):
     app.stalls(metrics, "stream")
 
 
+def launch(fn, raw, i, stalls):
+    """Runs one scenario launch. With stalls, under CANDY_STALLS, keeping only the stall metrics."""
+    global STALLS
+    if not stalls:
+        fn(raw, i)
+        return
+    STALLS, scratch = True, {}
+    try:
+        fn(scratch, i)
+    finally:
+        STALLS = False
+    for name, values in scratch.items():
+        if ".stall_" in name or name.endswith(".dropped_frames"):
+            raw.setdefault(name, []).extend(values)
+
+
 # MARK: report
 
 
@@ -694,18 +714,17 @@ def main():
         try:
             # Inside the try: an interrupt while the server boots must still stop it.
             server.start()
-            for i in range(args.repeat):
-                quiet_wait("idle-%d" % i)
-                log("launch and idle, run %d of %d" % (i + 1, args.repeat))
-                scenario_idle(app_path, raw, args.idle_seconds, i, noise)
-            for i in range(args.repeat):
-                quiet_wait("big-%d" % i)
-                log("large thread, run %d of %d" % (i + 1, args.repeat))
-                scenario_big_thread(app_path, raw, i, noise)
-            for i in range(args.repeat):
-                quiet_wait("open-%d" % i)
-                log("thread open and reopen, run %d of %d" % (i + 1, args.repeat))
-                scenario_open(app_path, raw, i, noise)
+            scenarios = [("idle", "launch and idle", lambda r, i: scenario_idle(app_path, r, args.idle_seconds, i, noise)),
+                         ("big", "large thread", lambda r, i: scenario_big_thread(app_path, r, i, noise)),
+                         ("open", "thread open and reopen", lambda r, i: scenario_open(app_path, r, i, noise))]
+            for tag, title, fn in scenarios:
+                for i in range(args.repeat):
+                    # Each run launches twice: without the stall monitor for every other metric, then with it
+                    # for the stall metrics alone (docs/perf/README.md, "Stalls and dropped frames").
+                    for stalls in (False, True):
+                        quiet_wait("%s-%d%s" % (tag, i, "-stalls" if stalls else ""))
+                        log("%s, run %d of %d%s" % (title, i + 1, args.repeat, ", stall monitor" if stalls else ""))
+                        launch(fn, raw, i, stalls)
             if args.stream:
                 quiet_wait("stream")
                 log("streaming turn (one claude-haiku-5-5 turn)")
