@@ -12,6 +12,8 @@ public struct SidebarActions {
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     public var unsnooze: (ThreadId) -> Void = { _ in }
     public var unpin: (ThreadId) -> Void = { _ in }
+    /// A row's Woke pill was clicked (`useAcknowledgeThreadWoke`).
+    public var acknowledgeWake: (ThreadId) -> Void = { _ in }
     /// A row's pull request badge was clicked.
     public var openPullRequest: (ThreadId) -> Void = { _ in }
     /// A pull request row in the badge's hover list: open the thread and that pull request in its panel
@@ -279,7 +281,8 @@ public final class SidebarContentView: DSView {
         list.rowActions = SidebarRowActions(
             settle: { [weak self] in self?.actions.settle($0) }, unsettle: { [weak self] in self?.actions.unsettle($0) },
             snooze: { [weak self] in self?.actions.snooze($0, $1) }, unsnooze: { [weak self] in self?.actions.unsnooze($0) },
-            unpin: { [weak self] in self?.actions.unpin($0) }, pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
+            unpin: { [weak self] in self?.actions.unpin($0) }, acknowledgeWake: { [weak self] in self?.actions.acknowledgeWake($0) },
+            pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
             pullRequestURL: { [weak self] in self?.actions.openPullRequestURL($0, $1) },
             contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
@@ -674,7 +677,11 @@ public final class SidebarContentView: DSView {
     func scheduleLabelTimer() {
         guard window != nil else { LabelClock.shared.cancel(self); return }
         let ms = nowMs, rows = list.visibleRowModels
-        let rebuildAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false)
+        // The earliest wake too, 50 ms late, so the Snoozed shelf empties the moment a snooze ends even while its rows
+        // are collapsed or scrolled away (Sidebar.tsx:3008-3022).
+        let wakeAt = snapshot?.threads.lazy.filter { $0.archivedAt == nil }
+            .compactMap { $0.snoozedUntil?.epochMs }.filter { $0 > ms }.min().map { $0 + 50 }
+        let rebuildAt = [SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false), wakeAt].compactMap { $0 }.min()
         let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
         guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }
         LabelClock.shared.schedule(self, in: Double(next - ms) / 1000) { [weak self] in self?.labelTimerFired(rebuildAt: rebuildAt) }
