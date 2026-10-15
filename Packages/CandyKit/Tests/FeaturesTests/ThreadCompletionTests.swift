@@ -87,6 +87,27 @@ struct ThreadCompletionTests {
         #expect(ThreadTaskStep.summary([steps[0]]) == "A")
         #expect(ThreadTaskStep.summary([ThreadTaskStep(text: "Done", status: "completed")]) == "Done")
     }
+    /// A long current step truncates in its column: it ran under the count and pushed the icon out of the banner.
+    @Test func longTaskStepStaysInItsColumn() {
+        let tasks = ThreadTasksView()
+        tasks.steps = [ThreadTaskStep(text: "Audit render loops, assets, memory, and background work.", status: "running"),
+                       ThreadTaskStep(text: "Implement and test resource-saving fixes.", status: "pending"),
+                       ThreadTaskStep(text: "Measure the result and document localhost usage.", status: "pending")]
+        tasks.frame = NSRect(x: 0, y: 0, width: 600, height: tasks.height)
+        tasks.layoutSubtreeIfNeeded()
+        let header = tasks.header
+        #expect(header.icon.frame.minX >= 0)
+        #expect(header.step.frame.maxX <= header.count.frame.minX)
+        #expect(header.step.frame.width > 0)
+    }
+    /// The shimmer's bright copy takes the label's font, or it drew larger over "Compacting context".
+    @Test func shineLabelCopiesShareTheFont() {
+        let label = ShineLabelView()
+        label.font = TL.font(12)
+        label.lineHeight = 16
+        let copies = label.subviews.compactMap { $0 as? LabelView }
+        #expect(copies.count == 2 && copies.allSatisfy { $0.font == TL.font(12) && $0.lineHeight == 16 })
+    }
     @Test func permissionNoticeRequiresExplicitLegacyGrant() throws {
         func state(_ extra: String) throws -> AuthSessionState {
             try json("{\"authenticated\":true,\"auth\":{\"policy\":\"token\",\"bootstrapMethods\":[],\"sessionMethods\":[]}," + extra + "}").decode(as: AuthSessionState.self)

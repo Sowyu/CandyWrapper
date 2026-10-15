@@ -30,38 +30,27 @@ public final class ThreadTasksView: ComposerBannerView {
     public var onHeightChange: (() -> Void)?
     public var steps: [ThreadTaskStep] = [] { didSet {
         guard steps != oldValue else { return }
-        summary.title = "Tasks   \(ThreadTaskStep.summary(steps))"
-        summary.setAccessibilityLabel("Tasks: \(steps.filter { $0.status == "completed" }.count) of \(steps.count) complete")
-        rebuild(); needsDisplay = true; needsLayout = true; onHeightChange?()
+        header.steps = steps
+        rebuild(); needsLayout = true; onHeightChange?()
     } }
     public private(set) var expanded = false
-    private let summary = ButtonView("Tasks", icon: .listTodo, variant: .ghost, size: .sm)
-    private let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-    private let chevron = ButtonView(icon: .chevronDown, variant: .ghost, size: .iconXs)
-    private let segments = DSView()
-    private var segmentLayers: [CALayer] = []
+    let header = ThreadTasksHeaderRow()
     private let scroller = NSScrollView()
     private let body = DSView()
     private var labels: [ThreadTaskStepView] = []
     public init() {
         super.init(variant: .neutral)
-        addSubview(summary); addSubview(count); addSubview(scroller); addSubview(segments); addSubview(chevron)
+        addSubview(header); addSubview(scroller)
         scroller.documentView = body; scroller.drawsBackground = false
         scroller.useT3Scrollbars(.overlay) // ComposerBanner.Scroll is a ScrollArea (ComposerTasksBadge.tsx:162)
-        summary.action = { [weak self] in
+        header.action = { [weak self] in
             guard let self else { return }
-            expanded.toggle(); chevron.icon = expanded ? .chevronUp : .chevronDown; rebuild(); needsLayout = true; onHeightChange?()
+            expanded.toggle(); header.expanded = expanded; rebuild(); needsLayout = true; onHeightChange?()
         }
-        chevron.action = summary.action
     }
     public var height: CGFloat { 34 + Self.overlap + (expanded ? min(240, labels.reduce(8) { $0 + $1.height(forWidth: max(1, bounds.width - 32)) }) : 0) }
     private func rebuild() {
         labels.forEach { $0.removeFromSuperview() }; labels = []
-        count.text = "\(steps.filter { $0.status == "completed" }.count)/\(steps.count)"
-        count.color = Themed.color(steps.allSatisfy { $0.status == "completed" } ? \.success : \.mutedForeground)
-        segmentLayers.forEach { $0.removeFromSuperlayer() }
-        segmentLayers = steps.count > 1 && steps.count <= 10 ? steps.map { _ in let l = CALayer(); l.cornerRadius = 1.5; segments.layer?.addSublayer(l); return l } : []
-        needsDisplay = true
         scroller.isHidden = !expanded
         guard expanded else { return }
         for step in steps {
@@ -71,16 +60,9 @@ public final class ThreadTasksView: ComposerBannerView {
     }
     public override func layout() {
         super.layout()
-        let segmented = !segmentLayers.isEmpty && bounds.width >= 560
-        segments.isHidden = !segmented
-        summary.frame = NSRect(x: 4, y: 4, width: max(0, bounds.width - (segmented ? 174 : 86)), height: 26)
-        count.frame = NSRect(x: bounds.width - (segmented ? 164 : 76), y: 9, width: 44, height: 18)
-        chevron.frame = NSRect(x: bounds.width - 28, y: 5, width: 24, height: 24)
-        segments.frame = NSRect(x: bounds.width - 116, y: 16, width: 80, height: 3)
-        let segmentWidth = (80 - CGFloat(max(0, segmentLayers.count - 1)) * 2) / CGFloat(max(1, segmentLayers.count))
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        for (i, layer) in segmentLayers.enumerated() { layer.frame = NSRect(x: CGFloat(i) * (segmentWidth + 2), y: 0, width: segmentWidth, height: 3) }
-        CATransaction.commit()
+        // `@min-[560px]:flex` on the segments, against the banner's own width.
+        header.showsSegments = bounds.width >= 560
+        header.frame = NSRect(x: 0, y: 5, width: bounds.width, height: 24)
         scroller.frame = NSRect(x: 8, y: 34, width: bounds.width - 16, height: max(0, height - 34 - Self.overlap))
         let width = scroller.contentSize.width
         var y: CGFloat = 4
@@ -91,15 +73,100 @@ public final class ThreadTasksView: ComposerBannerView {
         }
         body.frame = NSRect(x: 0, y: 0, width: width, height: y + 4)
     }
-    public override func updateLayer() {
+}
+
+/// `TaskSummary` in a `ComposerBanner.Row` button (ComposerTasksBadge.tsx:65-96, ComposerBanner.tsx:190-337):
+/// the list icon, "Tasks" and the current step truncating in the content column, then the count, the segments and
+/// the toggle. Placed at the reference capture's offsets (thread-completion/tasks-*).
+final class ThreadTasksHeaderRow: ControlView {
+    var steps: [ThreadTaskStep] = [] { didSet { if steps != oldValue { update() } } }
+    var expanded = false { didSet { if expanded != oldValue { update() } } }
+    var showsSegments = false { didSet { if showsSegments != oldValue { needsLayout = true } } }
+    let icon = IconView(name: .listTodo, size: 12, strokeColor: Themed.color(\.mutedForeground))
+    private let tasks = bannerLabel(Themed.color(\.mutedForeground))
+    let step = bannerLabel(Themed.color(\.foreground, 0.8), weight: .medium)
+    let count = bannerLabel(Themed.color(\.mutedForeground), weight: .medium, tabular: true)
+    /// `ChevronDownIcon`, turned 180 degrees while folded (ComposerBanner.tsx:328-337).
+    private let chevron = IconView(name: .chevronDown, size: 14, strokeColor: Themed.color(\.foreground))
+    private let chevronUp = IconView(name: .chevronUp, size: 14, strokeColor: Themed.color(\.foreground))
+    private let segments = DSView()
+    private var segmentLayers: [CALayer] = []
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        tasks.text = "Tasks"
+        [icon, tasks, step, count, segments, chevron, chevronUp].forEach(addSubview)
+        setAccessibilityRole(.button)
+        update()
+    }
+
+    private func update() {
+        let done = steps.filter { $0.status == "completed" }.count
+        let summary = ThreadTaskStep.summary(steps)
+        step.text = summary
+        count.text = "\(done)/\(steps.count)"
+        count.color = Themed.color(done >= steps.count ? \.success : \.mutedForeground)
+        chevron.isHidden = !expanded
+        chevronUp.isHidden = expanded
+        setAccessibilityLabel("\(expanded ? "Collapse tasks" : "Tasks"): \(done) of \(steps.count) complete. Current task: \(summary)")
+        // `MAX_TASK_SEGMENTS`: one bar per step for 2 to 10 steps (ComposerTasksBadge.tsx:37-58).
+        let wanted = steps.count > 1 && steps.count <= 10 ? steps.count : 0
+        if segmentLayers.count != wanted {
+            segmentLayers.forEach { $0.removeFromSuperlayer() }
+            segmentLayers = (0..<wanted).map { _ in
+                let l = CALayer(); l.cornerRadius = 1.5; l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+                segments.layer?.addSublayer(l); return l
+            }
+        }
+        needsDisplay = true
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        icon.frame = NSRect(x: 8, y: 6, width: 12, height: 12)
+        // Actions, `gap-1`: the count centred in at least 24, the 80pt segments, the toggle box.
+        chevron.frame = NSRect(x: w - 21, y: 5, width: 14, height: 14)
+        chevronUp.frame = chevron.frame
+        var right = w - 24
+        segments.isHidden = !showsSegments || segmentLayers.isEmpty
+        if !segments.isHidden {
+            segments.frame = NSRect(x: right - 80, y: 10.5, width: 80, height: 3)
+            right -= 80 + 4
+        } else {
+            right -= 4
+        }
+        let tw = ceil(count.textWidth), cw = max(24, tw)
+        count.frame = NSRect(x: right - cw + (cw - tw) / 2, y: 4, width: tw + 1, height: 16)
+        // Content, `gap-1`: "Tasks" keeps its width, the step truncates.
+        let contentRight = right - cw - 4
+        let lw = ceil(tasks.textWidth)
+        tasks.frame = NSRect(x: 36, y: 4, width: lw + 1, height: 16)
+        step.frame = NSRect(x: 36 + lw + 4, y: 4, width: max(0, contentRight - (36 + lw + 4)), height: 16)
+        let segmentWidth = (80 - CGFloat(max(0, segmentLayers.count - 1)) * 2) / CGFloat(max(1, segmentLayers.count))
+        for (i, layer) in segmentLayers.enumerated() { layer.frame = NSRect(x: CGFloat(i) * (segmentWidth + 2), y: 0, width: segmentWidth, height: 3) }
+    }
+
+    override func updateLayer() {
         super.updateLayer()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        for (i, layer) in segmentLayers.enumerated() {
-            let step = steps[i]
-            layer.backgroundColor = Themed.color(step.status == "completed" ? \.success : step.status == "running" ? \.primary : \.mutedForeground, step.status == "pending" ? 0.25 : 1).cgColor(in: self)
+        for (i, layer) in segmentLayers.enumerated() where i < steps.count {
+            let status = steps[i].status
+            layer.backgroundColor = Themed.color(status == "completed" ? \.success : status == "running" ? \.primary : \.mutedForeground,
+                                                 status == "pending" ? 0.25 : 1).cgColor(in: self)
         }
         CATransaction.commit()
     }
+}
+
+/// Labels on the glass draw without font smoothing, like Chromium on backdrop-filter layers.
+@MainActor private func bannerLabel(_ color: NSColor, weight: NSFont.Weight = .regular, tabular: Bool = false) -> LabelView {
+    let label = LabelView("", font: tabular ? SB.tabular(12, weight) : DSFont.ui(12, weight: weight), color: color)
+    label.lineHeight = 16
+    label.smoothsFont = false
+    return label
 }
 
 /// ComposerTasksBadge.tsx:166-218. Wrapped task text and source status glyphs.
