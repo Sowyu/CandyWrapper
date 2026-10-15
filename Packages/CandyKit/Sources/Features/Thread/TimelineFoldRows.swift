@@ -124,8 +124,8 @@ final class CompactionRowView: TimelineRowView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for r in [left, right] { r.fill = TL.c(\.border, 0.7); addSubview(r) }
-        label.base.font = TL.font(12)
-        label.base.lineHeight = 16
+        label.font = TL.font(12)
+        label.lineHeight = 16
         label.base.color = TL.c(\.mutedForeground)
         label.style = .focus
         addSubview(icon)
