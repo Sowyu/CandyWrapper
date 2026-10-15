@@ -186,15 +186,15 @@ final class WorkLineView: DSView {
         case .destructive:
             iconView.strokeColor = TL.c(\.destructive)
             label.base.color = TL.c(\.destructive)
-            label.base.font = TL.font(14, .medium)
+            label.font = TL.font(14, .medium)
         case .warning:
             iconView.strokeColor = TL.c(\.warning)
             label.base.color = TL.c(\.warning)
-            label.base.font = TL.font(14, .medium)
+            label.font = TL.font(14, .medium)
         case .tool, .plain:
             iconView.strokeColor = failed ? TL.c(\.toolErrorIcon, 0.4) : WorkIcons.muted
             label.base.color = style == .tool ? TL.c(\.secondaryLabel) : TL.c(\.foreground, 0.8)
-            label.base.font = TL.font(14)
+            label.font = TL.font(14)
         }
         label.text = text
         label.shining = active
@@ -765,8 +765,8 @@ final class WorkingRowView: TimelineRowView {
         super.init(frame: frameRect)
         label.lineHeight = TL.relaxed
         addSubview(label)
-        compactingLabel.base.font = TL.tabular(14)
-        compactingLabel.base.lineHeight = TL.relaxed
+        compactingLabel.font = TL.tabular(14)
+        compactingLabel.lineHeight = TL.relaxed
         compactingLabel.base.color = TL.c(\.mutedForeground)
         compactingLabel.style = .focus
         compactingLabel.text = "Compacting…"

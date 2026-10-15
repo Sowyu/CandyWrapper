@@ -337,6 +337,16 @@ final class ShineLabelView: DSView {
 
     var shining = false { didSet { if shining != oldValue { bright.isHidden = !shining; loop?.update() } } }
 
+    /// Both copies take the font and line height, or the bright one drew at its own size over the base.
+    var font: NSFont {
+        get { base.font }
+        set { base.font = newValue; bright.font = newValue }
+    }
+    var lineHeight: CGFloat? {
+        get { base.lineHeight }
+        set { base.lineHeight = newValue; bright.lineHeight = newValue }
+    }
+
     /// `shine` is `live-tool-shine` on live tool rows. `focus` is `live-activity-focus` (index.css:556-622),
     /// the band over Thinking and the compaction row (`ActivityShimmerOverlay`, MessagesTimeline.tsx:3681):
     /// a 72px window with soft edges that travels from -72px to the label's width + 72px in 2.2s, linear.
