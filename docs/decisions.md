@@ -2,6 +2,8 @@
 
 What the user decided and why, newest first. Check here before changing anything these cover.
 
+- 2026-10-16: opening a woken thread dismisses its Woke pill ("make this go away when ive seen it"). T3 keeps a timer wake through a visit until the pill or the thread footer's Dismiss is clicked (Sidebar.tsx:1276-1282). CandyWrapper sends the same `thread.visit` at the wake time that T3's Dismiss sends, so official T3 clears the pill too. The pill and the footer's Dismiss still work as in T3.
+
 - 2026-10-14, agent decision for the user's optimisation pass: no T3-style idle pings on direct routes. T3 pings every 5 s and drops a socket after 15 s without a frame (rpc/protocol.ts:10-12), which also turns any server stall over 15 s into a "reconnecting" banner. CandyWrapper checks a quiet socket only while a reply is owed or a thread runs on that environment and the app is active, and probes on wake, app activation and network changes. That catches a dead network during a turn within 14 to 16 s and costs 0.19 extra wakeups/s only while a turn runs; idle stays at zero. The price: an idle, frontmost window on a silently dead remote network keeps showing "Connected" until the next send, wake, activation, network change or turn. Revisit if the user reports stale idle windows (docs/perf/README.md, "Connection in bad moments").
 
 - 2026-10-14: the user removed Glass Native (Experimental), shipped in v1.1.0: "remove native glass its useless". A stored Glass Native choice falls back to Glass. Fixes made during its work that apply to every theme stay.

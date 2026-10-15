@@ -253,6 +253,24 @@ final class RowActionButton: ControlView {
     }
 }
 
+/// The Woke pill's button (Sidebar.tsx:1871-1888, 2036-2054): laid over the pill's icon and label, it dismisses
+/// the wake and underlines the label on hover.
+final class WokeDismissButton: ControlView {
+    weak var label: LabelView?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        setAccessibilityLabel("Dismiss Woke notification")
+        toolTip = "Dismiss Woke notification"
+    }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        label?.isUnderlined = state.hovered
+    }
+}
+
 /// Base for recycled list rows: hover and press from ControlView, a reusable `configure`.
 class SidebarRowBase: ControlView {
     final var onOpen: (@MainActor () -> Void)? // final: see PROGRESS.md gotchas (Swift 6.4 link bug)
@@ -464,6 +482,8 @@ struct SidebarRowActions {
     var snooze: (ThreadId, NSView) -> Void = { _, _ in }
     var unsnooze: (ThreadId) -> Void = { _ in }
     var unpin: (ThreadId) -> Void = { _ in }
+    /// The Woke pill, a button that dismisses the wake (Sidebar.tsx:1410-1418).
+    var acknowledgeWake: (ThreadId) -> Void = { _ in }
     /// The pull request badge: one link opens it, a stack or several open the thread's list.
     var pullRequest: (ThreadId) -> Void = { _ in }
     /// A row of the badge's hover mini list: that pull request, beside the thread.
@@ -495,6 +515,7 @@ final class SidebarCardRowView: SidebarRowBase {
     let prBadge = PullRequestBadgeView()
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
+    let wokeButton = WokeDismissButton()
     var actions = SidebarRowActions()
     /// The actions hold the status slot (`static`); they keep fading out after this turns false.
     private var showsActions = false
@@ -519,6 +540,9 @@ final class SidebarCardRowView: SidebarRowBase {
         settleButton.padding = 6
         addSubview(snoozeButton)
         addSubview(settleButton)
+        addSubview(wokeButton)
+        wokeButton.label = statusLabel
+        wokeButton.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.acknowledgeWake(r.id) } }
         HoverReveal.snap([snoozeButton, settleButton], visible: false, hides: true)
         settleButton.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.settle(r.id) } }
         snoozeButton.action = { [weak self] in
@@ -571,6 +595,8 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.font = SB.tabular(12)
         }
         let woke = r.topStatus == .woke
+        wokeButton.isHidden = !woke || lift != nil
+        if !woke { statusLabel.isUnderlined = false }
         // The status label and the actions cross-fade over 150 ms (`transition-opacity`, Sidebar.tsx:2027,2094);
         // the slot's width follows `showsActions` at once, as `absolute` and `static` flip without a transition.
         HoverReveal.fade([statusIcon, statusLabel, duration], visible: !showActions || woke)
@@ -631,9 +657,13 @@ final class SidebarCardRowView: SidebarRowBase {
         settleButton.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
         let zw = snoozeButton.preferredWidth
         snoozeButton.frame = NSRect(x: settleButton.frame.minX - zw, y: top, width: zw, height: 20)
-        if showsActions { slotLeft = (showsSnooze ? snoozeButton : settleButton).frame.minX }
-        // Status label at rest (absolute and faded while actions show).
-        var sx = slotRight
+        let actionsLeft = (showsSnooze ? snoozeButton : settleButton).frame.minX
+        if showsActions { slotLeft = actionsLeft }
+        // Status label at rest (absolute and faded while actions show). Woke is itself an action, so it stays in
+        // the flow beside the hover actions instead of under them (Sidebar.tsx:2023-2030).
+        let wokeBeside = showsActions && !wokeButton.isHidden
+        let statusRight = wokeBeside ? actionsLeft : slotRight
+        var sx = statusRight
         if !duration.text.isEmpty {
             let dw = ceil(duration.textWidth)
             duration.frame = NSRect(x: sx - dw, y: top + 2, width: dw + 1, height: 16)
@@ -645,6 +675,8 @@ final class SidebarCardRowView: SidebarRowBase {
             sx -= lw
             if statusIcon.icon != nil { statusIcon.frame = NSRect(x: sx - 4 - 16, y: top + 2, width: 16, height: 16); sx -= 20 }
         }
+        if !wokeButton.isHidden { wokeButton.frame = NSRect(x: sx, y: top, width: statusRight - sx, height: 20) }
+        if wokeBeside { slotLeft = sx }
         let restWidth = max(32, slotRight - sx) // `min-w-8`
         if !showsActions { slotLeft = slotRight - restWidth }
         if lift != nil {
@@ -721,6 +753,11 @@ final class SidebarSlimRowView: SidebarRowBase {
     let terminal = TerminalStatusGlyph()
     let prBadge = PullRequestBadgeView()
     private let time = LabelView()
+    /// The Woke pill's `size-3` alarm clock, before "Woke" in the time slot (Sidebar.tsx:1871-1888).
+    private let wokeIcon = IconView(name: .alarmClock, size: 12)
+    let wokeButton = WokeDismissButton()
+    /// Hovered with the Woke pill showing: the action sits beside the pill instead of over it.
+    private var wokeBeside = false
     private var actionButton: RowActionButton?
     private var actionKind: SidebarRowModel.Action?
     var actions = SidebarRowActions()
@@ -730,9 +767,11 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, title, pin, terminal, prBadge, time] as [NSView] { addSubview(v) }
+        for v in [monogram, title, pin, terminal, prBadge, time, wokeIcon, wokeButton] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
+        wokeButton.label = time
+        wokeButton.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.acknowledgeWake(r.id) } }
         title.lineHeight = 20
         time.font = SB.tabular(12); time.lineHeight = 16
         pin.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.unpin(r.id) } }
@@ -773,14 +812,26 @@ final class SidebarSlimRowView: SidebarRowBase {
         pin.isHidden = !showsPin(r)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
+        let woke = r.isWoke && r.snoozeLabel == nil
         if let snooze = r.snoozeLabel {
             time.text = snooze
             time.color = SB.c(\.infoForeground)
+            time.font = SB.tabular(12)
+        } else if woke {
+            // A wake can land straight in the settled tail, so the pill shows there too (Sidebar.tsx:1871-1873).
+            time.text = "Woke"
+            time.color = SB.c(\.warningForeground)
+            time.font = SB.font(12, .medium)
+            wokeIcon.strokeColor = SB.c(\.warningForeground)
         } else {
             time.text = r.timeLabel
             time.color = unsettle && !hovered ? SB.c(\.secondaryLabel, 0.7) : SB.c(\.secondaryLabel)
+            time.font = SB.tabular(12)
         }
-        HoverReveal.fade([time], visible: !hovered || r.isWoke) // Sidebar.tsx:1857-1860
+        wokeIcon.isHidden = !woke || lift != nil
+        wokeButton.isHidden = wokeIcon.isHidden
+        if !woke { time.isUnderlined = false }
+        HoverReveal.fade([time, wokeIcon], visible: !hovered || r.isWoke) // Sidebar.tsx:1857-1860
         if actionKind != r.action {
             actionButton?.removeFromSuperview()
             let b: RowActionButton
@@ -804,6 +855,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         // `opacity-0 transition-opacity group-any-hover/sidebar-row:opacity-100` (Sidebar.tsx:1903,1920,1937).
         if let actionButton { HoverReveal.fade([actionButton], visible: hovered, hides: true) }
+        wokeBeside = hovered && woke && actionButton != nil
         // The lifted row trades the time and action for the drop verb (Sidebar.tsx:1847-1849).
         if lift != nil {
             time.isHidden = true
@@ -828,13 +880,21 @@ final class SidebarSlimRowView: SidebarRowBase {
         monogram.frame = NSRect(x: x, y: (h - 16) / 2, width: 16, height: 16)
         x += 16 + 10
         let tw = ceil(time.textWidth)
-        let slot = lift == nil ? max(32, tw) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
-        let slotX = w - 10 - slot
-        if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (h - 20) / 2, width: max(0, slot), height: 20) }
-        time.frame = NSRect(x: w - 10 - tw, y: (h - 16) / 2, width: tw + 1, height: 16)
+        let pill = wokeIcon.isHidden ? tw : 12 + 4 + tw // `size-3` icon, `gap-1`
+        // While hovered, a woke row's action joins the flow (`static`) right of the pill (Sidebar.tsx:1907-1941).
+        var timeRight = w - 10
         if let b = actionButton {
             let bw = b.preferredWidth
             b.frame = NSRect(x: w - 10 + 4 - bw, y: (h - 24) / 2, width: bw, height: 24) // `-mr-1`
+            if wokeBeside { timeRight = b.frame.minX }
+        }
+        let slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
+        let slotX = w - 10 - slot
+        if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (h - 20) / 2, width: max(0, slot), height: 20) }
+        time.frame = NSRect(x: timeRight - tw, y: (h - 16) / 2, width: tw + 1, height: 16)
+        if !wokeIcon.isHidden {
+            wokeIcon.frame = NSRect(x: timeRight - pill, y: (h - 12) / 2, width: 12, height: 12)
+            wokeButton.frame = NSRect(x: timeRight - pill, y: (h - 20) / 2, width: pill, height: 20)
         }
         var right = slotX - 10
         // `{title}{pin}{terminal}{prBadge}` in a `gap-2.5` row.
