@@ -159,6 +159,8 @@ public actor ConnectionSupervisor {
     private var online = true
     private var appActive = true
     private var expectingTraffic = false
+    /// Orders `applyWatch` calls, which reach the connection through separate tasks.
+    private var watchGeneration = 0
     private var failures = 0
     private var skipNextDelay = false
     private var connection: RPCConnection?
@@ -291,7 +293,9 @@ public actor ConnectionSupervisor {
     private func applyWatch() {
         guard let connection else { return }
         let on = expectingTraffic && appActive
-        Task { await connection.setWatched(on) }
+        watchGeneration += 1
+        let generation = watchGeneration
+        Task { await connection.setWatched(on, generation: generation) }
     }
 
     /// Starts NWPathMonitor and wake and activation observers. The app calls this once.
