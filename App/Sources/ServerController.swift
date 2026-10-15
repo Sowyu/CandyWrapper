@@ -28,6 +28,12 @@ final class ServerController {
     private var activityUpdate: Task<Void, Never>?
     private var connecting = false
     private var connectTask: Task<Void, Never>?
+    /// While T3's server on this Mac is up but silent (it migrates its database after an update) or its
+    /// service is restarting it, connecting retries on its own, backing off to 30 s, and says so once.
+    /// Nothing retries while the window is hidden; showing it connects at once (`windowChanged`).
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay: Duration = .seconds(2)
+    private var waitingAlert: NSAlert?
     /// While `updateOwnRuntime` swaps the runtime, nothing else starts a server on the home: not before its
     /// database backup is taken, and not while a failed version's restore runs.
     private var updatingRuntime = false
@@ -104,15 +110,41 @@ final class ServerController {
                 startSession(origin: origin, token: token, key: key)
                 environments.setPrimaryDescriptor(descriptor)
                 if remoteAccess.userChoice == nil { refreshRemoteAccess(origin: origin, token: token) }
+            } catch let error as LocalServerDiscoveryError {
+                if waitingAlert == nil { waitingAlert = present(error) }
+                scheduleRetry()
             } catch {
                 present(error)
             }
         }
     }
 
+    private func scheduleRetry() {
+        retryTask?.cancel()
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, .seconds(30))
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, let window = self.window, window.occlusionState.contains(.visible) else { return }
+            self.connect()
+        }
+    }
+
+    /// The server answered: the backoff resets and the "keeps trying" alert closes by itself.
+    private func stopWaiting() {
+        retryTask?.cancel()
+        retryTask = nil
+        retryDelay = .seconds(2)
+        if let alert = waitingAlert, let window, alert.window.sheetParent === window { window.endSheet(alert.window) }
+        waitingAlert = nil
+    }
+
     private func resolveServer() async throws -> (URL, EnvironmentDescriptor, String)? {
         try await finishPendingRestore()
-        switch try await lifecycle.ensureRunning() {
+        let server = try await lifecycle.ensureRunning()
+        // It answered: before any pairing sheet, which would queue behind the "keeps trying" alert.
+        stopWaiting()
+        switch server {
         case .owned(let server):
             return (server.origin, server.descriptor, server.accessToken)
         case .reused(let server):
@@ -492,8 +524,9 @@ final class ServerController {
         return "owned-server-\(String(hash, radix: 16)).json"
     }
 
-    private func present(_ error: Error) {
-        guard let window else { return }
+    @discardableResult
+    private func present(_ error: Error) -> NSAlert? {
+        guard let window else { return nil }
         let alert = NSAlert()
         alert.messageText = "Couldn't reach T3 Code"
         switch error {
@@ -502,5 +535,6 @@ final class ServerController {
         default: alert.informativeText = ConnectionFailure.classify(error).detail
         }
         alert.beginSheetModal(for: window)
+        return alert
     }
 }
