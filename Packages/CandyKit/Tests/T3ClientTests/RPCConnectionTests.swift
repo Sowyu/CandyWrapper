@@ -213,6 +213,12 @@ struct RPCConnectionTests {
         try await Task.sleep(for: .milliseconds(250))
         #expect(pings(idleSocket) == after, "unwatched again: the watchdog stopped")
 
+        // An older toggle that lands late changes nothing.
+        await idle.setWatched(false, generation: 2)
+        await idle.setWatched(true, generation: 1)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(pings(idleSocket) == after, "a stale watch didn't restart the watchdog")
+
         // Watched and silent: closed.
         let (dead, deadSocket) = await makeWatchedConnection()
         await dead.setWatched(true)

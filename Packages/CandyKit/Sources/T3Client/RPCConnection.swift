@@ -66,6 +66,7 @@ public actor RPCConnection {
     private var pingOutstanding = false
     /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
     private var watched = false
+    private var watchGeneration = 0
     private let traceNumber = RPCTrace.connectionNumber()
 
     public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
@@ -175,7 +176,12 @@ public actor RPCConnection {
     public var isClosed: Bool { closedWith != nil }
 
     /// Keeps the liveness watchdog running while `on`, even with nothing owed.
-    public func setWatched(_ on: Bool) {
+    /// `generation` orders calls sent through separate tasks, which may land out of order: an older one is dropped.
+    public func setWatched(_ on: Bool, generation: Int? = nil) {
+        if let generation {
+            guard generation > watchGeneration else { return }
+            watchGeneration = generation
+        }
         watched = on
         if on { armWatchdog() }
     }
