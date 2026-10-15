@@ -24,8 +24,8 @@ final class ProjectScriptsController {
     /// `useT3ProjectFileScripts`: the scripts of the workspace's `t3.json`, keyed by environment and cwd.
     private var fileScripts: (key: String, scripts: [T3ProjectFile.Script])?
     private var fileTask: Task<Void, Never>?
-    /// `projects.readFile` on an environment; nil when unreadable.
-    var readFile: ((_ environmentId: String, _ cwd: String, _ path: String) async -> (contents: String, truncated: Bool)?)?
+    /// `projects.readFile` on an environment; nil when the server has no readable file, a throw when it couldn't be asked.
+    var readFile: ((_ environmentId: String, _ cwd: String, _ path: String) async throws -> (contents: String, truncated: Bool)?)?
     /// The script's checked-in t3.json counterparts not yet imported (`importableScripts`).
     private var importable: [T3ProjectFile.Script] {
         T3ProjectFile.importable(fileScripts?.scripts ?? [], existing: scripts)
@@ -85,7 +85,9 @@ final class ProjectScriptsController {
         fileTask?.cancel()
         fileTask = Task { [weak self] in
             guard let read = self?.readFile else { return }
-            let reply = await read(env, cwd, T3ProjectFile.fileName)
+            // A read that never reached the server (a reconnect) isn't cached, so the next switch asks again.
+            let reply: (contents: String, truncated: Bool)?
+            do { reply = try await read(env, cwd, T3ProjectFile.fileName) } catch { return }
             guard !Task.isCancelled, let self, self.fileScripts?.key == key else { return }
             let scripts = reply.flatMap { $0.truncated ? nil : T3ProjectFile.parse($0.contents) }?.scripts ?? []
             self.recentFiles[key] = (ContinuousClock.now, scripts)

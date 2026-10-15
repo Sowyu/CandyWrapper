@@ -201,6 +201,9 @@ final class GitController {
 
     /// `vcs.refreshStatus`: the server re-reads the workspace and pushes the change on the stream.
     private func refreshStatus() {
+        // Every git action here ends with this, and T3 drops cached refs when any of them settles (vcs.ts:296-356),
+        // so a switch back within `refsReuse` never shows refs from before a pull, init or branch change.
+        refsCache.removeAll()
         guard let target, let shell else { return }
         let key = statusKey
         Task { [weak self] in

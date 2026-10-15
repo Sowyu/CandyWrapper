@@ -505,8 +505,10 @@ final class ThreadController {
         scripts = ProjectScriptsController(panel: panel, sidebar: sidebar, composer: composer, terminal: terminal)
         scripts.openProjectSettings = { [weak sidebar] key in sidebar?.actions.openProjectSettings(key) }
         scripts.readFile = { [weak environments] env, cwd, path in
-            guard let reply = try? await environments?.request(env, "projects.readFile", .object(["cwd": .string(cwd), "relativePath": .string(path)])),
-                  let contents = reply["contents"]?.stringValue else { return nil }
+            let reply: JSONValue?
+            do { reply = try await environments?.request(env, "projects.readFile", .object(["cwd": .string(cwd), "relativePath": .string(path)])) }
+            catch RPCClientError.failure { return nil } // the server answered: no readable file
+            guard let reply, let contents = reply["contents"]?.stringValue else { return nil }
             return (contents, reply["truncated"] == .bool(true))
         }
         // `runProjectScript` (ChatView.tsx:5059-5075): a script with `autoOpenPreview` opens its URL in the browser panel
