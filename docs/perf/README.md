@@ -170,6 +170,8 @@ These didn't pay off:
 
 `big_thread.scroll_cpu_ms` (276 to 365 ms) and the open first frames (56 to 68 ms, cached 44 to 69 ms) moved up with overlapping ranges, so the verdicts are "same". The 810aa19 baseline's 276 ms was low next to e34f91c's 346 ms. Six other commits landed between the two runs, so rerun before reading either as a regression.
 
+The pre-release review, `2026-10-15-a3077d8-w1` against `810aa19`, flags nothing. Its scroll CPU is 341 ms (301 to 342) and its first frames 63, 50 and 66 ms, all within the thresholds. Five interleaved launches each of the two Release builds, with no stall monitor, gave scroll CPU 334 to 364 ms (median 344) for 810aa19 and 338 to 363 ms (median 352) for main, and first frames of 63, 48 and 66 ms on both. The rise came from two things. The e72162b review measured with the monitor on, which adds about 40 ms, and 810aa19's 276 ms was a low run.
+
 ## Sidebar updates (2026-10-13)
 
 `CANDY_SIDEBAR_TIMING=1` (passed through `scripts/run-app`) prints `sidebar rebuild <ms>, <items> items, <n> rows built` for every sidebar update; `CANDY_SIDEBAR_TIMING=nocache` builds the list from scratch each time, for a before. Numbers and method: `docs/research/m10-load-2026-10-12.md`, "Sidebar updates".
