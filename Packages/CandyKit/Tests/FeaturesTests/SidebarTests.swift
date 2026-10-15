@@ -182,6 +182,21 @@ struct SidebarListTests {
         #expect(content.pendingLabelRefresh == nil)
     }
 
+    /// The clock is armed for a snooze's end, though a snooze label's last step ("1m") comes earlier and the
+    /// snoozed row may be out of sight (Sidebar.tsx:3008-3022). The thread left the shelf only on the next change.
+    @Test func snoozeEndArmsTheLabelClock() throws {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        defer { window.contentView = nil }
+        content.setSnapshot(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
+            SidebarPreview.thread("s1", "Look again", project: "p1", kind: .read, minutesAgo: 400,
+                                  extra: ["snoozedUntil": SidebarPreview.iso(-0.5), "snoozedAt": SidebarPreview.iso(60)]),
+        ]), animated: false)
+        let due = try #require(content.pendingLabelRefresh).timeIntervalSinceNow
+        #expect(due > 29 && due < 32)
+    }
+
     /// Snoozing the open thread turns its card into a slim row in the collapsed shelf, and unsnoozing
     /// turns it back. Each shape gets its own view class, and no card view lands in the slim pool
     /// (a card with "Working 1m" stayed at the foot of the user's sidebar).
