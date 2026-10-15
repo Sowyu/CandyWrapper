@@ -364,6 +364,25 @@ Server. The app starts its own server only when nothing serves the home, from `e
 
 HUD. ⌥⇧⌘P or "hud" in the palette. It reads `proc_pid_rusage` every 0.5 s with 10% tolerance, only while the window is visible. Frame time is the longest main run loop pass, wake to sleep, since the last sample: a frame's layout, drawing and Core Animation commit happen inside one pass, and measuring it needs no display link. Events are server messages decoded by any socket, counted only while the HUD is shown. During a haiku turn it read 12.3% CPU, a 29.6 ms longest pass, 14.5 events/s and 145 MB. Showing it costs about 4 wakeups/s. Hidden it costs nothing beyond one uncontended lock per received frame.
 
+## Energy by state (2026-10-15)
+
+Task battery. `scripts/procstat` now prints each process's energy as an average in mW (`ri_energy_nj`; `ri_billed_energy` reads 0 here). Release build of 428998c with its own 3105 server on a copy of `perf-home-pristine`, so CandyWrapper started and owned the server, window 1100x780 frontmost unless hidden. Turns were claude-haiku-5-5 writing 300 numbers as words. CandyWrapper is under its own name, the server tree under the others, and WindowServer is the rise over its own idle of 8.0 mW (`sudo procstat`), so read that column as a rough share.
+
+| State | CandyWrapper | WindowServer rise | T3 server | Resource monitor | Claude processes |
+|---|---|---|---|---|---|
+| Idle, window shown, server settled | 0.01 mW, 0.8 wk/s | | 0.25 | 1.35 | 0.3 each |
+| Idle, window shown, server's first minutes | 0.00 | | 3.30 | 1.34 | none yet |
+| Idle, window hidden | 0.00, 0.7 wk/s | | 0.13 | 0.49 | 0.2 to 2.5 each |
+| Reply streaming, short thread, 20 s | 6.2, 6.2 wk/s | 1.6 | 11 | 2.5 | 4 to 44 |
+| Reply streaming, long thread ("Numbers 1 to 1000"), 20 s | 10.0, 8.2 wk/s | 2.6 | 32 | | |
+| Three agents in other threads, window shown, 30 s | 1.7, 1.4 wk/s | | 36 | 1.6 | about 26 together |
+| Three agents, window hidden, 30 s | 1.25, 1.0 wk/s | | 28 | 0.6 | about 11 together |
+
+The app itself is at the floor when idle and costs 1 to 10 mW while agents work, 3 to 15% of the total. The rest is T3's: the server, its resource monitor (`t3-resource-monitor`, a sample every 5 s without a Diagnostics subscriber or on battery, `NativeTelemetryClient.ts:42-45`) and the Claude processes, which T3 keeps 30 minutes after their last turn (`ProviderSessionManager.ts:54`, not a setting). The official app runs the same server. For scale, two hours of streaming into a long thread costs CandyWrapper about 90 J, about 0.05% of a 52 Wh charge.
+
+At steady idle the owned server costs about the same at normal and background priority (0.25 and 0.13 mW), so the 2026-10-14 change that keeps it at normal priority while the app is active costs no measurable energy. Frames decode on a detached task at default priority; moving them to efficiency cores would save well under 1 mW while streaming.
+
+
 ## Battery during runs (2026-10-11)
 
 Task battery, worktree agent-a20c5cd6caf7826c0. The states a user sits in for hours while agents run, each measured with `scripts/procstat` (CPU, interrupt and package idle wakeups) and `sudo powermetrics --samplers tasks --show-process-energy` over the same window. Debug builds against the shared sandbox server, where three other agents built and ran turns: the 1-minute load sat at 2.2 to 5 during the A/B windows and up to 12 during the single runs. A running turn that streams nothing came from a haiku turn told to wait in the foreground on `until [ -f <file> ]; do sleep 2; done` until I touched the file; a raw `sleep` or `ping` wait is refused by the agent's harness. During that wait the server sent the client nothing for 20 s, so every wakeup below is the client's own.
