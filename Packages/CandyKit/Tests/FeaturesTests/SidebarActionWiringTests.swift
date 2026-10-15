@@ -35,6 +35,31 @@ struct SidebarActionWiringTests {
         window.contentView = nil
     }
 
+    /// A woken row keeps its Woke pill beside the hover actions, never under them, and the pill dismisses the wake.
+    @Test func wokePillSitsBesideTheActionsAndDismisses() throws {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        var calls: [String] = []
+        content.setSnapshot(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
+            SidebarPreview.thread("w1", "Add a mode", project: "p1", kind: .read, minutesAgo: 400,
+                                  extra: ["snoozedUntil": SidebarPreview.iso(10), "snoozedAt": SidebarPreview.iso(60)]),
+        ]), animated: false)
+        content.list.layoutSubtreeIfNeeded()
+        content.actions.acknowledgeWake = { calls.append("wake \($0.rawValue)") }
+        let card = try #require(content.list.rowView("thread:w1") as? SidebarCardRowView)
+        #expect(card.row?.topStatus == .woke && !card.wokeButton.isHidden)
+        var hot = card.state
+        hot.hovered = true
+        card.previewState(hot)
+        card.layoutSubtreeIfNeeded()
+        let actions = card.snoozeButton.isHidden ? card.settleButton.frame : card.snoozeButton.frame
+        #expect(card.wokeButton.frame.width > 20 && card.wokeButton.frame.maxX <= actions.minX)
+        card.wokeButton.performAction()
+        #expect(calls == ["wake w1"])
+        window.contentView = nil
+    }
+
     @Test func undoNoticeAndUtilityFooter() {
         let content = SidebarContentView()
         let window = host(content)

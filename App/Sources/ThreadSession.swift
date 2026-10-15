@@ -395,13 +395,7 @@ final class ThreadController {
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
         lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
-        lineage.acknowledgeWake = { [weak self, weak sidebar] id, time in
-            sidebar?.state.localVisits[id] = time
-            guard let self, let env = id.environmentId, self.composer.config(env)?.capabilities.contains("threadVisitedTracking") == true else { return }
-            Task { _ = try? await self.environments.request(env, "orchestration.dispatchCommand", .object([
-                "type": .string("thread.visit"), "commandId": .string(UUID().uuidString.lowercased()),
-                "threadId": .string(id.localId.rawValue), "visitedAt": .string(time.raw)])) }
-        }
+        lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
         // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
         // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
         panel.model.webAssetURL = { [weak self] id, name in
@@ -851,6 +845,7 @@ final class ThreadController {
         session.paintRetained()
         // composer.showThread fired onTargetChange before the session was set, so sync now.
         automations.sync()
+        syncVisit()
         terminal.show(id)
         scripts.show(id)
         updateEnvironmentBanner()
@@ -925,6 +920,16 @@ final class ThreadController {
     private var visits = ThreadVisitTracker()
     private var visitTimer: DispatchWorkItem?
     private var visitViewShown = false
+    /// The wake the open thread last acknowledged, so a shell change before the visit's echo doesn't send it again.
+    private var acknowledgedWake: String?
+
+    /// `useAcknowledgeThreadWoke` (useThreadActions.ts:240-256): visits the thread at its wake time, on the server
+    /// when it tracks visits and in the local watermark otherwise.
+    func acknowledgeWake(_ id: ThreadId, at time: T3Timestamp) {
+        sidebar?.state.localVisits[id] = time
+        guard let env = id.environmentId, composer.config(env)?.capabilities.contains("threadVisitedTracking") == true else { return }
+        Task { _ = try? await environments.dispatch(id, ThreadCommands.visit(id.localId, visitedAt: time)) }
+    }
 
     /// ChatView's visit effect (ChatView.tsx:2938-3000) for the open thread while the thread view shows:
     /// a visit clears the row's Done and Woke marks. Runs on every shell change and route change.
@@ -940,6 +945,15 @@ final class ThreadController {
         guard shown, let id = openThreadId, let sidebar,
               let shell = sidebar.snapshot?.threads.first(where: { $0.id == id }) else { return }
         let now = TimestampFormat.nowMs()
+        // Opening a woken thread dismisses its Woke pill. T3 keeps a timer wake through a visit until the pill or the
+        // footer's Dismiss is clicked (Sidebar.tsx:1276-1282); the user asked for it to clear once seen (decisions.md).
+        let thread = SidebarThread(shell)
+        if let wake = SidebarModel.threadWokeAt(thread, nowMs: now), acknowledgedWake != id.rawValue + wake.raw,
+           SidebarModel.isWoke(thread, lastVisitedAt: SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt,
+                                                                                             local: sidebar.state.localVisits[id]), nowMs: now) {
+            acknowledgedWake = id.rawValue + wake.raw
+            acknowledgeWake(id, at: wake)
+        }
         switch visits.decide(shell, routeKey: id.rawValue, local: sidebar.state.localVisits[id], nowMs: now) {
         case .none: break
         case .local(let time): sidebar.state.localVisits[id] = time
