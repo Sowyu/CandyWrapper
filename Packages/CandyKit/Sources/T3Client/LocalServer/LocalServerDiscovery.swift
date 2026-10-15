@@ -166,8 +166,8 @@ public enum LocalServerDiscoveryError: Error, Sendable, Equatable, CustomStringC
 
     public var description: String {
         switch self {
-        case .unresponsive: "T3 Code's server on this Mac is running but not responding. Try again in a moment."
-        case .serviceNotRunning: "T3 Code's background service runs the server on this Mac, and it isn't running right now. Start T3 Code's service, then try again."
+        case .unresponsive: "T3 Code's server on this Mac is running but not answering yet. It may be updating its database. CandyWrapper keeps trying and connects as soon as it answers."
+        case .serviceNotRunning: "T3 Code's background service runs the server on this Mac, and it isn't running right now. CandyWrapper keeps trying, and connects once T3 Code's service is back."
         }
     }
 }
