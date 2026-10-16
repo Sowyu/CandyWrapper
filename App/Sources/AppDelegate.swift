@@ -656,9 +656,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func checkForUpdates(_ sender: Any?) { updates?.menuCheck() }
 
-    /// Test builds carry their own bundle id (`dev.candywrapper.test.<task>`). Only they read the development
-    /// defaults that stand in for launch arguments, so a stray default can never redirect the shipped app.
+    /// Sandbox and performance builds have separate defaults and file-backed drafts/stashes. Only they read
+    /// development defaults that stand in for launch arguments, so a stray default cannot redirect the shipped app.
     static let isTestBuild = Bundle.main.bundleIdentifier?.hasPrefix("dev.candywrapper.test.") == true
+        || Bundle.main.bundleIdentifier == "dev.candywrapper.perf"
 
     @objc func showGallery(_ sender: Any?) {
         if galleryWindow == nil {

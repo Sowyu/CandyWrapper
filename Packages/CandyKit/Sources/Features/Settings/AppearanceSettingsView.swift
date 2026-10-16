@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import DesignSystem
 import T3Protocol
 
@@ -9,6 +10,11 @@ public final class AppearanceSettingsView: SettingsPageBase {
     static let advancedKey = "settings.typographyAdvanced"
     private var typography: SettingsSectionView?
     private var advancedSwitch = SwitchView(isOn: false, size: .default)
+    /// T3 discovers installed families asynchronously and shares the result (FontFamilyPicker.tsx:48-61).
+    /// Core Text avoids NSFontManager's localized descriptor scan, which stalls the first page open.
+    private lazy var installedFamilies = Task.detached(priority: .userInitiated) {
+        (CTFontManagerCopyAvailableFontFamilyNames() as? [String] ?? []).sorted()
+    }
     private lazy var simpleRows: [any SettingsGroupRow] = [interfaceFont(), fontRow("code-font", title: "Monospace font",
         detail: "Code blocks, diffs, file previews, and the terminal.", family: "fontFamilyCode", size: "fontSizeCode", range: 10...18,
         defaultFamily: "SF Mono", reset: "monospace font")]
@@ -271,7 +277,12 @@ public final class AppearanceSettingsView: SettingsPageBase {
     /// `FontFamilySettingsRow`: a family input (the probed default as placeholder) and a size select, reset clears both.
     private func fontRow(_ id: String, title: String? = nil, detail: String, family: String, size: String, range: ClosedRange<Int>,
                          defaultFamily: String, reset: String) -> SettingsRowView {
-        let picker = ComboboxView(options: NSFontManager.shared.availableFontFamilies.sorted(), placeholder: defaultFamily)
+        let picker = ComboboxView(options: [], placeholder: defaultFamily)
+        let families = installedFamilies
+        Task { [weak picker] in
+            let options = await families.value
+            picker?.options = options
+        }
         let input = picker.input
         input.size = .sm
         picker.frame.size = NSSize(width: 176, height: 28)
@@ -293,14 +304,17 @@ public final class AppearanceSettingsView: SettingsPageBase {
         }
         // The family commits when typing pauses or on Return, only for a font this Mac has (or an empty field).
         input.onCommit = { [weak self, weak input] text in
-            guard let input else { return }
             let name = text.trimmingCharacters(in: .whitespaces)
-            guard name.isEmpty || NSFontManager.shared.availableFontFamilies.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
-                input.isInvalid = true
-                return
+            Task { [weak self, weak input] in
+                let options = await families.value
+                guard let self, let input, input.text.trimmingCharacters(in: .whitespaces) == name else { return }
+                guard name.isEmpty || options.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
+                    input.isInvalid = true
+                    return
+                }
+                input.isInvalid = false
+                self.context.writeClient?([family: .string(name)])
             }
-            input.isInvalid = false
-            self?.context.writeClient?([family: .string(name)])
         }
         select.onChange = { [weak self] i in self?.context.writeClient?([size: .number(Double(sizes[i]))]) }
         binder.add { [weak self, weak input, weak select, weak picker] in

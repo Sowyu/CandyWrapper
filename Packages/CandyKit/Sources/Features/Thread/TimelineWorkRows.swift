@@ -575,6 +575,7 @@ final class ReasoningTraceView: DSView {
     /// newest text. Scrolling up more than 4pt from the end pauses that until the reader returns to the end.
     private var followLive = false
     private var atLiveEdge = true
+    private var traceKey: String?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -589,6 +590,13 @@ final class ReasoningTraceView: DSView {
     }
 
     func set(_ items: [Item], context: TimelineContext) {
+        if traceKey != items.first?.key {
+            traceKey = items.first?.key
+            // A recycled box represents a newly mounted WorkLogDetails (WorkLog.tsx:145-152).
+            scroll.scroll(to: .zero)
+            atLiveEdge = true
+        }
+        while views.count > items.count { views.removeLast().removeFromSuperview() }
         while views.count < items.count {
             let m = MarkdownView(frame: .zero)
             m.bodyColor = TL.c(\.foreground)

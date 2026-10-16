@@ -64,6 +64,11 @@ final class HtmlRenderDialogView: DSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { frameView.release() }
+    }
+
     /// Shows the dialog over `window`'s content with the close button focused (`initialFocus`).
     func present(in window: NSWindow) {
         guard let content = window.contentView else { return }

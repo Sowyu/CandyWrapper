@@ -58,7 +58,7 @@ PERF_BUNDLE_ID = "dev.candywrapper.perf"
 # The thread cache likewise: dev runs fill the shared one from the live sandbox, which has drifted from the
 # frozen dataset. This one only ever sees the perf server, so after the first launch it is warm and stable.
 PERF_THREAD_CACHE = os.path.join(os.path.dirname(SANDBOX), "perf-thread-cache-w%d" % WORKLOAD)
-DEMO_PID_FILE = "/tmp/cw-demo.pid"
+DEMO_PID_FILE = os.environ.get("CANDY_DEMO_PID_FILE", "/tmp/cw-demo.pid")
 IDLE_THREAD = "Reply with one word: candy"
 BIG_THREAD = "Numbers 1 to 1000"
 STREAM_PROMPT = "Without using any tools, write the numbers from 1 to 60 as English words, one per line."
