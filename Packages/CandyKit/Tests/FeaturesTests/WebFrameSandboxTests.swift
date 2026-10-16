@@ -85,4 +85,47 @@ struct WebFrameSandboxTests {
         #expect(ThreadWebFrameBudget.count == before)
         frame.release()
     }
+
+    @Test func expandedReplyKeepsTheSharedStoreUntilItCloses() throws {
+        let inline = F(frame: .zero), expanded = F(frame: .zero)
+        expanded.budgeted = false
+        defer { inline.release(); expanded.release() }
+        let page = F.Page(src: src, title: "reply", dark: false)
+        inline.activate(page)
+        expanded.activate(page)
+        let store = try #require(expanded.webView?.configuration.websiteDataStore)
+        #expect(inline.webView?.configuration.websiteDataStore === store)
+        // Touching the last inline frame must not detach its live store either.
+        ThreadWebFrameBudget.touch(inline)
+        #expect(ThreadWebFrameBudget.dataStore === store)
+        inline.release()
+        // Force Reload and later inline frames must still use the expanded reply's store.
+        #expect(ThreadWebFrameBudget.dataStore === store)
+        expanded.release()
+        #expect(ThreadWebFrameBudget.dataStore !== store)
+    }
+
+    @Test func expandedReplyDoesNotConsumeOrGetEvictedFromInlineSlots() {
+        let expanded = F(frame: .zero)
+        expanded.budgeted = false
+        let frames = (0...ThreadWebFrameBudget.limit).map { _ in F(frame: .zero) }
+        defer { frames.forEach { $0.release() }; expanded.release() }
+        let page = F.Page(src: src, title: "reply", dark: false)
+        expanded.activate(page)
+        for frame in frames { frame.activate(page) }
+        #expect(expanded.isLive)
+        #expect(!frames[0].isLive)
+        #expect(frames.dropFirst().allSatisfy { $0.isLive })
+        #expect(ThreadWebFrameBudget.count == ThreadWebFrameBudget.limit)
+    }
+
+    @Test func removingExpandedReplyReleasesItsStore() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        let dialog = HtmlRenderDialogView(page: .init(src: src, title: "reply", dark: false)) { _, _ in }
+        dialog.present(in: window)
+        let store = ThreadWebFrameBudget.dataStore
+        dialog.removeFromSuperview()
+        #expect(ThreadWebFrameBudget.dataStore !== store)
+    }
 }

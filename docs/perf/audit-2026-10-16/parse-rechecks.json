@@ -1,0 +1,286 @@
+{
+  "command": "CW_BENCH=1 scripts/test -c release -Xswiftc -enable-testing --skip-build --filter PerfBenchmarks/hugeThreadOpen",
+  "reason": "Isolated reruns of the 61.1 ms huge_full_parse outlier, with no code change.",
+  "runs": [
+    [
+      {
+        "bytes": 8294252,
+        "max_ms": 17.530541,
+        "median_ms": 16.4565,
+        "min_ms": 16.4475,
+        "name": "huge_open_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 10.178084,
+        "median_ms": 10.0715,
+        "min_ms": 10.016125,
+        "name": "huge_open_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.011042,
+        "median_ms": 0.009458,
+        "min_ms": 0.009333,
+        "name": "huge_open_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 1.291417,
+        "median_ms": 1.28125,
+        "min_ms": 1.271625,
+        "name": "huge_open_entries",
+        "nodes": 3600,
+        "rows": 57,
+        "runs": 900
+      },
+      {
+        "max_ms": 0.1705,
+        "median_ms": 0.147791,
+        "min_ms": 0.145583,
+        "name": "huge_open_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 6.573375,
+        "median_ms": 5.70775,
+        "min_ms": 5.702541,
+        "name": "huge_open_panel",
+        "runs": 5,
+        "timeline_rows": 27
+      },
+      {
+        "bytes": 20303983,
+        "max_ms": 42.161666,
+        "median_ms": 40.693792,
+        "min_ms": 40.56275,
+        "name": "huge_full_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 31.242375,
+        "median_ms": 30.825292,
+        "min_ms": 30.66075,
+        "name": "huge_full_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.878708,
+        "median_ms": 0.87275,
+        "min_ms": 0.834875,
+        "name": "huge_full_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 15.307292,
+        "median_ms": 14.720292,
+        "min_ms": 14.639542,
+        "name": "huge_full_entries",
+        "nodes": 3600,
+        "rows": 5700,
+        "runs": 900
+      },
+      {
+        "max_ms": 18.25575,
+        "median_ms": 17.9725,
+        "min_ms": 17.864875,
+        "name": "huge_full_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 4.521375,
+        "median_ms": 4.255458,
+        "min_ms": 1.771833,
+        "name": "huge_full_panel",
+        "runs": 5,
+        "timeline_rows": 2700
+      },
+      {
+        "bytes": 8339054,
+        "max_ms": 16.945917,
+        "median_ms": 16.878292,
+        "min_ms": 16.760667,
+        "name": "huge_open_long_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 10.06125,
+        "median_ms": 9.949125,
+        "min_ms": 9.860709,
+        "name": "huge_open_long_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.012041,
+        "median_ms": 0.00975,
+        "min_ms": 0.009375,
+        "name": "huge_open_long_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 1.299833,
+        "median_ms": 1.250625,
+        "min_ms": 1.230291,
+        "name": "huge_open_long_entries",
+        "nodes": 3600,
+        "rows": 57,
+        "runs": 900
+      },
+      {
+        "max_ms": 0.145916,
+        "median_ms": 0.142958,
+        "min_ms": 0.140667,
+        "name": "huge_open_long_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 11.844042,
+        "median_ms": 11.368334,
+        "min_ms": 11.192167,
+        "name": "huge_open_long_panel",
+        "runs": 5,
+        "timeline_rows": 27
+      }
+    ],
+    [
+      {
+        "bytes": 8294252,
+        "max_ms": 17.954458,
+        "median_ms": 16.747875,
+        "min_ms": 16.702792,
+        "name": "huge_open_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 10.064791,
+        "median_ms": 9.917917,
+        "min_ms": 9.88175,
+        "name": "huge_open_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.011333,
+        "median_ms": 0.009292,
+        "min_ms": 0.009208,
+        "name": "huge_open_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 1.28325,
+        "median_ms": 1.261084,
+        "min_ms": 1.254833,
+        "name": "huge_open_entries",
+        "nodes": 3600,
+        "rows": 57,
+        "runs": 900
+      },
+      {
+        "max_ms": 0.155625,
+        "median_ms": 0.145625,
+        "min_ms": 0.141333,
+        "name": "huge_open_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 5.941125,
+        "median_ms": 5.495166,
+        "min_ms": 5.469542,
+        "name": "huge_open_panel",
+        "runs": 5,
+        "timeline_rows": 27
+      },
+      {
+        "bytes": 20303983,
+        "max_ms": 41.330958,
+        "median_ms": 39.840625,
+        "min_ms": 39.703667,
+        "name": "huge_full_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 30.190542,
+        "median_ms": 30.137375,
+        "min_ms": 29.849,
+        "name": "huge_full_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.841458,
+        "median_ms": 0.831667,
+        "min_ms": 0.804541,
+        "name": "huge_full_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 14.918458,
+        "median_ms": 14.293667,
+        "min_ms": 14.135541,
+        "name": "huge_full_entries",
+        "nodes": 3600,
+        "rows": 5700,
+        "runs": 900
+      },
+      {
+        "max_ms": 18.366666,
+        "median_ms": 18.195958,
+        "min_ms": 18.142417,
+        "name": "huge_full_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 4.68,
+        "median_ms": 4.283042,
+        "min_ms": 1.812375,
+        "name": "huge_full_panel",
+        "runs": 5,
+        "timeline_rows": 2700
+      },
+      {
+        "bytes": 8339054,
+        "max_ms": 16.606584,
+        "median_ms": 16.518042,
+        "min_ms": 16.493292,
+        "name": "huge_open_long_parse",
+        "runs": 5
+      },
+      {
+        "max_ms": 10.080791,
+        "median_ms": 9.938375,
+        "min_ms": 9.881583,
+        "name": "huge_open_long_decode",
+        "runs": 5
+      },
+      {
+        "max_ms": 0.01375,
+        "median_ms": 0.009459,
+        "min_ms": 0.00925,
+        "name": "huge_open_long_reduce",
+        "runs": 5
+      },
+      {
+        "max_ms": 1.255791,
+        "median_ms": 1.250958,
+        "min_ms": 1.227125,
+        "name": "huge_open_long_entries",
+        "nodes": 3600,
+        "rows": 57,
+        "runs": 900
+      },
+      {
+        "max_ms": 0.153708,
+        "median_ms": 0.145333,
+        "min_ms": 0.141834,
+        "name": "huge_open_long_derive",
+        "runs": 5
+      },
+      {
+        "max_ms": 11.88475,
+        "median_ms": 11.528375,
+        "min_ms": 11.480583,
+        "name": "huge_open_long_panel",
+        "runs": 5,
+        "timeline_rows": 27
+      }
+    ]
+  ]
+}

@@ -103,7 +103,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         frameLoads = 0
         shortcutsPosted = false
         web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
-        if page.kind == .agent, budgeted { ThreadWebFrameBudget.add(self) }
+        if page.kind == .agent { ThreadWebFrameBudget.add(self) }
     }
 
     /// Tears the web view down; its content process goes when no other view uses it.
@@ -252,7 +252,8 @@ private final class ThreadWebFrameMessageProxy: NSObject, WKScriptMessageHandler
     }
 }
 
-/// At most `limit` live web views across the app, least recently shown evicted first.
+/// At most `limit` inline web views, least recently shown evicted first. Expanded replies share the store
+/// without taking an inline slot (HtmlRenderDialog.tsx:40-47 mounts a separate HtmlRenderDocument).
 @MainActor
 enum ThreadWebFrameBudget {
     static let limit = 3
@@ -265,13 +266,12 @@ enum ThreadWebFrameBudget {
         return made
     }
     private static var store: WKWebsiteDataStore?
-    private static var live: [ThreadWebFrameView] = [] { didSet { if live.isEmpty { store = nil } } }
+    private static var live: [ThreadWebFrameView] = []
 
     static func add(_ frame: ThreadWebFrameView) {
         live.removeAll { $0 === frame }
         live.append(frame)
-        while live.count > limit {
-            let oldest = live.removeFirst()
+        while count > limit, let oldest = live.first(where: { $0.budgeted }) {
             oldest.release()
             oldest.onEvicted?()
         }
@@ -282,7 +282,12 @@ enum ThreadWebFrameBudget {
         live.append(live.remove(at: i))
     }
 
-    static func remove(_ frame: ThreadWebFrameView) { live.removeAll { $0 === frame } }
+    static func remove(_ frame: ThreadWebFrameView) {
+        live.removeAll { $0 === frame }
+        // Only an actual release ends the store's lifetime. Moving the first frame to the end of the
+        // list in add/touch can briefly empty it while that frame still owns its web view.
+        if live.isEmpty { store = nil }
+    }
 
     /// Force Reload: wipes what live frames stored (cache, cookies, web storage). A store with no frames is gone already.
     static func clearData() {
@@ -290,7 +295,7 @@ enum ThreadWebFrameBudget {
     }
 
     /// For tests and the memory report.
-    static var count: Int { live.count }
+    static var count: Int { live.filter(\.budgeted).count }
 }
 
 /// Keyboard focus in a framed page, for the app's shortcut dispatcher.

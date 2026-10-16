@@ -7,7 +7,14 @@ public final class ComboboxView: DSView {
     public enum Kind: Sendable { case combobox, autocomplete }
 
     public let kind: Kind
-    public var options: [String]
+    public var options: [String] {
+        didSet {
+            selectedIndex = options.firstIndex(of: input.text)
+            if let popup = list?.hostPopup, popupHost?.popups.contains(where: { $0 === popup }) == true {
+                showList(filter: filtersList)
+            }
+        }
+    }
     public private(set) var selectedIndex: Int?
     public let input: InputView
     public final var onChange: (@MainActor (Int) -> Void)?
@@ -16,6 +23,7 @@ public final class ComboboxView: DSView {
     private var settingText = false
     private weak var list: MenuPopupView?
     private var shown: [Int] = []
+    private var filtersList = false
 
     /// `showTrigger` defaults to true for Combobox and false for Autocomplete.
     public init(_ kind: Kind = .combobox, options: [String], placeholder: String = "", showTrigger: Bool? = nil) {
@@ -67,6 +75,7 @@ public final class ComboboxView: DSView {
 
     func showList(filter: Bool) {
         guard let host = popupHost else { return }
+        filtersList = filter
         shown = filter ? Self.filter(options, input.text) : Array(options.indices)
         let items = shown.map { MenuItem(options[$0], kind: .radio($0 == selectedIndex)) }
         if let list, list.hostPopup.map({ p in host.popups.contains { $0 === p } }) == true {

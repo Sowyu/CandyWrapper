@@ -245,6 +245,23 @@ struct PopupBehaviourTests {
         #expect(ComboboxView.filter(["A", "B"], " ") == [0, 1])
     }
 
+    @Test func comboboxAcceptsOptionsWhileItsListIsOpen() throws {
+        let (w, root) = window()
+        let picker = ComboboxView(options: [])
+        picker.frame = NSRect(x: 100, y: 100, width: 200, height: 32)
+        root.addSubview(picker)
+        picker.setValue("Menlo")
+        picker.showList(filter: false)
+        let host = PopupHost.host(for: w)
+        picker.options = ["Helvetica", "Menlo", "Monaco"]
+        #expect(picker.selectedIndex == 1)
+        #expect(host.popups.count == 1)
+        host.handleKey(.down)
+        host.handleKey(.enter)
+        #expect(picker.input.text == "Monaco")
+        #expect(picker.selectedIndex == 2)
+    }
+
     @Test func safeTriangle() {
         let sub = CGRect(x: 200, y: 0, width: 100, height: 200)
         #expect(MenuPopupView.inSafeTriangle(CGPoint(x: 150, y: 100), from: CGPoint(x: 100, y: 100), toward: sub))

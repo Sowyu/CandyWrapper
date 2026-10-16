@@ -679,8 +679,17 @@ public final class SidebarContentView: DSView {
         let ms = nowMs, rows = list.visibleRowModels
         // The earliest wake too, 50 ms late, so the Snoozed shelf empties the moment a snooze ends even while its rows
         // are collapsed or scrolled away (Sidebar.tsx:3008-3022).
-        let wakeAt = snapshot?.threads.lazy.filter { $0.archivedAt == nil }
-            .compactMap { $0.snoozedUntil?.epochMs }.filter { $0 > ms }.min().map { $0 + 50 }
+        // A lazy filter/map chain repeatedly copies the large ThreadShell value while advancing its
+        // iterator. Read only the two fields this scan needs, without intermediate thread values.
+        var earliestWake: Int64?
+        if let threads = snapshot?.threads {
+            for i in threads.indices {
+                guard threads[i].archivedAt == nil, let wake = threads[i].snoozedUntil?.epochMs,
+                      wake > ms else { continue }
+                earliestWake = min(earliestWake ?? wake, wake)
+            }
+        }
+        let wakeAt = earliestWake.map { $0 + 50 }
         let rebuildAt = [SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false), wakeAt].compactMap { $0 }.min()
         let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
         guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }

@@ -123,6 +123,8 @@ public final class MarkdownView: DSView {
     /// narrower width or shorter code needs no fix-up.
     private(set) var codeOffsets: [Int: CGFloat] = [:]
     private var cache: [CGFloat: MarkdownLayout] = [:]
+    /// Measuring and drawing can alternate widths. Keep those two, and release widths a panel slide passed.
+    private var cachedWidths: [CGFloat] = []
     /// The layout before the last document change, whose unchanged leading blocks the next layout
     /// at its width keeps. Only a document change sets it; any other invalidation drops it.
     private var reusable: MarkdownLayout?
@@ -174,6 +176,7 @@ public final class MarkdownView: DSView {
 
     private func invalidate(redraw: Bool = true) {
         cache.removeAll()
+        cachedWidths.removeAll()
         reusable = nil
         invalidateIntrinsicContentSize()
         needsLayout = true
@@ -201,14 +204,21 @@ public final class MarkdownView: DSView {
     }
 
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
-        if let hit = cache[width] { return hit }
-        // ponytail: unbounded per-width cache, cleared on document change; cap it if live resizing measures many widths
+        if let hit = cache[width] {
+            if cachedWidths.last != width {
+                cachedWidths.removeAll { $0 == width }
+                cachedWidths.append(width)
+            }
+            return hit
+        }
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
+        cachedWidths.append(width)
+        if cachedWidths.count > 2 { cache[cachedWidths.removeFirst()] = nil }
         return made
     }
 

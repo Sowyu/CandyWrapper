@@ -48,16 +48,44 @@ public struct ThemeCardDefinition: Equatable, Sendable {
 /// a blurred base with an accent glow and an action tint (themePreview.ts render specs). The ball is drawn once
 /// into an image per colors and scale.
 final class ThemePreviewCircleView: DSView {
-    var colors: [ThemeColorRole: String] = [:] { didSet { if colors != oldValue { image = nil; needsDisplay = true } } }
-    var mode: ThemeAppearance = .light { didSet { if mode != oldValue { image = nil; needsDisplay = true } } }
+    var colors: [ThemeColorRole: String] = [:] { didSet { if colors != oldValue { invalidateImage() } } }
+    var mode: ThemeAppearance = .light { didSet { if mode != oldValue { invalidateImage() } } }
     private var image: CGImage?
     private var imageScale: CGFloat = 0
+    private var renderTask: Task<Void, Never>?
+    private var renderFailed = false
+
+    isolated deinit { renderTask?.cancel() }
+
+    private func invalidateImage() {
+        renderTask?.cancel()
+        renderTask = nil
+        image = nil
+        imageScale = 0
+        renderFailed = false
+        needsDisplay = true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { invalidateImage() }
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        invalidateImage()
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        needsDisplay = true
+    }
 
     override var wantsUpdateLayer: Bool { false }
     override var intrinsicContentSize: NSSize { NSSize(width: 60, height: 60) }
 
-    struct Spec { let baseTarget: String; let accentCenter: CGPoint; let accentMiddleOpacity: Double; let actionCenter: CGPoint }
-    static func spec(_ mode: ThemeAppearance) -> Spec {
+    struct Spec: Sendable { let baseTarget: String; let accentCenter: CGPoint; let accentMiddleOpacity: Double; let actionCenter: CGPoint }
+    nonisolated static func spec(_ mode: ThemeAppearance) -> Spec {
         mode == .light ? Spec(baseTarget: "#ffffff", accentCenter: CGPoint(x: 0.72, y: 0.22), accentMiddleOpacity: 0.72, actionCenter: CGPoint(x: 0.18, y: 0.82))
             : Spec(baseTarget: "#09090b", accentCenter: CGPoint(x: 0.28, y: 0.78), accentMiddleOpacity: 0.62, actionCenter: CGPoint(x: 0.82, y: 0.18))
     }
@@ -65,7 +93,27 @@ final class ThemePreviewCircleView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
-        if image == nil || imageScale != scale { image = Self.render(colors: colors, mode: mode, scale: scale); imageScale = scale }
+        if imageScale != scale { invalidateImage(); imageScale = scale }
+        if image == nil, renderTask == nil, !renderFailed {
+            if window?.isVisible == true {
+                guard !isHiddenOrHasHiddenAncestor else { return }
+                // Core Image's first blur can take hundreds of milliseconds. Let the page paint and
+                // remain interactive while producing the same pixels away from the main thread.
+                let colors = colors, mode = mode
+                renderTask = Task { [weak self] in
+                    let rendered = await ThemePreviewRenderer.shared.render(colors: colors, mode: mode, scale: scale)
+                    guard !Task.isCancelled, let self else { return }
+                    self.image = rendered
+                    self.renderFailed = rendered == nil
+                    self.renderTask = nil
+                    self.needsDisplay = true
+                }
+            } else {
+                // An offscreen export needs its final pixels before Snapshot returns.
+                image = Self.render(colors: colors, mode: mode, scale: scale)
+                renderFailed = image == nil
+            }
+        }
         // The view is 4pt larger than the ball so the ball's 1px/2px shadow is not clipped.
         let s = min(bounds.width, bounds.height) - 4
         let ball = NSRect(x: (bounds.width - s) / 2, y: (bounds.height - s) / 2, width: s, height: s)
@@ -92,7 +140,7 @@ final class ThemePreviewCircleView: DSView {
     }
 
     /// The 52px padding box: base color, two radial gradients interpolated in OKLab, blurred 3px, scaled 1.1.
-    static func render(colors: [ThemeColorRole: String], mode: ThemeAppearance, scale: CGFloat) -> CGImage? {
+    nonisolated static func render(colors: [ThemeColorRole: String], mode: ThemeAppearance, scale: CGFloat) -> CGImage? {
         let spec = spec(mode)
         let side = 52.0, px = Int((side * scale).rounded())
         func color(_ role: ThemeColorRole) -> ThemeCSSColor { ThemeCSSColor.parse(colors[role] ?? "") ?? .transparent }
@@ -146,6 +194,16 @@ final class ThemePreviewCircleView: DSView {
         let ci = CIContext(options: [.workingColorSpace: space])
         let crop = CGRect(x: margin, y: margin, width: px, height: px)
         return ci.createCGImage(blurred, from: crop, format: .RGBA8, colorSpace: space)
+    }
+}
+
+/// Serial work keeps a page of previews from starting a GPU context per card at the same time.
+private actor ThemePreviewRenderer {
+    static let shared = ThemePreviewRenderer()
+
+    func render(colors: [ThemeColorRole: String], mode: ThemeAppearance, scale: CGFloat) -> CGImage? {
+        guard !Task.isCancelled else { return nil }
+        return ThemePreviewCircleView.render(colors: colors, mode: mode, scale: scale)
     }
 }
 

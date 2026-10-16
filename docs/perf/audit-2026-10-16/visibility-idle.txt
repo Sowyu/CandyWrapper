@@ -1,0 +1,16 @@
+Supplemental idle smoke check, 2026-10-16
+Release app from the full audit review, before the final sidebar scan change.
+Shared sandbox, completed Markdown example, 1100 x 780 pt window.
+No stall monitor. One 30-second process-only sample per state.
+Hidden with Cmd-H; System Events confirmed visible=false.
+These are not the frozen workload or a whole-machine energy comparison.
+
+Visible:
+pid     name                           cpu%   idle wk/s   intr wk/s   energy mW    footprint
+49266   CandyWrapper                   0.01        0.27        0.53        0.01      48.3 MB
+TOTAL                                  0.01        0.27        0.53        0.01      48.3 MB
+
+Hidden:
+pid     name                           cpu%   idle wk/s   intr wk/s   energy mW    footprint
+49266   CandyWrapper                   0.03        0.33        0.60        0.72      51.1 MB
+TOTAL                                  0.03        0.33        0.60        0.72      51.1 MB
