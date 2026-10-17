@@ -321,6 +321,14 @@ public final class TimelineView: DSView {
         for view in visible.values { if let item = view.item { view.configure(item); applyFindHighlight(view) } }
     }
 
+    /// Run options own the speed, so changing the next prompt's model cannot change an active sweep.
+    func setGlimmerModel(_ selection: ModelSelection?) {
+        let fast = ShineLabelView.usesFastMode(selection)
+        guard fast != context.fastGlimmer else { return }
+        context.fastGlimmer = fast
+        reconfigureVisible()
+    }
+
     isolated deinit {
         if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
     }

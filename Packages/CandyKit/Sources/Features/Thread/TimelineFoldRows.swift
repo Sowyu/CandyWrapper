@@ -136,6 +136,7 @@ final class CompactionRowView: TimelineRowView {
         super.configure(item)
         guard case .contextCompaction(let text, let active) = item.row.kind else { return }
         label.text = text
+        label.fastMode = context.fastGlimmer
         label.shining = active
         needsLayout = true
     }

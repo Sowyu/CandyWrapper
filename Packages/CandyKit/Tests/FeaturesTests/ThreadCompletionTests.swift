@@ -108,6 +108,33 @@ struct ThreadCompletionTests {
         let copies = label.subviews.compactMap { $0 as? LabelView }
         #expect(copies.count == 2 && copies.allSatisfy { $0.font == TL.font(12) && $0.lineHeight == 16 })
     }
+    @Test func glimmerSpeedsUpOnlyForFastModelOptions() throws {
+        for (options, fast) in [("{}", false), (#"{"fastMode":false}"#, false),
+                                (#"{"fastMode":true}"#, true), (#"{"serviceTier":"fast"}"#, true),
+                                (#"{"serviceTier":"default"}"#, false), (#"{"serviceTier":"flex"}"#, false)] {
+            let selection = ModelSelection(instanceId: ProviderInstanceId("sandbox"), model: "test", options: try json(options))
+            let label = ShineLabelView()
+            label.fastMode = ShineLabelView.usesFastMode(selection)
+            #expect(label.fastMode == fast)
+            #expect(abs(label.sweepDuration - (fast ? 0.88 : 2.2)) < 0.000001)
+            label.fastMode = false
+            #expect(label.sweepDuration == 2.2)
+        }
+        #expect(!ShineLabelView.usesFastMode(nil))
+    }
+    @Test func glimmerSpeedFollowsTheLatestRunAndResetsBetweenThreads() throws {
+        let panel = ThreadPanelView()
+        let projection = try json(#"{"thread":{"id":"t"},"runs":[{"id":"new","threadId":"t","ordinal":2,"status":"running","requestedAt":"2026-10-18T00:00:00Z","modelSelection":{"instanceId":"sandbox","model":"test","options":{"serviceTier":"fast"}}},{"id":"old","threadId":"t","ordinal":1,"status":"completed","requestedAt":"2026-10-18T00:00:00Z"}],"updatedAt":"2026-10-18T00:00:00Z"}"#).decode(as: ThreadProjection.self)
+        panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
+        #expect(panel.timeline.context.fastGlimmer)
+        var standard = projection
+        standard.runs[0].modelSelection?.options = .object([:])
+        panel.setProjection(standard, projectTitle: "Sandbox", workspaceRoot: nil)
+        #expect(!panel.timeline.context.fastGlimmer)
+        panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        #expect(!panel.timeline.context.fastGlimmer)
+    }
     @Test func permissionNoticeRequiresExplicitLegacyGrant() throws {
         func state(_ extra: String) throws -> AuthSessionState {
             try json("{\"authenticated\":true,\"auth\":{\"policy\":\"token\",\"bootstrapMethods\":[],\"sessionMethods\":[]}," + extra + "}").decode(as: AuthSessionState.self)
