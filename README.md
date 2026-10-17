@@ -21,11 +21,11 @@ I try to maintain it as long as I use T3 Code.
 
 The official desktop app runs on Electron. On the same Mac with the same data, CandyWrapper:
 
-- uses 12x less CPU while an agent streams a reply
-- needs 91% less memory with a thread open, 41 MB instead of 469 MB
-- wakes the CPU over 2,000x less often when idle
-- uses 5x less energy while a reply streams
-- is an 11x smaller download, 14.6 MB instead of 162 MB
+- uses 16x less CPU while an agent streams a reply
+- needs 89% less memory with a thread open, 39 MB instead of 381 MB
+- wakes the CPU over 1,000x less often when idle
+- uses 4x less energy while a reply streams
+- is a 9x smaller download, 17.4 MB instead of 163 MB
 
 I measured every one of these. The full table and how I measured are in [The numbers](#the-numbers).
 
@@ -61,23 +61,23 @@ Glass is a CandyWrapper-only theme that frosts the sidebar and the thread so you
 
 ## The numbers
 
-I ran both apps one after the other on a Mac mini M4 on 2026-10-11, against the same T3 server data. The official app was 0.0.46-nightly.20261009.2861 and CandyWrapper was commit 0209d52. Only each app's own processes count. Both use the same T3 server, so the server is left out.
+I ran both apps one after the other on a Mac mini M4 on 2026-10-17, against the same T3 server data. The official app was 0.1.1-nightly.20261017.3234 and CandyWrapper was commit 1a844cb, version 1.5.0. Only each app's own processes count. Both use the same T3 server, so the server is left out.
 
 | What I measured | T3 Code desktop | CandyWrapper | Difference |
 |---|---|---|---|
-| CPU while a turn streams | 15.5% | 1.26% | 12x less |
-| Energy Impact while a turn streams | 85.1 | 15.1 | 5x less |
-| Memory with a small thread open | 469 MB | 41.3 MB | 91% less |
-| Memory with a 2,000-message thread and 50 threads | 500 MB | 71 MB | 85% less |
-| CPU at idle | 2.04% | 0.00% | over 99% less |
-| CPU wakeups a second at idle | 74.5 | 0.03 | over 2,000x fewer |
-| Launch to a ready sidebar | 3.71 s | 0.20 s | 18x faster, see below |
-| Slow frames scrolling 2,000 messages | 1 of 912 | 0 of 1,095 | |
-| Keypress to letter on screen | 37.8 ms | 37.8 ms | the same |
-| Download | 162.2 MB | 14.6 MB | 11x smaller |
-| App on disk | 366 MB | 27 MB | 13x smaller |
+| CPU while a turn streams | 15.4% | 0.92% | 16x less |
+| Energy Impact while a turn streams | 46.5 | 9.7 | 4x less |
+| Memory with a small thread open | 381 MB | 39.3 MB | 89% less |
+| Memory with a 2,000-message thread and 50 threads | 397 MB | 46 MB | 88% less |
+| CPU at idle | 2.23% | 0.00% | over 99% less |
+| CPU wakeups a second at idle | 73.1 | 0.05 | over 1,000x fewer |
+| Launch to a ready sidebar | 2.10 s | 0.23 s | 8x faster, see below |
+| Slow frames scrolling 2,000 messages | 0 of 724 | 11 of 1,426 | CandyWrapper is worse |
+| Keypress to letter on screen | 39.7 ms | 35.0 ms | 4.7 ms faster |
+| Download | 163.5 MB | 17.4 MB | 9x smaller |
+| App on disk | 370 MB | 30.7 MB | 12x smaller |
 
-The official app's launch time includes starting its own server, while CandyWrapper's server was already running. A first launch that starts the server took 0.71 s. Every ratio is rounded down, and [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers.
+Both launch times are relaunches. The official app's time includes starting its own server, while CandyWrapper's server was already running. The first launch of a new CandyWrapper build took 0.71 s, and the official app's first launch on the copied data took 4.64 s while it upgraded the database. Every ratio is rounded down, and [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers.
 
 ## Building it yourself
 
