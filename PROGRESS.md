@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Fix sent-image grids hiding prompt text and the stray Connecting strip in Glass, with sandbox screenshot proof. Hold release for user approval. (taken 2026-10-17)
+
 - [x] Progressive blur (2026-10-17): the sidebar art bakes a CIMaskedVariableBlur once per size, and Glass puts a 32pt backdrop `variableBlur` over the timeline top (its mask is read from alpha, one pixel per device pixel, so the backdrop samples at full scale). 131 focused tests passed; the user skipped the full suite and perf-review for this release. Checked on screen in Glass dark.
 - [x] Release v1.5.1 (build 26), published 2026-10-17 from `8915cc0`: Release build, app signatures, downloaded ZIP/DMG hashes and published signed update feed verified.
 - [x] Release v1.5.0 (build 25), published 2026-10-17 from `ab31217`: Release build, app signatures, downloaded ZIP/DMG hashes and published signed update feed verified.
