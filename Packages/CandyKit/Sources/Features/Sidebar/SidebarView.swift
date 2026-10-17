@@ -182,6 +182,7 @@ public final class SidebarContentView: DSView {
         }
         addSubview(scrollArea)
         addSubview(brand)
+        newThreadButton.isHeaderAction = true
         addSubview(trigger)
         undoNotice.isHidden = true
         undoNotice.shortcut = undoShortcut
@@ -724,13 +725,18 @@ public final class SidebarContentView: DSView {
         LabelClock.shared.visibilityChanged()
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+    }
+
     // MARK: Layout
 
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        // Titlebar row, 52px. The art bleeds 80px under the search row.
-        backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 80)
+        // Titlebar row, 52px. The candy wash dissolves behind the search row.
+        backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 112)
         let controlsLeft = SidebarMetrics.controlsLeft(windowedMac: windowedMac)
         trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
         let bs = brand.intrinsicContentSize
@@ -741,13 +747,15 @@ public final class SidebarContentView: DSView {
         // Fixed header group, `p-2`: search, then the 28px icon buttons.
         let rowY: CGFloat = 52 + 8
         var right = w - 8
+        let polished = WindowGlass.isActive(for: self)
         // Without projects there is nothing to scope, so scope and add project stay out (SidebarThreadHeader.tsx:127-135).
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         for b in [newThreadButton, addProjectButton, filterButton] {
             b.isHidden = b !== newThreadButton && !hasProjects
             if b.isHidden { continue }
-            b.frame = NSRect(x: right - 28, y: rowY + 2, width: 28, height: 28)
-            right -= 28
+            let size: CGFloat = polished && b === newThreadButton ? 32 : 28
+            b.frame = NSRect(x: right - size, y: rowY + (32 - size) / 2, width: size, height: size)
+            right -= size + (polished ? 2 : 0)
         }
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: 32)

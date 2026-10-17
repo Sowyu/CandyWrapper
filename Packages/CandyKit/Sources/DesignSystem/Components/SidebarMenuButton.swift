@@ -29,6 +29,8 @@ public final class SidebarMenuButtonView: ControlView {
     public var iconDefinition: IconDefinition? { didSet { updateIcon() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var variant: Variant = .default { didSet { restyle() } }
+    /// A gently filled compose action in CandyWrapper's Glass sidebar header.
+    public var isHeaderAction = false { didSet { restyle() } }
     public let kind: Kind
     /// `data-active=true`: the selected row.
     public var isActive = false { didSet { restyle(); setAccessibilitySelected(isActive) } } // `data-active`, read as selected
@@ -129,7 +131,16 @@ public final class SidebarMenuButtonView: ControlView {
     }
 
     private func restyle() {
-        let look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state)
+        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state)
+        if isHeaderAction, WindowGlass.isActive(for: self) {
+            let ink: NSColor = effectiveAppearance.isDark ? .white : .black
+            look.box.radius = 10
+            if !state.hovered && !state.active && !isActive {
+                look.box.fill = ink.withAlphaComponent(0.09)
+            }
+            look.box.border = ink.withAlphaComponent(0.10)
+            look.icon = Themed.color(\.sidebarForeground, sidebar: true)
+        }
         decoration.boxStyle = look.box
         label.color = look.text
         label.font = look.font
