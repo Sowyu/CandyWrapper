@@ -726,3 +726,7 @@ On the frozen workload the big thread peaks at 33 MB on open in every build; the
 Two runs of the same build (dbfd490): launch times within 6 to 15 ms, idle footprint 0.3 MB, big-thread memory 0.6 MB, first frame 2.4 ms, micro-benchmarks 2 to 5% (the first run's benchmarks ran 4% slower across the board), idle CPU 0.030 against 0.067% and package idle wakeups 0.07 against 0.13/s. Scroll CPU time is bimodal, about 255 or about 350 ms in the same build (the repeat had 255, 257 and 347), so a single run's median can move by 30%; the range check keeps it from flagging.
 
 The perf server once accepted connections and never answered (17 minutes on its first request). The readiness check now gives each probe 2 s and gives up after 60 s.
+
+## Tables, Nightly 3234 and server updates, 2026-10-17
+
+The [final review](2026-10-17-d7db15d-dirty-w1.md) covers the wide-table fix, the 3234 catch-up and independent runtime updates. Against the preceding saved run: 194 ms window, 0.045% idle CPU, 34.6 MB idle footprint and 378.5 ms scroll CPU. There were no 50 ms scrolling stalls and one 51.6 ms thread-open stall. A 40.4 MB settled streaming sample triggered the memory threshold; three isolated repeats were 34.6–34.7 MB, below the 35.5 MB baseline. Both the original flag and the follow-up data remain in the report. All 1,541 tests passed, followed by the 17 update checks after the final trial validation changes.

@@ -189,9 +189,9 @@ public struct ProjectedTurnItem: Codable, Hashable, Sendable {
     public var isLocal: Bool { visibility == "local" }
 }
 
-/// Decodes an array of turn items or projected rows, dropping rows whose item `type` this build
-/// doesn't know (docs/protocol.md 1.4). A known type that doesn't decode still fails.
-struct KnownTurnItems<Element: Decodable>: Decodable {
+/// Keeps unfamiliar item types when their common fields decode, for the generic timeline fallback.
+/// Malformed unfamiliar rows are skipped; a malformed known type still fails (docs/protocol.md 1.4).
+struct CompatibleTurnItems<Element: Decodable>: Decodable {
     var values: [Element] = []
 
     private struct Peek: Decodable {
@@ -205,7 +205,10 @@ struct KnownTurnItems<Element: Decodable>: Decodable {
         var value: Element?
         init(from decoder: Decoder) throws {
             let peek = try Peek(from: decoder)
-            if let type = peek.type ?? peek.item?.type, !type.isKnown { return }
+            if let type = peek.type ?? peek.item?.type, !type.isKnown {
+                value = try? Element(from: decoder)
+                return
+            }
             value = try Element(from: decoder)
         }
     }

@@ -1054,6 +1054,17 @@ final class ThreadController {
         let state = serverUpdates.state(id)
         let label = environments.environmentIds.count > 1 ? "\(environments.label(id) ?? id) server" : "server"
         let mismatch = serverUpdates.mismatch(id)
+        if let runtime = serverUpdates.ownRuntimeState(id) {
+            guard mismatch != nil || runtime.isRestarting || runtime.status == .downloading else { panel.serverUpdateNotice = nil; return }
+            let action = runtime.isRestarting || runtime.status == .downloading ? nil
+                : DesktopUpdateLogic.buttonAction(runtime) == .install ? "Restart" : "Download"
+            let status: ComposerServerUpdateNotice.Status = runtime.isRestarting ? .running(.resuming)
+                : runtime.status == .downloading ? .running(.downloading)
+                : .available(serverVersion: runtime.currentVersion, clientVersion: runtime.availableVersion ?? runtime.downloadedVersion ?? "")
+            panel.serverUpdateNotice = ComposerServerUpdateNotice(serverLabel: label, status: status,
+                guidance: DesktopUpdateLogic.buttonTooltip(runtime), action: action, actionEnabled: serverUpdates.canUpdate(id), dismissible: false)
+            return
+        }
         let show: Bool
         switch state {
         case .idle: show = mismatch != nil && !serverUpdates.isDismissed(id)
@@ -1089,6 +1100,7 @@ final class ThreadController {
     private func serverUpdateAction(_ index: Int?) {
         guard let id = session?.environmentId ?? composer.targetEnvironmentId, let notice = panel.serverUpdateNotice else { return }
         guard index != nil else { return serverUpdates.dismiss(id) }
+        if serverUpdates.ownRuntimeState(id) != nil { serverUpdates.request(id, serverLabel: notice.serverLabel); return }
         if case .running = notice.status { return disconnect(id) }
         switch serverUpdates.offer(id, serverLabel: notice.serverLabel) {
         case .update?: serverUpdates.request(id, serverLabel: notice.serverLabel)

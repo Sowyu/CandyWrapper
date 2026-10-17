@@ -164,6 +164,11 @@ extension SettingsController {
     /// line, then "Update to <version>", "Retry update", the manual path, or "Up to date".
     private func versionRow(_ id: String, line: String, known: Bool, label: String?) -> ConnectionsPageModel.HostRow {
         let state = serverUpdates?.state(id) ?? .idle
+        if let runtime = serverUpdates?.ownRuntimeState(id) {
+            let look = DesktopUpdateLogic.settingsButton(runtime)
+            return .init(id: "version", title: "Version", detail: "\(line)\n\(DesktopUpdateLogic.buttonTooltip(runtime))",
+                control: .update(look.label, enabled: !look.disabled && serverUpdates?.canUpdate(id) == true))
+        }
         let serverLabel = label.map { "\($0) server" } ?? "server"
         var control: ConnectionsPageModel.HostRow.Control = .none
         if let updates = serverUpdates, let mismatch = updates.mismatch(id), !state.isRunning {

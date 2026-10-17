@@ -85,14 +85,23 @@ private let projectionJSON = """
         #expect(file.string("fileName")?.hasSuffix("notes.md") == true)
     }
 
-    @Test func dropsUnknownItemTypesAndKeepsUnknownFields() throws {
+    @Test func keepsValidUnknownItemsAndFields() throws {
         let projection = try JSONDecoder().decode(ThreadProjection.self, from: Data(projectionJSON.utf8))
-        #expect(projection.visibleTurnItems.map(\.item.id) == ["i1"])
+        #expect(projection.visibleTurnItems.map(\.item.id) == ["i1", "i2"])
         #expect(projection.visibleTurnItems[0].item["newField"] == .bool(true))
         #expect(projection.thread.raw["futureField"]?["x"] == .number(1))
         // Round trip keeps the wire object.
         let again = try JSONDecoder().decode(ThreadProjection.self, from: JSONEncoder().encode(projection))
         #expect(again == projection)
+    }
+
+    @Test func skipsMalformedUnknownRows() throws {
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(projectionJSON.utf8)) as? [String: Any])
+        var rows = try #require(json["visibleTurnItems"] as? [[String: Any]])
+        rows.append(["item": ["id": "broken", "type": "future"]])
+        json["visibleTurnItems"] = rows
+        let projection = try JSONDecoder().decode(ThreadProjection.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(projection.visibleTurnItems.map(\.item.id) == ["i1", "i2"])
     }
 
     @Test func unknownEventsStillCarryTheirSequence() throws {

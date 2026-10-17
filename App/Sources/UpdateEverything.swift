@@ -52,7 +52,7 @@ final class UpdateEverything {
     private var action: DesktopUpdateLogic.ButtonAction { DesktopUpdateLogic.buttonAction(updater.state) }
 
     private func machines() -> [L.Machine] {
-        environments.environmentIds.map { id in
+        environments.environmentIds.filter { serverUpdates.ownRuntimeState($0) == nil && !serverUpdates.isOwnServer($0) }.map { id in
             let caps = serverUpdates.capabilities(id)
             return L.Machine(environmentId: id, label: environments.label(id) ?? id, serverVersion: serverUpdates.descriptor(id)?.serverVersion,
                              connected: environments.state(id)?.status == .connected, canMaintain: serverUpdates.canUpdate(id),
@@ -80,7 +80,11 @@ final class UpdateEverything {
     private func refresh() {
         let next = makePlan()
         plan = next
-        pill?.everythingSummary = next.servers.isEmpty && next.providerMachines.isEmpty ? nil : next.summary
+        // The independently downloaded runtime keeps its Download / Restart buttons. Providers
+        // and service-managed servers retain their own update actions while it waits.
+        let runtime = serverUpdates.runtimeUpdater?.state
+        let runtimeOffer = runtime.map { $0.enabled && (DesktopUpdateLogic.buttonAction($0) != .none || $0.status == .downloading || $0.isRestarting) } ?? false
+        pill?.everythingSummary = runtimeOffer || (next.servers.isEmpty && next.providerMachines.isEmpty) ? nil : next.summary
         pill?.run = run.map { (runTooltip($0), $0.localVersion != nil) }
     }
 

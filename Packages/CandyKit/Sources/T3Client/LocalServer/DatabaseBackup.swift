@@ -8,8 +8,8 @@ import Foundation
 public struct DatabaseBackup: Sendable {
     /// `DB_FILE_SUFFIXES`.
     static let suffixes = ["", "-wal", "-shm"]
-    /// `RESTORE_MARKER`: written before a restore touches the live files and removed first when the backup goes.
-    /// While it exists no server has run on the home since, so running the restore again is safe.
+    /// `RESTORE_MARKER`: a trial or restore remains pending. Removed first when the backup goes.
+    /// Recovery must check that no process owns the home before restoring its files.
     static let restoreMarker = "restore-pending"
 
     public let database: URL
@@ -40,10 +40,11 @@ public struct DatabaseBackup: Sendable {
     }
 
     /// `backupDatabaseOnce`: copies the files that exist into `directory`, through a staging folder.
-    /// Nil when the home has no database yet. Call it only while no server runs on the home.
-    public static func make(database: URL, in directory: URL) throws -> DatabaseBackup? {
+    /// Nil for a missing database unless `includeMissing` records its absence for a trial rollback.
+    /// Call it only while no server runs on the home.
+    public static func make(database: URL, in directory: URL, includeMissing: Bool = false) throws -> DatabaseBackup? {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: database.path) else { return nil }
+        guard includeMissing || fm.fileExists(atPath: database.path) else { return nil }
         // A backup whose restore never finished is the only good copy left.
         if pending(database: database, in: directory) != nil {
             throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: directory.path,
@@ -71,12 +72,9 @@ public struct DatabaseBackup: Sendable {
     /// Call it only once the server that used the database has exited. It marks the backup first, with
     /// `previous`, the runtime the failed update goes back to (nil for T3's own), so a restore that fails or
     /// is cut off shows up in `pending` and runs again, and goes back, before a server starts on the home.
-    // ponytail: a crash after the backup but before any restore leaves it unmarked and unused on disk, where
-    // the next update replaces it; recover it at launch if anyone hits that
     public func restore(previous: String? = nil) throws {
         let fm = FileManager.default
-        let marker = directory.appending(path: Self.restoreMarker)
-        if !fm.fileExists(atPath: marker.path) { try Data((previous ?? "").utf8).write(to: marker, options: .atomic) }
+        try armRestore(previous: previous)
         for suffix in Self.suffixes {
             let live = database.path + suffix, saved = directory.appending(path: "database" + suffix).path
             guard fm.fileExists(atPath: saved) else {
@@ -91,6 +89,14 @@ public struct DatabaseBackup: Sendable {
             try? fm.removeItem(atPath: incoming)
             try fm.copyItem(atPath: saved, toPath: incoming)
             guard rename(incoming, target) == 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: target]) }
+        }
+    }
+
+    /// Arm recovery before the first start of a trial version, including a crash before it answers.
+    public func armRestore(previous: String?) throws {
+        let marker = directory.appending(path: Self.restoreMarker)
+        if !FileManager.default.fileExists(atPath: marker.path) {
+            try Data((previous ?? "").utf8).write(to: marker, options: .atomic)
         }
     }
 
