@@ -102,6 +102,7 @@ final class TimelineContext {
     var workspaceRoot: String? { model?.workspaceRoot }
     /// T3's `markdownCwd` (ChatView.tsx `gitCwd`): the thread's worktree, else the project root. File chips resolve against it.
     var markdownCwd: String? { model?.projection?.thread.worktreePath ?? model?.workspaceRoot }
+    var fastGlimmer = false
     var now: () -> Date = Date.init
 
     private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
@@ -323,13 +324,28 @@ final class FillView: DSView {
 }
 
 /// A text label whose sweeping highlight copies `live-tool-shine` (index.css:521-548): the label in
-/// `secondaryLabel`, a copy in `foreground` shown through a 72px band that crosses it in 2.2s,
+/// `secondaryLabel`, a copy in `foreground` shown through a 72px band that crosses it in 2.2s (0.88s in Fast mode),
 /// 30 steps. Core Animation runs it, and only while the label is visible.
 final class ShineLabelView: DSView {
     let base = LabelView()
     private let bright = LabelView()
     private let band = CAGradientLayer()
     private var loop: LoopingAnimation?
+
+    var fastMode = false {
+        didSet {
+            guard fastMode != oldValue else { return }
+            band.removeAnimation(forKey: "shine")
+            loop?.update()
+        }
+    }
+    var sweepDuration: TimeInterval { fastMode ? 2.2 / 2.5 : 2.2 }
+
+    /// Fast uses the same options as the traits picker (TraitsPicker.tsx:497-521).
+    static func usesFastMode(_ selection: ModelSelection?) -> Bool {
+        let options = selection?.options
+        return options?["fastMode"]?.boolValue == true || options?["serviceTier"]?.stringValue == "fast"
+    }
 
     var text: String {
         get { base.text }
@@ -350,7 +366,7 @@ final class ShineLabelView: DSView {
 
     /// `shine` is `live-tool-shine` on live tool rows. `focus` is `live-activity-focus` (index.css:556-622),
     /// the band over Thinking and the compaction row (`ActivityShimmerOverlay`, MessagesTimeline.tsx:3681):
-    /// a 72px window with soft edges that travels from -72px to the label's width + 72px in 2.2s, linear.
+    /// a 72px window with soft edges that travels from -72px to the label's width + 72px.
     enum Style { case shine, focus }
     var style = Style.shine {
         didSet {
@@ -387,12 +403,12 @@ final class ShineLabelView: DSView {
             let width = self?.bright.bounds.width ?? 0
             // `focus` moves its band by the overlay's own width, the label plus 9rem.
             let from: CGFloat = -36, to = self?.style == .focus ? width + 108 : width + 36
-            // `steps(30)` (index.css:545, 604, T3 3105 6bbb72c61): 30 jumps per 2.2s pass, each held, not a frame-by-frame slide.
+            // Keep T3's 30 held steps (index.css:545, 604), with the user's 2.5 times faster sweep.
             let a = CAKeyframeAnimation(keyPath: "position.x")
             a.values = (0..<30).map { from + (to - from) * CGFloat($0) / 30 }
             a.keyTimes = (0...30).map { NSNumber(value: Double($0) / 30) }
             a.calculationMode = .discrete
-            a.duration = 2.2
+            a.duration = self?.sweepDuration ?? 2.2
             a.repeatCount = .infinity
             return a
         }

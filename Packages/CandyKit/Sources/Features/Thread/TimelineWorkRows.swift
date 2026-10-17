@@ -247,6 +247,7 @@ class WorkRowBase: TimelineRowView {
             addSubview(l)
             lines.append(l)
         }
+        lines[i].label.fastMode = context.fastGlimmer
         lines[i].isHidden = false
         return lines[i]
     }
@@ -824,6 +825,7 @@ final class WorkingRowView: TimelineRowView {
         label.isHidden = compacting
         compactingIcon.isHidden = !compacting
         compactingLabel.isHidden = !compacting
+        compactingLabel.fastMode = context.fastGlimmer
         compactingLabel.shining = compacting
         needsLayout = true
         tick()
