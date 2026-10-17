@@ -1,6 +1,6 @@
 # Benchmarks
 
-Official T3 Code and CandyWrapper on the same machine and workload. Status on 2026-10-11: every row of the client comparison is measured for both clients ("Milestone 8 side by side").
+Official T3 Code and CandyWrapper on the same machine and workload. Status on 2026-10-11: every row of the client comparison is measured for both clients ("Milestone 8 side by side"). The README numbers come from "README refresh against Nightly 3234 (2026-10-17)".
 
 ## Machine
 
@@ -197,3 +197,85 @@ Bundle: CandyWrapper as built 42.7 MB, of which the unstripped binary is 38.0 MB
 - The Claude provider sends the reply as one final item (docs/protocol.md, "Streaming assistant text"), so the "streaming" turn is about 15 s of the working state and one large update. The official renderer's cost is mostly that working state.
 - Both servers keep a Claude provider process per finished turn alive (about 122 MB each), so memory and idle numbers taken after turns include them; they are reported separately.
 - One idle window and two turns per client. The official turns' Energy Impact differs by 55% between runs.
+
+## README refresh against Nightly 3234 (2026-10-17)
+
+The same side by side as 2026-10-11, repeated for the README: official T3 Code (Nightly) 0.1.1-nightly.20261017.3234 from its GitHub DMG, and CandyWrapper 1.5.0 at commit 1a844cb, built Release with the perf flags (own bundle id and URL scheme, no update feed) and signed ad hoc. The official app ran with `T3CODE_DISABLE_AUTO_UPDATE=1` so its updater stayed out of the idle window, since 3238 was already published. Only one of the two apps ran at a time, with the official app first, and the 1-minute load average sat between 1.3 and 2.4 during the windows.
+
+### Setup
+
+- Data: fresh copies of `sbs-home-seed` as `sbs3234-home-official` and `sbs3234-home-candy` in `~/CandyWrapper-research`, the official one with the 2026-10-11 `client-settings.json`, `desktop-settings.json` and `settings.json`. The official app migrated its copy on its first launch. CandyWrapper's server was the 3234 runtime on port 47396, started with `env -i` the `scripts/sandbox-server` way.
+- Tools: `scripts/procstat.swift`, `scripts/perf/probe.swift` and `turn.swift`, `powermetrics`, and a copy of `scripts/measure-launch.swift` that also sets `T3CODE_DISABLE_AUTO_UPDATE=1`. The 2026-10-11 `frames` tool was never committed and was gone from `/tmp`, so I wrote a new one with the same method: ScreenCaptureKit display times of changed frames in a screen region, HID pixel scroll events every 8 ms for 300 events, and `a` key presses 600 ms apart counted when a change wider than 4 px shows. A slow frame is a gap over 20 ms at 60 Hz.
+- The official app's thread view crashed twice with "Cannot read properties of undefined (reading 'environmentId')" when I opened a thread from Cmd+K. "Try again" brought the thread back each time. That is an upstream bug in 3234.
+
+### Raw numbers
+
+Launch (official sidebar time from the first `environment.orchestration.shellSnapshot` span after spawn, CandyWrapper from `CANDY_LAUNCH_TIMING`):
+
+| | Window | Sidebar data |
+|---|---|---|
+| Official, first launch on the copy, with the database upgrade | 4.26 s | 4.64 s |
+| Official, relaunch 2, 3 and 4 | 1.78, 1.82, 1.80 s | 2.13, 2.10, 2.09 s |
+| CandyWrapper, first launch of the new build | 0.61 s | 0.71 s live, 0.66 s cached |
+| CandyWrapper, relaunch 2 and 3 | 0.15, 0.16 s | 0.24, 0.23 s live, 0.21, 0.20 s cached |
+
+Idle, two 60 s windows with "Perf stream 7070d1f 124911" open and the composer focused (procstat, then powermetrics 12 x 5 s):
+
+| Process | CPU | Interrupt/s | Pkg idle/s | Energy Impact | Footprint |
+|---|---|---|---|---|---|
+| Official main | 0.27, 0.25% | 3.3, 3.2 | 1.3, 1.2 | | 85 MB |
+| Official GPU | 1.28, 1.26% | 63.1, 63.0 | 44.3, 44.3 | | 163 MB |
+| Official renderer | 0.64, 0.62% | 6.3, 6.0 | 1.9, 2.0 | | 124 MB |
+| Official network | 0.07, 0.07% | 0.65, 0.63 | 0.2, 0.3 | | 8 MB |
+| Official app total | 2.26, 2.20% | 73.4, 72.9 | | 2.00, 1.97 | 381 MB |
+| Official bundled server | 0.46, 0.46% | 19.3, 19.7 | 7.1, 7.1 | 1.35, 1.23 | 160 MB |
+| CandyWrapper | 0.00, 0.00% | 0.03, 0.07 | 0.00, 0.00 | 0.00, 0.00 | 39.3 MB |
+| CandyWrapper's server | 0.14, 0.34% (1 s samples) | 10, 21 | | 0.16, 0.13 | 238 MB |
+
+The official GPU process still wakes about 63 times a second for the composer's blinking caret.
+
+Streaming, the `turn2` story prompt on a fresh `claude-haiku-5-5` thread made by `turn create` and opened in the app (CPU from rusage across the turn, Energy Impact as the mean of the 2 s powermetrics samples inside it):
+
+| Turn | Length | App CPU | App Energy | Server CPU | Server Energy |
+|---|---|---|---|---|---|
+| Official 1 | 26.2 s | 15.43% | 47.3 | 3.49% | 43.6 |
+| Official 2 | 21.2 s | 15.37% | 45.7 | 4.44% | 49.4 |
+| CandyWrapper 1 | 21.0 s | 0.95% | 9.6 | 2.57% | 37.9 |
+| CandyWrapper 2 | 16.6 s | 0.88% | 9.7 | 3.71% | 37.7 |
+
+Official app CPU splits into renderer 8.5 and 8.5%, GPU process 6.4 and 6.4%, main 0.4 and 0.4%. The official processes held 434 to 436 MB after a turn and CandyWrapper 96 to 98 MB.
+
+Memory with "Seeded 2000 messages", 30 s after opening it from Cmd+K:
+
+| State | Official | CandyWrapper |
+|---|---|---|
+| As opened | 397 MB (main 89, renderer 139, GPU 162, network 8) | 46.2 MB |
+| All 2,000 messages loaded | 334 MB (renderer 178, GPU 57, composer unfocused), after 50 clicks on "Load earlier turns" | 67 to 69 MB, after scrolling to message 1 |
+
+Scrolling at 60 Hz, a 400 x 200 pt part of the timeline, from message 1 downward:
+
+| Client | Runs | Gaps | Over 20 ms | Longest |
+|---|---|---|---|---|
+| Official | 5 (three at 20 px, two at 60 px per event) | 724 | 0 | 16.7 ms |
+| CandyWrapper, first set | 5 (the same) | 713 | 8 | 33.3 ms |
+| CandyWrapper, second set | 5 (the same) | 713 | 3 | 33.3 ms |
+
+Every slow CandyWrapper frame was a single dropped frame, 33.3 ms. The README counts both CandyWrapper sets, 11 of 1,426. On 2026-10-11 CandyWrapper dropped none of 1,095, so this is a regression since then.
+
+Keypress to glyph in the small thread's composer, end to end, two runs of 20 keys each, pooled:
+
+| App | Median | Range |
+|---|---|---|
+| Official | 39.7 ms (runs 36.0, 42.0) | 26.9 to 76.2 ms |
+| CandyWrapper | 35.0 ms (runs 37.7, 35.1) | 22.9 to 50.2 ms |
+
+In the 2,000-message thread with every turn loaded, the official composer took 47.5 and 49.0 ms. I didn't measure a bare `NSTextView` floor this time.
+
+Sizes: the official `T3-Code-0.1.1-nightly.20261017.3234-arm64.dmg` is 163,473,725 bytes and its app is 379,356 KiB (370 MB) by `du -sk` inside the mounted DMG. `CandyWrapper-1.5.0-arm64.dmg` is 17,407,159 bytes and its app is 31,440 KiB (30.7 MB). On 2026-10-11 the CandyWrapper DMG was 14.6 MB and the app 27 MB.
+
+### Caveats
+
+- The two apps used different themes: the official app opened light and CandyWrapper dark, each with its own settings from the copied homes.
+- The user's live T3 and its agents ran the whole time, and the user may have watched over Screen Sharing, so WindowServer sat near 40% CPU.
+- The official all-loaded scroll set ran once. CandyWrapper ran it twice because the first set showed slow frames.
+- Energy Impact for the official app came out lower than on 2026-10-11 (46.5 against 85.1). The 2026-10-11 turns differed by 55% between runs, so treat that row as rough.
