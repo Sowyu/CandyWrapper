@@ -91,8 +91,8 @@ public final class TimelineView: DSView {
         }
         let rect = row.convert(local, to: document)
         let viewport = scrollView.contentView.bounds
-        let margin = min(96, max(0, (viewport.height - bottomInset - rect.height) / 2))
-        let top = viewport.minY + margin, bottom = viewport.maxY - margin - bottomInset
+        let margin = min(96, max(0, (viewport.height - topClearance - bottomInset - rect.height) / 2))
+        let top = viewport.minY + topClearance + margin, bottom = viewport.maxY - margin - bottomInset
         let delta = rect.minY < top ? rect.minY - top : rect.maxY > bottom ? rect.maxY - bottom : 0
         if abs(delta) >= 1 {
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, viewport.minY + delta))))
@@ -105,6 +105,17 @@ public final class TimelineView: DSView {
 
     /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem), under the header view if any.
     public var topInset: CGFloat = 24 { didSet { if topInset != oldValue { relayout() } } }
+    /// The top of the timeline the thread header covers. Glass scrolls rows on under the header, so the
+    /// timeline starts at the panel's top and the rows, scroller and minimap keep clear of this much.
+    public var topClearance: CGFloat = 0 {
+        didSet {
+            guard topClearance != oldValue else { return }
+            scrollView.scrollerInsets.top = topClearance
+            updateTopInset()
+            layoutHeader()
+            layoutMinimap()
+        }
+    }
     /// A view above the rows in the lane (the list header's "Subagent of" divider, MessagesTimeline.tsx:1409-1437),
     /// `headerHeight` tall, before the 24pt spacer.
     public func setHeader(_ view: NSView?, height: CGFloat) {
@@ -141,14 +152,14 @@ public final class TimelineView: DSView {
         let lane = laneFrame
         let host = worktreeSetup.isHidden ? parked : document
         if worktreeSetup.superview !== host { host.addSubview(worktreeSetup) }
-        header?.frame = NSRect(x: TL.snap(lane.x), y: 0, width: lane.width, height: headerHeight)
+        header?.frame = NSRect(x: TL.snap(lane.x), y: topClearance, width: lane.width, height: headerHeight)
         let height = worktreeSetup.height(forWidth: lane.width)
-        worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: headerHeight + 12, width: lane.width, height: height)
+        worktreeSetup.frame = NSRect(x: TL.snap(lane.x), y: topClearance + headerHeight + 12, width: lane.width, height: height)
         if setupHeight != height { setupHeight = height; updateTopInset() }
         layoutEmptyPlaceholder()
     }
 
-    private func updateTopInset() { topInset = 24 + headerHeight + setupHeight }
+    private func updateTopInset() { topInset = 24 + topClearance + headerHeight + setupHeight }
 
     /// Space the floating composer covers at the bottom. The last row scrolls clear of it.
     public var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { relayout(); layoutEmptyPlaceholder(); needsLayout = true } } }
@@ -177,8 +188,8 @@ public final class TimelineView: DSView {
         // MessagesTimeline.tsx:1615-1618, T3 3105 aaf83eedd).
         let lane = laneFrame
         let w = min(ceil(label.textWidth) + 1, lane.width)
-        let h = max(20, bounds.height - bottomInset)
-        label.frame = NSRect(x: ((lane.x + (lane.width - w) / 2) * 2).rounded() / 2, y: ((h - 20) / 2 * 2).rounded() / 2, width: w, height: 20)
+        let h = max(20, bounds.height - bottomInset - topClearance)
+        label.frame = NSRect(x: ((lane.x + (lane.width - w) / 2) * 2).rounded() / 2, y: topClearance + ((h - 20) / 2 * 2).rounded() / 2, width: w, height: 20)
     }
     /// True while the viewport is at the end; new content then keeps it there.
     public private(set) var followsEnd = true
@@ -410,7 +421,7 @@ public final class TimelineView: DSView {
         guard let i = indexById[entryId], i < tops.count else { return false }
         followsEnd = false
         if revealActiveFindMatch(entryId) { return true }
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, tops[i] - 60))))
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(maxScroll, tops[i] - 60 - topClearance))))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         tile()
         _ = revealActiveFindMatch(entryId)
@@ -610,14 +621,14 @@ public final class TimelineView: DSView {
         let gutter = laneFrame.x
         minimap.isHidden = minimap.items.count < 2 || gutter <= 12
         minimap.persistentGutter = gutter >= 48
-        let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - 288))
-        minimap.frame = NSRect(x: 12, y: (bounds.height - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
+        let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - topClearance - 288))
+        minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
         updateMinimapPosition()
     }
     /// The first turn on screen is the current one, else the last above it; every turn on screen lights its strip
     /// (`resolveTimelineMinimapCurrentIndex`, MessagesTimeline.logic.ts:383-409).
     private func updateMinimapPosition() {
-        let top = viewport.minY, bottom = viewport.maxY
+        let top = viewport.minY + topClearance, bottom = viewport.maxY
         var current: Int?, preceding: Int?, inView = IndexSet()
         for (index, item) in minimap.items.enumerated() where item.rowIndex < tops.count && item.rowIndex < heights.count {
             let rowTop = tops[item.rowIndex]

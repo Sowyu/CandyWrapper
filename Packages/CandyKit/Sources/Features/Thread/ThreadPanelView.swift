@@ -456,19 +456,26 @@ public final class ThreadPanelView: DSView {
         }
     }
     private let fade = CAGradientLayer()
-    /// Glass in place of `fade`: a progressive blur over the timeline's top, strongest at the header and
-    /// easing to none, so content softens as it scrolls out. The window server draws it; scrolling costs
-    /// the app nothing more.
+    /// Glass in place of `fade`: the rows scroll on under the header, and a progressive blur over the
+    /// header and the timeline's top softens them as they go, strongest at the panel's top and eased to
+    /// none `topBlurRamp` below the header. The window server draws it; scrolling costs the app nothing more.
     private var topBlur: BackdropBlurView?
-    static let topBlurHeight: CGFloat = 32
+    /// A wash of the background over the blur, fading out with it, so the title reads over blurred rows.
+    private var topTint: GlassHeaderTint?
+    static let topBlurRamp: CGFloat = 64
+    static let topBlurRadius: CGFloat = 16
+    /// Eased so the blur has no visible start or end: `smoothstep` from 1 at the top to 0 at the bottom.
+    static func topBlurStrength(_ y: Double) -> Double {
+        let t = 1 - min(1, max(0, y))
+        return t * t * (3 - 2 * t)
+    }
     /// The blur's strength over the band, in the mask's alpha. The window server maps the mask pixel for
-    /// pixel, so it is made at the band's device size. Full radius at the header, eased to none.
+    /// pixel, so it is made at the band's device size.
     static func topBlurMask(width: Int, height: Int) -> CGImage? {
         guard width > 0, height > 1 else { return nil }
         var bytes = [UInt8](repeating: 0, count: width * height * 2)
         for row in 0..<height {
-            let t = 1 - Double(row) / Double(height - 1)
-            let v = UInt8((t * t * (3 - 2 * t) * 255).rounded())
+            let v = UInt8((topBlurStrength(Double(row) / Double(height - 1)) * 255).rounded())
             for x in 0..<width { bytes[(row * width + x) * 2 + 1] = v }
         }
         guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
@@ -478,16 +485,26 @@ public final class ThreadPanelView: DSView {
     }
 
     private func syncTopBlur(on: Bool, frame: CGRect) {
-        guard on else { topBlur?.removeFromSuperview(); topBlur = nil; return }
+        guard on else {
+            topBlur?.removeFromSuperview(); topBlur = nil
+            topTint?.removeFromSuperview(); topTint = nil
+            return
+        }
         if topBlur == nil {
             let blur = BackdropBlurView(frame: frame)
             blur.saturation = 1 // no tint step where the band ends
+            blur.radius = Self.topBlurRadius
+            // Above the rows, under the header (added after the timeline).
             addSubview(blur, positioned: .above, relativeTo: timeline)
+            let tint = GlassHeaderTint(frame: frame)
+            addSubview(tint, positioned: .above, relativeTo: blur)
             topBlur = blur
+            topTint = tint
+            needsDisplay = true // `updateLayer` colors the tint
         }
         guard let topBlur else { return }
         topBlur.frame = frame
-        topBlur.layer?.zPosition = 1
+        topTint?.frame = frame
         let scale = window?.backingScaleFactor ?? 2
         let w = Int((frame.width * scale).rounded()), h = Int((frame.height * scale).rounded())
         if topBlur.variableMask?.width != w || topBlur.variableMask?.height != h {
@@ -1427,7 +1444,13 @@ public final class ThreadPanelView: DSView {
     public override func updateLayer() {
         let bg = TL.c(\.background).cgColor(in: self)
         fade.colors = [1, 0.9, 0.7, 0.42, 0.18, 0.04, 0].map { bg.copy(alpha: $0)! }
-        // A colored overlay over the Glass theme's translucent surface reads as a band, so Glass blurs instead (`topBlur`).
+        // A colored overlay over the Glass theme's translucent surface reads as a band, so Glass blurs instead (`topBlur`),
+        // under a wash that fades out with the blur's own curve.
+        if let tint = topTint?.layer as? CAGradientLayer {
+            let stops = (0...8).map { Double($0) / 8 }
+            tint.colors = stops.map { bg.copy(alpha: GlassHeaderTint.alpha * Self.topBlurStrength($0))! }
+            tint.locations = stops.map { NSNumber(value: $0) }
+        }
         needsLayout = true
     }
 
@@ -1464,7 +1487,10 @@ public final class ThreadPanelView: DSView {
             terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
         }
         terminalGhost?.frame.origin.y = chatHeight
-        timeline.frame = NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop))
+        // Glass: the rows run on under the header (`topBlur`).
+        let glass = WindowGlass.isActive(for: self)
+        timeline.topClearance = glass ? chatTop : 0
+        timeline.frame = NSRect(x: 0, y: chatTop - timeline.topClearance, width: chat, height: max(0, chatHeight - chatTop + timeline.topClearance))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
         panelGhost?.frame.origin.x = chat
@@ -1572,13 +1598,28 @@ public final class ThreadPanelView: DSView {
         // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
         fade.frame = CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
-        let glass = WindowGlass.isActive(for: self)
         fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || glass
-        syncTopBlur(on: glass && window != nil && errorBanner.isHidden && providerBanner.isHidden,
-                    frame: CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: Self.topBlurHeight))
+        // Banners sit above the blur, so it stays on under them: the rows still pass under the header.
+        syncTopBlur(on: glass && window != nil && chat > 0, frame: CGRect(x: 0, y: 0, width: chat, height: chatTop + Self.topBlurRamp))
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
         CATransaction.commit()
     }
+}
+
+/// The Glass header's wash: a vertical gradient of the background that takes no clicks, so the rows
+/// under its fading part stay clickable.
+final class GlassHeaderTint: NSView {
+    /// The wash's opacity at the panel's top.
+    static let alpha: Double = 0.35
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+    override func makeBackingLayer() -> CALayer { CAGradientLayer() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
