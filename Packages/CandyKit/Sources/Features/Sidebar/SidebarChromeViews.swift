@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import CoreText
 import DesignSystem
 
@@ -100,6 +101,16 @@ final class StageBackdropView: DSView {
         let crop = Self.candyCrop
         let rect = CGRect(x: origin.x + crop.minX * scale, y: origin.y + crop.minY * scale,
                           width: crop.width * scale, height: crop.height * scale)
+        if !compact, let blurred = progressiveLuma(luma, at: rect, deviceScale: abs(ctx.convertToDeviceSpace(CGSize(width: 1, height: 1)).width)) {
+            ctx.saveGState()
+            ctx.translateBy(x: 0, y: h)
+            ctx.scaleBy(x: 1, y: -1)
+            ctx.clip(to: bounds, mask: blurred)
+            ctx.setFillColor(Self.candyLight.cgColor(in: self))
+            ctx.fill(bounds)
+            ctx.restoreGState()
+            return
+        }
         ctx.saveGState()
         // The view is flipped; flip the rect back so the image's first row lands at its top.
         ctx.translateBy(x: 0, y: rect.minY + rect.maxY)
@@ -109,6 +120,39 @@ final class StageBackdropView: DSView {
         ctx.setFillColor(Self.candyLight.cgColor(in: self))
         ctx.fill(rect)
         ctx.restoreGState()
+    }
+
+    /// The band's progressive blur: sharp to 28% down, then blurring harder toward the fade's end at 92%,
+    /// like a system variable blur. The duotone is linear in luma, so blurring the luma blurs the art.
+    /// Baked once per device-pixel size; the luma has no colors, so both appearances share it.
+    private var blurredLuma: (key: CGRect, image: CGImage)?
+    static let blurRadius: CGFloat = 7
+    private static let ci = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
+
+    private func progressiveLuma(_ luma: CGImage, at rect: CGRect, deviceScale s: CGFloat) -> CGImage? {
+        let pw = Int((bounds.width * s).rounded()), ph = Int((bounds.height * s).rounded())
+        guard pw > 0, ph > 0 else { return nil }
+        let key = CGRect(x: rect.minX * s, y: rect.minY * s, width: CGFloat(pw), height: CGFloat(ph))
+        if let blurredLuma, blurredLuma.key == key { return blurredLuma.image }
+        guard let gray = CGContext(data: nil, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: 0,
+                                   space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        gray.scaleBy(x: s, y: s)
+        gray.interpolationQuality = .high
+        gray.draw(luma, in: CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
+        guard let placed = gray.makeImage() else { return nil }
+        let extent = CGRect(x: 0, y: 0, width: pw, height: ph)
+        // Core Image puts y = 0 at the bottom: no blur above 28% from the top, full blur at 92%.
+        let mask = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: 0, y: CGFloat(ph) * 0.72), "inputColor0": CIColor.black,
+            "inputPoint1": CIVector(x: 0, y: CGFloat(ph) * 0.08), "inputColor1": CIColor.white])?.outputImage
+        let blur = CIFilter(name: "CIMaskedVariableBlur", parameters: [
+            kCIInputImageKey: CIImage(cgImage: placed).clampedToExtent(), "inputMask": mask as Any,
+            kCIInputRadiusKey: Self.blurRadius * s])
+        guard let out = blur?.outputImage?.cropped(to: extent),
+              let image = Self.ci.createCGImage(out, from: extent, format: .L8, colorSpace: CGColorSpaceCreateDeviceGray())
+        else { return nil }
+        blurredLuma = (key, image)
+        return image
     }
 
     private func drawFadeAndMask(_ ctx: CGContext) {
