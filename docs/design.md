@@ -120,7 +120,7 @@ The user's own choices where CandyWrapper looks different from T3 on purpose.
 
 ## Glass
 
-The classic Glass theme (`candywrapper-glass`) is CandyWrapper's own, so its material is ours. The user requested a softer sidebar header on 2026-10-17: a rounded search surface with focus feedback, a gently filled 32pt compose action and 2pt between the header actions. The candy artwork now fades directly into the sidebar over 112pt, with a stronger gradual blur. Elsewhere, layout, sizes, wording and behavior stay T3's; only the surfaces change. Every other theme is untouched: the code below runs only while `ThemeRuntime.isGlass` is true. It all lives in `WindowGlass` (DesignSystem/Components/WindowGlass.swift), and views use its colors and helpers instead of their own copies.
+The classic Glass theme (`candywrapper-glass`) is CandyWrapper's own, so its material is ours. The candy artwork fades directly into the sidebar over 112pt, with a stronger gradual blur. The user rejected the persistent search and compose backgrounds on 2026-10-17, so both stay transparent at rest and retain hover and focus feedback. The compose action has a 32pt target and the header actions have 2pt gaps. Elsewhere, layout, sizes, wording and behavior stay T3's; only the surfaces change. Every other theme is untouched: the code below runs only while `ThemeRuntime.isGlass` is true. It all lives in `WindowGlass` (DesignSystem/Components/WindowGlass.swift), and views use its colors and helpers instead of their own copies.
 
 One frost covers the window, so the desktop shows through blurred and saturated and our tints set all the density. Every surface on it is a tinted pane. Depth comes from how dense a pane is, never from soft shadows.
 

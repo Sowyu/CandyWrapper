@@ -13,7 +13,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Remove the rejected resting backgrounds from sidebar search and compose; retain the approved blur and show screenshots before any new release. (taken 2026-10-17)
+- [x] Removed the rejected resting backgrounds from sidebar search and compose (2026-10-17), retaining the approved blur and hover/focus feedback. All 113 focused sidebar tests passed; real light/dark screenshots checked. [Notes and screenshots](docs/research/sidebar-header-2026-10-17.md#remove-the-rejected-backgrounds). Not released.
 
 - [x] Final sidebar outline cleanup and v1.5.3 release (2026-10-17): removed resting search/compose borders, kept editing and keyboard focus feedback, checked light/dark screenshots and 113 focused tests, then published build 28 from `77e81a9`. Release signatures, downloads and update feed verified.
 
@@ -45,6 +45,8 @@ The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`
 The code marks known shortcuts with `// ponytail:`, each naming when to fix it (`rg '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
 ## Waiting on the user
+
+- Approval of the transparent sidebar search/compose correction before another release (2026-10-17).
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).

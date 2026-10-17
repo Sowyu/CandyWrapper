@@ -357,8 +357,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if WindowGlass.isActive(for: self) {
-            let ink: NSColor = effectiveAppearance.isDark ? .white : .black
-            surface.backgroundColor = ink.withAlphaComponent(hovered || editing ? 0.10 : 0.055).cgColor
+            surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
             surface.borderWidth = editing ? 1 : 0
             surface.borderColor = editing ? SB.c(\.ring).withAlphaComponent(0.65).cgColor(in: self) : nil
             surface.cornerRadius = 10
