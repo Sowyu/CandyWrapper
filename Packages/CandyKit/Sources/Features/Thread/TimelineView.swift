@@ -202,6 +202,7 @@ public final class TimelineView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        context.onMarkdownHeightChange = { [weak self] id in self?.remeasure { $0.id == id } }
         context.onDisclosure = { [weak self] id in
             self?.disclosureRowId = id
             // A toggle that changes no rows must not hold the next, unrelated update.

@@ -13,7 +13,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Wide Markdown tables: horizontal scrolling, collapsed and expanded cells, copy parity, fidelity and sandbox checks (taken 2026-10-17).
+- [x] Wide Markdown tables (2026-10-17): horizontal scrolling and fades, per-table expansion across streaming, Markdown/CSV copy, row-height updates, light/dark fidelity and sandbox checks including Classic Glass. Full suite: 1,501 tests, then 42 focused checks after the height fix. Perf: no threshold regressions, 198 ms window, 0.043% idle CPU, 34.2 MB idle footprint; two scroll samples had about 60 ms stalls. [Notes](docs/research/wide-tables-2026-10-17.md).
 - [ ] Catch up to T3 Code Nightly 3234 or newer, following `docs/nightly-catch-up.md`, after the table fix.
 - [ ] Independent updates for CandyWrapper's own server runtime, rollback and newer-server compatibility, after the Nightly catch-up.
 

@@ -267,8 +267,11 @@ public final class MarkdownLayout {
         case remoteImage(URL, String, CGRect)
     }
 
+    static func tableMarkdown(_ table: MarkdownTable) -> String { Builder.markdown(table) }
+    static func tableCSV(_ table: MarkdownTable) -> String { Builder.csv(table) }
+
     struct Control {
-        enum Action { case copy(String), toggleWrap(Int), toggleTable, toggleDiagram(Int), retryDiagram(String), runShell(String) }
+        enum Action { case copy(String), copyTable(MarkdownTable), toggleWrap(Int), toggleTable(Int), toggleDiagram(Int), retryDiagram(String), runShell(String) }
         var frame: CGRect
         var icon: IconName?
         var variant: ButtonView.Variant
@@ -302,6 +305,8 @@ public final class MarkdownLayout {
     fileprivate private(set) var rootBlocks: [MarkdownBlock] = []
     fileprivate private(set) var rootEnds: [RootEnd] = []
     private var reuseKey: ReuseKey?
+    fileprivate var expandedTables: Set<Int> = []
+    fileprivate var rootBoxes: [Box] = []
     /// The text boxes this layout made or took over for the blocks it laid out itself. Only a
     /// layout that reused an earlier one keeps them: that is a streaming answer, whose next update
     /// lays out its last block again and takes the boxes whose input did not change.
@@ -310,7 +315,7 @@ public final class MarkdownLayout {
     private(set) var reusedTextBoxes = 0
     /// The flow after one top-level block: the items and controls so far, the y below the block,
     /// its own bottom margin (before the root zeroes the last one) and the next code block index.
-    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int; var innerBottom: CGFloat = 0 }
+    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int; var tableIndex: Int; var innerBottom: CGFloat = 0 }
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
@@ -327,27 +332,24 @@ public final class MarkdownLayout {
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
+                expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
                 reusing previous: MarkdownLayout? = nil) {
         self.width = width
+        self.expandedTables = expandedTables
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
+        builder.expandedTables = expandedTables
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
                            runsShell: runsShell)
-        var resume: (layout: MarkdownLayout, blocks: Int)?
-        if let previous, previous.width == width, previous.reuseKey == key {
-            let blocks = document.blocks, old = previous.rootBlocks
-            var same = 0
-            while same < min(blocks.count, old.count), blocks[same] == old[same] { same += 1 }
-            if same > 0 { resume = (previous, same) }
-        }
-        reusedBlocks = resume?.blocks ?? 0
-        let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true, resume: resume)
+        if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
+        let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
+        reusedBlocks = builder.reusedBlocks
+        rootBoxes = builder.rootBoxes
         reuseKey = key
         textBoxes = builder.boxes.made
         reusedTextBoxes = builder.boxes.hits
@@ -367,7 +369,7 @@ public final class MarkdownLayout {
 
 /// A laid-out block: CSS margins (to collapse with neighbours), its border-box height, and its
 /// content relative to its top-left.
-private struct Box {
+fileprivate struct Box {
     var top: CGFloat = 0
     var bottom: CGFloat = 0
     /// The part of `top` and `bottom` that comes from descendants (a loose list item's `<p>`), which
@@ -397,6 +399,11 @@ private struct Builder {
     let wrapsCode: Bool
     let files: FileChipResolver?
     var codeIndex = 0
+    var tableIndex = 0
+    var expandedTables: Set<Int> = []
+    var previous: MarkdownLayout?
+    var rootBoxes: [Box] = []
+    var reusedBlocks = 0
     var diagrams: MarkdownLayout.Diagrams?
     var contexts: MarkdownContextChips?
     var cwd: String?
@@ -413,27 +420,50 @@ private struct Builder {
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
     /// stops them), except at the root, where T3 zeroes them (`.chat-markdown > :first-child`).
-    /// `resume` (root only) takes the first blocks as `layout` placed them and lays out the rest.
+    /// Unchanged root blocks reuse their boxes, including blocks following a toggled table.
     @MainActor
-    mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false,
-                       resume: (layout: MarkdownLayout, blocks: Int)? = nil) -> Box {
+    mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false) -> Box {
         var out = Box()
         var y: CGFloat = 0
         var previousBottom: CGFloat?
+        func canReuse(_ index: Int, _ code: Int, _ table: Int) -> Bool {
+            guard root, let previous, index < previous.rootBlocks.count else { return false }
+            let oldCode = index == 0 ? 0 : previous.rootEnds[index - 1].codeIndex
+            let oldTable = index == 0 ? 0 : previous.rootEnds[index - 1].tableIndex
+            guard code == oldCode, table == oldTable, blocks[index] == previous.rootBlocks[index] else { return false }
+            let tables = table..<previous.rootEnds[index].tableIndex
+            return expandedTables.intersection(tables) == previous.expandedTables.intersection(tables)
+        }
         var first = 0
-        if root, let resume {
-            let end = resume.layout.rootEnds[resume.blocks - 1]
-            out.items = Array(resume.layout.items.prefix(end.items))
-            out.controls = Array(resume.layout.controls.prefix(end.controls))
-            rootTops = Array(resume.layout.blockTops.prefix(resume.blocks))
-            rootEnds = Array(resume.layout.rootEnds.prefix(resume.blocks))
-            codeIndex = end.codeIndex
-            y = end.y
-            previousBottom = end.bottom
-            first = resume.blocks
+        if root, let previous {
+            while first < blocks.count, canReuse(first, codeIndex, tableIndex) {
+                codeIndex = previous.rootEnds[first].codeIndex
+                tableIndex = previous.rootEnds[first].tableIndex
+                first += 1
+            }
+            if first > 0 {
+                let end = previous.rootEnds[first - 1]
+                out.items = Array(previous.items.prefix(end.items))
+                out.controls = Array(previous.controls.prefix(end.controls))
+                rootTops = Array(previous.blockTops.prefix(first))
+                rootEnds = Array(previous.rootEnds.prefix(first))
+                rootBoxes = Array(previous.rootBoxes.prefix(first))
+                y = end.y
+                previousBottom = end.bottom
+                reusedBlocks = first
+            }
         }
         for index in first..<blocks.count {
-            var box = layout(blocks[index], width: width, context: context, tight: tight)
+            var box: Box
+            if canReuse(index, codeIndex, tableIndex), let previous {
+                box = previous.rootBoxes[index]
+                codeIndex = previous.rootEnds[index].codeIndex
+                tableIndex = previous.rootEnds[index].tableIndex
+                reusedBlocks += 1
+            } else {
+                box = layout(blocks[index], width: width, context: context, tight: tight)
+            }
+            if root { rootBoxes.append(box) }
             let ownBottom = box.bottom
             // The root zeroes its first and last child's own margins; a loose list item's `<p>` margin still shows.
             if root, index == 0 { y += box.innerTop; box.top = 0 }
@@ -443,7 +473,7 @@ private struct Builder {
             out.add(box, at: CGPoint(x: 0, y: y))
             y += box.height
             previousBottom = box.bottom
-            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex, innerBottom: box.innerBottom)) }
+            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex, tableIndex: tableIndex, innerBottom: box.innerBottom)) }
         }
         out.bottom = previousBottom ?? 0
         out.height = y + (root ? rootEnds.last?.innerBottom ?? 0 : 0)
@@ -894,10 +924,11 @@ private struct Builder {
 
     /// `MarkdownTable`: 12px cells with `0.45rem 0.75rem` padding (header `0.55rem` block padding, weight 600),
     /// a 1px bottom rule at 60% border under every row, then the expand and copy buttons 2px below.
-    // ponytail: columns get their max-content width plus a proportional share of the slack, and cells never
-    // wrap; a table wider than the message is clipped, not scrolled. Add the ScrollArea when wide tables show up.
     @MainActor
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
+        let index = tableIndex
+        tableIndex += 1
+        let expanded = expandedTables.contains(index)
         let columns = table.alignments.count
         let size = MarkdownStyle.tableFontSize, line = MarkdownStyle.tableLineHeight
         func cellString(_ runs: [InlineRun], header: Bool, column: Int) -> MarkdownStyle.Inline {
@@ -914,7 +945,7 @@ private struct Builder {
         var widths = [CGFloat](repeating: 0, count: columns)
         for row in [table.header] + table.rows {
             for (c, runs) in row.enumerated() where c < columns {
-                widths[c] = max(widths[c], natural(cellString(runs, header: row == table.header, column: c).string) + 24)
+                widths[c] = max(widths[c], min(384, natural(cellString(runs, header: row == table.header, column: c).string) + 24))
             }
         }
         let total = widths.reduce(0, +)
@@ -933,9 +964,13 @@ private struct Builder {
                 let runs = c < row.count ? row[c] : []
                 let inline = cellString(runs, header: r == 0, column: c)
                 let s = inline.string, chips = inline.code
-                // Columns are at least max-content wide, so the cell never wraps; it must still wrap at its width
-                // for TextKit to place centered and right-aligned text inside the column.
-                let textBox = boxes.make(s, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
+                let displayed = NSMutableAttributedString(attributedString: s)
+                if !expanded || r == 0, displayed.length > 0 {
+                    let paragraph = (displayed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                    paragraph.lineBreakMode = .byTruncatingTail
+                    displayed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: displayed.length))
+                }
+                let textBox = boxes.make(displayed, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
                                          chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
                 var cell = Box(height: textBox.height)
                 for chip in textBox.chips {
@@ -954,28 +989,52 @@ private struct Builder {
             box.items.append(.box(CGRect(x: 0, y: y, width: tableWidth, height: 1), fill: rule, border: nil, radius: 0))
             y += 1
         }
-        // Classic Glass sets the table on a dense pane; the stock look paints nothing there.
-        box.items.insert(.box(CGRect(x: 0, y: 0, width: min(width, tableWidth), height: y), fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
+        // Negative scroll IDs keep table and code state separate while sharing the input and scrollbar paths.
+        let viewport = CGRect(x: 0, y: 0, width: width, height: y + (tableWidth > width ? MarkdownStyle.codeScrollbar : 0))
+        box.items.insert(.scroll(codeIndex: -index - 1, viewport: viewport, contentWidth: tableWidth), at: 0)
+        box.items.append(.endClip)
+        // Classic Glass sets the table on a dense pane, below the faded content.
+        box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
                               border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
-        if tableWidth > width {
-            box.items.insert(.clip(CGRect(x: 0, y: 0, width: width, height: y)), at: 0)
-            box.items.append(.endClip)
-        }
-        box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: .minimize2, variant: .secondary, action: .toggleTable))
+        y = viewport.maxY
+        box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
+                                  variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
         box.controls.append(.init(frame: CGRect(x: width - 24, y: y + 2, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
-                                  action: .copy(Self.markdown(table))))
+                                  action: .copyTable(table)))
         box.height = y + 2 + 24
         return box
+    }
+
+    static func csv(_ table: MarkdownTable) -> String {
+        ([table.header] + table.rows).map { row in
+            row.map { runs in
+                let text = runs.map(\.text).joined().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                return text.contains(",") || text.contains("\"") ? "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : text
+            }.joined(separator: ",")
+        }.joined(separator: "\n")
     }
 
     /// "Copy as Markdown" for a table.
     static func markdown(_ table: MarkdownTable) -> String {
         func row(_ cells: [[InlineRun]]) -> String {
-            "| " + cells.map { $0.map(\.text).joined().replacingOccurrences(of: "|", with: "\\|") }.joined(separator: " | ") + " |"
+            "| " + cells.map { runs in
+                runs.map { run in
+                    var text = run.text.replacingOccurrences(of: "\n", with: " ")
+                    if run.code {
+                        let fence = text.contains("`") ? "``" : "`"
+                        text = fence + text + fence
+                    }
+                    if run.bold { text = "**" + text + "**" }
+                    if run.italic { text = "_" + text + "_" }
+                    if run.strikethrough { text = "~~" + text + "~~" }
+                    if let link = run.link { text = "[" + text + "](" + link.absoluteString + ")" }
+                    return text
+                }.joined().trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "|", with: "\\|")
+            }.joined(separator: " | ") + " |"
         }
         let rule = "| " + table.alignments.map { a -> String in
             switch a {
-            case .left: ":---"
+            case .left: "---"
             case .center: ":---:"
             case .right: "---:"
             case .none: "---"

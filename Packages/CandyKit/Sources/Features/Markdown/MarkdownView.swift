@@ -19,6 +19,20 @@ public final class MarkdownView: DSView {
         didSet { if (oldValue == nil) != (onRunShellCommand == nil) { invalidate() } }
     }
 
+    /// The owner changes this before recycling the view for a different message.
+    public var messageID: String? {
+        didSet {
+            guard messageID != oldValue else { return }
+            expandedTables = []; unwrappedCode = []; diagramCode = []; codeOffsets = [:]
+            for reset in copiedResets.values { reset.cancel() }
+            copiedResets = [:]
+            scrollLatch = nil; thumbDrag = nil
+            invalidate()
+        }
+    }
+    public var onHeightChange: (() -> Void)?
+    private(set) var expandedTables: Set<Int> = []
+
     public var document = MarkdownDocument(blocks: []) {
         didSet {
             // T3 reads the wrap setting when a code block mounts (`readInitialWordWrapSetting`, ChatMarkdown.tsx:555-557); a
@@ -28,12 +42,12 @@ public final class MarkdownView: DSView {
             if fadesNewBlocks, document.blocks.count > oldValue.blocks.count {
                 fadeIn(blocks: oldValue.blocks.count..<document.blocks.count)
             }
-            // A reset wrap or diagram toggle changes a block in place; only plain growth redraws in part.
-            // ponytail: a streaming answer remounts its blocks here on every update, so a sideways scroll or wrap toggle on a
-            // block still streaming resets; keep the state per message if users scroll blocks while they stream
-            let toggled = !unwrappedCode.isEmpty || !diagramCode.isEmpty || wraps != wrapsCode
-            clearAssistantSelection(); unwrappedCode = []; diagramCode = []; codeOffsets = [:]; wrapsCode = wraps
-            let previous = toggled ? nil : cache[bounds.width]
+            clearAssistantSelection()
+            if messageID == nil && !fadesNewBlocks {
+                unwrappedCode = []; diagramCode = []; expandedTables = []; codeOffsets = [:]
+            }
+            let previous = wraps == wrapsCode ? cache[bounds.width] : nil
+            wrapsCode = wraps
             invalidate(redraw: previous == nil)
             reusable = previous
             if let previous { redrawChanges(from: previous, oldBlocks: oldValue.blocks) }
@@ -213,7 +227,7 @@ public final class MarkdownView: DSView {
         }
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
-                                  wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
+                                  wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
@@ -343,6 +357,11 @@ public final class MarkdownView: DSView {
             case .copy(let text):
                 button.setAccessibilityLabel("Copy")
                 button.action = { [weak self] in self?.copy(text, button: i) }
+            case .copyTable(let table):
+                let label = copiedResets[i] == nil ? "Copy table" : "Copied"
+                button.setAccessibilityLabel(label)
+                button.toolTip = label
+                button.action = { [weak self] in self?.showTableCopy(table, button: i) }
             case .runShell(let command):
                 button.setAccessibilityLabel("Run in terminal")
                 button.toolTip = "Run in terminal"
@@ -361,12 +380,26 @@ public final class MarkdownView: DSView {
                     guard let self else { return }
                     MermaidDiagrams.shared.retry(code, dark: self.effectiveAppearance.isDark)
                 }
-            case .toggleTable:
-                button.setAccessibilityLabel("Collapse table cells")
-                // ponytail: cells never truncate yet, so the toggle has nothing to collapse; wire it with cell truncation
-                button.action = nil
+            case .toggleTable(let index):
+                let label = expandedTables.contains(index) ? "Collapse table cells" : "Expand table cells"
+                button.setAccessibilityLabel(label)
+                button.toolTip = label
+                button.action = { [weak self] in self?.toggleTable(index) }
             }
         }
+    }
+
+    /// Hit regions move and clip with the table content, including after a scroll without relayout.
+    private func visibleFrame(_ frame: CGRect) -> CGRect {
+        for scroller in codeScrollers where scroller.index < 0 {
+            let viewport = scroller.viewport
+            if frame.midY >= viewport.minY && frame.midY < viewport.maxY {
+                let moved = frame.offsetBy(dx: -codeOffset(scroller.index, viewport, scroller.contentWidth), dy: 0)
+                let clipped = moved.intersection(viewport)
+                return clipped.isNull ? .zero : clipped
+            }
+        }
+        return frame
     }
 
     /// One transparent view per file chip: pointer cursor, hover, tooltip, click and context menu.
@@ -380,7 +413,7 @@ public final class MarkdownView: DSView {
         for (i, view) in chipViews.enumerated() {
             guard i < chips.count else { view.isHidden = true; continue }
             view.isHidden = false
-            view.frame = chips[i].frame
+            view.frame = visibleFrame(chips[i].frame)
             view.chip = chips[i]
         }
         if let hovered = hoveredChip, hovered >= chips.count { hoveredChip = nil }
@@ -397,7 +430,7 @@ public final class MarkdownView: DSView {
         for (i, view) in contextChipViews.enumerated() {
             guard i < chips.count else { view.isHidden = true; continue }
             view.isHidden = false
-            view.frame = chips[i].frame
+            view.frame = visibleFrame(chips[i].frame)
             view.chip = chips[i]
         }
         if let hovered = hoveredContextChip, hovered >= chips.count { hoveredContextChip = nil }
@@ -444,7 +477,7 @@ public final class MarkdownView: DSView {
         for (i, view) in linkViews.enumerated() {
             guard i < links.count else { view.isHidden = true; continue }
             view.isHidden = false
-            view.frame = links[i].frame
+            view.frame = visibleFrame(links[i].frame)
             view.url = links[i].url
         }
     }
@@ -617,9 +650,25 @@ public final class MarkdownView: DSView {
         NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
 
+    private func showTableCopy(_ table: MarkdownTable, button index: Int) {
+        MenuPopupView.show([
+            MenuItem("Copy as Markdown") { [weak self] in self?.copy(MarkdownLayout.tableMarkdown(table), button: index) },
+            MenuItem("Copy as CSV") { [weak self] in self?.copy(MarkdownLayout.tableCSV(table), button: index) }
+        ], from: buttons[index], placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
+    }
+
+    func toggleTable(_ index: Int) {
+        let previous = cache[bounds.width]
+        if expandedTables.contains(index) { expandedTables.remove(index) } else { expandedTables.insert(index) }
+        invalidate()
+        reusable = previous
+        onHeightChange?()
+    }
+
     private func copy(_ text: String, button index: Int) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        guard NSPasteboard.general.setString(text, forType: .string) else { return }
+        needsLayout = true
         // T3 swaps the icon to a check for 1.2s.
         buttons[index].icon = .check
         copiedResets[index]?.cancel()
@@ -665,7 +714,7 @@ public final class MarkdownView: DSView {
         let old = codeOffset(index, viewport, contentWidth)
         codeOffsets[index] = min(max(0, contentWidth - viewport.width), (max(0, value) * 2).rounded() / 2)
         let new = codeOffset(index, viewport, contentWidth)
-        if new != old { setNeedsDisplay(viewport) }
+        if new != old { setNeedsDisplay(viewport); needsLayout = true }
         return new
     }
 
@@ -909,6 +958,7 @@ public final class MarkdownView: DSView {
         var contextIndex = -1
         var findOccurrence = 0
         var selectionOffset = 0
+        var tableFade: (CGRect, CGFloat, CGFloat)?
         for item in layout(forWidth: bounds.width).items {
             switch item {
             case .text(let box, let origin):
@@ -1014,6 +1064,10 @@ public final class MarkdownView: DSView {
                 ctx.saveGState()
                 ctx.clip(to: rect)
             case .scroll(let index, let viewport, let width):
+                if index < 0, width > viewport.width {
+                    ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+                    tableFade = (viewport, codeOffset(index, viewport, width), width)
+                }
                 ctx.saveGState()
                 if let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
                     // The frame's `overflow-hidden rounded-lg` clips the bar at the block's bottom corners.
@@ -1030,6 +1084,11 @@ public final class MarkdownView: DSView {
                 ctx.translateBy(x: -codeOffset(index, viewport, width), y: 0)
             case .endClip:
                 ctx.restoreGState()
+                if let (viewport, offset, width) = tableFade {
+                    Self.drawTableFade(viewport, offset: offset, contentWidth: width, in: ctx)
+                    ctx.endTransparencyLayer()
+                    tableFade = nil
+                }
             case .image(let image, let rect):
                 // The view is flipped; CGImage draws bottom up.
                 ctx.saveGState()
@@ -1039,6 +1098,19 @@ public final class MarkdownView: DSView {
                 ctx.draw(image, in: CGRect(origin: .zero, size: rect.size))
                 ctx.restoreGState()
             }
+        }
+    }
+
+    /// ScrollArea's 1.5rem mask, shortened to the remaining overflow at either edge.
+    private static func drawTableFade(_ viewport: CGRect, offset: CGFloat, contentWidth: CGFloat, in ctx: CGContext) {
+        let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1)] as CFArray, locations: [0, 1])!
+        let edges: [(CGFloat, CGFloat)] = [(viewport.minX, min(24, offset)), (viewport.maxX, -min(24, contentWidth - viewport.width - offset))]
+        for (x, length) in edges where length != 0 {
+            ctx.saveGState()
+            ctx.clip(to: CGRect(x: min(x, x + length), y: viewport.minY, width: abs(length), height: viewport.height - MarkdownStyle.codeScrollbar))
+            ctx.setBlendMode(.destinationIn)
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: x, y: 0), end: CGPoint(x: x + length, y: 0), options: [])
+            ctx.restoreGState()
         }
     }
 
