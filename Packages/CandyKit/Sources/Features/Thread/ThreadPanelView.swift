@@ -456,13 +456,12 @@ public final class ThreadPanelView: DSView {
         }
     }
     private let fade = CAGradientLayer()
-    /// Glass in place of `fade`: the rows scroll on under the header, and a progressive blur over the
-    /// header and the timeline's top softens them as they go, strongest at the panel's top and eased to
-    /// none `topBlurRamp` below the header. The window server draws it; scrolling costs the app nothing more.
+    /// Glass in place of `fade`: the rows scroll on under the header, and the header's own backdrop is a
+    /// progressive blur, strongest at the panel's top and eased to none at the header's bottom edge. The
+    /// window server draws it; scrolling costs the app nothing more.
     private var topBlur: BackdropBlurView?
     /// A wash of the background over the blur, fading out with it, so the title reads over blurred rows.
     private var topTint: GlassHeaderTint?
-    static let topBlurRamp: CGFloat = 64
     static let topBlurRadius: CGFloat = 16
     /// Eased so the blur has no visible start or end: `smoothstep` from 1 at the top to 0 at the bottom.
     static func topBlurStrength(_ y: Double) -> Double {
@@ -1600,7 +1599,7 @@ public final class ThreadPanelView: DSView {
         fade.zPosition = 1
         fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || glass
         // Banners sit above the blur, so it stays on under them: the rows still pass under the header.
-        syncTopBlur(on: glass && window != nil && chat > 0, frame: CGRect(x: 0, y: 0, width: chat, height: chatTop + Self.topBlurRamp))
+        syncTopBlur(on: glass && window != nil && chat > 0, frame: CGRect(x: 0, y: 0, width: chat, height: chatTop))
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
