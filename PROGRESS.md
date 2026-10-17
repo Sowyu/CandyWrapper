@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Refine the sidebar header and search controls, and soften the candy artwork blur/fade. Show real-window screenshots before release. (taken 2026-10-17)
+
 - [ ] Profile the memory increase already present in v1.5.2: about 38 MB idle and 85 MB startup peak, versus the pre-blur baseline of 34 MB and 34 MB. An isolated published-release control matches the prompt/preview fix build. The cause is not yet isolated. [Measurements](docs/research/prompt-preview-layout-2026-10-17.md#performance-review).
 
 - [x] Prompt and floating preview fixes (2026-10-17): attachments keep their full height above separately collapsed prompt text; browser previews and their control bars are opaque and avoid the details card and composer. Checked in real Glass light/dark windows, including expand. Full suite: 1,530 tests; final focused checks: 9 tests. Performance matches released v1.5.2; the older baseline exposes a pre-existing memory increase. [Review and screenshot paths](docs/research/prompt-preview-layout-2026-10-17.md). Not released; waiting for screenshot approval.
@@ -40,7 +42,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 ## Waiting on the user
 
-- Screenshot approval for the prompt and floating browser preview fixes before any release (2026-10-17).
+- The user approved the prompt/preview fixes and requested sidebar header polish. Await the new screenshots and explicit release approval (2026-10-17).
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
