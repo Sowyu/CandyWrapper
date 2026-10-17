@@ -37,3 +37,9 @@ The full test suite passed: 1,530 tests. The app performance review compares aga
 Removed the resting search border and the compose border, which also removes the Glass highlight derived from that border. The fills stay unchanged. Checked on screen in light and dark, including typing a search and its editing ring. All 113 focused sidebar tests passed. The preceding full suite (1,530 tests) and app performance review cover the rest of this release; this final change only removes border drawing. Final screenshots are `header-final-dark.png`, `header-final-light.png` and `search-final-focus-light.png` in the screenshot folder above.
 
 Published as v1.5.3 (build 28) from `77e81a9` on 2026-10-17. The release script verified the signed app, downloaded ZIP/DMG hashes and published signed update feed.
+
+## Remove the rejected backgrounds
+
+After v1.5.3, the user rejected the persistent search and compose fills. Removed those fills while retaining the approved artwork blur, transparent resting controls, hover feedback and editing/keyboard focus indicators. This restores the search's hover-only fill from `apps/web/src/components/sidebar/SidebarThreadHeader.tsx:65-68` and the header action's ghost styling from the same file at lines 148-176. The earlier border-only cleanup did not address the fill itself. No new release is authorized for this correction.
+
+All 113 focused sidebar tests passed after this correction. Native light/dark window checks confirm both resting backgrounds are gone. Screenshots: `header-transparent-dark.png` and `header-transparent-light.png` in `/Users/mrm/CandyWrapper-research/sandbox/sidebar-polish`. Code review confirms this only removes the two persistent fills; the cached blur and interaction styles are unchanged.

@@ -29,7 +29,7 @@ public final class SidebarMenuButtonView: ControlView {
     public var iconDefinition: IconDefinition? { didSet { updateIcon() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var variant: Variant = .default { didSet { restyle() } }
-    /// A gently filled compose action in CandyWrapper's Glass sidebar header.
+    /// A clear compose glyph in CandyWrapper's Glass sidebar header.
     public var isHeaderAction = false { didSet { restyle() } }
     public let kind: Kind
     /// `data-active=true`: the selected row.
@@ -133,11 +133,7 @@ public final class SidebarMenuButtonView: ControlView {
     private func restyle() {
         var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state)
         if isHeaderAction, WindowGlass.isActive(for: self) {
-            let ink: NSColor = effectiveAppearance.isDark ? .white : .black
             look.box.radius = 10
-            if !state.hovered && !state.active && !isActive {
-                look.box.fill = ink.withAlphaComponent(0.09)
-            }
             look.box.border = nil
             look.icon = Themed.color(\.sidebarForeground, sidebar: true)
         }
