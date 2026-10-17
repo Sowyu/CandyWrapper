@@ -23,8 +23,8 @@ public enum SidebarStage: Sendable {
     }
 }
 
-/// `.sidebar-stage-backdrop` (index.css:498-518): 80px tall, masked to fade out from 55% to 92%, with
-/// the `--sidebar-stage-fade` overlay. Drawn once per size and appearance.
+/// CandyWrapper's softer take on `.sidebar-stage-backdrop` (index.css:498-518): a 112pt
+/// wash that fades directly into the sidebar. Drawn once per size and appearance.
 /// CandyWrapper's own art replaces T3's `NightlySkyArt` here: the teddy-and-milk corner of "Candy Town"
 /// by Aya_Lu (pixabay.com/illustrations/candy-town-city-buildings-8579300, Pixabay Content License)
 /// as a duotone, placed like CSS `background-size: 122%; background-position: 97% 95%`.
@@ -77,7 +77,7 @@ final class StageBackdropView: DSView {
         // scratch layer (27 MB at 2x).
         ctx.beginTransparencyLayer(in: bounds, auxiliaryInfo: nil)
         drawCandyTown(ctx)
-        if !compact { drawFadeAndMask(ctx) }
+        if !compact { drawFadeMask(ctx) }
         ctx.endTransparencyLayer()
         ctx.restoreGState()
     }
@@ -96,7 +96,7 @@ final class StageBackdropView: DSView {
             origin = CGPoint(x: -Self.teddy.minX * scale, y: -Self.teddy.minY * scale)
         } else {
             scale = 1.22 * w / Self.candySource.width
-            origin = CGPoint(x: (w - Self.candySource.width * scale) * 0.97, y: (h - Self.candySource.height * scale) * 0.95)
+            origin = CGPoint(x: (w - Self.candySource.width * scale) * 0.97, y: (80 - Self.candySource.height * scale) * 0.95)
         }
         let crop = Self.candyCrop
         let rect = CGRect(x: origin.x + crop.minX * scale, y: origin.y + crop.minY * scale,
@@ -122,11 +122,11 @@ final class StageBackdropView: DSView {
         ctx.restoreGState()
     }
 
-    /// The band's progressive blur: sharp to 28% down, then blurring harder toward the fade's end at 92%,
+    /// The band's progressive blur starts near the top and grows through the full wash,
     /// like a system variable blur. The duotone is linear in luma, so blurring the luma blurs the art.
     /// Baked once per device-pixel size; the luma has no colors, so both appearances share it.
     private var blurredLuma: (key: CGRect, image: CGImage)?
-    static let blurRadius: CGFloat = 7
+    static let blurRadius: CGFloat = 14
     private static let ci = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
 
     private func progressiveLuma(_ luma: CGImage, at rect: CGRect, deviceScale s: CGFloat) -> CGImage? {
@@ -141,10 +141,10 @@ final class StageBackdropView: DSView {
         gray.draw(luma, in: CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
         guard let placed = gray.makeImage() else { return nil }
         let extent = CGRect(x: 0, y: 0, width: pw, height: ph)
-        // Core Image puts y = 0 at the bottom: no blur above 28% from the top, full blur at 92%.
+        // Core Image puts y = 0 at the bottom: sharp at 8% from the top, full blur at 90%.
         let mask = CIFilter(name: "CILinearGradient", parameters: [
-            "inputPoint0": CIVector(x: 0, y: CGFloat(ph) * 0.72), "inputColor0": CIColor.black,
-            "inputPoint1": CIVector(x: 0, y: CGFloat(ph) * 0.08), "inputColor1": CIColor.white])?.outputImage
+            "inputPoint0": CIVector(x: 0, y: CGFloat(ph) * 0.92), "inputColor0": CIColor.black,
+            "inputPoint1": CIVector(x: 0, y: CGFloat(ph) * 0.10), "inputColor1": CIColor.white])?.outputImage
         let blur = CIFilter(name: "CIMaskedVariableBlur", parameters: [
             kCIInputImageKey: CIImage(cgImage: placed).clampedToExtent(), "inputMask": mask as Any,
             kCIInputRadiusKey: Self.blurRadius * s])
@@ -155,19 +155,19 @@ final class StageBackdropView: DSView {
         return image
     }
 
-    private func drawFadeAndMask(_ ctx: CGContext) {
-        let h = bounds.height, space = CGColorSpaceCreateDeviceRGB()
-        // ::after fade to --sidebar-stage-fade.
-        let fade = SB.c(\.sidebarStageFade).cgColor(in: self)
-        let stops: [(CGFloat, CGFloat)] = [(0, 0), (0.28, 0), (0.40, 0.1), (0.52, 0.3), (0.64, 0.58), (0.75, 0.82), (0.85, 0.96), (0.93, 1)]
-        let fadeGradient = CGGradient(colorsSpace: space, colors: stops.map { fade.copy(alpha: fade.alpha * $0.1)! } as CFArray,
-                                      locations: stops.map(\.0))!
-        ctx.drawLinearGradient(fadeGradient, start: .zero, end: CGPoint(x: 0, y: h), options: [.drawsAfterEndLocation])
-        // mask-image: black 0-55%, transparent at 92%.
+    private func drawFadeMask(_ ctx: CGContext) {
+        // One smooth alpha fade keeps the candy's color as it dissolves into Glass. A dark
+        // overlay followed by an alpha mask made a black stripe across the old header.
+        let stops = (0...16).map { CGFloat($0) / 16 }
+        let colors = stops.map { position -> CGColor in
+            let t = min(1, max(0, (position - 0.12) / 0.88))
+            let opacity = 1 - t * t * (3 - 2 * t)
+            return CGColor(gray: 0, alpha: opacity)
+        }
         ctx.setBlendMode(.destinationIn)
-        let mask = CGGradient(colorsSpace: space, colors: [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)] as CFArray,
-                              locations: [0, 0.55, 0.92])!
-        ctx.drawLinearGradient(mask, start: .zero, end: CGPoint(x: 0, y: h), options: [.drawsAfterEndLocation])
+        let mask = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: colors as CFArray,
+                              locations: stops)!
+        ctx.drawLinearGradient(mask, start: .zero, end: CGPoint(x: 0, y: bounds.height), options: [.drawsAfterEndLocation])
     }
 }
 
@@ -261,7 +261,7 @@ final class SidebarBrandView: ControlView {
         // `items-baseline` in a 28px box with the 20px line centred: baseline as for the text line.
         let baseline = TextLine(NSAttributedString(string: Self.word, attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
         let fg = onBackdrop ? StageBackdropView.ink() : SB.c(\.foreground)
-        let muted = onBackdrop ? StageBackdropView.ink(0.7) : SB.c(\.mutedForeground)
+        let muted = onBackdrop ? StageBackdropView.ink(0.9) : SB.c(\.mutedForeground)
         if onBackdrop {
             // The white title lifts off the candy art: `text-shadow: 0 1px 2px rgb(20 6 30 / 35%)`.
             ctx.setShadow(offset: CGSize(width: 0, height: -1), blur: 2, color: CGColor(srgbRed: 20 / 255, green: 6 / 255, blue: 30 / 255, alpha: 0.35))
@@ -294,6 +294,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     private let icon = IconView(name: .search, size: 16)
     private let surface = CALayer()
     private var hovered = false { didSet { restyle() } }
+    private var editing = false { didSet { restyle() } }
     private var fieldHeight: CGFloat = 0
     /// "Clear thread search" (SidebarThreadHeader.tsx:110-123): `icon-micro ghost-muted`, a `size-3` x, while searching.
     let clearButton = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
@@ -347,13 +348,26 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     func controlTextDidChange(_ obj: Notification) { syncClear(); onChange?(field.stringValue) }
+    func controlTextDidBeginEditing(_ obj: Notification) { editing = true }
+    func controlTextDidEndEditing(_ obj: Notification) { editing = false }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        if WindowGlass.isActive(for: self) {
+            let ink: NSColor = effectiveAppearance.isDark ? .white : .black
+            surface.backgroundColor = ink.withAlphaComponent(hovered || editing ? 0.10 : 0.055).cgColor
+            surface.borderWidth = 1
+            surface.borderColor = editing ? SB.c(\.ring).withAlphaComponent(0.65).cgColor(in: self)
+                : ink.withAlphaComponent(0.09).cgColor
+            surface.cornerRadius = 10
+        } else {
+            surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+            surface.borderWidth = 0
+            surface.cornerRadius = 8
+        }
         CATransaction.commit()
         icon.strokeColor = SB.c(\.sidebarIconColor)
         field.textColor = SB.c(\.sidebarForeground)
