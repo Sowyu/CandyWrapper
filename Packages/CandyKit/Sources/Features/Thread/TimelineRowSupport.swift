@@ -94,6 +94,7 @@ enum TL {
 /// What every row view shares: the model for toggles and a cache of parsed markdown.
 @MainActor
 final class TimelineContext {
+    var onMarkdownHeightChange: ((String) -> Void)?
     weak var model: ThreadViewModel?
     /// A row is about to toggle a disclosure (a turn fold, a work group or an entry): the timeline holds it in place.
     var onDisclosure: ((String) -> Void)?

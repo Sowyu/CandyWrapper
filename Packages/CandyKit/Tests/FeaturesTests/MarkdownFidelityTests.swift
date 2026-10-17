@@ -35,6 +35,7 @@ struct MarkdownFidelityTests {
                 let view = MarkdownView(frame: .zero)
                 view.cwd = native["cwd"]
                 view.setMarkdown(native["markdown"]!)
+                if name == "table" { view.toggleTable(0) }
                 let height = view.height(forWidth: width)
                 let canvas = Canvas(frame: .zero)
                 canvas.addSubview(view)
@@ -60,6 +61,33 @@ struct MarkdownFidelityTests {
             + "<p>T3 in Chromium, ours, diff (red where a channel differs by more than \(Self.tolerance)/255).</p><table>\(rows)</table>"
         try html.write(to: Self.out.appendingPathComponent("report-markdown.html"), atomically: true, encoding: .utf8)
         #expect(count > 0)
+    }
+
+    @Test func wideTables() throws {
+        let refDir = Self.repo.appendingPathComponent("design/component-reference/wide-tables")
+        let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repo.appendingPathComponent("design/component-reference/wide-tables.json"))) as! [String: Any]
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
+        for entry in spec["cases"] as! [[String: Any]] {
+            let name = entry["name"] as! String, native = entry["native"] as! [String: String]
+            for theme in ["light", "dark"] {
+                let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(name).rest.\(theme).png"))))
+                let view = MarkdownView(frame: .zero)
+                view.setMarkdown(native["markdown"]!)
+                if native["expanded"] == "true" { view.toggleTable(0) }
+                let height = view.height(forWidth: 480)
+                let canvas = Canvas(frame: .zero)
+                canvas.addSubview(view)
+                view.frame = CGRect(x: 8, y: 8, width: 480, height: height)
+                let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2), scale: 2, dark: theme == "dark")
+                let (share, diff) = Self.compare(ref, ours)
+                try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
+                try Snapshot.writePNG(ours, to: Self.out.appendingPathComponent("wide-\(name)-\(theme).png"))
+                try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent("wide-\(name)-\(theme)-diff.png"))
+                print("WIDE TABLE", name, theme, "difference", share, "height", height, "reference", manifest[name]?["height"] ?? 0)
+                #expect(abs(height - (manifest[name]?["height"] ?? 0)) < 1)
+                #expect(share < 0.08)
+            }
+        }
     }
 
     static func pixels(_ rep: NSBitmapImageRep, _ w: Int, _ h: Int) -> [UInt8] {

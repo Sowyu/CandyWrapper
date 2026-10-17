@@ -371,6 +371,11 @@ final class AssistantMessageRowView: TimelineRowView {
             markdown.cancelBlockFades()
             if m.streaming { markdown.document = MarkdownDocument(blocks: []) }
         }
+        markdown.onHeightChange = { [weak self] in
+            guard let self, let id = self.item?.id else { return }
+            self.context.onMarkdownHeightChange?(id)
+        }
+        markdown.messageID = m.id.rawValue
         markdown.fadesNewBlocks = m.streaming
         if let summary, !summary.files.isEmpty {
             cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
