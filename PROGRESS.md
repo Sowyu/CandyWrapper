@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Remove the resting search/compose outlines, check the final surfaces, and publish v1.5.3 as requested. (taken 2026-10-17)
+
 - [x] Sidebar header polish (2026-10-17): a longer candy blur fades directly into the sidebar; Glass gets a rounded search surface with focus feedback and a softer compose action. Real-window light/dark screenshots and search interactions checked. All 1,530 tests passed; app performance review found no threshold regressions (38 MB idle, 0.048% CPU). [Review and screenshots](docs/research/sidebar-header-2026-10-17.md). Not released; awaiting approval.
 
 - [ ] Profile the memory increase already present in v1.5.2: about 38 MB idle and 85 MB startup peak, versus the pre-blur baseline of 34 MB and 34 MB. An isolated published-release control matches the prompt/preview fix build. The cause is not yet isolated. [Measurements](docs/research/prompt-preview-layout-2026-10-17.md#performance-review).
@@ -42,7 +44,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 ## Waiting on the user
 
-- The user approved the prompt/preview fixes and requested sidebar header polish. Await the new screenshots and explicit release approval (2026-10-17).
+- Release authorized on 2026-10-17; finish the sidebar outline cleanup before publishing.
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
