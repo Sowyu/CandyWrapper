@@ -1,6 +1,6 @@
 # Sidebar header polish
 
-The user approved the prompt and browser-preview fixes, then requested changes to the sidebar header and a prettier blur. Release remains on hold for the new screenshots and explicit approval.
+The user approved the prompt and browser-preview fixes, then requested changes to the sidebar header and a prettier blur. The user approved release after this review, then flagged the thin outlines around search and compose. The final cleanup removes their resting borders and keeps the search editing ring and button keyboard-focus feedback.
 
 ## Changes and source
 
@@ -31,3 +31,7 @@ Checked the 256pt and 360pt sidebar layouts. Typing “Count files” narrowed t
 ## Validation
 
 The full test suite passed: 1,530 tests. The app performance review compares against the immediately preceding prompt/preview build; unchanged model micro-benchmarks are excluded for this drawing-only change. The [saved review](../perf/2026-10-17-a4dc126-dirty-w1.md) found no threshold regressions: median 236ms to the window, 0.048% idle CPU, 38.0MB idle footprint, 85.2MB startup peak and 355.8ms scroll CPU. Three launches ran per scenario, with separate stall-monitor passes. One launch took 708ms and one long-thread sample recorded a 51ms stall; the medians passed, and the scrolling runs each recorded two dropped frames, as in the baseline. The pre-existing memory increase documented in the prompt/preview review remains open.
+
+## Final outline cleanup
+
+Removed the resting search border and the compose border, which also removes the Glass highlight derived from that border. The fills stay unchanged. Checked on screen in light and dark, including typing a search and its editing ring. All 113 focused sidebar tests passed. The preceding full suite (1,530 tests) and app performance review cover the rest of this release; this final change only removes border drawing. Final screenshots are `header-final-dark.png`, `header-final-light.png` and `search-final-focus-light.png` in the screenshot folder above.

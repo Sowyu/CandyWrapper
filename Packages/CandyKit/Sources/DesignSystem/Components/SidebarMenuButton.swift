@@ -138,7 +138,7 @@ public final class SidebarMenuButtonView: ControlView {
             if !state.hovered && !state.active && !isActive {
                 look.box.fill = ink.withAlphaComponent(0.09)
             }
-            look.box.border = ink.withAlphaComponent(0.10)
+            look.box.border = nil
             look.icon = Themed.color(\.sidebarForeground, sidebar: true)
         }
         decoration.boxStyle = look.box
