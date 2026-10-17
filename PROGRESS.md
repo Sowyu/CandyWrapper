@@ -15,7 +15,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 - [x] Wide Markdown tables (2026-10-17): horizontal scrolling and fades, per-table expansion across streaming, Markdown/CSV copy, row-height updates, light/dark fidelity and sandbox checks including Classic Glass. Full suite: 1,501 tests, then 42 focused checks after the height fix. Perf: no threshold regressions, 198 ms window, 0.043% idle CPU, 34.2 MB idle footprint; two scroll samples had about 60 ms stalls. [Notes](docs/research/wide-tables-2026-10-17.md).
 - [x] Nightly catch-up (2026-10-17): pinned 3234, audited all 207 commits, ported the main wire/UI changes and checked 3234 and 3105 sandbox turns. Full suite: 1,527 tests run; the final breadcrumb expectation was corrected, then all 107 focused checks passed. Fresh app build and light/dark screen checks passed. Perf: no threshold regressions, 182 ms window, 0.047% idle CPU, 34.2 MB; one 51 ms thread-open stall. [Audit and remaining work](docs/research/nightly-diff-3234.md), [perf](docs/perf/2026-10-17-1d8f066-dirty-w1.md).
-- [ ] Independent updates for CandyWrapper's own server runtime, rollback and newer-server compatibility, after the Nightly catch-up.
+- [ ] Independent updates for CandyWrapper's own server runtime, rollback and newer-server compatibility (taken 2026-10-17).
 
 - [ ] Remaining 3234 parity: cross-environment thread attachments, per-machine Update everything, Connect repair/pairing changes, smaller visual comparisons, and ANSI colors/follow-end in live command output. See [the audit](docs/research/nightly-diff-3234.md#5-review-and-remaining-work), including the PR-host validation limit.
 
