@@ -192,7 +192,7 @@ public enum FileBreadcrumbs {
     public static func crumbs(projectName: String, path: String) -> [Crumb] {
         let host = path.hasPrefix("/")
         let parts = path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).map(String.init)
-        var out: [Crumb] = host ? [] : [Crumb(label: projectName, path: "", kind: .project)]
+        var out: [Crumb] = host ? [Crumb(label: "/", path: "/", kind: parts.isEmpty ? .file : .directory)] : [Crumb(label: projectName, path: "", kind: .project)]
         for (i, part) in parts.enumerated() {
             out.append(Crumb(label: part, path: (host ? "/" : "") + parts[...i].joined(separator: "/"),
                              kind: i == parts.count - 1 ? .file : .directory))

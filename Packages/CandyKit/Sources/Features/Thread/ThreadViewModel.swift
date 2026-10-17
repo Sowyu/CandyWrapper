@@ -51,6 +51,7 @@ enum ToolOutputState: Hashable {
     /// "Couldn't load output: <message>"
     case failed(String)
     case fetched(TurnItemDetail.Fetched)
+    case live(text: String, truncated: Bool, running: Bool)
 }
 
 /// One row as the timeline draws it.
@@ -195,6 +196,23 @@ public final class ThreadViewModel {
     /// tests) leaves omitted output unfetched.
     public typealias TurnItemLoader = @Sendable (GetTurnItemInput, TurnItemType) async throws -> TurnItemDetail.Fetched
     public var turnItemLoader: TurnItemLoader?
+    public var commandOutputEnabled = false
+    public var commandOutput: (@MainActor (String, String, @escaping @MainActor (Result<CommandOutputFrame, Error>) -> Void) -> Task<Void, Never>)?
+    private var commandBuffers: [String: CommandOutputBuffer] = [:]
+    private var liveCommandOutputs: [String: ToolOutputState] = [:]
+
+    func receiveCommandOutput(_ id: String, _ result: Result<CommandOutputFrame, Error>) {
+        switch result {
+        case .success(let frame):
+            var buffer = commandBuffers[id] ?? CommandOutputBuffer()
+            buffer.apply(frame); commandBuffers[id] = buffer
+            liveCommandOutputs[id] = .live(text: buffer.text, truncated: buffer.truncated, running: buffer.running)
+        case .failure(let error): liveCommandOutputs[id] = .failed(error.localizedDescription)
+        }
+        refreshItems()
+    }
+    func forgetCommandOutput(_ id: String) { liveCommandOutputs[id] = nil; commandBuffers[id] = nil }
+
     /// Per entry id: the revision fetched (`TurnItemDetail.revision`) and its state.
     private var outputs: [String: (revision: String, state: ToolOutputState)] = [:]
     private var outputTasks: [String: Task<Void, Never>] = [:]
@@ -427,6 +445,7 @@ public final class ThreadViewModel {
     /// The output state of an open entry. Starts a fetch when the stream left its output out and
     /// this revision isn't fetched yet: on expand, and again when a live item settles.
     private func output(for e: WorkLogEntry) -> ToolOutputState? {
+        if commandOutputEnabled, e.itemType == .commandExecution { return liveCommandOutputs[e.id] ?? .loading }
         guard let row = e.projectedItem, TurnItemDetail.needsFetch(row.item) else { return nil }
         let request = TurnItemDetail.request(row)
         let revision = request.revision ?? ""
@@ -466,6 +485,7 @@ public final class ThreadViewModel {
     }
 
     private func dropOutputs() {
+        liveCommandOutputs = [:]; commandBuffers = [:]
         outputTasks.values.forEach { $0.cancel() }
         outputTasks = [:]
         outputs = [:]

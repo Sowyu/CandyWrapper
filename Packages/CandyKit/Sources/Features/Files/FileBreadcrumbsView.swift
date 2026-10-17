@@ -10,25 +10,40 @@ final class FileBreadcrumbsView: DSView {
     var browse: ((String) async -> [ProjectEntry]?)?
     private var crumbs: [FileBreadcrumbs.Crumb] = []
     private var labels: [CrumbButton] = []
-    private var chevrons: [IconView] = []
+    private var chevrons: [ButtonView] = []
     private var path = ""
+    private var trail = ""
+    private var project = ""
 
     func set(projectName: String, path: String) {
-        self.path = path
-        crumbs = FileBreadcrumbs.crumbs(projectName: projectName, path: path)
+        self.path = path == "." ? "" : path
+        let isParent = self.path.isEmpty || trail.hasPrefix(self.path == "/" ? "/" : self.path + "/")
+        if project != projectName || !isParent { trail = self.path }
+        project = projectName
+        crumbs = FileBreadcrumbs.crumbs(projectName: projectName, path: trail)
         labels.forEach { $0.removeFromSuperview() }
         chevrons.forEach { $0.removeFromSuperview() }
         let host = path.hasPrefix("/")
         labels = crumbs.map { crumb in
-            let b = CrumbButton(crumb.label, current: crumb.kind == .file, interactive: crumb.kind != .file && !host)
+            let b = CrumbButton(crumb.label, current: crumb.path == self.path, interactive: crumb.path != self.path)
             b.toolTip = crumb.path.isEmpty ? projectName : crumb.path
-            b.onClick = { [weak self, weak b] in
-                guard let self, let b else { return }
-                self.openMenu(directory: crumb.path, root: crumb.path, from: b)
+            b.onClick = { [weak self] in
+                guard let self else { return }
+                self.onOpenFile?(crumb.path.isEmpty ? "." : crumb.path)
             }
             return b
         }
-        chevrons = crumbs.dropFirst().map { _ in IconView(name: .chevronRight, size: 14, strokeColor: Themed.color(\.mutedForeground, 0.6)) }
+        chevrons = crumbs.dropLast().map { crumb in
+            let button = ButtonView(nil, icon: .chevronRight, variant: .ghost, size: .iconXs)
+            button.iconSize = 14
+            button.isEnabled = !host
+            button.setAccessibilityLabel("Browse " + crumb.label)
+            button.action = { [weak self, weak button] in
+                guard let self, let button else { return }
+                self.openMenu(directory: crumb.path, root: crumb.path, from: button)
+            }
+            return button
+        }
         labels.forEach(addSubview)
         chevrons.forEach(addSubview)
         needsLayout = true

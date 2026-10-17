@@ -306,6 +306,7 @@ final class PullRequestDetailBinding {
     /// `pullRequests.runAction`, then a fresh read.
     func perform(_ action: String, mergeMethod: String?) {
         guard let shell, let ref = reference else { return }
+        view.pendingAction = action
         view.actionPending = true
         Task { [weak self] in
             do {
@@ -314,7 +315,7 @@ final class PullRequestDetailBinding {
                 self.view.actionPending = false
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
-                if action == "revert" { self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success) }
+                if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success) }
                 self.onActed?(action)
                 self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
             } catch {
@@ -950,6 +951,11 @@ final class ThreadPullRequestsController {
     /// A linked pull request clicked: the panel when a project here reads its repository
     /// (`useOpenChangeRequestLink`), the browser otherwise.
     func open(_ link: ThreadPullRequestLink) {
+        if !ClientSettingsStore.shared.current.bool("pullRequestLinksOpenInApp")
+            || NSApp.currentEvent?.buttonNumber == 2 {
+            if let url = SafeExternalURL.parse(link.url) { NSWorkspace.shared.open(url) }
+            return
+        }
         guard let thread, let env = thread.id.environmentId, capabilities.has(env, "pullRequests"),
               let parsed = ChangeRequestURL.parse(link.url) else {
             if let u = SafeExternalURL.parse(link.url) { NSWorkspace.shared.open(u) }
@@ -1116,7 +1122,7 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
     func openChatLink(_ url: URL, modified: Bool) {
         if modified { NSWorkspace.shared.open(url); return }
         // A pull request a project here reads opens in the panel (`useOpenChangeRequestLink`).
-        if let target = previewTarget(url) {
+        if ClientSettingsStore.shared.current.bool("pullRequestLinksOpenInApp"), let target = previewTarget(url) {
             panel.mutatePanel {
                 $0.openPullRequest(PullRequestSurfaceTarget(environmentId: target.env, projectId: target.ref.projectId, host: target.ref.host,
                                                             repository: target.ref.repository, number: target.ref.number, url: url.absoluteString))

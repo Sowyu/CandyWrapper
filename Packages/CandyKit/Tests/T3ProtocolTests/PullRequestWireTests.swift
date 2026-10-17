@@ -134,12 +134,21 @@ struct PullRequestWireTests {
                                      source: source, linkedAt: T3Timestamp(linkedAt), snapshot: snapshot, stack: nil, watch: nil)
     }
 
+    @Test func siblingPullRequestsStayUnderTheirParent() {
+        let base = Self.link(1, head: "base"), left = Self.link(2, head: "left", base: "base"), right = Self.link(3, head: "right", base: "base")
+        let grandchild = Self.link(4, head: "child", base: "left")
+        let chain = ThreadPullRequests.chains([base, left, grandchild, right])
+        #expect(chain.count == 1)
+        #expect(chain.first?.depths == [0, 1, 2, 1])
+        #expect(ThreadPullRequests.current([base, left, grandchild, right])?.number == 4)
+    }
+
     @Test func threadLinkViews() {
         // Chained by base and head: 1 <- 2 <- 3 is one stack, 9 stands alone.
         let one = Self.link(1, head: "a"), two = Self.link(2, head: "b", base: "a"), three = Self.link(3, head: "c", base: "b")
         let lone = Self.link(9, state: .merged, head: "z")
         let chains = ThreadPullRequests.chains([three, lone, one, two])
-        #expect(chains.map { $0.layers.map(\.number) } == [[1, 2, 3], [9]])
+        #expect(chains.map { $0.layers.map(\.number) } == [[9], [1, 2, 3]])
         #expect(ThreadPullRequests.current([three, lone, one, two])?.number == 3)
         #expect(ThreadPullRequests.badge([one, two, three]) == .init(kind: .stack(layers: 3), state: "open"))
         #expect(ThreadPullRequests.badge([lone]) == .init(kind: .pullRequest(others: 0), state: "merged"))

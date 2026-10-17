@@ -41,7 +41,7 @@ enum SB {
         case .failed, .limited: .circleAlert
         case .done: .circleCheck
         case .woke: .alarmClock
-        case .waiting: nil
+        case .waiting: .circleDotDashed
         }
     }
 
@@ -583,7 +583,7 @@ final class SidebarCardRowView: SidebarRowBase {
             statusLabel.text = r.statusLabel ?? ""
             statusLabel.color = color
             statusIcon.set(SB.statusIcon(top), color: color)
-            duration.text = r.status == .working ? r.workingStartedMs.map {
+            duration.text = (r.status == .working || r.status == .waiting) ? r.workingStartedMs.map {
                 SidebarModel.formatWorkingDurationLabel(elapsedMs: Double(nowMs - $0)) } ?? "" : ""
             duration.color = color
             duration.font = SB.tabular(12, .medium)

@@ -124,7 +124,7 @@ final class PullRequestsPageController {
         // `useLiveRefresh`: once a minute while the page is in front, and on the way back to the window.
         liveTimer?.invalidate()
         liveTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload(keepRows: true) }
+            MainActor.assumeIsolated { self?.reload(keepRows: true, periodic: true) }
         }
         liveTimer?.tolerance = 6
         let flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -140,7 +140,7 @@ final class PullRequestsPageController {
             return nil
         }
         activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { if self?.visible == true { self?.reload(keepRows: true) } }
+            MainActor.assumeIsolated { if self?.visible == true { self?.reload(keepRows: true, periodic: true) } }
         }
         monitors = [flags, keys].compactMap { $0 }
     }
@@ -177,7 +177,13 @@ final class PullRequestsPageController {
 
     private var projects: [ProjectShell] {
         let envs = Set(capableEnvironments)
-        return (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId.map(envs.contains) ?? false }
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: sidebar?.snapshot, primaryEnvironmentId: environments.primaryId,
+            order: SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt)
+        return groups.flatMap(\.members).filter { project in
+            guard let env = project.id.environmentId, envs.contains(env) else { return false }
+            let scratch = sidebar?.state.scratchRoots[env]
+            return scratch == nil || SidebarModel.normalizeProjectPath(project.workspaceRoot) != scratch
+        }
     }
 
     private func scopedProject() -> (env: String, projectId: String)? {
@@ -214,7 +220,9 @@ final class PullRequestsPageController {
         }
     }
 
-    func reload(keepRows: Bool = false) {
+    func reload(keepRows: Bool = false, periodic: Bool = false) {
+        // Final rows stay cached on timed refreshes. An explicit refresh still reads the host.
+        if periodic, PullRequestListLogic.periodicRefreshState(state) == nil { return }
         guard visible else { return }
         generation += 1
         let gen = generation
@@ -228,7 +236,9 @@ final class PullRequestsPageController {
         let filters = menuFilters.merging(parsed.filters)
         let scoped = scopedProject()
         let wantsPartitions = involvement == "all" && sentQuery.isEmpty
-        let (state, involvement, host, pageSize) = (self.state, self.involvement, self.host, self.pageSize)
+        let previousOpen = periodic && self.state == "all" ? (answer?.result.entries ?? []).filter { $0.state == "open" } : []
+        let cachedFinal = periodic ? (answer?.result.entries ?? []).filter { $0.state == "closed" || $0.state == "merged" } : []
+        let (state, involvement, host, pageSize) = (periodic ? (PullRequestListLogic.periodicRefreshState(self.state) ?? self.state) : self.state, self.involvement, self.host, self.pageSize)
         let targets = envs.filter { scoped == nil || scoped?.env == $0 }
         Task { [weak self] in
             guard let self else { return }
@@ -267,6 +277,21 @@ final class PullRequestsPageController {
                 }
             }
             guard self.generation == gen else { return }
+            // An open PR that left the live page may just have closed. Read that transition once,
+            // then cache the final result along with the other closed and merged rows.
+            for var entry in previousOpen where !merged.entries.contains(where: { PullRequestListLogic.key($0) == PullRequestListLogic.key(entry) }) {
+                guard failure == nil, let env = entry.environmentId else { merged.entries.append(entry); continue }
+                let ref = PullRequestRef(projectId: entry.projectId, host: entry.host, repository: entry.repository, number: entry.number)
+                guard let value = try? await self.environments.request(env, "pullRequests.detail", ref.payload),
+                      let detail = try? value.decode(as: PullRequestDetail.self) else { merged.entries.append(entry); continue }
+                if detail.state != "open" {
+                    entry.state = detail.state; entry.isDraft = detail.isDraft; entry.title = detail.title
+                    entry.additions = detail.additions; entry.deletions = detail.deletions
+                    merged.entries.append(entry)
+                }
+            }
+            guard self.generation == gen else { return }
+            for entry in cachedFinal where !merged.entries.contains(where: { PullRequestListLogic.key($0) == PullRequestListLogic.key(entry) }) { merged.entries.append(entry) }
             self.loading = false
             if failure != nil && merged.entries.isEmpty && targets.count > 0 {
                 self.error = failure
@@ -277,7 +302,7 @@ final class PullRequestsPageController {
                 self.truncatedEnvs = truncated
                 if host == nil || self.hosts.isEmpty { self.hosts = merged.providers }
                 self.overrides = PullRequestListLogic.settle(self.overrides, answered: merged.entries, now: Date().timeIntervalSince1970 * 1000)
-                self.loadStats(merged.entries, gen: gen)
+                self.loadStats(merged.entries.filter { !periodic || $0.state == "open" }, gen: gen)
             }
             self.render()
             self.syncDetail()

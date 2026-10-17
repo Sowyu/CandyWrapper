@@ -139,6 +139,10 @@ public enum ThreadPullRequests {
         public var native: Bool
         /// Bottom to top.
         public var layers: [ThreadPullRequestLink]
+        public var depths: [Int]
+        var fromTop: [ThreadPullRequestLink] {
+            layers.indices.sorted { depths[$0] != depths[$1] ? depths[$0] > depths[$1] : $0 > $1 }.map { layers[$0] }
+        }
     }
 
     /// `resolveThreadPullRequestChains`: native stacks first, then links chained base to head
@@ -161,7 +165,7 @@ public enum ThreadPullRequests {
             let order = Dictionary(members[0].stack!.layers.enumerated().map { ($0.element.number, $0.offset) }, uniquingKeysWith: { a, _ in a })
             members.sort { (order[$0.number] ?? 0) < (order[$1.number] ?? 0) }
             members.forEach { placed.insert($0.key.id) }
-            chains.append(Chain(native: true, layers: members))
+            chains.append(Chain(native: true, layers: members, depths: Array(members.indices)))
         }
         let remaining = shown.filter { !placed.contains($0.key.id) }
         func branchKey(_ link: ThreadPullRequestLink, _ branch: String) -> String {
@@ -179,19 +183,23 @@ public enum ThreadPullRequests {
             guard let snap = link.snapshot, let entry = byHead[branchKey(link, snap.baseBranch)], let p = entry else { return nil }
             return p
         }
-        var hasChild = Set<String>()
-        for link in remaining { if let p = parent(link), p.key.id != link.key.id { hasChild.insert(p.key.id) } }
-        for top in remaining where !hasChild.contains(top.key.id) {
-            var layers: [ThreadPullRequestLink] = []
-            var cursor: ThreadPullRequestLink? = top
-            while let c = cursor, !placed.contains(c.key.id) {
-                placed.insert(c.key.id)
-                layers.insert(c, at: 0)
-                cursor = parent(c)
-            }
-            if !layers.isEmpty { chains.append(Chain(native: false, layers: layers)) }
+        var children: [String: [ThreadPullRequestLink]] = [:]
+        for link in remaining {
+            if let p = parent(link), p.key.id != link.key.id { children[p.key.id, default: []].append(link) }
         }
-        for link in remaining where !placed.contains(link.key.id) { chains.append(Chain(native: false, layers: [link])) }
+        for base in remaining where parent(base) == nil || parent(base)?.key.id == base.key.id {
+            var layers: [ThreadPullRequestLink] = [], depths: [Int] = []
+            var pending: [(ThreadPullRequestLink, Int)] = [(base, 0)]
+            while let (link, depth) = pending.popLast() {
+                guard placed.insert(link.key.id).inserted else { continue }
+                layers.append(link); depths.append(depth)
+                for child in (children[link.key.id] ?? []).reversed() { pending.append((child, depth + 1)) }
+            }
+            if !layers.isEmpty { chains.append(Chain(native: false, layers: layers, depths: depths)) }
+        }
+        for link in remaining where !placed.contains(link.key.id) {
+            if placed.insert(link.key.id).inserted { chains.append(Chain(native: false, layers: [link], depths: [0])) }
+        }
         return chains
     }
 
@@ -204,11 +212,11 @@ public enum ThreadPullRequests {
         if open.count == 1 { return open[0] }
         let all = chains(shown)
         if open.count > 1 {
-            let openChains: [[ThreadPullRequestLink]] = all.map { Array($0.layers.reversed().filter(isOpen)) }.filter { !$0.isEmpty }
+            let openChains: [[ThreadPullRequestLink]] = all.map { $0.fromTop.filter(isOpen) }.filter { !$0.isEmpty }
             let newest = openChains.max { a, b in (a.map(linkedMs).max() ?? 0) < (b.map(linkedMs).max() ?? 0) }
             return newest?.first
         }
-        if all.count == 1 { return all[0].layers.last }
+        if all.count == 1 { return all[0].fromTop.first }
         return shown.max { activity($0) < activity($1) }
     }
 
@@ -246,7 +254,7 @@ public enum ThreadPullRequests {
             return l != r ? l > r : a.offset < b.offset
         }.map(\.element)
         return ordered.flatMap { chain in
-            chain.layers.enumerated().map { Line(link: $0.element, depth: $0.offset, stackSize: $0.offset == 0 && chain.layers.count > 1 ? chain.layers.count : nil,
+            chain.layers.enumerated().map { Line(link: $0.element, depth: chain.depths[$0.offset], stackSize: $0.offset == 0 && chain.layers.count > 1 ? chain.layers.count : nil,
                                                  native: chain.native) }
         }
     }

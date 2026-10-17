@@ -220,7 +220,7 @@ public enum ProviderSkills {
 // MARK: - Menu items
 
 /// `PullRequestContextMetadata` (contracts composerContext.ts:79-88).
-public struct PullRequestReference: Equatable, Sendable {
+public struct PullRequestReference: Codable, Equatable, Sendable {
     public var number: Int
     public var title: String
     public var url: String
@@ -690,9 +690,9 @@ public enum ComposerContext {
     }
 
     /// A pull request picked from `#`: `buildPullRequestReferenceContext` under the
-    /// `pr-reference:<n>` id, labeled `#<n>`.
+    /// URL-scoped id, labeled `#<n>` (pullRequestDetail.logic.ts:947-952 at 3234).
     public static func pullRequestReference(_ pr: PullRequestReference) -> Reference {
-        Reference(kind: "review-comment", contextId: kindScopedId("review-comment", "pr-reference:\(pr.number)"), label: "#\(pr.number)")
+        Reference(kind: "review-comment", contextId: kindScopedId("review-comment", "pr-reference:\(pr.url)"), label: "#\(pr.number)")
     }
 
     /// `reviewCommentContextRecord(buildPullRequestReferenceContext(pr))` (pullRequestDetail.logic.ts:1074-1125).

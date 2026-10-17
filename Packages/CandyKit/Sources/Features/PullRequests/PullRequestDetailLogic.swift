@@ -20,6 +20,7 @@ public enum PullRequestDetailLogic {
         case "ready": "Marked ready for review"
         case "draft": "Converted to draft"
         case "close": "Pull request closed"
+        case "delete-branch": "Branch deleted"
         case "reopen": "Pull request reopened"
         case "update-branch": "Branch updated with the base branch"
         case "enable-auto-merge": "Auto-merge turned on — merges as soon as this is ready, sooner if it already is"
@@ -37,6 +38,7 @@ public enum PullRequestDetailLogic {
         case "ready": "Could not mark this ready for review"
         case "draft": "Could not convert this to a draft"
         case "close": "Could not close this pull request"
+        case "delete-branch": "Could not delete this branch"
         case "reopen": "Could not reopen this pull request"
         case "update-branch": "Could not update this branch"
         case "enable-auto-merge": "Could not turn on auto-merge"
@@ -51,6 +53,11 @@ public enum PullRequestDetailLogic {
     public static func can(_ detail: PullRequestDetail?, _ action: String) -> Bool {
         guard let detail else { return false }
         return detail.capabilities.actions.contains(action) && detail.viewerPermissions.actions.contains(action)
+    }
+
+    /// `canDeletePullRequestBranch`, pullRequestDetail.logic.ts:1141-1154 (3234).
+    public static func canDeleteBranch(_ detail: PullRequestDetail) -> Bool {
+        detail.state != "open" && detail.capabilities.deleteBranch == true && can(detail, "delete-branch")
     }
 
     /// `allowedPullRequestMergeMethods`: the host's methods the repository allows.

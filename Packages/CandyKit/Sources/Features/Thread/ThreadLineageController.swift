@@ -129,7 +129,7 @@ public final class ThreadLineageController {
     public func syncFooter() {
         guard let threadId, let env = threadId.environmentId, let projection else { return }
         let providers = providers?(env) ?? []
-        let handoff = HandoffEndpoints.pending(projection.runs, selection: selectedModel?(), providers: providers,
+        let handoff = projection.visibleTurnItems.isEmpty ? nil : HandoffEndpoints.pending(projection.runs, selection: selectedModel?(), providers: providers,
                                                 threadModel: shell?.modelSelection)
         if let handoff { pendingHandoff.configure(handoff, providers: providers, pending: true) }
         let status = updateStatusLine(shell)

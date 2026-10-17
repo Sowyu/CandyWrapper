@@ -121,7 +121,7 @@ struct SettingsProjectTests {
             == Self.json(#"{"mode": "custom", "customInstructions": "Keep it short.", "followChangeRequestTemplates": true}"#))
         let cleanup = s.plan(["worktreeCleanup": Self.json(#"{"mode": "custom", "rules": {"worktreeOnDelete": true}}"#)])
         #expect(cleanup.writes[1].patch["projectSettingsOverrides"]?["fleet-laptop"]?["worktreeCleanup"]
-            == Self.json(#"{"mode": "custom", "rules": {"worktreeAfterDays": 30, "worktreeOnDelete": true, "worktreeOnMerge": false, "worktreeUnchanged": false}}"#))
+            == Self.json(#"{"mode": "custom", "rules": {"worktreeAfterDays": 30, "worktreeSettledAfterDays": null, "worktreeOnDelete": true, "worktreeOnMerge": false, "worktreeUnchanged": false}}"#))
     }
 
     @Test func clearDropsKeysAndEmptiedEntries() {
@@ -133,7 +133,7 @@ struct SettingsProjectTests {
     @Test func worktreeCleanupResolution() {
         let s = ServerSettingsValues(Self.json(#"{"storageCleanup": {"worktreeAfterDays": 5, "worktreeOnMerge": true}, "projectSettingsFolded": true, "projectSettingsOverrides": {"off": {"worktreeCleanup": {"mode": "off"}}}}"#))
         #expect(ProjectSettings.worktreeCleanup(s, projectId: nil)["worktreeAfterDays"] == .number(5))
-        #expect(ProjectSettings.worktreeCleanup(s, projectId: "off") == ["worktreeAfterDays": .null, "worktreeOnMerge": .bool(false),
+        #expect(ProjectSettings.worktreeCleanup(s, projectId: "off") == ["worktreeAfterDays": .null, "worktreeSettledAfterDays": .null, "worktreeOnMerge": .bool(false),
                                                                          "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false)])
     }
 

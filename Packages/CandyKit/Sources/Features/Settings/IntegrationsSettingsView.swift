@@ -12,6 +12,14 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         body = [browserAccessSection(), browserSection(), browserProfilesSection(), devicesSection()]
     }
 
+    private func pullRequestRow() -> SettingsRowView {
+        let links = clientSwitch("pull-request-links-open-in-app",
+            "Clicking a pull request link opens it in CandyWrapper. Turn off to open pull request links like any other link, on GitHub or your git host.",
+            key: "pullRequestLinksOpenInApp", reset: "open pull requests in CandyWrapper", label: "Open pull requests in CandyWrapper")
+        links.title = "Open pull requests in CandyWrapper"
+        return links
+    }
+
     // MARK: Agent browser access (server, project-scoped)
 
     private func browserAccessSection() -> SettingsSectionView {
@@ -83,7 +91,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         let floating = clientSwitch("browser-auto-show-floating-preview",
                                     "Show the floating preview when an agent opens a browser or device unless the agent says otherwise.",
                                     key: "browserAutoShowFloatingPreview", reset: "auto-show floating preview", label: "Auto-show floating preview")
-        return section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating])
+        return section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating, pullRequestRow()])
     }
 
     private func browserProfilesSection() -> SettingsSectionView {

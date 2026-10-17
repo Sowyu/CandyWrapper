@@ -46,7 +46,7 @@ final class UserIntentMarkerView: DSView {
     /// Label, icon and tooltip for an intent, or nil when the row shows no marker (`turn_start`, none).
     static func presentation(_ intent: InputIntent?) -> (label: String, icon: Bool, tooltip: String)? {
         guard let intent, intent != .turnStart else { return nil }
-        if intent == .queuedTurn { return ("Queued", false, "Queued behind the active turn") }
+        if intent == .queuedTurn { return ("From queue", false, "Queued while the agent was busy") }
         if intent == .promotedQueuedToSteer { return ("Steer", true, "Originally queued, then promoted to steer the active turn") }
         // T3 falls back to the steer look for any other intent.
         return ("Steer", true, "Steered the active turn")

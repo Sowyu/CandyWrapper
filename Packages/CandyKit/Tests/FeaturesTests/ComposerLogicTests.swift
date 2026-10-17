@@ -8,6 +8,14 @@ import T3Store
 struct ComposerLogicTests {
     typealias L = ComposerLogic
 
+    @Test func compactionAlwaysQueuesFollowUps() {
+        for alternate in [true, false] {
+            for steer in [true, false] {
+                #expect(ComposerLogic.sendMode(running: true, alternate: alternate, steerByDefault: steer, canSteer: false) == .queue)
+            }
+        }
+    }
+
     @Test func sendShortcutModes() {
         let enter = L.Key(isReturn: true), mod = L.Key(isReturn: true, mod: true)
         // mode, prompt, key, expected

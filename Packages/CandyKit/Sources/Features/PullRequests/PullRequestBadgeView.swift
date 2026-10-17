@@ -152,6 +152,7 @@ public final class PullRequestBadgeView: DSView {
     }
 
     public override func mouseDown(with event: NSEvent) {}
+    public override func otherMouseUp(with event: NSEvent) { if event.buttonNumber == 2 { mouseUp(with: event) } }
     public override func mouseUp(with event: NSEvent) { if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() } }
     public override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     public override func accessibilityPerformPress() -> Bool { onClick?(); return true }
@@ -261,9 +262,11 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     public override func mouseExited(with event: NSEvent) { hovered = nil; onPointerInside?(false) }
     public override func mouseMoved(with event: NSEvent) { hovered = onOpen == nil ? nil : row(at: event) }
     public override func mouseDown(with event: NSEvent) {}
+    public override func otherMouseUp(with event: NSEvent) { if event.buttonNumber == 2 { mouseUp(with: event) } }
     public override func mouseUp(with event: NSEvent) {
         guard let onOpen, let i = row(at: event) else { return }
-        onOpen(rows[i].url)
+        if event.buttonNumber == 2, let url = SafeExternalURL.parse(rows[i].url) { NSWorkspace.shared.open(url) }
+        else { onOpen(rows[i].url) }
     }
     public override func resetCursorRects() {
         guard onOpen != nil else { return }

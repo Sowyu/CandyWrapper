@@ -36,6 +36,7 @@ public final class ComposerView: DSView {
     /// The thread's runs as the primary action reads them.
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
     public var isDraftRoute = false
+    public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
     public var runState = ComposerLogic.RunState() { didSet { if runState != oldValue { refresh() } } }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
@@ -340,7 +341,7 @@ public final class ComposerView: DSView {
         fileDrop.onHighlight = { [weak self] on in self?.dropHighlight.isHidden = !on }
         fileDrop.onFiles = { [weak self] urls in self?.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         editor.fileDrop = fileDrop
-        registerForDraggedTypes([.fileURL, .composerMention, .sidebarThreads])
+        registerForDraggedTypes([.fileURL, .composerMention, .sidebarThreads, PullRequestDrag.type])
         editor.onPasteAttachments = { [weak self] pboard in
             guard let self, let onFiles = self.onFiles else { return false }
             let files = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory)
@@ -448,7 +449,7 @@ public final class ComposerView: DSView {
     var onCaretChange: (() -> Void)?
 
     private var sendMode: ComposerLogic.SendMode {
-        ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault)
+        ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault, canSteer: !isCompacting)
     }
 
     /// `insertComposerText` refuses outside text while an approval or any question is open, or no
@@ -515,7 +516,7 @@ public final class ComposerView: DSView {
             } else {
                 // ponytail: no shortcut label after "Ctrl/⌘-click"; add it with the keybindings settings
                 let action = steerByDefault ? "steer" : "queue", other = steerByDefault ? "queue" : "steer"
-                primary.tooltip = "Click to \(action), Ctrl/⌘-click to \(other)"
+                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), Ctrl/⌘-click to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }
@@ -605,7 +606,7 @@ public final class ComposerView: DSView {
             return true
         }
         if pending == .approval { return true }
-        let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault)
+        let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
         send(mode, background: intent == .background)
         // A send key never inserts a newline, even when nothing was sent.
         return true
@@ -619,7 +620,7 @@ public final class ComposerView: DSView {
         case .update: send(.queue)
         case .send, .queue, .steer:
             let held = NSApp.currentEvent.map { !$0.modifierFlags.intersection([.command, .control]).isEmpty } ?? false
-            send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: held, steerByDefault: steerByDefault))
+            send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: held, steerByDefault: steerByDefault, canSteer: !isCompacting))
         }
     }
 
@@ -630,7 +631,7 @@ public final class ComposerView: DSView {
     }
 
     /// Sends the prompt as the primary button would without a modifier (`submitCitationAndSend`, ChatComposer.tsx:4305-4314).
-    public func submit() { send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: false, steerByDefault: steerByDefault)) }
+    public func submit() { send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: false, steerByDefault: steerByDefault, canSteer: !isCompacting)) }
 
     private func send(_ mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent || planFollowUp,
@@ -641,9 +642,11 @@ public final class ComposerView: DSView {
     // MARK: Drops on the padding
 
     /// Sidebar threads dropped on the composer (`THREAD_CONTEXT_DROP_EVENT`): true when they were taken.
+    public var onPullRequestDropped: ((PullRequestReference) -> Bool)?
     public var onThreadsDropped: (([ThreadId]) -> Bool)?
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if PullRequestDrag.read(sender.draggingPasteboard) != nil { return .copy }
         if Self.mention(in: sender) != nil { return .copy }
         // `in-data-[thread-context-over]:bg-accent/45 ring-1 ring-primary/70`, the file drop's highlight.
         if onThreadsDropped != nil, SidebarThreadDrag.threads(sender.draggingPasteboard) != nil {
@@ -655,6 +658,7 @@ public final class ComposerView: DSView {
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
     public override func draggingExited(_ sender: (any NSDraggingInfo)?) { fileDrop.exited() }
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let pr = PullRequestDrag.read(sender.draggingPasteboard) { return onPullRequestDropped?(pr) ?? false }
         if let mention = Self.mention(in: sender) {
             if insertMentionAtEnd(mention) { return true }
             onInsertRejected?()

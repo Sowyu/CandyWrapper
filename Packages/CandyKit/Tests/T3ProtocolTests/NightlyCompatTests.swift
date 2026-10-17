@@ -4,6 +4,36 @@ import Testing
 
 /// Wire shapes that changed between nightly 2861 and 2994, read the same way on both.
 struct NightlyCompatTests {
+    @Test func recorded3234ConfigDatabaseAndThreadDecode() throws {
+        var configSeen = false, databaseSeen = false, threadSeen = false
+        for frame in try WireTests.load("20-nightly-3234") where frame.dir == "recv" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                let decoded = try config.decode(as: ServerProviderConfig.self)
+                #expect(decoded.capabilities.contains("commandOutputStreaming"))
+                #expect(decoded.capabilities.contains("databaseStorage"))
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                if value["requestId"]?.stringValue == "2" {
+                    let status = try item.decode(as: DatabaseStorageStatus.self)
+                    #expect(status.databaseBytes > 0)
+                    #expect(!status.compactCommand.isEmpty)
+                    databaseSeen = true
+                }
+                if value["requestId"]?.stringValue == "4" {
+                    _ = try item.decode(as: ThreadStreamItem.self)
+                    if let projection = item["projection"] {
+                        let decoded = try projection.decode(as: ThreadProjection.self)
+                        #expect(!decoded.visibleTurnItems.isEmpty)
+                        threadSeen = true
+                    }
+                }
+            }
+        }
+        #expect(configSeen && databaseSeen && threadSeen)
+    }
+
     static func settings(_ text: String) -> ServerThreadDefaults { ServerThreadDefaults(raw: UsageTests.json(text)) }
 
     @Test func sourceControlHostsFollowTheServersShape() {

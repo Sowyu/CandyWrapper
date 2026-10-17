@@ -44,6 +44,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case circleCheck
     case circleDashed
     case circleDot
+    case circleDotDashed
     case circleSlash
     case circleX
     case clock
@@ -291,6 +292,7 @@ extension IconName {
         case .circleCheck: return "circle-check"
         case .circleDashed: return "circle-dashed"
         case .circleDot: return "circle-dot"
+        case .circleDotDashed: return "circle-dot-dashed"
         case .circleSlash: return "circle-slash"
         case .circleX: return "circle-x"
         case .clock: return "clock"
@@ -736,6 +738,18 @@ extension IconName {
                 IconElement(.path(d: "M21.818 10.1a10 10 0 0 1 0 3.8")),
                 IconElement(.path(d: "M3.721 6.391a10 10 0 0 1 2.7-2.69")),
                 IconElement(.path(d: "M6.391 20.279a10 10 0 0 1-2.69-2.7")),
+            ])
+        case .circleDotDashed:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M10.1 2.18a9.93 9.93 0 0 1 3.8 0")),
+                IconElement(.path(d: "M17.6 3.71a9.95 9.95 0 0 1 2.69 2.7")),
+                IconElement(.path(d: "M21.82 10.1a9.93 9.93 0 0 1 0 3.8")),
+                IconElement(.path(d: "M20.29 17.6a9.95 9.95 0 0 1-2.7 2.69")),
+                IconElement(.path(d: "M13.9 21.82a9.94 9.94 0 0 1-3.8 0")),
+                IconElement(.path(d: "M6.4 20.29a9.95 9.95 0 0 1-2.69-2.7")),
+                IconElement(.path(d: "M2.18 13.9a9.93 9.93 0 0 1 0-3.8")),
+                IconElement(.path(d: "M3.71 6.4a9.95 9.95 0 0 1 2.7-2.69")),
+                IconElement(.circle(cx: 12, cy: 12, r: 1)),
             ])
         case .circleDot:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
