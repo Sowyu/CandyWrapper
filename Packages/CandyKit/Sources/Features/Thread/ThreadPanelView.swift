@@ -456,6 +456,44 @@ public final class ThreadPanelView: DSView {
         }
     }
     private let fade = CAGradientLayer()
+    /// Glass in place of `fade`: a progressive blur over the timeline's top, strongest at the header and
+    /// easing to none, so content softens as it scrolls out. The window server draws it; scrolling costs
+    /// the app nothing more.
+    private var topBlur: BackdropBlurView?
+    static let topBlurHeight: CGFloat = 32
+    /// The blur's strength over the band, in the mask's alpha. The window server maps the mask pixel for
+    /// pixel, so it is made at the band's device size. Full radius at the header, eased to none.
+    static func topBlurMask(width: Int, height: Int) -> CGImage? {
+        guard width > 0, height > 1 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: width * height * 2)
+        for row in 0..<height {
+            let t = 1 - Double(row) / Double(height - 1)
+            let v = UInt8((t * t * (3 - 2 * t) * 255).rounded())
+            for x in 0..<width { bytes[(row * width + x) * 2 + 1] = v }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 16, bytesPerRow: width * 2,
+                       space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    private func syncTopBlur(on: Bool, frame: CGRect) {
+        guard on else { topBlur?.removeFromSuperview(); topBlur = nil; return }
+        if topBlur == nil {
+            let blur = BackdropBlurView(frame: frame)
+            blur.saturation = 1 // no tint step where the band ends
+            addSubview(blur, positioned: .above, relativeTo: timeline)
+            topBlur = blur
+        }
+        guard let topBlur else { return }
+        topBlur.frame = frame
+        topBlur.layer?.zPosition = 1
+        let scale = window?.backingScaleFactor ?? 2
+        let w = Int((frame.width * scale).rounded()), h = Int((frame.height * scale).rounded())
+        if topBlur.variableMask?.width != w || topBlur.variableMask?.height != h {
+            topBlur.variableMask = Self.topBlurMask(width: w, height: h)
+        }
+    }
     private weak var sheetPreviousResponder: NSResponder?
     private var sheetWasOpen = false
     public var rightPanelSheetOpen: Bool { rightPanelOpen && viewportWidth <= 980 && !rightPanelMaximized }
@@ -1389,9 +1427,7 @@ public final class ThreadPanelView: DSView {
     public override func updateLayer() {
         let bg = TL.c(\.background).cgColor(in: self)
         fade.colors = [1, 0.9, 0.7, 0.42, 0.18, 0.04, 0].map { bg.copy(alpha: $0)! }
-        // A colored overlay over the Glass theme's translucent surface reads as a band, so Glass drops the fade.
-        // ponytail: hard scroll edge under the header in Glass; a gradient mask on the timeline would match T3
-        // but renders offscreen on every scroll frame, add it if the edge is missed
+        // A colored overlay over the Glass theme's translucent surface reads as a band, so Glass blurs instead (`topBlur`).
         needsLayout = true
     }
 
@@ -1536,7 +1572,10 @@ public final class ThreadPanelView: DSView {
         // The last 6px column (the scrollbar) stays unmasked. No fade under a top banner (`topFadeEnabled`).
         fade.frame = CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: 25)
         fade.zPosition = 1
-        fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || WindowGlass.isActive(for: self)
+        let glass = WindowGlass.isActive(for: self)
+        fade.isHidden = !errorBanner.isHidden || !providerBanner.isHidden || glass
+        syncTopBlur(on: glass && window != nil && errorBanner.isHidden && providerBanner.isHidden,
+                    frame: CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: Self.topBlurHeight))
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
         toasts.layer?.zPosition = 3
