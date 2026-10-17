@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Remove the rejected resting backgrounds from sidebar search and compose; retain the approved blur and show screenshots before any new release. (taken 2026-10-17)
+
 - [x] Final sidebar outline cleanup and v1.5.3 release (2026-10-17): removed resting search/compose borders, kept editing and keyboard focus feedback, checked light/dark screenshots and 113 focused tests, then published build 28 from `77e81a9`. Release signatures, downloads and update feed verified.
 
 - [x] Sidebar header polish (2026-10-17): a longer candy blur fades directly into the sidebar; Glass gets a rounded search surface with focus feedback and a softer compose action. Real-window light/dark screenshots and search interactions checked. All 1,530 tests passed; app performance review found no threshold regressions (38 MB idle, 0.048% CPU). [Review and screenshots](docs/research/sidebar-header-2026-10-17.md). Released in v1.5.3.
