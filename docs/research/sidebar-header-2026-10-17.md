@@ -40,6 +40,8 @@ Published as v1.5.3 (build 28) from `77e81a9` on 2026-10-17. The release script 
 
 ## Remove the rejected backgrounds
 
-After v1.5.3, the user rejected the persistent search and compose fills. Removed those fills while retaining the approved artwork blur, transparent resting controls, hover feedback and editing/keyboard focus indicators. This restores the search's hover-only fill from `apps/web/src/components/sidebar/SidebarThreadHeader.tsx:65-68` and the header action's ghost styling from the same file at lines 148-176. The earlier border-only cleanup did not address the fill itself. No new release is authorized for this correction.
+After v1.5.3, the user rejected the persistent search and compose fills. Removed those fills while retaining the approved artwork blur, transparent resting controls, hover feedback and editing/keyboard focus indicators. This restores the search's hover-only fill from `apps/web/src/components/sidebar/SidebarThreadHeader.tsx:65-68` and the header action's ghost styling from the same file at lines 148-176. The earlier border-only cleanup did not address the fill itself. The user subsequently authorized immediate release of this correction.
 
 All 113 focused sidebar tests passed after this correction. Native light/dark window checks confirm both resting backgrounds are gone. Screenshots: `header-transparent-dark.png` and `header-transparent-light.png` in `/Users/mrm/CandyWrapper-research/sandbox/sidebar-polish`. Code review confirms this only removes the two persistent fills; the cached blur and interaction styles are unchanged.
+
+Published the transparent-control correction as v1.5.4 (build 29) from `794afc4` on 2026-10-17. Signed app, downloaded ZIP/DMG hashes and the signed automatic-update feed verified.
