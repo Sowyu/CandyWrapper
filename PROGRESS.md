@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Speed up the activity glimmer 2.5 times and publish a release (taken 2026-10-18).
+
 - [x] Published v1.5.4 (build 29) from `794afc4` on 2026-10-17: transparent sidebar search/compose controls. Signed app, ZIP/DMG downloads and update feed verified.
 
 - [x] Removed the rejected resting backgrounds from sidebar search and compose (2026-10-17), retaining the approved blur and hover/focus feedback. All 113 focused sidebar tests passed; real light/dark screenshots checked. [Notes and screenshots](docs/research/sidebar-header-2026-10-17.md#remove-the-rejected-backgrounds). Released in v1.5.4.
