@@ -3,9 +3,9 @@
 ```text
 🚨 HUMAN WRITTEN NOTE & AI-ASSISTED DEVELOPMENT NOTICE 🚨
 
-This whole project was made with multiple opus 5.5 subagents over the span of 3 days.
+This whole project was made with multiple opus 5.5 subagents over the span of 3 days and is still being maintained and carefully reviewed.
 
-I made this app because I use t3 Code all day and I hated the electron and ram usage which would case my battery to drain.
+I made this app because I use T3 Code all day and I hated the electron and ram usage which would case my battery to drain.
 I love T3 code for the T3 Connect features so I decided to just make Candy Wrapper (Get it? Because T3 Code is a wrapper lol) anyways
 
 CandyWrapper is a native macOS client for [T3 Code](https://github.com/pingdotgg/t3code).
