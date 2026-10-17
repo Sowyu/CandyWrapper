@@ -18,6 +18,8 @@ public struct DesktopUpdateState: Equatable, Sendable {
         }
     }
 
+    /// The native server restart keeps the app open while the desktop update UI is pending.
+    public var isRestarting = false
     public var enabled = false
     public var status: Status = .disabled
     public var channel: Channel
@@ -181,10 +183,11 @@ public enum DesktopUpdateLogic {
     }
 
     /// desktopUpdate.logic.ts:54-56.
-    public static func isButtonDisabled(_ s: DesktopUpdateState?) -> Bool { s?.status == .downloading }
+    public static func isButtonDisabled(_ s: DesktopUpdateState?) -> Bool { s?.status == .downloading || s?.isRestarting == true }
 
     /// desktopUpdate.logic.ts:73-98.
     public static func buttonTooltip(_ s: DesktopUpdateState) -> String {
+        if s.isRestarting { return "Restarting…" }
         switch s.status {
         case .available: return "Update \(s.availableVersion ?? "available") ready to download"
         case .downloading:
@@ -216,7 +219,7 @@ public enum DesktopUpdateLogic {
     /// desktopUpdate.logic.ts:118-123.
     public static func canCheck(_ s: DesktopUpdateState?) -> Bool {
         guard let s, s.enabled else { return false }
-        return s.status != .checking && s.status != .downloading && s.status != .disabled
+        return !s.isRestarting && s.status != .checking && s.status != .downloading && s.status != .disabled
     }
 
     /// `shouldUseSidebarUpdateReleaseNotesPopover` (SidebarUpdatePill.tsx:39-44).
@@ -226,6 +229,7 @@ public enum DesktopUpdateLogic {
 
     /// The Settings Version row (SettingsPanels.tsx:399-426): button label, description, disabled.
     public static func settingsButton(_ s: DesktopUpdateState?) -> (label: String, description: String, disabled: Bool) {
+        if s?.isRestarting == true { return ("Restarting…", "Restarting…", true) }
         let action = s.map(buttonAction) ?? .none
         let label: String = switch action {
         case .download: "Download"

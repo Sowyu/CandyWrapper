@@ -405,6 +405,25 @@ public final class GeneralSettingsView: SettingsPageBase {
             checkTip.text = update.map(DesktopUpdateLogic.buttonTooltip) ?? ""
             if versionRow.detail != look.description { versionRow.detail = look.description }
         }
+        let runtimeButton = ButtonView("Check for Updates", variant: .outline, size: .sm)
+        let runtimeTip = TooltipController.attach(to: runtimeButton, text: "")
+        let runtimeVersion = VersionTitleView()
+        let runtimeRow = row(nil, title: "Server runtime", detail: "", control: runtimeButton)
+        runtimeRow.accessories = [runtimeVersion]
+        runtimeButton.action = { [weak self] in self?.context.runtimeUpdateButton?() }
+        binder.add { [weak self, weak runtimeRow, weak runtimeButton] in
+            guard let self, let runtimeRow, let runtimeButton else { return }
+            let state = context.runtimeUpdate
+            runtimeRow.isHidden = state == nil
+            runtimeVersion.version = state?.currentVersion ?? ""
+            let look = DesktopUpdateLogic.settingsButton(state)
+            runtimeButton.title = look.label
+            runtimeButton.isEnabled = !look.disabled
+            let tooltip = state.map(DesktopUpdateLogic.buttonTooltip) ?? ""
+            if runtimeTip.text != tooltip { runtimeTip.hide(); runtimeTip.text = tooltip }
+            runtimeRow.detail = state.map(DesktopUpdateLogic.buttonTooltip) ?? ""
+            runtimeRow.needsLayout = true
+        }
         let track = settingsSelect(["Stable", "Nightly"], width: 160)
         track.setAccessibilityLabel("Update track")
         track.onChange = { [weak self] index in
@@ -424,7 +443,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)
         let mobile = row("nightly-mobile-beta", title: "Mobile app", detail: "Nightly needs the beta app. The App Store and Google Play versions cannot connect.", control: NightlyMobileBetaView())
-        return section("about", "About", [versionRow, trackRow, mobile, privacy])
+        return section("about", "About", [versionRow, runtimeRow, trackRow, mobile, privacy])
     }
 
     private func diagnosticsSection() -> SettingsSectionView {

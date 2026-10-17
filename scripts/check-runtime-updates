@@ -1,0 +1,4 @@
+#!/bin/zsh -f
+# The release/channel, activation throttle, download and rollback decisions, without a live service.
+cd "${0:A:h:h}" || exit 1
+exec scripts/test --filter 'RuntimeUpdatePolicyTests|RuntimeTrialTests|RuntimeStoreTests|DatabaseBackupTests'

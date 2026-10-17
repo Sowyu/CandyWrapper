@@ -41,6 +41,7 @@
 		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
+		98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
@@ -84,6 +85,7 @@
 		55FB4EFB4DBDAF423D7789DC /* GitController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitController.swift; sourceTree = "<group>"; };
 		56396DA448A1952FDC05BF3E /* ComposerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerController.swift; sourceTree = "<group>"; };
 		5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCommands.swift; sourceTree = "<group>"; };
+		5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeUpdateController.swift; sourceTree = "<group>"; };
 		606083DF126114F0273EEEDD /* ShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSession.swift; sourceTree = "<group>"; };
 		67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningThreadKeepAlive.swift; sourceTree = "<group>"; };
 		6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyThreadMigrationToast.swift; sourceTree = "<group>"; };
@@ -182,6 +184,7 @@
 				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
 				2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */,
 				67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */,
+				5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */,
 				CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */,
 				CDA413FF2F602E6306049C36 /* ServerController.swift */,
 				BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */,
@@ -366,6 +369,7 @@
 				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
 				7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */,
 				A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */,
+				98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */,
 				844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */,
 				6853335632C49221DEDD17A8 /* ServerController.swift in Sources */,
 				472C78A43764067DA610C34E /* ServerUpdates.swift in Sources */,

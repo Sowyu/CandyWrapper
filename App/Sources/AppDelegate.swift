@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updates: UpdateUI?
     private var updateEverything: UpdateEverything?
     private var updater: UpdateController?
+    private var runtimeUpdater: RuntimeUpdateController?
     private let codexAuth = CodexAuthCallbackReceiver()
     private var chatGptWelcome: ChatGptWelcomeCoordinator?
     /// URLs that arrived before the window existed (a cold launch from a link).
@@ -198,10 +199,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.serverUpdates.toasts = { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts }
         threads.serverUpdates.window = { [weak window] in window }
         threads.serverUpdates.isOwnServer = { [weak self] id in self?.server?.ownsLocalServer(id) == true }
-        threads.serverUpdates.updateOwnServer = { [weak self] target, stage in
-            guard let server = self?.server else { throw CancellationError() }
-            try await server.updateOwnRuntime(to: target, onStage: stage)
-        }
         // The desktop bridge's ChatGPT callback (providerAuth.ts:16-47): the window comes forward once the browser returns.
         settings.pageContext.receiveProviderAuthCallback = { [weak self] url in
             guard let self else { throw CancellationError() }
@@ -237,7 +234,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         let updater = UpdateController()
         self.updater = updater
-        updates = UpdateUI(updater: updater, window: window, pill: sidebar.updatePill, settings: settings,
+        let runtime = RuntimeUpdateController(window: window, current: { [weak self, weak environments, weak threads] in
+            guard let id = environments?.primaryId, self?.server?.ownsLocalServer(id) == true,
+                  let version = threads?.serverUpdates.descriptor(id)?.serverVersion else { return nil }
+            return .init(environmentId: id, version: version)
+        }, isExternal: { [weak self, weak environments] in
+            guard let id = environments?.primaryId, environments?.state(id)?.status == .connected else { return false }
+            return self?.server?.ownsLocalServer(id) != true
+        }, restart: { [weak self] target in
+            guard let server = self?.server else { throw CancellationError() }
+            try await server.updateOwnRuntime(to: target, onStage: { _ in })
+        })
+        runtimeUpdater = runtime
+        threads.serverUpdates.runtimeUpdater = runtime
+        runtime.onNotice = { [weak settings, weak threads] title, message, failed in
+            (settings?.visibleToasts ?? threads?.panel.toasts)?.show(ToastView(title: title, message: message, kind: failed ? .error : .success))
+        }
+        runtime.observe { [weak threads] in threads?.serverUpdates.changed() }
+        environments.observe { [weak runtime] in runtime?.contextChanged() }
+        threads.serverUpdates.observe { [weak runtime] in runtime?.contextChanged() }
+        updates = UpdateUI(updater: updater, runtime: runtime, window: window, pill: sidebar.updatePill, settings: settings,
                            toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                            showWindow: { [weak window] in window?.makeKeyAndOrderFront(nil) })
         let everything = UpdateEverything(updater: updater, environments: environments, serverUpdates: threads.serverUpdates,
@@ -246,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
         updateEverything = everything
         threads.composer.configObservers.append { [weak everything] _ in everything?.providersChanged() }
-        if !Self.isPreview { updater.start() }
+        if !Self.isPreview { updater.start(); runtime.start() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)
         installNotifications(window: window, environments: environments, threads: threads, commands: commands, settings: settings)
@@ -592,6 +608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let server = ServerController(environments: environments, window: window)
+        server.onRuntimeRecovery = { [weak self] message in self?.runtimeUpdater?.onNotice?("Server update recovery", message, false) }
         // The first start on a Mac without T3 Code installs CandyWrapper's own runtime; a toast shows how far it got.
         var installToast: (id: Int, view: ToastView)?
         server.onInstallProgress = { [weak self] version, progress in

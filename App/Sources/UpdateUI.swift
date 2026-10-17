@@ -8,15 +8,17 @@ import Features
 @MainActor
 final class UpdateUI {
     let updater: UpdateController
+    private let runtime: RuntimeUpdateController
     private weak var window: NSWindow?
     private weak var pill: SidebarUpdatePillView?
     private weak var settings: SettingsController?
     private let toasts: () -> ToastViewport?
     private let showWindow: () -> Void
 
-    init(updater: UpdateController, window: NSWindow, pill: SidebarUpdatePillView, settings: SettingsController,
+    init(updater: UpdateController, runtime: RuntimeUpdateController, window: NSWindow, pill: SidebarUpdatePillView, settings: SettingsController,
          toasts: @escaping () -> ToastViewport?, showWindow: @escaping () -> Void) {
         self.updater = updater
+        self.runtime = runtime
         self.window = window
         self.pill = pill
         self.settings = settings
@@ -32,11 +34,20 @@ final class UpdateUI {
         c.updateButton = { [weak self] in self?.settingsButton() }
         c.setUpdateTrack = { [weak self] channel in self?.setTrack(channel) }
         updater.observe { [weak self] in self?.stateChanged() }
+        runtime.observe { [weak self] in self?.stateChanged() }
+        c.runtimeUpdateButton = { [weak runtime] in runtime?.request() }
+    }
+
+    private var showsRuntime: Bool {
+        if runtime.state.isRestarting || runtime.state.status == .downloading { return true }
+        guard DesktopUpdateLogic.buttonAction(updater.state) == .none, updater.state.status != .downloading else { return false }
+        return runtime.state.enabled && (DesktopUpdateLogic.buttonAction(runtime.state) != .none || runtime.state.status == .checking)
     }
 
     private func stateChanged() {
-        pill?.update = updater.state
+        pill?.update = showsRuntime ? runtime.state : updater.state
         settings?.pageContext.update = updater.state
+        settings?.pageContext.runtimeUpdate = runtime.state.enabled ? runtime.state : nil
         settings?.refreshPages()
     }
 
@@ -68,6 +79,7 @@ final class UpdateUI {
     // MARK: Pill
 
     private func pillCheck() {
+        if showsRuntime { runtime.request(); return }
         pill?.isActionPending = true
         Task {
             let result = await updater.check()
@@ -79,6 +91,7 @@ final class UpdateUI {
     }
 
     private func pillDownload() {
+        if showsRuntime { runtime.request(); return }
         pill?.isActionPending = true
         Task {
             let result = await updater.download()
@@ -91,6 +104,7 @@ final class UpdateUI {
     }
 
     private func pillInstall() {
+        if showsRuntime { runtime.request(); return }
         pill?.isActionPending = true
         confirmInstall(onCancel: { [weak self] in self?.pill?.isActionPending = false }) { [weak self] in
             guard let self else { return }

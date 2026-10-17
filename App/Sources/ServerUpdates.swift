@@ -29,8 +29,13 @@ final class ServerUpdates {
     var continueThreads: (String) -> Bool = { _ in false }
     /// The server is one CandyWrapper started on this Mac (`ServerController`), not T3's.
     var isOwnServer: (String) -> Bool = { _ in false }
-    /// Installs a version into CandyWrapper's runtimes and restarts its own server on it (`ServerController`).
-    var updateOwnServer: ((String, @escaping @MainActor (ServerUpdateStage) -> Void) async throws -> Void)?
+    var runtimeUpdater: RuntimeUpdateController?
+
+    func ownRuntimeState(_ id: String) -> DesktopUpdateState? {
+        guard runtimeUpdater?.environmentId == id, runtimeUpdater?.state.enabled == true else { return nil }
+        return runtimeUpdater?.state
+    }
+
 
     /// Hosts that refused this client's protocol, by environment id: their HTTP descriptor, read once per refusal.
     private var outdated: [String: EnvironmentDescriptor] = [:]
@@ -76,11 +81,25 @@ final class ServerUpdates {
 
     /// `serverUpdateStateForServerVersion`: a failure clears once the server runs another version.
     func state(_ environmentId: String) -> ServerUpdateState {
-        (states[environmentId] ?? .idle).forServerVersion(descriptor(environmentId)?.serverVersion)
+        if let runtime = ownRuntimeState(environmentId) {
+            let target = runtime.downloadedVersion ?? runtime.availableVersion ?? runtime.currentVersion
+            if runtime.isRestarting { return .running(stage: .resuming, fromVersion: runtime.currentVersion, targetVersion: target) }
+            if runtime.status == .downloading { return .running(stage: .downloading, fromVersion: runtime.currentVersion, targetVersion: target) }
+            if let message = runtime.message, runtime.errorContext == .install {
+                return .failed(stage: .resuming, fromVersion: runtime.currentVersion, targetVersion: target, message: message)
+            }
+            return .idle
+        }
+        return (states[environmentId] ?? .idle).forServerVersion(descriptor(environmentId)?.serverVersion)
     }
 
     /// `resolveVersionMismatch`: the server runs an older T3 than this client.
     func mismatch(_ environmentId: String) -> (server: String, client: String)? {
+        if let runtime = ownRuntimeState(environmentId) {
+            guard let target = runtime.availableVersion ?? runtime.downloadedVersion else { return nil }
+            return (runtime.currentVersion, target)
+        }
+        if isOwnServer(environmentId) { return nil }
         guard let server = descriptor(environmentId)?.serverVersion, ServerVersionSkewLogic.serverIsBehind(server) else { return nil }
         return (server, ServerVersionSkewLogic.clientVersion)
     }
@@ -88,15 +107,15 @@ final class ServerUpdates {
     /// `canUpdateServer`: an authenticated session granted `environment:maintain`.
     func canUpdate(_ environmentId: String) -> Bool {
         environments.authSession(environmentId)?.grants(AuthScopes.environmentMaintain) == true
+            && (ownRuntimeState(environmentId) == nil || runtimeUpdater?.busy == false)
     }
 
     /// What the update control offers for a server behind this client.
     func offer(_ environmentId: String, serverLabel: String) -> ServerUpdateOffer? {
         guard let mismatch = mismatch(environmentId) else { return nil }
         let caps = capabilities(environmentId)
-        // CandyWrapper's own server runs in desktop mode with nothing to drive (docs/decisions.md).
-        // CandyWrapper's own server: "Update" installs the version into its own runtimes (docs/decisions.md).
-        if caps.selfUpdate == .desktopManaged, !caps.desktopAppUpdate, isOwnServer(environmentId), updateOwnServer != nil { return .update(confirm: nil) }
+        // Our runtime has its own release feed and separate Download and Restart clicks.
+        if ownRuntimeState(environmentId) != nil { return .update(confirm: nil) }
         return ServerUpdateOffer(caps, targetVersion: mismatch.client, serverLabel: serverLabel)
     }
 
@@ -104,6 +123,10 @@ final class ServerUpdates {
 
     /// The button: the desktop app's confirmation first, then the update.
     func request(_ environmentId: String, serverLabel: String) {
+        if ownRuntimeState(environmentId) != nil {
+            if canUpdate(environmentId) { runtimeUpdater?.request() }
+            return
+        }
         guard canUpdate(environmentId), tasks[environmentId] == nil else { return }
         guard case .update(let question)? = offer(environmentId, serverLabel: serverLabel) else { return }
         guard let question, let window = window() else { return start(environmentId, serverLabel: serverLabel) }
@@ -155,17 +178,14 @@ final class ServerUpdates {
     }
 
     private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle, quiet: Bool = false) {
-        guard tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId),
+        guard ownRuntimeState(environmentId) == nil, !isOwnServer(environmentId),
+              tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId),
               let mismatch = mismatch(environmentId) else { return }
         let caps = capabilities(environmentId)
         let from = mismatch.server
         let continueThreads = caps.threadContinuation && continueThreads(environmentId)
         states[environmentId] = .running(stage: .downloading, fromVersion: from, targetVersion: mismatch.client)
         changed()
-        if caps.selfUpdate == .desktopManaged, !caps.desktopAppUpdate, isOwnServer(environmentId), let updateOwnServer {
-            return startOwn(environmentId, target: mismatch.client, from: from, serverLabel: serverLabel, failureTitle: failureTitle, quiet: quiet,
-                            update: updateOwnServer)
-        }
         tasks[environmentId] = Task { [weak self] in
             do {
                 let result = try await ServerUpdater.run(supervisor: shell.supervisor, targetVersion: mismatch.client,
@@ -189,44 +209,6 @@ final class ServerUpdates {
                 let message = (error as? ServerUpdater.Failure)?.message ?? "Server update failed."
                 var stage = ServerUpdateStage.downloading, target = mismatch.client
                 if case .running(let s, _, let t)? = states[environmentId] { stage = s; target = t }
-                states[environmentId] = .failed(stage: stage, fromVersion: from, targetVersion: target, message: message)
-                if quiet { quietFailures[environmentId] = message } else { toast(ToastView(title: failureTitle, message: message, kind: .error)) }
-            }
-            self?.tasks[environmentId] = nil
-            self?.changed()
-        }
-    }
-
-    /// Our own server: install the version into CandyWrapper's runtimes, restart on it, and wait for its
-    /// `welcome` to name it, for as long as T3 waits for a service update.
-    private func startOwn(_ environmentId: String, target: String, from: String, serverLabel: String, failureTitle: String, quiet: Bool,
-                          update: @escaping (String, @escaping @MainActor (ServerUpdateStage) -> Void) async throws -> Void) {
-        tasks[environmentId] = Task { [weak self] in
-            do {
-                try await update(target) { stage in
-                    self?.states[environmentId] = .running(stage: stage, fromVersion: from, targetVersion: target)
-                    self?.changed()
-                }
-                // ponytail: polls every 500 ms during the restart only; follow the welcome observer if restarts get slow
-                let deadline = ContinuousClock.now + ServerUpdateLogic.resumeTimeout
-                while self?.descriptor(environmentId)?.serverVersion != target {
-                    guard ContinuousClock.now < deadline else { throw ServerUpdater.Failure(ServerUpdateLogic.resumeTimeoutMessage(target)) }
-                    try await Task.sleep(for: .milliseconds(500))
-                }
-                guard let self else { return }
-                states[environmentId] = .idle
-                if !quiet {
-                    toast(ToastView(title: ServerUpdateCopy.successTitle(serverLabel: serverLabel),
-                                    message: ServerUpdateCopy.successDescription(nil, targetVersion: target), kind: .success))
-                }
-            } catch is CancellationError {
-                self?.states[environmentId] = .idle
-                if quiet { self?.quietFailures[environmentId] = "Server update was interrupted." }
-            } catch {
-                guard let self else { return }
-                let message = (error as? ServerUpdater.Failure)?.message ?? "Server update failed: \(error)"
-                var stage = ServerUpdateStage.downloading
-                if case .running(let s, _, _)? = states[environmentId] { stage = s }
                 states[environmentId] = .failed(stage: stage, fromVersion: from, targetVersion: target, message: message)
                 if quiet { quietFailures[environmentId] = message } else { toast(ToastView(title: failureTitle, message: message, kind: .error)) }
             }

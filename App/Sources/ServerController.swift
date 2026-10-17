@@ -208,7 +208,7 @@ final class ServerController {
         let phase = await lifecycle.phase
         ownsServer = phase == .running(owned: true)
         // The started server ran its migrations: raise this home's floor and note how far that version goes.
-        if ownsServer, let version = Self.startingVersion {
+        if ownsServer, !updatingRuntime, let version = Self.startingVersion {
             Self.startingVersion = nil
             let home = self.home
             Task.detached { Self.records.recordStart(version, home: home, migration: HomeRecords.databaseMigration(home: home)) }
@@ -344,6 +344,7 @@ final class ServerController {
     private nonisolated(unsafe) static var startingVersion: String?
     /// Shows install progress; set by the app.
     var onInstallProgress: ((String, RuntimeStore.Progress?) -> Void)?
+    var onRuntimeRecovery: ((String) -> Void)?
 
     /// The T3 Code desktop app's version, when it is installed. It runs its own server on `~/.t3`.
     nonisolated static func desktopAppVersion() -> String? {
@@ -384,80 +385,48 @@ final class ServerController {
         return binary
     }
 
-    /// The update button for our own server: install `target`, make it active, restart the server on it.
+    /// The Restart button for our own server: trial the verified download and restore on failure.
     /// Guarded the way T3's service launcher guards an update (serviceLauncher.ts, 570542662, 3417bc385):
     /// a database backup that won't fit refuses the update before the server stops, the database is
     /// snapshotted while no server runs, and a version that fails to start puts the snapshot back and
     /// starts the previous version again.
     func updateOwnRuntime(to target: String, onStage: @escaping @MainActor (ServerUpdateStage) -> Void) async throws {
-        onStage(.downloading)
-        _ = try await Self.store.install(target)
-        onStage(.installing)
-        let database = DatabaseBackup.database(home: home)
-        let backupRoot = Self.store.root.appending(path: "db-backup", directoryHint: .isDirectory)
-        // Off the main thread: a backup that can't clone copies the whole database.
-        if let blocker = await Task.detached(operation: { DatabaseBackup.blocker(database: database, root: backupRoot) }).value {
-            throw ServerUpdater.Failure(blocker)
-        }
-        let previous = Self.store.state().active
-        onStage(.resuming)
-        // No other connect starts a server on the home from here: one under way finishes, the server stops, and
-        // only then does the new runtime become the one a start picks.
+        guard ownsServer, !updatingRuntime else { throw RuntimeTrial.Failure("CandyWrapper no longer owns this server.") }
+        guard Self.store.binary(target) != nil else { throw RuntimeTrial.Failure("Download the update before restarting.") }
         updatingRuntime = true
         defer {
+            Self.startingVersion = nil
             updatingRuntime = false
             connect()
         }
         await connectTask?.value
-        await lifecycle.shutdown()
-        try Self.store.activate(target)
+        let lifecycle = self.lifecycle, home = self.home, identity = self.identity
         let directory = backupDirectory
-        let backup: DatabaseBackup?
-        do {
-            backup = try await Task.detached { try DatabaseBackup.make(database: database, in: directory) }.value
-        } catch {
-            Self.goBack(to: previous)
-            throw ServerUpdater.Failure("Could not back up the database before updating: \(error.localizedDescription). The update was not applied.")
-        }
-        do {
-            _ = try await lifecycle.ensureRunning()
-            try? backup?.discard()
-        } catch {
-            // `launch` stops a server that fails to start. Another server may have taken the home meanwhile
-            // (a discovery error): its owner lock says so, and then the database stays as it is, since that
-            // server may have written to it. A restore that fails stays pending and runs again on connect.
-            let home = self.home
-            let rollback = await Task.detached { () -> (restored: Bool, failure: String?) in
-                guard let backup else { return (false, nil) }
-                do {
-                    guard LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) else {
-                        try backup.discard()
-                        return (false, nil)
+        onStage(.resuming)
+        try await Task.detached {
+            try await RuntimeTrial.apply(store: Self.store, home: home, target: target, backupDirectory: directory,
+                stop: { await lifecycle.shutdown() },
+                startAndConnect: {
+                    guard case .owned(let server) = try await lifecycle.ensureRunning() else {
+                        throw RuntimeTrial.Failure("Another process started the server.")
                     }
-                    try backup.restore(previous: previous)
-                    Self.goBack(to: previous)
-                    try backup.discard()
-                    return (true, nil)
-                } catch {
-                    return (false, error.localizedDescription)
-                }
-            }.value
-            // After a failed restore the new runtime stays active: the database may be the one it migrated, and an
-            // older server must not open that. A pending restore goes back once it goes through.
-            if rollback.failure == nil { Self.goBack(to: previous) }
-            let reason = (error as? LocalServerLaunchError)?.description ?? ConnectionFailure.classify(error).detail
-            if let failure = rollback.failure {
-                let again = DatabaseBackup.pending(database: database, in: directory) != nil ? ", and CandyWrapper tries again before it starts a server" : ""
-                throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason) Putting its database back failed: \(failure). The copy saved before the update is in \(directory.path)\(again).")
-            }
-            let to = previous.map { "T3 Code \($0)" } ?? "the T3 Code it ran before"
-            throw ServerUpdater.Failure("T3 Code \(target) did not start: \(reason) CandyWrapper went back to \(to)\(rollback.restored ? " and restored its database" : "").")
+                    guard server.descriptor.serverVersion == target else {
+                        throw RuntimeTrial.Failure("The server started on \(server.descriptor.serverVersion) instead of \(target).")
+                    }
+                    try await RuntimeTrial.verify(server, identity: identity)
+                },
+                unowned: {
+                    LocalServerDiscovery.ownerLockHolder(home: home) == nil && !LocalServerDiscovery.runtimeProcessAlive(home: home)
+                })
+        }.value
+        if let version = Self.startingVersion {
+            await Task.detached { Self.records.recordStart(version, home: home, migration: HomeRecords.databaseMigration(home: home)) }.value
         }
     }
 
     /// The runtime a failed update goes back to: our previous one, or with none, T3's own.
-    nonisolated private static func goBack(to previous: String?) {
-        if let previous { try? store.activate(previous) } else { try? store.deactivate() }
+    nonisolated private static func goBack(to previous: String?) throws {
+        if let previous { try store.activate(previous) } else { try store.deactivate() }
     }
 
     private var backupDirectory: URL {
@@ -473,22 +442,45 @@ final class ServerController {
     // app writing, would restore over that; stamp the restored files' identity in the marker if anyone hits it
     private func finishPendingRestore() async throws {
         guard let backup = DatabaseBackup.pending(database: DatabaseBackup.database(home: home), in: backupDirectory) else { return }
+        updatingRuntime = true
+        defer { updatingRuntime = false; Self.startingVersion = nil }
         let home = self.home
+        // A crash may leave our trial process alive. Adopt and verify it before deciding whether
+        // its database should be restored. A service owned by another app remains untouched.
+        if LocalServerDiscovery.ownerLockHolder(home: home) != nil || LocalServerDiscovery.runtimeProcessAlive(home: home) {
+            let running = try await lifecycle.ensureRunning()
+            switch running {
+            case .owned(let server):
+                do {
+                    try await RuntimeTrial.verify(server, identity: identity)
+                    try backup.discard()
+                    let version = server.descriptor.serverVersion
+                    await Task.detached { Self.records.recordStart(version, home: home, migration: HomeRecords.databaseMigration(home: home)) }.value
+                    return
+                } catch {
+                    await lifecycle.shutdown()
+                }
+            case .reused:
+                try backup.discard()
+                onRuntimeRecovery?("Another server took ownership. CandyWrapper kept its current data and did not roll it back.")
+                return
+            }
+        }
         let failure = await Task.detached { () -> String? in
             do {
-                if LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) {
-                    try backup.restore()
+                guard LocalServerDiscovery.ownerLockHolder(home: home) == nil, !LocalServerDiscovery.runtimeProcessAlive(home: home) else {
+                    return "Another server owns the database."
                 }
-                Self.goBack(to: backup.previousRuntime)
+                try backup.restore()
+                try Self.goBack(to: backup.previousRuntime)
                 try backup.discard()
                 return nil
-            } catch {
-                return error.localizedDescription
-            }
+            } catch { return error.localizedDescription }
         }.value
         if let failure {
             throw ConnectionFailure.blocked(.configuration, "Could not put back the database saved before a T3 Code update: \(failure). The copy is in \(backup.directory.path). CandyWrapper starts no server on this Mac until it is back.")
         }
+        onRuntimeRecovery?("CandyWrapper restored the database saved before the interrupted update and went back to the previous runtime.")
     }
 
     private func makeLifecycle() -> LocalServerLifecycle {

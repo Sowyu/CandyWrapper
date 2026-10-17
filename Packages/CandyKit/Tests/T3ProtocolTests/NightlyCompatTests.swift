@@ -34,6 +34,25 @@ struct NightlyCompatTests {
         #expect(configSeen && databaseSeen && threadSeen)
     }
 
+    @Test func futureRecordedConfigAndFramesDecode() throws {
+        var unknown = 0, configSeen = false
+        for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {
+            for message in try RPCFrame.decodeServer(frame.bodyData) {
+                switch message {
+                case .unknown: unknown += 1
+                case .exit(_, .success(let value)):
+                    if value["providers"] != nil {
+                        let config = try value.decode(as: ServerProviderConfig.self)
+                        #expect(config.providers.first?.driver == "futureProvider")
+                        configSeen = true
+                    }
+                default: break
+                }
+            }
+        }
+        #expect(configSeen && unknown == 2)
+    }
+
     static func settings(_ text: String) -> ServerThreadDefaults { ServerThreadDefaults(raw: UsageTests.json(text)) }
 
     @Test func sourceControlHostsFollowTheServersShape() {

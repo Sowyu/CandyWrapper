@@ -1,0 +1,104 @@
+{
+  "metrics": {
+    "stream.cpu_pct": {
+      "median": 1.1316727965014042,
+      "min": 1.1149453355938004,
+      "max": 1.1729338743105258,
+      "values": [
+        1.1149453355938004,
+        1.1316727965014042,
+        1.1729338743105258
+      ]
+    },
+    "stream.interrupt_wakeups_per_s": {
+      "median": 3.4023696343955283,
+      "min": 3.2420771100738928,
+      "max": 3.437301765854107,
+      "values": [
+        3.2420771100738928,
+        3.4023696343955283,
+        3.437301765854107
+      ]
+    },
+    "stream.package_idle_wakeups_per_s": {
+      "median": 0.8531781868615508,
+      "min": 0.6804739268791057,
+      "max": 0.9548060460705853,
+      "values": [
+        0.8531781868615508,
+        0.6804739268791057,
+        0.9548060460705853
+      ]
+    },
+    "stream.footprint_mb": {
+      "median": 34.61024475097656,
+      "min": 34.563392639160156,
+      "max": 34.67274475097656,
+      "values": [
+        34.67274475097656,
+        34.61024475097656,
+        34.563392639160156
+      ]
+    },
+    "stream.peak_footprint_mb": {
+      "median": 35.09461975097656,
+      "min": 35.047767639160156,
+      "max": 35.15711975097656,
+      "values": [
+        35.15711975097656,
+        35.09461975097656,
+        35.047767639160156
+      ]
+    },
+    "stream.settled_footprint_mb": {
+      "median": 34.657142639160156,
+      "min": 34.59461975097656,
+      "max": 34.71961975097656,
+      "values": [
+        34.59461975097656,
+        34.71961975097656,
+        34.657142639160156
+      ]
+    },
+    "stream.turn": {
+      "first_text_seconds": 2.947504997253418,
+      "seconds": 3.16095507144928,
+      "status": "completed"
+    }
+  },
+  "notes": [],
+  "quiet": {
+    "max_load": 3.0,
+    "noisy": false,
+    "waits": [
+      {
+        "before": "stream-recheck-0",
+        "waited_s": 0,
+        "load_before": 2.94,
+        "load": 2.94,
+        "quiet": true
+      },
+      {
+        "before": "stream-recheck-1",
+        "waited_s": 0,
+        "load_before": 2.53,
+        "load": 2.53,
+        "quiet": true
+      },
+      {
+        "before": "stream-recheck-2",
+        "waited_s": 81,
+        "load_before": 3.78,
+        "load": 2.88,
+        "quiet": true
+      }
+    ]
+  },
+  "context": {
+    "scenario": "Three isolated repeats of scripts/perf-review scenario_stream",
+    "frozen_workload": 1,
+    "source": "final runtime update tree",
+    "baseline": "2026-10-17-1d8f066-dirty-w1.json",
+    "reason": "The full review flagged one 40.4 MB settled streaming sample. Preserve that sample and check whether it repeats."
+  }
+}

@@ -100,8 +100,8 @@ The server adds fields, union members, event types and turn item types between r
 | --- | --- | --- |
 | Unknown JSON keys in an object | Ignore them. Effect Schema strips excess properties on decode. | `.repos/effect-smol/packages/effect/src/SchemaAST.ts:463` |
 | Unknown domain event `type` on the thread stream | The official decoder maps it to `{kind:"unknown-event", sequence, eventType}`. Skip it **but advance the resume cursor**. | `packages/contracts/src/orchestrationV2.ts:3320-3364` |
-| `turn-item.updated` whose payload `type` is unknown | Same `unknown-event` treatment. | `packages/contracts/src/orchestrationV2.ts:3320-3364` |
-| Unknown turn item `type` inside `projection.turnItems`, `visibleTurnItems`, history page `items` | Drop the row. A known `type` with a malformed payload is a decode error. | `packages/contracts/src/orchestrationV2.ts:1580-1608`, `packages/contracts/src/baseSchemas.ts:261-285` |
+| `turn-item.updated` whose payload `type` is unknown | Keep a payload with valid common fields and render the generic label. An undecodable unfamiliar payload keeps the `unknown-event` treatment. | `apps/web/src/session-logic.ts:552-557`; `packages/contracts/src/orchestrationV2.ts:3320-3364` for cursor handling |
+| Unknown turn item `type` inside `projection.turnItems`, `visibleTurnItems`, history page `items` | Keep rows whose common fields decode, using the generic type label. Skip malformed unfamiliar rows; a malformed known type remains a decode error. | `apps/web/src/session-logic.ts:552-557`; user’s 2026-10-17 forward-compatibility requirement |
 | `ForwardCompatibleArray(X)` | Drop elements that fail to decode. | `packages/contracts/src/baseSchemas.ts:114-170` |
 | `ForwardCompatibleOptional(X)` | Unknown literal decodes as absent. | `packages/contracts/src/baseSchemas.ts:50-69` |
 | `ForwardCompatibleNullable(X)` | Unknown literal or missing key decodes as `null`. | `packages/contracts/src/baseSchemas.ts:71-87` |

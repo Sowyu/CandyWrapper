@@ -89,7 +89,7 @@ public struct ThreadHistoryPage: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         snapshotSequence = try c.decode(Int.self, forKey: .snapshotSequence)
-        items = try c.decode(KnownTurnItems<ProjectedTurnItem>.self, forKey: .items).values
+        items = try c.decode(CompatibleTurnItems<ProjectedTurnItem>.self, forKey: .items).values
         nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
         hasMoreHistory = try c.decode(Bool.self, forKey: .hasMoreHistory)
     }
@@ -223,8 +223,8 @@ public struct ThreadEvent: Hashable, Sendable {
 }
 
 /// `OrchestrationV2ThreadStreamItem` (orchestrationV2.ts:3366-3392). An event of a type this
-/// build doesn't know, or a `turn-item.updated` with an unknown item type, decodes to
-/// `.unknownEvent` and still advances the resume cursor (orchestrationV2.ts:3329-3364).
+/// build does not know decodes to `.unknownEvent` and still advances the resume cursor.
+/// Unfamiliar turn items keep valid common fields for the generic timeline fallback.
 public enum ThreadStreamItem: Decodable, Hashable, Sendable {
     case synchronized
     case snapshot(ThreadDetailSnapshot)
@@ -276,7 +276,7 @@ public enum ThreadStreamItem: Decodable, Hashable, Sendable {
             if type == .turnItemUpdated {
                 struct Peek: Decodable { var type: TurnItemType }
                 let itemType = try e.decode(Peek.self, forKey: .payload).type
-                if !itemType.isKnown {
+                if !itemType.isKnown, (try? e.decode(TurnItem.self, forKey: .payload)) == nil {
                     self = .unknownEvent(sequence: sequence, eventType: type.rawValue)
                     return
                 }

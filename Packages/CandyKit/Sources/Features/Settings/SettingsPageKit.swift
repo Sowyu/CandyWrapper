@@ -19,6 +19,8 @@ public final class SettingsPageContext {
     public var appVersion = ""
     /// The app updater's state (`useDesktopUpdateState`) for the Version and Update track rows.
     public var update: DesktopUpdateState?
+    public var runtimeUpdate: DesktopUpdateState?
+    public var runtimeUpdateButton: (() -> Void)?
     /// `isUpdateActionPending` and `isChangingUpdateChannel` (SettingsPanels.tsx:282-283).
     public var updateActionPending = false
     public var changingUpdateTrack = false

@@ -263,12 +263,12 @@ public struct ThreadProjection: Codable, Hashable, Sendable {
         runtimeRequests = try list(.runtimeRequests)
         messages = try list(.messages)
         plans = try list(.plans)
-        turnItems = try c.decodeIfPresent(KnownTurnItems<TurnItem>.self, forKey: .turnItems)?.values ?? []
+        turnItems = try c.decodeIfPresent(CompatibleTurnItems<TurnItem>.self, forKey: .turnItems)?.values ?? []
         checkpointScopes = try list(.checkpointScopes)
         checkpoints = try list(.checkpoints)
         contextHandoffs = try list(.contextHandoffs)
         contextTransfers = try list(.contextTransfers)
-        visibleTurnItems = try c.decodeIfPresent(KnownTurnItems<ProjectedTurnItem>.self, forKey: .visibleTurnItems)?.values ?? []
+        visibleTurnItems = try c.decodeIfPresent(CompatibleTurnItems<ProjectedTurnItem>.self, forKey: .visibleTurnItems)?.values ?? []
         updatedAt = try c.decode(T3Timestamp.self, forKey: .updatedAt)
     }
 }

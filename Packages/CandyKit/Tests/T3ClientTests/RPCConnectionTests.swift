@@ -11,6 +11,53 @@ struct RPCConnectionTests {
         return (connection, socket)
     }
 
+    @Test func futureRecordedPushesAndUnknownRPCFailuresKeepTheConnection() async throws {
+        let (connection, socket) = await makeConnection()
+        defer { socket.close() }
+        let stream = await connection.stream("orchestration.subscribeThread")
+        async let config = connection.request("server.getConfig")
+        #expect(await eventually { socket.sent.count == 2 })
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let text = try String(contentsOf: root.appending(path: "fixtures/transcripts/21-future-server.jsonl"), encoding: .utf8)
+        var count = 0
+        for line in text.split(separator: "\n") {
+            let record = try JSONDecoder().decode(JSONValue.self, from: Data(line.utf8))
+            guard record["dir"]?.stringValue == "recv", let body = record["body"] else { continue }
+            for message in try RPCFrame.decodeServer(JSONEncoder().encode(body)) {
+                switch message {
+                case .chunk(let id, let values) where id == .string("4"):
+                    count += values.count
+                    socket.deliver(.chunk(requestId: .string("1"), values: values))
+                case .exit(let id, let result) where id == .string("1"):
+                    socket.deliver(.exit(requestId: .string("2"), exit: result))
+                case .unknown: socket.deliver(message)
+                default: break
+                }
+            }
+        }
+        var iterator = stream.makeAsyncIterator()
+        var snapshotSeen = false
+        for _ in 0..<count {
+            let value = try #require(try await iterator.next())
+            let item = try value.decode(as: ThreadStreamItem.self)
+            if case .snapshot = item { snapshotSeen = true }
+        }
+        #expect(snapshotSeen)
+        #expect(try await config["providers"]?.arrayValue?.first?["driver"]?.stringValue == "futureProvider")
+        async let unknown = connection.request("server.futureMethod")
+        #expect(await eventually { socket.sent.contains { if case .request(let r) = $0 { return r.tag == "server.futureMethod" }; return false } })
+        socket.deliver(.exit(requestId: .string("3"), exit: .failure([.fail(RPCTypedError(tag: "FutureMethodUnavailable", fields: ["message": .string("Unavailable")]))])))
+        do { _ = try await unknown; Issue.record("Expected an RPC error") }
+        catch let error as RPCClientError { #expect(error.typedError?.tag == "FutureMethodUnavailable") }
+        #expect(!(await connection.isClosed))
+        async let next = connection.request("server.getConfig")
+        #expect(await eventually { socket.sent.contains { if case .request(let r) = $0 { return r.id == .string("4") }; return false } })
+        socket.deliver(.exit(requestId: .string("4"), exit: .success(.string("still connected"))))
+        #expect(try await next == .string("still connected"))
+        await connection.close()
+    }
+
     @Test func unaryRequestSucceedsAndFails() async throws {
         let (c, socket) = await makeConnection()
         async let first = c.request("server.getConfig")

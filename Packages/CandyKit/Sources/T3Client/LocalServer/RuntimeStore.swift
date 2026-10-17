@@ -6,12 +6,13 @@ import T3Protocol
 /// CLI or background service. The layout is T3's pinned runtime (cloud/pinnedRuntime.ts:23-70):
 /// `<root>/versions/<version>/t3` beside the web client and native packages, with `.install-complete`
 /// holding the version. `state.json` names the active version and the one before it; the store
-/// deletes every other version.
+/// keeps those versions and a verified download waiting for Restart.
 public struct RuntimeStore: Sendable {
     public struct State: Codable, Equatable, Sendable {
         public var active: String?
         public var previous: String?
-        public init(active: String? = nil, previous: String? = nil) { self.active = active; self.previous = previous }
+        public var downloaded: String?
+        public init(active: String? = nil, previous: String? = nil, downloaded: String? = nil) { self.active = active; self.previous = previous; self.downloaded = downloaded }
     }
 
     public enum Progress: Equatable, Sendable {
@@ -20,8 +21,9 @@ public struct RuntimeStore: Sendable {
         case extracting
     }
 
-    public struct InstallError: Error, Equatable, CustomStringConvertible {
+    public struct InstallError: Error, Equatable, CustomStringConvertible, LocalizedError {
         public let description: String
+        public var errorDescription: String? { description }
         public init(_ description: String) { self.description = description }
     }
 
@@ -68,6 +70,15 @@ public struct RuntimeStore: Sendable {
             s.previous = s.active
             s.active = version
         }
+        if s.downloaded == version { s.downloaded = nil }
+        try write(s)
+        cleanup()
+    }
+
+    /// A verified download waits for a separate Restart click, including across app launches.
+    public func markDownloaded(_ version: String) throws {
+        guard binary(version) != nil else { throw InstallError("The runtime download is incomplete.") }
+        var s = state(); s.downloaded = version
         try write(s)
         cleanup()
     }
@@ -80,9 +91,9 @@ public struct RuntimeStore: Sendable {
         try write(s)
     }
 
-    /// Deletes every version folder but the active and previous ones, and any staging leftovers.
+    /// Keeps the active, previous and downloaded versions, and removes staging leftovers.
     public func cleanup() {
-        let keep = Set([state().active, state().previous].compactMap { $0 })
+        let keep = Set([state().active, state().previous, state().downloaded].compactMap { $0 })
         let names = (try? FileManager.default.contentsOfDirectory(atPath: versionsDir.path)) ?? []
         for name in names where !keep.contains(name) {
             try? FileManager.default.removeItem(at: versionsDir.appending(path: name))
