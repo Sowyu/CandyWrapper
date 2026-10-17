@@ -66,13 +66,47 @@ public final class BrowserMiniPlayerView: DSView {
         return CGSize(width: (s.width * fit).rounded(), height: (s.height * fit).rounded() + ServerBrowserView.barHeight)
     }
 
-    /// The top-right corner of `container`, `edgeGap` in, unless the user moved it; kept inside.
-    public static func frame(size: CGSize, origin: CGPoint?, container: CGRect) -> CGRect {
+    /// `previewMiniPlayerLayout.ts:150-267`: stay below the details card and above the composer,
+    /// or move beside them when that is closer to the dragged position.
+    public static func frame(size: CGSize, origin: CGPoint?, container: CGRect,
+                             composer: CGRect? = nil, details: CGRect? = nil) -> CGRect {
         let gap = edgeGap
-        var o = origin ?? CGPoint(x: container.maxX - gap - size.width, y: container.minY + gap)
-        o.x = min(max(container.minX + gap, o.x), container.maxX - gap - size.width)
-        o.y = min(max(container.minY + gap, o.y), container.maxY - gap - size.height)
-        return CGRect(origin: o, size: size)
+        let availableHeight = (composer?.minY ?? container.maxY) - container.minY - 2 * gap
+        let fit = min(1, max(1, container.width - 2 * gap) / max(1, size.width),
+                      max(1, availableHeight) / max(1, size.height))
+        let size = CGSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
+        let desired = origin ?? CGPoint(x: details.map { $0.maxX - size.width } ?? (container.maxX - gap - size.width),
+                                        y: details.map { $0.maxY + gap } ?? (container.minY + gap))
+        func clampX(_ x: CGFloat) -> CGFloat {
+            min(max(container.minX + gap, x), max(container.minX + gap, container.maxX - gap - size.width))
+        }
+        func overlaps(_ rect: CGRect, _ obstacle: CGRect?) -> Bool {
+            obstacle.map { rect.minX < $0.maxX && rect.maxX > $0.minX } ?? false
+        }
+        let inside = CGPoint(x: clampX(desired.x), y: min(max(container.minY + gap, desired.y),
+            max(container.minY + gap, container.maxY - gap - size.height)))
+        func candidate(_ x: CGFloat) -> CGRect {
+            let span = CGRect(x: x, y: 0, width: size.width, height: size.height)
+            let ceiling = overlaps(span, details) ? details!.maxY : container.minY
+            let floor = overlaps(span, composer) ? composer!.minY : container.maxY
+            let y = min(container.maxY - gap - size.height,
+                        max(container.minY + gap, ceiling + gap, min(inside.y, floor - gap - size.height)))
+            return CGRect(x: x, y: y, width: size.width, height: size.height)
+        }
+        func blocked(_ rect: CGRect) -> Bool {
+            (overlaps(rect, details) && rect.minY < details!.maxY + gap)
+                || (overlaps(rect, composer) && rect.maxY > composer!.minY - gap)
+        }
+        var best = candidate(inside.x)
+        var distance = blocked(best) ? CGFloat.infinity : abs(best.minY - inside.y)
+        for obstacle in [composer, details].compactMap({ $0 }) {
+            for x in [obstacle.minX - gap - size.width, obstacle.maxX + gap] where clampX(x) == x {
+                let rect = candidate(x)
+                let d = abs(x - inside.x) + abs(rect.minY - inside.y)
+                if !blocked(rect), d < distance { best = rect; distance = d }
+            }
+        }
+        return best
     }
 
     public override func layout() {
@@ -96,7 +130,8 @@ public final class BrowserMiniPlayerView: DSView {
     }
 
     public override func updateLayer() {
-        card.layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
+        // A preview floats above live text. Glass's muted overlay is not a backing surface.
+        card.layer?.backgroundColor = Themed.color(\.background).withAlphaComponent(1).cgColor(in: self)
         card.layer?.shadowColor = Themed.black(0.35).cgColor(in: self)
     }
 

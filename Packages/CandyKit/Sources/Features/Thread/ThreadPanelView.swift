@@ -1565,17 +1565,19 @@ public final class ThreadPanelView: DSView {
         }
         detailsSlideFrom = nil
         // The floating browser keeps to the chat canvas, top right by default (previewMiniPlayerLayout.ts).
-        // ponytail: no composer or details-card obstacles and no resize handles; add them from
-        // previewMiniPlayerLayout.ts when the player is used beside long threads
+        let previewDetails = detailsOpen ? lazyDetailsCard.loaded.flatMap { $0.isHidden ? nil : $0.frame } : nil
+        let previewComposer: CGRect? = composer.isHidden ? nil : composer.frame
         if deviceMiniPlayerShown {
             deviceMiniPlayer.frame = BrowserMiniPlayerView.frame(size: deviceMiniPlayerSize, origin: deviceMiniPlayerOrigin,
-                container: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)))
+                container: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)),
+                composer: previewComposer, details: previewDetails)
             deviceMiniPlayer.layer?.zPosition = 2
         }
         if miniPlayerShown {
             let canvas = NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop))
             let size = miniPlayerSize ?? BrowserMiniPlayerView.size(source: miniPlayerSource)
-            miniPlayer.frame = BrowserMiniPlayerView.frame(size: size, origin: miniPlayerOrigin, container: canvas)
+            miniPlayer.frame = BrowserMiniPlayerView.frame(size: size, origin: miniPlayerOrigin, container: canvas,
+                composer: previewComposer, details: previewDetails)
             miniPlayer.isHidden = chat < size.width + 24
             miniPlayer.layer?.zPosition = 2
         }

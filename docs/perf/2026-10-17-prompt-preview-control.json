@@ -1,0 +1,87 @@
+{
+  "control": "Released v1.5.2 build 27, isolated bundle and URL scheme, updater disabled",
+  "metrics": {
+    "launch.window_ms": [
+      642,
+      213,
+      222
+    ],
+    "launch.live_sidebar_ms": [
+      721.0,
+      255.0,
+      262.0
+    ],
+    "launch.cached_sidebar_ms": [
+      654.0,
+      223.0,
+      232.0
+    ],
+    "idle.cpu_pct": [
+      0.05670653259645687,
+      0.035937798990385864,
+      0.0521868361296415
+    ],
+    "idle.interrupt_wakeups_per_s": [
+      0.6978090163893239,
+      0.5982640123497734,
+      0.4985090259546228
+    ],
+    "idle.package_idle_wakeups_per_s": [
+      0.19937400468266397,
+      0.19942133744992446,
+      0.19940361038184914
+    ],
+    "idle.footprint_mb": [
+      39.485313415527344,
+      37.297813415527344,
+      37.688438415527344
+    ],
+    "idle.peak_footprint_mb": [
+      88.86031341552734,
+      84.28218841552734,
+      84.71968841552734
+    ],
+    "big_thread.footprint_mb": [
+      39.547813415527344
+    ],
+    "big_thread.peak_footprint_mb": [
+      86.25093841552734
+    ],
+    "big_thread.scroll_cpu_ms": [
+      337.946708
+    ],
+    "big_thread.after_scroll_footprint_mb": [
+      47.20415496826172
+    ],
+    "big_thread.after_scroll_peak_mb": [
+      101.95415496826172
+    ]
+  },
+  "noise": [],
+  "quiet": {
+    "noisy": false,
+    "waits": [
+      {
+        "before": "control-idle-0",
+        "waited_s": 0,
+        "load_before": 1.86,
+        "load": 1.86,
+        "quiet": true
+      },
+      {
+        "before": "control-idle-1",
+        "waited_s": 0,
+        "load_before": 1.73,
+        "load": 1.73,
+        "quiet": true
+      },
+      {
+        "before": "control-idle-2",
+        "waited_s": 0,
+        "load_before": 1.8,
+        "load": 1.8,
+        "quiet": true
+      }
+    ]
+  }
+}
