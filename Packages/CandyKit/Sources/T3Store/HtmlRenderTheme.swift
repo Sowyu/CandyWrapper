@@ -5,6 +5,13 @@ import T3Protocol
 /// standard palette (themePalettes.ts:137-262) mapped to the variables pages style against.
 // ponytail: the standard light and dark palettes only; follow custom themes when the app gets them (WP-E)
 public struct HtmlRenderTheme: Sendable, Equatable {
+    public static func imageRequest(_ data: JSONValue) -> (src: String, name: String)? {
+        guard data["jsonrpc"]?.stringValue == "2.0", data["method"]?.stringValue == "t3/notifications/open-image",
+              let src = data["params"]?["src"]?.stringValue,
+              src.lowercased().hasPrefix("https://") || src.lowercased().hasPrefix("http://") || src.lowercased().hasPrefix("data:image/") else { return nil }
+        let label = String((data["params"]?["name"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        return (src, label.isEmpty ? "Image" : label)
+    }
     public let dark: Bool
     public let variables: [String: String]
 

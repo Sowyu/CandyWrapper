@@ -440,6 +440,7 @@ final class ComposerController {
 
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
+        var refreshComposer = true
         switch event {
         case .snapshot(let snapshot):
             // Hub snapshots never ride in a config snapshot; keep the last ones.
@@ -450,7 +451,12 @@ final class ComposerController {
             config.environmentThemes = themes
         case .environmentThemesUpdated(let themes): config.environmentThemes = themes
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
-        case .providerStatuses(let providers): config.providers = providers
+        case .providerStatuses(let providers):
+            guard config.providers != providers else { return }
+            let unchanged = config.providers.count == providers.count
+                && zip(config.providers, providers).allSatisfy { $0.hasSamePresentation(as: $1) }
+            config.providers = providers
+            refreshComposer = !unchanged
         case .settingsUpdated(let settings): config.settings = settings
         case .keybindingsUpdated(let rules):
             config.keybindings = rules
@@ -470,7 +476,7 @@ final class ComposerController {
         }
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         switch event { case .snapshot, .settingsUpdated: migrateModelPreferences(environmentId); default: break }
-        if environmentId == targetEnvironmentId { refresh() }
+        if refreshComposer && environmentId == targetEnvironmentId { refresh() }
         onConfigChange?(environmentId)
         configObservers.forEach { $0(environmentId) }
     }
@@ -1229,6 +1235,7 @@ final class ComposerController {
 
     private func refresh() {
         refreshQueued = false
+        panel.model.commandOutputEnabled = targetEnvironmentId.flatMap { serverConfigs[$0] }?.capabilities.contains("commandOutputStreaming") == true
         panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
         panel.lazyDiffPanel.set(\.reviewComments, contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") })
         if threadFindTarget != openThreadId { closeThreadFind() }
@@ -1243,6 +1250,10 @@ final class ComposerController {
         if let thread = shellThread, thread.status == .failed, thread.lastErrorClass == .usageLimit {
             runState.resumableRunId = thread.latestRunId
         }
+        composer.isCompacting = projection.map {
+            let state = TimelineRunState(projection: $0)
+            return state.isWorking && TimelineRunState.compactRequestActive($0, latestRun: state.latestRun)
+        } ?? false
         composer.runState = runState
         composer.isDraftRoute = panel.isDraft
         // A rewind is no busy spinner in T3: the arrow stays, disabled with "Rewinding conversation".
@@ -2569,19 +2580,25 @@ extension ComposerController {
             return .init(items: threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
         case .pullRequest:
             let env = targetEnvironmentId ?? ""
+            let linked = ThreadPullRequests.visible(shellThread?.pullRequests ?? [])
             let available = menuState.pullRequestsSupported[env] == true && menuProject != nil && menuRepository != nil
-            guard available else {
-                return .init(items: [], emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: false, pullRequestsAvailable: false))
-            }
             let key = pullRequestKey(trigger.query)
-            guard let listed = menuState.pullRequests, listed.key == key else {
-                return .init(items: [], emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: true))
-            }
-            // The exact number's detail leads when the list lacks it.
+            let listed = menuState.pullRequests.flatMap { $0.key == key ? $0 : nil }
             let exact = menuState.exactPullRequest.flatMap { $0.key == key && String($0.number) == trigger.query ? $0.entry : nil }
-            let entries = exact.map { e in [e] + listed.entries.filter { $0.reference.number != e.reference.number } } ?? listed.entries
+            let listedEntries = listed?.entries ?? []
+            var entries = exact.map { e in [e] + listedEntries.filter { $0.reference.number != e.reference.number } } ?? listedEntries
+            for link in linked where !entries.contains(where: { $0.reference.url == link.url }) {
+                let snapshot = link.snapshot
+                let pr = PullRequestReference(number: link.number, title: snapshot?.title ?? "#\(link.number)", url: link.url,
+                    headBranch: snapshot?.headBranch ?? "", baseBranch: snapshot?.baseBranch ?? "",
+                    state: snapshot?.state.rawValue ?? "open", isDraft: snapshot?.isDraft ?? false)
+                let query = trigger.query.lowercased()
+                if query.isEmpty || "#\(pr.number) \(pr.title) \(link.repository) \(pr.headBranch)".lowercased().contains(query) {
+                    entries.append(.init(reference: pr, repository: link.repository, authorLogin: nil, updatedAt: snapshot?.updatedAt?.raw ?? ""))
+                }
+            }
             let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: entries, hostSearched: true)
-            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: false, pullRequestsFailed: listed.failed,
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: available && listed == nil, pullRequestsAvailable: available || !linked.isEmpty, pullRequestsFailed: listed?.failed == true,
                                                                            query: trigger.query))
         }
     }
@@ -2853,6 +2870,17 @@ extension ComposerController {
 
     fileprivate func setUpAttachments() {
         composer.onFiles = { [weak self] files in self?.addFiles(files) }
+        composer.onPullRequestDropped = { [weak self] pr in
+            guard let self else { return false }
+            let reference = ComposerContext.pullRequestReference(pr)
+            let previous = self.menuState.records[reference.contextId]
+            self.menuState.records[reference.contextId] = ComposerContext.pullRequestRecord(pr)
+            guard self.composer.insertMentionAtEnd(ComposerContext.reference(reference)) else {
+                self.menuState.records[reference.contextId] = previous
+                return false
+            }
+            return true
+        }
         composer.onThreadsDropped = { [weak self] ids in self?.dropThreads(ids) ?? false }
         composer.onPasteText = { [weak self] text, bypass in self?.foldPastedText(text, bypass: bypass) ?? false }
         composer.pasteDirectory = Self.attachmentWorkDirectory

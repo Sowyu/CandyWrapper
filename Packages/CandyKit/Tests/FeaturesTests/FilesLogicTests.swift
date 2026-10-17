@@ -45,7 +45,7 @@ struct FilesLogicTests {
         let c = FileBreadcrumbs.crumbs(projectName: "demo", path: "src/lib/a.ts")
         #expect(c.map(\.label) == ["demo", "src", "lib", "a.ts"])
         #expect(c.map(\.path) == ["", "src", "src/lib", "src/lib/a.ts"])
-        #expect(FileBreadcrumbs.crumbs(projectName: "demo", path: "/etc/hosts").first?.path == "/etc")
+        #expect(FileBreadcrumbs.crumbs(projectName: "demo", path: "/etc/hosts").map(\.path) == ["/", "/etc", "/etc/hosts"])
         let kids = FileBreadcrumbs.children([ProjectEntry(path: "f10", isDirectory: false), ProjectEntry(path: "f9", isDirectory: false),
                                              ProjectEntry(path: "z", isDirectory: true), ProjectEntry(path: "z/q", isDirectory: false)], of: "")
         #expect(kids.map(\.path) == ["z", "f9", "f10"])

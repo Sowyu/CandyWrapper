@@ -145,7 +145,7 @@ struct ModelPickerTests {
         let s = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "claude-haiku-5-5", favorites: [],
                                     rail: .instance("claudeAgent"), query: "haiku", expandedLegacy: [])
         #expect(!s.showsRail)
-        #expect(Self.names(s.rows) == ["Claude Haiku 4.5", "Claude Haiku 5.5 *"])
+        #expect(Self.names(s.rows) == ["Claude Haiku 5.5 *", "Claude Haiku 4.5"])
         let fuzzy = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "", favorites: [],
                                         rail: .instance("claudeAgent"), query: "op 5.5", expandedLegacy: [])
         #expect(Self.names(fuzzy.rows).first == "Claude Opus 5.5")

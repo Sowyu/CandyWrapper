@@ -234,8 +234,9 @@ public enum ComposerLogic {
 
     /// `resolveComposerDispatchMode` (client-runtime composerDispatch.ts:13-23). `steerByDefault`
     /// is the `followUpBehavior` setting (default queue); `alternate` is Cmd/Ctrl held.
-    public static func sendMode(running: Bool, alternate: Bool, steerByDefault: Bool) -> SendMode {
+    public static func sendMode(running: Bool, alternate: Bool, steerByDefault: Bool, canSteer: Bool = true) -> SendMode {
         guard running else { return .auto }
+        guard canSteer else { return .queue }
         return steerByDefault != alternate ? .steer : .queue
     }
 

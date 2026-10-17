@@ -7,7 +7,7 @@ public enum SidebarStage: Sendable {
     case none, nightly, dev
 
     /// `resolveServerBackedAppStageLabel` (branding.logic.ts): a nightly or preview server version means Nightly.
-    public static func from(serverVersion: String?, fallbackLabel: String = "Alpha") -> SidebarStage {
+    public static func from(serverVersion: String?, fallbackLabel: String = "Beta") -> SidebarStage {
         let label: String
         if let v = serverVersion, v.range(of: #"^[^-+]+-(?:nightly|preview)\.\d{8}\.\d+$"#, options: .regularExpression) != nil {
             label = "Nightly"

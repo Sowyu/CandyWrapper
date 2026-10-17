@@ -257,6 +257,34 @@ class WorkRowBase: TimelineRowView {
 
 /// A `work` row: one tool call (`py-0.5`), or the open body of a group (`py-0` lines, `pb-1`).
 final class WorkRowView: WorkRowBase {
+    private var commandContentVisible = true
+    private var commandTasks: [String: Task<Void, Never>] = [:]
+    deinit { commandTasks.values.forEach { $0.cancel() } }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncCommandStreams()
+    }
+    override func viewDidHide() { super.viewDidHide(); syncCommandStreams() }
+    override func viewDidUnhide() { super.viewDidUnhide(); syncCommandStreams() }
+    private func syncCommandStreams() {
+        let wanted = !commandContentVisible || window == nil || pooled || isHiddenOrHasHiddenAncestor || context.model?.commandOutputEnabled != true ? [] : entries.filter {
+            $0.open && $0.entry.itemType == .commandExecution
+        }.map(\.entry)
+        let ids = Set(wanted.map(\.id))
+        for (id, task) in commandTasks where !ids.contains(id) {
+            task.cancel(); commandTasks[id] = nil; context.model?.forgetCommandOutput(id)
+        }
+        guard let model = context.model, let subscribe = model.commandOutput else { return }
+        for entry in wanted where commandTasks[entry.id] == nil {
+            guard let row = entry.projectedItem else { continue }
+            let id = entry.id
+            commandTasks[id] = subscribe(row.sourceThreadId.rawValue, row.sourceItemId.rawValue) { [weak self, weak model] result in
+                guard self?.commandTasks[id] != nil else { return }
+                model?.receiveCommandOutput(id, result)
+            }
+        }
+    }
+
     private var details: [WorkDetailView] = []
     private var entries: [(entry: WorkLogEntry, detail: WorkDetail, open: Bool)] = []
     private var isGroupBody = false
@@ -321,6 +349,7 @@ final class WorkRowView: WorkRowBase {
                                      checkpointStatus: { [weak model = context.model] id in model?.checkpointStatus(id) }),
                     item.ui.expandedEntries.contains(e.id))
         }
+        syncCommandStreams()
         while cards.count < entries.count { cards.append(nil) }
         traceOnly = isGroup && !grouped.isEmpty && grouped.allSatisfy { $0.itemType == .reasoning }
         if traceOnly {
@@ -419,10 +448,14 @@ final class WorkRowView: WorkRowBase {
 
     override func setContentVisible(_ visible: Bool) {
         super.setContentVisible(visible)
+        commandContentVisible = visible
+        syncCommandStreams()
         cards.forEach { $0?.contentVisible = visible }
     }
 
     override func prepareForReuse() {
+        for (id, task) in commandTasks { task.cancel(); context.model?.forgetCommandOutput(id) }
+        commandTasks = [:]
         super.prepareForReuse()
         cards.forEach { $0?.stop() }
     }

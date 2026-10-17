@@ -4,6 +4,16 @@ import T3Protocol
 /// The Pull Requests page's list logic (apps/web/src/components/pullRequest/pullRequestList.logic.ts
 /// and the route's own constants, routes/_chat.pull-requests.tsx:210-276).
 public enum PullRequestListLogic {
+    /// Final rows stay cached during a timed or activation refresh. The user also requests closed
+    /// PRs here; T3 3234 only skips merged PRs (#19374). Explicit refresh does not use this filter.
+    public static func periodicRefreshState(_ state: String) -> String? {
+        switch state {
+        case "closed", "merged": nil
+        case "all": "open"
+        default: state
+        }
+    }
+
     public typealias Entry = PullRequestListEntry
 
     /// `PullRequestGroupKey`, in display order.

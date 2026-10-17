@@ -193,6 +193,16 @@ func waitFor(_ label: String, after: Int = 0, timeout: Double, _ predicate: @esc
 func payload(_ e: [String: Any]) -> [String: Any] { (e["payload"] as? [String: Any]) ?? [:] }
 
 switch scenario {
+case "nightly":
+    guard let thread = ProcessInfo.processInfo.environment["CANDY_TRANSCRIPT_THREAD_ID"] else {
+        print("nightly needs CANDY_TRANSCRIPT_THREAD_ID from the sandbox"); exit(2)
+    }
+    try await request("server.getConfig")
+    try await request("server.getDatabaseStorage")
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    try await request("orchestration.subscribeThread", ["threadId": thread, "requestCompletionMarker": true])
+    await pause(4)
+
 case "basic":
     try await request("server.getConfig")
     try await request("subscribeServerConfig")

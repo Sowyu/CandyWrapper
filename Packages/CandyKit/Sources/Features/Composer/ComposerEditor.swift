@@ -686,11 +686,13 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     var fileDrop: ComposerFileDrop?
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if PullRequestDrag.read(sender.draggingPasteboard) != nil { return .copy }
         if ComposerView.mention(in: sender) != nil { return .copy }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
         return super.draggingEntered(sender)
     }
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if PullRequestDrag.read(sender.draggingPasteboard) != nil { return .copy }
         if ComposerView.mention(in: sender) != nil { return .copy }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.entered(sender) }
         return super.draggingUpdated(sender)
@@ -700,6 +702,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         super.draggingExited(sender)
     }
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let pr = PullRequestDrag.read(sender.draggingPasteboard) { return enclosingComposer?.onPullRequestDropped?(pr) ?? false }
         if let mention = ComposerView.mention(in: sender), let composer = enclosingComposer {
             return composer.insertMentionAtEnd(mention)
         }

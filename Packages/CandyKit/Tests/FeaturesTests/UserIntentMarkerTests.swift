@@ -14,7 +14,7 @@ struct UserIntentMarkerTests {
         #expect(UserIntentMarkerView.presentation(.steer)?.label == "Steer")
         #expect(UserIntentMarkerView.presentation(.steer)?.tooltip == "Steered the active turn")
         #expect(UserIntentMarkerView.presentation(.promotedQueuedToSteer)?.tooltip == "Originally queued, then promoted to steer the active turn")
-        #expect(UserIntentMarkerView.presentation(.queuedTurn).map { "\($0.label) \($0.icon)" } == "Queued false")
+        #expect(UserIntentMarkerView.presentation(.queuedTurn).map { "\($0.label) \($0.icon)" } == "From queue false")
     }
 
     @Test func steeredRowsDrawTheMarkerAboveTheBubble() throws {

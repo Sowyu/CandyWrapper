@@ -203,6 +203,19 @@ public struct ServerProviderWorkspaceSnapshot: Codable, Hashable, Sendable {
 /// `ServerProvider` (server.ts:213-300), one configured provider instance. Fields nothing here
 /// reads (auth, usage limits, advisories) are skipped.
 public struct ServerProvider: Decodable, Hashable, Sendable {
+    /// Health timestamps change without changing the composer or model picker.
+    public func hasSamePresentation(as other: Self) -> Bool {
+        var lhs = self, rhs = other
+        lhs.checkedAt = nil; rhs.checkedAt = nil
+        if let snapshots = lhs.workspaceSnapshots {
+            lhs.workspaceSnapshots = snapshots.map { var value = $0; value.checkedAt = ""; return value }
+        }
+        if let snapshots = rhs.workspaceSnapshots {
+            rhs.workspaceSnapshots = snapshots.map { var value = $0; value.checkedAt = ""; return value }
+        }
+        return lhs == rhs
+    }
+
     public var instanceId: ProviderInstanceId
     /// Driver kind slug (`claudeAgent`, `codex`, ...). Picks the icon; never a routing key.
     public var driver: String

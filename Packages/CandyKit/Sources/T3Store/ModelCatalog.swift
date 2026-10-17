@@ -119,6 +119,8 @@ public enum ModelPickerSearch {
     public static func score(_ m: ServerProviderModel, entry e: ProviderInstanceEntry, query: String, isFavorite: Bool) -> Int? {
         let tokens = normalize(query).split(whereSeparator: \.isWhitespace).map(String.init)
         if tokens.isEmpty { return 0 }
+        let exactQuery = tokens.joined(separator: " ")
+        if [m.name, m.shortName ?? ""].contains(where: { normalize($0).split(whereSeparator: \.isWhitespace).joined(separator: " ") == exactQuery }) { return -1000 }
         let fields = [normalize(m.name)] + [m.shortName, m.subProvider].compactMap { $0.map(normalize) }
             + [normalize(e.driver), normalize(e.displayName), searchText(m, e)]
         var score = 0
@@ -144,7 +146,7 @@ public enum ModelPickerSearch {
         let value = Array(valueString), query = Array(queryString)
         guard !value.isEmpty, !query.isEmpty else { return nil }
         if value == query { return exact }
-        if valueString.hasPrefix(queryString) { return prefix + lengthPenalty(value, query) }
+        if valueString.hasPrefix(queryString) { return prefix }
         var bestBoundary: Int?
         for marker in [" ", "-", "_", "/"] {
             if let r = valueString.range(of: marker + queryString) {
@@ -152,10 +154,8 @@ public enum ModelPickerSearch {
                 bestBoundary = min(bestBoundary ?? .max, index)
             }
         }
-        if let b = bestBoundary { return boundary + b * 2 + lengthPenalty(value, query) }
-        if let r = valueString.range(of: queryString) {
-            return includes + valueString.distance(from: valueString.startIndex, to: r.lowerBound) * 2 + lengthPenalty(value, query)
-        }
+        if bestBoundary != nil { return boundary }
+        if valueString.contains(queryString) { return includes }
         if let fuzzy, let s = subsequence(value, query) { return fuzzy + s }
         return nil
     }
@@ -170,7 +170,7 @@ public enum ModelPickerSearch {
             qi += 1
             if qi == query.count {
                 let span = vi - first + 1 - query.count
-                return first * 2 + gaps * 3 + span + min(64, value.count - query.count)
+                return gaps * 3 + span
             }
         }
         return nil
@@ -250,14 +250,14 @@ public struct ModelPickerSections: Sendable {
         }
 
         if searching {
-            let ranked = flat.compactMap { item -> (ModelPickerItem, Int, String)? in
+            let ranked = flat.enumerated().compactMap { order, item -> (ModelPickerItem, Int, Int)? in
                 guard let s = ModelPickerSearch.score(item.model, entry: item.entry, query: query, isFavorite: item.isFavorite) else { return nil }
-                return (item, s, ModelPickerSearch.searchText(item.model, item.entry))
+                return (item, s, order)
             }
             rows = ranked.sorted { a, b in
                 if a.1 != b.1 { return a.1 < b.1 }
                 if a.0.isFavorite != b.0.isFavorite { return a.0.isFavorite }
-                return a.2.localizedStandardCompare(b.2) == .orderedAscending
+                return a.2 < b.2
             }.map { .model($0.0) }
             return
         }

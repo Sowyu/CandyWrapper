@@ -35,6 +35,7 @@ public final class PullRequestDetailView: DSView {
         }
     }
     public var refreshing = false { didSet { more.icon = refreshing ? .refreshCw : .ellipsis } }
+    public var pendingAction: String?
     public var actionPending = false { didSet { composer?.actionPending = actionPending; rebuildActions() } }
     public var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) { didSet { rebuild() } }
     /// The merge method the reader last picked (`pullRequestMergeMethod` in the UI state store).
@@ -690,6 +691,21 @@ public final class PullRequestDetailView: DSView {
             items.append(.separator)
             items.append(confirmMenuItem("revert", title: "Revert changes", armed: "Confirm revert?", icon: .rotateCcw,
                                          armedDestructive: true, index: items.count, menu: menuRef))
+        }
+        if PullRequestDetailLogic.canDeleteBranch(d) {
+            var delete = MenuItem(pendingAction == "delete-branch" ? "Deleting branch..." : "Delete branch", icon: .trash2, destructive: true, disabled: actionPending)
+            delete.action = { [weak self] in
+                guard let self, let window = self.window else { return }
+                let dialog = DialogView(kind: .alertDialog, title: "Delete branch \(d.headBranch)?",
+                    message: "This deletes \(d.headBranch) from \(d.headRepositoryNameWithOwner ?? d.repository). Local branches and worktrees are not changed.")
+                let cancel = ButtonView("Cancel", variant: .outline, size: .sm)
+                let confirm = ButtonView("Delete branch", variant: .destructive, size: .sm)
+                dialog.footerButtons = [cancel, confirm]
+                let host = ModalHost.present(dialog, in: window)
+                cancel.action = { host.close() }
+                confirm.action = { [weak self] in host.close(); self?.onAction?("delete-branch", nil) }
+            }
+            items += [.separator, delete]
         }
         let popup = MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
         menuRef.popup = popup

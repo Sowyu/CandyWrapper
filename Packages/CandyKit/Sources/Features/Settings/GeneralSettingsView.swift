@@ -143,6 +143,12 @@ public final class GeneralSettingsView: SettingsPageBase {
                                     key: "sidebarAutoSettleAfterDays", reset: "auto-settle",
                                     read: { $0["sidebarAutoSettleAfterDays"] != .null },
                                     write: { on in ["sidebarAutoSettleAfterDays": on ? .number(3) : .null] })
+        let keep = serverSwitch("auto-settle-keep-pull-requests", "Inactivity does not settle threads with a pull request. Merge and close still do.",
+                                key: "sidebarAutoSettleKeepPullRequests", reset: "keep threads with pull requests")
+        keep.title = "Keep threads with a PR"
+        binder.add { [weak self, weak keep] in
+            keep?.isHidden = self?.context.scope.allSupport("threadAutoSettlementScope") != true || self?.server["sidebarAutoSettleAfterDays"] == .null
+        }
         let days = InputView(placeholder: "", text: "", size: .sm)
         days.frame.size = NSSize(width: 96, height: 28)
         days.setAccessibilityLabel("Days of inactivity before auto-settle")
@@ -168,7 +174,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             daysRow?.isHidden = !supported || self.server["sidebarAutoSettleAfterDays"] == .null
             if let days, !days.state.focused { days.text = self.server["sidebarAutoSettleAfterDays"].intValue.map(String.init) ?? "" }
         }
-        let s = section("organization", "Organization", [grouping, order, resume, snooze, shelf, merged, inactive, daysRow])
+        let s = section("organization", "Organization", [grouping, order, resume, snooze, shelf, merged, inactive, daysRow, keep])
         binder.add { [weak s] in
             guard let s else { return }
             // Hidden rows leave the card, like T3's conditional rendering.

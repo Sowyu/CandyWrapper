@@ -104,6 +104,12 @@ final class HtmlRenderRowView: TimelineRowView {
             guard frame.userIsActive, let url = SafeExternalURL.parse(link.url) else { return }
             if let open = model?.onOpenWebLink { open(url, link.modified) } else { NSWorkspace.shared.open(url) }
             frame.post(HtmlRenderTheme.result(link.id))
+        } else if frame.userIsActive, let image = HtmlRenderTheme.imageRequest(data),
+                  let url = URL(string: image.src), let window = frame.window {
+            ExpandedImagePreviewView(items: [.init(key: image.src, name: image.name, load: { side in
+                if url.scheme?.lowercased() == "data" { return await MarkdownImages.decodeData(image.src, side: side)?.image }
+                return await MarkdownImages.download(url, side: side)?.image
+            })], index: 0).present(in: window)
         } else if frame.userIsActive, let stroke = HtmlRenderShortcuts.keyDown(data) {
             model?.onFrameShortcut?(stroke)
         }

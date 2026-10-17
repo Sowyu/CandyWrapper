@@ -103,6 +103,20 @@ final class ThreadSession {
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
+            let supervisor = shell.supervisor
+            panel?.model.commandOutput = { thread, item, receive in
+                supervisor.subscribe("orchestration.subscribeCommandOutput", payload: {
+                    .object(["threadId": .string(thread), "itemId": .string(item)])
+                }, handler: { event in
+                    switch event {
+                    case .value(let value):
+                        do { let frame = try value.decode(as: CommandOutputFrame.self); await receive(.success(frame)) }
+                        catch { await receive(.failure(error)) }
+                    case .interrupted(let error): await receive(.failure(error))
+                    case .subscribed: break
+                    }
+                })
+            }
         }
         let store = self.store
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
@@ -534,6 +548,11 @@ final class ThreadController {
         // the thread's pull requests tab (`ThreadPullRequestBadgeControl`).
         sidebar.actions.openPullRequest = { [weak self, weak sidebar] id in
             guard let self, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { return }
+            if !ClientSettingsStore.shared.current.bool("pullRequestLinksOpenInApp") || NSApp.currentEvent?.buttonNumber == 2 {
+                if let href = ThreadPullRequests.current(thread.pullRequests ?? [])?.url ?? thread.linkedPullRequest?.url ?? thread.branchPullRequest?.url,
+                   let url = SafeExternalURL.parse(href) { NSWorkspace.shared.open(url) }
+                return
+            }
             self.open(id)
             if SidebarPullRequestBadge(thread)?.opensList == true {
                 self.panel.mutatePanel { $0.open(.pullRequests); return [] }

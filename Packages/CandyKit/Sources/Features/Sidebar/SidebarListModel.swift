@@ -471,7 +471,7 @@ public enum SidebarListBuilder {
             ? SidebarModel.resolveSettledThreadTimestamp(t) : (shell.latestUserMessageAt ?? shell.updatedAt)
         let wake = section == .snoozed ? shell.snoozedUntil?.epochMs : nil
         let working = status == .working
-            ? SidebarModel.resolveWorkingStartedAt(latestRun: t.latestRun, runtime: t.runtime)?.epochMs : nil
+            ? SidebarModel.resolveWorkingStartedAt(latestRun: t.latestRun, runtime: t.runtime)?.epochMs : status == .waiting ? t.latestRun?.completedAt?.epochMs : nil
         return SidebarRowModel(
             id: shell.id, variant: variant, action: action, section: section, title: shell.title,
             projectLabel: group?.label ?? project?.title, projectTitle: project?.title, projectIcon: project.map(ProjectIconSource.init),

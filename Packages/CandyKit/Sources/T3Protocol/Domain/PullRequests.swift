@@ -170,6 +170,7 @@ public struct PullRequestCapabilities: Codable, Hashable, Sendable {
     public var edit: Edit?
     public var stacks: Bool?
     public var stackActions: Bool?
+    public var deleteBranch: Bool?
     public var labels: Bool?
 }
 

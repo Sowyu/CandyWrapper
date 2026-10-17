@@ -16,7 +16,7 @@ public enum ProjectSettings {
         "textGenerationModelSelection", "sourceControlWriterModelSelection", "reviewGuideModelSelection", "reviewGuideInstructions",
         "sourceControlWritingStyle", "removeAgentCreditsOnMerge",
         "branchNamingMode", "branchNamePrefix", "branchNameInstructions", "pullRequestMergeMethod", "sidebarAutoSettleOnMerge",
-        "sidebarAutoSettleAfterDays", "continueThreadsAfterServerUpdate", "responseStreamingMode",
+        "sidebarAutoSettleAfterDays", "sidebarAutoSettleKeepPullRequests", "continueThreadsAfterServerUpdate", "responseStreamingMode",
     ]
     static let scopedSet = Set(scopedKeys)
 
@@ -108,7 +108,7 @@ public enum ProjectSettings {
     }
 
     /// The four worktree rules of `storageCleanup` (`WorktreeCleanupRules`).
-    public static let worktreeRuleKeys = ["worktreeAfterDays", "worktreeOnMerge", "worktreeOnDelete", "worktreeUnchanged"]
+    public static let worktreeRuleKeys = ["worktreeAfterDays", "worktreeSettledAfterDays", "worktreeOnMerge", "worktreeOnDelete", "worktreeUnchanged"]
 
     /// `resolveWorktreeCleanup`: custom rules, off, or the environment's `storageCleanup` rules.
     public static func worktreeCleanup(_ settings: ServerSettingsValues, projectId: String?) -> [String: JSONValue] {
@@ -116,14 +116,14 @@ public enum ProjectSettings {
         switch policy["mode"]?.stringValue {
         case "custom": return policy["rules"]?.objectValue ?? [:]
         case "off":
-            var rules: [String: JSONValue] = ["worktreeAfterDays": .null, "worktreeOnMerge": .bool(false), "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false)]
+            var rules: [String: JSONValue] = ["worktreeAfterDays": .null, "worktreeSettledAfterDays": .null, "worktreeOnMerge": .bool(false), "worktreeOnDelete": .bool(false), "worktreeUnchanged": .bool(false)]
             // 2994 keeps the environment's `worktreeKeepWhen` (shared projectSettings.ts:275-282). 2861 servers have none.
             if let keep = settings["storageCleanup"].objectValue?["worktreeKeepWhen"] { rules["worktreeKeepWhen"] = keep }
             return rules
         default:
             let storage = settings["storageCleanup"].objectValue ?? [:]
             // `StorageCleanupSettings` decoding defaults for absent rules.
-            var rules = Dictionary(uniqueKeysWithValues: worktreeRuleKeys.map { ($0, storage[$0] ?? ($0 == "worktreeAfterDays" ? .null : .bool(false))) })
+            var rules = Dictionary(uniqueKeysWithValues: worktreeRuleKeys.map { ($0, storage[$0] ?? ($0.hasSuffix("AfterDays") ? .null : .bool(false))) })
             if let keep = storage["worktreeKeepWhen"] { rules["worktreeKeepWhen"] = keep }
             return rules
         }

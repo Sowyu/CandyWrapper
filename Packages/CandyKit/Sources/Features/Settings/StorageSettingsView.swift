@@ -13,6 +13,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
     private var locationRow: SettingsRowView!
     private var modeRow: SettingsRowView!
     private var keepRow: SettingsRowView!
+    private var settledRow: SettingsRowView!
     private var ruleRows: [SettingsRowView] = []
     private var cleanup: SettingsSectionView!
     private var deleteRow: SettingsRowView!
@@ -22,6 +23,9 @@ public final class StorageSettingsView: ScopedSettingsPage {
     private var reports: [String: StorageCleanupReport?] = [:]
     private var reportTasks: [String: Task<Void, Never>] = [:]
     private var deleting = false
+    private var databaseTasks: [String: Task<Void, Never>] = [:]
+    private var databaseRows: [String: SettingsSectionView] = [:]
+
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -32,7 +36,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
         binder.add { [weak self] in self?.update() }
     }
 
-    deinit { reportTasks.values.forEach { $0.cancel() } }
+    deinit { reportTasks.values.forEach { $0.cancel() }; databaseTasks.values.forEach { $0.cancel() } }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -78,6 +82,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
             select.selectedIndex = mixedModes ? nil : ["inherit", "off", "custom"].firstIndex(of: m)
         }
         for r in ruleRows { r.isHidden = isProject && (mixedModes || m != "custom") }
+        settledRow.isHidden = settledRow.isHidden || !scope.connected.allSatisfy { $0.capabilities.contains("settledWorktreeCleanup") }
         // StorageSettings.tsx:572-575: the keep rule needs `storageCleanupRun` on every connected environment.
         keepRow.isHidden = (isProject && (mixedModes || m != "custom")) || !scope.connected.allSatisfy { $0.capabilities.contains("storageCleanupRun") }
         worktrees.group.rows = worktrees.group.rows
@@ -93,6 +98,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
 
     /// Follows each supported environment's report stream while the page shows; drops the rest.
     private func syncReports() {
+        syncDatabases()
         let want = window == nil || isProject ? [] : Set(supported.map(\.id))
         for (id, task) in reportTasks where !want.contains(id) {
             task.cancel()
@@ -108,10 +114,49 @@ public final class StorageSettingsView: ScopedSettingsPage {
         }
     }
 
+    private func syncDatabases() {
+        let environments = window == nil || isProject ? [] : context.scope.connected.filter {
+            $0.capabilities.contains("databaseStorage") && !UserDefaults.standard.bool(forKey: "database-storage-notice-dismissed:" + $0.id)
+        }
+        let want = Set(environments.map(\.id))
+        for (id, task) in databaseTasks where !want.contains(id) {
+            task.cancel(); databaseTasks[id] = nil; databaseRows[id] = nil
+        }
+        for environment in environments where databaseTasks[environment.id] == nil {
+            let id = environment.id, label = environment.label
+            databaseTasks[id] = context.subscribe?(id, "server.getDatabaseStorage", .object([:])) { [weak self] value in
+                guard let self, self.databaseTasks[id] != nil else { return }
+                if let status = try? value.decode(as: DatabaseStorageStatus.self), status.recommendsCompaction {
+                    let copy = ButtonView("Copy command", variant: .outline, size: .sm)
+                    copy.action = { [weak copy] in
+                        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(status.compactCommand, forType: .string)
+                        copy?.title = "Copied"
+                    }
+                    let row = self.row(nil, title: String(format: "Reclaim %.1f GiB on %@", status.reclaimableBytes / 1_073_741_824, label),
+                        detail: "Old history is cleaned up automatically, but this database still holds the freed space. Run the command on \(label) to return it to disk; it pauses and restarts the background service. Quit the desktop app first if it hosts this environment.\n\n\(status.compactCommand)", control: copy)
+                    let dismiss = ButtonView("Dismiss", variant: .ghost, size: .sm)
+                    dismiss.action = { [weak self] in
+                        UserDefaults.standard.set(true, forKey: "database-storage-notice-dismissed:" + id)
+                        self?.databaseTasks.removeValue(forKey: id)?.cancel(); self?.databaseRows[id] = nil
+                        self?.rebuildDatabaseBody()
+                    }
+                    row.accessories = [dismiss]
+                    self.databaseRows[id] = self.section("storage-database-" + id, "Database", [row])
+                } else { self.databaseRows[id] = nil }
+                self.rebuildDatabaseBody()
+            }
+        }
+        rebuildDatabaseBody()
+    }
+
+    private func rebuildDatabaseBody() {
+        body = [notice] + databaseRows.keys.sorted().compactMap { databaseRows[$0] } + [worktrees, artifacts, cleanup]
+    }
+
     /// `hasRules` (StorageSettings.tsx:265-283): any retention or worktree rule on, at the environment or in a custom project policy.
     private var hasRules: Bool {
         func enabled(_ r: [String: JSONValue]) -> Bool {
-            (r["worktreeAfterDays"].map { $0 != .null } ?? false) || r["worktreeOnMerge"]?.boolValue == true
+            (r["worktreeAfterDays"].map { $0 != .null } ?? false) || (r["worktreeSettledAfterDays"].map { $0 != .null } ?? false) || r["worktreeOnMerge"]?.boolValue == true
                 || r["worktreeOnDelete"]?.boolValue == true || r["worktreeUnchanged"]?.boolValue == true
         }
         return supported.contains { e in
@@ -265,7 +310,10 @@ public final class StorageSettingsView: ScopedSettingsPage {
         let merged = ruleSwitch("Delete merged worktrees",
                                 "Remove worktrees whose pull request is merged and whose commits are included in the default branch.", key: "worktreeOnMerge")
         let unchanged = ruleSwitch("Delete unchanged worktrees", "Remove worktrees with no commits beyond the default branch.", key: "worktreeUnchanged")
-        ruleRows = [onDelete, inactive, merged, unchanged]
+        settledRow = retentionRow("Delete settled worktrees",
+            "Remove worktrees this many days after their thread settles. Set 0 days to remove them at the next cleanup. Branches and thread history are kept.",
+            key: "worktreeSettledAfterDays", worktree: true)
+        ruleRows = [onDelete, inactive, settledRow, merged, unchanged]
         keepRow = keepWhenRow()
         return section("storage-worktrees", "Worktrees", [locationRow, modeRow] + ruleRows + [keepRow])
     }
@@ -319,7 +367,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
 
     /// `RetentionControl`: days 1 to 3650 beside a switch (on starts at 8); "Off" when off.
     private func retentionRow(_ title: String, _ detail: String, key: String, worktree: Bool) -> SettingsRowView {
-        let control = RetentionControl(label: title)
+        let control = RetentionControl(label: title, minimum: key == "worktreeSettledAfterDays" ? 0 : 1)
         let r = row(nil, title: title, detail: detail, control: control)
         r.accessories = [ResetSlot(label: "")]
         control.onChange = { [weak self] value in
@@ -356,14 +404,14 @@ final class RetentionControl: DSView {
         }
     }
 
-    init(label: String) {
+    init(label: String, minimum: Double = 1) {
         super.init(frame: .zero)
-        field.range = 1...3650
+        field.range = minimum...3650
         field.setAccessibilityLabel("\(label) in days")
         toggle.setAccessibilityLabel(label)
         off.lineHeight = 16
         // ponytail: the days field commits on every step and edit; T3 commits on blur. Debounce if the server churns
-        field.onChange = { [weak self] v in self?.onChange?(Int(min(3650, max(1, v.rounded())))) }
+        field.onChange = { [weak self] v in self?.onChange?(Int(min(3650, max(minimum, v.rounded())))) }
         toggle.onChange = { [weak self] on in self?.onChange?(on ? 8 : nil) }
         for v in [field, off, toggle] as [NSView] { addSubview(v) }
         value = nil

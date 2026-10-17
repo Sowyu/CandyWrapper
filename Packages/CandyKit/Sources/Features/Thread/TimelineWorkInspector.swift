@@ -159,6 +159,10 @@ struct WorkDetail: Hashable {
             images(ToolOutputImage.list(threadId: row.sourceThreadId, itemId: row.sourceItemId, count: count))
         }
         switch output {
+        case .live(let text, let truncated, let running):
+            if !text.isEmpty { mono(text, .output) }
+            else if !running { mono("No output.", .note) }
+            if truncated { mono("Earlier output was truncated.", .note) }
         case .loading: mono("Loading output…", .note)
         case .failed(let message): mono("Couldn't load output: " + message, .error)
         case .fetched(.gone): mono("Couldn't load output: Output is no longer available.", .error)
@@ -172,7 +176,7 @@ struct WorkDetail: Hashable {
     func showsImageOutput(_ output: ToolOutputState?) -> Bool {
         if blocks.contains(where: { if case .image(.toolOutput) = $0.kind { true } else { false } }) { return true }
         switch output {
-        case .fetched?, .failed?: return false
+        case .fetched?, .failed?, .live?: return false
         case .loading?, nil: return fetches
         }
     }
@@ -200,7 +204,7 @@ struct WorkDetail: Hashable {
     static func inspector(_ item: TurnItem, row: ProjectedTurnItem? = nil, workspaceRoot: String?, output: ToolOutputState?,
                           checkpointStatus: ((String) -> String?)?) -> WorkDetail {
         var d = WorkDetail()
-        d.fetches = TurnItemDetail.needsFetch(item)
+        d.fetches = TurnItemDetail.needsFetch(item) || (item.type == .commandExecution && output != nil)
         func structured(_ text: String?) {
             guard let text, !text.isEmpty else { return }
             d.blocks.append(Block(text: text, kind: .mono(.output), gap: d.blocks.isEmpty ? 0 : 8))

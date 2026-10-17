@@ -568,7 +568,9 @@ final class GroupHeaderView: DSView {
 /// `#n title` with the checks and verdict glyphs and the diff counts on the right, and under it the
 /// author, repository and labels with the time on the right. `px-3 py-2.5`, `rounded-md`,
 /// `bg-accent` selected, `hover:bg-accent/60`. Shift shows the quick actions.
-final class PullRequestRowView: DSView {
+final class PullRequestRowView: DSView, NSDraggingSource {
+    private var dragged = false
+    private var canDragContext = true
     static let height: CGFloat = 56
     /// The linked pull requests panel's row (`PULL_REQUEST_ROW_CLASS`, `py-1 pr-1`,
     /// stepping in `1.25rem` per stack layer): 44pt.
@@ -650,6 +652,7 @@ final class PullRequestRowView: DSView {
         }
         panelDepth = line.depth
         configure(e, selected: false, showProvider: false, matchedElsewhere: false, speedMode: false, nowMs: nowMs)
+        canDragContext = snap != nil
         watch.isHidden = link.watch == nil || (snap != nil && snap?.state != .open)
         // Not synced yet: the muted glyph ("Waiting for host state") and `host/repository` in mono.
         authorless = snap == nil || e.author == nil
@@ -672,6 +675,7 @@ final class PullRequestRowView: DSView {
 
     func configure(_ e: PullRequestListEntry, selected: Bool, showProvider: Bool, matchedElsewhere: Bool, speedMode: Bool,
                    hostActions: [String: Set<String>] = [:], nowMs: Int64) {
+        canDragContext = true
         watch.isHidden = true
         branches.text = ""
         authorless = false
@@ -852,7 +856,30 @@ final class PullRequestRowView: DSView {
 
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2, let entry, let url = URL(string: entry.url),
+              ["http", "https"].contains(url.scheme ?? "") else { return }
+        NSWorkspace.shared.open(url)
+    }
+    override func mouseDown(with event: NSEvent) { dragged = false }
+    override func mouseDragged(with event: NSEvent) {
+        guard !dragged, canDragContext, let entry else { return }
+        dragged = true
+        let pr = PullRequestReference(number: entry.number, title: entry.title, url: entry.url,
+            headBranch: entry.headBranch, baseBranch: entry.baseBranch, state: entry.state, isDraft: entry.isDraft)
+        guard let data = try? JSONEncoder().encode(pr) else { return }
+        let board = NSPasteboardItem()
+        board.setData(data, forType: PullRequestDrag.type)
+        board.setString(entry.url, forType: .string)
+        let item = NSDraggingItem(pasteboardWriter: board)
+        let image = NSImage(size: bounds.size)
+        image.lockFocus(); title.draw(title.bounds); image.unlockFocus()
+        item.setDraggingFrame(bounds, contents: image)
+        beginDraggingSession(with: [item], event: event, source: self)
+    }
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation { .copy }
     override func mouseUp(with event: NSEvent) {
+        guard !dragged else { return }
         let p = convert(event.locationInWindow, from: nil)
         guard let entry, bounds.contains(p) else { return }
         if let onStack, !stack.isHidden, stack.frame.union(stackIcon.frame).insetBy(dx: -2, dy: -4).contains(p) {
