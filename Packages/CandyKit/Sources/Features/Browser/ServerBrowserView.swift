@@ -271,7 +271,8 @@ public final class ServerBrowserView: DSView {
     public var frameSize: CGSize? { reportedSize }
 
     public override func updateLayer() {
-        bar.layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        // ServerBrowserSurface.tsx:722: bg-background, including in the floating preview.
+        bar.layer?.backgroundColor = Themed.color(\.background).withAlphaComponent(1).cgColor(in: self)
         barBorder.backgroundColor = Themed.color(\.border).cgColor(in: self)
         status.color = Themed.color(\.mutedForeground)
     }

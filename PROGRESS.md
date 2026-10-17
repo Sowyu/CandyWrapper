@@ -13,7 +13,9 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Fix sent-image grids hiding prompt text and the stray Connecting strip in Glass, with sandbox screenshot proof. Hold release for user approval. (taken 2026-10-17)
+- [ ] Profile the memory increase already present in v1.5.2: about 38 MB idle and 85 MB startup peak, versus the pre-blur baseline of 34 MB and 34 MB. An isolated published-release control matches the prompt/preview fix build. The cause is not yet isolated. [Measurements](docs/research/prompt-preview-layout-2026-10-17.md#performance-review).
+
+- [x] Prompt and floating preview fixes (2026-10-17): attachments keep their full height above separately collapsed prompt text; browser previews and their control bars are opaque and avoid the details card and composer. Checked in real Glass light/dark windows, including expand. Full suite: 1,530 tests; final focused checks: 9 tests. Performance matches released v1.5.2; the older baseline exposes a pre-existing memory increase. [Review and screenshot paths](docs/research/prompt-preview-layout-2026-10-17.md). Not released; waiting for screenshot approval.
 
 - [x] Progressive blur (2026-10-17): the sidebar art bakes a CIMaskedVariableBlur once per size, and Glass puts a 32pt backdrop `variableBlur` over the timeline top (its mask is read from alpha, one pixel per device pixel, so the backdrop samples at full scale). 131 focused tests passed; the user skipped the full suite and perf-review for this release. Checked on screen in Glass dark.
 - [x] Release v1.5.1 (build 26), published 2026-10-17 from `8915cc0`: Release build, app signatures, downloaded ZIP/DMG hashes and published signed update feed verified.
@@ -37,6 +39,8 @@ The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`
 The code marks known shortcuts with `// ponytail:`, each naming when to fix it (`rg '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
 ## Waiting on the user
+
+- Screenshot approval for the prompt and floating browser preview fixes before any release (2026-10-17).
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).

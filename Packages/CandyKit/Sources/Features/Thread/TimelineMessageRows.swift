@@ -221,7 +221,7 @@ final class UserMessageRowView: TimelineRowView {
     /// A match below a collapsed message's fold opens it (`data-thread-find-fold`, MessagesTimeline.tsx:4737-4740).
     override func activeFindRect() -> CGRect? {
         guard let rect = markdown.activeFindRect() else { return nil }
-        if collapsible, item?.ui.messageExpanded != true, rect.maxY + markdown.frame.minY - Self.padding > Self.collapsedHeight - Self.fade,
+        if collapsible, item?.ui.messageExpanded != true, rect.maxY > Self.collapsedHeight - Self.fade,
            case .message(let m, _, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
@@ -268,17 +268,20 @@ final class UserMessageRowView: TimelineRowView {
     private var attributionSpace: CGFloat { attribution.isHidden ? 0 : UserMessageAttributionView.height + 4 }
     private var markerSpace: CGFloat { attributionSpace + (marker.isHidden ? 0 : UserIntentMarkerView.height + 4) }
 
-    private func metrics(_ width: CGFloat) -> (bubble: CGFloat, body: CGFloat, full: CGFloat) {
+    private func metrics(_ width: CGFloat) -> (bubble: CGFloat, attachments: CGFloat, body: CGFloat, full: CGFloat) {
         let maxBubble = width * 0.8
         let inner = maxBubble - Self.padding * 2
         // `fit-content`: the max-content width (unwrapped) if it fits, else the full 80%.
         let natural = max(markdown.layout(forWidth: 100_000).contentWidth, attachments.naturalWidth)
         var bubbleWidth = natural > inner ? maxBubble : min(maxBubble, ceil(natural * 64) / 64 + Self.padding * 2)
         if collapsible { bubbleWidth = max(bubbleWidth, min(maxBubble, toggle.intrinsicContentSize.width - 4 + Self.padding * 2)) }
-        let full = markdown.height(forWidth: bubbleWidth - Self.padding * 2) + attachments.height(forWidth: bubbleWidth - Self.padding * 2)
+        // MessagesTimeline.tsx:2420-2528 puts attachments before CollapsibleUserMessageBody.
+        // Only the prompt text uses its 176pt fold; images always keep their full height.
+        let attachmentsHeight = attachments.height(forWidth: bubbleWidth - Self.padding * 2)
+        let full = markdown.height(forWidth: bubbleWidth - Self.padding * 2)
         let expanded = item?.ui.messageExpanded ?? false
         let body = collapsible && !expanded ? min(full, Self.collapsedHeight) : full
-        return (bubbleWidth, body, full)
+        return (bubbleWidth, attachmentsHeight, body, full)
     }
 
     /// The bubble's hairline, for tests.
@@ -290,7 +293,7 @@ final class UserMessageRowView: TimelineRowView {
     override func height(forWidth width: CGFloat) -> CGFloat {
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        return markerSpace + m.body + footer + Self.padding * 2 + 4 + 24 + 16
+        return markerSpace + m.attachments + m.body + footer + Self.padding * 2 + 4 + 24 + 16
     }
 
     override func layout() {
@@ -298,16 +301,16 @@ final class UserMessageRowView: TimelineRowView {
         let width = bounds.width
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        let bubbleHeight = m.body + footer + Self.padding * 2
+        let bubbleHeight = m.attachments + m.body + footer + Self.padding * 2
         let top = markerSpace
         let attributionWidth = attribution.fittingWidth
         attribution.frame = NSRect(x: width - 4 - attributionWidth, y: 0, width: attributionWidth, height: UserMessageAttributionView.height)
         let markerWidth = marker.fittingWidth
         marker.frame = NSRect(x: width - 4 - markerWidth, y: attributionSpace, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
-        let attachmentsHeight = attachments.height(forWidth: m.bubble - Self.padding * 2)
+        let attachmentsHeight = m.attachments
         attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + Self.padding, width: m.bubble - Self.padding * 2, height: attachmentsHeight)
-        markdown.frame = NSRect(x: Self.padding, y: Self.padding + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full - attachmentsHeight)
+        markdown.frame = NSRect(x: Self.padding, y: Self.padding + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full)
         let clipped = collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if clipped {
@@ -321,7 +324,7 @@ final class UserMessageRowView: TimelineRowView {
         CATransaction.commit()
         bubble.layer?.masksToBounds = true
         let size = toggle.intrinsicContentSize
-        toggle.frame = NSRect(x: Self.padding - 4, y: Self.padding + m.body + 6, width: size.width, height: size.height)
+        toggle.frame = NSRect(x: Self.padding - 4, y: Self.padding + attachmentsHeight + m.body + 6, width: size.width, height: size.height)
         // Hover row: `max-w-[80%] justify-end pe-1 gap-2`, 24px tall under a 4px gap.
         let rowTop = top + bubbleHeight + 4
         let copySize = copyButton.intrinsicContentSize

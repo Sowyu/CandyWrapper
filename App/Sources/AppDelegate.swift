@@ -554,6 +554,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--thread-preview") else { return nil }
         let title = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ThreadPreview.markdownThread
+        #if DEBUG
+        // Isolated test builds can replay a sandbox projection and its local image files.
+        if isTestBuild, title.hasPrefix("/"), title.hasSuffix(".json"),
+           let data = try? Data(contentsOf: URL(fileURLWithPath: title)),
+           let projection = try? JSONDecoder().decode(ThreadProjection.self, from: data) {
+            let panel = ThreadPanelView()
+            let directory = URL(fileURLWithPath: title).deletingLastPathComponent()
+            panel.model.attachmentImage = { id, side, cover in
+                let file = directory.appendingPathComponent((id as NSString).lastPathComponent + ".png")
+                return await ComposerImageIO.thumbnail(file, side: side, cover: cover)
+            }
+            panel.setProjection(projection, projectTitle: "Layout sandbox", workspaceRoot: directory.path)
+            if args.contains("--preview-details") {
+                panel.setDetailsOpen(true); panel.setDetailsInlineOpen(true)
+                panel.detailsCard.runContext.text = "Local sandbox"
+                panel.detailsCard.branch.text = "main"
+                panel.detailsCard.gitActions.primary.text = "Commit & push"
+                panel.detailsCard.gitActions.primary.icon = IconName.cloudUpload.definition
+                panel.detailsCard.totals.insertions = 42
+                panel.detailsCard.totals.deletions = 8
+            }
+            if args.contains("--preview-browser") {
+                panel.miniPlayerShown = true
+                panel.miniPlayer.onClose = { [weak panel] in panel?.miniPlayerShown = false }
+            }
+            return panel
+        }
+        #endif
         guard let projection = try? ThreadPreview.projection(titled: title) else { return nil }
         let panel = ThreadPanelView()
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
