@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Publish the MCP preview fix as v1.5.7 (build 32) (taken 2026-10-18): source `4a5cdd3`, full suite and native light/dark checks already passed.
+
 - [x] Stop MCP previews opening full screen without a user action (2026-10-18): automatic requests stay inline, explicit expansion remains available, and expanded content survives new inline results. Full suite: 1,553 tests; final focused checks: 12 tests. Native light/dark startup, expand and exit checks passed. Not released yet. [Fix and validation](docs/research/mcp-fullscreen-2026-10-18.md).
 
 - [x] Fix the composer placeholder/footer overlap and publish v1.5.6 (2026-10-18): fix `d880587`; released build 31 from `827fce0`. All 1,534 Swift Testing and 17 XCTest tests passed. Real-window Glass light/dark collapse, expansion and menu checks passed after the user unlocked the desktop. Signed app, ZIP/DMG downloads and automatic-update feed verified. [Fix, benchmark limits and validation](docs/research/composer-overlap-2026-10-18.md).
