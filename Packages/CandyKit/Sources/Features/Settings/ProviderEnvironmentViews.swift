@@ -270,26 +270,20 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
     }
 }
 
-/// `ProviderEnvironmentFieldRow`'s control: a write-only field for one named variable and its clear button.
-final class ProviderEnvironmentFieldControl: DSView {
+/// A write-only field and its clear button: `SecretInput` beside a ghost-destructive X, 8pt apart in a 224pt
+/// column (ProviderSettingsForm.tsx:414-435). The X shows only while something is saved.
+class SecretFieldControl: DSView {
     let input = SecureInputView()
     let clear = ButtonView(nil, icon: .x, variant: .ghostDestructive, size: .iconSm)
 
-    init(field: ProviderEnvironmentLogic.Field, variable: ProviderEnvironmentLogic.Variable?, enabled: Bool,
-         commit: @escaping @MainActor (String) -> Void, remove: @escaping @MainActor () -> Void) {
+    init(label: String, saved: Bool, enabled: Bool) {
         super.init(frame: NSRect(x: 0, y: 0, width: 224, height: 32))
-        input.text = variable?.valueRedacted == true ? "" : variable?.value ?? ""
-        input.placeholder = variable?.valueRedacted == true ? "Stored secret - enter a new value to replace" : field.placeholder
-        input.setAccessibilityLabel(field.label)
+        input.setAccessibilityLabel(label)
         input.isEnabled = enabled
-        var last = input.text
-        input.onCommit = { text in guard text != last else { return }; last = text; commit(text) }
-        input.onSubmit = { [weak self] in guard let self else { return }; let t = self.input.text; guard t != last else { return }; last = t; commit(t) }
         clear.iconSize = 14
-        clear.setAccessibilityLabel("Clear \(field.label)")
-        clear.isHidden = variable == nil
+        clear.setAccessibilityLabel("Clear \(label)")
+        clear.isHidden = !saved
         clear.isEnabled = enabled
-        clear.action = { remove() }
         addSubview(input)
         addSubview(clear)
     }
@@ -299,6 +293,20 @@ final class ProviderEnvironmentFieldControl: DSView {
         let cw: CGFloat = clear.isHidden ? 0 : 28 + 8
         input.frame = NSRect(x: 0, y: 0, width: bounds.width - cw, height: bounds.height)
         clear.frame = NSRect(x: bounds.width - 28, y: (bounds.height - 28) / 2, width: 28, height: 28)
+    }
+}
+
+/// `ProviderEnvironmentFieldRow`'s control: a write-only field for one named variable and its clear button.
+final class ProviderEnvironmentFieldControl: SecretFieldControl {
+    init(field: ProviderEnvironmentLogic.Field, variable: ProviderEnvironmentLogic.Variable?, enabled: Bool,
+         commit: @escaping @MainActor (String) -> Void, remove: @escaping @MainActor () -> Void) {
+        super.init(label: field.label, saved: variable != nil, enabled: enabled)
+        input.text = variable?.valueRedacted == true ? "" : variable?.value ?? ""
+        input.placeholder = variable?.valueRedacted == true ? "Stored secret, enter a new value to replace" : field.placeholder
+        var last = input.text
+        input.onCommit = { text in guard text != last else { return }; last = text; commit(text) }
+        input.onSubmit = { [weak self] in guard let self else { return }; let t = self.input.text; guard t != last else { return }; last = t; commit(t) }
+        clear.action = { remove() }
     }
 }
 

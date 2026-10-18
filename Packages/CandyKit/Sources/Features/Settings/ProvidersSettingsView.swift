@@ -183,7 +183,8 @@ public enum ProvidersLogic {
         case "opencode": return [binary("opencode", "Path to the OpenCode binary."),
                                  Field(key: "serverUrl", title: "Server URL", detail: "Leave blank to let T3 Code spawn the server when needed.",
                                        placeholder: "http://127.0.0.1:4096"),
-                                 Field(key: "serverPassword", title: "Server password", detail: "Stored in plain text on disk.", placeholder: "Optional", secret: true)]
+                                 Field(key: "serverPassword", title: "Server password", detail: "Stored separately on the host.", placeholder: "Optional",
+                                       secret: true, redacted: true)]
         case "antigravity": return [
             Field(key: "authMethod", title: "Sign-in method", detail: "Google accounts use your subscription; API keys and Agent Platform bill usage.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
             Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true, redacted: true),
@@ -759,17 +760,17 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 } else if f.secret {
                     // `SecretInput` (settings/SecretInput.tsx, T3 3105 d514a8c61): a value the server stores apart arrives
                     // redacted, so the field stays empty with "Stored secret, enter a new value to replace", and an
-                    // empty commit keeps it.
+                    // empty commit keeps it. Since 3315 a Clear button sits beside a saved one (ProviderSettingsForm.tsx:414-435).
                     let configured = f.redacted && !saved.isEmpty
-                    let input = SecureInputView(placeholder: configured ? "Stored secret, enter a new value to replace" : f.placeholder)
-                    input.text = f.redacted ? "" : saved
-                    input.frame.size = NSSize(width: 224, height: 32)
-                    input.isEnabled = !readOnly
-                    input.onSubmit = { [weak self, weak input] in
-                        guard let input, !(configured && input.text.isEmpty) else { return }
+                    let field = SecretFieldControl(label: f.title, saved: configured, enabled: !readOnly)
+                    field.input.placeholder = configured ? "Stored secret, enter a new value to replace" : f.placeholder
+                    field.input.text = f.redacted ? "" : saved
+                    field.input.onSubmit = { [weak self, weak field] in
+                        guard let input = field?.input, !(configured && input.text.isEmpty) else { return }
                         self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: input.text), env: env.id)
                     }
-                    control = input
+                    field.clear.action = { [weak self] in self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: ""), env: env.id) }
+                    control = field
                 } else {
                     let input = InputView(placeholder: f.placeholder, text: saved, size: .sm)
                     input.frame.size = NSSize(width: 224, height: 28)
