@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Stop MCP previews opening full screen without a user action (taken 2026-10-18): trace the Blender capture takeover, keep automatic requests inline, retain explicit expansion and verify the native window.
+
 - [x] Fix the composer placeholder/footer overlap and publish v1.5.6 (2026-10-18): fix `d880587`; released build 31 from `827fce0`. All 1,534 Swift Testing and 17 XCTest tests passed. Real-window Glass light/dark collapse, expansion and menu checks passed after the user unlocked the desktop. Signed app, ZIP/DMG downloads and automatic-update feed verified. [Fix, benchmark limits and validation](docs/research/composer-overlap-2026-10-18.md).
 
 - [x] Full bug, redundancy and codebase audit (2026-10-18): three high-priority file-save risks and five medium-priority state/resource defects, plus duplication candidates and app integration test gaps. All 1,532 Swift Testing and 17 XCTest tests passed; isolated app build and sandbox snapshot passed. Product behavior is unchanged. [Audit and repair order](docs/research/codebase-audit-2026-10-18.md).
