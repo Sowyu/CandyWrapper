@@ -282,6 +282,7 @@ public final class ComposerView: DSView {
     private var separators: [SeparatorView] = []
     private var alternateHeld = false
     private var editorHeight = ComposerView.editorMin
+    private var heightUpdateQueued = false
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -465,6 +466,7 @@ public final class ComposerView: DSView {
     }
 
     func refresh() {
+        defer { invalidateHeightIfNeeded() }
         // ChatComposer.tsx:7489-7490.
         let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
         if placeholder.text != placeholderText { placeholder.text = placeholderText; needsLayout = true }
@@ -592,6 +594,32 @@ public final class ComposerView: DSView {
         onHeightChange?()
     }
 
+    /// Chrome can expand the composer without changing the editor's line count.
+    private func invalidateHeightIfNeeded() {
+        resetBlockedScrollCollapse()
+        guard bounds.height != preferredHeight else { return }
+        needsLayout = true
+        onHeightChange?()
+    }
+
+    /// T3 clears a scroll collapse when expanded chrome takes over (ChatComposer.tsx:4907-4911).
+    /// Clearing it also keeps a smaller timeline inset from repeatedly toggling overflow.
+    private func resetBlockedScrollCollapse() {
+        if scrollCollapsed && !isResting { scrollCollapsed = false }
+    }
+
+    /// A menu or the timeline's overflow can change while the parent is laying out. Ask again
+    /// after that pass, when AppKit will keep the parent's invalidation.
+    private func reconcileLayoutHeight() {
+        guard bounds.height != preferredHeight, !heightUpdateQueued, onHeightChange != nil else { return }
+        heightUpdateQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            heightUpdateQueued = false
+            invalidateHeightIfNeeded()
+        }
+    }
+
     // MARK: Actions
 
     private func submitKey(_ key: ComposerLogic.Key) -> Bool {
@@ -705,6 +733,8 @@ public final class ComposerView: DSView {
 
     public override func layout() {
         super.layout()
+        resetBlockedScrollCollapse()
+        defer { reconcileLayoutHeight() }
         let w = bounds.width, h = bounds.height
         let box = CGRect(x: 0, y: 0, width: w, height: h)
         CATransaction.begin(); CATransaction.setDisableActions(true)
