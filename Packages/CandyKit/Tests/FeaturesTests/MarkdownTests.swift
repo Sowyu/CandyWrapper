@@ -56,6 +56,15 @@ struct MarkdownTests {
         #expect(runs.map(\.text).joined() == "one\ntwo")
     }
 
+    /// Since 3315 a webhook run frames request values in `<webhook-data-ID>` tags. T3 renders raw HTML as text
+    /// (ChatMarkdown.tsx:3372 `skipHtml={false}`), so the tags stay visible.
+    @Test func webhookDataTagsStayText() {
+        let tag = "webhook-data-0123456789ab"
+        let doc = MarkdownDocument(parsing: "Review this PR: <\(tag)>https://e.com/pull/45</\(tag)>", preservesLineBreaks: true)
+        guard case .paragraph(let runs) = doc.blocks.first else { Issue.record("paragraph"); return }
+        #expect(runs.map(\.text).joined() == "Review this PR: <\(tag)>https://e.com/pull/45</\(tag)>")
+    }
+
     /// Token classes Shiki gives these snippets with pierre-light (dumped from T3's bundled highlighter).
     @Test func highlightsLikeShiki() {
         func kinds(_ code: String, _ language: String) -> [String: CodeTokenKind] {
