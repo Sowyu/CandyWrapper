@@ -105,7 +105,7 @@ TABLE_VIEWPORT = ("h-full max-h-[inherit] overflow-auto overscroll-contain round
                   "mask-t-from-[calc(100%-min(var(--fade-size),var(--scroll-area-overflow-y-start)))] mask-b-from-[calc(100%-min(var(--fade-size),var(--scroll-area-overflow-y-end)))] "
                   "mask-l-from-[calc(100%-min(var(--fade-size),var(--scroll-area-overflow-x-start)))] mask-r-from-[calc(100%-min(var(--fade-size),var(--scroll-area-overflow-x-end)))] "
                   "[--fade-size:1.5rem] scroll-p-[var(--fade-size)]")
-def table(header, aligns, rows):
+def table(header, aligns, rows, clipped=False):
     def cell(tag, text, align):
         style = f' style="text-align:{align}"' if align else ""
         return f"<{tag}{style}>{text}</{tag}>"
@@ -117,7 +117,9 @@ def table(header, aligns, rows):
             f'<div class="{TABLE_VIEWPORT}" data-slot="scroll-area-viewport" style="{overflow}">'
             f"<table><thead>{head}</thead><tbody>{body}</tbody></table></div></div>"
             '<div class="mt-0.5 flex items-center justify-between select-none">'
-            + button("secondary", "minimize-2", ' aria-pressed="true" aria-label="Collapse table cells"')
+            # Since 3315 the toggle shows only when a cell is clipped; an empty span keeps copy at the right
+            # (ChatMarkdown.tsx:663-682).
+            + (button("secondary", "minimize-2", ' aria-pressed="true" aria-label="Collapse table cells"') if clipped else "<span></span>")
             + button("ghost-muted", "copy", ' aria-label="Copy table"') + "</div></div>")
 
 CASES = []
