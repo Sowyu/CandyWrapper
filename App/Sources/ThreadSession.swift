@@ -410,6 +410,8 @@ final class ThreadController {
         lineage.openThread = { [weak self] id in self?.open(id) }
         lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
         lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
+        // The open thread's snooze ended with no push: the visit rules see it woke while shown.
+        lineage.onWake = { [weak self] in self?.syncVisit() }
         // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
         // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
         panel.model.webAssetURL = { [weak self] id, name in
