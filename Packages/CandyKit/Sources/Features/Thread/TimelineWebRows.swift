@@ -160,7 +160,7 @@ final class HtmlRenderRowView: TimelineRowView {
 
 /// `McpAppTimelineRow` (MessagesTimeline.tsx:2973-2993, McpAppFrame.tsx:73-550): the app's captured document in an
 /// opaque-origin frame speaking the MCP Apps bridge. Its tool calls and reads reach its own server through the
-/// environment; calls to tools not marked read-only and chat messages ask first. Starts 320 tall, then the
+/// environment; non-read-only tools ask outside Full access, and chat messages ask in every mode. Starts 320 tall, then the
 /// app's reported size. An app that asks to close leaves "The {server} app was closed" with Show app.
 final class McpAppRowView: TimelineRowView {
     private let frameView = ThreadWebFrameView()
@@ -272,20 +272,10 @@ final class McpAppRowView: TimelineRowView {
             post: { [weak frame] in frame?.post($0) },
             hostContext: { [weak self] in self?.hostContext() ?? .object([:]) },
             callTool: { [weak self] name, args in
-                var info = target; info["name"] = .string(name)
-                let tool = try await Self.unwrap { try await actions.request("mcpApps.toolInfo", .object(info)) }
-                guard tool["callable"]?.boolValue == true else { throw McpAppHostBridge.Refusal("This app cannot call that tool.") }
-                if tool["readOnly"]?.boolValue != true {
-                    let pretty = String(data: (try? JSONEncoder().encode(args)) ?? Data(), encoding: .utf8) ?? "{}"
-                    guard await self?.ask("Allow \(e.app.server) to run \(tool["title"]?.stringValue ?? name)?", pretty) == true else {
-                        throw McpAppHostBridge.Refusal("Declined by the user.")
-                    }
+                guard let self else { throw McpAppHostBridge.Refusal("The app was closed.") }
+                return try await self.callTool(name, arguments: args, entry: e, conversation: conversation, actions: actions) { [weak self] title, detail in
+                    await self?.ask(title, detail) ?? false
                 }
-                guard let self, self.window != nil, self.entry == e, self.context.model?.projection?.thread.id == conversation else {
-                    throw McpAppHostBridge.Refusal("The app was closed.")
-                }
-                var input = target; input["name"] = .string(name); input["arguments"] = args
-                return try await Self.unwrap { try await actions.request("mcpApps.callTool", .object(input)) }
             },
             readResource: { uri in
                 var input = target; input["uri"] = .string(uri)
@@ -355,6 +345,26 @@ final class McpAppRowView: TimelineRowView {
             guard let item = await actions.turnItem(e.sourceThreadId, e.itemId), self?.bridge === bridge else { return }
             bridge.setToolCall(arguments: item["input"] ?? .object([:]), result: item["output"]?["result"])
         }
+    }
+
+    func callTool(_ name: String, arguments: JSONValue, entry e: McpAppEntry, conversation: ThreadId,
+                  actions: McpAppActions, confirm: (String, String) async -> Bool) async throws -> JSONValue {
+        let target: [String: JSONValue] = ["threadId": .string(e.sourceThreadId.rawValue), "itemId": .string(e.itemId.rawValue)]
+        var info = target; info["name"] = .string(name)
+        let tool = try await Self.unwrap { try await actions.request("mcpApps.toolInfo", .object(info)) }
+        guard tool["callable"]?.boolValue == true else { throw McpAppHostBridge.Refusal("This app cannot call that tool.") }
+        // McpAppFrame.tsx:290-305 always asks for writes. Full access already authorizes them here.
+        if tool["readOnly"]?.boolValue != true, context.model?.projection?.thread.raw["runtimeMode"]?.stringValue != "full-access" {
+            let pretty = String(data: (try? JSONEncoder().encode(arguments)) ?? Data(), encoding: .utf8) ?? "{}"
+            guard await confirm("Allow \(e.app.server) to run \(tool["title"]?.stringValue ?? name)?", pretty) else {
+                throw McpAppHostBridge.Refusal("Declined by the user.")
+            }
+        }
+        guard window != nil, entry == e, context.model?.projection?.thread.id == conversation else {
+            throw McpAppHostBridge.Refusal("The app was closed.")
+        }
+        var input = target; input["name"] = .string(name); input["arguments"] = arguments
+        return try await Self.unwrap { try await actions.request("mcpApps.callTool", .object(input)) }
     }
 
     // McpAppFrame.tsx:341-353 accepts unsolicited expansion. Keep background previews inline here.
