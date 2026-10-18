@@ -40,6 +40,11 @@ public final class ThreadLineageController {
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
+    /// Fires once when the open thread's snooze ends, so the footer leaves Snoozed without a push.
+    private var wakeTimer: DispatchWorkItem?
+    private var wakeKey: String?
+    /// The open thread woke on its timer, after `sync`.
+    public var onWake: (() -> Void)?
 
     public init(panel: ThreadPanelView) {
         self.panel = panel
@@ -78,6 +83,7 @@ public final class ThreadLineageController {
             panel.timeline.setFooter(nil, height: 0)
             panel.header.parentThreadTitle = nil
             panel.childInputKey = nil
+            armWake()
             return
         }
         let all = shells?() ?? []
@@ -108,6 +114,38 @@ public final class ThreadLineageController {
         shell = all.first { $0.id == threadId }
         syncFooter()
         updateChildInputs(all, threadId: threadId)
+        armWake()
+    }
+
+    /// Milliseconds until a snoozed shell wakes, plus 50 and capped like `setTimeout`, or nil when it is not
+    /// snoozed (ChatView.tsx:4769-4779).
+    public static func wakeDelay(_ shell: ThreadShell?, nowMs: Int64) -> Int64? {
+        guard let shell, SidebarModel.effectiveSnoozed(SidebarThread(shell), nowMs: nowMs),
+              let wake = shell.snoozedUntil?.epochMs else { return nil }
+        return min(max(0, wake - nowMs) + 50, 2_147_483_647)
+    }
+
+    /// One timer for the open thread's wake time, re-armed when the thread or its snooze changes and dropped
+    /// when it is not snoozed or no thread is open. A timer that fires early re-arms through `sync`.
+    private func armWake() {
+        let delay = threadId == nil ? nil : Self.wakeDelay(shell, nowMs: TimestampFormat.nowMs())
+        let key = delay == nil ? nil : "\(threadId?.rawValue ?? "") \(shell?.snoozedUntil?.raw ?? "")"
+        guard key != wakeKey || (key != nil && wakeTimer == nil) else { return }
+        wakeTimer?.cancel()
+        wakeTimer = nil
+        wakeKey = key
+        guard let delay else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.wakeTimer = nil
+                self.wakeKey = nil
+                self.sync()
+                self.onWake?()
+            }
+        }
+        wakeTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delay)), execute: work)
     }
 
     /// `childInputBannerItem` (ChatView.tsx:7462-7497): subagents waiting on a question, unless this thread waits on
@@ -138,7 +176,7 @@ public final class ThreadLineageController {
     }
 
     /// The timeline footer for a snoozed or settled thread (ChatView.tsx:7613-7646).
-    // ponytail: relative times refresh on pushed state and navigation, add a shared visible clock only if idle wakeup measurements allow it
+    // ponytail: relative times refresh on pushed state, navigation and the wake timer, add a shared visible clock only if idle wakeup measurements allow it
     private func updateStatusLine(_ shell: ThreadShell?) -> Bool {
         guard let shell, let threadId else { return false }
         let now = TimestampFormat.nowMs()
