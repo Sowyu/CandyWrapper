@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Publish the Full access MCP fix as v1.5.8 (build 33) (taken 2026-10-18): source `d93500b`, all 21 focused tests passed.
+
 - [x] Auto-allow MCP app tool calls in Full access (2026-10-18): reads the current thread mode after tool lookup, retains callable and row/conversation checks, and asks in other modes. All 21 focused tests passed. Not released yet. [Notes](docs/research/mcp-fullscreen-2026-10-18.md#full-access-tool-confirmation).
 
 - [x] Published the MCP preview fix as v1.5.7 (build 32) on 2026-10-18 from `d69d95f`. Signed app, downloaded ZIP/DMG hashes and automatic-update feed verified.
