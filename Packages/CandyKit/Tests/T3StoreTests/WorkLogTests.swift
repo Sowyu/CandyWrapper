@@ -221,6 +221,10 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(WorkLog.displayIndicatesFailure(exit))
         let clean = entry { $0.itemType = .commandExecution; $0.command = "ls"; $0.toolLifecycleStatus = .completed }
         #expect(WorkLog.indicatesSuccess(clean) && !WorkLog.indicatesNeutral(clean))
+        // 3315: a reasoning row's prose is not tool output, but an explicit failure still counts.
+        let thinking = entry(tone: .thinking) { $0.itemType = .reasoning; $0.detail = "That exit code 2 is expected."; $0.toolLifecycleStatus = .completed }
+        #expect(!WorkLog.indicatesFailure(thinking) && WorkLog.indicatesSuccess(thinking))
+        #expect(WorkLog.indicatesFailure({ var f = thinking; f.toolLifecycleStatus = .failed; return f }()))
         let idle = entry { $0.toolLifecycleStatus = .idle }
         #expect(WorkLog.indicatesNeutral(idle) && !WorkLog.isVisibleInGroup(idle))
         #expect(WorkLog.isVisibleInGroup({ var s = idle; s.toolLifecycleStatus = .stopped; return s }()))

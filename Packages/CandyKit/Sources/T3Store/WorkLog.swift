@@ -351,7 +351,9 @@ public enum WorkLog {
 
     private static func checkFailure(_ entry: WorkLogEntry, includeCommand: Bool) -> Bool {
         if entry.tone == .error || entry.toolLifecycleStatus == .failed || entry.toolLifecycleStatus == .declined { return true }
-        guard isToolLikeForPresentation(entry) else { return false }
+        // Reasoning detail is the model's own prose, not tool output, so "exit code 2 is expected" is no failure
+        // (presentation.ts:368-371, T3 3315 e0366ad0e4).
+        guard isToolLikeForPresentation(entry), entry.itemType != .reasoning else { return false }
         if T3McpTools.definition(toolName(entry)) != nil, t3ToolResultIndicatesFailure(toolOutput(entry)) { return true }
         if let item = entry.structuredPayload, item.type == .commandExecution {
             if item["outputIndicatesFailure"]?.boolValue == true { return true }
