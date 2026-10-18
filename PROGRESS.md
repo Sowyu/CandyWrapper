@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Fix the composer placeholder/footer overlap reported in a screenshot and publish a release (taken 2026-10-18). Check collapsed-to-expanded layout and native rendering before release.
+
 - [x] Full bug, redundancy and codebase audit (2026-10-18): three high-priority file-save risks and five medium-priority state/resource defects, plus duplication candidates and app integration test gaps. All 1,532 Swift Testing and 17 XCTest tests passed; isolated app build and sandbox snapshot passed. Product behavior is unchanged. [Audit and repair order](docs/research/codebase-audit-2026-10-18.md).
 
 - [ ] Repair the eight findings from the [2026-10-18 codebase audit](docs/research/codebase-audit-2026-10-18.md): start with workspace file identity, environment-scoped buffers and writer ownership across editor closure. The save-handoff race was reproduced with the production coordinator; the other findings have source traces and proposed regression checks.
