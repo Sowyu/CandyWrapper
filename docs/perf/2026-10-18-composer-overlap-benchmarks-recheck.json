@@ -1,0 +1,387 @@
+{
+ "app_measured": false,
+ "baseline": "2026-10-17-d547087-dirty-w1.json",
+ "commit": "2d16274-dirty",
+ "created": "2026-10-18T09:52:49",
+ "idle_seconds": 30,
+ "machine": "Mac16,10",
+ "metrics": {
+  "bench.decode_fixtures": {
+   "detail": {
+    "bytes": 2524311
+   },
+   "max": 11.312708,
+   "median": 11.253958,
+   "min": 11.16775,
+   "runs": 9
+  },
+  "bench.huge_cache_load": {
+   "detail": {
+    "bytes": 655353
+   },
+   "max": 25.132,
+   "median": 25.027584,
+   "min": 24.852417,
+   "runs": 5
+  },
+  "bench.huge_cache_write": {
+   "detail": {
+    "bytes": 655353,
+    "json_bytes": 8294252
+   },
+   "max": 33.1595,
+   "median": 31.472,
+   "min": 31.346709,
+   "runs": 5
+  },
+  "bench.huge_full_decode": {
+   "detail": {},
+   "max": 31.9795,
+   "median": 31.531166,
+   "min": 31.41775,
+   "runs": 5
+  },
+  "bench.huge_full_derive": {
+   "detail": {},
+   "max": 19.302083,
+   "median": 18.862833,
+   "min": 18.611166,
+   "runs": 5
+  },
+  "bench.huge_full_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 5700
+   },
+   "max": 16.045583,
+   "median": 15.484125,
+   "min": 15.207917,
+   "runs": 900
+  },
+  "bench.huge_full_panel": {
+   "detail": {
+    "timeline_rows": 2700
+   },
+   "max": 6.0815,
+   "median": 5.016208,
+   "min": 1.886209,
+   "runs": 5
+  },
+  "bench.huge_full_parse": {
+   "detail": {
+    "bytes": 20303983
+   },
+   "max": 44.022458,
+   "median": 42.042,
+   "min": 41.944458,
+   "runs": 5
+  },
+  "bench.huge_full_reduce": {
+   "detail": {},
+   "max": 0.93475,
+   "median": 0.873375,
+   "min": 0.861459,
+   "runs": 5
+  },
+  "bench.huge_open_decode": {
+   "detail": {},
+   "max": 10.753333,
+   "median": 10.525333,
+   "min": 10.487166,
+   "runs": 5
+  },
+  "bench.huge_open_derive": {
+   "detail": {},
+   "max": 0.165167,
+   "median": 0.157375,
+   "min": 0.153875,
+   "runs": 5
+  },
+  "bench.huge_open_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 57
+   },
+   "max": 1.391083,
+   "median": 1.35475,
+   "min": 1.345167,
+   "runs": 900
+  },
+  "bench.huge_open_long_decode": {
+   "detail": {},
+   "max": 10.701,
+   "median": 10.488833,
+   "min": 10.455875,
+   "runs": 5
+  },
+  "bench.huge_open_long_derive": {
+   "detail": {},
+   "max": 0.161334,
+   "median": 0.156833,
+   "min": 0.155834,
+   "runs": 5
+  },
+  "bench.huge_open_long_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 57
+   },
+   "max": 1.511458,
+   "median": 1.484541,
+   "min": 1.408834,
+   "runs": 900
+  },
+  "bench.huge_open_long_panel": {
+   "detail": {
+    "timeline_rows": 27
+   },
+   "max": 12.650959,
+   "median": 12.501208,
+   "min": 12.278958,
+   "runs": 5
+  },
+  "bench.huge_open_long_parse": {
+   "detail": {
+    "bytes": 8339054
+   },
+   "max": 17.699167,
+   "median": 17.655084,
+   "min": 17.444083,
+   "runs": 5
+  },
+  "bench.huge_open_long_reduce": {
+   "detail": {},
+   "max": 0.014042,
+   "median": 0.010584,
+   "min": 0.010583,
+   "runs": 5
+  },
+  "bench.huge_open_panel": {
+   "detail": {
+    "timeline_rows": 27
+   },
+   "max": 6.382125,
+   "median": 6.064625,
+   "min": 6.003166,
+   "runs": 5
+  },
+  "bench.huge_open_parse": {
+   "detail": {
+    "bytes": 8294252
+   },
+   "max": 18.421666,
+   "median": 17.366125,
+   "min": 17.29825,
+   "runs": 5
+  },
+  "bench.huge_open_reduce": {
+   "detail": {},
+   "max": 0.018792,
+   "median": 0.010708,
+   "min": 0.010583,
+   "runs": 5
+  },
+  "bench.huge_update_append": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 1.944334,
+   "median": 1.9070419999999997,
+   "min": 1.877499,
+   "runs": 10
+  },
+  "bench.huge_update_stream": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 0.991291,
+   "median": 0.875209,
+   "min": 0.811917,
+   "runs": 10
+  },
+  "bench.huge_update_stream_entries": {
+   "detail": {},
+   "max": 2.27575,
+   "median": 2.204209,
+   "min": 2.183458,
+   "runs": 9
+  },
+  "bench.huge_update_stream_rows_patch": {
+   "detail": {},
+   "max": 0.036917,
+   "median": 0.034333,
+   "min": 0.034042,
+   "runs": 9
+  },
+  "bench.huge_update_tool": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 0.6513749999999999,
+   "median": 0.646791,
+   "min": 0.619833,
+   "runs": 10
+  },
+  "bench.huge_update_tool_entries": {
+   "detail": {},
+   "max": 2.297625,
+   "median": 2.184875,
+   "min": 2.174042,
+   "runs": 9
+  },
+  "bench.huge_update_tool_rows_offmain": {
+   "detail": {},
+   "max": 19.635459,
+   "median": 19.56375,
+   "min": 19.30175,
+   "runs": 5
+  },
+  "bench.markdown_layout": {
+   "detail": {
+    "blocks": 323
+   },
+   "max": 51.233,
+   "median": 50.990709,
+   "min": 50.666875,
+   "runs": 9
+  },
+  "bench.markdown_parse": {
+   "detail": {
+    "bytes": 38943
+   },
+   "max": 13.179325,
+   "median": 13.1200334,
+   "min": 12.9042666,
+   "runs": 9
+  },
+  "bench.markdown_parse_lines": {
+   "detail": {
+    "bytes": 27692
+   },
+   "max": 36.21894433333333,
+   "median": 35.56761133333333,
+   "min": 35.405138666666666,
+   "runs": 9
+  },
+  "bench.markdown_stream_delta_full": {
+   "detail": {
+    "words": 2151
+   },
+   "max": 19.2421541,
+   "median": 18.8870334,
+   "min": 18.6489583,
+   "runs": 9
+  },
+  "bench.markdown_stream_delta_incremental": {
+   "detail": {
+    "words": 2151
+   },
+   "max": 1.8970375000000002,
+   "median": 0.5159417000000001,
+   "min": 0.30495,
+   "runs": 9
+  },
+  "bench.paging_huge_main": {
+   "detail": {
+    "last_ms": 1.9530840000000003,
+    "sum_ms": 125.88574300000005,
+    "timeline_rows": 2700
+   },
+   "max": 2.7301670000000002,
+   "median": 1.670418,
+   "min": 1.019209,
+   "runs": 75
+  },
+  "bench.paging_huge_total": {
+   "detail": {
+    "last_ms": 5.973042,
+    "sum_ms": 295.19046,
+    "timeline_rows": 2700
+   },
+   "max": 6.062334,
+   "median": 3.82175,
+   "min": 2.065916,
+   "runs": 75
+  },
+  "bench.paging_seeded2000_main": {
+   "detail": {
+    "last_ms": 0.835916,
+    "sum_ms": 43.56846399999999,
+    "timeline_rows": 2000
+   },
+   "max": 1.425125,
+   "median": 0.835916,
+   "min": 0.419833,
+   "runs": 50
+  },
+  "bench.paging_seeded2000_total": {
+   "detail": {
+    "last_ms": 1.667875,
+    "sum_ms": 56.36242000000001,
+    "timeline_rows": 2000
+   },
+   "max": 2.955,
+   "median": 1.104083,
+   "min": 0.420083,
+   "runs": 50
+  },
+  "bench.sidebar_items_1000": {
+   "detail": {
+    "threads": 1000
+   },
+   "max": 3.7058999999999997,
+   "median": 3.6747166,
+   "min": 3.6412500000000003,
+   "runs": 9
+  },
+  "bench.sidebar_rename_1580_classic": {
+   "detail": {},
+   "max": 0.448083,
+   "median": 0.431542,
+   "min": 0.416167,
+   "runs": 15
+  },
+  "bench.sidebar_shelf_1580_classic": {
+   "detail": {},
+   "max": 1.842542,
+   "median": 1.708291,
+   "min": 0.925542,
+   "runs": 9
+  },
+  "bench.sidebar_tick_1580_classic": {
+   "detail": {},
+   "max": 0.36,
+   "median": 0.295,
+   "min": 0.275375,
+   "runs": 15
+  },
+  "bench.thread_reducer": {
+   "detail": {
+    "items": 129
+   },
+   "max": 0.30186665,
+   "median": 0.3000771,
+   "min": 0.29898335,
+   "runs": 9
+  },
+  "bench.timeline_rows": {
+   "detail": {
+    "turn_items": 19
+   },
+   "max": 0.10334166,
+   "median": 0.10177749999999999,
+   "min": 0.1008525,
+   "runs": 9
+  }
+ },
+ "mode": "benchmarks-only",
+ "notes": [
+  "Warm rerun of the same optimized binary through scripts/test with CW_BENCH=1, after compilation ended. No app measurements."
+ ],
+ "regressions": [
+  "bench.huge_full_panel"
+ ],
+ "repeat": 3,
+ "source": ".",
+ "workload": 1
+}
