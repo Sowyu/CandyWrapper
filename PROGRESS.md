@@ -13,7 +13,9 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Full bug, redundancy and codebase audit (taken 2026-10-18): review runtime safety, state and connection lifetimes, UI resource use, duplicated code and test coverage. Report findings without changing product behavior.
+- [x] Full bug, redundancy and codebase audit (2026-10-18): three high-priority file-save risks and five medium-priority state/resource defects, plus duplication candidates and app integration test gaps. All 1,532 Swift Testing and 17 XCTest tests passed; isolated app build and sandbox snapshot passed. Product behavior is unchanged. [Audit and repair order](docs/research/codebase-audit-2026-10-18.md).
+
+- [ ] Repair the eight findings from the [2026-10-18 codebase audit](docs/research/codebase-audit-2026-10-18.md): start with workspace file identity, environment-scoped buffers and writer ownership across editor closure. The save-handoff race was reproduced with the production coordinator; the other findings have source traces and proposed regression checks.
 
 - [x] Fast-mode activity glimmer (2026-10-18): 0.88 second sweeps for Fast runs, 2.2 seconds for normal runs, based on the current run rather than the next prompt. All 1,532 tests passed; isolated light/dark checks and code review completed. Published v1.5.5 (build 30) from `9efd347`; signatures, ZIP/DMG downloads and signed update feed verified. [Notes](docs/research/fast-mode-glimmer-2026-10-18.md).
 
