@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Full bug, redundancy and codebase audit (taken 2026-10-18): review runtime safety, state and connection lifetimes, UI resource use, duplicated code and test coverage. Report findings without changing product behavior.
+
 - [x] Fast-mode activity glimmer (2026-10-18): 0.88 second sweeps for Fast runs, 2.2 seconds for normal runs, based on the current run rather than the next prompt. All 1,532 tests passed; isolated light/dark checks and code review completed. Published v1.5.5 (build 30) from `9efd347`; signatures, ZIP/DMG downloads and signed update feed verified. [Notes](docs/research/fast-mode-glimmer-2026-10-18.md).
 
 - [x] Published v1.5.4 (build 29) from `794afc4` on 2026-10-17: transparent sidebar search/compose controls. Signed app, ZIP/DMG downloads and update feed verified.
