@@ -659,6 +659,21 @@ final class ComposerController {
             }
             return true
         }
+        // `composer.increaseEffort` and `composer.decreaseEffort` (no default keys, ChatView.tsx:5563-5568):
+        // one reasoning step per press, repeats ignored. Nothing happens with no provider, an open approval
+        // or question, or a queued edit (ChatComposer.tsx:6055-6063).
+        shortcuts.on(["composer.increaseEffort", "composer.decreaseEffort"]) { [weak self] call in
+            guard let self, self.isActive else { return false }
+            if !call.isRepeat, !self.noProviderAvailable, self.panel.drawer != .approval,
+               self.questionRequestId == nil, self.queuedEdit == nil,
+               let step = self.pickers.stepEffort(call.command == "composer.increaseEffort" ? 1 : -1, cursor: self.composer.expandedCaret),
+               step.prompt != self.composer.text {
+                self.composer.text = step.prompt
+                self.composer.expandedCaret = step.cursor
+                self.remember(step.prompt)
+            }
+            return true
+        }
         // `composer.host`: opens "Run on" when it can choose (ChatView.tsx:8183-8192).
         shortcuts.on("composer.host") { [weak self] call in
             guard let self, self.isActive else { return false }

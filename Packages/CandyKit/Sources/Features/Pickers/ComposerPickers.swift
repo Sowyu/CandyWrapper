@@ -266,6 +266,20 @@ public final class ComposerPickers {
         refresh(notify: true)
     }
 
+    /// `composer.increaseEffort` and `composer.decreaseEffort` (ChatComposer.tsx:6054-6082): stores the
+    /// next reasoning option without a popup and returns the step, whose prompt and caret the caller
+    /// applies when the Ultrathink prefix changed. Nil when nothing changes.
+    @discardableResult
+    public func stepEffort(_ direction: Int, cursor: Int) -> ModelTraits.ReasoningStep? {
+        guard let step = ModelTraits.reasoningStep(model: current.model, options: current.options,
+                                                   prompt: prompt, cursor: cursor, direction: direction) else { return nil }
+        if let options = step.options {
+            store.setOptions(draftKey, options, context)
+            refresh(notify: true)
+        }
+        return step
+    }
+
     // MARK: Access
 
     struct ModeInfo { let label: String; let description: String; let icon: IconName }

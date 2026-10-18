@@ -208,6 +208,11 @@ public final class ComposerView: DSView {
         get { editor.expandedText }
         set { editor.setText(newValue) }
     }
+    /// The caret as a UTF-16 offset into `text`.
+    public var expandedCaret: Int {
+        get { editor.expandedCaret }
+        set { editor.expandedCaret = newValue }
+    }
 
     /// Content that stands in for the editor and footer inside the same surface (`ProviderSubagentBar` on a
     /// provider-native subagent thread, ChatView.tsx:11559-11577, where `ChatComposer` is not mounted).
