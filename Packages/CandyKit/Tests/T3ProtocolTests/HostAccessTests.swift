@@ -28,7 +28,8 @@ struct HostAccessTests {
     @Test func togglingTerminalsKeepsReadWithUse() {
         #expect(AuthScopes.toggle([], "terminal:operate", true) == ["terminal:operate", "terminal:read"])
         #expect(AuthScopes.toggle(["terminal:read", "terminal:operate", "x"], "terminal:read", false) == ["x"])
-        #expect(AuthScopes.standard.count == 13 && AuthScopes.options.count == 16)
+        // Since 3315 the default grants every option, access and T3 Connect management included.
+        #expect(AuthScopes.standard.count == 16 && Set(AuthScopes.standard) == Set(AuthScopes.options.map(\.scope)))
     }
 
     @Test func accessStreamFoldsIntoASnapshot() throws {

@@ -48,10 +48,11 @@ public enum AuthScopes {
         .init(scope: relayWrite, title: "Manage relay", description: "Change managed tunnel connectivity."),
     ]
 
-    /// `AuthStandardClientScopes` (auth.ts:205-219), the default of a new pairing link.
+    /// `AuthStandardClientScopes` (auth.ts:151-168), the default of a new pairing link. Since 3315 it includes
+    /// managing access and T3 Connect, which a shell or a full-access agent could reach anyway.
     public static let standard = [orchestrationRead, orchestrationOperate, settingsWrite, providersManage, environmentMaintain,
                                   previewOperate, diagnosticsRead, terminalRead, terminalOperate, sourceControlWrite,
-                                  filesystemRead, filesystemWrite, relayRead]
+                                  filesystemRead, filesystemWrite, relayRead, accessRead, accessWrite, relayWrite]
     /// The `Read only` preset of the Create pairing link dialog (ConnectionsSettings.tsx:1155-1162).
     public static let readOnly = [orchestrationRead, filesystemRead, diagnosticsRead, terminalRead]
 
