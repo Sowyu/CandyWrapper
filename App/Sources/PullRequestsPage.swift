@@ -93,7 +93,7 @@ final class PullRequestsPageController {
         page.onInvolvement = { [weak self] v in self?.involvement = v; self?.savePrefs(); self?.reload() }
         page.onHost = { [weak self] v in self?.host = v; self?.reload() }
         page.onProject = { [weak self] v in self?.projectKey = v; self?.reload() }
-        page.onFilters = { [weak self] f in self?.menuFilters = f; self?.reload() }
+        page.onFilters = { [weak self] f in self?.changeFilters(f) }
         page.onRefresh = { [weak self] in self?.refreshFromHost() }
         page.onRetry = { [weak self] in self?.reload() }
         page.onLoadMore = { [weak self] in self?.loadMore() }
@@ -192,6 +192,19 @@ final class PullRequestsPageController {
     }
 
     // MARK: Loading
+
+    /// A menu pick. Another Draft value takes a typed `draft:` out of the search, which then applies at
+    /// once (_chat.pull-requests.tsx:1471-1484).
+    private func changeFilters(_ value: PullRequestListFilters) {
+        let change = PullRequestListLogic.applyDraftFilterChange(query: query, menu: menuFilters, next: value)
+        menuFilters = change.filters
+        if change.query != query {
+            page.search.input.text = change.query
+            searchTask?.cancel()
+            sentQuery = change.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        reload()
+    }
 
     private func typed(_ text: String) {
         query = text
@@ -336,7 +349,7 @@ final class PullRequestsPageController {
     private func render() {
         var m = PullRequestsPageView.Model()
         m.sort = sort; m.state = state; m.involvement = involvement; m.host = host
-        m.menuFilters = menuFilters
+        m.menuFilters = PullRequestListLogic.shownMenuFilters(query: query, menu: menuFilters)
         m.projectKey = projectKey
         m.searchText = PullRequestListLogic.parseQuery(query).text
         m.refreshing = refreshing || loading
@@ -427,6 +440,9 @@ final class PullRequestsPageController {
                 m.body = .ghost(caption: "Searching every host for “\(shownQuery)”")
             } else if !typedQuery.isEmpty {
                 m.body = .searchEmpty(query: typedQuery)
+            } else if typedQuery != sentQuery {
+                // `carriedToNothing` (_chat.pull-requests.tsx:1306-1309): a cleared search keeps the ghost until it settles.
+                m.body = .ghost(caption: nil)
             } else {
                 m.body = .empty(filtered: filtered, canLoadMore: (answer?.result.truncated ?? false) && pageSize < PullRequestListLogic.maxPageSize)
             }

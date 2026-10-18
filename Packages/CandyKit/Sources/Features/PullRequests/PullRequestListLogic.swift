@@ -107,12 +107,11 @@ public enum PullRequestListLogic {
 
     static func qualifierValue(_ raw: String) -> String { raw.replacingOccurrences(of: "\"", with: "").trimmingCharacters(in: .whitespaces) }
 
+    /// Commas split the list outside quotes, so `label:"a,b",c` names `a,b` and `c`
+    /// (client-runtime pullRequestQuery.ts:26-30).
     static func splitQualifierList(_ raw: String) -> [String] {
-        if raw.range(of: #"^\s*"[^"]*"\s*$"#, options: .regularExpression) != nil {
-            let whole = qualifierValue(raw)
-            return whole.isEmpty ? [] : [whole]
-        }
-        return raw.split(separator: ",", omittingEmptySubsequences: false).map { qualifierValue(String($0)) }.filter { !$0.isEmpty }
+        listRegex.matches(in: raw, range: NSRange(raw.startIndex..., in: raw))
+            .map { qualifierValue(String(raw[Range($0.range, in: raw)!])) }.filter { !$0.isEmpty }
     }
 
     static func boundedNames(_ names: [String]) -> [String] {
@@ -121,6 +120,7 @@ public enum PullRequestListLogic {
 
     /// Compiled once: `parseQuery` runs on every keystroke in the search field.
     private static let tokenRegex = try! NSRegularExpression(pattern: #"(?:[^\s"]|"[^"]*")+"#)
+    private static let listRegex = try! NSRegularExpression(pattern: #"(?:[^,"]|"[^"]*")+"#)
     private static let qualifierRegex = try! NSRegularExpression(pattern: #"^(-?)([A-Za-z][A-Za-z0-9_-]*):(.*)$"#, options: [.dotMatchesLineSeparators])
 
     /// `parsePullRequestQuery`: GitHub style qualifiers (`label:`, `-label:`, `author:`, `draft:`,
@@ -166,6 +166,31 @@ public enum PullRequestListLogic {
         if !labels.isEmpty { filters.labels = Array(labels.prefix(10)) }
         if !excluded.isEmpty { filters.excludedLabels = Array(excluded.prefix(10)) }
         return (text.joined(separator: " "), filters)
+    }
+
+    /// `applyPullRequestDraftFilterChange` (pullRequestQuery.ts:115-137): the Draft menu shows a typed `draft:`,
+    /// so picking another Draft value takes the typed qualifier out of the query. Any other menu change keeps
+    /// the query and the stored menu draft.
+    public static func applyDraftFilterChange(query: String, menu: PullRequestListFilters,
+                                              next: PullRequestListFilters) -> (query: String, filters: PullRequestListFilters) {
+        let typed = parseQuery(query).filters.draft
+        if next.draft == (typed ?? menu.draft) {
+            var kept = next
+            kept.draft = menu.draft
+            return (query, kept)
+        }
+        guard typed != nil else { return (query, next) }
+        let tokens = tokenRegex.matches(in: query, range: NSRange(query.startIndex..., in: query)).map { String(query[Range($0.range, in: query)!]) }
+        return (tokens.filter { parseQuery($0).filters.draft == nil }.joined(separator: " "), next)
+    }
+
+    /// The filters the menu shows: the stored ones with a typed `draft:` over the Draft value
+    /// (_chat.pull-requests.tsx:1466-1470).
+    public static func shownMenuFilters(query: String, menu: PullRequestListFilters) -> PullRequestListFilters {
+        guard let typed = parseQuery(query).filters.draft else { return menu }
+        var shown = menu
+        shown.draft = typed
+        return shown
     }
 
     /// `matchesPullRequestQuery`: the fields a row shows, plus `#123`.

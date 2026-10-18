@@ -54,6 +54,24 @@ struct PullRequestListLogicTests {
         #expect(L.parseQuery("   ").text.isEmpty && L.parseQuery("   ").filters.isEmpty)
     }
 
+    /// pullRequestQuery.test.ts (9f70fcc7b5): commas split outside quotes, and the Draft menu replaces a typed `draft:`.
+    @Test func quotedCommasAndTypedDraft() {
+        #expect(L.parseQuery("label:\"needs,triage\",wip").filters.labels == [["needs,triage", "wip"]])
+        #expect(L.parseQuery("label:\"needs design\",,wip").filters.labels == [["needs design", "wip"]])
+        typealias F = PullRequestListFilters
+        let replaced = L.applyDraftFilterChange(query: "draft:false fix label:\"needs design\"", menu: F(), next: F(draft: "only"))
+        #expect(replaced.query == "fix label:\"needs design\"" && replaced.filters == F(draft: "only"))
+        let cleared = L.applyDraftFilterChange(query: "draft:true \"draft:false\" fix", menu: F(draft: "only"), next: F())
+        #expect(cleared.query == "\"draft:false\" fix" && cleared.filters == F())
+        // Another filter changing keeps the typed query and the stored menu draft.
+        let other = L.applyDraftFilterChange(query: "draft:false fix", menu: F(draft: "only"), next: F(draft: "hide", checks: "passing"))
+        #expect(other.query == "draft:false fix" && other.filters == F(draft: "only", checks: "passing"))
+        let untyped = L.applyDraftFilterChange(query: "fix", menu: F(), next: F(draft: "hide"))
+        #expect(untyped.query == "fix" && untyped.filters == F(draft: "hide"))
+        #expect(L.shownMenuFilters(query: "draft:true fix", menu: F(draft: "hide", review: "none")) == F(draft: "only", review: "none"))
+        #expect(L.shownMenuFilters(query: "fix", menu: F(draft: "hide")) == F(draft: "hide"))
+    }
+
     @Test func boundsTypedQualifiers() {
         let many = (0..<14).map { "l\($0)" }.joined(separator: ",")
         let long = String(repeating: "x", count: 240)
