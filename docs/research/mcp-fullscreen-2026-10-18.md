@@ -39,4 +39,13 @@ The user asked to auto-allow the Blender viewport capture dialog while the threa
 
 This deliberately differs from `apps/web/src/components/chat/McpAppFrame.tsx:290-305` at `T3_VERSION`, which asks for every non-read-only tool call without consulting runtime mode. The MCP request and response shapes are unchanged.
 
-`McpToolApprovalTests` exercises the production tool-call path with six access-mode values, approved writes and read-only calls in restricted mode, forbidden tools, row reuse, and a mode change while tool metadata loads. All 21 focused approval, fullscreen, MCP-effect and web-content tests passed through `scripts/test`. Diff review completed. No drawing or layout code changed, and no new timer or polling was added. This follow-up has not been released yet.
+`McpToolApprovalTests` exercises the production tool-call path with six access-mode values, approved writes and read-only calls in restricted mode, forbidden tools, row reuse, and a mode change while tool metadata loads. All 21 focused approval, fullscreen, MCP-effect and web-content tests passed through `scripts/test`. Diff review completed. No drawing or layout code changed, and no new timer or polling was added. This follow-up shipped in [v1.5.8 (build 33)](https://github.com/Sowyu/CandyWrapper/releases/tag/v1.5.8).
+
+### Full access release
+
+Published v1.5.8 (build 33) from `7ce83141102fc44f6435627ec70d91996ad0314f` on 2026-10-18 with `scripts/release`. The clean Release build, strict app signature check, downloaded ZIP/DMG hashes and published signed update feed all passed verification. The 21 focused tests cover this narrow behavior change; the whole suite and app performance review were not rerun for this follow-up.
+
+```text
+044ffaa157449be771c2b005fb0cab2f58081a2f5f2d85c8a4862bb34eafec00  CandyWrapper-1.5.8-arm64.zip
+22a2a58408e5b3660b29243660587ada7e2c07136310b172cedab408adda5caa  CandyWrapper-1.5.8-arm64.dmg
+```
