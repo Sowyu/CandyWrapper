@@ -53,6 +53,28 @@ struct MarkdownTableTests {
         #expect(controls.map(\.icon) == [.maximize2, .minimize2])
     }
 
+    private func toggles(_ markdown: String, expand: Bool = false) -> [IconName?] {
+        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 480, height: 200))
+        view.setMarkdown(markdown)
+        if expand { view.toggleTable(0) }
+        return view.layout(forWidth: 480).controls.compactMap { control in
+            if case .toggleTable = control.action { return control.icon }
+            return nil
+        }
+    }
+
+    @Test func toggleShowsOnlyWhenACellIsClipped() throws {
+        #expect(toggles("| Name | Value |\n|---|---|\n| a | b |").isEmpty)
+        #expect(toggles(Self.source) == [.maximize2])
+        #expect(toggles("| \(Self.long) | Value |\n|---|---|\n| a | b |") == [.maximize2])
+        #expect(toggles(Self.source, expand: true) == [.minimize2])
+        // The copy menu stays right-aligned without the toggle.
+        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 480, height: 200))
+        view.setMarkdown("| Name | Value |\n|---|---|\n| a | b |")
+        let copy = try #require(view.layout(forWidth: 480).controls.first { if case .copyTable = $0.action { return true }; return false })
+        #expect(copy.frame.maxX == 480)
+    }
+
     @Test func wideTableScrollsAndClamps() throws {
         let view = view()
         let scroller = try #require(view.layout(forWidth: 480).items.compactMap { item -> (Int, CGRect, CGFloat)? in
