@@ -1,0 +1,421 @@
+{
+ "app_measured": false,
+ "baseline": "2026-10-17-d547087-dirty-w1.json",
+ "commit": "2d16274-dirty",
+ "created": "2026-10-18T09:35:58",
+ "idle_seconds": 30,
+ "machine": "Mac16,10",
+ "metrics": {
+  "bench.decode_fixtures": {
+   "detail": {
+    "bytes": 2524311
+   },
+   "max": 12.722916,
+   "median": 12.661084,
+   "min": 12.580916,
+   "runs": 9
+  },
+  "bench.huge_cache_load": {
+   "detail": {
+    "bytes": 654202
+   },
+   "max": 30.380375,
+   "median": 30.306,
+   "min": 30.202417,
+   "runs": 5
+  },
+  "bench.huge_cache_write": {
+   "detail": {
+    "bytes": 654202,
+    "json_bytes": 8294252
+   },
+   "max": 40.286833,
+   "median": 38.731125,
+   "min": 38.062291,
+   "runs": 5
+  },
+  "bench.huge_full_decode": {
+   "detail": {},
+   "max": 35.782583,
+   "median": 35.337625,
+   "min": 35.163792,
+   "runs": 5
+  },
+  "bench.huge_full_derive": {
+   "detail": {},
+   "max": 21.576291,
+   "median": 21.062958,
+   "min": 20.805875,
+   "runs": 5
+  },
+  "bench.huge_full_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 5700
+   },
+   "max": 17.637709,
+   "median": 16.989209,
+   "min": 16.795,
+   "runs": 900
+  },
+  "bench.huge_full_panel": {
+   "detail": {
+    "timeline_rows": 2700
+   },
+   "max": 4.773667,
+   "median": 4.048459,
+   "min": 2.009625,
+   "runs": 5
+  },
+  "bench.huge_full_parse": {
+   "detail": {
+    "bytes": 20303983
+   },
+   "max": 49.404458,
+   "median": 47.5065,
+   "min": 47.124,
+   "runs": 5
+  },
+  "bench.huge_full_reduce": {
+   "detail": {},
+   "max": 1.037333,
+   "median": 0.970959,
+   "min": 0.961958,
+   "runs": 5
+  },
+  "bench.huge_open_decode": {
+   "detail": {},
+   "max": 11.901,
+   "median": 11.703166,
+   "min": 11.648417,
+   "runs": 5
+  },
+  "bench.huge_open_derive": {
+   "detail": {},
+   "max": 0.189834,
+   "median": 0.174,
+   "min": 0.171417,
+   "runs": 5
+  },
+  "bench.huge_open_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 57
+   },
+   "max": 1.547208,
+   "median": 1.504208,
+   "min": 1.490833,
+   "runs": 900
+  },
+  "bench.huge_open_long_decode": {
+   "detail": {},
+   "max": 12.809833,
+   "median": 12.538834,
+   "min": 12.321541,
+   "runs": 5
+  },
+  "bench.huge_open_long_derive": {
+   "detail": {},
+   "max": 0.193125,
+   "median": 0.188417,
+   "min": 0.18775,
+   "runs": 5
+  },
+  "bench.huge_open_long_entries": {
+   "detail": {
+    "nodes": 3600,
+    "rows": 57
+   },
+   "max": 1.6565,
+   "median": 1.644292,
+   "min": 1.615791,
+   "runs": 900
+  },
+  "bench.huge_open_long_panel": {
+   "detail": {
+    "timeline_rows": 27
+   },
+   "max": 14.654667,
+   "median": 14.350208,
+   "min": 14.314875,
+   "runs": 5
+  },
+  "bench.huge_open_long_parse": {
+   "detail": {
+    "bytes": 8339054
+   },
+   "max": 21.798125,
+   "median": 21.05325,
+   "min": 20.440583,
+   "runs": 5
+  },
+  "bench.huge_open_long_reduce": {
+   "detail": {},
+   "max": 0.017625,
+   "median": 0.012292,
+   "min": 0.012208,
+   "runs": 5
+  },
+  "bench.huge_open_panel": {
+   "detail": {
+    "timeline_rows": 27
+   },
+   "max": 7.223208,
+   "median": 6.81,
+   "min": 6.646958,
+   "runs": 5
+  },
+  "bench.huge_open_parse": {
+   "detail": {
+    "bytes": 8294252
+   },
+   "max": 20.515166,
+   "median": 19.329292,
+   "min": 19.144583,
+   "runs": 5
+  },
+  "bench.huge_open_reduce": {
+   "detail": {},
+   "max": 0.015,
+   "median": 0.01175,
+   "min": 0.011541,
+   "runs": 5
+  },
+  "bench.huge_update_append": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 2.612792,
+   "median": 2.473293,
+   "min": 2.408375,
+   "runs": 10
+  },
+  "bench.huge_update_stream": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 1.318459,
+   "median": 1.08425,
+   "min": 1.026875,
+   "runs": 10
+  },
+  "bench.huge_update_stream_entries": {
+   "detail": {},
+   "max": 2.73175,
+   "median": 2.613667,
+   "min": 2.593875,
+   "runs": 9
+  },
+  "bench.huge_update_stream_rows_patch": {
+   "detail": {},
+   "max": 0.046291,
+   "median": 0.044584,
+   "min": 0.04425,
+   "runs": 9
+  },
+  "bench.huge_update_tool": {
+   "detail": {
+    "timeline_rows": 2702
+   },
+   "max": 0.850667,
+   "median": 0.824001,
+   "min": 0.7888330000000001,
+   "runs": 10
+  },
+  "bench.huge_update_tool_entries": {
+   "detail": {},
+   "max": 2.8105,
+   "median": 2.659042,
+   "min": 2.614291,
+   "runs": 9
+  },
+  "bench.huge_update_tool_rows_offmain": {
+   "detail": {},
+   "max": 24.4765,
+   "median": 24.22975,
+   "min": 23.82,
+   "runs": 5
+  },
+  "bench.markdown_layout": {
+   "detail": {
+    "blocks": 323
+   },
+   "max": 61.386625,
+   "median": 58.638958,
+   "min": 58.493584,
+   "runs": 9
+  },
+  "bench.markdown_parse": {
+   "detail": {
+    "bytes": 38943
+   },
+   "max": 16.6978666,
+   "median": 16.13055,
+   "min": 15.911358400000001,
+   "runs": 9
+  },
+  "bench.markdown_parse_lines": {
+   "detail": {
+    "bytes": 27692
+   },
+   "max": 44.35208333333333,
+   "median": 43.83916666666667,
+   "min": 43.653999999999996,
+   "runs": 9
+  },
+  "bench.markdown_stream_delta_full": {
+   "detail": {
+    "words": 2151
+   },
+   "max": 22.2826958,
+   "median": 21.7913292,
+   "min": 20.8969458,
+   "runs": 9
+  },
+  "bench.markdown_stream_delta_incremental": {
+   "detail": {
+    "words": 2151
+   },
+   "max": 2.1155,
+   "median": 0.5784875,
+   "min": 0.34372919999999996,
+   "runs": 9
+  },
+  "bench.paging_huge_main": {
+   "detail": {
+    "last_ms": 2.2132080000000003,
+    "sum_ms": 140.441959,
+    "timeline_rows": 2700
+   },
+   "max": 3.024541,
+   "median": 1.809917,
+   "min": 1.168042,
+   "runs": 75
+  },
+  "bench.paging_huge_total": {
+   "detail": {
+    "last_ms": 6.866458,
+    "sum_ms": 334.55370800000003,
+    "timeline_rows": 2700
+   },
+   "max": 6.866458,
+   "median": 4.460625,
+   "min": 2.273416,
+   "runs": 75
+  },
+  "bench.paging_seeded2000_main": {
+   "detail": {
+    "last_ms": 0.943916,
+    "sum_ms": 48.514492000000004,
+    "timeline_rows": 2000
+   },
+   "max": 1.5597089999999998,
+   "median": 0.943125,
+   "min": 0.479626,
+   "runs": 50
+  },
+  "bench.paging_seeded2000_total": {
+   "detail": {
+    "last_ms": 1.9705,
+    "sum_ms": 63.39678799999999,
+    "timeline_rows": 2000
+   },
+   "max": 3.259333,
+   "median": 1.243166,
+   "min": 0.479834,
+   "runs": 50
+  },
+  "bench.sidebar_items_1000": {
+   "detail": {
+    "threads": 1000
+   },
+   "max": 4.1420666,
+   "median": 4.1169166,
+   "min": 4.0833418,
+   "runs": 9
+  },
+  "bench.sidebar_rename_1580_classic": {
+   "detail": {},
+   "max": 0.527292,
+   "median": 0.504875,
+   "min": 0.500542,
+   "runs": 15
+  },
+  "bench.sidebar_shelf_1580_classic": {
+   "detail": {},
+   "max": 2.179708,
+   "median": 1.992167,
+   "min": 1.08325,
+   "runs": 9
+  },
+  "bench.sidebar_tick_1580_classic": {
+   "detail": {},
+   "max": 0.414125,
+   "median": 0.334542,
+   "min": 0.313292,
+   "runs": 15
+  },
+  "bench.thread_reducer": {
+   "detail": {
+    "items": 129
+   },
+   "max": 0.3449625,
+   "median": 0.3424271,
+   "min": 0.34059795,
+   "runs": 9
+  },
+  "bench.timeline_rows": {
+   "detail": {
+    "turn_items": 19
+   },
+   "max": 0.11661165999999999,
+   "median": 0.1139325,
+   "min": 0.113575,
+   "runs": 9
+  }
+ },
+ "mode": "benchmarks-only",
+ "notes": [
+  "Benchmarks only (--no-app). No app launch, idle, energy or window measurements. Product source matches d880587; the run began before that commit was created.",
+  "Recompared the saved measurements against the newest saved run containing all 43 benchmark metrics. The initially selected app-only baseline contained none."
+ ],
+ "quiet": {
+  "max_load": 3.0,
+  "noisy": false,
+  "waits": [
+   {
+    "before": "bench",
+    "load": 2.09,
+    "load_before": 2.09,
+    "quiet": true,
+    "waited_s": 0
+   }
+  ]
+ },
+ "regressions": [
+  "bench.huge_cache_load",
+  "bench.huge_cache_write",
+  "bench.huge_open_long_decode",
+  "bench.huge_open_long_entries",
+  "bench.huge_open_long_parse",
+  "bench.huge_open_panel",
+  "bench.huge_update_append",
+  "bench.huge_update_stream",
+  "bench.huge_update_stream_entries",
+  "bench.huge_update_tool",
+  "bench.huge_update_tool_entries",
+  "bench.huge_update_tool_rows_offmain",
+  "bench.markdown_parse",
+  "bench.markdown_parse_lines",
+  "bench.markdown_stream_delta_full",
+  "bench.paging_huge_main",
+  "bench.paging_huge_total",
+  "bench.paging_seeded2000_main",
+  "bench.paging_seeded2000_total",
+  "bench.sidebar_rename_1580_classic",
+  "bench.sidebar_tick_1580_classic"
+ ],
+ "repeat": 3,
+ "source": ".",
+ "workload": 1
+}

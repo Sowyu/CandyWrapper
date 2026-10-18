@@ -13,7 +13,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Fix the composer placeholder/footer overlap reported in a screenshot and publish a release (taken 2026-10-18). Check collapsed-to-expanded layout and native rendering before release.
+- [ ] Fix the composer placeholder/footer overlap and publish v1.5.6 (taken 2026-10-18): fix `d880587` and version/build `827fce0` (1.5.6, 31) are pushed. All 1,534 Swift Testing and 17 XCTest tests and the isolated app build passed. The remote GUI is locked, so the required real-window check and release are waiting for the user to unlock it or waive that check. Release notes: `/tmp/cw-composer-release-notes.md`. [Fix and validation](docs/research/composer-overlap-2026-10-18.md).
 
 - [x] Full bug, redundancy and codebase audit (2026-10-18): three high-priority file-save risks and five medium-priority state/resource defects, plus duplication candidates and app integration test gaps. All 1,532 Swift Testing and 17 XCTest tests passed; isolated app build and sandbox snapshot passed. Product behavior is unchanged. [Audit and repair order](docs/research/codebase-audit-2026-10-18.md).
 
@@ -55,6 +55,8 @@ The user dropped the side-by-side sweep of the parity checklist on 2026-10-13 (`
 The code marks known shortcuts with `// ponytail:`, each naming when to fix it (`rg '// ?ponytail:' App Packages/CandyKit/Sources`). They aren't tasks on their own. Fix one when your work touches it.
 
 ## Waiting on the user
+
+- Unlock the remote Mac's GUI or allow automated checks only for the composer fix. v1.5.6 (build 31), commit `827fce0`, is prepared but not published. A question was sent on 2026-10-18; no answer has been received.
 
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
