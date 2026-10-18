@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Auto-allow MCP app tool calls in Full access (taken 2026-10-18): keep callable-tool checks and confirmation in the other access modes.
+
 - [x] Published the MCP preview fix as v1.5.7 (build 32) on 2026-10-18 from `d69d95f`. Signed app, downloaded ZIP/DMG hashes and automatic-update feed verified.
 
 - [x] Stop MCP previews opening full screen without a user action (2026-10-18): automatic requests stay inline, explicit expansion remains available, and expanded content survives new inline results. Full suite: 1,553 tests; final focused checks: 12 tests. Native light/dark startup, expand and exit checks passed. Released in v1.5.7. [Fix and validation](docs/research/mcp-fullscreen-2026-10-18.md).
