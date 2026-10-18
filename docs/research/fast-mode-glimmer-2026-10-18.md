@@ -10,6 +10,10 @@ CandyWrapper reads the latest run by ordinal, not the next composer selection. P
 
 ## Validation
 
-All 15 focused ThreadCompletionTests passed, including Fast options, normal and missing options, latest-run ordering and reset between threads. The isolated Debug app built successfully. Real-window light/dark sandbox previews and recorded frame sheets were inspected (`/tmp/cw-glimmer-fast-light.png`, `/tmp/cw-glimmer-normal-dark.png`, `/tmp/cw-glimmer-fast-final.mov`, `/tmp/cw-glimmer-normal.mov`). The full suite result is recorded below when it finishes.
+All 15 focused ThreadCompletionTests passed, including Fast options, normal and missing options, latest-run ordering and reset between threads. The isolated Debug app built successfully. Real-window light/dark sandbox previews and recorded frame sheets were inspected (`/tmp/cw-glimmer-fast-light.png`, `/tmp/cw-glimmer-normal-dark.png`, `/tmp/cw-glimmer-fast-final.mov`, `/tmp/cw-glimmer-normal.mov`). The final full suite passed all 1,532 tests (332 protocol, 125 client, 172 store, 785 feature and 118 design-system tests).
 
 Code review found no wire changes or new idle callbacks. The 30 fps cap remains; a faster sweep can use more render-server updates while active. This small animation change did not trigger a full performance review.
+
+## Release
+
+v1.5.5 (build 30) was published from `9efd347` on 2026-10-18. The release script verified app signatures, downloaded ZIP/DMG hashes and the signed update feed. [Release and downloads](https://github.com/Sowyu/CandyWrapper/releases/tag/v1.5.5).
