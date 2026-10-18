@@ -32,3 +32,11 @@ Published v1.5.7 (build 32) from `d69d95f1498e52b7f3ca884e5c097a10eccaa43a` on 2
 c6ef68727f8206d779e2c4e70698a37a603be43fdc8a8d44740253c5076f483d  CandyWrapper-1.5.7-arm64.zip
 c237fc4bfba8db13807021f571bf04cb7a24992eadf2a1dbce41f322ebc6806e  CandyWrapper-1.5.7-arm64.dmg
 ```
+
+## Full access tool confirmation
+
+The user asked to auto-allow the Blender viewport capture dialog while the thread uses Full access. `McpAppRowView` now reads the current thread's `runtimeMode` after fetching tool metadata. An exact `full-access` value skips the tool confirmation. Other modes and unknown or absent modes keep asking for non-read-only tools. Read-only tools keep their existing behavior. The server's callable flag, app-row identity, open window and conversation identity still gate execution. Chat messages and downloads keep their own confirmation flows.
+
+This deliberately differs from `apps/web/src/components/chat/McpAppFrame.tsx:290-305` at `T3_VERSION`, which asks for every non-read-only tool call without consulting runtime mode. The MCP request and response shapes are unchanged.
+
+`McpToolApprovalTests` exercises the production tool-call path with six access-mode values, approved writes and read-only calls in restricted mode, forbidden tools, row reuse, and a mode change while tool metadata loads. All 21 focused approval, fullscreen, MCP-effect and web-content tests passed through `scripts/test`. Diff review completed. No drawing or layout code changed, and no new timer or polling was added. This follow-up has not been released yet.

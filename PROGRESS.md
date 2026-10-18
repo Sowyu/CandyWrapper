@@ -13,7 +13,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Auto-allow MCP app tool calls in Full access (taken 2026-10-18): keep callable-tool checks and confirmation in the other access modes.
+- [x] Auto-allow MCP app tool calls in Full access (2026-10-18): reads the current thread mode after tool lookup, retains callable and row/conversation checks, and asks in other modes. All 21 focused tests passed. Not released yet. [Notes](docs/research/mcp-fullscreen-2026-10-18.md#full-access-tool-confirmation).
 
 - [x] Published the MCP preview fix as v1.5.7 (build 32) on 2026-10-18 from `d69d95f`. Signed app, downloaded ZIP/DMG hashes and automatic-update feed verified.
 
@@ -77,6 +77,7 @@ Leave these alone during side-by-side checks.
 - Updates come from this repo's GitHub releases through Sparkle, and an update keeps agents on this Mac's server running.
 - Quitting asks first only while an agent runs on this Mac's own server.
 - MCP previews require recent interaction to expand; background display-mode requests stay inline. The native expand button is always available.
+- MCP app tool calls skip confirmation in Full access; other modes still ask for non-read-only tools. The user requested this on 2026-10-18.
 - Editing a project action without touching its shortcut keeps the shortcut, where T3 drops it.
 - A Read row's file preview that fails to load removes itself, and is skipped when the result already carries the image. T3 keeps an empty slot (ChatMarkdown.tsx:1491-1510). The user asked on 2026-10-14.
 
