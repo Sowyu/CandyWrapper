@@ -18,8 +18,17 @@ The full suite passed all 1,536 Swift Testing tests and 17 XCTest tests, 1,553 t
 
 Real-window checks passed in light and dark using a temporary isolated-app fixture with the production MCP host and a local HTTP capture document. The page requested fullscreen during initialization and displayed the host's inline response. The native expand button preserved the loaded canvas, Escape returned it inline, the page's own clicked expand button received fullscreen, and Exit full screen returned it inline. Fixture launch code was removed from the repository after the check; no test-only entry point ships. Screenshots stay outside git in `~/CandyWrapper-research/sandbox/mcp-fullscreen/`: `cw-mcp-dark-expanded.png`, `cw-mcp-dark-inline.png`, `cw-mcp-light-inline.png`, `cw-mcp-light-app-click.png` and `cw-mcp-light-dismissed.png`. The test app, derived data and fixture HTTP server were stopped or removed.
 
-No Blender account, live thread or live server was accessed. The fix has not been released yet. App CPU and memory were not profiled for this narrow interaction change.
+No Blender account, live thread or live server was accessed. The fix shipped in [v1.5.7 (build 32)](https://github.com/Sowyu/CandyWrapper/releases/tag/v1.5.7). App CPU and memory were not profiled for this narrow interaction change.
 
 ## Remote desktop interruption
 
-Native checks were interrupted by the remote desktop locking. Host logs identify immediate lock requests from Apple's ScreensharingAgent at 09:58 and 10:08, followed by that agent exiting. Sleep and display sleep were already disabled. This points to Screen Sharing restoring the locked state when a connection ends, rather than the test app or an idle timeout. No login or remote-access setting was changed. The user does not want repeated Screen Sharing reconnects to be part of the validation workflow; a permanent solution remains to be established.
+Native checks were interrupted by the remote desktop locking. Host logs identify immediate lock requests from Apple's ScreensharingAgent at 09:58 and 10:08, followed by that agent exiting. Sleep and display sleep were already disabled. This points to Screen Sharing restoring the locked state when a connection ends, rather than the test app or an idle timeout. The user subsequently asked to keep the desktop available after closing Screen Sharing. `RestoreMachineState` is the relevant Remote Management preference, documented by [Screens support](https://help.edovia.com/en/screens-5/troubleshooting/log-in-twice-mac/). The installed ScreensharingAgent binary contains the key alongside `ScreenState_GetRestorePreference` and the message `pref set to not restore state`. The preference was absent. On the user's request, set it with `sudo defaults write /Library/Preferences/com.apple.RemoteManagement RestoreMachineState -bool NO` and verified that it reads back as `0`. No service was restarted. This leaves the desktop unlocked after a remote session instead of restoring its previous locked state. Removing that key restores the previous configuration. Verified after the viewer disconnected: no ScreensharingAgent process remained, and the console session stayed unlocked.
+
+## Release
+
+Published v1.5.7 (build 32) from `d69d95f1498e52b7f3ca884e5c097a10eccaa43a` on 2026-10-18 with `scripts/release`. The clean Release build and strict app signature check passed. Downloaded ZIP and DMG hashes matched the local archives, and the signed automatic-update feed was published and checked.
+
+```text
+c6ef68727f8206d779e2c4e70698a37a603be43fdc8a8d44740253c5076f483d  CandyWrapper-1.5.7-arm64.zip
+c237fc4bfba8db13807021f571bf04cb7a24992eadf2a1dbce41f322ebc6806e  CandyWrapper-1.5.7-arm64.dmg
+```
