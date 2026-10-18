@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Catch up to T3 Code Nightly 3315, following `docs/nightly-catch-up.md` (taken 2026-10-18).
+
 - [x] Published the Full access MCP fix as v1.5.8 (build 33) on 2026-10-18 from `7ce8314`. All 21 focused tests passed; signed app, ZIP/DMG downloads and automatic-update feed verified.
 
 - [x] Auto-allow MCP app tool calls in Full access (2026-10-18): reads the current thread mode after tool lookup, retains callable and row/conversation checks, and asks in other modes. All 21 focused tests passed. Released in v1.5.8. [Notes](docs/research/mcp-fullscreen-2026-10-18.md#full-access-tool-confirmation).
