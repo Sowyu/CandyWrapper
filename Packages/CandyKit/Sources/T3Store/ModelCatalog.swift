@@ -464,4 +464,55 @@ public enum ModelTraits {
     public static func stripUltrathinkPrefix(_ text: String) -> String {
         text.replacingOccurrences(of: #"^Ultrathink:\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
     }
+    // MARK: Effort stepping (TraitsPicker.tsx:264-353, composerProviderState.tsx:169-218)
+
+    /// One `composer.increaseEffort` or `composer.decreaseEffort` press: the new prompt and caret, and
+    /// the selections to store, or nil options when only the Ultrathink prefix changed.
+    public struct ReasoningStep: Equatable, Sendable {
+        public let prompt: String
+        /// UTF-16 offset into `prompt`.
+        public let cursor: Int
+        public let options: [ProviderOptionSelection]?
+    }
+
+    /// `getComposerReasoningStep`: moves the first reasoning select one option in `direction`, wrapping
+    /// at both ends. Nil when the model has no reasoning select with two options or "ultrathink" sits in
+    /// the prompt body. `cursor` is a UTF-16 offset into `prompt` and stays on the same character.
+    public static func reasoningStep(model: ServerProviderModel?, options: [ProviderOptionSelection]?,
+                                     prompt: String, cursor: Int, direction: Int) -> ReasoningStep? {
+        let descriptors = descriptors(model, selections: withImplicitFastMode(model, options))
+        let selects = descriptors.filter { $0.type == .select }
+        let controlled = selects.first?.promptInjectedValues?.isEmpty == false && isUltrathinkPrompt(prompt)
+        if controlled && ultrathinkInBody(prompt) { return nil }
+        guard let d = selects.first(where: { reasoningIds.contains($0.id) }), d.options.count >= 2 else { return nil }
+        let isPrimary = d.id == selects.first?.id
+        let ordered = direction > 0 ? d.options : Array(d.options.reversed())
+        // A value outside the catalog steps from the catalog default, or from the end when there is none.
+        let position = [isPrimary && controlled ? "ultrathink" : currentValue(d)?.string, defaultChoice(d)]
+            .lazy.compactMap { v in ordered.firstIndex { $0.id == v } }.first ?? -1
+        for option in ordered[(position + 1)...] + ordered[..<max(position, 0)] {
+            guard !option.id.isEmpty else { return nil }
+            if d.promptInjectedValues?.contains(option.id) == true {
+                // A slash command refuses the Ultrathink prefix, so skip that level.
+                let next = applyUltrathinkPrefix(prompt)
+                if next.hasPrefix(ultrathinkPrefix) { return step(prompt, cursor, to: next, options: nil) }
+                continue
+            }
+            guard let picked = pick(descriptors, id: d.id, value: .string(option.id)) else { return nil }
+            return step(prompt, cursor, to: isPrimary && controlled ? stripUltrathinkPrefix(prompt) : prompt, options: picked)
+        }
+        return nil
+    }
+
+    /// Keeps the caret on the same character: adding the prefix also trims the prompt, so the kept text
+    /// starts right after the prefix (composerProviderState.tsx:207-213).
+    private static func step(_ prompt: String, _ cursor: Int, to next: String, options: [ProviderOptionSelection]?) -> ReasoningStep {
+        guard next != prompt else { return ReasoningStep(prompt: prompt, cursor: cursor, options: options) }
+        let length = prompt.utf16.count, nextLength = next.utf16.count
+        let leading = length - String(prompt.drop { $0.isWhitespace }).utf16.count
+        let trimmedLength = prompt.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count
+        let keptStart = options != nil ? 0 : nextLength - trimmedLength
+        let offset = options != nil ? nextLength - length : keptStart - leading
+        return ReasoningStep(prompt: next, cursor: min(nextLength, max(keptStart, cursor + offset)), options: options)
+    }
 }

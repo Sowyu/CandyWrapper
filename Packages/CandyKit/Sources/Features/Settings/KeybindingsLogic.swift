@@ -38,7 +38,7 @@ public struct KeybindingTarget: Equatable, Sendable {
 
 /// T3's Keybindings page logic (apps/web/src/components/settings/KeybindingsSettings.logic.ts).
 public enum KeybindingsLogic {
-    /// `STATIC_KEYBINDING_COMMANDS` (contracts keybindings.ts:59-114), in contract order.
+    /// `STATIC_KEYBINDING_COMMANDS` (contracts keybindings.ts:59-116), in contract order.
     public static let staticCommands: [String] = [
         "sidebar.toggle", "navigation.back", "navigation.forward", "terminal.toggle", "terminal.split", "terminal.splitVertical",
         "terminal.new", "terminal.close", "rightPanel.toggle", "rightPanel.new", "threadPanel.toggle", "rightPanel.toggleMaximized",
@@ -46,7 +46,8 @@ public enum KeybindingsLogic {
         "preview.focusUrl", "preview.zoomIn", "preview.zoomOut", "preview.resetZoom", "commandPalette.toggle", "filePicker.toggle",
         "projectSearch.toggle", "usage.open", "theme.select", "appearance.cycle", "themeEditor.toggle", "composer.stash",
         "composer.sendAlternate", "composer.sendBackground", "composer.sendAndNewThread", "composer.host", "composer.cycleHost",
-        "composer.effort", "composer.mode", "composer.workspace", "composer.previousWorktree", "composer.branch", "chat.new",
+        "composer.effort", "composer.increaseEffort", "composer.decreaseEffort", "composer.mode", "composer.workspace",
+        "composer.previousWorktree", "composer.branch", "chat.new",
         "chat.newLocal", "chat.newWithoutProject", "chat.find", "editor.openFavorite", "usage.cost", "usage.tokens", "usage.limits",
         "usage.period.day", "usage.period.week", "usage.period.month", "usage.period.quarter",
         "modelPicker.toggle", "modelPicker.previousProvider", "modelPicker.nextProvider",
