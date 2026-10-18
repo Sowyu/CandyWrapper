@@ -13,7 +13,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
-- [ ] Stop MCP previews opening full screen without a user action (taken 2026-10-18): trace the Blender capture takeover, keep automatic requests inline, retain explicit expansion and verify the native window.
+- [x] Stop MCP previews opening full screen without a user action (2026-10-18): automatic requests stay inline, explicit expansion remains available, and expanded content survives new inline results. Full suite: 1,553 tests; final focused checks: 12 tests. Native light/dark startup, expand and exit checks passed. Not released yet. [Fix and validation](docs/research/mcp-fullscreen-2026-10-18.md).
 
 - [x] Fix the composer placeholder/footer overlap and publish v1.5.6 (2026-10-18): fix `d880587`; released build 31 from `827fce0`. All 1,534 Swift Testing and 17 XCTest tests passed. Real-window Glass light/dark collapse, expansion and menu checks passed after the user unlocked the desktop. Signed app, ZIP/DMG downloads and automatic-update feed verified. [Fix, benchmark limits and validation](docs/research/composer-overlap-2026-10-18.md).
 
@@ -72,6 +72,7 @@ Leave these alone during side-by-side checks.
 - Escape leaves Settings.
 - Updates come from this repo's GitHub releases through Sparkle, and an update keeps agents on this Mac's server running.
 - Quitting asks first only while an agent runs on this Mac's own server.
+- MCP previews require recent interaction to expand; background display-mode requests stay inline. The native expand button is always available.
 - Editing a project action without touching its shortcut keeps the shortcut, where T3 drops it.
 - A Read row's file preview that fails to load removes itself, and is skipped when the result already carries the image. T3 keeps an empty slot (ChatMarkdown.tsx:1491-1510). The user asked on 2026-10-14.
 

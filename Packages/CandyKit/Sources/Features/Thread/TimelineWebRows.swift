@@ -169,6 +169,7 @@ final class McpAppRowView: TimelineRowView {
     private let closedBox = FillView()
     private let closedLabel = LabelView("", font: TL.font(12))
     private let showApp = ButtonView("Show app", variant: .ghost, size: .xs)
+    private let expand = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var entry: McpAppEntry?
     private var bridge: McpAppHostBridge?
     private var loading: Task<Void, Never>?
@@ -195,17 +196,27 @@ final class McpAppRowView: TimelineRowView {
             self.context.model?.setAppClosed(id, false)
         }
         addSubview(showApp)
+        expand.iconSize = 14
+        expand.isHidden = true
+        expand.setAccessibilityLabel("Open app full screen")
+        _ = TooltipController.attach(to: expand, text: "Open app full screen")
+        expand.action = { [weak self] in _ = self?.setDisplayMode("fullscreen", userInitiated: true) }
+        addSubview(expand)
         frameView.onMessage = { [weak self] in self?.bridge?.receive($0) }
         frameView.onNavigatedAway = { [weak self] in
             guard let self else { return }
             self.bridge?.dispose()
             self.bridge = nil
             self.navigatedAway = true
+            self.expand.isHidden = true
             self.frameView.release()
             self.note.text = "The \(self.entry?.app.server ?? "") app left its page and was stopped"
             self.note.isHidden = false
         }
-        frameView.onEvicted = { [weak self] in self?.bridge?.dispose(); self?.bridge = nil }
+        frameView.onEvicted = { [weak self] in
+            _ = self?.setDisplayMode("inline")
+            self?.bridge?.dispose(); self?.bridge = nil
+        }
         restyle()
     }
 
@@ -220,6 +231,7 @@ final class McpAppRowView: TimelineRowView {
         closedBox.isHidden = !isClosed
         closedLabel.isHidden = !isClosed
         showApp.isHidden = !isClosed
+        expand.isHidden = isClosed || navigatedAway || fullscreen != nil
         closedLabel.text = "The \(e.app.server) app was closed"
         border.isHidden = isClosed || e.app.prefersBorder != true
         if isClosed { teardown() } else { load() }
@@ -330,7 +342,10 @@ final class McpAppRowView: TimelineRowView {
                     guard let target else { throw McpAppHostBridge.Refusal("Declined by the user.") }
                     try bytes.write(to: target, options: .atomic)
                 }
-            }, requestDisplayMode: { [weak self] mode in self?.setDisplayMode(mode) ?? "inline" }))
+            }, requestDisplayMode: { [weak self] mode in
+                guard let self else { return "inline" }
+                return self.setDisplayMode(mode, userInitiated: self.window?.isKeyWindow == true && self.frameView.userIsActive)
+            }))
         self.bridge = bridge
         frameView.activate(.init(src: url, title: "\(e.app.server) app", allow: e.app.allowAttribute, dark: effectiveAppearance.isDark))
         // The tool's definition (for `toolInfo` at initialize) and the stored call (arguments and result).
@@ -342,17 +357,29 @@ final class McpAppRowView: TimelineRowView {
         }
     }
 
-    private func setDisplayMode(_ mode: String) -> String {
+    // McpAppFrame.tsx:341-353 accepts unsolicited expansion. Keep background previews inline here.
+    func setDisplayMode(_ mode: String, userInitiated: Bool = false) -> String {
         if mode == "inline" {
-            if let fullscreen { addSubview(frameView); fullscreen.removeFromSuperview(); self.fullscreen = nil; needsLayout = true }
-        } else if mode == "fullscreen", fullscreen == nil, let content = window?.contentView,
+            if let fullscreen {
+                addSubview(frameView, positioned: .below, relativeTo: border)
+                fullscreen.removeFromSuperview(); self.fullscreen = nil
+                frameView.webView?.forwardsScroll = true
+                frameView.budgeted = true
+                if frameView.isLive { ThreadWebFrameBudget.add(frameView) }
+                needsLayout = true
+            }
+        } else if mode == "fullscreen", userInitiated, frameView.isLive, fullscreen == nil, let content = window?.contentView,
                   context.model?.projection?.runtimeRequests.contains(where: { $0.status == "pending" }) != true,
                   !content.subviews.contains(where: { $0 is ModalHost || $0 is ThreadMcpFullscreenView }), window?.attachedSheet == nil {
             let host = ThreadMcpFullscreenView(content: frameView)
             host.frame = content.bounds; host.autoresizingMask = [.width, .height]
             host.onClose = { [weak self] in _ = self?.setDisplayMode("inline") }
+            // A visible fullscreen app must not be evicted by new inline results.
+            frameView.budgeted = false
+            frameView.webView?.forwardsScroll = false
             fullscreen = host; content.addSubview(host)
         }
+        expand.isHidden = closed || navigatedAway || fullscreen != nil
         bridge?.updateHostContext()
         return fullscreen == nil ? "inline" : "fullscreen"
     }
@@ -413,6 +440,7 @@ final class McpAppRowView: TimelineRowView {
         entry = nil
         navigatedAway = false
         note.isHidden = true
+        expand.isHidden = true
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -439,6 +467,7 @@ final class McpAppRowView: TimelineRowView {
         let box = NSRect(x: 4, y: 0, width: max(0, bounds.width - 8), height: boxHeight)
         if fullscreen == nil { frameView.frame = box }
         border.frame = box
+        expand.frame = NSRect(x: max(4, box.maxX - 32), y: 8, width: 24, height: 24)
         note.frame = NSRect(x: box.minX, y: box.midY - 8, width: box.width, height: 16)
         // `rounded-lg border px-3 py-2 text-xs`, Show app at the end.
         closedBox.frame = box
@@ -461,6 +490,7 @@ private final class ThreadMcpFullscreenView: DSView {
         close.action = { [weak self] in self?.onClose?() }
     }
     override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    override func cancelOperation(_ sender: Any?) { onClose?() }
     override func layout() {
         super.layout()
         close.frame = NSRect(x: max(8, bounds.width - 160), y: 8, width: 152, height: 32)
