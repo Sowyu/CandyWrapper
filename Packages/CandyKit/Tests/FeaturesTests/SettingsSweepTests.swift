@@ -23,6 +23,8 @@ import T3Protocol
     @Test func providerFieldsMatchDriverAndSource() {
         #expect(ProvidersLogic.fields("antigravity").map(\.key) == ["authMethod", "apiKey", "gcpProject", "gcpLocation", "binaryPath"])
         #expect(ProvidersLogic.fields("antigravity").first { $0.key == "apiKey" }?.secret == true)
+        // 3315 masks OpenCode's password in settings reads, so the field must never show the mask as a typed value.
+        #expect(ProvidersLogic.fields("opencode").first { $0.key == "serverPassword" }.map { $0.secret && $0.redacted } == true)
         #expect(ProvidersLogic.fields("acpRegistry", config: .object(["source": .string("local")])).map(\.key) == ["source", "commandPath"])
         #expect(ProvidersLogic.fields("acpRegistry").map(\.key) == ["source", "agentId", "commandPath", "authMethodId"])
         let instance: JSONValue = .object(["driver": .string("antigravity"), "config": .object(["apiKey": .string("fake")])])
