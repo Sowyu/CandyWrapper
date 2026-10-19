@@ -223,6 +223,18 @@ import Testing
 }
 
 @MainActor struct ComposerRichTextBlockTypingTests {
+    /// Effort stepping restores the caret by its offset in the draft. A rule before it keeps its newline
+    /// there, so the caret stays on the line after the rule.
+    @Test func expandedCaretRoundTripsPastARule() {
+        let editor = makeEditor()
+        editor.setText("---\nabc")
+        let target = (editor.expandedText as NSString).range(of: "abc").location
+        editor.expandedCaret = target
+        #expect(editor.expandedCaret == target)
+        type(editor, "X")
+        #expect(storedDraft(editor) == "---\nXabc")
+    }
+
     /// Each rule fires on the keystroke that completes it, at the start of a plain line.
     @Test(arguments: [
         ("* item", "bulletList"), ("+ item", "bulletList"), ("- item", "bulletList"), ("1. item", "orderedList"),
