@@ -65,6 +65,19 @@ struct MarkdownTests {
         #expect(runs.map(\.text).joined() == "Review this PR: <\(tag)>https://e.com/pull/45</\(tag)>")
     }
 
+    /// A raw HTML block has no paragraph, so its text used to vanish: a subagent prompt that opened with `<task>`
+    /// drew an empty bubble. T3 shows raw HTML as text, its whitespace collapsed like any HTML text.
+    @Test func rawHTMLBlocksStayVisible() {
+        func paragraph(_ text: String) -> MarkdownBlock { .paragraph([InlineRun(text: text)]) }
+        #expect(MarkdownDocument(parsing: "<task>\nInvestigate the update regressions.\n</task>", preservesLineBreaks: true).blocks
+                == [paragraph("<task> Investigate the update regressions. </task>")])
+        #expect(MarkdownDocument(parsing: "<context>\nsome context\n</context>\n\nPlease fix it.").blocks
+                == [paragraph("<context> some context </context>"), paragraph("Please fix it.")])
+        #expect(MarkdownDocument(parsing: "> <task>\n> do it\n> </task>").blocks == [.blockquote([paragraph("<task> do it </task>")])])
+        guard case .list(let list)? = MarkdownDocument(parsing: "- <task>\n  do it\n  </task>").blocks.first else { Issue.record("list"); return }
+        #expect(list.items.first?.blocks == [paragraph("<task> do it </task>")])
+    }
+
     /// Token classes Shiki gives these snippets with pierre-light (dumped from T3's bundled highlighter).
     @Test func highlightsLikeShiki() {
         func kinds(_ code: String, _ language: String) -> [String: CodeTokenKind] {
