@@ -35,7 +35,7 @@ public struct MarkdownDocument: Sendable, Equatable {
             where line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) { blank.insert(index + 1) }
             builder.root.markLooseLists(blank: blank)
         }
-        return builder.root.children.compactMap(\.node).flatMap(Self.blocks(from:))
+        return containedBlocks(builder.root)
     }
 
     /// False only when no list can be loose: no blank line follows a list marker line and comes before
@@ -204,7 +204,7 @@ public struct MarkdownDocument: Sendable, Equatable {
             let ordered: Bool = { if case .orderedList = node.kind { return true }; return false }()
             return [.list(MarkdownList(ordered: ordered, start: start, items: items, loose: node.loose))]
         case .blockQuote:
-            var children = node.children.compactMap(\.node).flatMap(blocks(from:))
+            var children = containedBlocks(node)
             if let kind = alertKind(&children) { return [.alert(kind, children)] }
             return [.blockquote(children)]
         case .codeBlock(let info):
@@ -226,12 +226,44 @@ public struct MarkdownDocument: Sendable, Equatable {
             }
             return [.table(MarkdownTable(alignments: alignments, header: header, rows: rows))]
         case .listItem, .tableHeaderRow, .tableRow, .tableCell, .root, .other:
-            return node.children.compactMap(\.node).flatMap(blocks(from:))
+            return containedBlocks(node)
         }
     }
 
+    /// A container's blocks in source order. Text straight under a container has no block of its own:
+    /// Foundation hands over a raw HTML block that way (`.blockHTML`, no paragraph), and dropping it left a
+    /// subagent prompt that opens with `<task>` as an empty bubble. T3 shows raw HTML as text (react-markdown's
+    /// `skipHtml={false}`, ChatMarkdown.tsx:3372, and user messages never parse it, MessagesTimeline.tsx:4593)
+    /// with HTML's whitespace collapsing, so the loose text becomes one paragraph.
+    private static func containedBlocks(_ node: Node) -> [MarkdownBlock] {
+        var out: [MarkdownBlock] = []
+        var loose = String.UnicodeScalarView()
+        var gap = false
+        func flush() {
+            if !loose.isEmpty { out.append(.paragraph([InlineRun(text: String(loose))])) }
+            loose = String.UnicodeScalarView()
+            gap = false
+        }
+        for child in node.children {
+            switch child {
+            case .node(let n):
+                flush()
+                out += blocks(from: n)
+            case .run(let run):
+                for scalar in run.text.unicodeScalars {
+                    if [" ", "\t", "\n", "\r", "\u{0C}"].contains(scalar) { gap = !loose.isEmpty; continue }
+                    if gap { loose.append(" "); gap = false }
+                    loose.append(scalar)
+                }
+                gap = !loose.isEmpty
+            }
+        }
+        flush()
+        return out
+    }
+
     private static func listItem(from node: Node) -> MarkdownListItem {
-        var blocks = node.children.compactMap(\.node).flatMap(blocks(from:))
+        var blocks = containedBlocks(node)
         // GFM task item: the first paragraph starts with "[ ] " or "[x] ".
         var task: Bool?
         if case .paragraph(var runs)? = blocks.first, let first = runs.first, !first.code {

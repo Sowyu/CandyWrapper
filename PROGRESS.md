@@ -19,6 +19,10 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 - [x] Nightly catch-up to 3315 (2026-10-18 to 19): pinned 3315 and ported the table expand rule, effort stepping keybindings, masked provider passwords with a Clear button, 16 default pairing scopes, the open-thread snooze wake, PR `draft:` menu sync and the reasoning failure scan. Full suite: 1,549 Swift Testing and 17 XCTest tests passed, then 115 focused tests after the review fix. Light/dark checks and Haiku turns against 3315 and 3234 passed. Perf: 195 ms window, 0.044% idle CPU, 38.1 MB idle. An A/B with the pre-run commit showed the flagged micro-benchmarks were noise, and the single ~54 ms scroll and open stalls appear on both builds against 3315. [Audit](docs/research/nightly-diff-3315.md).
 
+- [x] Raw HTML blocks no longer vanish (2026-10-20): a message that opens with a tag line, like a subagent prompt starting with `<task>`, drew an empty bubble. It now shows the literal text with collapsed whitespace, as T3 does for user messages. The new Markdown check fails on the old parser. All 1,551 Swift Testing and 17 XCTest tests passed, and a `<task>` prompt showed correctly on screen against 3315.
+
+- [ ] Two small differences found with it: T3 renders sanitized HTML in assistant replies (`rehypeRaw` and `rehypeSanitize`, packages/shared/src/markdownPipeline.ts:180-185) where CandyWrapper shows the literal tags, and T3 labels a message the server sent for an agent "Sent by T3 Code" (packages/client-runtime/src/userMessage.ts:43-50) where CandyWrapper says "Sent by another agent".
+
 - [ ] Remaining 3315 parity: relative time labels that keep counting while shown (#21026) and SSH session reuse (#20445). See [the audit](docs/research/nightly-diff-3315.md#5-review-and-remaining-work).
 
 - [x] Published the Full access MCP fix as v1.5.8 (build 33) on 2026-10-18 from `7ce8314`. All 21 focused tests passed; signed app, ZIP/DMG downloads and automatic-update feed verified.
