@@ -168,18 +168,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return ComposerRichTextStyler.serialize(storage.attributedSubstring(from: range))
     }
 
-    /// The caret as a UTF-16 offset into `expandedText` (T3's `expandedCursor`).
+    /// The caret as a UTF-16 offset into `expandedText` (T3's `expandedCursor`). It maps through the whole
+    /// document, because a prefix serializes its last block as if it ended the draft (a rule drops its newline).
     var expandedCaret: Int {
-        get { expanded(NSRange(location: 0, length: selectedRange().location)).utf16.count }
-        set {
-            // The first storage position whose expanded prefix reaches the offset; chips expand, so search.
-            var low = 0, high = textStorage?.length ?? 0
-            while low < high {
-                let mid = (low + high) / 2
-                if expanded(NSRange(location: 0, length: mid)).utf16.count < newValue { low = mid + 1 } else { high = mid }
-            }
-            setSelectedRange(NSRange(location: low, length: 0))
-        }
+        get { markdownOffset(selectedRange().location) }
+        set { setCaret(markdown: newValue) }
     }
 
     /// Highlight whole code bodies off the main actor. Only the current document may receive tokens.
