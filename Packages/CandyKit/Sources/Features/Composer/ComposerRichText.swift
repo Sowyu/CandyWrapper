@@ -218,7 +218,10 @@ enum ComposerListContinuation {
     /// after the split line count on from the inserted one, until a blank line, a shallower line or
     /// another kind of item. Deeper lines are skipped; a newline inside a chip starts no item.
     private static func renumberFollowing(_ value: NSString, after lineEnd: Int, indent: String, marker: String) -> [Renumber] {
-        guard var expected = UInt64(marker.dropLast()).map({ $0 + 2 }) else { return [] }
+        // `Number.isSafeInteger(expected)` (composer-list-continuation.ts:87-91): a number too large to count
+        // on from renumbers nothing, and adding to it here must not overflow.
+        guard let current = UInt64(marker.dropLast()), current <= 9_007_199_254_740_991 - 2 else { return [] }
+        var expected = current + 2
         let delimiter = marker.suffix(1), base = indentWidth(indent)
         let tokens = ComposerInlineTokens.collect(value as String)
         var result: [Renumber] = [], position = lineEnd
