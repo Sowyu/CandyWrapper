@@ -2,6 +2,7 @@ import AppKit
 import Testing
 @testable import Features
 import DesignSystem
+import T3Protocol
 
 /// Ported from apps/web/src/components/CommandPalette.logic.test.ts, plus the palette's key routing.
 @MainActor
@@ -178,5 +179,15 @@ import DesignSystem
         palette.setMode(.init(name: "files", placeholder: "", footerActionLabel: "") { _ in ([], "") })
         palette.setMode(nil)
         #expect(palette.query.isEmpty)
+    }
+
+    /// `ThreadSearchPullRequestNumber`: the badge shows only when the query names the pull request.
+    @Test func threadSearchPullRequestBadge() {
+        let thread = ComposerFeedbackTests.shell(#""status":"idle","linkedPullRequest":{"projectId":"p","repository":"o/r","number":123,"url":"https://github.com/o/r/pull/123"}"#)
+        #expect(ThreadPullRequests.searchTerms(thread) == ["#123", "o/r#123", "https://github.com/o/r/pull/123"])
+        #expect(SidebarPullRequestBadge.search(thread, query: "#123")?.text == "123")
+        #expect(SidebarPullRequestBadge.search(thread, query: "o/r 123")?.text == "123")
+        #expect(SidebarPullRequestBadge.search(thread, query: "#124") == nil)
+        #expect(SidebarPullRequestBadge.search(thread, query: " ") == nil)
     }
 }

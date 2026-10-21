@@ -41,6 +41,10 @@ public struct PaletteEntry {
     public var trailingIcon: IconName?
     public var trailingCheckbox: Bool?
     public var noteIsWarning = false
+    /// `ThreadSearchPullRequestNumber`: a thread row's pull request badge, drawn without its controls.
+    public var pullRequestBadge: SidebarPullRequestBadge?
+    /// The thread is settled: the badge takes `text-secondary-label`.
+    public var pullRequestBadgeSettled = false
 
     /// UTF-16 offsets of the query's hits in `match`, after the tag.
     var matchHighlights: [Int]? {
@@ -89,6 +93,15 @@ public struct PalettePage {
 public enum PaletteSearch {
     /// `RECENT_THREAD_LIMIT`.
     public static let recentThreadLimit = 12
+
+    /// `pullRequestMatchesSearchQuery` (Sidebar.logic.ts:1011-1019): every word of the query is in the
+    /// pull request terms.
+    public static func pullRequestMatches(_ terms: [String], query: String) -> Bool {
+        let q = normalize(query)
+        guard !q.isEmpty else { return false }
+        let haystack = normalize(terms.joined(separator: " "))
+        return q.split(separator: " ").allSatisfy { haystack.contains($0) }
+    }
 
     /// `normalizeSearchText` (lib/utils.ts:22-24): NFKD without marks, lowercased, single spaces.
     public static func normalize(_ value: String) -> String {

@@ -233,6 +233,10 @@ public final class CommandPaletteController {
         item.trailingIcon = entry.trailingIcon
         item.trailingCheckbox = entry.trailingCheckbox
         item.noteIsWarning = entry.noteIsWarning
+        if let badge = entry.pullRequestBadge {
+            let settled = entry.pullRequestBadgeSettled
+            item.makeTrailing = { SearchPullRequestBadgeView(badge, settled: settled) }
+        }
         return item
     }
 
