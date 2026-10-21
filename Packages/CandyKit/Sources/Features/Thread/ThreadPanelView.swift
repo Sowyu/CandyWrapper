@@ -599,6 +599,10 @@ public final class ThreadPanelView: DSView {
         fade.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull()]
         fadeMask.actions = ["bounds": NSNull(), "position": NSNull(), "locations": NSNull()]
         layer?.addSublayer(fade)
+        timeline.onScroll = { [weak self] distance in
+            guard let self else { return }
+            DitherArtView.scrolled(distance, from: self)
+        }
         timeline.context.model = model
         model.onChange = { [weak self] change in
             guard let self else { return }
