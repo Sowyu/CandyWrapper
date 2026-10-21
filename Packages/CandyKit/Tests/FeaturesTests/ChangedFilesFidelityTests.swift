@@ -109,7 +109,8 @@ struct ChangedFilesFidelityTests {
         #expect(open.map(\.depth) == [0, 1, 2, 1, 0])
         let one = ChangedFilesCardView.rows(files, allExpanded: true, overrides: ["src/app": false])
         #expect(one.map(\.node.name) == ["src", "app", "b.md", "README.md"])
-        #expect(ChangedFilesCardView.height(files, allExpanded: false, overrides: [:]) == 40 + 16 + 28.5 + 28)
+        let collapsedHeight: CGFloat = 40 + 16 + 28.5 + 28
+        #expect(ChangedFilesCardView.height(files, allExpanded: false, overrides: [:]) == collapsedHeight)
         #expect(FileTypeIcon.token(for: "x/hello.py") == "python")
         #expect(FileTypeIcon.token(for: "notes.md") == "markdown")
         #expect(FileTypeIcon.token(for: "package.json") == "npm")
