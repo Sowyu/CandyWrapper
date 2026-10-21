@@ -241,6 +241,10 @@ final class BrowserController {
         return window.occlusionState.contains(.visible) && !window.isMiniaturized
     }
 
+    /// Settings, Usage and Pull requests take the thread panel out of the window: its streams and
+    /// discovery stop at once, and come back when the panel returns.
+    func threadRouteChanged() { render() }
+
     private func render() {
         let state = currentState ?? ThreadPreviewState()
         // Tab titles and favicons.
