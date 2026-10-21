@@ -547,13 +547,13 @@ final class WorkDetailView: DSView {
         needsLayout = true
     }
 
-    /// `+n -n` in `text-xs`: success then destructive.
+    /// `+n -n` in `text-xs`, in the diff palette (ba1907e8e0, V2ItemInspector.tsx).
     private static func counts(additions: Int?, deletions: Int?) -> NSAttributedString? {
         guard additions != nil || deletions != nil else { return nil }
         let font = DSFont.ui(12)
-        let s = NSMutableAttributedString(string: "+\(additions ?? 0)", attributes: [.font: font, .foregroundColor: TL.c(\.success)])
+        let s = NSMutableAttributedString(string: "+\(additions ?? 0)", attributes: [.font: font, .foregroundColor: TL.c(\.diffAddition)])
         s.append(NSAttributedString(string: " ", attributes: [.font: font]))
-        s.append(NSAttributedString(string: "-\(deletions ?? 0)", attributes: [.font: font, .foregroundColor: TL.c(\.destructive)]))
+        s.append(NSAttributedString(string: "-\(deletions ?? 0)", attributes: [.font: font, .foregroundColor: TL.c(\.diffDeletion)]))
         return s
     }
 
