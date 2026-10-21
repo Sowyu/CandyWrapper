@@ -61,7 +61,9 @@ final class ModelPickerView: DSView, PickerPopupBody {
         self.active = active
         self.activeModel = activeModel
         rail = ModelPickerSections.initialRail(active: active, favorites: favorites, catalog: catalog)
-        if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true { expandedLegacy = [active] }
+        // Opens the legacy group on an active legacy model unless it is a favorite (ModelPickerContent.tsx:433-440).
+        if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
+           !favorites.contains(ModelFavorite(provider: active, model: activeModel)) { expandedLegacy = [active] }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences)
         favoritesButton = RailButtonView(kind: .favorites)

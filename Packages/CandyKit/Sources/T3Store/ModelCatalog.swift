@@ -274,8 +274,9 @@ public struct ModelPickerSections: Sendable {
             let items = flat.enumerated().filter { $0.element.entry.id == id }
                 .sorted { ($0.element.isFavorite ? 0 : 1, $0.offset) < ($1.element.isFavorite ? 0 : 1, $1.offset) }
                 .map(\.element)
-            let current = items.filter { $0.model.isLegacy != true }
-            let legacy = items.filter { $0.model.isLegacy == true }
+            // A favorited legacy model lists with the current ones (ModelPickerContent.tsx:656-666).
+            let current = items.filter { $0.model.isLegacy != true || $0.isFavorite }
+            let legacy = items.filter { $0.model.isLegacy == true && !$0.isFavorite }
             if legacy.isEmpty {
                 rows = items.map { .model($0) }
             } else {
