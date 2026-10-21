@@ -126,7 +126,8 @@ public enum TerminalRPC {
     /// `cols` 1 to 1000, `rows` 1 to 500 (terminal.ts:13-14).
     public static let colsRange = 1...1000
     public static let rowsRange = 1...500
-    /// `terminal.write` takes at most 65,536 characters per call.
+    /// `terminal.write` takes at most 65,536 UTF-16 code units per call, JavaScript's `.length`
+    /// (terminal.ts:64-67).
     public static let maxWriteLength = 65_536
 
     /// Where a terminal starts: the thread's checkout and T3's project script variables.
@@ -184,15 +185,38 @@ public enum TerminalRPC {
     }
 
     /// Splits input into `terminal.write`-sized pieces without cutting a character in two.
+    /// Only a single character longer than the limit, like endless combining marks, splits
+    /// between its scalars, since the server would reject it whole.
     public static func writeChunks(_ data: String) -> [String] {
-        guard data.count > maxWriteLength else { return data.isEmpty ? [] : [data] }
+        guard data.utf16.count > maxWriteLength else { return data.isEmpty ? [] : [data] }
         var chunks: [String] = []
-        var rest = Substring(data)
-        while !rest.isEmpty {
-            let end = rest.index(rest.startIndex, offsetBy: maxWriteLength, limitedBy: rest.endIndex) ?? rest.endIndex
-            chunks.append(String(rest[..<end]))
-            rest = rest[end...]
+        var start = data.startIndex
+        var length = 0
+        func add(_ from: String.Index, _ to: String.Index) {
+            let n = data.utf16.distance(from: from, to: to)
+            if length + n > maxWriteLength, from > start {
+                chunks.append(String(data.unicodeScalars[start..<from]))
+                start = from
+                length = 0
+            }
+            length += n
         }
+        var i = data.startIndex
+        while i < data.endIndex {
+            let next = data.index(after: i)
+            if data.utf16.distance(from: i, to: next) > maxWriteLength {
+                var j = i
+                while j < next {
+                    let k = data.unicodeScalars.index(after: j)
+                    add(j, k)
+                    j = k
+                }
+            } else {
+                add(i, next)
+            }
+            i = next
+        }
+        chunks.append(String(data.unicodeScalars[start...]))
         return chunks
     }
 
