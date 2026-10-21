@@ -56,6 +56,7 @@ final class PullRequestsPageController {
     private var liveTimer: Timer?
     private var monitors: [Any] = []
     private var activeObserver: NSObjectProtocol?
+    private var occlusionObserver: NSObjectProtocol?
     private var speedMode = false
     private var visible = false
 
@@ -121,12 +122,7 @@ final class PullRequestsPageController {
         if visible { didHide() }
         visible = true
         reload()
-        // `useLiveRefresh`: once a minute while the page is in front, and on the way back to the window.
-        liveTimer?.invalidate()
-        liveTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload(keepRows: true, periodic: true) }
-        }
-        liveTimer?.tolerance = 6
+        syncLiveTimer()
         let flags = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             let m = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             self?.setSpeedMode(m.contains(.shift) && !m.contains(.command) && !m.contains(.control) && !m.contains(.option))
@@ -140,7 +136,18 @@ final class PullRequestsPageController {
             return nil
         }
         activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { if self?.visible == true { self?.reload(keepRows: true, periodic: true) } }
+            MainActor.assumeIsolated { if self?.windowVisible == true { self?.reload(keepRows: true, periodic: true) } }
+        }
+        // `useLiveRefresh` `visibilitychange` (useLiveRefresh.ts:118-140): a hidden, minimized or covered window
+        // stops the timer, and coming back refreshes once and restarts it.
+        occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] note in
+            let source = (note.object as AnyObject?).map(ObjectIdentifier.init)
+            MainActor.assumeIsolated {
+                guard let self, self.visible, let window = self.page.window, source == ObjectIdentifier(window) else { return }
+                let wasLive = self.liveTimer != nil
+                self.syncLiveTimer()
+                if !wasLive, self.liveTimer != nil { self.reload(keepRows: true, periodic: true) }
+            }
         }
         monitors = [flags, keys].compactMap { $0 }
     }
@@ -153,7 +160,21 @@ final class PullRequestsPageController {
         monitors = []
         if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
         activeObserver = nil
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        occlusionObserver = nil
         setSpeedMode(false)
+    }
+
+    private var windowVisible: Bool { visible && page.window?.occlusionState.contains(.visible) == true }
+
+    /// `useLiveRefresh`: once a minute while the page is in front of a visible window, nothing otherwise.
+    private func syncLiveTimer() {
+        guard windowVisible else { liveTimer?.invalidate(); liveTimer = nil; return }
+        guard liveTimer == nil else { return }
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reload(keepRows: true, periodic: true) }
+        }
+        liveTimer?.tolerance = 6
     }
 
     private func setSpeedMode(_ on: Bool) {
