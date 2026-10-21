@@ -172,6 +172,10 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     /// The pointer is over the popup: the badge keeps it open (`pointer-events-auto`).
     var onPointerInside: ((Bool) -> Void)?
     private let decoration = BoxDecorationLayer()
+    /// The rows scroll within the height the popup gets (`max-h-[calc(var(--available-height)-0.5rem-2px)]
+    /// overflow-y-auto overscroll-contain`, ThreadStatusIndicators.tsx:301, commit 219afe344c).
+    private let document = DSView()
+    private lazy var scroll = ScrollAreaView(documentView: document, scrollbars: .native)
     var isEmpty: Bool { rows.isEmpty }
 
     /// `drawsSurface: false` leaves out the glass box, for a footer inside another card (the thread hover card).
@@ -190,7 +194,8 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
         highlight.cornerRadius = 4
         highlight.isHidden = true
         highlight.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
-        layer?.addSublayer(highlight)
+        addSubview(scroll)
+        document.layer?.addSublayer(highlight)
         func make(number: Int, title: String, tone: PullRequestStateTone?, depth: Int, stack: String?, url: String) -> Row {
             let icon = IconView(name: tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow, size: 12,
                                 strokeColor: tone.map(PullRequestStyle.color) ?? Themed.color(\.mutedForeground))
@@ -199,8 +204,8 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
             let s = stack.map { LabelView($0, font: DSFont.ui(9)) }
             for l in [n, t] { l.lineHeight = 16 }
             s?.lineHeight = 12
-            [icon, n, t].forEach(addSubview)
-            s.map(addSubview)
+            [icon, n, t].forEach(document.addSubview)
+            s.map(document.addSubview)
             return Row(icon: icon, number: n, title: t, stack: s, depth: depth, url: url)
         }
         if !badge.lines.isEmpty {
@@ -226,10 +231,14 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        var y: CGFloat = 8
+        // The scroll area spans the padding box less 4pt at each end; its rows start 4pt in, so a list that
+        // fits rests where it did without the scroll area.
+        scroll.frame = NSRect(x: 0, y: 4, width: bounds.width, height: max(0, bounds.height - 8))
+        document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: popupSize.height - 8)
+        var y: CGFloat = 4
         if let hovered, hovered < rows.count {
             let indent = CGFloat(min(rows[hovered].depth, 3)) * 12
-            highlight.frame = CGRect(x: 12 + indent, y: 8 + CGFloat(hovered) * 28, width: bounds.width - 24 - indent, height: 24)
+            highlight.frame = CGRect(x: 12 + indent, y: 4 + CGFloat(hovered) * 28, width: bounds.width - 24 - indent, height: 24)
         }
         for r in rows {
             var x: CGFloat = 12 + 4 + CGFloat(min(r.depth, 3)) * 12
@@ -247,10 +256,24 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     }
 
     private func row(at event: NSEvent) -> Int? {
-        let p = convert(event.locationInWindow, from: nil)
-        guard p.x >= 12, p.x <= bounds.width - 12, p.y >= 8 else { return nil }
-        let i = Int((p.y - 8) / 28)
-        return i < rows.count && p.y - 8 - CGFloat(i) * 28 < 24 ? i : nil
+        guard scroll.frame.contains(convert(event.locationInWindow, from: nil)) else { return nil }
+        let p = document.convert(event.locationInWindow, from: nil)
+        guard p.x >= 12, p.x <= bounds.width - 12, p.y >= 4 else { return nil }
+        let i = Int((p.y - 4) / 28)
+        return i < rows.count && p.y - 4 - CGFloat(i) * 28 < 24 ? i : nil
+    }
+
+    /// Clicks land here, not on the rows; the wheel goes on to the scroll area, which keeps it
+    /// (`overscroll-contain`) unless the list scrolls.
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        return hit is NSScroller ? hit : self
+    }
+    public override func scrollWheel(with event: NSEvent) {
+        guard document.frame.height > scroll.frame.height else { super.scrollWheel(with: event); return }
+        scroll.scrollView.scrollWheel(with: event)
+        mouseMoved(with: event)
+        window?.invalidateCursorRects(for: self)
     }
 
     public override func updateTrackingAreas() {
@@ -270,7 +293,11 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
     }
     public override func resetCursorRects() {
         guard onOpen != nil else { return }
-        for i in rows.indices { addCursorRect(NSRect(x: 12, y: 8 + CGFloat(i) * 28, width: bounds.width - 24, height: 24), cursor: .pointingHand) }
+        // The visible part of each row, in this view's coordinates.
+        for i in rows.indices {
+            let r = convert(NSRect(x: 12, y: 4 + CGFloat(i) * 28, width: bounds.width - 24, height: 24), from: document).intersection(scroll.frame)
+            if !r.isEmpty { addCursorRect(r, cursor: .pointingHand) }
+        }
     }
 
     public override func updateLayer() {
