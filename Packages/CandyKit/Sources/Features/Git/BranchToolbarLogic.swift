@@ -6,6 +6,19 @@ public enum EnvMode: String, Codable, Sendable { case local, worktree }
 
 /// BranchToolbar.logic.ts and shared/git.ts helpers the branch toolbar uses.
 public enum BranchToolbarLogic {
+    /// Where a finished branch operation writes its branch and worktree.
+    public enum ResultTarget: Equatable, Sendable { case thread(String), draft(String), none }
+
+    /// A branch operation writes to the thread or draft it started on, never to whatever is open when it ends
+    /// (T3 binds `setThreadBranch` to its render's thread, BranchToolbarBranchSelector.tsx:168-194, and git
+    /// actions to their checkout, GitActionsControl.tsx:1205-1206). A server thread is updated by its id on its
+    /// own environment. A draft is only reachable while it is still the open one.
+    public static func resultTarget(startedThreadId: String?, startedDraftId: String?, currentDraftId: String?) -> ResultTarget {
+        if let startedThreadId { return .thread(startedThreadId) }
+        guard let startedDraftId, startedDraftId == currentDraftId else { return .none }
+        return .draft(startedDraftId)
+    }
+
     /// `resolveLocalCheckoutBranchMismatch` (BranchToolbar.logic.ts:250-264): a Current checkout thread whose
     /// branch differs from the branch the checkout is on now.
     public static func localCheckoutBranchMismatch(envMode: EnvMode, worktreePath: String?, threadBranch: String?,
