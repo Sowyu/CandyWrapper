@@ -355,7 +355,7 @@ struct LinkPullRequestLogicTests {
                 == .link(.init(host: "github.com", repository: "pingdotgg/t3code", number: 7, url: "https://github.com/pingdotgg/t3code/pull/7")))
         #expect(LinkPullRequestLogic.resolve("https://github.com/Owner/Repo/pull/9", project: nil)
                 == .link(.init(host: "github.com", repository: "owner/repo", number: 9, url: "https://github.com/Owner/Repo/pull/9")))
-        #expect(LinkPullRequestLogic.resolve("12", project: nil) == .error("Paste a full URL to link a pull request from another repository."))
+        #expect(LinkPullRequestLogic.resolve("12", project: nil) == .error("Paste the full pull request URL; this thread has no repository to resolve the number against."))
         #expect(LinkPullRequestLogic.resolve("https://github.com/o/r/pull/3", project: nil, canLink: { _ in false })
                 == .error("No project in this environment can read github.com/o/r."))
         #expect(LinkPullRequestLogic.resolve("nonsense", project: project) == nil)

@@ -166,7 +166,7 @@ public enum LinkPullRequestLogic {
             return .link(Resolved(host: url.host, repository: url.repository, number: url.number, url: parsed))
         }
         guard let number = Int(parsed), number >= 1 else { return nil }
-        guard let project else { return .error("Paste a full URL to link a pull request from another repository.") }
+        guard let project else { return .error("Paste the full pull request URL; this thread has no repository to resolve the number against.") }
         guard let web = ChangeRequestURL.url(kind: project.kind, host: project.host, repository: project.repository, number: number),
               let reference = ChangeRequestURL.parse(web) else {
             return .error("Paste a full URL; this project's host has no known pull request URL.")
