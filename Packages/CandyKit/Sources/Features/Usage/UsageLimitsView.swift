@@ -249,6 +249,9 @@ public struct UsageLimitsModel {
     /// Environments to offer Cursor's Keychain access on (id, label).
     public var cursorPrompt: [(id: String, label: String)] = []
     public var nowMs: Int64 = 0
+    /// A reset credit in use or its outcome, by account key: "Using reset credit…" then the result. The
+    /// popover closes for the confirm, so the line sits under the pool (UsageLimitsPooled.tsx:307-322).
+    public var resetStatus: (accountKey: String, text: String)?
     public init() {}
 }
 
@@ -335,7 +338,11 @@ final class UsagePoolSectionView: DSView, SettingsGroupRow {
         let color = UsageStyle.barColor(driver: pool.driver)
         cards = UsageLimitsLogic.displayWindows(pool).map { w in
             let details = pool.driver == "cursor" ? UsageLimitsLogic.cursorWindowDetails(w.id) : nil
-            let card = UsagePoolCardView(window: w, color: color, nowMs: nowMs, label: details?.label, description: details?.description)
+            let status = owner.model.resetStatus.flatMap { s -> (UsageLimitAccount, String)? in
+                w.columns.first { $0.account.key == s.accountKey }.map { ($0.account, s.text) }
+            }
+            let card = UsagePoolCardView(window: w, color: color, nowMs: nowMs, label: details?.label, description: details?.description,
+                                         resetStatus: status)
             card.onUseReset = { [weak owner] a in owner?.onUseReset?(a) }
             return card
         }
@@ -385,10 +392,21 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private let note: TextBlockView?
     private var segments: [UsagePoolSegmentView] = []
     private var legend: [UsagePoolLegendRow] = []
+    /// `role="status"` under the segments: the account's name in `font-medium text-foreground`, then the words.
+    // ponytail: keyed by account, so every card with that account shows it; key by window too if users notice
+    private let resetStatus: TextBlockView?
     var onUseReset: ((UsageLimitAccount) -> Void)?
 
-    init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?) {
+    init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?,
+         resetStatus status: (account: UsageLimitAccount, text: String)? = nil) {
         pool = w
+        resetStatus = status.map { s in
+            let name = s.account.displayName ?? UsageProviderLabels.driverLabel(s.account.driver)
+            let t = TextBlockView()
+            t.text = "\(name) \(s.text)"; t.font = DSFont.ui(12); t.lineHeight = 16; t.color = Themed.color(\.mutedForeground)
+            t.boldPrefix = name; t.boldColor = Themed.color(\.foreground)
+            return t
+        }
         title = UsageStyle.label(label ?? w.label, 14, .medium)
         big = UsageStyle.label("\(w.remainingPercent)%", 30, .semibold, tabular: true, lineHeight: 36)
         pace = w.pace.map(usagePaceIcon)
@@ -408,6 +426,7 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         pace.map(addSubview)
         refill.map(addSubview)
         note.map(addSubview)
+        resetStatus.map(addSubview)
         let restores = Dictionary(w.resets.map { ($0.account.key, $0) }, uniquingKeysWith: { a, _ in a })
         for (i, col) in w.columns.enumerated() {
             guard let cw = col.window else { continue }
@@ -431,7 +450,11 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private var leftHeight: CGFloat { 20 + 4 + 36 + (refill == nil ? 0 : 4 + 16) }
 
     private func barHeight(_ width: CGFloat) -> CGFloat {
-        wide(width) ? 32 : 20 + CGFloat(legend.count) * (28 + 4)
+        (wide(width) ? 32 : 20 + CGFloat(legend.count) * (28 + 4)) + statusHeight(width)
+    }
+
+    private func statusHeight(_ width: CGFloat) -> CGFloat {
+        resetStatus.map { 4 + $0.height(forWidth: barWidth(width)) } ?? 0
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -466,6 +489,10 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         for (i, l) in legend.enumerated() {
             l.isHidden = isWide
             l.frame = NSRect(x: bx, y: by + 24 + CGFloat(i) * 32, width: bwidth, height: 28)
+        }
+        if let resetStatus {
+            let sh = statusHeight(width) - 4
+            resetStatus.frame = NSRect(x: bx, y: by + bh - sh, width: bwidth, height: sh)
         }
         if let note { note.frame = NSRect(x: 16, y: 16 + rowH + (two ? 0 : 12 + bh) + 12, width: inner, height: note.height(forWidth: inner)) }
     }
