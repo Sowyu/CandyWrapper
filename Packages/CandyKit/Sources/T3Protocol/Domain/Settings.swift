@@ -167,6 +167,7 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "autoResumeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleKeepPullRequests": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleOnMerge": SettingSpec(.bool, .bool(true)),
+        "compactIdleThreads": SettingSpec(.bool, .bool(false)),
         "backgroundActivity": SettingSpec(.any, BackgroundActivity.defaultSettings),
         "backgroundActivityProfile": SettingSpec(.literals(["balanced", "performance", "battery-saver"]), .string("balanced")),
         "automaticGitFetchInterval": SettingSpec(.any, .number(30_000)),
