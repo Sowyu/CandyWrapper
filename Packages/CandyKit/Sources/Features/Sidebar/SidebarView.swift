@@ -362,6 +362,9 @@ public final class SidebarContentView: DSView {
     /// the list builds from scratch every time, as it did before `SidebarListCache`.
     private static let timing = ProcessInfo.processInfo.environment["CANDY_SIDEBAR_TIMING"]
 
+    /// Dither's Cmd-click: open the thread in a new tab.
+    public var onOpenInNewTab: ((ThreadId) -> Void)?
+
     /// Called whenever the active thread, draft or snapshot may have changed (Dither's tab strip follows it).
     public var onListChange: (() -> Void)?
 
@@ -500,6 +503,12 @@ public final class SidebarContentView: DSView {
         let event = NSApp.currentEvent
         let mouse = event.map { $0.type == .leftMouseUp || $0.type == .leftMouseDown } ?? false
         let flags = mouse ? event?.modifierFlags ?? [] : []
+        // Dither (after Capy): Cmd-click opens the thread in a new tab, as in a browser, instead of adding it to a selection.
+        if flags.contains(.command), ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let onOpenInNewTab {
+            clearSelection()
+            onOpenInNewTab(id)
+            return
+        }
         if flags.contains(.command) { toggleSelection(id); return }
         if flags.contains(.shift) { selectRange(to: id); return }
         if mouse, (event?.clickCount ?? 1) >= 2 { startRename(id); return }
