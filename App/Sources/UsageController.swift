@@ -61,6 +61,8 @@ final class UsageController {
     private var window_ = UsageFormat.makeWindow(days: 30)
     private var selectedIds: Set<String>?
     private var breakdown = "model"
+    /// The reset credit being used or its outcome, shown under its pool (UsageLimitsPooled.tsx:307-322).
+    private var resetStatus: (accountKey: String, text: String)?
     private var selectedModelKey: String?
     private var refreshing = false
     private var limitsNowMs = TimestampFormat.nowMs()
@@ -367,6 +369,7 @@ final class UsageController {
         lm.notices = UsageLimitsLogic.notices(envs)
         lm.externalLinks = UsageLimitsLogic.externalUsageLinks(envs)
         lm.nowMs = limitsNowMs
+        lm.resetStatus = resetStatus
         let chosen = envStatuses().filter { ids.contains($0.id) }
         lm.cursorPrompt = hidden.contains(.cursor) ? [] : cursorEnvironments(chosen).map { ($0.id, $0.label) }
         return lm
@@ -620,9 +623,12 @@ final class UsageController {
 
     private func useReset(_ account: UsageLimitAccount) {
         guard let redeem = account.redeem else { return }
-        UsageResetCredit.confirmAndUse(in: window, environments: environments, environmentId: redeem.environmentId, target: redeem.target) { [weak self] _, status in
-            if let status { self?.composer?.toastPublic(.info, status) }
-            if status != nil { self?.refreshLimits(automatic: false) }
+        let key = account.key
+        UsageResetCredit.confirmAndUse(in: window, environments: environments, environmentId: redeem.environmentId, target: redeem.target) { [weak self] busy, status in
+            guard let self else { return }
+            self.resetStatus = busy ? (key, "Using reset credit\u{2026}") : status.map { (key, $0) }
+            self.page.limits.model.resetStatus = self.resetStatus
+            if status != nil { self.refreshLimits(automatic: false) }
         }
     }
 
