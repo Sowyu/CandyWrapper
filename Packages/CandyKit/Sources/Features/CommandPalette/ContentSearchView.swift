@@ -269,7 +269,8 @@ public final class ContentSearchView: DSView {
 
         /// `p-0.5 gap-0.5` inside a 1px border.
         public override var intrinsicContentSize: NSSize {
-            NSSize(width: 2 + 4 + toggles.reduce(0) { $0 + $1.intrinsicContentSize.width } + 2 * 2, height: 24 + 6)
+            let toggleWidth: CGFloat = toggles.reduce(0) { $0 + $1.intrinsicContentSize.width }
+            return NSSize(width: 2 + 4 + toggleWidth + 2 * 2, height: 24 + 6)
         }
 
         public override func layout() {

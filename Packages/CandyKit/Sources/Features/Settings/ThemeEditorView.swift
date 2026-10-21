@@ -384,7 +384,7 @@ public final class ThemeEditorController {
         for (role, value) in colors[active] ?? [:] {
             guard let v = ThemeCSSColor.nsColor(value)?.usingColorSpace(.sRGB) else { continue }
             let d = pow(v.redComponent - c.redComponent, 2) + pow(v.greenComponent - c.greenComponent, 2) + pow(v.blueComponent - c.blueComponent, 2)
-            if best == nil || d < best!.1 { best = (role, d) }
+            if best == nil || d < best!.1 { best = (role, Double(d)) }
         }
         isInspecting = false
         if let best { selectRole(best.0, reveal: true) } else { changed(structure: false) }
