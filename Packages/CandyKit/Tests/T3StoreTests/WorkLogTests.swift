@@ -248,3 +248,19 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
             == "Provider error after 5/5 retries")
     }
 }
+
+/// `contextCompactionLabel` (client-runtime work-log/presentation.ts:57-79).
+@Suite struct ContextCompactionLabelTests {
+    @Test func labelFollowsTheStatusAndTheRowSplitsAroundTheArrow() {
+        func label(_ status: String, counts: Bool = true) -> String {
+            let tokens = counts ? #","beforeTokenCount":12000,"afterTokenCount":5000"# : ""
+            return WorkLog.contextCompactionLabel(turnItem(#"{"id":"c","type":"compaction","status":"\#(status)"\#(tokens)}"#))
+        }
+        #expect(label("failed") == "Context compaction failed")
+        #expect(label("interrupted") == "Context compaction stopped")
+        #expect(label("waiting") == "Compacting context")
+        #expect(label("completed", counts: false) == "Context compacted")
+        let done = label("completed")
+        #expect(done.hasPrefix("Context compacted ") && done.hasSuffix(" tokens") && done.contains(" → "))
+    }
+}
