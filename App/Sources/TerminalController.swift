@@ -36,6 +36,8 @@ final class TerminalController {
     isolated deinit { if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) } }
     /// "Add to chat" from a terminal: the composer inserts the excerpt chip.
     var onAddToChat: ((ComposerContext.TerminalSelection) -> Void)?
+    /// The set of terminals running a subprocess changed, in any environment.
+    var onActivityChanged: (() -> Void)?
 
     /// One attached terminal: its view, the attach stream and an ordered outbox for writes and resizes.
     @MainActor
@@ -723,6 +725,12 @@ final class TerminalController {
             }
         }
         if sidebar?.state.terminalProcesses != processes { sidebar?.state.terminalProcesses = processes }
+        onActivityChanged?()
+    }
+
+    /// How many of `environmentId`'s terminals run a subprocess. Keeps its server from idle-stopping.
+    func runningSubprocesses(environmentId: String) -> Int {
+        metadata[environmentId]?.activity.runningThreads.values.reduce(0, +) ?? 0
     }
 
     // MARK: Persistence

@@ -288,6 +288,21 @@ struct ServerLifecycleTests {
         #expect(await eventually { await rec.stops == [1] })
     }
 
+    /// A hidden app with a terminal running a build and no agent run keeps its server, then idle-stops once the build ends.
+    @Test func aRunningTerminalAloneKeepsTheServerUp() async throws {
+        let lc = make()
+        _ = try await lc.ensureRunning()
+        await lc.update(.init(runningTerminals: 1))
+        #expect(scheduler.armed == 0)
+        scheduler.advance(by: .seconds(3600))
+        await settle()
+        #expect(await rec.stops.isEmpty)
+        await lc.update(.init())
+        #expect(scheduler.armed == 1)
+        scheduler.advance(by: .seconds(600))
+        #expect(await eventually { await rec.stops == [1] })
+    }
+
     // Rule 4
     @Test func restartsTransparentlyAfterAnIdleStop() async throws {
         let lc = make(idle: .seconds(60))
