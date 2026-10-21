@@ -2043,7 +2043,8 @@ final class ComposerController {
         }
         let shown = Set(messages.map(\.id))
         messages += optimistic.filter { $0.inputIntent != .queuedTurn && !shown.contains($0.id) }
-        return messages.map { PromptHistory.Message(id: $0.id.rawValue, isUser: $0.role == .user, text: $0.text) }
+        // Recall skips messages sent by automations and other agents (composerPromptHistory.ts:131-132).
+        return messages.map { PromptHistory.Message(id: $0.id.rawValue, isUser: UserMessagePresentation.isTypedByUser($0), text: $0.text) }
     }
 
     /// The server's message for a failed command, else nil for the caller's fallback.

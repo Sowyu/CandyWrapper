@@ -22,6 +22,18 @@ import Testing
         #expect(typed == UserMessagePresentation(text: text, isAutomation: false, scheduledTaskId: nil))
     }
 
+    /// Prompt recall takes only what the user typed (composerPromptHistory.ts:131-132).
+    @Test func typedByUserSkipsAutomationsAndAgents() {
+        func m(_ createdBy: String?, task: String? = nil, role: ChatMessage.Role = .user) -> ChatMessage {
+            ChatMessage(id: MessageId("m"), role: role, text: "hi", createdAt: "2026-01-01T00:00:00Z", createdBy: createdBy, scheduledTaskId: task)
+        }
+        #expect(UserMessagePresentation.isTypedByUser(m("user")))
+        #expect(UserMessagePresentation.isTypedByUser(m(nil)))
+        #expect(!UserMessagePresentation.isTypedByUser(m("agent")))
+        #expect(!UserMessagePresentation.isTypedByUser(m("user", task: "scheduled-task:1")))
+        #expect(!UserMessagePresentation.isTypedByUser(m("user", role: .assistant)))
+    }
+
     @Test func agentAndAssistantMessagesAreNotAutomation() {
         #expect(!UserMessagePresentation.resolve(id: "m", isUser: true, text: "reply ok", createdBy: "agent", scheduledTaskId: nil).isAutomation)
         let assistant = UserMessagePresentation.resolve(id: "m", isUser: false, text: "[Triggered by schedule task: x]\n\nhi", createdBy: nil, scheduledTaskId: "t")
