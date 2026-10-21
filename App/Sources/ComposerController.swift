@@ -1651,12 +1651,8 @@ final class ComposerController {
         if let key = draftKey { draftAttachments[key] = nil }
         composer.text = ""
         remember("")
-        // The title seed leaves context links out (ChatView.tsx:9481-9485), else names the first
-        // attachment (:9807-9821); records ride as `context`.
-        var titleText = ComposerContext.stripReferences(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
-        if titleText.isEmpty, let first = attachments.first(where: { $0.kind == .image }) { titleText = "Image: \(first.name)" }
-        if titleText.isEmpty, let first = attachments.first(where: { $0.kind == .file }) { titleText = "File: \(first.name)" }
-        let title = ComposerLogic.titleSeed(titleText)
+        // `deriveThreadTitleSeed` (ChatView.tsx:5538-5542); records ride as `context`.
+        let title = ComposerLogic.threadTitleSeed(trimmed, attachments: attachments.map { ($0.kind == .image, $0.name) })
         let selectionJSON = ThreadSession.encode(selection)
         let supervisor = shell.supervisor
 
@@ -1892,9 +1888,7 @@ final class ComposerController {
         let referenced = contextRecords(for: trimmed)
         let records = ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] } + attachments.compactMap(\.contextRecord)
         let context: JSONValue? = records.isEmpty ? nil : .object(["version": .number(1), "records": .array(records)])
-        var titleText = ComposerContext.stripReferences(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
-        if titleText.isEmpty { titleText = attachments.first?.name ?? "New thread" }
-        let title = ComposerLogic.titleSeed(titleText)
+        let title = ComposerLogic.threadTitleSeed(trimmed, attachments: attachments.map { ($0.kind == .image, $0.name) })
         let strategy = BranchToolbarLogic.workspaceStrategy(mode: .worktree, branch: branch, worktreePath: nil,
                                                             startFromOrigin: session.startFromOrigin ?? false)
         if let draftKey { draftAttachments[draftKey] = nil }
