@@ -46,6 +46,10 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     /// (`WindowGlass`).
     public var glassLight = false
     public var glassDark = false
+    /// The Dither theme on each side, which also sets `glass*`, and its picture (nil for the desktop picture).
+    public var ditherLight = false
+    public var ditherDark = false
+    public var ditherPicture: String?
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -70,6 +74,10 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
 
     public nonisolated static func isGlass(dark: Bool) -> Bool { dark ? glass.dark : glass.light }
+    /// Whether the Glass backdrop shows the dithered picture instead of the blurred desktop in each appearance.
+    public private(set) static var dither = (light: false, dark: false)
+    public private(set) static var ditherPicture: URL?
+    public static func isDither(dark: Bool) -> Bool { dark ? dither.dark : dither.light }
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -94,6 +102,11 @@ public enum ThemeRuntime {
         }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
             glass = (next.glassLight, next.glassDark)
+            changed = true
+        }
+        if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark || next.ditherPicture != old.ditherPicture {
+            dither = (next.ditherLight, next.ditherDark)
+            ditherPicture = next.ditherPicture.map { URL(filePath: $0) }
             changed = true
         }
         guard changed else { return }

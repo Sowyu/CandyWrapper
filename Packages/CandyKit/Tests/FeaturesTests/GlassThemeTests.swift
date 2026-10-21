@@ -9,7 +9,7 @@ import T3Protocol
 struct GlassThemeTests {
     @Test func glassKeepsTheStockPaletteAndFrostsEachSideItOwns() {
         let glass = ThemeDefinition.glass
-        #expect(ThemeDefinition.pickerBuiltIns.last == glass)
+        #expect(ThemeDefinition.pickerBuiltIns.suffix(2) == [glass, ThemeDefinition.dither])
         #expect(ThemePalette.reservedIds.contains(glass.id))
         #expect(ThemeCardDefinition(glass).previews == ThemeCardDefinition.standard.previews)
 
@@ -31,6 +31,21 @@ struct GlassThemeTests {
         let (mixed, _) = library.runtimeInput(client: .defaults)
         #expect(!mixed.glassLight && mixed.glassDark)
         #expect(mixed.light?.builtInId == "ocean")
+    }
+
+    /// Dither is Glass on both sides plus the dithered picture, and leaves the desktop picture when none is chosen.
+    @Test func ditherFrostsAndNamesItsPicture() {
+        let dither = ThemeDefinition.dither
+        #expect(ThemePalette.reservedIds.contains(dither.id))
+        #expect(ThemeCardDefinition(dither).previews == ThemeCardDefinition.standard.previews)
+        let defaults = UserDefaults(suiteName: "cw.dither.tests.\(UUID().uuidString)")!
+        defaults.set(dither.id, forKey: "theme.preference")
+        let (input, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)
+        #expect(input.glassLight && input.glassDark && input.ditherLight && input.ditherDark)
+        #expect(input.ditherPicture == DitherPicture.path)
+        defaults.set(ThemeDefinition.glass.id, forKey: "theme.preference")
+        let (glass, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)
+        #expect(glass.glassDark && !glass.ditherDark && glass.ditherPicture == nil)
     }
 
     /// Glass Native was removed on 2026-10-14 (docs/decisions.md): a stored choice of it, as the theme or one side of

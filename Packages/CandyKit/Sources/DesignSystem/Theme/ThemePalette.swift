@@ -55,10 +55,17 @@ public struct ThemeDefinition: Equatable, Sendable {
     public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
                                               colors: standardLightColors, variants: [.dark: standardDarkColors])
 
-    /// The theme picker's fixed cards: T3's built-ins, then Glass.
-    public static let pickerBuiltIns = builtIns + [glass]
+    /// CandyWrapper's own theme, not in T3: Glass's panes over a picture the user chose (the desktop picture until
+    /// they do), dithered in two grays (`WallpaperBlur.dither`) instead of blurred.
+    public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Dither", appearance: .light,
+                                               colors: standardLightColors, variants: [.dark: standardDarkColors])
 
-    public var isWindowGlass: Bool { id == Self.glass.id }
+    /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
+    public static let pickerBuiltIns = builtIns + [glass, dither]
+
+    /// Glass and Dither both wear the stock palette over see-through panes.
+    public var isWindowGlass: Bool { id == Self.glass.id || isDither }
+    public var isDither: Bool { id == Self.dither.id }
 }
 
 /// The theme library's rules and color math.
@@ -66,7 +73,7 @@ public enum ThemePalette {
     public static let fileVersion = 1
     public static let reservedIds: Set<String> = ["system", "light", "dark", "t3-chat", "grove", "ocean", "ember", "iris",
                                                   "t3-chat-dark", "t3-grove", "t3-ocean", "t3-ember", "t3-iris",
-                                                  "candywrapper-glass", "candywrapper-glass-native"]
+                                                  "candywrapper-glass", "candywrapper-glass-native", "candywrapper-dither"]
     static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris",
                                "candywrapper-glass-native": "candywrapper-glass"]
 

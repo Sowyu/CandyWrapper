@@ -339,6 +339,10 @@ public final class ThemeLibrary {
             if d.isWindowGlass {
                 // Glass wears the stock palette over a frosted window and frosts every surface.
                 if a == .light { input.glassLight = true } else { input.glassDark = true }
+                if d.isDither {
+                    if a == .light { input.ditherLight = true } else { input.ditherDark = true }
+                    input.ditherPicture = DitherPicture.path
+                }
                 continue
             }
             // `applyThemePalette` falls back to the base colors for a side the theme lacks.
