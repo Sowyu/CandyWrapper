@@ -12,7 +12,10 @@ enum ComposerRichText {
     }
     private struct Frame { var delimiter: String; var mark: Mark; var spans: [Span] = [] }
 
-    static func parse(_ text: String) -> [Span] {
+    /// `typing` false reads a whole draft, as `buildTiptapContent` does, where `_x_` is italic. Typing
+    /// and pasting keep a single `_` literal: the composer's italic rules only take `*`, so names like
+    /// `node_modules` or `_build_` stay as typed (composer-rich-text-doc.ts:136-148, bb76f1233c).
+    static func parse(_ text: String, typing: Bool = false) -> [Span] {
         let units = Array(text.utf16)
         var root: [Span] = [], stack: [Frame] = []
         func slice(_ a: Int, _ b: Int) -> String { String(decoding: units[a..<min(b, units.count)], as: UTF16.self) }
@@ -75,6 +78,7 @@ enum ComposerRichText {
                     i += top.delimiter.utf16.count
                 } else if canOpen && (c != 126 || end - i >= 2) {
                     let length = c == 126 || end - i >= 2 ? 2 : 1
+                    if typing, c == 95, length == 1 { push(slice(i, end), []); i = end; continue }
                     let mark: Mark = c == 126 ? .strike : length == 2 ? .bold : .italic
                     if stack.contains(where: { $0.mark == mark }) { push(slice(i, end), []); i = end; continue }
                     stack.append(Frame(delimiter: slice(i, i + length), mark: mark)); i += length
@@ -163,7 +167,9 @@ enum ComposerRichText {
 /// composer-list-continuation.ts:29-179. Kept separate from rendering so source mode
 /// and rich mode use the same marker grammar and UTF-16 edit coordinates.
 enum ComposerListContinuation {
-    struct Edit: Equatable { var range: NSRange; var replacement: String }
+    /// `renumber`: number replacements on the ordered items after the new one, in the original text.
+    struct Edit: Equatable { var range: NSRange; var replacement: String; var renumber: [Renumber] = [] }
+    struct Renumber: Equatable { var range: NSRange; var number: String }
     static func nextOrderedMarker(_ marker: String) -> String {
         let digits = String(marker.dropLast())
         guard let n = UInt64(digits), n <= 9_007_199_254_740_991 else { return marker }
@@ -185,12 +191,59 @@ enum ComposerListContinuation {
         let line = value.substring(with: NSRange(location: start, length: end - start)) as NSString
         guard let match = listMarker.firstMatch(in: line as String, range: NSRange(location: 0, length: line.length)) else { return nil }
         if indent { return Edit(range: NSRange(location: start, length: 0), replacement: "  ") }
+        // A bare "2." with no space after it is not an item yet: Return adds a line
+        // (composer-list-continuation.ts:156, bac96aa3b2).
+        guard match.range(at: 3).length > 0 else { return nil }
         guard cursor >= start + match.range.length else { return nil }
         if line.substring(from: match.range.length).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return Edit(range: NSRange(location: start, length: cursor - start), replacement: "")
         }
         let prefix = line.substring(with: match.range(at: 1)), marker = line.substring(with: match.range(at: 2))
-        let next = marker.contains("[") ? "- [ ]" : marker.last == "." || marker.last == ")" ? nextOrderedMarker(marker) : marker
-        return Edit(range: selection, replacement: "\n" + prefix + next + " ")
+        let ordered = marker.last == "." || marker.last == ")"
+        let next = marker.contains("[") ? "- [ ]" : ordered ? nextOrderedMarker(marker) : marker
+        let renumber = ordered ? renumberFollowing(value, after: end, indent: prefix, marker: marker) : []
+        return Edit(range: selection, replacement: "\n" + prefix + next + " ", renumber: renumber)
+    }
+
+    /// Markdown tabs advance to the next four-column stop.
+    private static func indentWidth(_ line: String) -> Int {
+        var width = 0
+        for c in line {
+            if c == " " { width += 1 } else if c == "\t" { width += 4 - width % 4 } else { break }
+        }
+        return width
+    }
+
+    /// `renumberFollowingItems` (composer-list-continuation.ts:79-122): the same-level ordered items
+    /// after the split line count on from the inserted one, until a blank line, a shallower line or
+    /// another kind of item. Deeper lines are skipped; a newline inside a chip starts no item.
+    private static func renumberFollowing(_ value: NSString, after lineEnd: Int, indent: String, marker: String) -> [Renumber] {
+        guard var expected = UInt64(marker.dropLast()).map({ $0 + 2 }) else { return [] }
+        let delimiter = marker.suffix(1), base = indentWidth(indent)
+        let tokens = ComposerInlineTokens.collect(value as String)
+        var result: [Renumber] = [], position = lineEnd
+        while position < value.length, expected <= 9_007_199_254_740_991 {
+            let lineStart = position + 1
+            let next = value.range(of: "\n", range: NSRange(location: lineStart, length: value.length - lineStart))
+            let end = next.location == NSNotFound ? value.length : next.location
+            position = end
+            if tokens.contains(where: { $0.range.location < lineStart && NSMaxRange($0.range) > lineStart }) { continue }
+            let line = value.substring(with: NSRange(location: lineStart, length: end - lineStart))
+            let width = indentWidth(line)
+            if line.trimmingCharacters(in: .whitespaces).isEmpty || width < base { break }
+            if width > base { continue }
+            guard let m = listMarker.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else { break }
+            let current = (line as NSString).substring(with: m.range(at: 2))
+            guard current.last.map(String.init) == String(delimiter), current.dropLast().allSatisfy(\.isNumber) else { break }
+            let digits = String(current.dropLast())
+            let replacement = digits.hasPrefix("0")
+                ? String(repeating: "0", count: max(0, digits.count - String(expected).count)) + String(expected) : String(expected)
+            if replacement != digits {
+                result.append(Renumber(range: NSRange(location: lineStart + m.range(at: 2).location, length: digits.utf16.count),
+                                       number: replacement))
+            }
+            expected += 1
+        }
+        return result
     }
 }

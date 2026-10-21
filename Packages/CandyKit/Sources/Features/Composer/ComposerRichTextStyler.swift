@@ -236,7 +236,7 @@ enum ComposerRichTextStyler {
             } else {
                 var plain = ""
                 func flushPlain() {
-                    for span in ComposerRichText.parse(plain) {
+                    for span in ComposerRichText.parse(plain, typing: typing) {
                         result.append(NSAttributedString(string: span.text, attributes: attributes(span.marks, base: lineBase)))
                     }
                     plain = ""

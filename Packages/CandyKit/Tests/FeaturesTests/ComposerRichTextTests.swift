@@ -56,6 +56,16 @@ struct ComposerRichTextTests {
         #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 3, length: 0))?.replacement == "\n- ")
         #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 1, length: 0)) == nil)
         #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 3, length: 1), indent: true) == nil)
+        // bac96aa3b2: a bare "2." is not an item, so Return adds a line; Tab still indents it.
+        #expect(ComposerListContinuation.edit("2.", selection: NSRange(location: 2, length: 0)) == nil)
+        #expect(ComposerListContinuation.edit("2.", selection: NSRange(location: 2, length: 0), indent: true) != nil)
+        // d407f5443b: the same-level items after the split count on; deeper lines are skipped.
+        let list = "1. a\n2. b\n   1. sub\n3. c\n\n9. other"
+        let split = ComposerListContinuation.edit(list, selection: NSRange(location: 4, length: 0))
+        #expect(split?.replacement == "\n2. ")
+        #expect(split?.renumber == [.init(range: NSRange(location: 5, length: 1), number: "3"),
+                                    .init(range: NSRange(location: 20, length: 1), number: "4")])
+        #expect(ComposerListContinuation.edit("1) a\n2. b", selection: NSRange(location: 4, length: 0))?.renumber == [])
     }
 }
 
@@ -87,6 +97,22 @@ struct ComposerRichTextTests {
         }
         #expect(editor.string == "bold and italic and code")
         #expect(editor.expandedText == "**bold** and *italic* and `code`")
+        // bb76f1233c: typed underscores stay literal; `__bold__` still bolds.
+        let under = ComposerEditor()
+        under.richTextEnabled = true
+        for c in "_build_ node_modules __b__" { under.insertText(String(c), replacementRange: under.selectedRange()) }
+        #expect(under.string == "_build_ node_modules b")
+        #expect(under.expandedText == "_build_ node_modules **b**")
+    }
+    @Test func returnRenumbersTheItemsAfter() throws {
+        let editor = ComposerEditor()
+        editor.setText("1. a\n2. b")
+        editor.setSelectedRange(NSRange(location: 4, length: 0))
+        let key = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+            context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        editor.keyDown(with: key)
+        #expect(editor.expandedText == "1. a\n2. \n3. b")
+        #expect(editor.selectedRange() == NSRange(location: 8, length: 0))
     }
     @Test func codeNewlineDoesNotSend() throws {
         let editor = ComposerEditor()
