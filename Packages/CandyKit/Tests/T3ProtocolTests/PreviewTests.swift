@@ -83,6 +83,17 @@ struct PreviewTests {
         #expect(PreviewURL.resolveAddressBarInput("mailto:a@b.c") == nil)
         #expect(PreviewURL.resolveAddressBarInput("ftp://x") == nil)
         #expect(PreviewURL.resolveAddressBarInput("   ") == nil)
+        // An address that contains another URL opens (#17943, preview.test.ts).
+        #expect(PreviewURL.resolveAddressBarInput("localhost:3000/?next=https://example.com") == "http://localhost:3000/?next=https://example.com")
+        #expect(PreviewURL.resolveAddressBarInput("example.com/https://example.org") == "https://example.com/https://example.org")
+        // The engine's template (#17688, preview.ts:98-185); a bad custom template searches DuckDuckGo.
+        let kagi = PreviewURL.searchTemplate(engine: "kagi", customURL: "")
+        #expect(PreviewURL.resolveAddressBarInput("grüße welt", searchTemplate: kagi) == "https://kagi.com/search?q=gr%C3%BC%C3%9Fe%20welt")
+        #expect(PreviewURL.searchTemplate(engine: "custom", customURL: " https://s.example/find?q=%s&x=1 ") == "https://s.example/find?q=%s&x=1")
+        #expect(PreviewURL.searchTemplate(engine: "custom", customURL: "https://%s.example/") == "https://duckduckgo.com/?q=%s")
+        #expect(!PreviewURL.isValidSearchTemplate("ftp://example.com/?q=%s"))
+        #expect(!PreviewURL.isValidSearchTemplate("https://example.com/?q="))
+        #expect(!PreviewURL.isValidSearchTemplate("https://%s@example.com/"))
         #expect(PreviewURL.normalize("127.0.0.1:3000/x") == "http://127.0.0.1:3000/x")
         #expect(PreviewURL.host(of: "http://localhost:47420/a") == "localhost:47420")
     }

@@ -214,7 +214,13 @@ public enum PreviewRPC {
 
 /// URL helpers shared by T3's server and clients (packages/shared/src/preview.ts).
 public enum PreviewURL {
-    public static let searchURL = "https://duckduckgo.com/?q="
+    /// `BROWSER_SEARCH_URL_TEMPLATES` (preview.ts:98-106): `%s` takes the encoded query.
+    public static let searchTemplates: [String: String] = [
+        "duckduckgo": "https://duckduckgo.com/?q=%s", "google": "https://www.google.com/search?q=%s",
+        "bing": "https://www.bing.com/search?q=%s", "brave": "https://search.brave.com/search?q=%s",
+        "kagi": "https://kagi.com/search?q=%s", "ecosia": "https://www.ecosia.org/search?q=%s",
+    ]
+    public static let defaultSearchTemplate = "https://duckduckgo.com/?q=%s"
     static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
     static let nonWebSchemes: Set<String> = ["about:", "blob:", "chrome:", "data:", "file:", "ftp:", "javascript:", "mailto:",
                                              "sms:", "ssh:", "tel:", "view-source:", "ws:", "wss:"]
@@ -238,7 +244,7 @@ public enum PreviewURL {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let useHttp = trimmed.range(of: #"^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::|/|$)"#, options: [.regularExpression, .caseInsensitive]) != nil
-        let candidate = trimmed.contains("://") ? trimmed : "\(useHttp ? "http" : "https")://\(trimmed)"
+        let candidate = trimmed.range(of: #"^[a-z][a-z\d+.-]*://"#, options: [.regularExpression, .caseInsensitive]) != nil ? trimmed : "\(useHttp ? "http" : "https")://\(trimmed)"
         guard var c = URLComponents(string: candidate), let scheme = c.scheme?.lowercased(), scheme == "http" || scheme == "https",
               let host = c.host, !host.isEmpty else { return nil }
         c.scheme = scheme
@@ -248,9 +254,33 @@ public enum PreviewURL {
         return c.string
     }
 
-    /// `resolveAddressBarInput`: an address, or a DuckDuckGo search for the text. Nil for empty
-    /// input or an explicit unsupported scheme.
-    public static func resolveAddressBarInput(_ rawInput: String) -> String? {
+    /// `fillSearchUrlTemplate` with `encodeURIComponent`.
+    static func fillSearchTemplate(_ template: String, _ query: String) -> String {
+        var allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        allowed.insert(charactersIn: "-_.!~*'()")
+        return template.replacingOccurrences(of: "%s", with: query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query)
+    }
+
+    /// `isValidSearchUrlTemplate` (preview.ts:113-130): http or https with `%s`, and two queries keep the same
+    /// credentials and host, so `%s` can't sit before the path.
+    public static func isValidSearchTemplate(_ template: String) -> Bool {
+        guard template.contains("%s"), let a = URLComponents(string: fillSearchTemplate(template, "a")),
+              let b = URLComponents(string: fillSearchTemplate(template, "b")),
+              let scheme = a.scheme?.lowercased(), scheme == "http" || scheme == "https", let host = a.host, !host.isEmpty else { return false }
+        func authority(_ c: URLComponents) -> String { "\(c.user ?? ""):\(c.password ?? "")@\(c.host?.lowercased() ?? ""):\(c.port.map(String.init) ?? "")" }
+        return authority(a) == authority(b)
+    }
+
+    /// `resolveSearchUrlTemplate` (preview.ts:136-145): an unusable custom template searches DuckDuckGo.
+    public static func searchTemplate(engine: String?, customURL: String?) -> String {
+        if engine != "custom" { return engine.flatMap { searchTemplates[$0] } ?? defaultSearchTemplate }
+        let custom = (customURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return isValidSearchTemplate(custom) ? custom : defaultSearchTemplate
+    }
+
+    /// `resolveAddressBarInput` (preview.ts:147-185): an address, or a search for the text with the
+    /// engine's template. Nil for empty input or an explicit unsupported scheme.
+    public static func resolveAddressBarInput(_ rawInput: String, searchTemplate: String = defaultSearchTemplate) -> String? {
         let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty || trimmed.range(of: #"^[a-z][a-z\d+.-]*://"#, options: [.regularExpression, .caseInsensitive]) != nil {
             return normalize(trimmed)
@@ -270,9 +300,7 @@ public enum PreviewURL {
             let dotted = host.range(of: #"^[^.]+(?:\.[^.]+)+\.?$"#, options: .regularExpression) != nil
             if hasPort || addressHost || dotted, let url = normalize(trimmed) { return url }
         }
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-_.!~*'()")
-        return searchURL + (trimmed.addingPercentEncoding(withAllowedCharacters: allowed) ?? trimmed)
+        return fillSearchTemplate(searchTemplate, trimmed)
     }
 
     /// `PREVIEW_ERROR_CODE_MESSAGES` (previewConstants.ts) through `describePreviewError`.

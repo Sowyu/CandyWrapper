@@ -589,7 +589,10 @@ final class BrowserController {
         chrome.onRefresh = { [weak self] in self?.panelStream?.client.send(.reload(ignoreCache: false)) }
         chrome.onSubmit = { [weak self] text in
             // Only empty input or an unsupported scheme fails; the bar keeps the text.
-            guard let self, let url = PreviewURL.resolveAddressBarInput(text) else { return }
+            // The search engine setting picks the template (PreviewView.tsx, preview.ts:136-145).
+            let settings = ClientSettingsStore.shared.current
+            let template = PreviewURL.searchTemplate(engine: settings.string("browserSearchEngine"), customURL: settings.string("browserCustomSearchUrl"))
+            guard let self, let url = PreviewURL.resolveAddressBarInput(text, searchTemplate: template) else { return }
             if self.navigate(to: url) { self.recordVisit(url) }
         }
         view.empty.onOpen = { [weak self] raw in
