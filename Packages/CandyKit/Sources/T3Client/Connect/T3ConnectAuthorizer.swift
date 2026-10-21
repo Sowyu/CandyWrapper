@@ -46,7 +46,17 @@ public actor T3ConnectAuthorizer {
     private let send: HTTPSend
     private let now: @Sendable () -> Date
     private var cache: [String: T3ConnectToken] = [:]
-    private var pending: [String: Task<T3ConnectToken, Error>] = [:]
+    private var pending: [String: Pending] = [:]
+    /// Bumped by `reset()`, so an exchange started before a sign-out can't publish or hand out its token.
+    private var generation = 0
+
+    /// One shared exchange, bound to the account and sign-in it started under (service.ts:413-415).
+    private struct Pending {
+        let id: UUID
+        let account: String
+        let generation: Int
+        let task: Task<T3ConnectToken, Error>
+    }
 
     /// `identity.connectionMethod` is ignored: T3 Connect sockets always say `relay`, even on a
     /// learned direct route (service.ts:217-245).
@@ -78,15 +88,35 @@ public actor T3ConnectAuthorizer {
             }
             if cached.accountId != account { cache = [:] } else if cached.accessToken == rejected { cache[environmentId] = nil }
         }
-        if let task = pending[environmentId] { return (try await task.value, false) }
-        let task = Task { try await self.exchange(environmentId: environmentId, account: account) }
-        pending[environmentId] = task
-        defer { pending[environmentId] = nil }
-        let fresh = try await task.value
-        // The user may have switched accounts while this ran (service.ts:409-421).
-        guard try await tokens.accountId() == account else { throw CloudSessionError.accountChanged }
-        cache[environmentId] = fresh
+        // The relay key never changes for this authorizer, so the account and generation are the whole identity.
+        let shared: Pending
+        if let p = pending[environmentId], p.account == account, p.generation == generation {
+            shared = p
+        } else {
+            let id = UUID(), started = generation
+            shared = Pending(id: id, account: account, generation: started, task: Task {
+                try await self.sharedExchange(environmentId: environmentId, account: account, generation: started, id: id)
+            })
+            pending[environmentId] = shared
+        }
+        let fresh = try await shared.task.value
+        // The user may have switched accounts while this waited (service.ts:409-421).
+        guard generation == shared.generation, try await tokens.accountId() == account, generation == shared.generation else {
+            throw CloudSessionError.accountChanged
+        }
         return (fresh, false)
+    }
+
+    /// The exchange every caller for one environment and account shares. It checks the account itself
+    /// before caching, so the cache never takes another account's token (service.ts:424-445).
+    private func sharedExchange(environmentId: String, account: String, generation started: Int, id: UUID) async throws -> T3ConnectToken {
+        defer { if pending[environmentId]?.id == id { pending[environmentId] = nil } }
+        let fresh = try await exchange(environmentId: environmentId, account: account)
+        guard generation == started, try await tokens.accountId() == account, generation == started else {
+            throw CloudSessionError.accountChanged
+        }
+        cache[environmentId] = fresh
+        return fresh
     }
 
     /// Steps 3 to 6 of protocol.md 10.4.
@@ -125,6 +155,7 @@ public actor T3ConnectAuthorizer {
 
     /// Drops everything, relay tokens included (sign-out, account switch).
     public func reset() async {
+        generation += 1
         cache = [:]
         pending = [:]
         await relay.resetTokenCache()

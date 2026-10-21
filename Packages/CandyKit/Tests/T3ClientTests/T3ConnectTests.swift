@@ -49,6 +49,52 @@ final class FakeClock: @unchecked Sendable {
     func advance(_ seconds: TimeInterval) { lock.withLock { current += seconds } }
 }
 
+/// Holds the first response to one path until `release()`. The reply is taken from the fake before
+/// the hold, so later requests get the next queued reply.
+final class HeldResponse: @unchecked Sendable {
+    private let lock = NSLock()
+    private let path: String
+    private var used = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var open = false
+
+    init(_ path: String) { self.path = path }
+
+    var isHolding: Bool { lock.withLock { waiter != nil } }
+    var isReleased: Bool { lock.withLock { open } }
+
+    func release() {
+        let w: CheckedContinuation<Void, Never>? = lock.withLock {
+            open = true
+            defer { waiter = nil }
+            return waiter
+        }
+        w?.resume()
+    }
+
+    func wrap(_ send: @escaping HTTPSend) -> HTTPSend {
+        { [self] request in
+            let reply = try await send(request)
+            let hold = lock.withLock {
+                guard request.url?.path == path, !used else { return false }
+                used = true
+                return true
+            }
+            if hold {
+                await withCheckedContinuation { c in
+                    let go: Bool = lock.withLock {
+                        if open { return true }
+                        waiter = c
+                        return false
+                    }
+                    if go { c.resume() }
+                }
+            }
+            return reply
+        }
+    }
+}
+
 final class FakeCloud: CloudTokenProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var subject: String? = "user_1"
@@ -442,10 +488,10 @@ struct T3ConnectAuthorizerTests {
     let cloud = FakeCloud()
     let key = try! SoftwareDPoPKey()
 
-    func makeAuthorizer() throws -> T3ConnectAuthorizer {
+    func makeAuthorizer(send: HTTPSend? = nil) throws -> T3ConnectAuthorizer {
         let relay = try RelayClient(key: key, send: http.send, now: { [clock] in clock.now })
         return T3ConnectAuthorizer(relay: relay, tokens: cloud, identity: ClientIdentity(appVersion: "1.2.3"),
-                                   send: http.send, now: { [clock] in clock.now })
+                                   send: send ?? http.send, now: { [clock] in clock.now })
     }
 
     func serveHappyPath() {
@@ -548,6 +594,25 @@ struct T3ConnectAuthorizerTests {
         #expect(http.requests("/v1/environments/env-1/connect").count == 2)
         cloud.signIn(nil)
         await #expect(throws: CloudSessionError.signedOut) { try await authorizer.token(environmentId: "env-1") }
+    }
+
+    @Test func newAccountNeverJoinsTheOldAccountsExchange() async throws {
+        serveHappyPath()
+        let held = HeldResponse("/oauth/token")
+        let authorizer = try makeAuthorizer(send: held.wrap(http.send))
+        let a = Task { try await authorizer.token(environmentId: "env-1") }
+        #expect(await eventually { held.isHolding })
+        cloud.signIn("user_2")
+        let b = Task { try await authorizer.token(environmentId: "env-1") }
+        // B runs its own exchange instead of waiting for A's.
+        #expect(await eventually(seconds: 2) { http.requests("/oauth/token").count == 2 })
+        held.release()
+        let tb = try await b.value
+        #expect(tb.accessToken == "eat-2" && tb.accountId == "user_2")
+        await #expect(throws: CloudSessionError.accountChanged) { try await a.value }
+        let url = URL(string: "https://prod-abc.tunnel.example/api/orchestration/shell")!
+        #expect(try await authorizer.authorizationHeaders(environmentId: "env-1", method: "GET", url: url)["Authorization"] == "DPoP eat-2")
+        #expect(http.requests("/oauth/token").count == 2)
     }
 
     @Test func relayEndpointForAnotherEnvironmentIsRefused() async throws {
