@@ -3241,17 +3241,24 @@ extension ComposerController {
         var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
         var reattached: [String] = []
         var error: String?
-        for file in files {
-            if (try? file.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                if env != environments.primaryId {
-                    error = "Folders can't be dropped into remote environments"
-                } else {
+        // `addComposerFolders` (ChatComposer.tsx:5136-5173): dropped or pasted folders become file links at
+        // the end, local environment only. A file URL always has a path and the editor is never busy, so
+        // T3's other two toasts can't happen here.
+        let isFolder = { (file: ComposerIncomingFile) in (try? file.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        let folders = files.filter(isFolder)
+        if !folders.isEmpty {
+            if env != environments.primaryId {
+                _ = panel.toasts.show(ToastView(title: "Folders can only be referenced in the local desktop environment", kind: .error))
+            } else {
+                for folder in folders {
                     let separator = composer.text.isEmpty || composer.text.last?.isWhitespace == true ? "" : " "
-                    composer.text += separator + ComposerInlineTokens.fileLink(file.url.path) + " "
-                    prompts[key] = composer.text; scheduleSave(); focusComposer()
+                    composer.text += separator + ComposerInlineTokens.fileLink(folder.url.path) + " "
                 }
-                continue
+                prompts[key] = composer.text; scheduleSave()
             }
+            focusComposer()
+        }
+        for file in files where !isFolder(file) {
             if reserved >= ComposerAttachmentRules.maxAttachments { error = ComposerAttachmentRules.countMessage; continue }
             switch ComposerAttachmentRules.classify(name: file.name, mimeType: file.mimeType) {
             case .unsupportedImage:
