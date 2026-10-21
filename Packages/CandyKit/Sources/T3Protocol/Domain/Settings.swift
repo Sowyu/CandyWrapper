@@ -109,6 +109,8 @@ public struct ClientSettings: Equatable, Sendable {
         "browserRecordingShowMousePresses": SettingSpec(.bool, .bool(false)),
         "browserLinkTarget": SettingSpec(.literals(["system", "app"]), .string("system")),
         "browserAutoShowFloatingPreview": SettingSpec(.bool, .bool(true)),
+        "browserSearchEngine": SettingSpec(.literals(["duckduckgo", "google", "bing", "brave", "kagi", "ecosia", "custom"]), .string("duckduckgo")),
+        "browserCustomSearchUrl": SettingSpec(.string(maxLength: 2048), .string("")),
         // Settings > Providers: favorites, visibility and order per instance (client settings).
         "providerModelPreferences": SettingSpec(.any, .object([:])),
         // Settings > Connections > Load balancing (contracts settings.ts:289-310): stored per client.

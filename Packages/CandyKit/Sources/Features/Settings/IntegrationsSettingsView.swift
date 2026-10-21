@@ -91,7 +91,49 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         let floating = clientSwitch("browser-auto-show-floating-preview",
                                     "Show the floating preview when an agent opens a browser or device unless the agent says otherwise.",
                                     key: "browserAutoShowFloatingPreview", reset: "auto-show floating preview", label: "Auto-show floating preview")
-        return section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating, pullRequestRow()])
+        let (engine, customURL) = searchEngineRows()
+        let s = section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating, engine, customURL,
+                                               pullRequestRow()])
+        // The custom URL row leaves the card unless the engine is Custom, like T3's conditional rendering.
+        binder.add { [weak s] in s.map { $0.group.rows = $0.group.rows } }
+        return s
+    }
+
+    /// `BrowserSearchEngineSetting` (IntegrationsSettings.tsx:690-772, #17688): the address bar's engine, and a
+    /// `%s` template for Custom. Not desktop-only. The reset clears both settings.
+    private func searchEngineRows() -> (engine: SettingsRowView, customURL: SettingsRowView) {
+        let engines = [("duckduckgo", "DuckDuckGo"), ("google", "Google"), ("bing", "Bing"), ("brave", "Brave Search"), ("kagi", "Kagi"),
+                       ("ecosia", "Ecosia"), ("custom", "Custom")]
+        let select = settingsSelect(engines.map(\.1), width: 160)
+        select.setAccessibilityLabel("Search engine")
+        let engine = row("browser-search-engine", detail: "What the address bar searches when you type something that isn't a URL.", control: select)
+        let reset = ResetSlot(label: "search engine")
+        engine.accessories = [reset]
+        reset.action = { [weak self] in
+            self?.context.writeClient?(["browserSearchEngine": .string("duckduckgo"), "browserCustomSearchUrl": .string("")])
+        }
+        select.onChange = { [weak self] i in self?.context.writeClient?(["browserSearchEngine": .string(engines[i].0)]) }
+        let input = InputView(placeholder: "https://example.com/search?q=%s", text: "", size: .sm)
+        input.frame.size = NSSize(width: 256, height: 28)
+        input.setAccessibilityLabel("Custom search URL")
+        let custom = row(nil, title: "Custom search URL", detail: "Use %s where the search terms go.", control: input)
+        // `DraftInput`: commits on Return or blur, trimmed, within BROWSER_CUSTOM_SEARCH_URL_MAX_LENGTH.
+        input.onCommit = { [weak self] text in
+            guard let self else { return }
+            let next = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(2048))
+            if next != self.client.string("browserCustomSearchUrl") { self.context.writeClient?(["browserCustomSearchUrl": .string(next)]) }
+        }
+        binder.add { [weak self, weak select, weak input, weak engine, weak custom] in
+            guard let self else { return }
+            let value = self.client.string("browserSearchEngine"), url = self.client.string("browserCustomSearchUrl")
+            select?.selectedIndex = engines.firstIndex { $0.0 == value } ?? 0
+            reset.isShown = value != "duckduckgo" || !url.isEmpty
+            custom?.isHidden = value != "custom"
+            custom?.status = PreviewURL.isValidSearchTemplate(url) ? nil : "Enter an http or https URL containing %s. Searches use DuckDuckGo until then."
+            if let input, !input.state.focused { input.text = url }
+            engine?.needsLayout = true
+        }
+        return (engine, custom)
     }
 
     private func browserProfilesSection() -> SettingsSectionView {

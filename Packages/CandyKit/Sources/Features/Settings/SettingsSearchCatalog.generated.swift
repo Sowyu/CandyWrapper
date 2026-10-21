@@ -99,6 +99,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "browser-recording-frame-rate", title: "Browser recording frame rate", to: .integrations)),
         .item(SettingsSearchItem(id: "browser-recording-key-presses", title: "Show key presses in recordings", to: .integrations, searchTerms: ["browser preview keyboard shortcuts keystrokes overlay capture"])),
         .item(SettingsSearchItem(id: "browser-recording-mouse-presses", title: "Show mouse presses in recordings", to: .integrations, searchTerms: ["browser preview clicks buttons drag overlay capture"])),
+        .item(SettingsSearchItem(id: "browser-search-engine", title: "Search engine", to: .integrations, searchTerms: ["address bar duckduckgo google bing brave kagi ecosia custom"])),
         .item(SettingsSearchItem(id: "pull-request-links-open-in-app", title: "Open pull requests in CandyWrapper", to: .integrations, searchTerms: ["github git host external links pr"])),
         .item(SettingsSearchItem(id: "browser-link-target", title: "Open links in", to: .integrations, searchTerms: ["links default browser in-app browser external open"])),
         .item(SettingsSearchItem(id: "browser-auto-show-floating-preview", title: "Auto-show floating preview", to: .integrations, searchTerms: ["agent opens browser device simulator pop into view hide"])),
