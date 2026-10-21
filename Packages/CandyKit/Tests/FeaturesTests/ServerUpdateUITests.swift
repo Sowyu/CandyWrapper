@@ -31,7 +31,7 @@ struct ServerUpdateUITests {
         let failed = ComposerServerUpdateNotice(status: .failed("The server did not resume on t3@2.0.0."), action: "Retry")
         #expect(failed.title == "Could not update server")
         #expect(failed.content.variant == .error && failed.content.iconIsError && failed.content.actions == ["Retry"])
-        #expect(failed.content.description == "· The server did not resume on t3@2.0.0.")
+        #expect(failed.content.description == "The server did not resume on t3@2.0.0.")
     }
 
     @Test func offersFollowTheCapabilities() {

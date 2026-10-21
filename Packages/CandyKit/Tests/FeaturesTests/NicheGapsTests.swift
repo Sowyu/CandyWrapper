@@ -103,6 +103,14 @@ struct NicheGapsTests {
         v.frame.size.width = 360
         v.layoutSubtreeIfNeeded()
         #expect(!v.detailsButton.isHidden)
+        #expect(v.titleDetailsButton.isHidden)
+        // 060ac670a9: a cut title gets "Show title details" right after it.
+        v.apply(.init(variant: .neutral, icon: .terminal, title: "Running: /usr/bin/zsh -lc " + String(repeating: "make test ", count: 30)))
+        v.frame.size.width = 360
+        v.layoutSubtreeIfNeeded()
+        #expect(!v.titleDetailsButton.isHidden)
+        #expect(v.titleDetailsButton.accessibilityLabel() == "Show title details")
+        #expect(v.titleDetailsButton.frame.maxX <= v.bounds.width - 4)
         let popup = NoticeDetailsPopupView(text: "Receiving")
         #expect(popup.accessibilityLabel() == "Notice details")
         #expect(popup.popupSize.width <= 480)

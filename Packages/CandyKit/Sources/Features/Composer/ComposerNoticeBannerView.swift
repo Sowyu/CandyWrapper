@@ -5,7 +5,8 @@ import DesignSystem
 /// ComposerBanner.tsx:180-330): a 24pt icon column with a 12pt glyph, the title in medium weight,
 /// the description in muted text truncated after it, then ghost `xs` actions and an optional
 /// `icon-xs` X. With `compact`, a narrow banner (under 400pt) drops the description. A cut or hidden
-/// description gets the "Show notice details" button (`NoticeDescription`, :250-317). Used for the
+/// description gets the "Show notice details" button, a cut title "Show title details" (`NoticeText`,
+/// :250-317 and :358-371, 060ac670a9). Used for the
 /// project clone notice (ChatView.tsx:2535-2596) and the branch change notice (:7801-7837).
 public final class ComposerNoticeBannerView: ComposerBannerView {
     public struct Content: Equatable {
@@ -54,6 +55,8 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     private let detail = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     /// "Show notice details": shown only while the description is cut or hidden.
     public let detailsButton = ButtonView(nil, icon: .info, variant: .ghostMuted, size: .iconXs)
+    /// "Show title details": shown only while the title is cut.
+    public let titleDetailsButton = ButtonView(nil, icon: .info, variant: .ghostMuted, size: .iconXs)
     private var titleTip: TooltipController?
     private var buttons: [ButtonView] = []
     public var disabledActions: Set<Int> = [] { didSet { updateActionAvailability() } }
@@ -81,8 +84,14 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         let tip = TooltipController.attach(to: detailsButton, text: "", delay: 0.3)
         tip.content = { [weak self] in NoticeDetailsPopupView(text: self?.content?.description ?? "") }
         detailsButton.action = { [weak tip] in tip?.show(instant: true) }
+        titleDetailsButton.iconSize = 14
+        titleDetailsButton.isHidden = true
+        titleDetailsButton.setAccessibilityLabel("Show title details")
+        let titleDetails = TooltipController.attach(to: titleDetailsButton, text: "", delay: 0.3)
+        titleDetails.content = { [weak self] in NoticeDetailsPopupView(text: self?.content?.title ?? "") }
+        titleDetailsButton.action = { [weak titleDetails] in titleDetails?.show(instant: true) }
         prefix.isHidden = true
-        for v in [iconView, prefix, title, detail, detailsButton, dismiss] as [NSView] { addSubview(v) }
+        for v in [iconView, prefix, title, detail, detailsButton, titleDetailsButton, dismiss] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("alert")
     }
@@ -152,8 +161,19 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             prefix.frame = NSRect(x: x, y: rowY, width: min(w, max(0, right - x)), height: 24)
             x = ((x + w + 6) * 2).rounded() / 2
         }
-        let titleWidth = min(ceil(title.textWidth) + 1, max(0, right - x))
+        // A cut title makes room for its details button, `gap-1` after it; the measure leaves the
+        // button's own width out, so it can't keep itself shown.
+        let titleCut = ceil(title.textWidth) + 1 > max(0, right - x)
+        titleDetailsButton.isHidden = !titleCut
+        let titleWidth = titleCut ? max(0, right - x - 4 - 24) : ceil(title.textWidth) + 1
         title.frame = NSRect(x: x, y: rowY, width: titleWidth, height: 24)
+        if titleCut {
+            titleDetailsButton.frame = NSRect(x: x + titleWidth + 4, y: rowY, width: 24, height: 24)
+            // ponytail: T3 keeps a zero-width description with its own details button; add it if a cut title with a description shows up
+            detail.isHidden = true
+            detailsButton.isHidden = true
+            return
+        }
         // `gap-1`; a compact banner hides the description under 400pt (`@max-[400px]:sr-only`).
         let hidden = content?.compact == true && bounds.width < 400
         // The description starts `gap-1` after the title's text, on a device pixel.
