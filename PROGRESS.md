@@ -26,7 +26,7 @@ Split by files so nobody edits the same ones. Claim a task by adding your agent 
 
 - [x] Published the Nightly 3315 catch-up as v1.6.0 (build 34) on 2026-10-19 from `6e20247`. The downloaded ZIP and DMG match the build's SHA-256, the app verifies with Team ID 8Q677AYRU7, and the live feed's 1.6.0 item carries a valid EdDSA signature.
 
-- [ ] Catch up to T3 Code Nightly 3373 or newer, following `docs/nightly-catch-up.md`. 3373 came out while the 3315 run was open. Its contracts diff is additive (browser search engine settings, workflow script messages, ended PR watches, terminal resume, git `rootPath`).
+- [ ] Catch up to T3 Code Nightly 3373 or newer, following `docs/nightly-catch-up.md` (taken 2026-10-21 by the scheduled catch-up, to 3473). 3373 came out while the 3315 run was open. Its contracts diff is additive (browser search engine settings, workflow script messages, ended PR watches, terminal resume, git `rootPath`).
 
 - [x] Nightly catch-up to 3315 (2026-10-18 to 19): pinned 3315 and ported the table expand rule, effort stepping keybindings, masked provider passwords with a Clear button, 16 default pairing scopes, the open-thread snooze wake, PR `draft:` menu sync and the reasoning failure scan. Full suite: 1,549 Swift Testing and 17 XCTest tests passed, then 115 focused tests after the review fix. Light/dark checks and Haiku turns against 3315 and 3234 passed. Perf: 195 ms window, 0.044% idle CPU, 38.1 MB idle. An A/B with the pre-run commit showed the flagged micro-benchmarks were noise, and the single ~54 ms scroll and open stalls appear on both builds against 3315. [Audit](docs/research/nightly-diff-3315.md).
 
