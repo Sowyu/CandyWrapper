@@ -31,6 +31,33 @@ struct NightlyCompatFeaturesTests {
         #expect(usage.promptCacheTtlMs == 300_000)
     }
 
+    /// cfa76eab67: a native fork with no usage of its own reads the parent's `sourceTokenUsage`.
+    @Test func forkReadsTheSourceUsage() throws {
+        let p = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
+        guard case .object(var root) = try JSONValue(parsing: JSONEncoder().encode(p)), case .object(var thread)? = root["thread"] else {
+            Issue.record("projection does not encode as an object"); return
+        }
+        let me = p.thread.id.rawValue
+        thread["forkedFrom"] = .object(["type": .string("run"), "threadId": .string("parent"), "runId": .string("run-1")])
+        thread["modelSelection"] = .object(["instanceId": .string("claudeAgent"), "model": .string("m")])
+        root["thread"] = .object(thread)
+        root["providerTurns"] = .array([])
+        root["providerThreads"] = .array([])
+        func transfer(_ status: String, instance: String = "claudeAgent") -> JSONValue {
+            .object(["type": .string("fork"), "targetThreadId": .string(me), "sourceThreadId": .string("parent"), "status": .string(status),
+                     "sourcePoint": .object(["runId": .string("run-1")]), "sourceProviderInstanceId": .string(instance),
+                     "sourceTokenUsage": .object(["usedTokens": .number(90_000), "maxTokens": .number(200_000),
+                                                  "updatedAt": .string("2026-10-10T12:00:00.000Z")])])
+        }
+        func usage(_ transfers: [JSONValue]) throws -> ThreadContextWindowUsage? {
+            root["contextTransfers"] = .array(transfers)
+            return ThreadContextWindowUsage.derive(try JSONDecoder().decode(ThreadProjection.self, from: JSONEncoder().encode(JSONValue.object(root))))
+        }
+        #expect(try usage([transfer("pending")])?.used == 90_000)
+        #expect(try usage([transfer("pending", instance: "codex")])?.used != 90_000)
+        #expect(try usage([transfer("resolved_portable")])?.used != 90_000)
+    }
+
     /// A 2994 workflow row unfolds into its phases and members; a running phase opens by itself.
     @MainActor @Test func workflowRowUnfoldsIntoPhasesAndMembers() throws {
         let json = try JSONValue(parsing: Data(#"""
