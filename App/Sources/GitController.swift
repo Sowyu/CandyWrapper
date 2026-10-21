@@ -80,6 +80,8 @@ final class GitController {
     private var picker: (view: BranchPickerView, popup: OpenPopup, query: String, pages: [VcsListRefsResult], inPanel: Bool)?
     /// The open "Checkout pull request" dialog and its resolve debounce.
     private var checkoutDialog: PullRequestThreadDialog?
+    /// The open commit dialog. Its buttons hold it weakly, so this keeps it until the host dismisses.
+    private var commitDialog: CommitDialog?
     private var resolveTask: Task<Void, Never>?
     static let checkoutPrefix = "__checkout_pull_request__:"
     private var pickerSeq = 0
@@ -784,14 +786,10 @@ final class GitController {
         let commit = CommitDialog(branch: status?.refName, isDefaultRef: status?.isDefaultRef ?? false,
                                   files: status?.workingTree.files, canChangeBranch: true, canWrite: true)
         let host = present(commit.dialog, in: window)
-        commit.cancel.action = { [weak host] in host?.close() }
-        commit.commit.action = { [weak self, weak host] in
-            host?.close()
-            self?.runAction(.commit, commitMessage: commit.commitMessage, filePaths: commit.selection.filePaths)
-        }
-        commit.commitOnNewBranch.action = { [weak self, weak host] in
-            host?.close()
-            self?.runAction(.commit, commitMessage: commit.commitMessage, featureBranch: true, filePaths: commit.selection.filePaths, skipDefaultPrompt: true)
+        commitDialog = commit
+        host.onDismiss = { [weak self] in self?.modal = nil; self?.commitDialog = nil }
+        commit.bind(to: host) { [weak self] message, filePaths, featureBranch in
+            self?.runAction(.commit, commitMessage: message, featureBranch: featureBranch, filePaths: filePaths, skipDefaultPrompt: featureBranch)
         }
         // `openChangedFileInEditor` (GitActionsControl.tsx:1492-1516, 771fd93fc5): paths are relative to the
         // repository root, which differs from the project folder when the project is a subfolder. The file opens
@@ -1051,11 +1049,11 @@ final class GitController {
         let host = present(dialog.dialog, in: window)
         host.onDismiss = { [weak self] in self?.modal = nil; self?.checkoutDialog = nil; self?.resolveTask?.cancel() }
         checkoutDialog = dialog
-        dialog.cancel.action = { host.close() }
+        dialog.cancel.action = { [weak host] in host?.close() }
         dialog.onReference = { [weak self] ref in self?.resolveCheckout(ref, debounce: true) }
-        dialog.onConfirm = { [weak self, weak dialog] mode, ref in
+        dialog.onConfirm = { [weak self, weak dialog, weak host] mode, ref in
             guard let self, let dialog else { return }
-            self.prepareCheckout(dialog, mode: mode, reference: ref) { host.close() }
+            self.prepareCheckout(dialog, mode: mode, reference: ref) { host?.close() }
         }
         resolveCheckout(dialog.reference, debounce: false)
         DispatchQueue.main.async { window.makeFirstResponder(dialog.input) }

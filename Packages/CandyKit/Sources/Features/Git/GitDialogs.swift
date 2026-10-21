@@ -41,6 +41,22 @@ public final class CommitDialog {
         dialog.needsLayout = true
     }
 
+    /// Wires Cancel, "Commit on new branch" and Commit to `host`. The buttons hold this dialog and the host
+    /// weakly, so the caller keeps the dialog while it is presented and lets it go in `host.onDismiss`.
+    public func bind(to host: ModalHost, submit: @escaping @MainActor (_ message: String?, _ filePaths: [String]?, _ featureBranch: Bool) -> Void) {
+        cancel.action = { [weak host] in host?.close() }
+        commit.action = { [weak self, weak host] in
+            guard let self else { return }
+            host?.close()
+            submit(self.commitMessage, self.selection.filePaths, false)
+        }
+        commitOnNewBranch.action = { [weak self, weak host] in
+            guard let self else { return }
+            host?.close()
+            submit(self.commitMessage, self.selection.filePaths, true)
+        }
+    }
+
     /// The trimmed message, nil when blank (the server writes one).
     public var commitMessage: String? {
         let m = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
