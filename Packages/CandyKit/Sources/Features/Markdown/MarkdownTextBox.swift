@@ -249,7 +249,8 @@ final class MarkdownTextBox {
 
     /// The rows `clip` reaches, in box coordinates, with one line of slack each side: glyphs can reach past their line box.
     private func rows(_ clip: CGRect?) -> Range<Int>? {
-        guard let clip, lineHeight > 0 else { return nil }
+        // `cacheDisplay` and `renderInContext` can pass an unbounded clip (infinite or near-infinite), which would trap converting to Int.
+        guard let clip, abs(clip.minY) < 1e9, abs(clip.maxY) < 1e9, lineHeight > 0 else { return nil }
         let first = Int((clip.minY / lineHeight).rounded(.down)) - 1, last = Int((clip.maxY / lineHeight).rounded(.up)) + 1
         return first..<max(first, last + 1)
     }
