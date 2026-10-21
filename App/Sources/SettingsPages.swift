@@ -141,6 +141,7 @@ extension SettingsController {
         refreshPages()
         extraPages[section]?.didShow()
         updateLinkPoll()
+        updateAccessTicker()
         onRouteChange?()
     }
 
