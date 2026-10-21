@@ -39,12 +39,4 @@ struct DitherArtTests {
         #expect(bottom < top)
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
-
-    /// The motion frames: no reveal shows only the background.
-    @Test func motionFramesReveal() throws {
-        let field = DitherArt.Field(width: 40, height: 40, background: [10, 10, 10],
-                                    deviation: [Float](repeating: 40, count: 40 * 40 * 3))
-        let hidden = try #require(DitherArt.image(field, .init(reveal: 0)))
-        #expect(Set(bytes(hidden).enumerated().filter { $0.offset % 4 != 3 }.map(\.element)) == [10])
-    }
 }

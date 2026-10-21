@@ -354,7 +354,11 @@ public final class SidebarContentView: DSView {
     /// the list builds from scratch every time, as it did before `SidebarListCache`.
     private static let timing = ProcessInfo.processInfo.environment["CANDY_SIDEBAR_TIMING"]
 
+    /// Called whenever the active thread, draft or snapshot may have changed (Dither's tab strip follows it).
+    public var onListChange: (() -> Void)?
+
     func rebuild(animated: Bool) {
+        defer { onListChange?() }
         guard Self.timing != nil else { return rebuildNow(animated: animated) }
         let start = DispatchTime.now().uptimeNanoseconds, built = listCache?.rowModelBuilds ?? 0
         rebuildNow(animated: animated)
@@ -752,27 +756,41 @@ public final class SidebarContentView: DSView {
         // Titlebar row, 52px. The candy wash dissolves behind the search row.
         backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 112)
         let controlsLeft = SidebarMetrics.controlsLeft(windowedMac: windowedMac)
-        trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
+        // Dither (after Capy): the traffic lights keep the titlebar row to themselves; the brand and the collapse
+        // button take the row under it.
+        let capyBrand = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let brandRow: CGFloat = capyBrand ? 36 : 0
+        brand.markOnly = capyBrand
         let bs = brand.intrinsicContentSize
-        brand.frame = NSRect(x: SidebarMetrics.titlebarContentLeft(windowedMac: windowedMac), y: 12, width: min(bs.width, max(0, w - 12 - 130)), height: 28)
+        if capyBrand {
+            // One left edge for the whole sidebar: the 16pt icon column of the search and nav rows.
+            trigger.frame = NSRect(x: w - 8 - 28, y: 52 + (brandRow - 28) / 2, width: 28, height: 28)
+            brand.frame = NSRect(x: 16, y: 52 + (brandRow - 28) / 2, width: min(bs.width, max(0, w - 16 - 44)), height: 28)
+        } else {
+            trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
+            brand.frame = NSRect(x: SidebarMetrics.titlebarContentLeft(windowedMac: windowedMac), y: 12, width: min(bs.width, max(0, w - 12 - 130)), height: 28)
+        }
         let pillSize = environmentPill.intrinsicContentSize
-        environmentPill.frame = NSRect(x: brand.frame.maxX + 12, y: 18, width: pillSize.width, height: pillSize.height)
+        environmentPill.frame = NSRect(x: brand.frame.maxX + 12, y: brand.frame.midY - pillSize.height / 2, width: pillSize.width, height: pillSize.height)
         environmentPill.alphaValue = environmentPill.frame.maxX <= w - 12 ? 1 : 0
         // Fixed header group, `p-2`: search, then the 28px icon buttons.
-        let rowY: CGFloat = 52 + 8
+        // Dither: search is the first of the 28pt nav rows, 2pt apart.
+        let rowY: CGFloat = capyBrand ? 52 + brandRow : 52 + 8
+        let searchHeight: CGFloat = capyBrand ? SidebarNavRowView.height : 32
         var right = w - 8
         let polished = WindowGlass.isActive(for: self)
         // Without projects there is nothing to scope, so scope and add project stay out (SidebarThreadHeader.tsx:127-135).
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
+        let capyHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         for b in [newThreadButton, addProjectButton, filterButton] {
-            b.isHidden = b !== newThreadButton && !hasProjects
-            if b.isHidden { continue }
+            b.isHidden = b !== newThreadButton && !hasProjects || capyHeader && b === newThreadButton
+            if b.isHidden || capyHeader { continue }
             let size: CGFloat = polished && b === newThreadButton ? 32 : 28
             b.frame = NSRect(x: right - size, y: rowY + (32 - size) / 2, width: size, height: size)
             right -= size + (polished ? 2 : 0)
         }
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
-        search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: 32)
+        search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: searchHeight)
         // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
         let menuTop = h - 36
         var footerTop = h - 40
@@ -788,7 +806,7 @@ public final class SidebarContentView: DSView {
             footerTop = undoNotice.frame.minY - 4
         }
         let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        var listTop: CGFloat = 100
+        var listTop: CGFloat = capyBrand ? rowY + searchHeight + 2 : 100
         for (i, row) in navRows.enumerated() {
             if row.superview == nil { addSubview(row) }
             row.isHidden = !capy || i == 1 && !showsPullRequests
@@ -799,9 +817,15 @@ public final class SidebarContentView: DSView {
         if navSection.superview == nil { navSection.lineHeight = 16; addSubview(navSection) }
         navSection.isHidden = !capy
         if capy {
-            listTop += 10
+            listTop += 14
             navSection.frame = NSRect(x: 16, y: listTop, width: max(0, w - 32), height: 16)
-            listTop += 16 + 4
+            // The list's own controls, at the label's right like Capy's section actions.
+            var bx = w - 8
+            for b in [addProjectButton, filterButton] where !b.isHidden {
+                b.frame = NSRect(x: bx - 24, y: listTop - 4, width: 24, height: 24)
+                bx -= 24 + 2
+            }
+            listTop += 16 + 6
         }
         var fx: CGFloat = 8
         for b in [settingsButton, pullRequestsButton, usageButton] {

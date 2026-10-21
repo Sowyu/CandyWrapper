@@ -221,8 +221,12 @@ final class SidebarBrandView: ControlView {
     var wordLine: CTLine {
         CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [.font: Self.font, .kern: Self.tracking]))
     }
+    /// Dither shows the candy alone, like Capy's logo.
+    var markOnly = false { didSet { if markOnly != oldValue { invalidateIntrinsicContentSize(); needsDisplay = true } } }
+
     override var intrinsicContentSize: NSSize {
-        NSSize(width: ceil(markWidth + Self.gap + CGFloat(CTLineGetTypographicBounds(wordLine, nil, nil, nil))), height: 28)
+        if markOnly { return NSSize(width: ceil(markWidth), height: 28) }
+        return NSSize(width: ceil(markWidth + Self.gap + CGFloat(CTLineGetTypographicBounds(wordLine, nil, nil, nil))), height: 28)
     }
 
     override init(frame: NSRect) {
@@ -275,6 +279,7 @@ final class SidebarBrandView: ControlView {
         ctx.fillPath()
         ctx.restoreGState()
         ctx.saveGState()
+        if markOnly { return }
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [
             .font: Self.font, .kern: Self.tracking, .foregroundColor: muted]))
@@ -369,8 +374,11 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         CATransaction.commit()
         icon.strokeColor = SB.c(\.sidebarIconColor)
         field.textColor = SB.c(\.sidebarForeground)
+        // Dither: the nav rows' 13pt, so search reads as the first of them.
+        let size: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 13 : 14
+        if field.font?.pointSize != size { field.font = SB.font(size, .medium); fieldHeight = 0; needsLayout = true }
         field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [
-            .font: SB.font(14, .medium), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)])
+            .font: SB.font(size, .medium), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)])
     }
 
     override func layout() {

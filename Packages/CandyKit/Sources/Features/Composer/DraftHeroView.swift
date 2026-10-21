@@ -17,7 +17,7 @@ public final class DraftHeroView: DSView {
         return isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
     }
 
-    public var projectTitle = "" { didSet { if projectTitle != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
+    public var projectTitle = "" { didSet { if projectTitle != oldValue { chipIcon.projectTitle = projectTitle; needsDisplay = true; superview?.needsLayout = true } } }
     /// A draft in the scratch project: "What should we work on?" with the picker, "No project", on the
     /// line below (DraftHeroHeadline.tsx:244-246, 326, 366-383).
     public var isScratch = false { didSet { if isScratch != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
@@ -32,7 +32,9 @@ public final class DraftHeroView: DSView {
 
     /// Dither (after Capy's composer chips): no headline, just the project as a small chip over the composer's left edge.
     private var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    private let chipIcon = IconView(name: .folder, size: 14)
+    private let chipIcon = ProjectMonogramView()
+    /// The project's icon for the chip; set after `projectTitle`.
+    public var projectIcon: ProjectIconSource? { didSet { chipIcon.source = projectIcon } }
     private let chipChevron = IconView(name: .chevronDown, size: 12)
     static var chipFont: NSFont { DSFont.ui(13, weight: .medium) }
     private var chipText: String { isScratch ? "No project" : projectTitle }
@@ -57,7 +59,7 @@ public final class DraftHeroView: DSView {
         chipChevron.isHidden = !capy
         guard capy else { return }
         let textWidth = ceil(TextLine(NSAttributedString(string: chipText, attributes: [.font: Self.chipFont])).width)
-        chipIcon.frame = NSRect(x: 8, y: (bounds.height - 14) / 2, width: 14, height: 14)
+        chipIcon.frame = NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
         chipChevron.frame = NSRect(x: 8 + 20 + textWidth + 4, y: (bounds.height - 12) / 2, width: 12, height: 12)
         projectAnchor.frame = NSRect(x: 4, y: 0, width: 8 + 20 + textWidth + 4 + 12 + 4, height: bounds.height)
         window?.invalidateCursorRects(for: self)
@@ -94,7 +96,6 @@ public final class DraftHeroView: DSView {
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         if capy {
             let color = Themed.color(\.foreground, hovered ? 1 : 0.85)
-            chipIcon.strokeColor = color
             chipChevron.strokeColor = Themed.color(\.mutedForeground)
             if hovered {
                 ctx.setFillColor(Themed.color(\.foreground, 0.08).cgColor(in: self))

@@ -231,7 +231,7 @@ public enum WindowGlass {
         if on, blur == nil {
             let made = BackdropBlurView(frame: view.bounds)
             made.autoresizingMask = [.width, .height]
-            made.cornerRadius = radius
+            made.cornerRadius = ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.radius(radius) : radius
             view.addSubview(made, positioned: .below, relativeTo: nil)
             // Under the view's own box decoration layer too, so the border and highlight stay sharp.
             made.layer?.zPosition = -1
@@ -241,7 +241,7 @@ public enum WindowGlass {
             blur.removeFromSuperview()
             return nil
         }
-        blur?.cornerRadius = radius
+        blur?.cornerRadius = ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.radius(radius) : radius
         return blur
     }
 
