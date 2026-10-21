@@ -14,7 +14,8 @@ public struct MarkdownDocument: Sendable, Equatable {
         blocks = Self.parseBlocks(Substring(markdown), preservesLineBreaks: preservesLineBreaks)
     }
 
-    private static func parseBlocks(_ markdown: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
+    private static func parseBlocks(_ source: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
+        let markdown = keepingWindowsPathEscapes(source)
         // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
         // and only loose lists need them.
         let positions = mayHaveLooseList(markdown)
@@ -36,6 +37,76 @@ public struct MarkdownDocument: Sendable, Equatable {
             builder.root.markLooseLists(blank: blank)
         }
         return containedBlocks(builder.root)
+    }
+
+    /// `remarkKeepWindowsPaths` (834f0e3a1b, shared/src/markdownPipeline.ts:258-300): CommonMark reads the `\.` in
+    /// `C:\me\.t3` as an escape, but every backslash in a drive path is a separator. An escape whose text since the
+    /// last whitespace ends in an unfinished drive path (`C:`, `C:\Users\me`, `C:/work`) gets an escaped backslash in
+    /// front, so it renders as written. Code spans and fences keep their text.
+    // ponytail: indented code blocks are scanned like prose, so `C:\x\.y` in one shows a doubled backslash; skip them
+    // here too if an agent's indented code shows it.
+    static func keepingWindowsPathEscapes(_ text: Substring) -> Substring {
+        let b = Array(text.utf8)
+        guard b.contains(UInt8(ascii: "\\")), b.contains(UInt8(ascii: ":")) else { return text }
+        func isWord(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 }
+        func isLetter(_ c: UInt8) -> Bool { (c >= 65 && c <= 90) || (c >= 97 && c <= 122) }
+        func isPunct(_ c: UInt8) -> Bool { (c >= 33 && c <= 47) || (c >= 58 && c <= 64) || (c >= 91 && c <= 96) || (c >= 123 && c <= 126) }
+        // `UNFINISHED_DRIVE_PATH`, /(?:^|\W)[A-Za-z]:(?:[\\/]\S*)?$/, over a run with no whitespace.
+        func unfinishedDrive(_ from: Int, _ to: Int) -> Bool {
+            var p = from
+            while p + 1 < to {
+                if isLetter(b[p]), b[p + 1] == UInt8(ascii: ":"), p == from || !isWord(b[p - 1]),
+                   p + 2 == to || b[p + 2] == UInt8(ascii: "\\") || b[p + 2] == UInt8(ascii: "/") { return true }
+                p += 1
+            }
+            return false
+        }
+        func run(_ i: Int, _ c: UInt8) -> Int { var j = i; while j < b.count, b[j] == c { j += 1 }; return j - i }
+        var out: [UInt8] = []
+        out.reserveCapacity(b.count + 8)
+        var i = 0, token = 0, lineStart = true, changed = false
+        var fence: (char: UInt8, length: Int)?
+        while i < b.count {
+            if lineStart {
+                let lineEnd = b[i...].firstIndex(of: UInt8(ascii: "\n")).map { $0 + 1 } ?? b.count
+                var j = i
+                while j < lineEnd, j - i < 3, b[j] == UInt8(ascii: " ") { j += 1 }
+                let c = j < lineEnd ? b[j] : 0
+                let marker = c == UInt8(ascii: "`") || c == UInt8(ascii: "~") ? run(j, c) : 0
+                if let open = fence {
+                    if c == open.char, marker >= open.length,
+                       b[(j + marker)..<lineEnd].allSatisfy({ $0 == 32 || $0 == 9 || $0 == 10 || $0 == 13 }) { fence = nil }
+                    out += b[i..<lineEnd]; i = lineEnd; token = i; continue
+                }
+                if marker >= 3 {
+                    fence = (c, marker)
+                    out += b[i..<lineEnd]; i = lineEnd; token = i; continue
+                }
+                lineStart = false
+            }
+            let c = b[i]
+            if c == UInt8(ascii: "\n") { out.append(c); i += 1; token = i; lineStart = true; continue }
+            if c == 32 || c == 9 || c == 13 { out.append(c); i += 1; token = i; continue }
+            if c == UInt8(ascii: "`") {
+                // A code span runs to the next backtick run of the same length; it starts a new text node after it.
+                let r = run(i, c)
+                var k = i + r
+                var close: Int?
+                while k < b.count {
+                    if b[k] == c { let n = run(k, c); if n == r { close = k; break }; k += n } else { k += 1 }
+                }
+                let end = close.map { $0 + r } ?? i + r
+                out += b[i..<end]; i = end; token = i
+                continue
+            }
+            if c == UInt8(ascii: "\\"), i + 1 < b.count, isPunct(b[i + 1]) {
+                if unfinishedDrive(token, i) { out += [UInt8(ascii: "\\"), UInt8(ascii: "\\")]; changed = true }
+                out += [c, b[i + 1]]; i += 2
+                continue
+            }
+            out.append(c); i += 1
+        }
+        return changed ? Substring(decoding: out, as: UTF8.self) : text
     }
 
     /// False only when no list can be loose: no blank line follows a list marker line and comes before
