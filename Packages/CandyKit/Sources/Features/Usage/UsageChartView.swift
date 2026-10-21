@@ -164,9 +164,9 @@ public final class UsageChartView: DSView {
     }
 
     private func format(_ v: Double) -> String { model.tokens ? UsageFormat.tokens(v) : UsageFormat.usd(v) }
-    func formatPeriod(_ p: String) -> String { model.hourly ? UsageFormat.hourShort(p, timeZone: model.timeZone) : UsageFormat.dayShort(p) }
+    func formatPeriod(_ p: String) -> String { model.hourly ? UsageFormat.hourShort(p, timeZone: model.timeZone, hour12: UsageTime.hour12()) : UsageFormat.dayShort(p) }
     func formatTooltipPeriod(_ p: String) -> String {
-        if model.hourly, let ref = model.referenceTime { return UsageFormat.relativeHourShort(p, relativeTo: ref, timeZone: model.timeZone) }
+        if model.hourly, let ref = model.referenceTime { return UsageFormat.relativeHourShort(p, relativeTo: ref, timeZone: model.timeZone, hour12: UsageTime.hour12()) }
         return formatPeriod(p)
     }
 

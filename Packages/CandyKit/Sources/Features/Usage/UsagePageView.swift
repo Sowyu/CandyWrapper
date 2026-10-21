@@ -44,9 +44,10 @@ public enum UsagePageOptions {
     }
 
     /// The period named in the header: hours for the past 24h, else days.
-    public static func windowLabel(_ w: UsageWindow) -> String {
+    @MainActor public static func windowLabel(_ w: UsageWindow) -> String {
         if w.isHourly, let s = w.sinceTime, let u = w.untilTime {
-            return "\(UsageFormat.dateTimeShort(s, timeZone: w.timeZone)) to \(UsageFormat.dateTimeShort(u, timeZone: w.timeZone))"
+            let hour12 = UsageTime.hour12()
+            return "\(UsageFormat.dateTimeShort(s, timeZone: w.timeZone, hour12: hour12)) to \(UsageFormat.dateTimeShort(u, timeZone: w.timeZone, hour12: hour12))"
         }
         return "\(UsageFormat.dayShort(w.sinceDay)) to \(UsageFormat.dayShort(w.untilDay))"
     }
@@ -209,7 +210,7 @@ public final class UsagePageView: DSView {
         }
         let periods = (m.window.isHourly ? m.merged.hourly : m.merged.daily).reversed()
         return .periods(header: m.window.isHourly ? "Hour" : "Day", providers: m.activeProviders, rows: periods.map { p in
-            .init(label: m.window.isHourly ? UsageFormat.hourShort(p.hourStart ?? "", timeZone: m.window.timeZone) : UsageFormat.dayShort(p.day),
+            .init(label: m.window.isHourly ? UsageFormat.hourShort(p.hourStart ?? "", timeZone: m.window.timeZone, hour12: UsageTime.hour12()) : UsageFormat.dayShort(p.day),
                   providers: m.activeProviders.map { UsageFormat.usd(p.byProvider[$0]?.costUsd ?? 0) },
                   providerLoading: m.activeProviders.map { m.providerLoading($0) },
                   total: UsageFormat.usd(p.costUsd), tokens: UsageFormat.tokens(p.totalTokens))
