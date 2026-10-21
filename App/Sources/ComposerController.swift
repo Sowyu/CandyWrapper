@@ -751,7 +751,7 @@ final class ComposerController {
     /// Keybinding context keys the composer owns.
     var shortcutContext: [String: Bool] {
         ["composerFocus": composer.isEditorFocused, "modelPickerOpen": pickers.isModelPickerOpen,
-         "turnRunning": composer.runState.canInterrupt]
+         "turnRunning": composer.runState.canInterrupt, "composerRequiresModifier": composer.requiresSendModifier]
     }
 
     /// The open draft's project, nil on a thread.
