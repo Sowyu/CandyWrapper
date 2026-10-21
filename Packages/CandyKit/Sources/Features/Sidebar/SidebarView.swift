@@ -112,6 +112,8 @@ public final class SidebarContentView: DSView {
     static let snoozedExpandedKey = "sidebar.snoozedExpanded"
     static let workingExpandedKey = "sidebar.workingExpanded"
 
+    static let collapsedProjectsKey = "sidebar.dither.collapsedProjects"
+
     func toggleShelf(_ shelf: SidebarShelf) {
         switch shelf {
         case .settled: state.settledExpanded.toggle(); state.settledVisibleCount = SidebarListBuilder.settledInitialCount
@@ -203,6 +205,12 @@ public final class SidebarContentView: DSView {
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
         list.onToggleShelf = { [weak self] in self?.toggleShelf($0) }
+        list.onToggleProject = { [weak self] key in
+            guard let self else { return }
+            if self.state.collapsedProjects.remove(key) == nil { self.state.collapsedProjects.insert(key) }
+            UserDefaults.standard.set(Array(self.state.collapsedProjects), forKey: Self.collapsedProjectsKey)
+        }
+        state.collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? [])
         list.sortContextProvider = { [weak self] in
             guard let self else { return SidebarSortPlanner.Context() }
             let snoozed = self.snapshot.map {

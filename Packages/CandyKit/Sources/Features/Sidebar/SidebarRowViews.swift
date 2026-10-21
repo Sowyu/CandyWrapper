@@ -579,9 +579,10 @@ final class SidebarCardRowView: SidebarRowBase {
 
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
-        // Dither keeps the project icon at the row's lead, beside the title, and drops the provider glyph.
-        monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil
-        capyIcon.isHidden = !capyRow || !monogram.isHidden
+        // Dither keeps the project icon at the row's lead, beside the title, and drops the provider glyph; under a
+        // project section the header carries the icon.
+        monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil || r.inProjectSection
+        capyIcon.isHidden = !capyRow || !monogram.isHidden || r.inProjectSection
         capyIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         project.text = r.projectLabel ?? ""
         project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
@@ -671,7 +672,7 @@ final class SidebarCardRowView: SidebarRowBase {
         let capy = capyRow
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: 46) : CGRect(x: 0, y: 2, width: w, height: 78)
+        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: bounds.height - 2) : CGRect(x: 0, y: 2, width: w, height: 78)
         CATransaction.commit()
         let left: CGFloat = capy ? 8 : 10, right = w - (capy ? 8 : 10), top: CGFloat = capy ? 5 : 10
         // Line 1: favicon, project, pin, status slot.
@@ -745,7 +746,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if capy {
             bx = left + 24
             // The project icon names the project; the meta line spells it out only when there is no branch to show.
-            let showsProject = !project.text.isEmpty && branch.text.isEmpty
+            let showsProject = !project.text.isEmpty && branch.text.isEmpty && row?.inProjectSection != true
             project.isHidden = !showsProject
             let pw = showsProject ? min(ceil(project.textWidth) + 1, max(0, trailing - bx)) : 0
             project.frame = NSRect(x: bx, y: y3, width: pw, height: 16)
@@ -1099,3 +1100,56 @@ final class TerminalStatusGlyph: DSView {
         return animation
     }
 }
+
+/// Dither (after Capy): a project section's header, its icon, name and thread count, with a chevron that turns as
+/// the section folds. Clicking anywhere on it folds or unfolds the section.
+final class SidebarProjectHeaderRowView: SidebarRowBase {
+    private let icon = ProjectMonogramView()
+    private let label = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
+    private let count = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground))
+    private let chevron = IconView(name: .chevronRight, size: 12)
+    private let surface = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(surface)
+        label.lineHeight = 18
+        count.lineHeight = 18
+        [icon, label, count, chevron].forEach(addSubview)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func refresh() {
+        guard case .projectHeader(let h)? = item else { return }
+        icon.projectTitle = h.projectTitle
+        icon.source = h.projectIcon
+        label.text = h.label
+        count.text = "\(h.count)"
+        chevron.strokeColor = SB.c(\.sidebarMutedForeground)
+        chevron.setRotation(h.expanded ? 90 : 0, motion: window == nil ? .none : .ease(0.15))
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        surface.cornerRadius = rowRadius
+        surface.backgroundColor = state.hovered || isKeyboardFocused ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        CATransaction.commit()
+        setAccessibilityLabel("\(h.label), \(h.count) threads")
+        setAccessibilityExpanded(h.expanded)
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        surface.frame = bounds.insetBy(dx: 0, dy: 1)
+        CATransaction.commit()
+        icon.frame = NSRect(x: 8, y: ((h - 16) / 2).rounded(), width: 16, height: 16)
+        chevron.frame = NSRect(x: bounds.width - 8 - 12, y: ((h - 12) / 2).rounded(), width: 12, height: 12)
+        let cw = ceil(count.textWidth) + 1
+        let lw = min(ceil(label.textWidth) + 1, max(0, chevron.frame.minX - 6 - 32 - cw - 6))
+        label.frame = NSRect(x: 32, y: ((h - 18) / 2).rounded(), width: lw, height: 18)
+        count.frame = NSRect(x: label.frame.maxX + 6, y: label.frame.minY, width: cw, height: 18)
+    }
+}
+

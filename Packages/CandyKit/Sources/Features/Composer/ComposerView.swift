@@ -278,6 +278,10 @@ public final class ComposerView: DSView {
     let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
     let compactPill = ComposerCompactPill()
+    /// Dither: T3's first compact-before-send control (655dfbe8, ComposerPrimaryActions.tsx before 0647c481) instead
+    /// of the chip: a "Compact and send" button with a menu to send with full history.
+    private let compactSend = MessageActionPill()
+    private let compactSendMenu = MessageActionPill().menuTrigger()
     let questionPill = MessageActionPill()
     /// "Previous" (`Button outline sm`), or the chevron (`outline icon-sm`) when compact.
     let previousFull = ButtonView("Previous", variant: .outline, size: .sm)
@@ -380,6 +384,14 @@ public final class ComposerView: DSView {
         compactPill.isHidden = true
         compactPill.action = { [weak self] in self?.onToggleKeepFullHistory?() }
         addSubview(compactPill)
+        compactSend.title = "Compact and send"
+        compactSend.half = .leading
+        compactSend.widePadding = true
+        compactSendMenu.half = .trailing
+        compactSendMenu.setAccessibilityLabel("Send options")
+        compactSend.action = { [weak self] in self?.sendCompacting(true) }
+        compactSendMenu.action = { [weak self] in self?.showCompactSendMenu() }
+        for v in [compactSend, compactSendMenu] { v.isHidden = true; addSubview(v) }
         questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
         previousCompact.iconSize = 14
         previousCompact.setAccessibilityLabel("Previous question")
@@ -669,6 +681,18 @@ public final class ComposerView: DSView {
     }
 
     /// `MenuPopup align="end" side="top"` with "Implement in a new thread".
+    /// Sends once with compaction on or off, leaving the thread's standing choice as the user set it.
+    private func sendCompacting(_ compacting: Bool) {
+        if keepFullHistory == compacting { onToggleKeepFullHistory?() }
+        submit()
+    }
+
+    private func showCompactSendMenu() {
+        let tokens = compactBeforeSendTokens.map(ThreadContextWindowUsage.tokens) ?? ""
+        let item = MenuItem("Send with full history (\(tokens) tokens)", disabled: !compactSend.isEnabled) { [weak self] in self?.sendCompacting(false) }
+        MenuPopupView.show([item], from: compactSendMenu, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
     private func showImplementMenu() {
         let item = MenuItem("Implement in a new thread", disabled: !planPill.isEnabled) { [weak self] in self?.onImplementInNewThread?() }
         MenuPopupView.show([item], from: implementMenu, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
@@ -884,7 +908,21 @@ public final class ComposerView: DSView {
             primary.frame = NSRect(x: right - 32, y: rowY, width: 32, height: 32)
             actionsLeft = primary.frame.minX
         }
-        compactPill.isHidden = !showsCompactPill || !footerShown
+        let splitCompact = showsCompactPill && footerShown && primary.face == .send && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        compactSend.isHidden = !splitCompact
+        compactSendMenu.isHidden = !splitCompact
+        if splitCompact {
+            primary.isHidden = true
+            compactSend.isEnabled = primary.isEnabled
+            compactSendMenu.isEnabled = primary.isEnabled
+            compactSend.toolTip = "Summarize \(compactBeforeSendTokens.map(ThreadContextWindowUsage.tokens) ?? "") tokens of history, then send"
+            let cw = compactSendMenu.intrinsicContentSize.width
+            compactSendMenu.frame = NSRect(x: right - cw, y: midY - 16, width: cw, height: 32)
+            let w = compactSend.intrinsicContentSize.width
+            compactSend.frame = NSRect(x: compactSendMenu.frame.minX - w, y: midY - 16, width: w, height: 32)
+            actionsLeft = compactSend.frame.minX
+        }
+        compactPill.isHidden = !showsCompactPill || !footerShown || splitCompact
         if !compactPill.isHidden {
             // `flex items-center gap-2` with the send button.
             let pw = compactPill.intrinsicContentSize.width
