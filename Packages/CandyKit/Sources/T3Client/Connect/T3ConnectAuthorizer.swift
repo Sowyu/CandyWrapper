@@ -38,6 +38,8 @@ public actor T3ConnectAuthorizer {
     public static let cachedSocketTimeout: TimeInterval = 3
     /// Environment request timeout (authorization/remote.ts:25).
     public static let requestTimeout: TimeInterval = 10
+    /// Cap on one shared exchange, whoever waits for it (DPOP_AUTHORIZATION_TIMEOUT_MS, service.ts:90, 447-457).
+    static let authorizationTimeout: Duration = .seconds(30)
 
     public nonisolated let relay: RelayClient
     private let tokens: any CloudTokenProvider
@@ -99,7 +101,14 @@ public actor T3ConnectAuthorizer {
             })
             pending[environmentId] = shared
         }
-        let fresh = try await shared.task.value
+        // Cancelling this caller, as the supervisor's 15 s timeout does, leaves the exchange running for the others.
+        let fresh: T3ConnectToken
+        do {
+            fresh = try await joinShared(shared.task)
+        } catch where generation != shared.generation && !Task.isCancelled {
+            // reset() ended the exchange this caller joined.
+            throw CloudSessionError.accountChanged
+        }
         // The user may have switched accounts while this waited (service.ts:409-421).
         guard generation == shared.generation, try await tokens.accountId() == account, generation == shared.generation else {
             throw CloudSessionError.accountChanged
@@ -111,7 +120,15 @@ public actor T3ConnectAuthorizer {
     /// before caching, so the cache never takes another account's token (service.ts:424-445).
     private func sharedExchange(environmentId: String, account: String, generation started: Int, id: UUID) async throws -> T3ConnectToken {
         defer { if pending[environmentId]?.id == id { pending[environmentId] = nil } }
-        let fresh = try await exchange(environmentId: environmentId, account: account)
+        let work = Task { try await self.exchange(environmentId: environmentId, account: account) }
+        let fresh: T3ConnectToken
+        do {
+            fresh = try await joinShared(work, timeout: Self.authorizationTimeout,
+                                         timeoutError: ConnectionFailure.transient("Timed out renewing the environment credential."))
+        } catch {
+            work.cancel()
+            throw error
+        }
         guard generation == started, try await tokens.accountId() == account, generation == started else {
             throw CloudSessionError.accountChanged
         }
@@ -120,8 +137,6 @@ public actor T3ConnectAuthorizer {
     }
 
     /// Steps 3 to 6 of protocol.md 10.4.
-    // ponytail: no 30 s cap on the whole exchange (service.ts:89), only 10 s per request and the
-    // supervisor's 15 s; add a task-group race if a caller outside the supervisor needs it.
     // ponytail: tokens live in memory only, so a relaunch runs the relay connect again; persist to
     // the Keychain if launch latency on T3 Connect matters.
     private func exchange(environmentId: String, account: String) async throws -> T3ConnectToken {
@@ -157,6 +172,7 @@ public actor T3ConnectAuthorizer {
     public func reset() async {
         generation += 1
         cache = [:]
+        for p in pending.values { p.task.cancel() }
         pending = [:]
         await relay.resetTokenCache()
     }
@@ -317,6 +333,64 @@ public actor T3ConnectAuthorizer {
     static func isEnvironmentAuthInvalid(_ error: Error) -> Bool {
         if case EnvironmentHTTPError.status(401, _) = error { return true }
         return false
+    }
+}
+
+/// Waits for a task that several callers share. Cancelling this caller throws `CancellationError` at
+/// once and leaves `task` running for the others; awaiting `task.value` would ignore the cancel
+/// (service.ts:466-469). With `timeout`, throws `timeoutError` once it passes; the owner cancels `task`.
+func joinShared<T: Sendable>(_ task: Task<T, Error>, timeout: Duration? = nil,
+                             timeoutError: Error = CancellationError()) async throws -> T {
+    let waiter = SharedWaiter<T>()
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { c in
+            waiter.install(c)
+            Task { waiter.finish(await task.result) }
+            if let timeout {
+                waiter.setTimer(Task {
+                    guard (try? await Task.sleep(for: timeout)) != nil else { return }
+                    waiter.finish(.failure(timeoutError))
+                })
+            }
+        }
+    } onCancel: {
+        waiter.finish(.failure(CancellationError()))
+    }
+}
+
+/// The first of the task's result, the caller's cancel or the timeout resumes the continuation.
+private final class SharedWaiter<T: Sendable>: @unchecked Sendable {
+    // Guards the fields below.
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var result: Result<T, Error>?
+    private var timer: Task<Void, Never>?
+
+    func install(_ c: CheckedContinuation<T, Error>) {
+        let early: Result<T, Error>? = lock.withLock {
+            if result == nil { continuation = c }
+            return result
+        }
+        if let early { c.resume(with: early) }
+    }
+
+    func setTimer(_ t: Task<Void, Never>) {
+        let finished: Bool = lock.withLock {
+            if result == nil { timer = t }
+            return result != nil
+        }
+        if finished { t.cancel() }
+    }
+
+    func finish(_ r: Result<T, Error>) {
+        let (c, t): (CheckedContinuation<T, Error>?, Task<Void, Never>?) = lock.withLock {
+            guard result == nil else { return (nil, nil) }
+            result = r
+            defer { continuation = nil; timer = nil }
+            return (continuation, timer)
+        }
+        t?.cancel()
+        c?.resume(with: r)
     }
 }
 

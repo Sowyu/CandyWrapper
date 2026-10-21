@@ -615,6 +615,25 @@ struct T3ConnectAuthorizerTests {
         #expect(http.requests("/oauth/token").count == 2)
     }
 
+    @Test func cancelledCallerStopsWaitingWithoutEndingTheSharedExchange() async throws {
+        serveHappyPath()
+        let held = HeldResponse("/oauth/token")
+        let authorizer = try makeAuthorizer(send: held.wrap(http.send))
+        let a = Task { try await authorizer.token(environmentId: "env-1") }
+        #expect(await eventually { held.isHolding })
+        let b = Task { try await authorizer.token(environmentId: "env-1") }
+        await settle()
+        // Without a prompt return the test would wait here until this release.
+        let safety = Task { try await Task.sleep(for: .seconds(5)); held.release() }
+        a.cancel()
+        await #expect(throws: CancellationError.self) { try await a.value }
+        #expect(!held.isReleased)
+        safety.cancel()
+        held.release()
+        #expect(try await b.value.accessToken == "eat-1")
+        #expect(http.requests("/oauth/token").count == 1)
+    }
+
     @Test func relayEndpointForAnotherEnvironmentIsRefused() async throws {
         http.on("POST", "/v1/client/dpop-token", 200, relayTokenJSON("rat-1"))
         http.on("POST", "/v1/environments/env-1/connect", 200, connectJSON("env-2"))
