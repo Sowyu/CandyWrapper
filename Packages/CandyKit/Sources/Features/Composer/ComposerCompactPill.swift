@@ -70,9 +70,10 @@ final class ComposerCompactPill: ControlView {
         box.border = keepFullHistory ? Themed.color(\.border) : Themed.color(\.warning, 0.4)
         box.fill = !keepFullHistory && hovered ? Themed.color(\.warning, 0.08) : nil
         decoration.boxStyle = box
+        // Two lines (ComposerPrimaryActions.tsx:389-396).
         tip.text = keepFullHistory
-            ? "Next send keeps all \(tokens) tokens. Click to compact first"
-            : "Next send compacts \(tokens) tokens first. Click to keep full history"
+            ? "Next send keeps all \(tokens) tokens.\nClick to compact first"
+            : "Next send compacts \(tokens) tokens first.\nClick to keep full history"
         setAccessibilityLabel("Compact \(tokens) tokens of history before sending")
         setAccessibilityValue(NSNumber(value: !keepFullHistory))
         invalidateIntrinsicContentSize()

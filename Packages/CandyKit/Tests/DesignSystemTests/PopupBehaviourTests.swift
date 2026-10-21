@@ -286,4 +286,12 @@ struct MenuRadioCloseTests {
         menu.activate(0)
         #expect(ran == ["closing"])
     }
+
+    /// A "\n" stacks two lines in a box as wide as the wider line, like the compact pill's two `<div>`s.
+    @Test func tooltipHardBreakStacksLines() {
+        let one = TooltipView("Next send keeps all 120k tokens.")
+        let two = TooltipView("Next send keeps all 120k tokens.\nClick to compact first")
+        #expect(abs(two.intrinsicContentSize.width - one.intrinsicContentSize.width) < 1)
+        #expect(two.intrinsicContentSize.height == 16.5 * 2 + 10)
+    }
 }
