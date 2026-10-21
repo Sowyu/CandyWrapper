@@ -414,8 +414,7 @@ public final class DiffTotalsView: DSView {
     }
 
     public override func updateLayer() {
-        plus.color = Themed.color(\.success)
-        minus.color = Themed.color(\.destructive)
+        plus.color = Themed.color(\.diffAddition); minus.color = Themed.color(\.diffDeletion)  // ba1907e8e0, GitActionsControl.tsx
     }
 }
 
