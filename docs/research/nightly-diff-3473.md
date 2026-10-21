@@ -77,7 +77,7 @@ T3's perf commits are React-specific. The steer segments add a membership set pe
 
 ## 4. Method and validation
 
-The release archive came from GitHub and matched SHA256SUMS. A copy of the 3315 sandbox home ran 3473 on port 47396 (CandyWrapper-research/sandbox-3473), and the 3315 sandbox ran on 47395 for compatibility. The main sandbox and the live service stayed untouched. Four research passes read the contracts diff in full and triaged all 1,110 commits by area; a comparison of every string literal in apps/web/src and the shared packages found the new user-facing text. Four agents then ported the changes in separate worktrees, one area each, and the main session merged, reviewed and tested them. The per-commit research notes, with T3 file:line and CW pointers for every item including the open ones, are in ~/CandyWrapper-research/notes/nightly-3473/ (findings-thread.md, findings-composer-settings.md, findings-panels.md, findings-server.md). The 48-diff-turn-file panel reference was recaptured from the 3473 web client, since 3473 expands a file opened from the card (design/reference/README.md).
+The release archive came from GitHub and matched SHA256SUMS. A copy of the 3315 sandbox home ran 3473 on port 47396 (CandyWrapper-research/sandbox-3473), and the 3315 sandbox ran on 47395 for compatibility. The main sandbox and the live service stayed untouched. Four research passes read the contracts diff in full and triaged the 1,110 commits by area, but 115 commits that change the web UI or the shared packages left no trace in their notes (section 6); a comparison of every string literal in apps/web/src and the shared packages found the new user-facing text. Four agents then ported the changes in separate worktrees, one area each, and the main session merged, reviewed and tested them. The per-commit research notes, with T3 file:line and CW pointers for every item including the open ones, are in ~/CandyWrapper-research/notes/nightly-3473/ (findings-thread.md, findings-composer-settings.md, findings-panels.md, findings-server.md). The 48-diff-turn-file panel reference was recaptured from the 3473 web client, since 3473 expands a file opened from the card (design/reference/README.md).
 
 ## 5. Review and remaining work
 
@@ -93,3 +93,45 @@ Performance (docs/perf/2026-10-21-80ed242-w1.md, against a 3473 server): 218 ms 
 
 Still open: section 2's list. Also: T3 always offers "Revert files too" in "Edit from here?", where CandyWrapper offers it only for a thread with a worktree (a rule older than this run), and the parent thread's projection, which would unlock workflow phases and the parent Lineage row status, is not loaded.
 
+## 6. Commits the first pass missed
+
+On 2026-10-22 a check of the research notes against `git log 3315..3473 -- apps/web/src packages/client-runtime packages/contracts packages/shared` found 115 commits, tests and refactors left out, that no note cites by hash or PR number. Three agents read each one against CandyWrapper: 60 can't matter here (web rendering, mobile, Windows, dev tooling, server internals), 18 CandyWrapper already matches, 3 need a look on screen and 33 are gaps. Their per-commit lines are in ~/CandyWrapper-research/notes/nightly-3473/audit-batch-{1,2,3}.md. The audit only read code, so each gap is confirmed against T3's source before it is fixed.
+
+Terminal, project scripts, files and panels:
+- [ ] Terminal output gets no clickable file paths; T3 detects them, keeps Unicode paths whole and skips logged request routes (terminal-links.ts, 9ac1355e01, 10b86829e8).
+- [ ] Project scripts reach the shell history; T3 sends a leading space (projectScripts.ts, b92ebce0ad).
+- [ ] A project script can reuse a right-panel terminal when the drawer is empty (projectScriptTerminal.ts, 687bd55533).
+- [ ] A tall terminal drawer can push the composer into the header on a short window (ThreadTerminalDrawer.tsx, 055a8418c1).
+- [ ] Revealing a deep file loads one folder at a time; T3 loads four (loadFileAncestors.ts, 1ea378c6f4).
+- [ ] A changed file opened from the commit dialog resolves against the project folder, not the repository root (771fd93fc5).
+
+Composer:
+- [ ] The approval menu takes its content's width and the approval editor its smaller minimum height (d356059c84).
+- [ ] A SnapShot taken while a question is open attaches to the answer (SnapShotCoordinator.tsx, b874ff6c22).
+- [ ] The draft's model pick yields once another client sets the thread to that model (composerDraftStore.ts, 2767012996).
+- [ ] The model preferences migration stops resending against servers that predate it (useSettings.ts, b34501a466).
+- [ ] A draft that starts with a list or quote sits 10 pt too low (index.css:2003-2010, 3ec095bc8b).
+- [ ] `@namespace.foo(bar)` stays text instead of becoming a file chip (composerInlineTokens.ts, 729924af29).
+- [ ] The context handoff footer hides for a provider the next send would skip (ChatView.tsx:3974-3985, a9af48a3d2).
+
+Thread, Markdown and sidebar:
+- [ ] A finished run no longer ends a snooze, a failed run wakes it only when it failed after the snooze, and re-snoozing to the same time restamps it (threadSettled.ts, d2fb83a973 reverting b14120fbc8, 69ba80dfae, 699c1c5d4c).
+- [ ] The Working row ends with a failed Codex turn that is still settling (threadExecution.ts, 07d38b8d17).
+- [ ] The sidebar update pill shows updates on non-default provider instances (f15aa815f3).
+- [ ] The code block scrollbar is 6 px (index.css:2073, b5a0696a98).
+- [ ] Rows of the changed-files card show the pointing hand (72ebd98cc6).
+- [ ] Expanded wide tables wrap to fit a lane of 36rem or more (f8b06c5fd0).
+- [ ] Media missing on a remote host says "Media unavailable" with the host and checked path (ChatMarkdown.tsx:536-575, 826ef55b74).
+
+Git, pull requests, settings and palette:
+- [ ] The SSH prompt says "SSH verification required" and asks for a password or verification code (cc93dc10d2).
+- [ ] A slow `vcs.refreshStatus` waits 120 s before the slow-request toast (requestLatencyState.ts:43, 069e63b117).
+- [ ] Azure DevOps Server pull request links on any host are recognised (changeRequestUrl.ts, fa68107b8b).
+- [ ] The default-branch dialog disables "Check out feature branch" on a clean tree and says why (7241e7ee50).
+- [ ] The branch select row has separate hover fills for its label and chevron (2fc244a438).
+- [ ] A long PR badge list scrolls within the screen (219afe344c).
+- [ ] A maximized right panel draws one border next to the sidebar, not two (06ce02f194).
+- [ ] Palette icons top-align with the title line, and thread results show the PR badge (26c6df72f8, 8a9d0e0dd5).
+- [ ] The Antigravity install row with its download bar, an older gap that 6a00484478 restyled.
+
+To check on screen: focus after closing the right panel from the keyboard (5088aff613), the branch strip after a failed worktree bootstrap (77ed46a8aa), and the editor's focus around the Implement menu (232e930cd2). CandyWrapper also never sends `server.reportClientActivity`; what the server uses it for is being looked up.
