@@ -13,6 +13,17 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+### Dither (Capy look) round 3, 2026-10-21: two agents in parallel
+
+Split by files so nobody edits the same ones. Claim a task by adding your agent name after "taken". Each task applies only under the Dither theme (`ThemeRuntime.isDither`). Reference: `~/CandyWrapper-research/capy-design.md`, `~/CandyWrapper-research/capy-ui/` and the real Capy app in /Applications (signed in; leave its settings as they are). Ask the main agent before touching a file another task owns.
+
+- [ ] A. Tabs, titlebar and the open PR (taken 2026-10-21, main agent). Files: `App/Sources/DitherTabsController.swift`, `Packages/CandyKit/Sources/DesignSystem/Components/DitherTabStripView.swift`, `Packages/CandyKit/Sources/DesignSystem/Components/SidebarView.swift`, `App/Sources/AppDelegate.swift`, `App/Sources/SettingsController.swift`. Fix the tab close button that sometimes does nothing, open Settings as its own tab, add Capy's back and forward buttons in the titlebar row, review and merge the open PR.
+- [ ] B. Thinking animation (taken 2026-10-21, main agent). Capy's 3x3 dot grid that pulses while a thread works, in sidebar rows and the timeline's "Thinking" row. Files: `Packages/CandyKit/Sources/Features/Sidebar/SidebarRowViews.swift`, `Packages/CandyKit/Sources/Features/Thread/TimelineWorkRows.swift`, a new `DesignSystem/Components/DotGridSpinnerView.swift`.
+- [ ] C. Settings UI cloned from Capy (free for the second agent). Capy's settings: a settings sidebar with grouped sections, a centered 840pt column, a large page title, section labels, rows grouped in rounded cards with hairline dividers. Files: `Packages/CandyKit/Sources/Features/Settings/**` only (not `ThemeLibrary.swift`, `DitherPicture.swift` or `ThemePalette.swift`). Settings content and wiring stay as they are; only the look changes. Settings now opens as its own Dither tab, and `SidebarLayoutView` draws Capy's back and forward buttons over the right end of the sidebar's titlebar row (the 70pt left of the sidebar edge, 52pt tall), whatever the sidebar shows: the settings nav's header (today T3's candy art and "Wrapper") must leave that spot clear under Dither, like the thread sidebar does (candy mark alone on its own row below the traffic lights).
+- [ ] D. Thread details card and its menus in Capy style (free for the second agent). The card from the thread header toggle (project, Open in, scripts, branch, Commit & push, Changes, Lineage): Capy popover fill, 8pt corners, 13pt rows, hairline dividers, muted icons. Files: `Packages/CandyKit/Sources/Features/Thread/ThreadDetails*.swift` and the popover/menu components in `DesignSystem/Components/PopupSurface.swift`, `MenuView.swift`.
+- [ ] E. New icon set for Dither, compared side by side with Capy before shipping (main agent after A and B; needs the user's review). Lucide at 2.5 is the current look. Files: `Packages/CandyKit/Sources/DesignSystem/Icons/**`.
+
+
 - [x] Published the Nightly 3315 catch-up as v1.6.0 (build 34) on 2026-10-19 from `6e20247`. The downloaded ZIP and DMG match the build's SHA-256, the app verifies with Team ID 8Q677AYRU7, and the live feed's 1.6.0 item carries a valid EdDSA signature.
 
 - [ ] Catch up to T3 Code Nightly 3373 or newer, following `docs/nightly-catch-up.md`. 3373 came out while the 3315 run was open. Its contracts diff is additive (browser search engine settings, workflow script messages, ended PR watches, terminal resume, git `rootPath`).

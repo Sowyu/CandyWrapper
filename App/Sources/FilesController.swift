@@ -517,6 +517,10 @@ final class FilesController {
                 // `confirmProjectFileQueryData`: a newer unsaved edit keeps the file pending.
                 onConfirmed: { [weak self, weak buffer] contents in
                     guard let buffer, buffer.edited == contents else { return false }
+                    // Text typed and undone during the write matches `contents` but is a newer revision.
+                    // The buffer and its writer stay until that one lands, or the next edit would start a
+                    // second writer racing it.
+                    if buffer.coordinator?.hasUnsaved == true { return true }
                     buffer.edited = nil
                     guard let self else { return true }
                     self.reads[k] = .text(contents, truncated: false, byteLength: contents.utf8.count, editable: true)
