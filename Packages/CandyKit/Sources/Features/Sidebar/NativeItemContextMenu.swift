@@ -23,7 +23,9 @@ public enum NativeItemContextMenu {
             if item.destructive, item.children.isEmpty {
                 native.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
+                #if compiler(>=6.4)
                 if #available(macOS 27, *) { native.preferredImageVisibility = .visible }
+                #endif
             }
             native.isEnabled = !item.disabled
             if let checked = item.checked { native.state = checked ? .on : .off }

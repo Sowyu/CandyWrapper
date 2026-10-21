@@ -68,8 +68,8 @@ public final class ProviderCodexAccountDialog: DialogView {
         pending = true; sync()
         let id = "codex_" + UUID().uuidString.lowercased()
         let display = Self.displayName(trimmed)
-        let instances = context.scope.environments.first { $0.id == environment }?.settings?["providerInstances"].objectValue ?? [:]
         let environment = environment
+        let instances = context.scope.environments.first { $0.id == environment }?.settings?["providerInstances"].objectValue ?? [:]
         Task { [weak self] in
             do {
                 let value = try await request(environment, "server.updateSettings", Self.payload(id: id, name: self?.trimmed ?? "", instances: instances))
