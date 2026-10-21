@@ -378,6 +378,20 @@ struct ClerkTokenTests {
         #expect(http.requests.count == 1)
     }
 
+    @Test func signingInAgainToTheSameAccountIsANewSignIn() async throws {
+        let http = FakeClerk(), store = MemoryClerkStore(ClerkFixture.signedIn)
+        http.on("GET", "/v1/environment", ClerkFixture.environment(single: false))
+        http.on("POST", "/v1/client/sign_ins", ClerkFixture.complete)
+        let clerk = makeClient(http, store)
+        let before = try #require(try await clerk.currentSignIn())
+        #expect(before.accountId == "user_1")
+        // Clerk can hand back the same session id; the sign-in still changes.
+        _ = try await clerk.signIn(email: ClerkFixture.email, password: "p")
+        let after = try #require(try await clerk.currentSignIn())
+        #expect(after.accountId == "user_1" && after != before)
+        #expect(try await clerk.currentSignIn() == after)
+    }
+
     @Test func noSessionIsSignedOutWithoutARequest() async throws {
         let http = FakeClerk()
         let clerk = makeClient(http, MemoryClerkStore(ClerkStoredSession(clientToken: "client-token-1")))
