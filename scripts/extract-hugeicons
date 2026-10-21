@@ -1,0 +1,639 @@
+#!/usr/bin/env python3
+"""Generate IconDataHugeicons.generated.swift: Hugeicons stroke-rounded (MIT) as a duotone set for the Dither theme.
+
+Usage: scripts/extract-hugeicons [--json PATH] [--out FILE]
+  --json  Iconify JSON for the Hugeicons free set (icons.json)
+  --out   output Swift file
+
+Each lucide IconName maps to the closest Hugeicons glyph in LUCIDE_TO_HUGEICONS. Strokes get
+width 1.8 (the source uses 1.5) with round caps and joins. Every closed stroked shape gets a
+fill-only copy at 16% opacity drawn before it. Open subpaths (checks, arrows, lines) never fill.
+The script reads the JSON as data only. It uses the Python standard library.
+"""
+import argparse
+import json
+import math
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_JSON = os.path.expanduser("~/CandyWrapper-research/downloads/packs/iconify/hugeicons/package/icons.json")
+DEFAULT_OUT = os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconDataHugeicons.generated.swift")
+ICON_DATA = os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconData.generated.swift")
+
+STROKE_WIDTH = 1.8   # source is 1.5; the user wants them bolder
+SOURCE_STROKE = 1.5
+DUO_OPACITY = 0.16
+
+# lucide name -> Hugeicons name. Lucide names left out have no good Hugeicons match and keep lucide.
+LUCIDE_TO_HUGEICONS = {
+    "activity": "pulse-01",
+    "alarm-clock": "alarm-clock",
+    "alarm-clock-off": "alarm-clock-off",
+    "archive": "archive-02",
+    "archive-x": "archive-x",
+    "arrow-down": "arrow-down-02",
+    "arrow-down-up": "arrow-data-transfer-vertical",
+    "arrow-left": "arrow-left-02",
+    "arrow-right": "arrow-right-02",
+    "arrow-right-left": "arrow-data-transfer-horizontal",
+    "arrow-up": "arrow-up-02",
+    "arrow-up-down": "arrow-up-down",
+    "arrow-up-left": "arrow-up-left-01",
+    "arrow-up-right": "arrow-up-right-01",
+    "battery": "battery-empty",
+    "blocks": "blocks",
+    "book-open": "book-open-01",
+    "bookmark": "bookmark-02",
+    "bot": "bot",
+    "box": "package",
+    "brain": "brain",
+    "bug": "bug-01",
+    "calendar": "calendar-03",
+    "calendar-arrow-down": "calendar-arrow-down",
+    "calendar-arrow-up": "calendar-arrow-up",
+    "calendar-clock": "calendar-clock",
+    "camera": "camera-01",
+    "chart-no-axes-column": "chart-no-axes-column",
+    "check": "tick-02",
+    "chevron-down": "arrow-down-01",
+    "chevron-left": "arrow-left-01",
+    "chevron-right": "arrow-right-01",
+    "chevron-up": "arrow-up-01",
+    "chevrons-down-up": "chevrons-down-up",
+    "chevrons-left-right-ellipsis": "chevrons-left-right-ellipsis",
+    "chevrons-up-down": "unfold-more",
+    "circle": "circle",
+    "circle-alert": "alert-circle",
+    "circle-arrow-up": "circle-arrow-up-02",
+    "circle-check": "checkmark-circle-02",
+    "circle-dashed": "circle-dashed",
+    "circle-dot": "circle-dot",
+    "circle-dot-dashed": "circle-dot-dashed",
+    "circle-slash": "circle-slash",
+    "circle-x": "cancel-circle",
+    "clock": "clock-01",
+    "clock-3": "clock-03",
+    "cloud": "cloud",
+    "cloud-cog": "cloud-cog",
+    "cloud-download": "cloud-download",
+    "cloud-upload": "cloud-upload",
+    "code": "code",
+    "code-2": "source-code",
+    "columns-2": "layout-2-column",
+    "copy": "copy-01",
+    "corner-left-up": "corner-left-up",
+    "corner-up-right": "corner-up-right",
+    "cpu": "cpu",
+    "database": "database",
+    "download": "download-04",
+    "ellipsis": "more-horizontal",
+    "external-link": "link-square-02",
+    "eye": "view",
+    "eye-off": "view-off-slash",
+    "file": "file-01",
+    "file-code-2": "file-code",
+    "file-diff": "file-diff",
+    "file-json": "file-braces",
+    "file-search": "file-search",
+    "file-spreadsheet": "file-spreadsheet",
+    "file-text": "file-02",
+    "files": "files-01",
+    "film": "film-02",
+    "flask-conical": "test-tube-01",
+    "folder": "folder-01",
+    "folder-closed": "folder-closed",
+    "folder-code": "folder-code",
+    "folder-git": "folder-git",
+    "folder-git-2": "folder-git-2",
+    "folder-open": "folder-open",
+    "folder-plus": "folder-add",
+    "folder-tree": "folder-tree",
+    "gamepad-2": "game-controller-03",
+    "gauge": "dashboard-speed-02",
+    "git-branch": "git-branch",
+    "git-branch-plus": "git-branch-plus",
+    "git-commit-horizontal": "git-commit",
+    "git-fork": "git-fork",
+    "git-merge": "git-merge",
+    "git-pull-request-arrow": "git-pull-request",
+    "git-pull-request-closed": "git-pull-request-closed",
+    "git-pull-request-draft": "git-pull-request-draft",
+    "globe": "globe-02",
+    "globe-2": "earth",
+    "grip-vertical": "drag-drop-vertical",
+    "hammer": "hammer",
+    "hard-drive": "hard-drive",
+    "history": "history",
+    "home": "home-03",
+    "image": "image-01",
+    "inbox": "inbox",
+    "info": "information-circle",
+    "keyboard": "keyboard",
+    "laptop": "laptop",
+    "layers": "layers-01",
+    "lightbulb": "bulb",
+    "link": "link-01",
+    "link-2": "link-02",
+    "list-checks": "list-checks",
+    "list-filter": "filter",
+    "list-ordered": "left-to-right-list-number",
+    "list-plus": "list-plus",
+    "list-todo": "list-todo",
+    "loader-circle": "loader-circle",
+    "lock": "square-lock-02",
+    "lock-open": "square-unlock-02",
+    "log-in": "login-03",
+    "mail": "mail-01",
+    "maximize": "full-screen",
+    "maximize-2": "arrow-expand-01",
+    "memory-stick": "memory-stick",
+    "message-circle": "bubble-chat",
+    "message-circle-question": "bubble-chat-question",
+    "message-square": "message-01",
+    "message-square-dashed": "message-square-dashed",
+    "message-square-off": "message-blocked",
+    "message-square-text": "comment-01",
+    "message-square-warning": "message-square-warning",
+    "messages-square": "message-multiple-01",
+    "minimize-2": "arrow-shrink-01",
+    "minus": "minus-sign",
+    "monitor": "computer",
+    "moon": "moon-02",
+    "more-vertical": "more-vertical",
+    "mouse-pointer-2": "cursor-01",
+    "mouse-pointer-click": "mouse-pointer-click",
+    "music": "music-note-01",
+    "octagon-alert": "alert-diamond",
+    "package": "package",
+    "package-plus": "package-add",
+    "paintbrush": "paintbrush",
+    "palette": "paint-board",
+    "panel-bottom": "sidebar-bottom",
+    "panel-left": "sidebar-left",
+    "panel-left-close": "sidebar-left-01",
+    "panel-right": "sidebar-right",
+    "panels-top-left": "layout-01",
+    "paperclip": "attachment-01",
+    "pen-line": "pen-line",
+    "pencil": "edit-03",
+    "pencil-ruler": "pencil-ruler",
+    "picture-in-picture-2": "picture-in-picture-on",
+    "pilcrow": "paragraph",
+    "pin": "pin",
+    "pin-off": "pin-off",
+    "play": "play",
+    "plug-2": "plug-01",
+    "plus": "plus-sign",
+    "power": "power",
+    "presentation": "presentation-01",
+    "qr-code": "qr-code",
+    "quote": "quote-down",
+    "radio-tower": "radio-tower",
+    "redo-2": "redo-03",
+    "refresh-cw": "reload",
+    "rocket": "rocket-01",
+    "rotate-ccw": "undo",
+    "rotate-cw": "redo",
+    "route": "route-01",
+    "rows-3": "layout-3-row",
+    "scale": "balance-scale",
+    "search": "search-01",
+    "send": "sent",
+    "server": "server",
+    "settings": "settings-01",
+    "settings-2": "filter-horizontal",
+    "shield": "shield-01",
+    "shield-check": "security-check",
+    "shield-question": "shield-question-mark",
+    "shopping-bag": "shopping-bag-01",
+    "sliders-horizontal": "sliders-horizontal",
+    "smartphone": "smart-phone-01",
+    "smile-plus": "smile-plus",
+    "sparkles": "sparkles",
+    "square": "square",
+    "square-arrow-out-up-right": "square-arrow-out-up-right",
+    "square-menu": "license",
+    "square-pen": "pencil-edit-02",
+    "square-split-horizontal": "square-split-horizontal",
+    "square-split-vertical": "square-split-vertical",
+    "star": "star",
+    "sun": "sun-03",
+    "table-2": "table",
+    "tag": "tag-01",
+    "target": "target-02",
+    "terminal": "terminal",
+    "terminal-square": "computer-terminal-01",
+    "text": "text-align-left",
+    "text-search": "text-search",
+    "text-wrap": "text-wrap",
+    "ticket": "ticket-01",
+    "trash-2": "delete-02",
+    "trending-down": "trending-down",
+    "trending-up": "trending-up",
+    "triangle-alert": "alert-02",
+    "type": "text-font",
+    "undo-2": "undo-03",
+    "unlink-2": "unlink-04",
+    "unplug": "unplug",
+    "upload": "upload-04",
+    "user-check": "user-check-01",
+    "user-lock": "user-lock-01",
+    "user-plus": "user-add-01",
+    "user-round": "user",
+    "user-round-x": "user-remove-01",
+    "users": "user-multiple",
+    "volume-2": "volume-high",
+    "volume-off": "volume-off",
+    "wifi-off": "wifi-off-01",
+    "workflow": "workflow-square-03",
+    "wrench": "wrench-01",
+    "x": "cancel-01",
+    "zap": "flash",
+}
+
+INHERITED = ("fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "fill-rule", "clip-rule")
+UNSUPPORTED_ATTRS = ("clip-path", "mask", "stroke-dasharray", "filter")
+SHAPES = ("path", "circle", "ellipse", "rect", "line", "polyline", "polygon")
+
+
+class Skip(Exception):
+    pass
+
+
+# ---- path parsing ----------------------------------------------------------
+
+NUM = re.compile(r"[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?")
+ARGS = {"M": 2, "L": 2, "H": 1, "V": 1, "C": 6, "S": 4, "Q": 4, "T": 2, "A": 7, "Z": 0}
+
+
+def tokenize(d):
+    """Yield (command, [args...]) with implicit repetition expanded. Handles packed arc flags."""
+    i, n = 0, len(d)
+    cmd = None
+    out = []
+
+    def skip():
+        nonlocal i
+        while i < n and d[i] in " \t\r\n,":
+            i += 1
+
+    def number():
+        nonlocal i
+        skip()
+        m = NUM.match(d, i)
+        if not m:
+            raise Skip("bad number at %d in %r" % (i, d[:40]))
+        i = m.end()
+        return float(m.group())
+
+    def flag():
+        nonlocal i
+        skip()
+        if i < n and d[i] in "01":
+            i += 1
+            return float(d[i - 1])
+        raise Skip("bad arc flag")
+
+    while True:
+        skip()
+        if i >= n:
+            break
+        c = d[i]
+        if c.isalpha():
+            cmd = c
+            i += 1
+        elif cmd is None:
+            raise Skip("path starts without a command")
+        elif cmd in "Mm":
+            cmd = "l" if cmd == "m" else "L"
+        up = cmd.upper()
+        if up == "Z":
+            out.append((cmd, []))
+            continue
+        k = ARGS[up]
+        if up == "A":
+            args = [number(), number(), number(), flag(), flag(), number(), number()]
+        else:
+            args = [number() for _ in range(k)]
+        out.append((cmd, args))
+    return out
+
+
+def fmt(v):
+    v = round(v, 3)
+    if v == int(v):
+        return str(int(v))
+    return ("%.3f" % v).rstrip("0").rstrip(".")
+
+
+def subpaths(d):
+    """Split into subpaths, each [(absolute command, args)], plus whether it is closed.
+    Closed means it ends in z or ends where it started."""
+    res = []
+    cur = None
+    x = y = sx = sy = 0.0
+    for c, a in tokenize(d):
+        up, rel = c.upper(), c.islower()
+        if up == "M":
+            if cur:
+                res.append(cur)
+            x, y = (x + a[0], y + a[1]) if rel else (a[0], a[1])
+            sx, sy = x, y
+            cur = {"segs": [("M", [x, y])], "z": False, "start": (x, y)}
+            continue
+        if cur is None:
+            raise Skip("drawing before moveto")
+        if up == "Z":
+            cur["segs"].append(("Z", []))
+            cur["z"] = True
+            x, y = sx, sy
+            res.append(cur)
+            # a command after z without M starts at the same point
+            cur = {"segs": [("M", [x, y])], "z": False, "start": (x, y), "implicit": True}
+            continue
+        if up == "H":
+            x = x + a[0] if rel else a[0]
+            cur["segs"].append(("L", [x, y]))
+        elif up == "V":
+            y = y + a[0] if rel else a[0]
+            cur["segs"].append(("L", [x, y]))
+        elif up == "A":
+            ex, ey = (x + a[5], y + a[6]) if rel else (a[5], a[6])
+            cur["segs"].append(("A", a[:5] + [ex, ey]))
+            x, y = ex, ey
+        else:
+            pts = [(a[j] + x, a[j + 1] + y) if rel else (a[j], a[j + 1]) for j in range(0, len(a), 2)]
+            cur["segs"].append((up, [v for p in pts for v in p]))
+            x, y = pts[-1]
+        cur["end"] = (x, y)
+    if cur:
+        res.append(cur)
+    out = []
+    for sp in res:
+        if len(sp["segs"]) < 2:
+            continue  # bare moveto
+        if sp.get("implicit") and len(sp["segs"]) == 1:
+            continue
+        closed = sp["z"]
+        if not closed and "end" in sp:
+            ex, ey = sp["end"]
+            closed = math.hypot(ex - sp["start"][0], ey - sp["start"][1]) < 0.02 and len(sp["segs"]) > 2
+            if closed and len(sp["segs"]) == 2 and sp["segs"][1][0] == "L":
+                closed = False
+        out.append((sp["segs"], closed))
+    return out
+
+
+def serialize(segs):
+    return "".join(c + " ".join(fmt(v) for v in a) for c, a in segs)
+
+
+# ---- body parsing ----------------------------------------------------------
+
+def num(a, k, default=0.0):
+    v = a.get(k)
+    if v is None:
+        return default
+    return float(v.replace("px", ""))
+
+
+def pts(s):
+    return [float(v) for v in NUM.findall(s or "")]
+
+
+def color(v):
+    if v is None or v == "none":
+        return None
+    if v == "currentColor":
+        return ".current"
+    m = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", v)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(ch * 2 for ch in h)
+        return ".rgba(0x%sFF)" % h.upper()
+    raise Skip("unsupported color %r" % v)
+
+
+def walk(el, inherited, opacity, out):
+    a = dict(el.attrib)
+    tag = el.tag
+    for k in UNSUPPORTED_ATTRS:
+        if k in a:
+            raise Skip("%s on <%s>" % (k, tag))
+    if tag == "g" and "transform" in a:
+        raise Skip("transform on <g>")
+    if tag in ("defs", "use", "clipPath", "mask", "linearGradient", "radialGradient"):
+        raise Skip("<%s>" % tag)
+    attrs = dict(inherited)
+    for k in INHERITED:
+        if k in a:
+            attrs[k] = a[k]
+    op = opacity * float(a.get("opacity", 1))
+    if tag in ("g", "svg"):
+        for ch in el:
+            walk(ch, attrs, op, out)
+        return
+    if tag not in SHAPES:
+        raise Skip("<%s>" % tag)
+    out.append((tag, a, attrs, op))
+
+
+def affine(t):
+    """Parse matrix(...) or rotate(deg cx cy) into (a, b, c, d, e, f)."""
+    m = re.fullmatch(r"\s*(matrix|rotate)\(([^)]*)\)\s*", t)
+    if not m:
+        raise Skip("transform %r" % t)
+    v = pts(m.group(2))
+    if m.group(1) == "matrix" and len(v) == 6:
+        return tuple(v)
+    if m.group(1) == "rotate" and len(v) in (1, 3):
+        r = math.radians(v[0])
+        cx, cy = (v[1], v[2]) if len(v) == 3 else (0, 0)
+        a, b, c, d = math.cos(r), math.sin(r), -math.sin(r), math.cos(r)
+        return (a, b, c, d, cx - a * cx - c * cy, cy - b * cx - d * cy)
+    raise Skip("transform %r" % t)
+
+
+def transformed(g, t):
+    """Apply a right-angle affine to a circle, ellipse or rect. Anything else skips the icon."""
+    a, b, c, d, e, f = (round(v, 6) for v in t)
+    swap = a == 0 and d == 0 and abs(b) == 1 and abs(c) == 1
+    if not ((b == 0 and c == 0 and abs(a) == 1 and abs(d) == 1) or swap):
+        raise Skip("non right-angle transform")
+    if not isinstance(g, tuple) or g[0] not in ("circle", "ellipse", "rect"):
+        raise Skip("transform on a path")
+
+    def pt(x, y):
+        return (a * x + c * y + e, b * x + d * y + f)
+    if g[0] == "circle":
+        return ("circle",) + pt(g[1], g[2]) + (g[3],)
+    if g[0] == "ellipse":
+        rx, ry = (g[4], g[3]) if swap else (g[3], g[4])
+        return ("ellipse",) + pt(g[1], g[2]) + (rx, ry)
+    x0, y0 = pt(g[1], g[2])
+    x1, y1 = pt(g[1] + g[3], g[2] + g[4])
+    rx, ry = (g[6], g[5]) if swap else (g[5], g[6])
+    return ("rect", min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0), rx, ry)
+
+
+def geometry(tag, a):
+    g = shape_geometry(tag, a)
+    if "transform" in a:
+        g = transformed(g, affine(a["transform"]))
+    return g
+
+
+def shape_geometry(tag, a):
+    if tag == "path":
+        return a["d"]
+    if tag == "circle":
+        return ("circle", num(a, "cx"), num(a, "cy"), num(a, "r"))
+    if tag == "ellipse":
+        return ("ellipse", num(a, "cx"), num(a, "cy"), num(a, "rx"), num(a, "ry"))
+    if tag == "rect":
+        rx = a.get("rx", a.get("ry"))
+        ry = a.get("ry", a.get("rx"))
+        return ("rect", num(a, "x"), num(a, "y"), num(a, "width"), num(a, "height"),
+                float(rx or 0), float(ry or 0))
+    if tag == "line":
+        return ("line", num(a, "x1"), num(a, "y1"), num(a, "x2"), num(a, "y2"))
+    return (tag, pts(a.get("points")))
+
+
+def shape_swift(g):
+    if isinstance(g, str):
+        return '.path(d: "%s")' % g
+    k = g[0]
+    if k == "circle":
+        return ".circle(cx: %s, cy: %s, r: %s)" % tuple(fmt(v) for v in g[1:])
+    if k == "ellipse":
+        return ".ellipse(cx: %s, cy: %s, rx: %s, ry: %s)" % tuple(fmt(v) for v in g[1:])
+    if k == "rect":
+        return ".rect(x: %s, y: %s, w: %s, h: %s, rx: %s, ry: %s)" % tuple(fmt(v) for v in g[1:])
+    if k == "line":
+        return ".line(x1: %s, y1: %s, x2: %s, y2: %s)" % tuple(fmt(v) for v in g[1:])
+    return ".%s([%s])" % (k, ", ".join(fmt(v) for v in g[1]))
+
+
+def paint_swift(fill=None, stroke=None, width=None, opacity=1.0, evenodd=False):
+    parts = []
+    if fill:
+        parts.append("fill: " + fill)
+    if stroke:
+        parts.append("stroke: " + stroke)
+    elif fill:
+        parts.append("stroke: .none")
+    if stroke:
+        parts.append("strokeWidth: " + fmt(width))
+    if opacity != 1:
+        parts.append("opacity: " + fmt(opacity))
+    if stroke:
+        parts.append("lineCap: .round, lineJoin: .round")
+    if evenodd:
+        parts.append("evenOdd: true")
+    return "IconPaint(%s)" % ", ".join(parts)
+
+
+def convert(body):
+    """Return a list of (shape swift, paint swift) for one Hugeicons body."""
+    try:
+        root = ET.fromstring('<svg xmlns:xlink="http://www.w3.org/1999/xlink">%s</svg>' % body)
+    except ET.ParseError as e:
+        raise Skip("XML: %s" % e)
+    flat = []
+    walk(root, {}, 1.0, flat)
+    out = []
+    for tag, a, attrs, op in flat:
+        fill = color(attrs.get("fill", "currentColor"))
+        stroke = color(attrs.get("stroke"))
+        evenodd = "evenodd" in (attrs.get("fill-rule"), attrs.get("clip-rule"))
+        g = geometry(tag, a)
+        if fill:
+            out.append((shape_swift(g), paint_swift(fill=fill, opacity=op, evenodd=bool(evenodd))))
+        if not stroke:
+            continue
+        width = STROKE_WIDTH * float(attrs.get("stroke-width", SOURCE_STROKE)) / SOURCE_STROKE
+        if not fill:
+            duo = None
+            if tag in ("circle", "ellipse", "rect", "polygon"):
+                duo = g
+            elif tag == "path":
+                closed = [segs for segs, c in subpaths(g) if c]
+                if closed:
+                    duo = "".join(serialize(s) for s in closed)
+            if duo is not None:
+                out.append((shape_swift(duo), paint_swift(fill=".current", opacity=DUO_OPACITY * op)))
+        out.append((shape_swift(g), paint_swift(stroke=stroke, width=width, opacity=op)))
+    if not out:
+        raise Skip("no shapes")
+    return out
+
+
+def lucide_cases(path):
+    """lucide kebab name -> IconName case, read from the lucide generator's output."""
+    src = open(path).read()
+    return {m.group(2): m.group(1) for m in re.finditer(r'case \.(\w+): return "([a-z0-9-]+)"', src)}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", default=DEFAULT_JSON)
+    ap.add_argument("--out", default=DEFAULT_OUT)
+    args = ap.parse_args()
+    data = json.load(open(args.json))
+    icons, aliases = data["icons"], data.get("aliases", {})
+    dw, dh = data.get("width", 24), data.get("height", 24)
+    cases = lucide_cases(ICON_DATA)
+
+    lines = [
+        "// GENERATED by scripts/extract-hugeicons. Do not edit.",
+        "// Hugeicons free set, stroke-rounded (MIT, see LICENSE-hugeicons.txt), https://hugeicons.com",
+        "// Drawn as a duotone for the Dither theme: closed shapes get a 16% fill under a 1.8 stroke.",
+        "",
+        "extension IconName {",
+        "    /// Hugeicons duotone glyph for this icon, or nil where none fits and the lucide glyph stays.",
+        "    public var hugeiconsDefinition: IconDefinition? {",
+        "        switch self {",
+    ]
+    mapped, unmapped, skipped = 0, [], []
+    for lucide, case in sorted(cases.items(), key=lambda kv: kv[1]):
+        huge = LUCIDE_TO_HUGEICONS.get(lucide)
+        if huge is None:
+            unmapped.append(lucide)
+            continue
+        name = huge
+        while name not in icons and name in aliases:
+            name = aliases[name]["parent"]
+        if name not in icons:
+            skipped.append((lucide, huge, "not in the set"))
+            continue
+        icon = icons[name]
+        try:
+            elements = convert(icon["body"])
+        except Skip as e:
+            skipped.append((lucide, huge, str(e)))
+            continue
+        w, h = icon.get("width", dw), icon.get("height", dh)
+        lines.append("        case .%s: // %s" % (case, huge))
+        lines.append("            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: %s, height: %s), elements: [" % (fmt(w), fmt(h)))
+        for s, p in elements:
+            lines.append("                IconElement(%s, %s)," % (s, p))
+        lines.append("            ])")
+        mapped += 1
+    lines += ["        default:", "            return nil", "        }", "    }", "}", ""]
+    with open(args.out, "w") as f:
+        f.write("\n".join(lines))
+    for lucide, huge, why in skipped:
+        print("warning: skipped %s -> %s: %s" % (lucide, huge, why), file=sys.stderr)
+    stale = sorted(set(LUCIDE_TO_HUGEICONS) - set(cases))
+    if stale:
+        print("warning: table names no lucide icon in IconName: %s" % ", ".join(stale), file=sys.stderr)
+    print("mapped %d, unmapped %d (%s), skipped %d" % (mapped, len(unmapped), ", ".join(unmapped), len(skipped)))
+
+
+if __name__ == "__main__":
+    main()

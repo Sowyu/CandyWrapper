@@ -6,9 +6,9 @@ import QuartzCore
 public final class IconView: NSView {
     /// Nil for an icon built from a definition, such as a file type icon.
     public let name: IconName?
-    private let definition: IconDefinition
-    /// Dither draws lucide's strokes 25% heavier (2.5 for its 2), after Capy's bolder icons.
-    private var heavy = false
+    private var definition: IconDefinition
+    /// Dither draws Hugeicons' duotone glyph where one is mapped (IconDataHugeicons.generated.swift), lucide elsewhere.
+    private var usesHugeicons = false
     /// Fixed-color glyph: unfilled shapes stay unfilled.
     private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
@@ -43,7 +43,10 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
-        heavy = !brand && ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true)
+        if let name, ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = name.hugeiconsDefinition {
+            self.definition = alt
+            usesHugeicons = true
+        }
         buildShapes()
         relayout()
         applyColors()
@@ -65,11 +68,14 @@ public final class IconView: NSView {
         }
     }
 
-    /// Follows Dither's heavier stroke as the theme turns on or off for this view.
-    private func syncWeight() {
-        let next = !isBrand && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        guard next != heavy else { return }
-        heavy = next
+    /// Swaps between lucide and Hugeicons as the Dither theme turns on or off for this view.
+    private func syncIconSet() {
+        guard let name else { return }
+        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? name.hugeiconsDefinition : nil
+        guard (alt != nil) != usesHugeicons else { return }
+        usesHugeicons = alt != nil
+        definition = alt ?? name.definition
+        buildShapes()
         relayout()
     }
 
@@ -94,7 +100,7 @@ public final class IconView: NSView {
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        syncWeight()
+        syncIconSet()
         applyColors()
     }
 
@@ -127,7 +133,9 @@ public final class IconView: NSView {
                 s.layer.bounds = bounds
                 s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
-                s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * (heavy ? 1.25 : 1) * scale
+                // A lucide stroke width override (2 is lucide's own) keeps its proportion on Hugeicons' 1.8.
+                let width = strokeWidth.map { usesHugeicons ? $0 * 0.9 : $0 } ?? s.element.paint.strokeWidth
+                s.layer.lineWidth = width * scale
             }
         }
     }
