@@ -16,6 +16,8 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
     public var stage: String
     public var percent: Int?
     public var detail: String?
+    /// `stalled` (projectClone.ts:34-35): git printed nothing for a while, so `detail` is stale. Older servers omit it.
+    public var stalled = false
     public var error: String?
 
     public init(projectId: String, remoteUrl: String, destinationPath: String, nameWithOwner: String? = nil, phase: Phase,
@@ -33,6 +35,7 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
                   nameWithOwner: json["repository"]?["nameWithOwner"]?.stringValue, phase: phase,
                   stage: json["stage"]?.stringValue ?? "connecting", percent: percent,
                   detail: json["detail"]?.stringValue, error: json["error"]?.stringValue)
+        stalled = json["stalled"]?.boolValue ?? false
     }
 
     /// `ProjectCloneListEvent`: the list, skipping entries this build cannot read.
@@ -47,7 +50,8 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
         return destinationPath.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? destinationPath
     }
 
-    /// `projectCloneProgressSummary`: "Receiving objects · 45% · 12.3 MiB | 5.0 MiB/s".
+    /// `projectCloneProgressSummary` (projectClone.ts:103-111): "Receiving objects · 45% · 12.3 MiB | 5.0 MiB/s",
+    /// or "Stalled" in place of git's last speed.
     public var progressSummary: String {
         let label = switch stage {
         case "counting": "Counting objects"
@@ -58,10 +62,10 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
         }
         var parts = [label]
         if let percent { parts.append("\(percent)%") }
-        if let detail, !detail.isEmpty { parts.append(detail) }
+        if stalled { parts.append("Stalled") } else if let detail, !detail.isEmpty { parts.append(detail) }
         return parts.joined(separator: " · ")
     }
 
     /// The toast's `renderKey`: an identical snapshot does not touch the toast.
-    public var renderKey: String { "\(phase.rawValue):\(stage):\(percent.map(String.init) ?? ""):\(detail ?? ""):\(error ?? "")" }
+    public var renderKey: String { "\(phase.rawValue):\(stage):\(percent.map(String.init) ?? ""):\(detail ?? ""):\(stalled):\(error ?? "")" }
 }
