@@ -96,6 +96,7 @@ public struct ThreadStatusPill: Sendable, Equatable {
         case working = "Working"
         case connecting = "Connecting"
         case completed = "Completed"
+        case failed = "Failed"
         case pendingApproval = "Pending Approval"
         case awaitingInput = "Awaiting Input"
         case waiting = "Waiting"
@@ -106,6 +107,7 @@ public struct ThreadStatusPill: Sendable, Equatable {
             switch self {
             case .pendingApproval: 5
             case .awaitingInput: 4
+            case .failed: 3.5
             case .working, .connecting: 3
             case .waiting: 2.5
             case .planReady: 2
@@ -250,6 +252,9 @@ public enum SidebarModel {
         if blocked || backgroundWorkHoldsCompletion(pendingBackgroundTasks) {
             return ThreadStatusPill(label: .waiting, pulse: false)
         }
+        if hasUnseenFailure(latestRun: latestRun, lastVisitedAt: lastVisitedAt) {
+            return ThreadStatusPill(label: .failed, pulse: false)
+        }
         if interactionMode == .plan, isLatestRunSettled(latestRun, runtime), hasActionableProposedPlan {
             return ThreadStatusPill(label: .planReady, pulse: false)
         }
@@ -326,6 +331,15 @@ public enum SidebarModel {
         guard let completed = latestRun?.completedAt?.epochMs else { return false }
         guard let lastVisitedAt else { return false }
         guard let visited = lastVisitedAt.epochMs else { return true }
+        return completed > visited
+    }
+
+    /// Port of `hasUnseenFailure` (Sidebar.logic.ts:727-739): a failed latest run nobody has looked at since it
+    /// ended. A thread never opened (an automation's) counts, unlike a completion.
+    static func hasUnseenFailure(latestRun: ThreadRunSummary?, lastVisitedAt: T3Timestamp?) -> Bool {
+        guard latestRun?.status == .failed else { return false }
+        guard let lastVisitedAt else { return true }
+        guard let completed = latestRun?.completedAt?.epochMs, let visited = lastVisitedAt.epochMs else { return true }
         return completed > visited
     }
 
