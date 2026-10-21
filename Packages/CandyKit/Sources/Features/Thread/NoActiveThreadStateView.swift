@@ -33,27 +33,21 @@ public final class NoActiveThreadStateView: DSView {
     public override func updateLayer() { layer?.backgroundColor = WindowGlass.inset.cgColor(in: self) }
 }
 
-/// The header bar: label at the 20px gutter, centered on 52, a 1px `border-border` underline.
+/// The header: label at the 20px gutter, centered on 52. T3 underlines it with `border-border`; the user removed header
+/// bars on 2026-10-21.
 final class NoActiveThreadHeaderView: TopbarDragView {
     let label = LabelView("No active thread", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.5))
-    private let line = CALayer()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.lineHeight = 16
         addSubview(label)
-        layer?.addSublayer(line)
     }
 
     override func layout() {
         super.layout()
         label.frame = NSRect(x: contentStart, y: ((bounds.height - 16) / 2).rounded(), width: ceil(label.textWidth) + 1, height: 16)
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        line.frame = NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1)
-        CATransaction.commit()
     }
-
-    override func updateLayer() { line.backgroundColor = Themed.color(\.border).cgColor(in: self) }
 }
 
 /// What the chat surface does when its thread may have gone (ThreadRouteView.tsx:144-158 with

@@ -2,8 +2,8 @@ import AppKit
 import Testing
 @testable import DesignSystem
 
-/// The Dither theme's art: a picture that matches the background renders as exactly the background, so text on a
-/// faded area never sits on stray dots, and a bright picture shows at the top and is gone at the bottom.
+/// The Dither theme's art: a picture that matches the background renders as exactly the background, and a bright
+/// picture is held to the reach that keeps text readable.
 struct DitherArtTests {
     func picture(gray: CGFloat, in dir: URL) throws -> URL {
         let ctx = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
@@ -29,8 +29,9 @@ struct DitherArtTests {
         let b = bytes(bright), row = bright.bytesPerRow
         let top = (0..<80).map { Int(b[$0 * 4]) }.reduce(0, +) / 80
         let bottom = (0..<80).map { Int(b[59 * row + $0 * 4]) }.reduce(0, +) / 80
-        #expect(top > 120)
-        #expect(bottom == 10)
-        #expect(DitherArt.fade(0) < 0.3 && DitherArt.fade(1) == 1 && DitherArt.shade(x: 0.5, y: 0.4, aspect: 1) == 0.9)
+        // A gray picture stays gray: every dot is the background or the picture's color at some strength.
+        #expect(abs(top - (10 + Int(DitherArt.reach))) <= 8)
+        #expect(bottom < top)
+        #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
 }

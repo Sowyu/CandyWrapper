@@ -2,8 +2,8 @@ import AppKit
 import ImageIO
 
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
-/// filling the main panel in color at 2pt ordered-dither dots. Before dithering, the picture fades into the panel's
-/// background from top to bottom, so the dots thin out where the composer and text sit. A new thread shows it
+/// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
+/// panel's background that keeps text readable anywhere on it. A new thread shows it
 /// fully; anywhere else a scrim of the background covers most of it, so messages and settings read as on the stock
 /// theme. It renders once per size and appearance off the main thread and runs nothing while idle.
 public final class DitherArtView: NSView {
@@ -80,11 +80,8 @@ public final class DitherArtView: NSView {
         refresh()
     }
 
-    /// Below the thread header, which stays the plain background like Capy's tab bar.
-    // ponytail: the thread header's fixed 52pt (ThreadPanelView.swift:10); pass the page's header height if pages differ
-    var artRect: CGRect {
-        CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - DitherArt.topInset))
-    }
+    /// The whole panel: the thread's top fade blends it into the header.
+    var artRect: CGRect { bounds }
 
     var isVivid: Bool {
         guard let panel = superview, window != nil else { return false }
@@ -146,10 +143,8 @@ private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
-    /// The thread header's height, kept clear of art.
-    nonisolated static let topInset: CGFloat = 52
-    /// Levels per color channel, so each dot steps a sixth of the range from the background.
-    nonisolated static let levels = 7
+    /// Brightness levels a dot steps between, from the background to the picture's brightest.
+    nonisolated static let levels = 9
     /// The background's share where text can sit: messages, settings and every page but a new thread.
     nonisolated static let scrim: CGFloat = 0.9
 
@@ -167,16 +162,14 @@ public enum DitherArt {
         return t * t * (3 - 2 * t)
     }
 
-    /// The share of the background mixed into the picture at `y`, 0 at the top to 1 at the bottom: a light veil at
-    /// the top, then the picture gives way until the bottom tenth is the background.
-    nonisolated static func fade(_ y: Double) -> Double { 0.25 + 0.75 * smoothstep(0.1, 0.9, y) }
+    /// The share of the background mixed into the picture at `y`, 0 at the top to 1 at the bottom: a light veil that
+    /// deepens a little toward the bottom. The thread's top fade blends the top into the header.
+    nonisolated static func fade(_ y: Double) -> Double { 0.15 + 0.2 * smoothstep(0.6, 1, y) }
 
-    /// The shadow the new thread's headline and composer sit in, an oval around the panel's middle: 90% background at
-    /// its center, none past its edge.
-    nonisolated static func shade(x: Double, y: Double, aspect: Double) -> Double {
-        let dx = (x - 0.5) / 0.42, dy = (y - 0.4) / 0.32 / aspect.squareRoot()
-        return 0.9 * (1 - smoothstep(0.55, 1, (dx * dx + dy * dy).squareRoot()))
-    }
+    /// How far, in 0...255 on any channel, the picture may stray from the background. Dark pictures pass untouched and
+    /// bright parts are held down, so text on the art keeps about 4.5:1 (white on at most 42% gray in dark, near-black
+    /// on at least 58% gray in light).
+    nonisolated static let reach: Double = 98
 
     /// The 8 x 8 Bayer matrix, thresholds 0..<64.
     nonisolated static let bayer: [UInt8] = [
@@ -213,21 +206,20 @@ public enum DitherArt {
         let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
         let step = 255 / Double(levels - 1)
         // Row 0 of the buffer is the top of the picture.
-        let aspect = min(max(Double(w) / Double(h) / 1.4, 0.6), 1.6)
         for y in 0..<h {
-            let fy = fade((Double(y) + 0.5) / Double(h))
+            let keep = 1 - fade((Double(y) + 0.5) / Double(h))
             for x in 0..<w {
-                let f = max(fy, shade(x: (Double(x) + 0.5) / Double(w), y: (Double(y) + 0.5) / Double(h), aspect: aspect))
                 let i = (y * w + x) * 4
                 let threshold = (Double(bayer[(y & 7) * 8 + (x & 7)]) + 0.5) / 64
-                // Dithers the distance from the background, so where the picture has faded out the panel is exactly
-                // its background, with no stray dots under text.
-                for c in 0..<3 {
-                    let scaled = (Double(data[i + c]) - bg[c]) * (1 - f) / step
-                    let low = scaled.rounded(.down)
-                    let q = scaled - low > threshold ? low + 1 : low
-                    data[i + c] = UInt8(min(max(bg[c] + q * step, 0), 255).rounded())
-                }
+                // Each dot is the picture's own color at a dithered strength over the background, so the dots keep
+                // its hue instead of scattering red, green and blue, and a faded area is exactly the background.
+                var d = (0..<3).map { (Double(data[i + $0]) - bg[$0]) * keep }
+                var m = d.map(abs).max() ?? 0
+                if m > reach { d = d.map { $0 * reach / m }; m = reach }
+                guard m > 0.5 else { for c in 0..<3 { data[i + c] = UInt8(bg[c].rounded()) }; continue }
+                let scaled = m / step, low = scaled.rounded(.down)
+                let q = (scaled - low > threshold ? low + 1 : low) * step / m
+                for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c] * q, 0), 255).rounded()) }
             }
         }
         return ctx.makeImage()

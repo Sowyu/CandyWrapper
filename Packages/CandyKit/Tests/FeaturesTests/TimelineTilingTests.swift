@@ -52,8 +52,8 @@ struct TimelineTilingTests {
         t.scrollView.reflectScrolledClipView(clip)
     }
 
-    /// Glass runs the rows on under the thread header: with a top clearance the first row starts that much
-    /// lower and the contract holds. The header blur's curve runs from full at the top to none at the bottom.
+    /// The rows run on under the thread header: with a top clearance the first row starts that much lower and the
+    /// contract holds. The top fade eases out from the panel's top with no solid part.
     @Test func headerClearanceKeepsTheFirstRowClear() throws {
         let all = Array(try ThreadTimelineTests.manyItems(copies: 1).prefix(40))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 844, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -69,8 +69,8 @@ struct TimelineTilingTests {
         Self.userScroll(t, to: 0)
         Self.check(t, "clearance")
         #expect(try #require(t.view(forRow: all[0].id)).frame.minY == top + 52)
-        #expect(ThreadPanelView.topBlurStrength(0) == 1 && ThreadPanelView.topBlurStrength(1) == 0)
-        #expect(ThreadPanelView.topBlurStrength(0.3) > ThreadPanelView.topBlurStrength(0.6))
+        #expect(ThreadPanelView.topFade(0) == 0.85 && ThreadPanelView.topFade(1) == 0)
+        #expect(ThreadPanelView.topFade(0.3) > ThreadPanelView.topFade(0.6))
     }
 
     @Test func longLiveThreadKeepsTheContract() throws {
