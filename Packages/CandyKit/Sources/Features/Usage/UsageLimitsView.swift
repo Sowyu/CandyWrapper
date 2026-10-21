@@ -145,8 +145,8 @@ public final class UsageLimitWindowsView: DSView {
     }
 }
 
-/// `WindowBar`: quota left as the fill over `bg-muted`, a 60% foreground hairline where even spending would be,
-/// and the figures as the tooltip.
+/// `WindowBar`: quota left as the fill over `bg-muted`, a 2px foreground tick in a 6px gap where even
+/// spending would be, and the figures as the tooltip.
 final class UsageLimitWindowBar: DSView {
     let color: NSColor
     let remaining: Int
@@ -168,8 +168,21 @@ final class UsageLimitWindowBar: DSView {
 
     override var wantsUpdateLayer: Bool { false }
 
+    /// `paceMarkStyles` (UsageLimits.tsx:77-111): the tick's center, clamped 3px inside the ends. Below
+    /// 6px wide there is no room, so neither the gap nor the tick draws.
+    static func paceMark(timeLeft: Int?, width: CGFloat) -> CGFloat? {
+        guard let timeLeft, width >= 6 else { return nil }
+        return min(max(width * CGFloat(timeLeft) / 100, 3), width - 3)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let at = Self.paceMark(timeLeft: timeLeft, width: bounds.width)
+        if let at {
+            ctx.saveGState()
+            ctx.clip(to: [CGRect(x: -1, y: -1, width: at - 3 + 1, height: bounds.height + 2),
+                          CGRect(x: at + 3, y: -1, width: bounds.width - at - 3 + 1, height: bounds.height + 2)])
+        }
         let track = CGRect(x: 0, y: 6, width: bounds.width, height: bounds.height - 12)
         ctx.addPath(CGPath(roundedRect: track, cornerWidth: track.height / 2, cornerHeight: track.height / 2, transform: nil))
         ctx.setFillColor(Themed.color(\.muted).cgColor(in: self))
@@ -180,9 +193,13 @@ final class UsageLimitWindowBar: DSView {
             ctx.setFillColor(color.cgColor(in: self))
             ctx.fillPath()
         }
-        if let t = timeLeft {
-            ctx.setFillColor(Themed.color(\.foreground, 0.6).cgColor(in: self))
-            ctx.fill(CGRect(x: (bounds.width * CGFloat(t) / 100 - 0.5), y: 2, width: 1, height: bounds.height - 4))
+        if let at {
+            ctx.restoreGState()
+            // `inset-y-1 w-0.5 rounded-full bg-foreground`
+            let tick = CGRect(x: at - 1, y: 4, width: 2, height: bounds.height - 8)
+            ctx.addPath(CGPath(roundedRect: tick, cornerWidth: 1, cornerHeight: 1, transform: nil))
+            ctx.setFillColor(Themed.color(\.foreground).cgColor(in: self))
+            ctx.fillPath()
         }
     }
 }
@@ -476,6 +493,8 @@ final class UsagePoolSegmentView: ControlView {
     let remaining: Int
     let resetsIn: String?
     let creditCount: Int
+    /// `paceRemainingPercent`: where even spending would be, as the tick in a gap (UsageLimitsPooled.tsx:345-393).
+    let timeLeft: Int?
 
     init(account: UsageLimitAccount, window: UsageLimitWindow, reset: UsageLimitPoolWindow.Reset?, color: NSColor, nowMs: Int64, index: Int,
          columns: Int, showAccountName: Bool) {
@@ -483,6 +502,7 @@ final class UsagePoolSegmentView: ControlView {
         remaining = UsageLimitsLogic.remainingPercent(window)
         resetsIn = UsageLimitsLogic.resetsIn(window, nowMs: nowMs)
         creditCount = account.limits.resetCredits?.availableCount ?? 0
+        timeLeft = UsageLimitsLogic.elapsedShare(window, nowMs: nowMs).map { Int(UsageFormat.jsRound((1 - $0) * 100)) }
         number = UsageStyle.label("\(index)", 10, .semibold, color: Themed.color(\.foreground, 0.8), tabular: true, lineHeight: 14)
         number.alignment = .center
         name = showAccountName ? UsageAccountName.make(account, font: DSFont.ui(12, weight: .medium)) : nil
@@ -499,7 +519,7 @@ final class UsagePoolSegmentView: ControlView {
         plate.layer?.cornerRadius = 4
         setAccessibilityRole(.button)
         let who = account.displayName ?? account.email.map(UsageLimitsLogic.accountInitials) ?? account.driver
-        setAccessibilityLabel("\(who): \(remaining)% left" + (resetsIn.map { ", \($0)" } ?? "")
+        setAccessibilityLabel("\(who): \(remaining)% left" + (resetsIn.map { ", \($0)" } ?? "") + (timeLeft.map { ", \($0)% of the window left" } ?? "")
                               + (creditCount > 0 ? ", \(creditCount) reset \(creditCount == 1 ? "credit" : "credits") banked" : ""))
         configure()
     }
@@ -544,9 +564,11 @@ final class UsagePoolSegmentView: ControlView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let r = bounds
         let shape = CGPath(roundedRect: r, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        let at = UsageLimitWindowBar.paceMark(timeLeft: timeLeft, width: r.width)
         ctx.saveGState()
         ctx.addPath(shape)
         ctx.clip()
+        if let at { ctx.clip(to: [CGRect(x: -1, y: -1, width: at - 2, height: r.height + 2), CGRect(x: at + 3, y: -1, width: r.width - at - 2, height: r.height + 2)]) }
         ctx.setFillColor(Themed.color(\.muted).cgColor(in: self))
         ctx.fill(r)
         let fillW = r.width * CGFloat(remaining) / 100
@@ -573,6 +595,12 @@ final class UsagePoolSegmentView: ControlView {
             ctx.restoreGState()
         }
         ctx.restoreGState()
+        if let at {
+            // `inset-y-0.5 w-0.5 rounded-full bg-foreground`
+            ctx.addPath(CGPath(roundedRect: CGRect(x: at - 1, y: 2, width: 2, height: r.height - 4), cornerWidth: 1, cornerHeight: 1, transform: nil))
+            ctx.setFillColor(Themed.color(\.foreground).cgColor(in: self))
+            ctx.fillPath()
+        }
         if state.popupOpen {
             ctx.addPath(CGPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 5.5, cornerHeight: 5.5, transform: nil))
             ctx.setStrokeColor(Themed.color(\.border).cgColor(in: self))
@@ -720,6 +748,8 @@ final class UsageSegmentPopoverContent: DSView {
         if let at = s.limitWindow.resetsAt {
             rows2.append(("Resets", UsageTime.upcoming(at, nowMs: s.nowMs) + (s.resetsIn.map { " · " + $0.replacingOccurrences(of: "resets in ", with: "in ") } ?? "")))
         }
+        // UsageLimitsPooled.tsx:193
+        if let t = s.timeLeft { rows2.append(("Even pace", "\(t)% left by now")) }
         if let r = s.reset, r.restoresPercent > 0 { rows2.append(("Restores", "+\(r.restoresPercent)% of pool")) }
         section(rows2)
         if a.redeem != nil, let credits = a.limits.resetCredits, credits.availableCount > 0 {
