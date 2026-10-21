@@ -256,14 +256,19 @@ public actor RPCConnection {
     }
 
     /// Hands out the next buffered value and acks its chunk when it was the chunk's last.
+    /// Each buffered chunk gets its own Ack, since T3's terminal window frees one chunk per Ack
+    /// (OutputProtocol.ts:34-40).
     private func takeValue(_ id: RPCRequestID, _ state: StreamState) -> JSONValue? {
         guard state.head < state.buffer.count else { return nil }
         let value = state.buffer[state.head]
         state.head += 1
+        while state.chunkEnds.first == state.head {
+            state.chunkEnds.removeFirst()
+            if state.end == nil { write(.ack(id)) }
+        }
         if state.head == state.buffer.count {
             state.buffer.removeAll(keepingCapacity: true)
             state.head = 0
-            if state.end == nil { write(.ack(id)) }
         }
         return value
     }
@@ -278,6 +283,7 @@ public actor RPCConnection {
                 guard let state = streams[id], state.end == nil, !values.isEmpty else { continue }
                 state.answered = true
                 state.buffer.append(contentsOf: values)
+                state.chunkEnds.append(state.buffer.count)
                 if let w = state.waiter {
                     state.waiter = nil
                     w.resume(returning: takeValue(id, state))
@@ -389,6 +395,8 @@ public actor RPCConnection {
 private final class StreamState {
     var buffer: [JSONValue] = []
     var head = 0
+    /// The buffer index just past each unacked chunk's last value, oldest first.
+    var chunkEnds: [Int] = []
     var end: Result<Void, RPCClientError>?
     var waiter: CheckedContinuation<JSONValue?, Error>?
     /// A chunk arrived, so the server has answered the subscription.

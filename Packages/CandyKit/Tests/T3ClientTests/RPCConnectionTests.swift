@@ -110,6 +110,28 @@ struct RPCConnectionTests {
         #expect(try await it.next() == nil)
     }
 
+    @Test func streamAcksEachBufferedChunk() async throws {
+        let (c, socket) = await makeConnection()
+        let stream = await c.stream("terminal.attach")
+        var it = stream.makeAsyncIterator()
+        #expect(await eventually { socket.sent.count == 1 })
+
+        // Two chunks wait in the buffer. T3's terminal window frees one chunk per Ack.
+        socket.deliver(.chunk(requestId: .string("1"), values: [.number(1)]))
+        socket.deliver(.chunk(requestId: .string("1"), values: [.number(2), .number(3)]))
+        await settle()
+        #expect(socket.sent.count == 1)
+
+        #expect(try await it.next() == .number(1))
+        #expect(await eventually { socket.sent.count == 2 })
+        #expect(try await it.next() == .number(2))
+        await settle()
+        #expect(socket.sent.count == 2, "no ack while part of the second chunk is unread")
+        #expect(try await it.next() == .number(3))
+        #expect(await eventually { socket.sent.count == 3 })
+        #expect(Array(socket.sent.dropFirst()) == [.ack(.string("1")), .ack(.string("1"))])
+    }
+
     @Test func cancellingTheConsumerSendsInterrupt() async throws {
         let (c, socket) = await makeConnection()
         let stream = await c.stream("orchestration.subscribeShell")
