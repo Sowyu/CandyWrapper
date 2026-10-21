@@ -41,14 +41,18 @@ extension SettingsController {
 
     /// `useRelativeTimeTick(1_000)`: expiry and connected-for labels count down. Only the access
     /// section has them, so only it is rebuilt, and the page updates only when a label changed.
-    /// The tick runs only while there is a link or session to count; nothing runs otherwise.
-    private func updateAccessTicker() {
-        let live = isOpen && (!access.pairingLinks.isEmpty || !access.clientSessions.isEmpty)
+    /// The tick runs only while Connections shows in a visible window and there is a link or session to
+    /// count; nothing runs otherwise. Back in view, the labels catch up once before the first tick.
+    func updateAccessTicker() {
+        let visible = window?.occlusionState.contains(.visible) == true
+        let live = isOpen && section == .connections && visible
+            && (!access.pairingLinks.isEmpty || !access.clientSessions.isEmpty)
         if live, ticker == nil {
             ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refreshAccess() }
             }
             ticker?.tolerance = 0.2
+            refreshAccess()
         } else if !live {
             ticker?.invalidate()
             ticker = nil
@@ -137,6 +141,7 @@ extension SettingsController {
     /// every 30 s while the row is mounted (SavedEnvironmentRows.tsx:489-494). Here the timer runs only
     /// while the Connections page shows an active tunnel, the only time the reachability line shows.
     /// A hidden, minimized or covered window holds nothing: the poll stops and, back in view, rereads once.
+    /// The same occlusion observer re-arms the access ticker (`updateAccessTicker`).
     func updateLinkPoll() {
         if linkPollVisibility == nil, let window {
             linkPollVisibility = NotificationCenter.default.addObserver(
@@ -144,6 +149,7 @@ extension SettingsController {
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
+                    self.updateAccessTicker()
                     let wasPolling = self.linkPoll != nil
                     self.updateLinkPoll()
                     if !wasPolling, self.linkPoll != nil { self.loadLinkState() }
