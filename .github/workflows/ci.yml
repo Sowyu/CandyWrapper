@@ -35,12 +35,12 @@ jobs:
         run: >-
           swift test --skip-build
           --skip 'Fidelity|Integration|Stress|FrameDecoder|Pixel|Snapshot'
-          --skip 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests'
+          --skip 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests|ShellCacheTests'
           --skip 'MarkdownStreamFadeTests|WallpaperBackdropTests|NightlyCompatFeaturesTests|gallerySection'
-      # Wall-clock ping and watchdog timers: they starve when run alongside the parallel suites.
+      # Wall-clock ping, watchdog and debounce timers: they starve when run alongside the parallel suites.
       - name: Connection timing tests
         working-directory: Packages/CandyKit
-        run: swift test --skip-build --no-parallel --filter 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests'
+        run: swift test --skip-build --no-parallel --filter 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests|ShellCacheTests'
 
   app:
     name: App build
