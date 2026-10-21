@@ -439,12 +439,19 @@ final class ComposerController {
     }
 
     private var keybindingsNotice = KeybindingsUpdateNotice()
+    /// Host freezes already toasted, as environment and detection time (HostFreezeToastCoordinator.tsx:13-31).
+    private var shownStalls: Set<String> = []
 
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
         var refreshComposer = true
         switch event {
         case .snapshot(let snapshot):
+            // A host that froze reports it on reconnect for a few minutes: say why it dropped, once per stall.
+            if let stall = snapshot.lastEventLoopStall, shownStalls.insert("\(environmentId):\(stall.detectedAt)").inserted {
+                let notice = stall.notice(hostLabel: environments.label(environmentId) ?? "This environment")
+                toast(.warning, notice.title, notice.description)
+            }
             // Hub snapshots never ride in a config snapshot; keep the last ones.
             let themes = config.environmentThemes
             let sources = config.usageLimitSources
@@ -3426,7 +3433,13 @@ extension ComposerController {
         guard let pending = sendAfterRetry[key], let list = draftAttachments[key] else { sendAfterRetry[key] = nil; return }
         if list.contains(where: { if case .uploading = $0.status { true } else { false } }) { return }
         sendAfterRetry[key] = nil
-        guard key == draftKey, ComposerAttachmentRules.retryableFailures(list).isEmpty else { return }
+        guard key == draftKey else { return }
+        guard ComposerAttachmentRules.retryableFailures(list).isEmpty else {
+            // ChatView.tsx:5131-5135: the retry failed again, so the draft stays and says why.
+            threadErrors.set(key, "Retry or remove failed uploads before sending.")
+            refresh()
+            return
+        }
         send(pending.text, mode: pending.mode, background: pending.background)
     }
 
