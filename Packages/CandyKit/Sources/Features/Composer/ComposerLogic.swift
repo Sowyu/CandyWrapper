@@ -116,6 +116,28 @@ public enum ComposerLogic {
         return "Prompt is \(n) character\(over == 1 ? "" : "s") over the \(limit)-character limit. Shorten or split it before sending."
     }
 
+    /// `deriveThreadTitleSeed` (client-runtime operations/threadTitle.ts:16-56): the prompt with context
+    /// links as their labels and citations as plain text; image links only count. An image-only message
+    /// is "Attached image" or "Attached images", a file-only one "File: <name>".
+    public static func threadTitleSeed(_ prompt: String, attachments: [(isImage: Bool, name: String)]) -> String {
+        func normalize(_ s: String) -> String {
+            ComposerInlineTokens.citationsToPlainText(s).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        let ns = NSMutableString(string: prompt)
+        var imageIds = Set<String>()
+        for t in ComposerInlineTokens.collect(prompt).reversed() {
+            guard case .context(let kind, let id, let label) = t.kind else { continue }
+            if kind == "image" { imageIds.insert(id) }
+            ns.replaceCharacters(in: t.range, with: kind == "image" ? "" : label)
+        }
+        let text = normalize(ns as String)
+        if !text.isEmpty { return titleSeed(text) }
+        let images = imageIds.isEmpty ? attachments.filter(\.isImage).count : imageIds.count
+        if images > 0 { return images == 1 ? "Attached image" : "Attached images" }
+        let name = normalize(attachments.first?.name ?? "")
+        return name.isEmpty ? "New thread" : titleSeed("File: " + name)
+    }
+
     /// `truncate` (packages/shared/src/String.ts:1-8) for the title seed: trimmed, cut at 50
     /// UTF-16 units with `...`; empty becomes "New thread".
     public static func titleSeed(_ text: String) -> String {
