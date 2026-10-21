@@ -336,6 +336,28 @@ struct RelayClientTests {
         #expect(http2.requests("/v1/environments/env-1/connect").count == 2)
     }
 
+    @Test func cancelledCreatorLeavesTheExchangeAndItsCacheEntryToTheOthers() async throws {
+        http.on("POST", "/v1/client/dpop-token", 200, relayTokenJSON("rat-1"))
+        http.on("POST", "/v1/client/dpop-token", 200, relayTokenJSON("rat-2"))
+        let held = HeldResponse("/v1/client/dpop-token")
+        let relay = try RelayClient(key: key, send: held.wrap(http.send), now: { [clock] in clock.now })
+        let jwt = fakeJWT(sub: "user_1")
+        let a = Task { try await relay.accessToken(relayJWT: jwt, scopes: [RelayScope.connect]) }
+        #expect(await eventually { held.isHolding })
+        let b = Task { try await relay.accessToken(relayJWT: jwt, scopes: [RelayScope.connect]) }
+        await settle()
+        a.cancel()
+        await #expect(throws: CancellationError.self) { try await a.value }
+        // C arrives while B still waits: it joins instead of starting a second exchange.
+        let c = Task { try await relay.accessToken(relayJWT: jwt, scopes: [RelayScope.connect]) }
+        await settle()
+        held.release()
+        #expect(try await b.value.accessToken == "rat-1")
+        #expect(try await c.value.accessToken == "rat-1")
+        #expect(try await relay.accessToken(relayJWT: jwt, scopes: [RelayScope.connect]).accessToken == "rat-1")
+        #expect(http.requests("/v1/client/dpop-token").count == 1)
+    }
+
     @Test func unexpectedScopeIsBlocked() async throws {
         http.on("POST", "/v1/client/dpop-token", 200, relayTokenJSON("rat-1", scope: "environment:connect environment:status"))
         do {

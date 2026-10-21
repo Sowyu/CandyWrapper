@@ -99,7 +99,7 @@ public actor ClerkClient: CloudTokenProvider {
     private var loaded = false
     private var cachedEnvironment: ClerkEnvironment?
     private var cachedJWT: (sessionId: String, jwt: String, expiresAt: Date)?
-    private var pendingMint: (sessionId: String, task: Task<String, Error>)?
+    private var pendingMint: (sessionId: String, id: UUID, task: Task<String, Error>)?
     /// Bumped on sign-in and sign-out so an in-flight mint can't cache or clear a newer session.
     private var generation = 0
 
@@ -226,12 +226,15 @@ public actor ClerkClient: CloudTokenProvider {
         if let c = cachedJWT, c.sessionId == sessionId, c.expiresAt.timeIntervalSince(now()) > Self.jwtMargin {
             return c.jwt
         }
-        // joinShared, so a cancelled caller (the authorizer's deadline) stops waiting at once.
+        // Every caller only joins, so a cancelled one (the authorizer's deadline) stops waiting at once
+        // and the mint still clears its own entry for the others.
         if let pending = pendingMint, pending.sessionId == sessionId { return try await joinShared(pending.task) }
-        let started = generation
-        let task = Task { try await self.mint(sessionId: sessionId, generation: started) }
-        pendingMint = (sessionId, task)
-        defer { if pendingMint?.task == task { pendingMint = nil } }
+        let started = generation, id = UUID()
+        let task = Task {
+            defer { if self.pendingMint?.id == id { self.pendingMint = nil } }
+            return try await self.mint(sessionId: sessionId, generation: started)
+        }
+        pendingMint = (sessionId, id, task)
         return try await joinShared(task)
     }
 

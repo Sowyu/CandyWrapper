@@ -49,7 +49,9 @@ public actor RelayClient {
         var expiresAt: Date
     }
     private var tokens: [CachedToken] = []
-    private var pending: [String: Task<CachedToken, Error>] = [:]
+    private var pending: [String: (id: UUID, task: Task<CachedToken, Error>)] = [:]
+    /// Bumped by `resetTokenCache()`, so an exchange started before it can't fill the new cache.
+    private var generation = 0
 
     /// `relayURL` must be an https origin with no path, query or credentials
     /// (packages/shared/src/relayUrl.ts:1-18).
@@ -103,6 +105,7 @@ public actor RelayClient {
 
     /// Forgets every relay access token (sign-out, account switch).
     public func resetTokenCache() {
+        generation += 1
         tokens = []
         pending = [:]
     }
@@ -141,13 +144,25 @@ public actor RelayClient {
         }
         if let hit = tokens.first(where: { $0.accountId == account && wanted.isSubset(of: $0.scopes) }) { return hit }
         let pendingKey = account + " " + scopes.sorted().joined(separator: " ")
-        // joinShared, so a cancelled caller (the authorizer's deadline) stops waiting at once.
-        if let task = pending[pendingKey] { return try await joinShared(task) }
-        let task = Task { try await self.exchange(relayJWT: relayJWT, scopes: scopes, accountId: account) }
-        pending[pendingKey] = task
-        defer { if pending[pendingKey] == task { pending[pendingKey] = nil } }
-        let token = try await joinShared(task)
-        tokens.append(token)
+        // Every caller only joins, so a cancelled one (the authorizer's deadline) stops waiting at once
+        // and the exchange still clears its entry and fills the cache for the others.
+        if let p = pending[pendingKey] { return try await joinShared(p.task) }
+        let id = UUID(), started = generation
+        let task = Task {
+            try await self.sharedExchange(relayJWT: relayJWT, scopes: scopes, accountId: account,
+                                          pendingKey: pendingKey, id: id, generation: started)
+        }
+        pending[pendingKey] = (id, task)
+        return try await joinShared(task)
+    }
+
+    /// The exchange every caller for one account and scope set shares. It owns its pending entry and
+    /// the cache entry, like `T3ConnectAuthorizer.sharedExchange`.
+    private func sharedExchange(relayJWT: String, scopes: [String], accountId: String,
+                                pendingKey: String, id: UUID, generation started: Int) async throws -> CachedToken {
+        defer { if pending[pendingKey]?.id == id { pending[pendingKey] = nil } }
+        let token = try await exchange(relayJWT: relayJWT, scopes: scopes, accountId: accountId)
+        if generation == started { tokens.append(token) }
         return token
     }
 

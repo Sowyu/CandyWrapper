@@ -322,6 +322,27 @@ struct ClerkTokenTests {
         #expect(http.requests.count == 1)
     }
 
+    @Test func cancelledCreatorLeavesTheMintToTheOthers() async throws {
+        let http = FakeClerk(), path = "/v1/client/sessions/sess_1/tokens/t3-relay"
+        // No `exp`, so nothing is cached: a second mint would show as a second request.
+        http.on("POST", path, #"{"jwt":"\#(fakeJWT(sub: "user_1"))"}"#)
+        let held = HeldResponse(path)
+        let clerk = ClerkClient(store: MemoryClerkStore(ClerkFixture.signedIn), device: ClerkFixture.device, locale: "en-US",
+                                send: held.wrap(http.send), sleep: { _ in })
+        let a = Task { try await clerk.relaySessionJWT() }
+        #expect(await eventually { held.isHolding })
+        let b = Task { try await clerk.relaySessionJWT() }
+        await settle()
+        a.cancel()
+        await #expect(throws: CancellationError.self) { try await a.value }
+        let c = Task { try await clerk.relaySessionJWT() }
+        await settle()
+        held.release()
+        #expect(try await b.value == fakeJWT(sub: "user_1"))
+        #expect(try await c.value == fakeJWT(sub: "user_1"))
+        #expect(http.requests.count == 1)
+    }
+
     @Test func noSessionIsSignedOutWithoutARequest() async throws {
         let http = FakeClerk()
         let clerk = makeClient(http, MemoryClerkStore(ClerkStoredSession(clientToken: "client-token-1")))
