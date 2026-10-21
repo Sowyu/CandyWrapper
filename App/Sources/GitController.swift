@@ -332,6 +332,7 @@ final class GitController {
 
     private func render() {
         syncBranchMismatch()
+        syncDefaultBranchDialog()
         panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
@@ -850,6 +851,17 @@ final class GitController {
         render()
     }
 
+    private var defaultBranchDialog: (dialog: DefaultBranchDialog, branch: String)?
+
+    /// The feature branch option follows the live status while the dialog is open. Until the
+    /// status loads it stays on, and the server rejects a stale request (GitActionsControl.tsx:1159-1167).
+    private func syncDefaultBranchDialog() {
+        guard let pending = defaultBranchDialog else { return }
+        guard modal?.panel === pending.dialog.dialog else { defaultBranchDialog = nil; return }
+        pending.dialog.setFeatureBranchUnavailable(GitActionsLogic.featureBranchUnavailableReason(
+            branchName: pending.branch, hasWorkingTreeChanges: status?.hasWorkingTreeChanges ?? true))
+    }
+
     /// The default-branch dialog: continue here, or run it on a new feature branch.
     private func confirmDefaultBranch(_ action: GitStackedAction, branch: String, commitMessage: String?, filePaths: [String]?) {
         guard let window = panel.window, modal == nil else { return }
@@ -858,6 +870,8 @@ final class GitController {
                                                            terminology: terminology)
         let d = DefaultBranchDialog(copy: copy, canWrite: true, canChangeBranch: true)
         let host = present(d.dialog, in: window)
+        defaultBranchDialog = (d, branch)
+        syncDefaultBranchDialog()
         d.abort.action = { [weak host] in host?.close() }
         d.proceed.action = { [weak self, weak host] in
             host?.close()

@@ -173,6 +173,13 @@ public enum GitActionsLogic {
                           continueLabel: "Push & create \(terms.shortLabel)")
     }
 
+    /// `resolveFeatureBranchUnavailableReason` (logic.ts:395-405): the server names the feature
+    /// branch from the uncommitted changes, so a clean tree can't use it.
+    public static func featureBranchUnavailableReason(branchName: String, hasWorkingTreeChanges: Bool) -> String? {
+        hasWorkingTreeChanges ? nil
+            : "There are no changes to commit, so a feature branch can't be named. Create a branch yourself or continue on \(branchName)."
+    }
+
     /// `includesCommit` in `runGitActionWithToast` (GitActionsControl.tsx:1335-1339).
     public static func includesCommit(_ action: GitStackedAction, status: VcsStatus?, featureBranch: Bool) -> Bool {
         let canCommit = action == .commit || action == .commitPush || action == .commitPushPr

@@ -84,6 +84,8 @@ struct GitActionsLogicTests {
         #expect(L.includesCommit(.commitPush, status: Self.status(changes: true), featureBranch: false))
         #expect(!L.includesCommit(.commitPush, status: Self.status(), featureBranch: false))
         #expect(L.includesCommit(.commitPush, status: Self.status(), featureBranch: true))
+        #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: true) == nil)
+        #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: false)?.hasSuffix("continue on main.") == true)
     }
 
     @Test func progressAndCopy() {
