@@ -94,7 +94,11 @@ public final class AppearanceSettingsView: SettingsPageBase {
             duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) }))]
         for theme in ThemeDefinition.pickerBuiltIns {
             cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
-                use: { lib.setTheme(theme.id) }, useMode: { lib.assignHalf($0, theme.id) },
+                use: { [weak self] in
+                    lib.setTheme(theme.id)
+                    // Dither shows the desktop picture until one is chosen, so it asks once.
+                    if theme.isDither, DitherPicture.path == nil { self?.chooseDitherPicture() }
+                }, useMode: { lib.assignHalf($0, theme.id) },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) })))
         }
         for theme in custom {
@@ -205,8 +209,31 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
-        let s = section("appearance-interface", "Interface", [contrast, glass, identification, diff, strip, width])
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), identification, diff, strip, width])
         return s
+    }
+
+    /// CandyWrapper's own row for the Dither theme's picture: choose one, or go back to the desktop picture.
+    private func ditherRow() -> SettingsRowView {
+        let choose = ButtonView("Choose…", variant: .outline, size: .sm)
+        let desktop = ButtonView("Use desktop", variant: .ghost, size: .sm)
+        choose.action = { [weak self] in self?.chooseDitherPicture() }
+        desktop.action = { [weak self] in DitherPicture.clear(); ThemeLibrary.shared.apply(); self?.refresh() }
+        let group = SettingsControlGroup([desktop, choose], gap: 6)
+        let r = row(nil, title: "Dither picture", detail: "The picture the Dither theme shows behind the window. Without one it uses the desktop picture.",
+                    control: group)
+        binder.add { [weak group] in
+            desktop.isHidden = DitherPicture.path == nil
+            group?.invalidateIntrinsicContentSize()
+        }
+        return r
+    }
+
+    private func chooseDitherPicture() {
+        DitherPicture.choose(in: window, onError: { [weak self] in self?.context.toast?("Couldn’t use that picture", $0, .error) }) { [weak self] in
+            ThemeLibrary.shared.apply()
+            self?.refresh()
+        }
     }
 
     private func sliderRow(_ id: String, _ detail: String, key: String, range: ClosedRange<Double>, step: Double, reset: String,
