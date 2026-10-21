@@ -111,6 +111,14 @@ public enum ComposerAttachmentRules {
         return uploadBlockReason(attachments.map(\.status))
     }
 
+    /// The failed uploads a send starts again (`retryAttachmentUpload`, ChatView.tsx:6438-6446).
+    public static func retryableFailures(_ attachments: [ComposerAttachment]) -> [ComposerAttachment] {
+        attachments.filter { a in
+            if case .failed = a.status { return !a.needsReattach }
+            return false
+        }
+    }
+
     /// `composerFileMatchesReattachMarker` (composerDraftStore.ts:906-917): same name and size, and the same
     /// type unless the marker's was empty or generic and both are videos.
     public static func matchesReattachMarker(_ marker: ComposerAttachment, name: String, mimeType: String, sizeBytes: Int) -> Bool {
@@ -124,17 +132,13 @@ public enum ComposerAttachmentRules {
         return (markerType.isEmpty || markerType == "application/octet-stream") && isVideo(marker.name, markerType) && isVideo(name, mimeType)
     }
 
-    /// `attachmentUploadBlockReason`: why the send waits (the send button's tooltip).
+    /// `attachmentUploadBlockReason` (lib/attachmentUploadState.ts:29-49): why the send waits (the send
+    /// button's tooltip). Send retries failed uploads, so they don't block it (073734c1e9).
     public static func uploadBlockReason(_ statuses: [ComposerFileRow.Status]) -> String? {
-        var pending = 0, failed = 0
+        var pending = 0
         for status in statuses {
-            switch status {
-            case .failed: failed += 1
-            case .uploading: pending += 1
-            case .ready: break
-            }
+            if case .uploading = status { pending += 1 }
         }
-        if failed > 0 { return failed == 1 ? "Retry or remove the failed attachment" : "Retry or remove the failed attachments" }
         if pending > 0 { return pending == 1 ? "Attachment still uploading" : "Attachments still uploading" }
         return nil
     }
