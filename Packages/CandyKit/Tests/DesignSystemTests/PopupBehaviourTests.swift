@@ -287,6 +287,14 @@ struct MenuRadioCloseTests {
         #expect(ran == ["closing"])
     }
 
+    /// `width="content"` drops the 10rem menu floor (menu.tsx:58, the approval "more" menu).
+    @Test func contentWidthMenuSkipsFloor() {
+        let menu = MenuPopupView(items: [MenuItem("Deny")])
+        #expect(menu.intrinsicContentSize.width == 160)
+        menu.fitsContent = true
+        #expect(menu.intrinsicContentSize.width < 160)
+    }
+
     /// A "\n" stacks two lines in a box as wide as the wider line, like the compact pill's two `<div>`s.
     @Test func tooltipHardBreakStacksLines() {
         let one = TooltipView("Next send keeps all 120k tokens.")
