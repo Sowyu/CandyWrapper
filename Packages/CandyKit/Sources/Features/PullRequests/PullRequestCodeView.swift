@@ -49,6 +49,11 @@ public final class PullRequestCodeView: DSView {
     var onSetViewed: ((String, Bool) -> Void)?
     /// The next slice is wanted (`loadNextSlice`), or a failed one again.
     var onLoadMore: (() -> Void)?
+    /// The first slice failed and "Try again" was pressed (`diffQuery.refresh`).
+    var onRetry: (() -> Void)?
+    var onOpenURL: ((String) -> Void)?
+    /// The failure screen while the first slice failed (PullRequestCodeTab.tsx:1330-1339).
+    private var unavailable: PullRequestDiffUnavailableView?
     private(set) lazy var scrollTarget = PullRequestScrollWatcher(scroll)
 
     public override init(frame frameRect: NSRect) {
@@ -120,9 +125,22 @@ public final class PullRequestCodeView: DSView {
             }
         }
         let empty = !loading && error == nil && patches.allSatisfy(\.isEmpty) && nextCursor == nil
-        status.text = loading ? "Loading pull request diff..." : error
+        let failed = !loading && error != nil && patches.isEmpty
+        status.text = loading ? "Loading pull request diff..." : failed ? "" : error
             ?? (empty ? (commit == nil ? "This pull request has no file changes." : "This commit has no file changes.") : "")
         status.isHidden = status.text.isEmpty
+        if !failed || unavailable?.error != error {
+            unavailable?.removeFromSuperview()
+            unavailable = nil
+        }
+        if failed, unavailable == nil, let error, let d = detail {
+            let v = PullRequestDiffUnavailableView(error: error, provider: d.provider)
+            v.onRetry = { [weak self] in self?.onRetry?() }
+            v.onOpen = { [weak self] in if let url = self?.detail?.url { self?.onOpenURL?(url) } }
+            addSubview(v)
+            unavailable = v
+        }
+        scroll.isHidden = failed
         footer.text = nextCursor == nil ? "" : moreError != nil ? "The rest of this diff could not be loaded." : moreLoading ? "Loading more files..." : ""
         footerRetry.isHidden = nextCursor == nil || moreError == nil
         updateCounts()
@@ -314,6 +332,7 @@ public final class PullRequestCodeView: DSView {
         let footerH: CGFloat = footer.text.isEmpty ? 0 : 32
         scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top - footerH))
         status.frame = NSRect(x: 16, y: top + 24, width: max(0, w - 32), height: 16)
+        unavailable?.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
         footer.isHidden = footerH == 0
         let rw = footerRetry.isHidden ? 0 : ceil(footerRetry.intrinsicContentSize.width) + 8
         let fw = ceil(footer.textWidth) + 1

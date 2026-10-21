@@ -107,6 +107,17 @@ public enum PullRequestDetailLogic {
         }
     }
 
+    /// `describePullRequestDiffError` (pullRequestDiffError.ts:1-14): failures arrive wrapped in transport
+    /// text, so the rate limit is recognized inside them.
+    public static func describeDiffError(_ error: String, providerName: String) -> (title: String, description: String) {
+        if error.range(of: #"\brate limit\b|\brate[-_]limited\b|\btoo many requests\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            return ("\(providerName) rate limit reached",
+                    "\(providerName) is temporarily limiting requests, so this diff couldn't be loaded. Try again after the limit resets, or view the changes on \(providerName).")
+        }
+        return ("Couldn't load the changes",
+                "The environment couldn't load this pull request's diff. Try again, or view the changes on \(providerName).")
+    }
+
     /// `openOnHostLabel` (pullRequestLinkContextMenu.ts).
     public static func openOnHostLabel(_ provider: String) -> String {
         "Open on \(PullRequestListLogic.providerName(provider))"

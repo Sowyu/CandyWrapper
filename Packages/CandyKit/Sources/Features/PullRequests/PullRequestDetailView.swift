@@ -270,6 +270,7 @@ public final class PullRequestDetailView: DSView {
         summary.onReact = { [weak self] id, content, reacted, bar in self?.onReact?(id, content, reacted, bar) }
         timeline.onOpenCommit = { [weak self] oid in self?.tab = .code; self?.onTab?(.code); self?.onCommit?(oid) }
         code.onCommit = { [weak self] oid in self?.onCommit?(oid) }
+        code.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
         code.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
         setAccessibilityLabel("Pull request")
         rebuild()
@@ -328,6 +329,8 @@ public final class PullRequestDetailView: DSView {
 
     /// The Code tab wants the next slice.
     public var onLoadMoreDiff: (() -> Void)? { get { code.onLoadMore } set { code.onLoadMore = newValue } }
+    /// The Code tab's first slice failed and the reader asked again.
+    public var onRetryDiff: (() -> Void)? { get { code.onRetry } set { code.onRetry = newValue } }
 
     /// What the conversation cards ask of the host; set once, used for every pull request.
     public var reviewActions: PullRequestReviewThreadActions? { didSet { syncReview() } }
