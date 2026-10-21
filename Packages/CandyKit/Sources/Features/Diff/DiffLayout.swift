@@ -153,7 +153,10 @@ struct DiffLayout {
     // narrower here than in Chromium. Measure glyph advances if non-Latin code wraps wrong.
     static func visualLines(_ diff: UnifiedDiff, _ index: Int, columns: Int) -> Int {
         let line = diff.lines[index]
-        if Int(line.length) <= columns { return 1 } // bytes >= characters, so it fits
+        if Int(line.length) <= columns { // bytes >= characters, so it fits unless a tab widens it
+            let start = Int(line.start)
+            if !diff.bytes[start..<start + Int(line.length)].contains(UInt8(ascii: "\t")) { return 1 }
+        }
         return wrapBreaks(diff.text(line), columns: columns).count + 1
     }
 

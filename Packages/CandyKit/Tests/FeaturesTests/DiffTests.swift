@@ -150,6 +150,14 @@ struct DiffTests {
         #expect(pieces == ["This line is long enough that it has to wrap at the", "panel width, so the row grows by one line height per", "extra visual line."])
     }
 
+    /// Tabs advance two columns, so a short line of tabs can still wrap; row height must agree.
+    @Test func tabIndentedLineHeightMatchesWrap() {
+        let text = String(repeating: "\t", count: 20) + "x"
+        let diff = UnifiedDiff("diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -0,0 +1 @@\n+\(text)\n")
+        #expect(DiffLayout.visualLines(diff, 0, columns: 30) == DiffLayout.wrapBreaks(text, columns: 30).count + 1)
+        #expect(DiffLayout.visualLines(diff, 0, columns: 30) == 2)
+    }
+
     /// Both sides tokenize as whole texts: a block comment opened on a context line colors the
     /// added line inside it, and deleted lines take old-side tokens.
     @Test func highlightsAcrossLines() {
