@@ -41,11 +41,13 @@ final class BrowserController {
         let key: String
         let tabId: String
         let client: PreviewStreamClient
+        /// The session whose route and token the client's tickets use.
+        weak var owner: ShellSession?
         var refusals = 0
         var chooser: String?
         var cap: CGSize
-        init(key: String, tabId: String, client: PreviewStreamClient, cap: CGSize) {
-            self.key = key; self.tabId = tabId; self.client = client; self.cap = cap
+        init(key: String, tabId: String, client: PreviewStreamClient, owner: ShellSession, cap: CGSize) {
+            self.key = key; self.tabId = tabId; self.client = client; self.owner = owner; self.cap = cap
         }
     }
     /// The panel's viewer and the floating player's.
@@ -371,9 +373,10 @@ final class BrowserController {
     // MARK: Streams
 
     private func ensureStream(mini: Bool, tabId: String) {
-        guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
+        guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return stopStream(mini: mini) }
         let key = "\(id.rawValue)\u{0}\(tabId)"
-        if let s = mini ? miniStream : panelStream, s.key == key { return }
+        // A replaced session (re-pairing) gets a new client on its own route and token.
+        if let s = mini ? miniStream : panelStream, s.key == key, s.owner === shell { return }
         stopStream(mini: mini)
         let viewer = mini ? panel.miniPlayer.viewer : view.viewer
         viewer.reset()
@@ -411,6 +414,8 @@ final class BrowserController {
             DispatchQueue.main.asyncAfter(deadline: .now() + (count == 1 ? 0 : pow(2, Double(count - 1)))) { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, (mini ? self.miniStream : self.panelStream) === s else { return }
+                    // A replaced session's retry belongs to the new session's client.
+                    guard self.threadId?.environmentId.flatMap({ self.environments.session($0) }) === shell else { return self.render() }
                     self.startClient(key: key, tabId: tabId, mini: mini, shell: shell, threadLocal: threadLocal, cap: s.cap, refusals: count)
                 }
             }
@@ -425,7 +430,7 @@ final class BrowserController {
             }
             return url
         }, events: events)
-        let stream = Stream(key: key, tabId: tabId, client: client, cap: cap)
+        let stream = Stream(key: key, tabId: tabId, client: client, owner: shell, cap: cap)
         stream.refusals = refusals
         streamRef = stream
         (mini ? miniStream : panelStream)?.client.stop()
@@ -880,6 +885,9 @@ final class BrowserController {
         else { ensureCapability(environmentId) }
         eventStreams[environmentId]?.task.cancel()
         eventStreams[environmentId] = nil
-        if let id = threadId, id.environmentId == environmentId, serverBrowser[environmentId] == true { startSync(environmentId, thread: id) }
+        guard let id = threadId, id.environmentId == environmentId else { return }
+        if serverBrowser[environmentId] == true { startSync(environmentId, thread: id) }
+        // Streams on the old session restart on the new one, or stop.
+        render()
     }
 }
