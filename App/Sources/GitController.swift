@@ -1050,6 +1050,13 @@ final class GitController {
                 }
                 self.refresh()
                 done()
+                // A checkout the server couldn't confirm at the head warns (PullRequestThreadDialog.tsx:176-178,
+                // pullRequestCheckoutToast.ts:1-6).
+                if !result.isOnPullRequestHead {
+                    self.toast("Checked out, but not confirmed on the latest commit",
+                               "This checkout could not be confirmed at the pull request's latest commit, so its code may differ. Local commits or uncommitted work keep a checkout where it is.",
+                               kind: .warning)
+                }
             } catch {
                 dialog.preparing = nil
                 dialog.prepareError = Self.message(error)
