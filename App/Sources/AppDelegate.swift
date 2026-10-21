@@ -558,6 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             history?.record(route)
             threads?.syncVisit()
             if case .thread? = route { threads?.costRouteShowsThread = true } else { threads?.costRouteShowsThread = false }
+            threads?.browser.threadRouteChanged()
         }
         threads.onRouteChange = record
         settings.onRouteChange = record
