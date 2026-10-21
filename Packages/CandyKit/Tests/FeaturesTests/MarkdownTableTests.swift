@@ -151,6 +151,40 @@ struct MarkdownTableTests {
         #expect(row.frame.height == before)
     }
 
+    /// An answer's expanded table or unwrapped code survives its view being recycled for another answer, so the height
+    /// the timeline cached with that choice still fits when the answer scrolls back.
+    @Test(arguments: [true, false]) func recycledRowKeepsItsLayoutChoices(table: Bool) throws {
+        let code = "```swift\nlet value = \"" + String(repeating: "a long line that wraps ", count: 12) + "\"\n```"
+        func item(_ id: String, _ text: String) -> TimelineItem {
+            let message = ChatMessage(id: MessageId(id), role: .assistant, text: text, createdAt: "2026-10-14T00:00:00Z")
+            return TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .message(
+                message, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
+                assistantCopyStreaming: false, turnDiffSummary: nil)))
+        }
+        let filler = String(repeating: "Filler paragraph with enough words to take a few lines of the lane. ", count: 8)
+        let items = [item("a", table ? Self.source : code)] + (0..<30).map { item("b\($0)", filler + "\n\n" + filler) }
+        let timeline = TimelineView(frame: CGRect(x: 0, y: 0, width: 600, height: 600))
+        timeline.layoutSubtreeIfNeeded()
+        timeline.setItems(items)
+        timeline.scroll(by: -timeline.documentHeight)
+        let row = try #require(timeline.view(forRow: "a"))
+        row.layoutSubtreeIfNeeded()
+        let markdown = try #require(row.subviews.compactMap { $0 as? MarkdownView }.first)
+        let before = row.frame.height
+        if table { markdown.toggleTable(0) } else { markdown.toggleWrap(0) }
+        timeline.layoutSubtreeIfNeeded()
+        #expect(row.frame.height != before)
+        let changed = row.frame.height
+        timeline.scroll(by: timeline.documentHeight)
+        #expect(timeline.view(forRow: "a") == nil)
+        timeline.scroll(by: -timeline.documentHeight)
+        let back = try #require(timeline.view(forRow: "a"))
+        back.layoutSubtreeIfNeeded()
+        #expect(back.frame.height == changed)
+        #expect(back.height(forWidth: back.frame.width) == back.frame.height)
+        #expect(timeline.layoutProblems().isEmpty)
+    }
+
     @Test func copyPreservesFullCellsAndEscapesCSV() throws {
         let document = MarkdownDocument(parsing: "| Name | Value |\n|---|---|\n| a,b | say \"hello\" |")
         guard case .table(let table) = document.blocks.first else { Issue.record("Expected table"); return }

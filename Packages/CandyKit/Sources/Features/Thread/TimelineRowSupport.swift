@@ -103,6 +103,10 @@ final class TimelineContext {
     /// T3's `markdownCwd` (ChatView.tsx `gitCwd`): the thread's worktree, else the project root. File chips resolve against it.
     var markdownCwd: String? { model?.projection?.thread.worktreePath ?? model?.workspaceRoot }
     var fastGlimmer = false
+    /// Expanded tables, unwrapped code and diagram code of each answer, by message id. They outlive the recycled
+    /// Markdown views, as the heights the timeline caches with them do.
+    // ponytail: one small entry per answer the reader toggled, never trimmed; trim with `measured` if it ever shows
+    var markdownChoices: [String: MarkdownView.LayoutChoices] = [:]
     var now: () -> Date = Date.init
 
     private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]

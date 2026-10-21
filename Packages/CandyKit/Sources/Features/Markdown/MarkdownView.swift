@@ -33,6 +33,29 @@ public final class MarkdownView: DSView {
     public var onHeightChange: (() -> Void)?
     private(set) var expandedTables: Set<Int> = []
 
+    /// The reader's per-message layout choices, which change the message's height. A recycled view drops them with
+    /// `messageID`, so an owner that caches heights keeps them by message and hands them back after setting `messageID`.
+    public struct LayoutChoices: Equatable, Sendable {
+        public var expandedTables: Set<Int> = []
+        public var unwrappedCode: Set<Int> = []
+        public var diagramCode: Set<Int> = []
+        public init() {}
+    }
+    public var layoutChoices: LayoutChoices {
+        get {
+            var choices = LayoutChoices()
+            choices.expandedTables = expandedTables; choices.unwrappedCode = unwrappedCode; choices.diagramCode = diagramCode
+            return choices
+        }
+        set {
+            guard newValue != layoutChoices else { return }
+            expandedTables = newValue.expandedTables; unwrappedCode = newValue.unwrappedCode; diagramCode = newValue.diagramCode
+            invalidate()
+        }
+    }
+    /// A toggle changed `layoutChoices`.
+    public var onLayoutChoicesChange: ((LayoutChoices) -> Void)?
+
     public var document = MarkdownDocument(blocks: []) {
         didSet {
             // T3 reads the wrap setting when a code block mounts (`readInitialWordWrapSetting`, ChatMarkdown.tsx:555-557); a
@@ -701,6 +724,7 @@ public final class MarkdownView: DSView {
         if expandedTables.contains(index) { expandedTables.remove(index) } else { expandedTables.insert(index) }
         invalidate()
         reusable = previous
+        onLayoutChoicesChange?(layoutChoices)
         onHeightChange?()
     }
 
@@ -723,14 +747,17 @@ public final class MarkdownView: DSView {
     private func toggleDiagram(_ index: Int) {
         if diagramCode.contains(index) { diagramCode.remove(index) } else { diagramCode.insert(index) }
         invalidate()
+        onLayoutChoicesChange?(layoutChoices)
         NotificationCenter.default.post(name: MermaidDiagrams.didRender, object: nil)
     }
 
-    private func toggleWrap(_ index: Int) {
+    func toggleWrap(_ index: Int) {
         if unwrappedCode.contains(index) { unwrappedCode.remove(index) } else { unwrappedCode.insert(index) }
         // A wrapped `pre` has nothing to scroll, so Chromium clamps its scrollLeft to 0.
         codeOffsets[index] = nil
         invalidate()
+        onLayoutChoicesChange?(layoutChoices)
+        onHeightChange?()
     }
 
     // MARK: Code block scrolling
