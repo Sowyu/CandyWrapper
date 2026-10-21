@@ -104,7 +104,8 @@ public final class ApprovalPanelView: ComposerBannerView {
             return item
         }
         // ponytail: warning options show the triangle but no tooltip inside the menu; add with menu row tooltips
-        MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+        // `width="content"`: as wide as the longest option (ComposerPendingApprovalActions.tsx:84).
+        MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none), fitsContent: true)
     }
 
     // MARK: Layout

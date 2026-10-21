@@ -115,6 +115,8 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
             invalidateIntrinsicContentSize()
         }
     }
+    /// `width="content"`: drops the menu's 10rem floor so the popup is as wide as its rows.
+    public var fitsContent = false { didSet { invalidateIntrinsicContentSize() } }
     /// Combobox and Autocomplete cap the list at 23rem.
     var maximumHeight: CGFloat = .greatestFiniteMagnitude
     /// Text shown when there are no items (ComboboxEmpty).
@@ -228,8 +230,8 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     public override var intrinsicContentSize: NSSize {
         var width = rows.map(\.naturalWidth).max() ?? 0
         if let emptyLabel { width = max(width, emptyLabel.intrinsicContentSize.width + 16) }
-        // `min-w-[min(10rem,...)]` for menus; the anchor width for the others.
-        let floor = style == .menu ? max(160, minimumWidth) : minimumWidth
+        // `min-w-[min(10rem,...)]` for menus unless `width="content"`; the anchor width for the others.
+        let floor = style == .menu && !fitsContent ? max(160, minimumWidth) : minimumWidth
         let w = max(floor, width + 2 * Self.inset)
         let h = min(contentHeight + 2 * Self.inset, maximumHeight)
         return NSSize(width: (w * 2).rounded(.up) / 2, height: h)
@@ -491,10 +493,11 @@ public extension MenuPopupView {
     /// the first item is highlighted, as in base-ui. Returns nil when the trigger has no window.
     @discardableResult
     static func show(_ items: [MenuItem], from trigger: NSView, placement: PopupPlacement = .menu,
-                     minimumWidth: CGFloat = 0, anchorRect: CGRect? = nil) -> MenuPopupView? {
+                     minimumWidth: CGFloat = 0, anchorRect: CGRect? = nil, fitsContent: Bool = false) -> MenuPopupView? {
         guard let host = trigger.popupHost else { return nil }
         let menu = MenuPopupView(items: items)
         menu.minimumWidth = minimumWidth
+        menu.fitsContent = fitsContent
         menu.hostPopup = host.open(menu, trigger: trigger, anchorRect: anchorRect, placement: placement, swallowsOutsideClick: true)
         if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
         return menu
