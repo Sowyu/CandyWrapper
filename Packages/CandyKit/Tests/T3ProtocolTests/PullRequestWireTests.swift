@@ -114,6 +114,11 @@ struct PullRequestWireTests {
         #expect(ChangeRequestURL.parse("https://dev.azure.com/org/proj/_git/repo/pullrequest/5")?.repository == "org/proj/_git/repo")
         #expect(ChangeRequestURL.parse("https://codeberg.org:8443/a/b/pulls/2")?.authority == "codeberg.org:8443")
         #expect(ChangeRequestURL.parse("https://github.com/o/r/issues/12") == nil)
+        // Azure DevOps Server: any host, and a port becomes the authority.
+        #expect(ChangeRequestURL.parse("https://tfs.example.com/Collection/Proj/_git/Repo/pullrequest/7")
+                == ChangeRequestURL.Link(host: "tfs.example.com", repository: "collection/proj/_git/repo", number: 7))
+        #expect(ChangeRequestURL.parse("http://tfs.example.com:8080/tfs/c/p/_git/r/pullrequest/7")?.authority == "tfs.example.com:8080")
+        #expect(ChangeRequestURL.parse("https://git.cafe/o/r/pulls/3")?.authority == nil)
         #expect(ChangeRequestURL.parse("javascript:alert(1)") == nil)
         #expect(ChangeRequestURL.reference("#42") == "42")
         #expect(ChangeRequestURL.reference("az repos pr checkout --id 17") == "17")

@@ -32,7 +32,7 @@ public enum ChangeRequestURL {
         public var host: String
         public var repository: String
         public var number: Int
-        /// Forgejo's host and port.
+        /// The host and port for Forgejo, and for Azure DevOps Server on a port.
         public var authority: String?
         public var key: ThreadPullRequestKey { ThreadPullRequestKey(host: host, repository: repository, number: number) }
     }
@@ -54,15 +54,28 @@ public enum ChangeRequestURL {
         func isHost(_ apex: String, label: String? = nil) -> Bool {
             host == apex || host.hasSuffix("." + apex) || (label.map { host.split(separator: ".").contains(Substring($0)) } ?? false)
         }
-        if isHost("github.com", label: "github"), let link = claim(#"^/([^/]+/[^/]+)/pull/(\d+)(?:/|$)"#) { return link }
-        if var link = claim(#"^/([^/]+(?:/[^/]+)+)/pulls/(\d+)(?:/|$)"#) {
-            link.authority = url.port.map { "\(host):\($0)" } ?? host
-            return link
+        func matches(_ pattern: String) -> Bool { path.range(of: pattern, options: .regularExpression) != nil }
+        // `url.host`: the port only when it isn't the scheme's default, as URL leaves it out then.
+        let port = url.port.flatMap { $0 == (scheme == "https" ? 443 : 80) ? nil : $0 }
+        let authority = port.map { "\(host):\($0)" } ?? host
+        if host == "git.cafe" || host == "staging.git.cafe" {
+            if let link = claim(#"^/([^/]+/[^/]+)/pulls/(\d+)(?:/|$)"#) { return link }
+        } else {
+            if isHost("github.com", label: "github"), let link = claim(#"^/([^/]+/[^/]+)/pull/(\d+)(?:/|$)"#) { return link }
+            let forgejo = #"^/([^/]+(?:/[^/]+)+)/pulls/(\d+)(?:/|$)"#
+            if matches(forgejo) {
+                guard var link = claim(forgejo) else { return nil }
+                link.authority = authority
+                return link
+            }
+            let gitlab = #"^/([^/]+(?:/[^/]+)+)/-/merge_requests/(\d+)(?:/|$)"#
+            if matches(gitlab) { return claim(gitlab) }
+            if isHost("bitbucket.org", label: "bitbucket"), let link = claim(#"^/([^/]+/[^/]+)/pull-requests/(\d+)(?:/|$)"#) { return link }
         }
-        if let link = claim(#"^/([^/]+(?:/[^/]+)+)/-/merge_requests/(\d+)(?:/|$)"#) { return link }
-        if isHost("bitbucket.org", label: "bitbucket") { return claim(#"^/([^/]+/[^/]+)/pull-requests/(\d+)(?:/|$)"#) }
-        if isHost("dev.azure.com") || host.hasSuffix(".visualstudio.com") { return claim(#"^/((?:[^/]+/)*_git/[^/]+)/pullrequest/(\d+)(?:/|$)"#) }
-        return nil
+        // Azure DevOps Server runs on any host; the `_git` pull request route names it.
+        guard var link = claim(#"^/((?:[^/]+/)*_git/[^/]+)/pullrequest/(\d+)(?:/|$)"#) else { return nil }
+        if port != nil { link.authority = authority }
+        return link
     }
 
     /// `changeRequestUrlFor`: the web URL a host writes for a change request.
