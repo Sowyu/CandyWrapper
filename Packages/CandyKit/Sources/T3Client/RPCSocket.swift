@@ -21,7 +21,8 @@ public enum RPCTransportError: Error, Sendable, Equatable, CustomStringConvertib
         case .openTimedOut: "The WebSocket did not open in time."
         case .upgradeRejected(let s): "The server rejected the WebSocket upgrade with HTTP \(s)."
         case .closed(let r): "Disconnected: \(r)"
-        case .pingTimedOut: "The server stopped responding."
+        // An open socket that went quiet points at the host, not the network (client-runtime/src/rpc/session.ts:194-200).
+        case .pingTimedOut: "The server stopped responding for 15s. \(unresponsiveHostHint)"
         case .invalidFrame(let r): "The server sent a frame this client can't read: \(r)"
         }
     }

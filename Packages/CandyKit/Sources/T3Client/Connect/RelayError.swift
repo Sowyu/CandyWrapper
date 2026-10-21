@@ -1,7 +1,10 @@
 import Foundation
 
 /// T3's network hint for relay and T3 Connect failures (client-runtime/src/errors/network.ts:3-4).
-public let t3ConnectNetworkHint = "Your DNS or firewall may be blocking T3 Connect. Try another network, such as a phone hotspot."
+public let t3ConnectNetworkHint = "Your DNS or firewall may be blocking T3 Connect. Try another network, such as a different Wi-Fi or mobile data."
+
+/// For a host that stopped answering on an open connection (client-runtime/src/errors/network.ts:4-5).
+public let unresponsiveHostHint = "It may be overloaded, asleep, or off the network."
 
 /// DPoP hints (client-runtime/src/relay/errorPresentation.ts:4-22).
 public enum DPoPHint {
