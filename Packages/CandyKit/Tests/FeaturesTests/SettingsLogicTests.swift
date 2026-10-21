@@ -149,6 +149,12 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "k", physicalKey: "k", meta: true, shift: true)) == "mod+shift+k")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "escape")) == "esc")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "{", physicalKey: "[", meta: true, shift: true)) == "mod+shift+[")
+        // The layout character records (#15972): German `ä` and `?` (Shift+ß), but US `?` stays `/` and Option uses the key.
+        #expect(KeybindingsLogic.binding(from: KeyStroke(key: "ä", physicalKey: "'", meta: true)) == "mod+ä")
+        #expect(KeybindingsLogic.binding(from: KeyStroke(key: "?", physicalKey: "-", meta: true, shift: true)) == "mod+shift+?")
+        #expect(KeybindingsLogic.binding(from: KeyStroke(key: "?", physicalKey: "/", meta: true, shift: true)) == "mod+shift+/")
+        #expect(KeybindingsLogic.binding(from: KeyStroke(key: "-", physicalKey: "/", meta: true)) == "mod+-")
+        #expect(KeybindingsLogic.binding(from: KeyStroke(key: "5", physicalKey: "1", alt: true)) == "alt+1")
         #expect(KeybindingsLogic.pillParts("mod+shift+k") == ["⌘", "⇧", "K"])
     }
 
