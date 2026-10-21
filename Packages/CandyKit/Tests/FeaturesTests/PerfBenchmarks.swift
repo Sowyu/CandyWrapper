@@ -59,8 +59,15 @@ private struct Transcript {
     }
 }
 
+/// The recordings the benchmarks were calibrated on. A later one, like 22-nightly-3473 with its 249-row thread, would
+/// become the base of the synthetic threads and move every comparison with saved runs (docs/perf/README.md).
+private let benchmarkFixtures: Set<String> = [
+    "01-basic.jsonl", "02-turn.jsonl", "03-turn2.jsonl", "04-threads.jsonl", "05-composer.jsonl", "06-requests.jsonl",
+    "07-queue.jsonl", "08-settings.jsonl", "09-reasoning-tools.jsonl", "20-nightly-3234.jsonl", "21-future-server.jsonl",
+]
+
 private func transcripts() throws -> [(String, Transcript)] {
-    try FileManager.default.contentsOfDirectory(atPath: fixtureDir.path).filter { $0.hasSuffix(".jsonl") }.sorted()
+    try FileManager.default.contentsOfDirectory(atPath: fixtureDir.path).filter { benchmarkFixtures.contains($0) }.sorted()
         .map { ($0, try Transcript(fixtureDir.appending(path: $0))) }
 }
 
