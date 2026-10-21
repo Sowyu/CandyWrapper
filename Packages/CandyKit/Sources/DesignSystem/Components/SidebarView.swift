@@ -432,3 +432,10 @@ public final class SidebarTriggerView: ControlView {
         icon.path = p.copy(using: &t)
     }
 }
+
+/// The Dither theme's metrics, after Capy's desktop app: tight corners.
+public enum DitherChrome {
+    /// Capy's corners: the composer and its banners 8, buttons and rows 6.
+    public static let cardRadius: CGFloat = 8
+    public static let controlRadius: CGFloat = 6
+}

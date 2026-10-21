@@ -342,9 +342,11 @@ public final class ThemeLibrary {
                 continue
             }
             if d.isDither {
-                // Dither wears the stock palette, with its picture in the main panel.
+                // Dither wears its own palette (after Capy), with its picture in the main panel.
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }
                 input.ditherPicture = DitherPicture.path
+                let half = ThemeRuntimeHalf(colors: d.colors(for: a) ?? d.colors)
+                if a == .light { input.light = half } else { input.dark = half }
                 continue
             }
             // `applyThemePalette` falls back to the base colors for a side the theme lacks.

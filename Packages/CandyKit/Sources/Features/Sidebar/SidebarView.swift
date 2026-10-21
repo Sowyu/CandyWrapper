@@ -42,6 +42,8 @@ public struct SidebarActions {
     public var openSettings: () -> Void = {}
     public var openPullRequests: () -> Void = {}
     public var openUsage: () -> Void = {}
+    /// Dither's nav row: Settings, Scheduled tasks.
+    public var openAutomations: () -> Void = {}
     /// Files dropped on a thread row (`handleThreadFileDrop`): open the thread and attach them there.
     public var dropFiles: (ThreadId, [URL]) -> Void = { _, _ in }
     /// The inline rename committed: thread, typed title, title before (`commitThreadRename`).
@@ -74,6 +76,11 @@ public final class SidebarContentView: DSView {
     let settingsButton = SidebarContentView.footerButton(.settings, "Settings")
     let pullRequestsButton = SidebarContentView.footerButton(.gitPullRequestArrow, "Pull Requests")
     let usageButton = SidebarContentView.footerButton(.chartNoAxesColumn, "Usage")
+    /// Dither (after Capy): nav rows under the search field.
+    let navRows = [SidebarNavRowView(.squarePen, "New thread"), SidebarNavRowView(.gitPullRequestArrow, "Pull requests"),
+                   SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
+    /// Dither: Capy's "Threads" section label between the nav rows and the list.
+    let navSection = LabelView("Threads", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
     let undoNotice = SidebarUndoNoticeView()
     /// `SidebarProviderUpdatePill` between the undo notice and the utility buttons.
@@ -259,7 +266,8 @@ public final class SidebarContentView: DSView {
 
     private func applyStage() {
         let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
-        let artwork = mode == "artwork" && stage == .nightly
+        // Dither keeps Capy's plain sidebar.
+        let artwork = mode == "artwork" && stage == .nightly && !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         backdrop.isHidden = !artwork
         brand.onBackdrop = artwork
         trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
@@ -300,6 +308,10 @@ public final class SidebarContentView: DSView {
         newThreadButton.action = { [weak self] in self?.actions.newThread() }
         settingsButton.action = { [weak self] in self?.actions.openSettings() }
         pullRequestsButton.action = { [weak self] in self?.actions.openPullRequests() }
+        navRows[0].action = { [weak self] in self?.actions.newThread() }
+        navRows[1].action = { [weak self] in self?.actions.openPullRequests() }
+        navRows[2].action = { [weak self] in self?.actions.openAutomations() }
+        navRows[3].action = { [weak self] in self?.actions.openSettings() }
         usageButton.action = { [weak self] in self?.actions.openUsage() }
     }
 
@@ -717,6 +729,7 @@ public final class SidebarContentView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         scheduleLabelTimer()
+        applyStage()
     }
 
     /// A sidebar shown again after a collapse catches up a tick it skipped while hidden.
@@ -727,6 +740,7 @@ public final class SidebarContentView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        applyStage() // Dither hides the artwork
         needsLayout = true
     }
 
@@ -773,9 +787,26 @@ public final class SidebarContentView: DSView {
             undoNotice.frame = NSRect(x: 8, y: stackTop - 8 - nh, width: w - 16, height: nh)
             footerTop = undoNotice.frame.minY - 4
         }
+        let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        var listTop: CGFloat = 100
+        for (i, row) in navRows.enumerated() {
+            if row.superview == nil { addSubview(row) }
+            row.isHidden = !capy || i == 1 && !showsPullRequests
+            if row.isHidden { continue }
+            row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
+            listTop += SidebarNavRowView.height + 2
+        }
+        if navSection.superview == nil { navSection.lineHeight = 16; addSubview(navSection) }
+        navSection.isHidden = !capy
+        if capy {
+            listTop += 10
+            navSection.frame = NSRect(x: 16, y: listTop, width: max(0, w - 32), height: 16)
+            listTop += 16 + 4
+        }
         var fx: CGFloat = 8
         for b in [settingsButton, pullRequestsButton, usageButton] {
-            b.isHidden = isOnUtilityPage || b === pullRequestsButton && !showsPullRequests
+            // Dither's nav rows hold Settings and Pull requests.
+            b.isHidden = isOnUtilityPage || b === pullRequestsButton && !showsPullRequests || capy && b !== usageButton
             if b.isHidden { continue }
             b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
@@ -785,7 +816,7 @@ public final class SidebarContentView: DSView {
         let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
         backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
         updatePill.frame = NSRect(x: w - 8 - 32, y: menuTop, width: 32, height: 32)
-        scrollArea.frame = NSRect(x: 0, y: 100, width: w, height: max(0, footerTop - 100))
+        scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true
     }

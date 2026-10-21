@@ -58,7 +58,38 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
     /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
     public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Dither", appearance: .light,
-                                               colors: standardLightColors, variants: [.dark: standardDarkColors])
+                                               colors: capyLightColors, variants: [.dark: capyDarkColors])
+
+    /// Dither's palette: Capy's default theme, from its stylesheet (`--bg`, `--panel`, `--card`, `--popover`, the text
+    /// mixes and the teal `--primary`, docs/research in ~/CandyWrapper-research/capy-design.md). Near-black cool grays,
+    /// the chrome a step darker than the panel, and teal for the focus ring, selection and send button.
+    static let capyDarkColors: [ThemeColorRole: String] = standardDarkColors.merging([
+        .canvas: "#131314", .chrome: "#0a0a0b", .toolbar: "#0a0a0b", .toolbarBorder: "#1d1d1e", .toolbarControl: "#181819",
+        .toolbarControlHover: "#1e1e1f", .surface: "#181819", .surfaceRaised: "#202021", .surfaceOverlay: "#202021",
+        .text: "#f5f5f5", .textMuted: "#aaaaab", .border: "#232324", .input: "#2a2a2b", .focus: "#2b948b",
+        .accent: "#2b948b", .accentForeground: "#ffffff", .secondary: "#1e1e1f", .secondaryForeground: "#f5f5f5",
+        .muted: "#1c1c1d", .mutedForeground: "#aaaaab", .placeholder: "#616162", .secondaryLabel: "#848485",
+        .iconMuted: "#686869", .accentSurface: "#1e1e1f", .accentSurfaceForeground: "#f5f5f5",
+        .messageSurface: "#202021", .messageForeground: "#f5f5f5", .messageAction: "#2b948b",
+        .messageActionForeground: "#ffffff", .messageActionHover: "#258178", .codeBackground: "#0f0f10",
+        .sidebar: "#0a0a0b", .sidebarForeground: "#f5f5f5", .sidebarMutedForeground: "#848485",
+        .sidebarControlSurface: "#141415", .sidebarRowHover: "#161617", .sidebarRowActive: "#1e1e1f",
+        .sidebarRowSelected: "#1e1e1f", .sidebarBorder: "#0a0a0b", .terminalBackground: "#0f0f10",
+        .terminalCursor: "#2b948b", .terminalSelection: "#1f3d3a",
+    ]) { $1 }
+    static let capyLightColors: [ThemeColorRole: String] = standardLightColors.merging([
+        .canvas: "#f9f9f9", .chrome: "#ececec", .toolbar: "#ececec", .toolbarBorder: "#dadada", .toolbarControl: "#ffffff",
+        .toolbarControlHover: "#f2f2f2", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",
+        .text: "#1e1e1e", .textMuted: "#6c6c6c", .border: "#dadada", .input: "#d4d4d4", .focus: "#0b9f95",
+        .accent: "#0b9f95", .accentForeground: "#ffffff", .secondary: "#efefef", .secondaryForeground: "#1e1e1e",
+        .muted: "#e1e1e2", .mutedForeground: "#6c6c6c", .placeholder: "#a2a2a2", .secondaryLabel: "#898989",
+        .iconMuted: "#959595", .accentSurface: "#efefef", .accentSurfaceForeground: "#1e1e1e",
+        .messageSurface: "#efefef", .messageForeground: "#1e1e1e", .messageAction: "#0b9f95",
+        .messageActionForeground: "#ffffff", .messageActionHover: "#098a81", .codeBackground: "#f4f4f4",
+        .sidebar: "#ececec", .sidebarForeground: "#1e1e1e", .sidebarMutedForeground: "#898989",
+        .sidebarControlSurface: "#e4e4e4", .sidebarRowHover: "#e4e4e4", .sidebarRowActive: "#e0e0e0",
+        .sidebarRowSelected: "#e0e0e0", .sidebarBorder: "#ececec",
+    ]) { $1 }
 
     /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
     public static let pickerBuiltIns = builtIns + [glass, dither]

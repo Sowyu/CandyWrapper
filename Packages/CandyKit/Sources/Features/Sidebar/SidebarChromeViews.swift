@@ -387,3 +387,43 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         clearButton.frame = NSRect(x: bounds.width - 8 - 20, y: (bounds.height - 20) / 2, width: 20, height: 20)
     }
 }
+
+/// Dither (after Capy's sidebar nav): a 28pt row with a 16pt line icon and a 13pt label, `rounded-md`, the row hover
+/// fill on hover.
+final class SidebarNavRowView: ControlView {
+    static let height: CGFloat = 28
+    private let icon: IconView
+    private let label: LabelView
+
+    init(_ name: IconName, _ text: String) {
+        icon = IconView(name: name, size: 16)
+        label = LabelView(text, font: SB.font(13, .medium), color: SB.c(\.foreground))
+        super.init(frame: .zero)
+        label.lineHeight = 20
+        addSubview(icon)
+        addSubview(label)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(text)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        label.frame = NSRect(x: 32, y: (bounds.height - 20) / 2, width: max(0, bounds.width - 40), height: 20)
+    }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
+    }
+
+    override func updateLayer() {
+        layer?.cornerRadius = DitherChrome.controlRadius
+        layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        icon.strokeColor = SB.c(\.sidebarMutedForeground)
+    }
+}
+

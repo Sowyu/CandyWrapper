@@ -142,6 +142,13 @@ public final class SidebarListView: DSView {
     private static let duration: CFTimeInterval = 0.15
     private static let easing = CAMediaTimingFunction(name: .easeOut)
 
+    /// A theme change can change card heights (Dither's compact rows).
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        recomputeGeometry()
+        needsLayout = true
+    }
+
     private func recomputeGeometry() {
         tops = []
         indexByKey = [:]

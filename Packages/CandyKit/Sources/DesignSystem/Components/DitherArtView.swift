@@ -303,7 +303,7 @@ public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
     /// The background's share over an open thread: the cap already keeps text readable, this calms it under messages.
-    nonisolated static let threadScrim: CGFloat = 0.45
+    nonisolated static let threadScrim: CGFloat = 0.2
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
 

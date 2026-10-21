@@ -232,6 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
+        sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
         let updater = UpdateController()
         self.updater = updater
         let runtime = RuntimeUpdateController(window: window, current: { [weak self, weak environments, weak threads] in

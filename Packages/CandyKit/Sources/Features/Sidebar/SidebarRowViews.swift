@@ -273,6 +273,8 @@ final class WokeDismissButton: ControlView {
 
 /// Base for recycled list rows: hover and press from ControlView, a reusable `configure`.
 class SidebarRowBase: ControlView {
+    /// T3's 8, or Capy's 6 under Dither.
+    var rowRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.controlRadius : 8 }
     final var onOpen: (@MainActor () -> Void)? // final: see PROGRESS.md gotchas (Swift 6.4 link bug)
     var isKeyboardFocused = false { didSet { if isKeyboardFocused != oldValue { needsDisplay = true; refresh() } } }
     var item: SidebarItem?
@@ -498,6 +500,7 @@ final class SidebarCardRowView: SidebarRowBase {
     /// The visible card, 2pt below the row's top: the hover card's trigger in T3 (aligned to its top edge).
     var surfaceFrame: CGRect { surface.frame }
     private let monogram = ProjectMonogramView()
+    private let capyIcon = IconView(name: .folder, size: 16)
     private let project = LabelView()
     let pin = PinButton()
     private let statusIcon = StatusIconSlot()
@@ -529,7 +532,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
+        for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
         project.font = SB.font(12, .medium); project.lineHeight = 16
@@ -556,6 +559,7 @@ final class SidebarCardRowView: SidebarRowBase {
     var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
 
     override func refresh() {
+        surface.cornerRadius = rowRadius
         guard let r = row else { return }
         let hovered = state.hovered || isKeyboardFocused || snoozeButton.state.popupOpen
         CATransaction.begin()
@@ -571,9 +575,12 @@ final class SidebarCardRowView: SidebarRowBase {
 
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
-        monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil
+        // Dither (after Capy): a neutral folder line icon instead of the colored project square, and no provider glyph.
+        monogram.isHidden = capyRow || (r.projectTitle == nil && r.projectLabel == nil)
+        capyIcon.isHidden = !capyRow
+        capyIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         project.text = r.projectLabel ?? ""
-        project.font = SB.font(12, r.recedes ? .regular : .medium)
+        project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
         project.color = SB.c(\.secondaryLabel)
         pin.isHidden = !showsPin(r)
 
@@ -614,20 +621,22 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         // Title (Sidebar.tsx:1658-1690), card variant.
         title.text = r.title
-        title.font = SB.font(14, r.recedes ? .regular : .medium)
+        title.font = SB.font(capyRow ? 13 : 14, r.recedes ? .regular : .medium)
         title.color = r.recedes ? SB.c(\.secondaryLabel)
             : r.isUnread || r.isWoke || r.status == .input ? SB.c(\.foreground)
             : r.status == .failed ? SB.c(\.foreground, 0.95) : SB.c(\.foreground, 0.9)
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
-        branch.color = SB.c(\.mutedForeground, 0.4)
+        branch.color = capyRow ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
+        branch.font = SB.font(capyRow ? 11 : 12)
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
         branchIcon.strokeColor = SB.c(\.mutedForeground, 0.4)
         scratchMachine.kind = showsScratch ? r.scratchMachine : nil
         scratchMachine.isHidden = !showsScratch
         scratchMachine.color = SB.c(\.mutedForeground, 0.4)
         provider.driver = r.providerIcon
+        provider.isHidden = capyRow
         machine.kind = r.environmentMachine
         machine.isHidden = r.environmentMachine == nil || showsScratch
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
@@ -639,17 +648,23 @@ final class SidebarCardRowView: SidebarRowBase {
         needsLayout = true
     }
 
+    /// Dither (after Capy): 48pt, the icon and title on the first line with the status at its right, then the
+    /// project, branch and badges on a small gray line.
+    private var capyRow: Bool { ThemeRuntime.ditherRows }
+
     override func layout() {
         super.layout()
         let w = bounds.width
+        let capy = capyRow
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.frame = CGRect(x: 0, y: 2, width: w, height: 78)
+        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: 46) : CGRect(x: 0, y: 2, width: w, height: 78)
         CATransaction.commit()
-        let left: CGFloat = 10, right = w - 10, top: CGFloat = 10
+        let left: CGFloat = capy ? 8 : 10, right = w - (capy ? 8 : 10), top: CGFloat = capy ? 5 : 10
         // Line 1: favicon, project, pin, status slot.
         var x = left
         if !monogram.isHidden { monogram.frame = NSRect(x: x, y: top + 2, width: 16, height: 16); x += 16 + 6 }
+        if capy { capyIcon.frame = NSRect(x: left, y: top + 2, width: 16, height: 16) }
         var slotRight = right
         var slotLeft = right
         // `-mr-1` on Settle, buttons stretch to the 20px slot. Placed while hidden too, so a fade-out stays put.
@@ -686,16 +701,24 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         slotRight = slotLeft
         if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
-        project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
-        // Line 2: title, `mt-1`.
-        title.frame = NSRect(x: left, y: top + 24, width: right - left, height: 20)
-        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
-                         frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
-        // Line 3: branch and provider, `mt-0.5`, text-xs.
-        let y3 = top + 46
+        if capy {
+            // Title beside the icon, before the status slot; the meta line under it starts with the project.
+            let tx = left + 24
+            title.frame = NSRect(x: tx, y: top, width: max(0, slotRight - 6 - tx), height: 20)
+            placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                             frame: NSRect(x: tx, y: top - 1, width: max(0, right - tx), height: 22))
+        } else {
+            project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
+            // Line 2: title, `mt-1`.
+            title.frame = NSRect(x: left, y: top + 24, width: right - left, height: 20)
+            placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                             frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
+        }
+        // Line 3: branch and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
+        let y3 = capy ? top + 21 : top + 46
         provider.frame = NSRect(x: right - 14, y: y3 + 1, width: 14, height: 14)
         // `ml-auto gap-1`: the machine sits 4pt left of the provider.
-        var trailing = right - 14
+        var trailing = capy ? right + 4 : right - 14
         if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
         // The terminal glyph follows the branch, `gap-1.5` before the provider group.
         if !prBadge.isHidden {
@@ -704,6 +727,12 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
+        if capy {
+            bx = left + 24
+            let pw = project.text.isEmpty ? 0 : min(ceil(project.textWidth) + 1, max(0, (trailing - bx) / 2))
+            project.frame = NSRect(x: bx, y: y3, width: pw, height: 16)
+            if pw > 0 { bx += pw + 8 }
+        }
         if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
@@ -781,6 +810,7 @@ final class SidebarSlimRowView: SidebarRowBase {
     var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
 
     override func refresh() {
+        surface.cornerRadius = rowRadius
         guard let r = row else { return }
         let hovered = state.hovered || isKeyboardFocused
         CATransaction.begin()
@@ -965,6 +995,7 @@ final class SidebarShowMoreRowView: SidebarRowBase {
     }
 
     override func refresh() {
+        surface.cornerRadius = rowRadius
         guard case .showMore(let count)? = item else { return }
         label.text = "Show \(count) more"
         let hovered = state.hovered || isKeyboardFocused

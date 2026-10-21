@@ -13,7 +13,8 @@ public final class DraftHeroView: DSView {
 
     /// The height at `width`: the headline wraps as T3's `h1` does when the column is narrower than it.
     public func height(forWidth width: CGFloat) -> CGFloat {
-        isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
+        if capy { return 28 }
+        return isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
     }
 
     public var projectTitle = "" { didSet { if projectTitle != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
@@ -29,10 +30,37 @@ public final class DraftHeroView: DSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
+    /// Dither (after Capy's composer chips): no headline, just the project as a small chip over the composer's left edge.
+    private var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private let chipIcon = IconView(name: .folder, size: 14)
+    private let chipChevron = IconView(name: .chevronDown, size: 12)
+    static var chipFont: NSFont { DSFont.ui(13, weight: .medium) }
+    private var chipText: String { isScratch ? "No project" : projectTitle }
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         clipsToBounds = true
         addSubview(projectAnchor)
+        addSubview(chipIcon)
+        addSubview(chipChevron)
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+        superview?.needsLayout = true
+    }
+
+    public override func layout() {
+        super.layout()
+        chipIcon.isHidden = !capy
+        chipChevron.isHidden = !capy
+        guard capy else { return }
+        let textWidth = ceil(TextLine(NSAttributedString(string: chipText, attributes: [.font: Self.chipFont])).width)
+        chipIcon.frame = NSRect(x: 8, y: (bounds.height - 14) / 2, width: 14, height: 14)
+        chipChevron.frame = NSRect(x: 8 + 20 + textWidth + 4, y: (bounds.height - 12) / 2, width: 12, height: 12)
+        projectAnchor.frame = NSRect(x: 4, y: 0, width: 8 + 20 + textWidth + 4 + 12 + 4, height: bounds.height)
+        window?.invalidateCursorRects(for: self)
     }
 
     static var sentence: NSFont { DSFont.ui(30) }
@@ -64,6 +92,19 @@ public final class DraftHeroView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
+        if capy {
+            let color = Themed.color(\.foreground, hovered ? 1 : 0.85)
+            chipIcon.strokeColor = color
+            chipChevron.strokeColor = Themed.color(\.mutedForeground)
+            if hovered {
+                ctx.setFillColor(Themed.color(\.foreground, 0.08).cgColor(in: self))
+                ctx.addPath(CGPath(roundedRect: projectAnchor.frame, cornerWidth: 6, cornerHeight: 6, transform: nil))
+                ctx.fillPath()
+            }
+            let line = TextLine(NSAttributedString(string: chipText, attributes: [.font: Self.chipFont, .foregroundColor: color]))
+            draw(line.line, at: CGPoint(x: 28, y: line.baseline(top: 4, lineHeight: 20)), in: ctx)
+            return
+        }
         if isScratch { drawScratch(ctx); return }
         let (_, range) = pieces()
         let lines = headlineLines(width: bounds.width)

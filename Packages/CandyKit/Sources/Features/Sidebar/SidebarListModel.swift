@@ -1,4 +1,5 @@
 import Foundation
+import DesignSystem
 import T3Protocol
 import T3Store
 
@@ -212,7 +213,8 @@ public enum SidebarItem: Equatable, Sendable {
     /// Layout height including the `py-0.5` of a card `li` (Sidebar.tsx:1955-2217). The list adds `gap-px`.
     var height: CGFloat {
         switch self {
-        case .row(let r): r.variant == .card ? 82 : 36
+        // Dither (after Capy): a two-line card, title then a small meta line.
+        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? 48 : 82) : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32

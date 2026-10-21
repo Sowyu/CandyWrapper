@@ -16,6 +16,8 @@ public class ComposerBannerView: DSView {
     /// `--chat-composer-drawer-inset`, per side.
     public static let drawerInset: CGFloat = 22
     static let radius: CGFloat = 18
+    /// Matches the composer's corner, Capy's tighter one under Dither.
+    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : Self.radius }
 
     var variant: Variant { didSet { if variant != oldValue { needsDisplay = true } } }
     /// Docked under another attachment (the queue strip): no top corners and no top border, so
@@ -45,9 +47,9 @@ public class ComposerBannerView: DSView {
         clip.clipsToBounds = true
         addSubview(clip)
         // Glass: the composer surface at 80% over a 12px backdrop blur, saturate 1.14.
-        blur.cornerRadius = Self.radius
+        blur.cornerRadius = cardRadius
         clip.addSubview(blur)
-        surface.layer?.cornerRadius = Self.radius
+        surface.layer?.cornerRadius = cardRadius
         surface.layer?.masksToBounds = true
         surface.layer?.borderWidth = 1
         surface.layer?.addSublayer(tint)
@@ -56,6 +58,9 @@ public class ComposerBannerView: DSView {
     }
 
     public override func updateLayer() {
+        blur.cornerRadius = cardRadius
+        surface.layer?.cornerRadius = cardRadius
+        needsLayout = true
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
         surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
@@ -83,10 +88,10 @@ public class ComposerBannerView: DSView {
         // Taller than the clip so the bottom corners never show. Joined: 1pt above the clip, so
         // the top border falls outside it, and square. Floating: the whole card, `rounded-2xl`.
         let top: CGFloat = joinsAbove && !floating ? -1 : 0
-        surface.frame = NSRect(x: 0, y: top, width: w, height: floating ? h : h + Self.radius - top)
+        surface.frame = NSRect(x: 0, y: top, width: w, height: floating ? h : h + cardRadius - top)
         blur.frame = surface.frame
         // CSS scales radii down to fit the box (a 34pt floating card gets 17); Core Animation does not.
-        let radius = top < 0 ? 0 : floating ? min(Self.radius, h / 2) : Self.radius
+        let radius = top < 0 ? 0 : floating ? min(cardRadius, h / 2) : cardRadius
         surface.layer?.cornerRadius = radius
         blur.cornerRadius = radius
         CATransaction.begin(); CATransaction.setDisableActions(true)

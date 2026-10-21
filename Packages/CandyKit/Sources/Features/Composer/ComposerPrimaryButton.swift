@@ -10,7 +10,7 @@ final class ComposerPrimaryButton: ControlView {
 
     var face: ComposerLogic.PrimaryAction = .send { didSet { if face != oldValue { restyleFace() } } }
     /// Nightly and dev servers fill the send button with stage art; ours is the teddy from the sidebar's candy art.
-    var stageArt = true { didSet { art.isHidden = !stageArt; restyle() } }
+    var stageArt = true { didSet { restyleFace() } }
     var tooltip: String = "" {
         didSet {
             tip.text = tooltip
@@ -52,20 +52,34 @@ final class ComposerPrimaryButton: ControlView {
 
     override var intrinsicContentSize: NSSize { NSSize(width: Self.size, height: Self.size) }
 
+    /// Dither (after Capy's desktop app): a rounded square in the action color with a dark glyph, no stage art.
+    private var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    static let capyRadius: CGFloat = DitherChrome.controlRadius
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyleFace()
+    }
+
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds
         highlight.frame = bounds
         // 32 normally, 28 as the question footer's Stop (`size-7`).
-        let r = bounds.height / 2
+        let r = capy ? Self.capyRadius : bounds.height / 2
         if r > 0, layer?.cornerRadius != r {
             layer?.cornerRadius = r
             fill.cornerRadius = r
             art.layer?.cornerRadius = r
             let crescent = CGMutablePath()
-            crescent.addEllipse(in: bounds)
-            crescent.addEllipse(in: bounds.offsetBy(dx: 0, dy: 1))
+            if capy {
+                crescent.addRoundedRect(in: bounds, cornerWidth: r, cornerHeight: r)
+                crescent.addRoundedRect(in: bounds.offsetBy(dx: 0, dy: 1), cornerWidth: r, cornerHeight: r)
+            } else {
+                crescent.addEllipse(in: bounds)
+                crescent.addEllipse(in: bounds.offsetBy(dx: 0, dy: 1))
+            }
             highlight.path = crescent
         }
         CATransaction.commit()
@@ -82,7 +96,7 @@ final class ComposerPrimaryButton: ControlView {
         icon?.removeFromSuperview()
         icon = nil
         spinner.isHidden = face != .busy
-        let white = NSColor.white
+        let white = capy && face != .stop ? Themed.color(\.primaryForeground) : NSColor.white
         let view: NSView? = switch face {
         case .send: IconView(definition: Self.arrowUp, size: 14, color: white)
         case .stop: IconView(definition: Self.stopSquare, size: 12, color: white)
@@ -93,7 +107,7 @@ final class ComposerPrimaryButton: ControlView {
         case .busy: nil
         }
         if let view { addSubview(view); icon = view }
-        art.isHidden = !stageArt || face == .stop
+        art.isHidden = !stageArt || face == .stop || capy
         needsLayout = true
         restyle()
     }
@@ -113,6 +127,9 @@ final class ComposerPrimaryButton: ControlView {
         if face == .stop {
             fill.backgroundColor = Themed.color(\.destructive, state.hovered ? 1 : 0.9).cgColor(in: self)
             shadowColor = Themed.color(\.destructive)
+        } else if capy {
+            fill.backgroundColor = Themed.color(\.primary, state.hovered ? 0.9 : 1).cgColor(in: self)
+            shadowColor = Themed.color(\.primary)
         } else if stageArt {
             fill.backgroundColor = nil
             shadowColor = .black
@@ -126,7 +143,8 @@ final class ComposerPrimaryButton: ControlView {
         layer?.shadowOpacity = shadowed ? 0.24 : 0
         layer?.shadowRadius = 1
         layer?.shadowOffset = CGSize(width: 0, height: -1)
-        layer?.shadowPath = CGPath(ellipseIn: bounds, transform: nil)
+        layer?.shadowPath = capy ? CGPath(roundedRect: bounds, cornerWidth: Self.capyRadius, cornerHeight: Self.capyRadius, transform: nil)
+            : CGPath(ellipseIn: bounds, transform: nil)
         // Enabled: the white top highlight; held: `inset 0 1px black/8%`.
         highlight.fillColor = state.active ? Themed.black(0.08).cgColor : Themed.white(0.16).cgColor
         if enabled { if highlight.superlayer == nil { layer?.addSublayer(highlight) } } else { highlight.removeFromSuperlayer() }

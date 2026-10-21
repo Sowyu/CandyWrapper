@@ -33,16 +33,16 @@ struct GlassThemeTests {
         #expect(mixed.light?.builtInId == "ocean")
     }
 
-    /// Dither keeps the stock palette and solid surfaces, and names its picture (nil for the desktop picture).
+    /// Dither wears its own Capy palette (near-black chrome, teal accent) and names its picture (nil for the desktop picture).
     @Test func ditherFrostsAndNamesItsPicture() {
         let dither = ThemeDefinition.dither
         #expect(ThemePalette.reservedIds.contains(dither.id))
-        #expect(ThemeCardDefinition(dither).previews == ThemeCardDefinition.standard.previews)
+        #expect(ThemeCardDefinition(dither).previews != ThemeCardDefinition.standard.previews)
         let defaults = UserDefaults(suiteName: "cw.dither.tests.\(UUID().uuidString)")!
         defaults.set(dither.id, forKey: "theme.preference")
         let (input, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)
         #expect(!input.glassLight && !input.glassDark && input.ditherLight && input.ditherDark)
-        #expect(input.light == nil && input.dark == nil)
+        #expect(input.dark?.colors[.sidebar] == "#0a0a0b" && input.dark?.colors[.messageAction] == "#2b948b")
         #expect(input.ditherPicture == DitherPicture.path)
         defaults.set(ThemeDefinition.glass.id, forKey: "theme.preference")
         let (glass, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)

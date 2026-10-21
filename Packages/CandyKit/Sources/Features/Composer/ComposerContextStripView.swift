@@ -75,6 +75,10 @@ public final class ComposerContextStripView: DSView {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
         surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        // Dither (after Capy's machine and worktree row): the controls sit plain under the composer, no strip card.
+        let capy = ThemeRuntime.isDither(dark: dark)
+        surface.isHidden = capy
+        blur.isHidden = capy
         surface.layer?.borderColor = (dark ? Themed.white(0.07) : Themed.black(0.08)).cgColor
         // Dark only: rgb(0 0 0 / 18%) at the seam fading out over 10px, over a 1% white fill.
         seam.isHidden = !dark
