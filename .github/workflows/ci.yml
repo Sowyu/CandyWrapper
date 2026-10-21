@@ -28,9 +28,19 @@ jobs:
         run: swift build --build-tests
       # Pixel-fidelity suites compare against reference renders from the developer's Mac and the integration
       # suites need a local T3 server, so CI runs the logic suites; scripts/test still runs everything locally.
+      # Also skipped: suites that read the runner's display settings (it has Reduce Motion on) or the gallery
+      # renders the fidelity suites write.
       - name: Logic tests
         working-directory: Packages/CandyKit
-        run: swift test --skip-build --skip 'Fidelity|Integration|Stress|FrameDecoder|Pixel|Snapshot'
+        run: >-
+          swift test --skip-build
+          --skip 'Fidelity|Integration|Stress|FrameDecoder|Pixel|Snapshot'
+          --skip 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests'
+          --skip 'MarkdownStreamFadeTests|WallpaperBackdropTests|NightlyCompatFeaturesTests|gallerySection'
+      # Wall-clock ping and watchdog timers: they starve when run alongside the parallel suites.
+      - name: Connection timing tests
+        working-directory: Packages/CandyKit
+        run: swift test --skip-build --no-parallel --filter 'RPCConnectionTests|SupervisorTests|ServerUpdaterTests'
 
   app:
     name: App build
