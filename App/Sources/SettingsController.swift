@@ -79,6 +79,8 @@ final class SettingsController {
     var revokingClient: String?
     var revokingOthers = false
     var ticker: Timer?
+    /// Rereads the T3 Connect link state every 30 s while Connections shows a tunnel (`updateLinkPoll`).
+    var linkPoll: Timer?
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 

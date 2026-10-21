@@ -94,6 +94,8 @@ public struct CloudLinkState: Codable, Sendable, Equatable {
     public var managedTunnelActive: Bool?
     public var publishAgentActivity: Bool
     public var holdWebhooksWhileOffline: Bool?
+    /// `reachability` (environmentHttp.ts:503-504): the server's latest T3 Connect check, absent until one finishes.
+    public var reachability: ConnectReachability?
 
     public init(linked: Bool, managedTunnelActive: Bool? = nil, publishAgentActivity: Bool, holdWebhooksWhileOffline: Bool? = nil) {
         self.linked = linked; self.managedTunnelActive = managedTunnelActive
@@ -103,6 +105,41 @@ public struct CloudLinkState: Codable, Sendable, Equatable {
     /// Older servers lack `managedTunnelActive`; for them a link always has a tunnel (useCloudLinkController.ts).
     public var tunnelActive: Bool { managedTunnelActive ?? linked }
     public var holdsWebhooks: Bool { holdWebhooksWhileOffline ?? false }
+}
+
+/// `EnvironmentConnectReachability` (environmentHttp.ts:411-442): whether other devices reach this
+/// environment through its tunnel. `reachable` carries the tunnel facts, `unreachable` the cause and fix.
+public struct ConnectReachability: Codable, Sendable, Equatable {
+    public var status: String
+    public var checkedAt: String?
+    public var readyConnections: Int?
+    public var `protocol`: String?
+    public var cause: String?
+    public var reason: String?
+    public var hint: String?
+    public var fix: String?
+
+    public init(status: String, checkedAt: String? = nil, readyConnections: Int? = nil, protocol: String? = nil,
+                cause: String? = nil, reason: String? = nil, hint: String? = nil, fix: String? = nil) {
+        self.status = status; self.checkedAt = checkedAt; self.readyConnections = readyConnections; self.protocol = `protocol`
+        self.cause = cause; self.reason = reason; self.hint = hint; self.fix = fix
+    }
+
+    /// The row's status line: `formatConnectReachable` ("Tunnel connected · 4 connections · QUIC", :445-456)
+    /// or the unreachable reason, hint and fix (SavedEnvironmentRows.tsx:500-503). Nil for other statuses.
+    public var statusLine: String? {
+        switch status {
+        case "reachable":
+            var parts = ["Tunnel connected"]
+            if let n = readyConnections { parts.append("\(n) connection\(n == 1 ? "" : "s")") }
+            if let p = `protocol`, !p.isEmpty { parts.append(p.uppercased()) }
+            return parts.joined(separator: " · ")
+        case "unreachable":
+            return [reason, hint, fix.map { "Fix: \($0)" }].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " ")
+        default:
+            return nil
+        }
+    }
 }
 
 /// `POST /api/connect/preferences` (`EnvironmentCloudPreferencesRequest`). Omit the hold flag to keep it.
