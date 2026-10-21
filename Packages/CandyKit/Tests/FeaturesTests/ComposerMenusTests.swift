@@ -202,6 +202,18 @@ struct ComposerMenusTests {
         #expect(ComposerContext.threadLink("abc", label: " ") == "[abc](t3-thread://v1/abc)")
     }
 
+    /// `threadContextsOutsideEnvironment` (c1377176b1): only referenced thread records on another machine.
+    @Test func threadsOutsideEnvironment() {
+        let here = ComposerContext.threadRecord(threadId: "a", title: "Here", environmentId: "env-1")
+        let there = ComposerContext.threadRecord(threadId: "b", title: "There", environmentId: "env-2")
+        let unused = ComposerContext.threadRecord(threadId: "c", title: "Unused", environmentId: "env-2")
+        let records = [here, there, unused].reduce(into: [String: JSONValue]()) { $0[$1["contextId"]!.stringValue!] = $1 }
+        let prompt = [("a", "Here"), ("b", "There")].map { ComposerContext.reference(ComposerContext.threadReference(threadId: $0.0, title: $0.1)) }
+            .joined(separator: " ")
+        #expect(ComposerContext.threadsOutsideEnvironment(prompt, records: records, environmentId: "env-1") == [there])
+        #expect(ComposerContext.threadsOutsideEnvironment(prompt, records: records, environmentId: "env-3").count == 2)
+    }
+
     @Test func clipboardFragmentRoundTrip() throws {
         let thread = ComposerContext.threadRecord(threadId: "abc", title: "Login", environmentId: "env")
         let text = "see [Login](t3-context://v1/thread/thread_abc) <b>"
