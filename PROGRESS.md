@@ -30,6 +30,8 @@ Split by files so nobody edits the same ones. Claim a task by adding your agent 
 
 - [ ] Remaining 3473 parity, most seen first: decline approvals on send, the background work banner, thread link chips, the pele Mermaid renderer, PR reply nesting and change breakdown, connection diagnosis, Add to another machine, webhook filters and dedupe, usage pool refills and smaller items. See [the audit](docs/research/nightly-diff-3473.md#2-visible-changes).
 
+- [ ] (taken 2026-10-22) 33 more 3473 gaps, found by checking the 115 commits the first research pass never covered: snooze rules, terminal path links, project scripts in the shell history, the SSH verification wording, Azure DevOps Server links, palette PR badges, wide table wrapping, SnapShots during questions and more. Four agents are porting them. See [the audit, section 6](docs/research/nightly-diff-3473.md#6-commits-the-first-pass-missed).
+
 - [ ] Teach `scripts/gen-settings-search.py` CandyWrapper's exceptions (no mobile app or math rows yet, "Keep threads with a PR", "Open pull requests in CandyWrapper"), so the catalog can be regenerated instead of hand-edited. Found 2026-10-21.
 
 - [ ] Micro-benchmarks ran slower on 2026-10-21 than in the 2026-10-19 run (ada72ad) already at a39a89b, before the 3473 catch-up: markdown_parse 13.1 to 19.8 ms, markdown_parse_lines 36 to 49 ms, huge_update_append 1.9 to 3.2 ms, huge_update_tool_rows_offmain 19 to 31 ms. The app metrics stayed within thresholds. Run ada72ad and a39a89b in the same hour to tell a commit since then from the Swift 6.3 build change or the machine (docs/perf/2026-10-21-80ed242-w1.md, [the 3473 audit](docs/research/nightly-diff-3473.md#5-review-and-remaining-work)).
