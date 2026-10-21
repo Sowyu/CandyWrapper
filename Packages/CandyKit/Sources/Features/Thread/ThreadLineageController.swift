@@ -229,7 +229,9 @@ public final class ThreadLineageController {
         bar.driver = provider?.driver
         bar.providerName = provider?.displayName ?? provider?.driver ?? ""
         bar.modelLabel = model.map { ModelNames.trigger($0) } ?? ThreadRelationships.modelSlugName(selection?.model ?? "")
-        bar.effortLabel = selection.flatMap { ThreadRelationships.effortLabel($0, model: model) }
+        bar.effortLabel = selection.flatMap {
+            ThreadRelationships.effortLabel($0, model: model, reported: ThreadRelationships.reportedSelection(projection, instanceId: $0.instanceId))
+        }
         bar.status = ThreadRelationships.providerSubagentStatus(projection)
         bar.onOpenParent = parent.map { p in { [weak self] in self?.open(p) } }
         if panel.composer.replacement !== bar { panel.composer.replacement = bar }

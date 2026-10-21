@@ -255,4 +255,22 @@ import Testing
         #expect(SecretRequests.failureMessage(tag: "RpcClientError", message: "value abc123") == SecretRequests.genericFailure)
         #expect(SecretRequests.failureMessage(tag: "SecretRequestError", message: "  ") == SecretRequests.genericFailure)
     }
+
+    /// 53ef45feac: the bar's effort shows only when the selection states it or the provider reported it for the
+    /// same instance and model; the catalog default no longer counts.
+    @Test func effortLabelNeedsAStatedOrReportedValue() {
+        let model = ServerProviderModel(slug: "opus", name: "Opus", optionDescriptors: [
+            ProviderOptionDescriptor(id: "effort", label: "Effort", type: .select,
+                                     options: [.init(id: "medium", label: "Medium"), .init(id: "high", label: "High", isDefault: true)],
+                                     currentValue: .string("high")),
+        ])
+        let bare = ModelSelection(instanceId: "claude", model: "opus")
+        let stated = ModelSelection(instanceId: "claude", model: "opus", options: .array([.object(["id": .string("effort"), "value": .string("medium")])]))
+        #expect(ThreadRelationships.effortLabel(bare, model: model) == nil)
+        #expect(ThreadRelationships.effortLabel(stated, model: model) == "Medium")
+        #expect(ThreadRelationships.effortLabel(bare, model: model, reported: stated) == "Medium")
+        let otherModel = ModelSelection(instanceId: "claude", model: "sonnet", options: .array([.object(["id": .string("effort"), "value": .string("medium")])]))
+        #expect(ThreadRelationships.effortLabel(bare, model: model, reported: otherModel) == nil)
+    }
+
 }
