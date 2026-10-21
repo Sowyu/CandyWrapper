@@ -253,3 +253,22 @@ struct MarkdownTests {
         #expect(box.laidOutCount < 80)
     }
 }
+
+/// 834f0e3a1b: Windows paths keep their backslashes (shared/src/markdownPipeline.test.ts, the prose case).
+struct MarkdownWindowsPathTests {
+    private func text(_ markdown: String) -> String {
+        MarkdownDocument(parsing: markdown).blocks.map { block -> String in
+            guard case .paragraph(let runs) = block else { return "" }
+            return runs.map { $0.code ? "<code>\($0.text)</code>" : $0.text }.joined()
+        }.joined()
+    }
+
+    @Test func drivePathsInProseRenderAsWritten() {
+        #expect(text(#"Saved to C:\Users\me\.t3\_build and (C:\.scratch) and C:/work\.config."#)
+            == #"Saved to C:\Users\me\.t3\_build and (C:\.scratch) and C:/work\.config."#)
+        #expect(text(#"Escaped C:\\Users\\me"#) == #"Escaped C:\\Users\\me"#)
+        #expect(text(#"See C:\x and \*this\* and Note:\*that\*."#) == #"See C:\x and *this* and Note:*that*."#)
+        #expect(text(#"`C:\me\.t3` and C:\me\.t3"#) == #"<code>C:\me\.t3</code> and C:\me\.t3"#)
+        #expect(MarkdownDocument(parsing: "```\nC:\\me\\.t3\n```").blocks == [.code(language: "text", title: nil, code: #"C:\me\.t3"#)])
+    }
+}
