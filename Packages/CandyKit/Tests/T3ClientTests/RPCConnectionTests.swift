@@ -62,7 +62,7 @@ struct RPCConnectionTests {
         let (c, socket) = await makeConnection()
         async let first = c.request("server.getConfig")
         #expect(await eventually { socket.sent.count == 1 })
-        #expect(socket.sent[0] == .request(RPCRequest(id: .string("1"), tag: "server.getConfig", payload: .object([:]))))
+        #expect(socket.sent.first == .request(RPCRequest(id: .string("1"), tag: "server.getConfig", payload: .object([:]))))
         socket.deliver(.exit(requestId: .string("1"), exit: .success(.object(["ok": .bool(true)]))))
         #expect(try await first == .object(["ok": .bool(true)]))
 
@@ -95,7 +95,7 @@ struct RPCConnectionTests {
 
         #expect(try await it.next() == .number(2))
         #expect(await eventually { socket.sent.count == 2 })
-        #expect(socket.sent[1] == .ack(.string("1")))
+        #expect(socket.sent.dropFirst().first == .ack(.string("1")))
 
         // A consumer already waiting gets the value and acks at once.
         let copy = it
@@ -104,7 +104,7 @@ struct RPCConnectionTests {
         socket.deliver(.chunk(requestId: .string("1"), values: [.number(3)]))
         #expect(try await third.value == .number(3))
         #expect(await eventually { socket.sent.count == 3 })
-        #expect(socket.sent[2] == .ack(.string("1")))
+        #expect(socket.sent.dropFirst(2).first == .ack(.string("1")))
 
         socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
         #expect(try await it.next() == nil)

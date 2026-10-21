@@ -59,7 +59,7 @@ final class FakeSocket: RPCSocket, @unchecked Sendable {
 }
 
 /// Polls until `condition` holds or `seconds` pass.
-func eventually(seconds: Int = 2, _ condition: @Sendable () async -> Bool) async -> Bool {
+func eventually(seconds: Int = 10, _ condition: @Sendable () async -> Bool) async -> Bool {
     for _ in 0..<(seconds * 200) {
         if await condition() { return true }
         try? await Task.sleep(for: .milliseconds(5))

@@ -93,7 +93,7 @@ public final class KeybindingsSettingsView: SettingsPageBase {
         var firstOfCommand = Set<String>()
         groupViews = KeybindingsLogic.group(rows).map { group in
             let rowViews = group.rows.map { row -> KeybindingRowView in
-                let v = rowViews[row.id].flatMap { $0.row == row ? $0 : nil } ?? KeybindingRowView(row: row)
+                let v = self.rowViews[row.id].flatMap { $0.row == row ? $0 : nil } ?? KeybindingRowView(row: row)
                 v.allRows = { [weak self] in self?.rows ?? [] }
                 v.onSave = { [weak self] target, replace in self?.context.saveKeybinding?(target, replace) }
                 v.onRemove = { [weak self] row in self?.context.removeKeybinding?(row) }

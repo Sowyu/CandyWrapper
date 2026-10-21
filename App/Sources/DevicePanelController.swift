@@ -85,6 +85,8 @@ final class DevicePanelController {
     /// The environment `subscription` follows. T3 keys device state by environment alone
     /// (state/device.ts:33-39, `input: {}`), so a thread switch within one environment keeps the stream.
     private var subscribedEnvironment: String?
+    /// The session `subscription` runs on: a replaced session for the same environment needs a new stream.
+    private weak var subscribedShell: ShellSession?
     /// `device.list` went out while the panel shows. DevicePanel.tsx:46-49 lists once the panel is
     /// visible, the state has loaded and the host isn't disabled; a hidden panel never lists.
     private var listedWhileVisible = false
@@ -96,11 +98,12 @@ final class DevicePanelController {
             thread = next; selected = nil
         }
         guard let thread, let env = thread.environmentId, let shell = environments.session(env) else {
-            stopStream(); subscription?.cancel(); subscription = nil; subscribedEnvironment = nil; state = nil; load?.cancel(); return
+            stopStream(); subscription?.cancel(); subscription = nil; subscribedEnvironment = nil; subscribedShell = nil; state = nil; load?.cancel(); return
         }
-        if subscription == nil || subscribedEnvironment != env {
+        if subscription == nil || subscribedEnvironment != env || subscribedShell !== shell {
             subscription?.cancel(); state = nil; listedWhileVisible = false
             subscribedEnvironment = env
+            subscribedShell = shell
             subscription = shell.supervisor.subscribe("subscribeDeviceState", payload: { .object([:]) }, handler: { [weak self] event in
                 guard case .value(let json) = event, let state = try? JSONValueDecoder().decode(DevicePanelState.self, from: json) else { return }
                 await MainActor.run { guard self?.subscribedEnvironment == env else { return }; self?.receive(state) }

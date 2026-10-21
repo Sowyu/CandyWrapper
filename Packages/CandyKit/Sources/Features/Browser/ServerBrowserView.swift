@@ -334,7 +334,7 @@ public final class ServerBrowserView: DSView {
         let unit: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 16
         let dx = Double(-event.scrollingDeltaX * unit), dy = Double(-event.scrollingDeltaY * unit)
         let old = pendingWheel
-        pendingWheel = (p.x, p.y, (old?.dx ?? 0) + dx, (old?.dy ?? 0) + dy, modifiers(event))
+        pendingWheel = (Double(p.x), Double(p.y), (old?.dx ?? 0) + dx, (old?.dy ?? 0) + dy, modifiers(event))
         scheduleFlush()
     }
 

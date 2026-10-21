@@ -151,10 +151,12 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         let rowWidths = rows.map { 2 + 12 + 8 + ceil($0.block?.naturalWidth ?? $0.label.textWidth) }
         let content = max(ceil(title.textWidth), rowWidths.max() ?? 0, footer == nil ? 0 : 300)
         let width = min(Self.maxWidth, content + 2 * (8 + 4) + 2)
-        let rowsHeight = rows.isEmpty ? 0 : rows.map { height(of: $0, cardWidth: width) }.reduce(0, +) + CGFloat(rows.count - 1) * 6
-        var height = 4 + 8 + 15 + (rows.isEmpty ? 0 : 8 + rowsHeight) + 8 + 4 + 2
-        if let footer { height += 8 + 1 + 8 + footer.popupSize.height - 16 }
-        return CGSize(width: width, height: height)
+        let rowHeights: [CGFloat] = rows.map { height(of: $0, cardWidth: width) }
+        let rowsHeight: CGFloat = rows.isEmpty ? 0 : rowHeights.reduce(0, +) + CGFloat(rows.count - 1) * 6
+        let rowsBlock: CGFloat = rows.isEmpty ? 0 : 8 + rowsHeight
+        var total: CGFloat = 4 + 8 + 15 + rowsBlock + 8 + 4 + 2
+        if let footer { total += 8 + 1 + 8 + footer.popupSize.height - 16 }
+        return CGSize(width: width, height: total)
     }
     public override var intrinsicContentSize: NSSize { popupSize }
 
