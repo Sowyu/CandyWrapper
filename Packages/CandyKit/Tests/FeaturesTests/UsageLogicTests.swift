@@ -105,4 +105,13 @@ struct UsageLogicTests {
         #expect(ScheduledTaskScope.matches(project, environmentId: "a", projectId: "p"))
         #expect(!ScheduledTaskScope.matches(project, environmentId: "a", projectId: "q"))
     }
+
+    /// `paceMarkStyles` and `usePaceMark` (UsageLimits.tsx:77-111): clamped 3px inside, none under 6px.
+    @Test func paceMarkClampsInsideTheBar() {
+        #expect(UsageLimitWindowBar.paceMark(timeLeft: 50, width: 200) == 100)
+        #expect(UsageLimitWindowBar.paceMark(timeLeft: 0, width: 200) == 3)
+        #expect(UsageLimitWindowBar.paceMark(timeLeft: 100, width: 200) == 197)
+        #expect(UsageLimitWindowBar.paceMark(timeLeft: 50, width: 5) == nil)
+        #expect(UsageLimitWindowBar.paceMark(timeLeft: nil, width: 200) == nil)
+    }
 }
