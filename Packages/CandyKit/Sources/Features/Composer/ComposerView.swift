@@ -672,7 +672,6 @@ public final class ComposerView: DSView {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent || planFollowUp,
               ComposerLogic.lengthValidationMessage(prompt) == nil else { return }
         onSend?(prompt, mode, background)
-        DitherArtView.ripple(from: self)
     }
 
     // MARK: Drops on the padding
