@@ -82,6 +82,8 @@ public final class SidebarLayoutView: DSView {
     public private(set) var isOpen = true
     /// The Glass theme's frost under everything, present only while it shows.
     private var glassBackdrop: WallpaperBackdropView?
+    /// The Dither theme's picture in the main panel, present only while it shows.
+    private var ditherArt: DitherArtView?
     /// Preferred width; the drawn width is this clamped to the window (`effectiveWidth`).
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
@@ -95,9 +97,9 @@ public final class SidebarLayoutView: DSView {
 
     /// The main column's page: the thread panel, Settings or a utility page. Setting it takes the others out.
     public var mainContent: NSView? {
-        get { main.subviews.first }
+        get { main.subviews.first { !($0 is DitherArtView) } }
         set {
-            for view in main.subviews where view !== newValue { view.removeFromSuperview() }
+            for view in main.subviews where view !== newValue && !(view is DitherArtView) { view.removeFromSuperview() }
             if let newValue, newValue.superview !== main { main.addSubview(newValue) }
             needsLayout = true
         }
@@ -185,6 +187,7 @@ public final class SidebarLayoutView: DSView {
     /// calls `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
     private func updateGlass() {
         glassBackdrop = WindowGlass.syncBackdrop(glassBackdrop, in: self)
+        ditherArt = DitherArtView.sync(ditherArt, in: main)
     }
 
     /// `sidebar.toggle` (Mod+B by default; the app's shortcut dispatcher calls it).
@@ -228,6 +231,8 @@ public final class SidebarLayoutView: DSView {
 
     public override func layout() {
         super.layout()
+        // The main page may have changed, say from a new thread to Settings.
+        ditherArt?.updateScrim()
         let w = effectiveWidth
         // Offcanvas: the container slides fully off screen to `left: -width`, the gap collapses to 0. Mid-slide
         // the gap is the open share of the width, on whole device pixels so the main panel's text stays sharp.
@@ -242,7 +247,7 @@ public final class SidebarLayoutView: DSView {
         sidebar.layer?.setAffineTransform(sliding ? CGAffineTransform(translationX: gap - w, y: 0) : .identity)
         CATransaction.commit()
         main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
-        main.subviews.first?.frame = main.bounds
+        for view in main.subviews { view.frame = main.bounds }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
         rail.isHidden = !isOpen // collapsed offcanvas rail has `pointer-events: none`

@@ -138,36 +138,6 @@ public enum WallpaperBlur {
         var pixels: CGSize
         var scale: CGFloat
         var dark: Bool
-        /// The Dither theme: 2pt dots in two grays instead of the blur.
-        var dither = false
-    }
-
-    /// Dither dots, in points.
-    nonisolated static let ditherDot: CGFloat = 2
-    /// The two grays, sRGB. They stay inside the desktop range `WindowGlass.frostWorstBackground` assumes
-    /// (10% gray in light, 85% in dark), so text on the panes keeps its contrast.
-    nonisolated static func ditherTones(dark: Bool) -> (low: UInt8, high: UInt8) { dark ? (8, 190) : (64, 255) }
-
-    /// The 8 x 8 Bayer matrix, thresholds 0..<64.
-    nonisolated static let bayer: [UInt8] = [
-        0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26,
-        12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22,
-        3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25,
-        15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21,
-    ]
-
-    /// Ordered dither of RGBX pixels in place, each pixel to one of `ditherTones` by its luminance.
-    nonisolated static func dither(_ data: UnsafeMutablePointer<UInt8>, width w: Int, height h: Int, dark: Bool) {
-        let (low, high) = ditherTones(dark: dark)
-        for y in 0..<h {
-            for x in 0..<w {
-                let i = (y * w + x) * 4
-                let l = 0.2126 * Float(data[i]) + 0.7152 * Float(data[i + 1]) + 0.0722 * Float(data[i + 2])
-                let threshold = (Float(bayer[(y & 7) * 8 + (x & 7)]) + 0.5) * 4
-                let v = l > threshold ? high : low
-                data[i] = v; data[i + 1] = v; data[i + 2] = v
-            }
-        }
     }
 
     /// The blurred picture for `request`, or nil if it can't be read, is guarded or changes on its own. Touches no
@@ -196,8 +166,7 @@ public enum WallpaperBlur {
         let rect = imageRect(image: CGSize(width: width * natural, height: height * natural), screen: request.pixels,
                              placement: request.placement)
 
-        let shrink = request.dither ? ditherDot * request.scale : downscale
-        let canvas = CGRect(x: 0, y: 0, width: ceil(request.pixels.width / shrink), height: ceil(request.pixels.height / shrink))
+        let canvas = CGRect(x: 0, y: 0, width: ceil(request.pixels.width / downscale), height: ceil(request.pixels.height / downscale))
         let toCanvas = canvas.width / request.pixels.width
         let target = CGSize(width: rect.width * toCanvas, height: rect.height * toCanvas)
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
@@ -216,10 +185,6 @@ public enum WallpaperBlur {
         let placed = CGRect(x: rect.minX * toCanvas, y: rect.minY * toCanvas, width: target.width, height: target.height)
         if request.placement == .tile { ctx.draw(thumbnail, in: placed, byTiling: true) } else { ctx.draw(thumbnail, in: placed) }
         guard let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
-        if request.dither {
-            dither(data, width: w, height: h, dark: request.dark)
-            return ctx.makeImage()
-        }
 
         // The window server blurs and saturates gamma-encoded sRGB, not linear light, so this does too.
         var plane = (0..<w * h * 3).map { Float(data[$0 / 3 * 4 + $0 % 3]) }
@@ -275,21 +240,18 @@ public enum WallpaperBlur {
     @MainActor
     static func request(for screen: NSScreen, dark: Bool) -> Request? {
         let workspace = NSWorkspace.shared
-        guard var url = workspace.desktopImageURL(for: screen) ?? ThemeRuntime.ditherPicture, url.isFileURL else { return nil }
+        guard var url = workspace.desktopImageURL(for: screen), url.isFileURL else { return nil }
         let options = workspace.desktopImageOptions(for: screen) ?? [:]
         var placement = placement(scaling: (options[.imageScaling] as? NSNumber)?.uintValue,
                                   clip: (options[.allowClipping] as? NSNumber)?.boolValue)
         #if DEBUG
         if let override { url = override.url; placement = override.placement ?? placement }
         #endif
-        var fill: [CGFloat] = [0, 0, 0]
-        if let c = (options[.fillColor] as? NSColor)?.usingColorSpace(.sRGB) { fill = [c.redComponent, c.greenComponent, c.blueComponent] }
-        let dither = ThemeRuntime.isDither(dark: dark)
-        if dither, let picture = ThemeRuntime.ditherPicture { url = picture; placement = .fill; fill = [0, 0, 0] }
+        let fill = (options[.fillColor] as? NSColor)?.usingColorSpace(.sRGB)
         let scale = screen.backingScaleFactor
-        return Request(url: url, placement: placement, fill: fill,
-                       pixels: CGSize(width: screen.frame.width * scale, height: screen.frame.height * scale), scale: scale, dark: dark,
-                       dither: dither)
+        return Request(url: url, placement: placement,
+                       fill: fill.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] } ?? [0, 0, 0],
+                       pixels: CGSize(width: screen.frame.width * scale, height: screen.frame.height * scale), scale: scale, dark: dark)
     }
 }
 
@@ -449,8 +411,7 @@ public final class WallpaperBackdropView: NSView {
         refreshes += 1
         let dark = effectiveAppearance.isDark
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        // A dithered picture is the theme itself, so it stays on inactive windows; the blur gives way to the material.
-        let flat = reduce || !(ThemeRuntime.isDither(dark: dark) || window.isMainWindow || window.isKeyWindow)
+        let flat = reduce || !(window.isMainWindow || window.isKeyWindow)
         let list = reduce ? [] : screens(dark)
         store.keep(Set(list.map(\.display)))
         var images: [CGDirectDisplayID: (CGImage, CGRect)] = [:]
@@ -478,8 +439,6 @@ public final class WallpaperBackdropView: NSView {
             let plate = plates[id]?.layer ?? makePlate()
             plates[id] = (plate, screen)
             if (plate.contents as! CGImage?) !== image { plate.contents = image }
-            // Dither dots stay square; the blur scales smoothly.
-            plate.magnificationFilter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .nearest : .linear
             plate.isHidden = !picture
         }
         showsPicture = picture

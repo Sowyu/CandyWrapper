@@ -55,16 +55,15 @@ public struct ThemeDefinition: Equatable, Sendable {
     public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
                                               colors: standardLightColors, variants: [.dark: standardDarkColors])
 
-    /// CandyWrapper's own theme, not in T3: Glass's panes over a picture the user chose (the desktop picture until
-    /// they do), dithered in two grays (`WallpaperBlur.dither`) instead of blurred.
+    /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
+    /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
     public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Dither", appearance: .light,
                                                colors: standardLightColors, variants: [.dark: standardDarkColors])
 
     /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
     public static let pickerBuiltIns = builtIns + [glass, dither]
 
-    /// Glass and Dither both wear the stock palette over see-through panes.
-    public var isWindowGlass: Bool { id == Self.glass.id || isDither }
+    public var isWindowGlass: Bool { id == Self.glass.id }
     public var isDither: Bool { id == Self.dither.id }
 }
 

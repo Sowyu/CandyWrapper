@@ -220,7 +220,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         choose.action = { [weak self] in self?.chooseDitherPicture() }
         desktop.action = { [weak self] in DitherPicture.clear(); ThemeLibrary.shared.apply(); self?.refresh() }
         let group = SettingsControlGroup([desktop, choose], gap: 6)
-        let r = row(nil, title: "Dither picture", detail: "The picture the Dither theme shows behind the window. Without one it uses the desktop picture.",
+        let r = row(nil, title: "Dither picture", detail: "The picture the Dither theme shows in the main panel. Without one it uses the desktop picture.",
                     control: group)
         binder.add { [weak group] in
             desktop.isHidden = DitherPicture.path == nil

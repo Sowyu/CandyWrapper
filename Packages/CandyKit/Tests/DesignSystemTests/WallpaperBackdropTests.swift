@@ -6,40 +6,6 @@ import Testing
 struct WallpaperBackdropTests {
     typealias W = WallpaperBlur
 
-    /// Dither: a full Bayer matrix, only the two grays, 2pt dots, and lighter input gives more light dots.
-    @Test func ditherRendersTwoGraysInPointDots() throws {
-        #expect(Set(W.bayer) == Set(0..<64))
-        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        // A left-to-right black to white ramp.
-        let ctx = CGContext(data: nil, width: 256, height: 64, bitsPerComponent: 8, bytesPerRow: 1024,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        for x in 0..<256 { ctx.setFillColor(gray: CGFloat(x) / 255, alpha: 1); ctx.fill(CGRect(x: x, y: 0, width: 1, height: 64)) }
-        let url = dir.appending(path: "ramp.png")
-        let rep = NSBitmapImageRep(cgImage: ctx.makeImage()!)
-        try rep.representation(using: .png, properties: [:])!.write(to: url)
-        for dark in [false, true] {
-            let request = W.Request(url: url, placement: .stretch, fill: [0, 0, 0], pixels: CGSize(width: 1024, height: 256), scale: 2,
-                                    dark: dark, dither: true)
-            let image = try #require(W.render(request))
-            #expect(image.width == 256 && image.height == 64)
-            let out = NSBitmapImageRep(cgImage: image)
-            let bytes = try #require(image.dataProvider?.data as Data?)
-            let tones = W.ditherTones(dark: dark)
-            var light = [0, 0]
-            for y in 0..<64 {
-                for x in 0..<256 {
-                    let v = bytes[y * image.bytesPerRow + x * 4]
-                    #expect(v == tones.low || v == tones.high)
-                    if v == tones.high { light[x < 128 ? 0 : 1] += 1 }
-                }
-            }
-            #expect(light[1] > light[0] * 2)
-            if let png = out.representation(using: .png, properties: [:]) { try? png.write(to: URL(filePath: "/tmp/dither-ramp-\(dark).png")) }
-        }
-    }
-
     @Test func optionsMapToTheDesktopsPlacements() {
         #expect(W.placement(scaling: nil, clip: nil) == .fill)
         #expect(W.placement(scaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue, clip: true) == .fill)
