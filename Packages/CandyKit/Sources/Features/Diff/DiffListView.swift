@@ -204,14 +204,25 @@ public final class DiffListView: DSView {
         reconfigureAll()
     }
 
-    /// Keeps the first visible row's file header in place when a file above it folds.
+    /// Keeps the first visible row at the same viewport offset through a relayout (a file above it
+    /// folds, an annotation grows). If that row is gone, its file folded: show the file header.
     private func relayoutKeepingAnchor() {
         let top = visibleRect.minY
-        let anchorFile = rowLayout.rows.isEmpty ? -1 : Int(rowLayout.rows[rowLayout.rowIndex(at: top)].file)
-        let offset = anchorFile >= 0 ? top - rowLayout.rows[rowLayout.headerRow[anchorFile]].top : 0
+        let anchor = rowLayout.rows.isEmpty ? nil : rowLayout.rows[rowLayout.rowIndex(at: top)]
+        let offset = anchor.map { top - $0.top } ?? 0
         relayout()
-        if anchorFile >= 0 {
-            let y = rowLayout.rows[rowLayout.headerRow[anchorFile]].top + min(offset, 0)
+        guard let anchor else { return }
+        let file = Int(anchor.file)
+        guard rowLayout.headerRow.indices.contains(file) else { return }
+        let end = file + 1 < rowLayout.headerRow.count ? rowLayout.headerRow[file + 1] : rowLayout.rows.count
+        let same = rowLayout.rows[rowLayout.headerRow[file]..<end].first {
+            $0.kind == anchor.kind && $0.left == anchor.left && $0.right == anchor.right
+        }
+        if let same {
+            let y = max(0, min(same.top + offset, frame.height - viewportHeight))
+            if y != visibleRect.minY { scrollTo(NSPoint(x: 0, y: y)) }
+        } else {
+            let y = rowLayout.rows[rowLayout.headerRow[file]].top
             if y < visibleRect.minY { scrollTo(NSPoint(x: 0, y: y)) }
         }
     }
