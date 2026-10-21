@@ -25,6 +25,8 @@ final class ServerController {
     /// `latest` came from the live session, not the disk cache.
     private var latestIsLive = false
     private var reported: LocalServerLifecycle.Activity?
+    /// Terminals running a subprocess in an environment; set by the app once the terminal controller exists.
+    var runningTerminals: ((String) -> Int)?
     private var activityUpdate: Task<Void, Never>?
     private var connecting = false
     private var connectTask: Task<Void, Never>?
@@ -246,7 +248,8 @@ final class ServerController {
         if let window, window.isKeyWindow || window.occlusionState.contains(.visible) { connect() }
     }
 
-    private func reportActivity() {
+    /// Call when the inputs change; an unchanged report is dropped.
+    func reportActivity() {
         let threads = latest?.threads ?? []
         let activity = LocalServerLifecycle.Activity(
             windowVisible: window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false,
@@ -254,8 +257,8 @@ final class ServerController {
             appActive: NSApp.isActive,
             activeRuns: threads.count { $0.activeRunId != nil },
             pendingRequests: threads.count { $0.pendingRuntimeRequest != nil },
-            // ponytail: no terminals yet, count them when the terminal drawer lands
-            runningTerminals: 0)
+            // Only our own server's environment: other environments' terminals don't keep it up.
+            runningTerminals: environmentId.map { runningTerminals?($0) ?? 0 } ?? 0)
         guard activity != reported else { return }
         reported = activity
         // Chained so the lifecycle sees updates in order.

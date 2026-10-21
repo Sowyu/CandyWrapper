@@ -742,6 +742,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let view = ToastView(title: title, message: message, kind: .loading)
             installToast = (toasts.show(view, timeout: 0), view)
         }
+        // A terminal running a build keeps the server from idle-stopping, which would kill the build.
+        server.runningTerminals = { [weak self] id in self?.threads?.terminal.runningSubprocesses(environmentId: id) ?? 0 }
+        threads?.terminal.onActivityChanged = { [weak server] in server?.reportActivity() }
         server.start()
         self.server = server
         environments.restoreSaved()
