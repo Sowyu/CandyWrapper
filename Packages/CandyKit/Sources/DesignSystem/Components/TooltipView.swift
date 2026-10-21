@@ -43,7 +43,8 @@ public final class TooltipView: DSView, PopupContent {
     /// tooltips keep the label; the block exists only once a long text needs it.
     private var maxText: CGFloat { (variant == .code ? 480 : 320) - 18 }
     private var wrapped: TextBlockView?
-    private var wraps: Bool { label.textWidth > maxText }
+    /// A "\n" is a hard break, like the stacked `<div>`s of a two-line tooltip.
+    private var wraps: Bool { label.textWidth > maxText || label.text.contains("\n") }
     private func wrappedBlock() -> TextBlockView {
         if let wrapped { return wrapped }
         let block = TextBlockView(label.text, font: label.font, lineHeight: label.lineHeight, color: label.color)
@@ -56,7 +57,16 @@ public final class TooltipView: DSView, PopupContent {
     public override var intrinsicContentSize: NSSize {
         guard wraps else { return NSSize(width: label.textWidth + 18, height: (label.lineHeight ?? 16.5) + 10) }
         // A shrink-to-fit box whose text overflows takes the whole max width; balancing only evens the lines.
-        return NSSize(width: maxText + 18, height: wrappedBlock().height(forWidth: maxText) + 10)
+        // Hard-broken lines that all fit take the widest line instead.
+        let block = wrappedBlock()
+        var width = maxText
+        if label.text.contains("\n") {
+            let layout = block.layout(forWidth: maxText)
+            if layout.lines.count == label.text.split(separator: "\n", omittingEmptySubsequences: false).count {
+                width = min(maxText, ceil(layout.widths.max() ?? 0))
+            }
+        }
+        return NSSize(width: width + 18, height: block.height(forWidth: maxText) + 10)
     }
 
     public override func layout() {

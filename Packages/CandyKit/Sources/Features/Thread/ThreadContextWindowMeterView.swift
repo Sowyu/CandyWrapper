@@ -301,7 +301,7 @@ final class ThreadContextWindowDetailsView: DSView {
         note.isHidden = !usage.automatically
         // `formatContextWindowCompactionMessage` (ContextWindowMeter.logic.ts:100-110).
         if let threshold = usage.autoCompactThreshold, threshold > 0, threshold < 9e15 {
-            note.text = "Compacts automatically at " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens."
+            note.text = "Compacts automatically at about " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens."
         } else {
             note.text = name.map { "Context for " + $0 + " compacts automatically when needed." } ?? "Context compacts automatically when needed."
         }
