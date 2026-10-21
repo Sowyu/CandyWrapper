@@ -19,8 +19,10 @@ import Testing
     }
 
     private func child(_ id: String, of parent: String, _ relation: LineageRelationship, created: String = "2026-06-20T00:00:00.000Z",
-                       status: ThreadStatus = .completed, activity: ThreadStatus? = nil) -> ThreadShell {
+                       status: ThreadStatus = .completed, activity: ThreadStatus? = nil,
+                       _ edit: (inout ThreadShell) -> Void = { _ in }) -> ThreadShell {
         thread(id) {
+            edit(&$0)
             $0.lineage.parentThreadId = ThreadId(parent)
             $0.lineage.relationshipToParent = relation
             $0.status = status
@@ -80,6 +82,21 @@ import Testing
         #expect(g.edges.contains(ThreadRelationshipEdge(sourceThreadId: "parent", targetThreadId: "kid", kind: .subagent, status: "running")))
         #expect(g.edges.contains(ThreadRelationshipEdge(sourceThreadId: "parent", targetThreadId: "target", kind: .transfer, status: "consumed")))
         #expect(!g.edges.contains { $0.targetThreadId == "parent" })
+    }
+
+    /// 321b86b05d: a supervisor still waiting on its worker shows as running; a settled one takes the child's later run.
+    @Test(arguments: [("running", "running"), ("completed", "failed")])
+    func activeSupervisorOutranksTheChildsLatestRun(_ agentStatus: String, _ expected: String) {
+        let p = projection("parent", subagents: """
+            [{"id":"n1","childThreadId":"kid","status":"\(agentStatus)","title":null,"origin":"provider_native",
+              "driver":"claudeAgent","providerInstanceId":"claude","startedAt":null,"completedAt":null}]
+            """)
+        let kid = child("kid", of: "parent", .subagent, status: .failed) { $0.latestRunId = RunId("r2") }
+        let g = ThreadRelationships.graph(threads: [thread("parent"), kid], projection: p)
+        #expect(g.edges.first { $0.targetThreadId == "kid" }?.status == expected)
+        let agent = ProjectedSubagent(p.subagents[0])
+        let live = child("kid", of: "parent", .subagent, activity: .waiting)
+        #expect(agent?.following(live).status == (agentStatus == "running" ? "running" : "waiting"))
     }
 
     @Test func theLiveShellWinsOverAnArchivedCopy() {
