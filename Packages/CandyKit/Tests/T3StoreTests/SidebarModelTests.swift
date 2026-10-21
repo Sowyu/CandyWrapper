@@ -185,6 +185,19 @@ private func pill(
             == ThreadStatusPill(label: .completed, pulse: false))
     }
 
+    /// Sidebar.logic.ts:727-739 and 1121-1128 (3473, #20996): a failed run shows until the thread is visited after
+    /// it ended, also when nobody ever opened it, and ranks between Awaiting Input and Working.
+    @Test func unseenFailurePill() {
+        var failed = latestRun()
+        failed.status = .failed
+        let done = ThreadRuntimeSummary(status: .failed)
+        #expect(pill(mode: .default, run: failed, runtime: done) == ThreadStatusPill(label: .failed, pulse: false))
+        #expect(pill(mode: .default, run: failed, runtime: done, visited: "2026-03-09T10:04:00.000Z")?.label == .failed)
+        #expect(pill(mode: .default, run: failed, runtime: done, visited: "2026-03-09T10:06:00.000Z") == nil)
+        #expect(pill(input: true, run: failed, runtime: done)?.label == .awaitingInput)
+        #expect(S.resolveProjectStatusIndicator([ThreadStatusPill(label: .working, pulse: true), ThreadStatusPill(label: .failed, pulse: false)])?.label == .failed)
+    }
+
     @Test func projectStatusIndicator() {
         let p = { (label: ThreadStatusPill.Label) in ThreadStatusPill(label: label, pulse: false) }
         #expect(S.resolveProjectStatusIndicator([nil, nil]) == nil)
