@@ -283,7 +283,10 @@ private final class QueuedRowView: DSView {
         self.editing = editing
         runId = item.runId
         self.editTip.text = editTip
-        text.text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Context links as their labels and citations as the quoted text (QueuedRunsControl.tsx:250-254).
+        // ponytail: queued rows show no thumbnails, so image links keep their label; drop it when they do
+        text.text = ComposerInlineTokens.citationsToPlainText(ComposerInlineTokens.contextLabels(item.text))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         textTip.text = text.text
         // The `sr-only` "Editing queued message: " before the text (QueuedRunsControl.tsx:367).
         text.setAccessibilityLabel((editing ? "Editing queued message: " : "") + text.text)

@@ -513,6 +513,27 @@ public enum ComposerInlineTokens {
 
     /// `collectComposerPromptInlineTokens`: mentions and skills, minus any that overlap a context
     /// link, plus the links, by position.
+    /// `assistantCitationsToPlainText` (shared assistantCitations.ts:124-132): each citation link becomes
+    /// its quoted text, plus "\nComment: <comment>" when it has one. Unparsable links stay.
+    public static func citationsToPlainText(_ text: String) -> String {
+        guard text.contains("t3-citation:") else { return text }
+        let ns = NSMutableString(string: text)
+        for match in citation.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            guard let c = ThreadAssistantCitation.parse((text as NSString).substring(with: match.range(at: 1))) else { continue }
+            ns.replaceCharacters(in: match.range, with: c.comment.map { "\(c.text)\nComment: \($0)" } ?? c.text)
+        }
+        return ns as String
+    }
+
+    /// `replaceComposerContextReferences` with each link's label (shared composerContextReferences.ts).
+    public static func contextLabels(_ text: String) -> String {
+        let ns = NSMutableString(string: text)
+        for t in collect(text).reversed() {
+            if case .context(_, _, let label) = t.kind { ns.replaceCharacters(in: t.range, with: label) }
+        }
+        return ns as String
+    }
+
     public static func collect(_ text: String) -> [ComposerInlineToken] {
         // An empty prompt has no tokens; returning early keeps the regexes uncompiled until typing.
         guard !text.isEmpty else { return [] }
