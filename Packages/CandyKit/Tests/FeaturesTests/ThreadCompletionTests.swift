@@ -81,6 +81,11 @@ struct ThreadCompletionTests {
         #expect(view.items[0].preview == "A B\n\nStreaming")
         #expect(view.items[1] == items[1])
     }
+    /// e6765094cb: the hover preview reads the answer as plain text (timelineMinimapItems.ts:55-110).
+    @Test func minimapPreviewReadsMarkdownAsPlainText() {
+        let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: " Fix  it ", assistantText: "## Done\n\n**Bold** and `code`\n\n- one\n- two\n\n```swift\nlet x = 1\n```")
+        #expect(item.preview == "Fix it\n\nDone Bold and code one two let x = 1")
+    }
     @Test func taskSummaryUsesRunningThenPendingThenLast() {
         let steps = [ThreadTaskStep(text: "A", status: "pending"), ThreadTaskStep(text: "B", status: "running")]
         #expect(ThreadTaskStep.summary(steps) == "B")
