@@ -17,7 +17,7 @@ public final class SlowRPCRequestTracker {
 
     public nonisolated static func threshold(for method: String) -> TimeInterval? {
         guard !method.contains("subscribe"), !method.hasPrefix("pullRequests."), !["server.getUsageSummary", "server.reportClientActivity"].contains(method) else { return nil }
-        return ["server.updateProvider", "server.refreshProviders", "server.updateServer"].contains(method) ? 120 : 15
+        return ["server.updateProvider", "server.refreshProviders", "server.updateServer", "vcs.refreshStatus"].contains(method) ? 120 : 15
     }
     public func start(id: UUID, method: String) {
         guard let threshold = Self.threshold(for: method) else { return }
