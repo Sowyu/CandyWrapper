@@ -243,6 +243,42 @@ struct DiffTests {
         #expect(choices[0].value(selected: nil) == "main")
     }
 
+    /// A large file tokenizes off the main thread and draws plain until its spans arrive; spans
+    /// built for a diff that was replaced meanwhile are dropped.
+    @Test func largeFileHighlightsOffMain() async {
+        final class Spy: @unchecked Sendable {
+            let lock = NSLock()
+            var onMain = 0, offMain = 0
+            func record() { lock.lock(); if Thread.isMainThread { onMain += 1 } else { offMain += 1 }; lock.unlock() }
+        }
+        func big(_ name: String) -> UnifiedDiff {
+            var patch = "diff --git a/\(name).ts b/\(name).ts\nnew file mode 100644\n--- /dev/null\n+++ b/\(name).ts\n@@ -0,0 +1,2000 @@\n"
+            for i in 0..<2_000 { patch += "+const \(name)\(i) = \"s\"\n" }
+            return UnifiedDiff(patch)
+        }
+        let spy = Spy()
+        let highlighter = DiffHighlighter(diff: big("a"), tokenize: { spy.record(); return CodeHighlighter.tokens($0, language: $1) })
+        var ready: [Int] = []
+        highlighter.onReady = { ready.append($0) }
+        #expect(highlighter.spans(file: 0, line: 0).isEmpty)
+        await highlighter.inFlight?.value
+        #expect(spy.onMain == 0)
+        #expect(spy.offMain > 0)
+        #expect(ready == [0])
+        #expect(!highlighter.spans(file: 0, line: 0).isEmpty)
+
+        highlighter.reset(big("b"))
+        _ = highlighter.spans(file: 0, line: 0)
+        highlighter.reset(big("c"))
+        await highlighter.inFlight?.value // b's spans arrive late
+        #expect(ready == [0])
+        #expect(highlighter.spans(file: 0, line: 0).isEmpty) // c starts its own build
+        await highlighter.inFlight?.value
+        #expect(ready == [0, 0])
+        #expect(!highlighter.spans(file: 0, line: 0).isEmpty)
+        #expect(spy.onMain == 0)
+    }
+
     /// Resizing an annotation keeps the reader's line in place instead of jumping to the file header.
     @Test func reloadAnnotationsKeepsScrollPosition() {
         final class Card: NSView, DiffAnnotationContent {
