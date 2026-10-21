@@ -53,6 +53,8 @@ struct WebRowViewportTests {
         TimelineTilingTests.userScroll(t, to: 0)
         let row = try #require(t.view(forRow: "web"))
         let frame = try #require(row.subviews.compactMap { $0 as? ThreadWebFrameView }.first)
+        // Parallel web tests share the process-wide budget, which would evict this frame at random.
+        frame.budgeted = false
         return (window, t, model, row, frame)
     }
 
