@@ -26,6 +26,8 @@ public final class SidebarListView: DSView {
 
     var onOpen: (@MainActor (ThreadId) -> Void)?
     var onToggleShelf: (@MainActor (SidebarShelf) -> Void)?
+    /// Dither's project sections: fold or unfold by group key.
+    var onToggleProject: (@MainActor (String) -> Void)?
     var onShowMore: (@MainActor () -> Void)?
     var onOpenDraft: (@MainActor (String) -> Void)?
     var onDiscardDraft: (@MainActor (String) -> Void)?
@@ -284,6 +286,8 @@ public final class SidebarListView: DSView {
             shelf.onToggle = { [weak self] in self?.onToggleShelf?($0) }
             view = shelf
         case .showMore: view = SidebarShowMoreRowView()
+        // A click reaches `open`, which folds the section.
+        case .projectHeader: view = SidebarProjectHeaderRowView()
         case .draft:
             let draft = SidebarDraftRowView()
             draft.onDiscard = { [weak self] id in self?.onDiscardDraft?(id) }
@@ -592,6 +596,7 @@ public final class SidebarListView: DSView {
         switch item {
         case .row(let r): onOpen?(r.id)
         case .shelfHeader(let shelf, _, _): onToggleShelf?(shelf)
+        case .projectHeader(let h): onToggleProject?(h.key)
         case .showMore: onShowMore?()
         case .draft(let d): onOpenDraft?(d.id)
         case .searchResult(let r): onOpenSearchResult?(r.id)

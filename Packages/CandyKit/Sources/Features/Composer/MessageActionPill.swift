@@ -68,7 +68,8 @@ final class MessageActionPill: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = bounds.height / 2
+        // Dither: Capy's rounded square, like its send button.
+        box.radius = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.controlRadius : bounds.height / 2
         box.corners = switch half { case .whole: .all; case .leading: .leading; case .trailing: .trailing }
         box.fill = fill
         // `shadow-xs shadow-message-action/24`.

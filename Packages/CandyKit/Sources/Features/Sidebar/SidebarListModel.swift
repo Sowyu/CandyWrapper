@@ -57,6 +57,13 @@ public struct SidebarRowModel: Equatable, Sendable {
     /// Terminals of this thread running a subprocess (`useThreadRunningTerminalIds`); above 0 shows
     /// the pulsing terminal glyph.
     public var terminalProcessCount = 0
+    /// Dither: the row sits under its project's header, so it leaves the project out.
+    public var inProjectSection = false
+    /// Dither's two-line card shows a second line: a branch, a scratch machine, a pull request or running terminals, or
+    /// the project outside a project section.
+    var hasMetaLine: Bool {
+        !inProjectSection || branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || terminalProcessCount > 0
+    }
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
     /// Timestamps behind the labels, for the refresh timer.
@@ -80,6 +87,16 @@ public struct SidebarRowModel: Equatable, Sendable {
 }
 
 public enum SidebarShelf: String, Sendable { case working, snoozed, settled }
+
+/// A project section's header under Dither: the group's key, name, icon and how many threads it holds.
+public struct SidebarProjectHeaderModel: Equatable, Sendable {
+    public var key: String
+    public var label: String
+    public var projectTitle: String
+    public var projectIcon: ProjectIconSource?
+    public var count: Int
+    public var expanded: Bool
+}
 
 /// The environments the merged shell spans: the primary (this machine), labels and machine kinds
 /// (Sidebar.tsx `primaryEnvironmentId`, `environmentLabelById`, `useEnvironmentMachines`). Thread and
@@ -178,6 +195,8 @@ public enum SidebarItem: Equatable, Sendable {
     case emptyText(String, search: Bool)
     /// "No projects yet" with its Add project button (Sidebar.tsx:5556-5569).
     case noProjects
+    /// Dither (after Capy): a project's own section over its unpinned threads, collapsible.
+    case projectHeader(SidebarProjectHeaderModel)
 
     public var key: String {
         switch self {
@@ -188,6 +207,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .draftDivider: "draft-divider"
         case .searchResult(let r): "search:\(r.id.rawValue)"
         case .emptyText, .noProjects: "empty"
+        case .projectHeader(let h): "project:\(h.key)"
         }
     }
 
@@ -202,10 +222,11 @@ public enum SidebarItem: Equatable, Sendable {
         case .searchResult: .searchResult
         case .emptyText: .emptyText
         case .noProjects: .noProjects
+        case .projectHeader: .projectHeader
         }
     }
 
-    enum Kind: CaseIterable { case card, slim, shelf, showMore, draft, divider, searchResult, emptyText, noProjects }
+    enum Kind: CaseIterable { case card, slim, shelf, showMore, draft, divider, searchResult, emptyText, noProjects, projectHeader }
 
     /// Rows the keyboard can land on.
     var isFocusable: Bool { kind != .divider && kind != .emptyText }
@@ -214,7 +235,8 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? 48 : 82) : 36
+        // Under a project section a row with nothing for its meta line keeps to one line.
+        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? (r.hasMetaLine ? 48 : 32) : 82) : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32
@@ -224,6 +246,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .emptyText: 64 // `py-6`, one text-xs line
         // `py-6 gap-2`: the line, then the `py-1 text-2xs` bordered button (16 + 8 + 2).
         case .noProjects: 24 + 16 + 8 + 26 + 24
+        case .projectHeader: 30
         }
     }
 }
@@ -265,6 +288,8 @@ public struct SidebarListState: Equatable, Sendable {
     /// `optimisticDrop.order` (Sidebar.tsx:2851-2871): a dropped section keeps the order the drop showed
     /// while its key writes land one by one.
     public var heldOrder: (section: SidebarSection, order: [ThreadId])?
+    /// Dither's project sections the user folded, by group key.
+    public var collapsedProjects: Set<String> = []
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -279,6 +304,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
+            && a.collapsedProjects == b.collapsedProjects
     }
 }
 
@@ -406,7 +432,11 @@ public enum SidebarListBuilder {
         }
         var items: [SidebarItem] = []
         items += held(shelves.pinned, .pinned).map { row($0, .pinned) }
-        items += held(shelves.active, .active).map { row($0, .active) }
+        if ThemeRuntime.ditherRows {
+            items += projectSections(held(shelves.active, .active), ctx: ctx, state: state) { row($0, .active) }
+        } else {
+            items += held(shelves.active, .active).map { row($0, .active) }
+        }
         if !shelves.working.isEmpty {
             let expanded = state.workingExpanded
             items.append(.shelfHeader(.working, label: expanded ? "Working" : "Working (\(shelves.working.count))", expanded: expanded))
@@ -433,6 +463,35 @@ public enum SidebarListBuilder {
                 if hiddenCount > 0 { items.append(.showMore(count: min(hiddenCount, settledPageCount))) }
             } else {
                 items += shelves.settled.filter { $0.id == state.activeThreadId }.map { row($0, .settled) }
+            }
+        }
+        return items
+    }
+
+    /// Dither (after Capy): the unpinned threads under one header per project, in the order each project's newest
+    /// thread sorts. The open thread stays visible in a folded section.
+    static func projectSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
+                                row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
+        var order: [String] = [], byKey: [String: [SidebarThread]] = [:]
+        for t in threads {
+            let key = ctx.groupByProject[t.shell.projectId]?.key ?? "project:\(t.shell.projectId.rawValue)"
+            if byKey[key] == nil { order.append(key) }
+            byKey[key, default: []].append(t)
+        }
+        var items: [SidebarItem] = []
+        for key in order {
+            let list = byKey[key] ?? []
+            guard let first = list.first else { continue }
+            let group = ctx.groupByProject[first.shell.projectId]
+            let project = ctx.projectById[first.shell.projectId]
+            let expanded = !state.collapsedProjects.contains(key)
+            items.append(.projectHeader(SidebarProjectHeaderModel(
+                key: key, label: group?.label ?? project?.title ?? "Project", projectTitle: project?.title ?? group?.label ?? "",
+                projectIcon: (group?.representative ?? project).map(ProjectIconSource.init), count: list.count, expanded: expanded)))
+            for t in list where expanded || t.id == state.activeThreadId {
+                guard case .row(var model) = row(t) else { continue }
+                model.inProjectSection = true
+                items.append(.row(model))
             }
         }
         return items
