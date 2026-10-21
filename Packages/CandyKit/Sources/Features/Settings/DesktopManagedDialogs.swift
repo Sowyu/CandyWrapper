@@ -33,7 +33,7 @@ public final class SshPasswordPromptDialog: DialogView {
     public var onResponse: ((String?) -> Void)?
     public init(state: SshPasswordPromptState, now: Date = Date()) {
         body = SshPasswordPromptBody(target: state.target, remaining: state.label(at: now), expired: state.remaining(at: now) == 0, password: password)
-        super.init(title: "SSH Password Required", message: "T3 needs your SSH password to connect to \(state.target). The password is passed to the local SSH process for this connection attempt and is not saved by T3 Code.")
+        super.init(title: "SSH verification required", message: "Enter the password or verification code required by \(state.target). T3 Code passes your response to the local SSH process and keeps it in memory to reuse for this host. T3 Code does not write it to disk.")
         maxWidth = 448; showsCloseButton = false
         panelContent = [body]; footerButtons = [cancel, proceed]
         cancel.action = { [weak self] in self?.respond(nil) }
@@ -52,14 +52,16 @@ public final class SshPasswordPromptDialog: DialogView {
 
 @MainActor
 public final class SshPasswordPromptBody: DSView {
-    private let prompt: LabelView
+    private let prompt = TextBlockView()
     private let countdown = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let hint = TextBlockView()
     public let password: SecureInputView
     public init(target: String, remaining: String, expired: Bool, password: SecureInputView = SecureInputView()) {
         self.password = password
-        prompt = LabelView("Enter the SSH password for \(target).", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
         super.init(frame: .zero)
+        // tunnel.ts:1432 builds this prompt; it wraps when the host is long.
+        prompt.text = "Enter the SSH password or verification code for \(target)."
+        prompt.font = DSFont.ui(14, weight: .medium); prompt.color = Themed.color(\.foreground)
         hint.font = DSFont.ui(14); hint.lineHeight = 20
         countdown.alignment = .right; countdown.lineHeight = 16; prompt.lineHeight = 20
         [prompt, countdown, password, hint].forEach { addSubview($0) }
@@ -67,17 +69,21 @@ public final class SshPasswordPromptBody: DSView {
     }
     public func set(remaining: String, expired: Bool) {
         countdown.text = remaining; countdown.color = Themed.color(expired ? \.destructive : \.mutedForeground)
-        hint.text = expired ? "This SSH password prompt expired. Try connecting again." : "Use SSH keys to avoid repeated password prompts on new SSH sessions."
+        hint.text = expired ? "This SSH verification prompt expired. Try connecting again." : "SSH keys may replace a password, but your server can still require a verification code."
         hint.color = Themed.color(expired ? \.destructive : \.mutedForeground)
         password.isEnabled = !expired; needsLayout = true
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 20 + 8 + 32 + 12 + hint.height(forWidth: bounds.width > 0 ? bounds.width : 398)) }
+    public override var intrinsicContentSize: NSSize {
+        let w = bounds.width > 0 ? bounds.width : 398
+        return NSSize(width: NSView.noIntrinsicMetric, height: prompt.height(forWidth: w - 60) + 8 + 32 + 12 + hint.height(forWidth: w))
+    }
     public override func layout() {
         super.layout(); let w = bounds.width
-        prompt.frame = NSRect(x: 0, y: 0, width: w - 60, height: 20)
-        countdown.frame = NSRect(x: w - 48, y: 2, width: 48, height: 16)
-        password.frame = NSRect(x: 0, y: 28, width: w, height: 32)
-        hint.frame = NSRect(x: 0, y: 72, width: w, height: hint.height(forWidth: w))
+        let promptHeight = prompt.height(forWidth: w - 60)
+        prompt.frame = NSRect(x: 0, y: 0, width: w - 60, height: promptHeight)
+        countdown.frame = NSRect(x: w - 48, y: ((promptHeight - 16) / 2).rounded(), width: 48, height: 16)
+        password.frame = NSRect(x: 0, y: promptHeight + 8, width: w, height: 32)
+        hint.frame = NSRect(x: 0, y: promptHeight + 52, width: w, height: hint.height(forWidth: w))
     }
 }
 
