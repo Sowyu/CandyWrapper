@@ -365,6 +365,8 @@ struct RelayErrorMappingTests {
              .transient("Relay timed out while contacting the environment endpoint.")),
             (error(403, #"{"_tag":"RelayEnvironmentLinkLimitExceededError","code":"environment_link_limit_exceeded","maxTunnels":3,"traceId":"t"}"#),
              .blocked(.permission, "Relay refused the link: this account already has its maximum of 3 managed tunnels. Unlink an environment to free one up.")),
+            (error(503, #"{"_tag":"RelayEnvironmentLinkUnavailableError","code":"environment_link_unavailable","reason":"managed_endpoint_provisioning_failed","provisioningStage":"dns","traceId":"t"}"#),
+             .transient("Relay cannot provision the managed endpoint (managed_endpoint_provisioning_failed). Failed stage: dns.")),
             (error(500, #"{"_tag":"RelayInternalError","code":"internal_error","reason":"database_unavailable","traceId":"t"}"#),
              .transient("Relay encountered an internal error (database_unavailable).")),
         ]
