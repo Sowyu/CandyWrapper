@@ -32,6 +32,7 @@ public enum PullRequestStyle {
         case "success": (.circleCheck, color(.open))
         case "failure", "cancelled": (.circleX, Themed.color(\.destructive))
         case "pending": (.loaderCircle, Themed.base("amber-500"))
+        case "skipped": (.circleSlash, Themed.color(\.mutedForeground, 0.7))
         default: (.circleDashed, Themed.color(\.mutedForeground, 0.7))
         }
     }
