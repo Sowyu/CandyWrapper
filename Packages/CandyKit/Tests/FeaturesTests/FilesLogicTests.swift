@@ -81,6 +81,21 @@ struct FilesLogicTests {
         #expect(t.expanded.contains("src/lib"))
     }
 
+    /// Expand all skips ignored folders, collapse all closes them too (FileBrowserPanel.tsx:134-137).
+    @Test func expandAllSkipsIgnoredFolders() {
+        var t = FileTreeModel()
+        t.setChildren([ProjectEntry(path: "src", isDirectory: true), ProjectEntry(path: "node_modules", isDirectory: true, ignored: true)], of: "")
+        #expect(t.setAllExpanded(true) == ["src"])
+        #expect(t.allExpanded && !t.expanded.contains("node_modules"))
+        _ = t.toggle("node_modules")
+        _ = t.setAllExpanded(false)
+        #expect(t.expanded.isEmpty)
+        t.setSearch("zz", entries: [])
+        #expect(t.hasNoSearchMatches)
+        t.setSearch("zz", entries: [ProjectEntry(path: "src/zz.ts", isDirectory: false)])
+        #expect(!t.hasNoSearchMatches)
+    }
+
     /// Polls (the suite runs in parallel, so fixed sleeps are flaky), at most 5 s.
     @MainActor static func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<500 where !condition() { try await Task.sleep(for: .milliseconds(10)) }

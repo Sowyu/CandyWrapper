@@ -119,17 +119,32 @@ public struct FileTreeModel: Sendable {
         return out
     }
 
-    /// `areAllDirectoriesExpanded`.
+    /// `expandableDirectoryPaths`: an ignored folder such as `node_modules` can list tens of thousands,
+    /// so expand all skips ignored folders. They still open by hand (FileBrowserPanel.tsx:134-137).
+    public var expandableDirectoryPaths: [String] {
+        var ignored = Set<String>()
+        for list in directories.values { for e in list where e.ignored { ignored.insert(e.path) } }
+        return directoryPaths.filter { !ignored.contains($0) }
+    }
+
+    /// `areAllDirectoriesExpanded` over the expandable folders.
     public var allExpanded: Bool {
-        let dirs = directoryPaths
+        let dirs = expandableDirectoryPaths
         return !dirs.isEmpty && dirs.allSatisfy(expanded.contains)
     }
 
-    /// `setAllDirectoriesExpanded`: returns folders that now need a listing.
+    /// `setAllDirectoriesExpanded`: expands the expandable folders or collapses every folder, and
+    /// returns folders that now need a listing.
     public mutating func setAllExpanded(_ value: Bool) -> [String] {
-        let dirs = directoryPaths
+        let dirs = value ? expandableDirectoryPaths : directoryPaths
         if value { expanded.formUnion(dirs) } else { expanded.subtract(dirs) }
         return value ? dirs.filter { directories[$0] == nil } : []
+    }
+
+    /// A search with text that found nothing (FileBrowserPanel.tsx:320-321).
+    public var hasNoSearchMatches: Bool {
+        guard let search else { return false }
+        return !search.query.trimmingCharacters(in: .whitespaces).isEmpty && search.entries.isEmpty
     }
 
     // MARK: Rows

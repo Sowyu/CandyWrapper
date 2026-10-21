@@ -39,6 +39,7 @@ public final class FilesPanelView: DSView {
     public var errorText: String? { didSet { updateChrome() } }
     public var searchTruncated = false { didSet { updateChrome() } }
     public var searchPending = false { didSet { updateChrome() } }
+    private var noMatches = false
 
     public override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: treeView)
@@ -104,8 +105,14 @@ public final class FilesPanelView: DSView {
         } else {
             errorButton.isHidden = true
         }
-        if !treeView.model.ready || isLoading || searchPending {
+        let loading = !treeView.model.ready || isLoading || searchPending
+        noMatches = !loading && searching && errorText == nil && treeView.model.hasNoSearchMatches
+        if loading {
             status.text = "Loading files\u{2026}"
+            status.isHidden = false
+        } else if noMatches {
+            // "No matching files." takes the tree's place (FileBrowserPanel.tsx:580-585).
+            status.text = "No matching files."
             status.isHidden = false
         } else if searching && searchTruncated {
             status.text = "More matches available. Refine your search."
@@ -135,10 +142,14 @@ public final class FilesPanelView: DSView {
             errorButton.frame = NSRect(x: 16, y: y + 16, width: max(0, w - 32), height: 19.5)
             y += 16 + 19.5 + 16
         }
-        if !status.isHidden {
+        if noMatches {
+            status.frame = NSRect(x: 12, y: y + 16, width: max(0, w - 24), height: 16)
+            y += 48
+        } else if !status.isHidden {
             status.frame = NSRect(x: 12, y: y + 4, width: max(0, w - 24), height: 16)
             y += 24
         }
+        scroll.isHidden = noMatches
         scroll.frame = NSRect(x: 0, y: y, width: w, height: max(0, bounds.height - y))
     }
 
