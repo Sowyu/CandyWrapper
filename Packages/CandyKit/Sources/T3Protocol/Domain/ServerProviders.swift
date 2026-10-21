@@ -397,6 +397,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var scratchWorkspaceRoot: String?
     /// `newProjectsRoot`: where "New project" creates name-only projects, nil when the server offers none.
     public var newProjectsRoot: String?
+    /// `lastEventLoopStall` (server.ts:593-600, 637): the host's latest freeze, sent for a few minutes after it.
+    public var lastEventLoopStall: ServerEventLoopStall?
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -410,7 +412,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              shellRevealInFileManagerKind,
-             scratchWorkspaceRoot, newProjectsRoot, threadFind, threadFindProgressive, observability, issues
+             scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, observability, issues
     }
 
     public init(from decoder: Decoder) throws {
@@ -434,6 +436,34 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         revealKind = try? c.decodeIfPresent(String.self, forKey: .shellRevealInFileManagerKind)
         scratchWorkspaceRoot = try? c.decodeIfPresent(String.self, forKey: .scratchWorkspaceRoot)
         newProjectsRoot = try? c.decodeIfPresent(String.self, forKey: .newProjectsRoot)
+        lastEventLoopStall = try? c.decodeIfPresent(ServerEventLoopStall.self, forKey: .lastEventLoopStall)
+    }
+}
+
+/// `ServerEventLoopStall` (server.ts:593-600): a stretch where the server's event loop could not run.
+public struct ServerEventLoopStall: Decodable, Hashable, Sendable {
+    public var detectedAt: String
+    public var durationMs: Int
+    /// One-minute load average. Absent on Windows.
+    public var loadAverage: Double?
+    public var cpuCount: Int
+
+    public init(detectedAt: String, durationMs: Int, loadAverage: Double? = nil, cpuCount: Int) {
+        self.detectedAt = detectedAt
+        self.durationMs = durationMs
+        self.loadAverage = loadAverage
+        self.cpuCount = cpuCount
+    }
+
+    /// `hostFreezeNotice` (client-runtime/src/connection/hostFreeze.ts:12-25): the warning toast's title and description.
+    public func notice(hostLabel: String) -> (title: String, description: String) {
+        let seconds = Int((Double(durationMs) / 1000).rounded())
+        let description = if let loadAverage, loadAverage > Double(cpuCount) {
+            "Its CPU is overloaded (load \(Int(loadAverage.rounded())) on \(cpuCount) cores)."
+        } else {
+            "T3 Code on \(hostLabel) was too busy to answer."
+        }
+        return ("\(hostLabel) froze for \(seconds)s", description)
     }
 }
 
