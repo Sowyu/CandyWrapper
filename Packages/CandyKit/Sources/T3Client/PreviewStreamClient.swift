@@ -25,7 +25,9 @@ public final class PreviewStreamClient {
     }
 
     private let url: @Sendable () async throws -> URL
-    private let events: Events
+    /// Cleared on `stop`: the owner's closures often reach back to this client, and a late callback
+    /// from a stopped client must do nothing.
+    private var events: Events
     private var task: Task<Void, Never>?
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
@@ -56,6 +58,7 @@ public final class PreviewStreamClient {
         session = nil
         control = nil
         decoder.stop()
+        events = Events()
     }
 
     /// False when the socket is closed or this viewer may not send it, and the input was dropped.

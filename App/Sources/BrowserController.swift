@@ -390,7 +390,8 @@ final class BrowserController {
         let viewer = mini ? panel.miniPlayer.viewer : view.viewer
         let http = shell.http, token = shell.token
         var events = PreviewStreamClient.Events()
-        var streamRef: Stream?
+        // Weak: the stream owns the client, which owns these closures.
+        weak var streamRef: Stream?
         events.onFrame = { [weak self] image in
             viewer.setFrame(image)
             if !mini, self?.panelFramed == false { self?.panelFramed = true; self?.render() }
