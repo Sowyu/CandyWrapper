@@ -401,7 +401,11 @@ public enum ModelTraits {
         return out.isEmpty ? nil : out
     }
 
-    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "thinking"]
+    /// `REASONING_SELECT_DESCRIPTOR_IDS` (client-runtime modelTraits.ts:17-20): `REASONING_EFFORT_OPTION_IDS`
+    /// plus "thinking". Cursor names its effort `reasoning_effort` (dd86a02096).
+    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking"]
+    /// `REASONING_EFFORT_OPTION_IDS` (client-runtime state/threadExecution.ts:154-160), in order.
+    public static let reasoningEffortIds = ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort"]
 
     /// `buildTraitsTriggerDisplay`: labels joined by " · ", Fast merged into the reasoning label.
     /// `ultrathink` is true when the prompt carries the Ultrathink prefix or word.
