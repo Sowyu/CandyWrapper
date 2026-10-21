@@ -3,7 +3,7 @@ import T3Protocol
 
 /// The composer's server version item (ChatView.tsx:3143-3222, ComposerServerUpdateStatus.tsx:10-65,
 /// ServerUpdateAction.tsx:33-44): "Server update available" with its versions as tooltip, then
-/// "Updating server · Downloading…" under a spinner, or "Could not update server · <reason>".
+/// "Updating server" and "Downloading…" under a spinner, or "Could not update server" and the reason.
 /// The app's updater owns the state; the composer only presents it.
 public struct ComposerServerUpdateNotice: Equatable {
     public enum Status: Equatable {
@@ -54,10 +54,11 @@ public struct ComposerServerUpdateNotice: Equatable {
                          dismissLabel: dismiss, priority: .notice, titleTooltip: detail)
         case .running:
             // Update progress outranks passive notices. Its only action is "Disconnect server".
-            return .init(variant: .neutral, icon: .download, title: title, description: "· " + detail, actions: action.map { [$0] } ?? [],
+            // The stage or the failure is the plain description (ChatView.tsx:2325-2332, a261a71817).
+            return .init(variant: .neutral, icon: .download, title: title, description: detail, actions: action.map { [$0] } ?? [],
                          priority: .urgent, spinner: true, actionTooltip: actionTooltip)
         case .failed:
-            return .init(variant: .error, icon: .circleAlert, title: title, description: "· " + detail, actions: action.map { [$0] } ?? [],
+            return .init(variant: .error, icon: .circleAlert, title: title, description: detail, actions: action.map { [$0] } ?? [],
                          dismissLabel: dismiss, priority: .notice, iconIsError: true)
         }
     }
