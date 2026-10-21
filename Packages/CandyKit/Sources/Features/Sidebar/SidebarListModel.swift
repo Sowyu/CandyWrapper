@@ -59,11 +59,7 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var terminalProcessCount = 0
     /// Dither: the row sits under its project's header, so it leaves the project out.
     public var inProjectSection = false
-    /// Dither's two-line card shows a second line: a branch, a scratch machine, a pull request or running terminals, or
-    /// the project outside a project section.
-    var hasMetaLine: Bool {
-        !inProjectSection || branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || terminalProcessCount > 0
-    }
+
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
     /// Timestamps behind the labels, for the refresh timer.
@@ -96,6 +92,8 @@ public struct SidebarProjectHeaderModel: Equatable, Sendable {
     public var projectIcon: ProjectIconSource?
     public var count: Int
     public var expanded: Bool
+    /// The Pinned section, with a pin for its icon.
+    public var isPinned = false
 }
 
 /// The environments the merged shell spans: the primary (this machine), labels and machine kinds
@@ -235,8 +233,7 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        // Under a project section a row with nothing for its meta line keeps to one line.
-        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? (r.hasMetaLine ? 48 : 32) : 82) : 36
+        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? 48 : 82) : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32
@@ -246,7 +243,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .emptyText: 64 // `py-6`, one text-xs line
         // `py-6 gap-2`: the line, then the `py-1 text-2xs` bordered button (16 + 8 + 2).
         case .noProjects: 24 + 16 + 8 + 26 + 24
-        case .projectHeader: 30
+        case .projectHeader: 32
         }
     }
 }
@@ -431,10 +428,22 @@ public enum SidebarListBuilder {
             return first + threads.filter { !placed.contains($0.id) }
         }
         var items: [SidebarItem] = []
-        items += held(shelves.pinned, .pinned).map { row($0, .pinned) }
         if ThemeRuntime.ditherRows {
+            // Dither (after Capy): Pinned is a section like the projects, above them.
+            let pinned = held(shelves.pinned, .pinned)
+            if !pinned.isEmpty {
+                let expanded = !state.collapsedProjects.contains(pinnedSectionKey)
+                items.append(.projectHeader(SidebarProjectHeaderModel(key: pinnedSectionKey, label: "Pinned", projectTitle: "",
+                                                                      projectIcon: nil, count: pinned.count, expanded: expanded, isPinned: true)))
+                for t in pinned where expanded || t.id == state.activeThreadId {
+                    guard case .row(var model) = row(t, .pinned) else { continue }
+                    model.inProjectSection = true
+                    items.append(.row(model))
+                }
+            }
             items += projectSections(held(shelves.active, .active), ctx: ctx, state: state) { row($0, .active) }
         } else {
+            items += held(shelves.pinned, .pinned).map { row($0, .pinned) }
             items += held(shelves.active, .active).map { row($0, .active) }
         }
         if !shelves.working.isEmpty {
@@ -467,6 +476,8 @@ public enum SidebarListBuilder {
         }
         return items
     }
+
+    static let pinnedSectionKey = "pinned"
 
     /// Dither (after Capy): the unpinned threads under one header per project, in the order each project's newest
     /// thread sorts. The open thread stays visible in a folded section.
