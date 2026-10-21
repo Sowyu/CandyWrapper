@@ -11,7 +11,6 @@ final class HtmlRenderRowView: TimelineRowView {
     private let failed = LabelView("", font: TL.font(12))
     private let open = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var reference: HtmlRenderReference?
-    private var src: URL?
     private var loading: Task<Void, Never>?
     /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view.
     private var contentVisible = true
@@ -31,7 +30,6 @@ final class HtmlRenderRowView: TimelineRowView {
         open.action = { [weak self] in self?.openFullScreen() }
         addSubview(open)
         frameView.onMessage = { [weak self] in self?.received($0) }
-        frameView.onEvicted = { [weak self] in self?.src = nil }
     }
 
     override func configure(_ item: TimelineItem) {
@@ -39,7 +37,6 @@ final class HtmlRenderRowView: TimelineRowView {
         guard case .htmlRender(let ref) = item.row.kind else { return }
         if ref.attachmentId != reference?.attachmentId {
             frameView.release()
-            src = nil
             failed.isHidden = true
         }
         reference = ref
@@ -48,7 +45,7 @@ final class HtmlRenderRowView: TimelineRowView {
         needsLayout = true
     }
 
-    /// Mints the page's URL once per mount, then frames it with the theme in its fragment.
+    /// Asks for the page's URL, which reuses a fresh one or mints one near expiry, then frames it with the theme in its fragment.
     private func load() {
         guard let ref = reference, !frameView.isLive, loading == nil, wantsContent else { return }
         let id = ref.attachmentId
@@ -58,7 +55,6 @@ final class HtmlRenderRowView: TimelineRowView {
             guard let self, !Task.isCancelled, self.reference?.attachmentId == id else { return }
             self.loading = nil
             guard let url else { self.failed.isHidden = false; return }
-            self.src = url
             self.show(url)
         }
     }
@@ -84,14 +80,15 @@ final class HtmlRenderRowView: TimelineRowView {
     override func viewDidHide() { super.viewDidHide(); syncContent() }
     override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
 
-    /// Off screen the page and any pending load go; back on screen the minted URL frames again. The row's height
-    /// comes from the model's `webContentHeight`, so releasing the page doesn't move the rows around it.
+    /// Off screen the page and any pending load go; back on screen the page loads again through `webAssetURL`, as
+    /// a kept signed URL may have expired. The row's height comes from the model's `webContentHeight`, so releasing
+    /// the page doesn't move the rows around it.
     private func syncContent() {
         if !wantsContent {
             loading?.cancel()
             loading = nil
             frameView.release()
-        } else if !frameView.isLive, let src { show(src) } else { load() }
+        } else { load() }
     }
 
     override func prepareForReuse() {
@@ -100,7 +97,6 @@ final class HtmlRenderRowView: TimelineRowView {
         loading = nil
         frameView.release()
         reference = nil
-        src = nil
         contentVisible = true
     }
 
