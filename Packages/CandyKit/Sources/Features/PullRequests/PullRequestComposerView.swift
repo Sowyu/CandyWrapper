@@ -65,6 +65,9 @@ public final class PullRequestComposerView: DSView {
     public let commentBox = TextareaView(placeholder: "Leave a comment")
     public let reviewBox = TextareaView()
     private let followUpButton: ButtonView?
+    /// "Close with comment" asks first: one press relabels it "Confirm close?" (PullRequestCommentForm.tsx:116-139).
+    private let closeConfirm = InlineActionConfirm()
+    private var closeArmed = false
     private let commentButton = ButtonView("Comment", icon: .send, variant: .outline, size: .xs)
     private let verdictSelect: SelectView?
     private let submit = ButtonView("Submit review", variant: .default, size: .xs)
@@ -118,6 +121,8 @@ public final class PullRequestComposerView: DSView {
         reviewBox.text = store.summary(reviewKey)
         followUpButton?.iconSize = 14
         commentButton.iconSize = 14
+        // The longest label holds the close button's width, so the confirming click lands on it.
+        if followUp == "close" { followUpButton?.reservedTitles = ["Close with comment"] }
         if let verdictSelect {
             verdictSelect.fitsContent = true
             verdictSelect.alignItemWithTrigger = false
@@ -139,7 +144,16 @@ public final class PullRequestComposerView: DSView {
         reviewBox.onChange = { [weak self] text in guard let self else { return }; self.store.setSummary(self.reviewKey, text) }
         commentBox.onCommand = { [weak self] sel in self?.commandEnter(sel, submit: { self?.sendComment("comment") }) ?? false }
         commentButton.action = { [weak self] in self?.sendComment("comment") }
-        followUpButton?.action = { [weak self] in if let f = self?.followUp { self?.sendComment(f) } }
+        followUpButton?.action = { [weak self] in
+            guard let self, let f = self.followUp else { return }
+            guard f == "close" else { self.sendComment(f); return }
+            let confirmed = self.closeConfirm.press("close", slot: "follow-up",
+                                                    contains: { [weak self] e in InlineActionConfirm.hits(e, self?.followUpButton) },
+                                                    onDisarm: { [weak self] in self?.closeArmed = false; self?.update() })
+            self.closeArmed = !confirmed
+            if confirmed { self.sendComment(f) }
+            self.update()
+        }
         submit.action = { [weak self] in self?.sendReview() }
         observer = NotificationCenter.default.addObserver(forName: PullRequestReviewStore.didChange, object: store, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
@@ -219,7 +233,8 @@ public final class PullRequestComposerView: DSView {
         commentButton.title = commentSubmitting == "comment" ? "Posting..." : "Comment"
         followUpButton?.isEnabled = hasComment && !locked
         if let f = followUp {
-            followUpButton?.title = commentSubmitting == f ? (f == "close" ? "Closing..." : "Reopening...") : (f == "close" ? "Close with comment" : "Reopen with comment")
+            followUpButton?.title = commentSubmitting == f ? (f == "close" ? "Closing..." : "Reopening...")
+                : f == "close" ? (closeArmed ? "Confirm close?" : "Close with comment") : "Reopen with comment"
         }
         verdictSelect?.isEnabled = !reviewPending
         if let v = selectedVerdict, let select = verdictSelect {
