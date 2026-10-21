@@ -233,8 +233,9 @@ final class NotificationSoundPlayer {
             let name = kind == .completion ? "notification-completion" : "notification-input"
             clips[kind] = Bundle.main.url(forResource: name, withExtension: "mp3").flatMap { NSSound(contentsOf: $0, byReference: true) }
         }
-        guard let clip = clips[kind] else { return }
-        clip.stop()
+        // threadNotifications.ts:111-120: threads that finish together play one clip, since
+        // full-volume copies sum into clipping. Each kind keeps its own slot.
+        guard let clip = clips[kind], !clip.isPlaying else { return }
         clip.play()
     }
 }

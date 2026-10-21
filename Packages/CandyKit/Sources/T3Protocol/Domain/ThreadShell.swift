@@ -27,10 +27,14 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var latestRunStartedAt: T3Timestamp?
     /// Absent on servers that predate it; `presentThreadShell` then falls back to `updatedAt`.
     public var latestRunCompletedAt: Tristate<T3Timestamp>
+    /// Stop reached the latest run (orchestrationV2.ts:1829). Absent on servers before 3473.
+    public var latestRunStopRequested: Bool?
     public var activeRunId: RunId?
     /// Absent on older servers; `resolveThreadWorkingStartedAt` then uses the latest run.
     public var activityRunStartedAt: Tristate<T3Timestamp>
     public var activityRunStatus: ThreadStatus?
+    /// The running turn waits on another thread (orchestrationV2.ts:1835), so it reads as Waiting.
+    public var blockedOnThreadWait: Bool?
     public var status: ThreadStatus
     public var lastError: String?
     public var lastErrorClass: ProviderFailureClass?
@@ -213,11 +217,15 @@ public struct PendingRuntimeRequestSummary: Codable, Hashable, Sendable {
     public var id: RuntimeRequestId
     public var kind: RuntimeRequestKind
     public var createdAt: T3Timestamp
+    /// False for an async question the run keeps working past (orchestrationV2.ts:1792). Absent
+    /// from servers before 3473, which counts as blocking.
+    public var blocking: Bool?
 
-    public init(id: RuntimeRequestId, kind: RuntimeRequestKind, createdAt: T3Timestamp) {
+    public init(id: RuntimeRequestId, kind: RuntimeRequestKind, createdAt: T3Timestamp, blocking: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.createdAt = createdAt
+        self.blocking = blocking
     }
 }
 

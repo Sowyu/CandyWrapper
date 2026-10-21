@@ -46,6 +46,16 @@ struct ThreadNotificationsTests {
         #expect(t.scan(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")]).isEmpty)
     }
 
+    /// ThreadNotificationCoordinator.tsx:154-160: a run the user stopped completes quietly.
+    @Test func stoppedRunDoesNotAnnounceCompletion() {
+        var t = ThreadNotificationTracker()
+        _ = t.scan(environmentId: "env-1", threads: [running()])
+        var stopped = completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")
+        stopped.latestRunStopRequested = true
+        #expect(t.scan(environmentId: "env-1", threads: [stopped]).isEmpty)
+        #expect(t.scan(environmentId: "env-1", threads: [completed(run: "run-3", at: "2026-09-13T11:00:00.000Z")]).map(\.title) == ["Thread completed"])
+    }
+
     @Test func reconnectDoesNotReplay() {
         var t = ThreadNotificationTracker()
         _ = t.scan(environmentId: "env-1", threads: [running()])

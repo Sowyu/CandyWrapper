@@ -991,7 +991,7 @@ final class ScheduledTaskDeliveriesDialog {
         let env = environmentId, id = task.id
         Task { [weak self] in
             do {
-                let r = try await request(env, "scheduledTasks.listWebhookDeliveries", .object(["id": .string(id)]))
+                let r = try await request(env, "scheduledTasks.listWebhookDeliveries", .object(["id": .string(id), "acceptAnyOutcome": .bool(true)]))
                 self?.deliveries = (r["deliveries"]?.arrayValue ?? []).compactMap(ScheduledTaskWebhookDelivery.init(json:))
                 self?.error = nil
             } catch { self?.error = ScheduledTaskErrorText.message(error) }
@@ -1008,7 +1008,7 @@ final class ScheduledTaskDeliveriesDialog {
         let env = environmentId, id = task.id
         Task { [weak self] in
             do {
-                let r = try await request(env, "scheduledTasks.getWebhookDelivery", .object(["id": .string(id), "deliveryId": .string(deliveryId)]))
+                let r = try await request(env, "scheduledTasks.getWebhookDelivery", .object(["id": .string(id), "deliveryId": .string(deliveryId), "acceptAnyOutcome": .bool(true)]))
                 self?.selected = r["delivery"].flatMap(ScheduledTaskWebhookDelivery.init(json:))
             } catch { self?.error = ScheduledTaskErrorText.message(error) }
             self?.render()
@@ -1057,7 +1057,7 @@ final class ScheduledTaskDeliveriesBody: DSView {
 
     func showDetail(_ d: ScheduledTaskWebhookDelivery, nowMs: Int64) {
         reset()
-        let head = ScheduledTaskInlineRow([BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .error),
+        let head = ScheduledTaskInlineRow([BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .outline),
                                            plain("\(d.method) · \(ScheduledTaskLogic.relativeLabel(d.receivedAt, nowMs: nowMs))", Themed.color(\.foreground))]
                                           + (d.signatureVerified ? [plain("Signature verified", Themed.color(\.mutedForeground))] : []), trailing: [])
         add(head, 20)
@@ -1113,7 +1113,7 @@ final class ScheduledTaskDeliveryListView: DSView {
         super.init(frame: .zero)
         rows = list.map { d in
             func l(_ s: String, _ c: NSColor) -> LabelView { let x = LabelView(s, font: DSFont.ui(14), color: c); x.lineHeight = 20; return x }
-            var items: [NSView] = [BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .error),
+            var items: [NSView] = [BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .outline),
                                    l(d.method, Themed.color(\.foreground)), l(ScheduledTaskLogic.relativeLabel(d.receivedAt, nowMs: nowMs), Themed.color(\.mutedForeground))]
             if !d.missingFields.isEmpty {
                 items.append(l("\(d.missingFields.count) empty placeholder\(d.missingFields.count == 1 ? "" : "s")", Themed.color(\.mutedForeground)))
