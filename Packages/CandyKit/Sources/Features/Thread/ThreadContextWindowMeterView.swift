@@ -37,8 +37,10 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
             if latest == nil || (at ?? .distantPast) >= (latest!.at ?? .distantPast) { latest = (usage, at) }
         }
         if let latest, let result = read(latest.usage, live: true, updatedAt: latest.at) { return result }
-        if let provider = projection.providerThreads.first(where: { $0["id"]?.stringValue == projection.thread.activeProviderThreadId }),
-           let usage = provider["contextUsage"], let result = read(usage, live: false, updatedAt: date(provider["updatedAt"])) { return result }
+        let provider = projection.providerThreads.first(where: { $0["id"]?.stringValue == projection.thread.activeProviderThreadId })
+        if let provider, let usage = provider["contextUsage"], let result = read(usage, live: false, updatedAt: date(provider["updatedAt"])) { return result }
+        if latest == nil, provider?["contextUsage"] == nil, let usage = forkSourceUsage(projection),
+           let result = read(usage, live: true, updatedAt: date(usage["updatedAt"])) { return result }
         for entry in projection.visibleTurnItems.reversed() {
             let item = entry.item.raw
             if item["type"]?.stringValue == "compaction", let used = item["afterTokenCount"]?.doubleValue, used >= 0 {
@@ -48,6 +50,22 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
         }
         return nil
     }
+    /// `latestProviderTurnTokenUsage` (lib/contextWindow.ts:43-56, cfa76eab67): a fork with no usage of its
+    /// own reads the parent's, carried as `sourceTokenUsage` on its native fork transfer.
+    static func forkSourceUsage(_ projection: ThreadProjection) -> JSONValue? {
+        let thread = projection.thread.raw, from = thread["forkedFrom"]
+        guard from?["type"]?.stringValue == "run", let sourceThread = from?["threadId"]?.stringValue else { return nil }
+        let me = projection.thread.id.localId, instance = thread["modelSelection"]?["instanceId"]?.stringValue
+        return projection.contextTransfers.first { t in
+            t["type"]?.stringValue == "fork"
+                && t["targetThreadId"]?.stringValue.map { ThreadId($0).localId } == me
+                && t["sourceThreadId"]?.stringValue.map { ThreadId($0).localId } == ThreadId(sourceThread).localId
+                && t["sourcePoint"]?["runId"] == from?["runId"]
+                && t["sourceProviderInstanceId"]?.stringValue == instance
+                && (t["status"]?.stringValue == "pending" || t["resolution"]?["strategy"]?.stringValue == "native_fork")
+        }?["sourceTokenUsage"]
+    }
+
     public static func tokens(_ value: Double) -> String {
         guard value.isFinite else { return "0" }
         if value < 1_000 { return String(Int(value.rounded())) }
