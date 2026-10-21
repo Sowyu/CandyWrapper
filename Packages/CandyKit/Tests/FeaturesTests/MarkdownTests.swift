@@ -272,3 +272,20 @@ struct MarkdownWindowsPathTests {
         #expect(MarkdownDocument(parsing: "```\nC:\\me\\.t3\n```").blocks == [.code(language: "text", title: nil, code: #"C:\me\.t3"#)])
     }
 }
+
+/// e27a03e94d: an image alone on its source line keeps that line (shared/src/markdownPipeline.test.ts).
+struct MarkdownImageLineTests {
+    private func shape(_ markdown: String) -> String {
+        MarkdownDocument(parsing: markdown).blocks.map { block -> String in
+            guard case .paragraph(let runs) = block else { return "?" }
+            return runs.map { $0.image != nil ? "<img>" : $0.isBreak && $0.text == "\n" ? "<br>" : $0.text }.joined()
+        }.joined()
+    }
+
+    @Test func imagesOnTheirOwnLineBreakAroundThem() {
+        #expect(shape("**Palette**\n![Palette](/tmp/palette.png)\n**Hero** (dark)\n![Hero](/tmp/hero.png)")
+            == "Palette<br><img><br>Hero (dark)<br><img>")
+        #expect(shape("Built ![CI](/ci.svg)\nand wrapped") == "Built <img> and wrapped")
+        #expect(shape("Hard-wrapped\nprose") == "Hard-wrapped prose")
+    }
+}
