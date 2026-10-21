@@ -364,5 +364,20 @@ public final class DefaultBranchDialog {
         dialog.footerVariant = .bare
         dialog.footerButtons = [abort, proceed, featureBranch]
         dialog.footerLeadingCount = 1
+        canChangeThreadBranch = canChangeBranch
+        unavailableNote.font = DSFont.ui(12); unavailableNote.lineHeight = 16
+        unavailableNote.color = Themed.color(\.mutedForeground)
+    }
+
+    private let canChangeThreadBranch: Bool
+    private let unavailableNote = TextBlockView()
+
+    /// `featureBranchUnavailableReason` (GitActionsControl.tsx:2052-2054, 2078): the `text-xs`
+    /// line under the description, and the feature branch button turns off.
+    public func setFeatureBranchUnavailable(_ reason: String?) {
+        featureBranch.isEnabled = canChangeThreadBranch && reason == nil
+        unavailableNote.text = reason ?? ""
+        let note = reason == nil ? nil : unavailableNote
+        if dialog.headerContent !== note { dialog.headerContent = note }
     }
 }
