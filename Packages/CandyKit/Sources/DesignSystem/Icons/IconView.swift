@@ -7,6 +7,8 @@ public final class IconView: NSView {
     /// Nil for an icon built from a definition, such as a file type icon.
     public let name: IconName?
     private let definition: IconDefinition
+    /// Dither draws lucide's strokes 25% heavier (2.5 for its 2), after Capy's bolder icons.
+    private var heavy = false
     /// Fixed-color glyph: unfilled shapes stay unfilled.
     private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
@@ -41,15 +43,34 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
+        heavy = !brand && ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true)
+        buildShapes()
+        relayout()
+        applyColors()
+    }
+
+    private func buildShapes() {
+        for s in shapes { s.layer.removeFromSuperlayer() }
+        shapes = []
+        let angle = -rotation * .pi / 180
         for element in definition.elements {
             guard let path = try? element.cgPath() else { continue }
             let l = CAShapeLayer()
-            l.actions = ["path": NSNull(), "lineWidth": NSNull(), "strokeColor": NSNull(), "fillColor": NSNull(), "opacity": NSNull()]
+            l.actions = ["path": NSNull(), "lineWidth": NSNull(), "strokeColor": NSNull(), "fillColor": NSNull(), "opacity": NSNull(),
+                         "transform": NSNull()]
+            l.contentsScale = window?.backingScaleFactor ?? 2
+            if rotation != 0 { l.transform = CATransform3DMakeRotation(angle, 0, 0, 1) }
             layer?.addSublayer(l)
             shapes.append((l, element, path))
         }
+    }
+
+    /// Follows Dither's heavier stroke as the theme turns on or off for this view.
+    private func syncWeight() {
+        let next = !isBrand && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        guard next != heavy else { return }
+        heavy = next
         relayout()
-        applyColors()
     }
 
     @available(*, unavailable)
@@ -73,6 +94,7 @@ public final class IconView: NSView {
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        syncWeight()
         applyColors()
     }
 
@@ -105,7 +127,7 @@ public final class IconView: NSView {
                 s.layer.bounds = bounds
                 s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
-                s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * scale
+                s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * (heavy ? 1.25 : 1) * scale
             }
         }
     }

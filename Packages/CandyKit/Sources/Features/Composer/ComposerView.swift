@@ -26,6 +26,8 @@ public final class ComposerView: DSView {
 
     /// `rounded-3xl`: `calc(var(--radius) + 12px)`.
     public static let radius: CGFloat = 22
+    /// The card's corner: T3's 22, or Capy's tighter corner under Dither.
+    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : Self.radius }
     /// Body `px-4 pt-4 pb-2`, footer `px-4 pb-4`, the 1px `p-px` of ComposerSurface.Main.
     static let inset: CGFloat = 1, pad: CGFloat = 16, footerHeight: CGFloat = 32
     /// `min-h-19.5` and `max-h-52` less the `p-1 -m-1` pair.
@@ -303,9 +305,9 @@ public final class ComposerView: DSView {
         layer?.addSublayer(shadowLayer)
 
         // Glass: `card` / `surface-raised` at 80% over a 12px backdrop blur, saturate 1.14.
-        blur.cornerRadius = Self.radius
+        blur.cornerRadius = cardRadius
         addSubview(blur)
-        glass.layer?.cornerRadius = Self.radius
+        glass.layer?.cornerRadius = cardRadius
         glass.layer?.masksToBounds = true
         addSubview(glass)
 
@@ -339,7 +341,7 @@ public final class ComposerView: DSView {
         restingImages.onExpand = { [weak self] id in self?.imageShelf.onExpand?(id) }
         restingImages.onOverflow = { [weak self] in self?.focus() }
         addSubview(restingImages)
-        dropHighlight.cornerRadius = Self.radius
+        dropHighlight.cornerRadius = cardRadius
         dropHighlight.borderWidth = 1
         dropHighlight.isHidden = true
         dropHighlight.actions = ["hidden": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -384,7 +386,7 @@ public final class ComposerView: DSView {
         [questionPill, previousFull, previousCompact].forEach { $0.isHidden = true; addSubview($0) }
 
         // The outline sits over everything (Host::after).
-        outline.layer?.cornerRadius = Self.radius
+        outline.layer?.cornerRadius = cardRadius
         outline.layer?.borderWidth = 1
         addSubview(outline)
 
@@ -726,14 +728,21 @@ public final class ComposerView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        glass.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        blur.cornerRadius = cardRadius
+        glass.layer?.cornerRadius = cardRadius
+        dropHighlight.cornerRadius = cardRadius
+        outline.layer?.cornerRadius = cardRadius
+        // Dither (after Capy): a near-solid slate card, the art only faintly through it.
+        glass.layer?.backgroundColor = ThemeRuntime.isDither(dark: dark)
+            ? Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: self).copy(alpha: 0.94)
+            : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
         let frost = WindowGlass.isActive(for: self)
         shadowLayer.shadowOpacity = dark || frost ? 0 : 0.4
-        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: Self.radius, edge: false)
+        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: cardRadius, edge: false)
         CATransaction.commit()
     }
 
@@ -746,11 +755,11 @@ public final class ComposerView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shadowLayer.frame = box
         // Spread -18: the shadow shape is the box inset by 18.
-        shadowLayer.shadowPath = CGPath(roundedRect: box.insetBy(dx: 18, dy: 18), cornerWidth: max(0, Self.radius - 18),
-                                   cornerHeight: max(0, Self.radius - 18), transform: nil)
+        shadowLayer.shadowPath = CGPath(roundedRect: box.insetBy(dx: 18, dy: 18), cornerWidth: max(0, cardRadius - 18),
+                                   cornerHeight: max(0, cardRadius - 18), transform: nil)
         let maskPath = CGMutablePath()
         maskPath.addRect(box.insetBy(dx: -60, dy: -60))
-        maskPath.addRoundedRect(in: box, cornerWidth: Self.radius, cornerHeight: Self.radius)
+        maskPath.addRoundedRect(in: box, cornerWidth: cardRadius, cornerHeight: cardRadius)
         shadowMask.frame = box
         shadowMask.path = maskPath
         CATransaction.commit()
