@@ -124,4 +124,34 @@ struct WebRowViewportTests {
         #expect(app.setDisplayMode("inline") == "inline")
         #expect(!frame.isLive, "closing full screen off the viewport releases the app")
     }
+
+    /// An app with a read in flight leaves and comes back before its old bridge finished tearing down. The old
+    /// bridge's late answer must not reach the new page, which may reuse the same request id.
+    @Test func anOldBridgeCannotAnswerIntoTheNextPage() async throws {
+        let assets = Assets()
+        let (window, t, model, row, frame) = try Self.fixture(mcp: true, assets: assets)
+        defer { row.prepareForReuse(); _ = (window, model) }
+        var held: [CheckedContinuation<JSONValue, Never>] = []
+        model.mcpApp = McpAppActions(request: { method, _ in
+            guard method == "mcpApps.readResource" else { throw McpAppHostBridge.Refusal("offline") }
+            return await withCheckedContinuation { held.append($0) }
+        }, turnItem: { _, _ in nil }, sendMessage: nil)
+        await Self.until { frame.isLive }
+        func send(_ text: String) throws { frame.onMessage?(try JSONValue(parsing: Data(text.utf8))) }
+        try send(#"{"jsonrpc":"2.0","id":1,"method":"ui/initialize","params":{}}"#)
+        try send(#"{"jsonrpc":"2.0","method":"ui/notifications/initialized"}"#)
+        try send(#"{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"ui://capture/data"}}"#)
+        await Self.until { !held.isEmpty }
+        #expect(held.count == 1)
+        Self.scrollAway(t, row)
+        TimelineTilingTests.userScroll(t, to: 0)
+        await Self.until { frame.isLive }
+        #expect(frame.isLive)
+        var posted: [JSONValue] = []
+        frame.onPost = { posted.append($0) }
+        held.forEach { $0.resume(returning: .object(["contents": .array([])])) }
+        for _ in 0..<10 { await Task.yield() }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!posted.contains { $0["id"] == .number(5) }, "the old bridge's answer stays out of the new page")
+    }
 }

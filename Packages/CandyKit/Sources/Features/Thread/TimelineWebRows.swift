@@ -196,6 +196,8 @@ final class McpAppRowView: TimelineRowView {
     private var navigatedAway = false
     private var toolDefinition: JSONValue?
     private var fullscreen: ThreadMcpFullscreenView?
+    /// Bumped whenever the page and bridge go, so an outgoing bridge can't post into the next page on this frame.
+    private var activation = 0
     /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view or bridge,
     /// unless the app is full screen.
     private var contentVisible = true
@@ -270,6 +272,7 @@ final class McpAppRowView: TimelineRowView {
     private func releaseContent() {
         loading?.cancel()
         loading = nil
+        activation += 1
         if let bridge { Task { await bridge.teardown() } }
         bridge = nil
         frameView.release()
@@ -297,8 +300,9 @@ final class McpAppRowView: TimelineRowView {
         let target: [String: JSONValue] = ["threadId": .string(e.sourceThreadId.rawValue), "itemId": .string(e.itemId.rawValue)]
         let conversation = model.projection?.thread.id ?? e.sourceThreadId
         let frame = frameView
+        let live = activation
         let bridge = McpAppHostBridge(app: e.app, hostVersion: "0.1.0", callbacks: .init(
-            post: { [weak frame] in frame?.post($0) },
+            post: { [weak self, weak frame] in if self?.activation == live { frame?.post($0) } },
             hostContext: { [weak self] in self?.hostContext() ?? .object([:]) },
             callTool: { [weak self] name, args in
                 guard let self else { throw McpAppHostBridge.Refusal("The app was closed.") }

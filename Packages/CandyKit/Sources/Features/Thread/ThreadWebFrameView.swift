@@ -117,9 +117,13 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         ThreadWebFrameBudget.remove(self)
     }
 
+    /// Sees every message posted into a live page. Tests watch the transport with it.
+    var onPost: ((JSONValue) -> Void)?
+
     /// Posts a JSON-RPC message into the framed document's window.
     func post(_ message: JSONValue) {
         guard let webView, let data = try? JSONEncoder().encode(message), let text = String(data: data, encoding: .utf8) else { return }
+        onPost?(message)
         webView.callAsyncJavaScript("window.__t3post(message)", arguments: ["message": text], in: nil, in: .world(name: "t3-host"), completionHandler: nil)
     }
 
