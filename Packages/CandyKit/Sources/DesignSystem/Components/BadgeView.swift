@@ -103,7 +103,7 @@ public final class BadgeView: DSView {
         case .default:
             box.fill = Themed.color(\.primary); text = Themed.color(\.primaryForeground)
         case .destructive:
-            box.fill = Themed.color(\.destructive); text = Themed.white(1)
+            box.fill = Themed.color(\.destructive); text = Themed.textOn(\.destructive)
         case .error:
             box.fill = Themed.color(light: \.destructive, 0.08, dark: \.destructive, 0.16); text = Themed.color(\.destructiveForeground)
         case .info:

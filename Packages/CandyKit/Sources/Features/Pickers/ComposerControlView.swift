@@ -146,8 +146,14 @@ enum ProviderIcon {
         case "claudeAgent": return IconView(name: .brandClaudeAI, size: size)
         case "codex": return IconView(name: .brandOpenAI, size: size, strokeColor: color)
         case "cursor": return IconView(name: .brandCursor, size: size, strokeColor: color)
+        case "grok": return IconView(definition: ProviderPackageIcons.grok, size: size, color: ProviderPackageIcons.grokFill)
+        case "pi": return IconView(definition: ProviderPackageIcons.pi, size: size, color: ProviderPackageIcons.grokFill)
+        case "muse": return IconView(definition: ProviderPackageIcons.muse, size: size)
+        case "opencode": return ProviderPackageIcons.openCode(size: size)
+        case "antigravity": return ProviderPackageIcons.antigravity(size: size)
+        case "acpRegistry": return IconView(name: .brandACPRegistry, size: size, strokeColor: color)
         default:
-            // ponytail: initials for drivers without a bundled glyph; T3 also has package and ACP registry icons, add them with those providers
+            // ponytail: initials for drivers without a bundled glyph; per-agent ACP registry icons load from URLs in T3, add them with remote icon loading
             let words = displayName.replacingOccurrences(of: "_", with: " ").split(separator: " ")
             let initials = words.count > 1 ? words.prefix(2).compactMap(\.first).map(String.init).joined() : String(displayName.prefix(2))
             let l = LabelView(initials, font: DSFont.ui(10, weight: .semibold), color: color)
