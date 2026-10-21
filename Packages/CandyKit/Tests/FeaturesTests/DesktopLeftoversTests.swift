@@ -39,6 +39,13 @@ struct DesktopLeftoversTests {
         #expect(OpenInEditors.remoteURL(editor: "zed", host: "work", path: "/C:/keep")?.absoluteString == "zed://ssh/work/C%3A/keep")
         #expect(OpenInEditors.remoteURL(editor: "file-manager", host: "work", path: "/") == nil)
         #expect(OpenInEditors.remoteURL(editor: "idea", host: "work", path: "/a b")?.absoluteString == "jetbrains://gateway/ssh/environment?h=work&launchIde=true&ideHint=IU&projectHint=%2Fa+b")
+        // The SSH user and a file position (contracts/editor.ts:180-224, remoteOpen.ts:78-90).
+        #expect(OpenInEditors.remoteURL(editor: "cursor", host: "box", username: "me", path: "/a.ts", isFile: true)?.absoluteString == "cursor://vscode-remote/ssh-remote+me%40box/a.ts:1:1")
+        #expect(OpenInEditors.remoteURL(editor: "zed", host: "box", username: "me", path: "/a")?.absoluteString == "zed://ssh/me@box/a")
+        #expect(OpenInEditors.remoteURL(editor: "idea", host: "box", username: "me", path: "/a!")?.absoluteString == "jetbrains://gateway/ssh/environment?h=box&launchIde=true&ideHint=IU&projectHint=%2Fa%21&u=me")
+        #expect(OpenInEditors.sshDestination(alias: "me@box", username: nil) == ("box", "me"))
+        #expect(OpenInEditors.sshDestination(alias: "me@box", username: " root ") == ("box", "root"))
+        #expect(OpenInEditors.sshDestination(alias: "box", username: "") == ("box", nil))
     }
     @Test func keybindingsSuccessCooldown() {
         var notice = KeybindingsUpdateNotice()

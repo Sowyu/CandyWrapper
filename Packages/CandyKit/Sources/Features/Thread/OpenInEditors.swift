@@ -76,20 +76,37 @@ public enum OpenInEditors {
     public static let remoteSchemes = ["cursor": "cursor", "vscode": "vscode", "vscode-insiders": "vscode-insiders", "vscodium": "vscodium", "zed": "zed"]
     private static let jetBrains = ["idea": "IU", "aqua": "QA", "clion": "CL", "datagrip": "DB", "dataspell": "DS", "goland": "GO", "phpstorm": "PS", "pycharm": "PY", "rider": "RD", "rubymine": "RM", "rustrover": "RR", "webstorm": "WS"]
 
-    /// contracts/editor.ts:199-242. Encode components, preserving path separators and drive letters.
-    public static func remoteURL(editor: String, host: String, path: String) -> URL? {
+    /// `buildRemoteOpenUrl` (contracts/editor.ts:180-224). Encode components, preserving path separators and drive
+    /// letters. `username` rides in the SSH destination; a file gets `:1:1` so VS Code opens it, not a folder.
+    public static func remoteURL(editor: String, host: String, username: String? = nil, path: String, isFile: Bool = false) -> URL? {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
         func encode(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "" }
         let posix = path.replacingOccurrences(of: "\\", with: "/")
         if let product = jetBrains[editor] {
-            func form(_ value: String) -> String { encode(value).replacingOccurrences(of: "%20", with: "+") }
-            return URL(string: "jetbrains://gateway/ssh/environment?h=\(form(host))&launchIde=true&ideHint=\(product)&projectHint=\(form(posix))")
+            // URLSearchParams: form encoding keeps only alphanumerics and `*-._`, and a space is `+`.
+            let formAllowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789*-._ ")
+            func form(_ value: String) -> String { (value.addingPercentEncoding(withAllowedCharacters: formAllowed) ?? "").replacingOccurrences(of: " ", with: "+") }
+            let user = username.map { "&u=\(form($0))" } ?? ""
+            return URL(string: "jetbrains://gateway/ssh/environment?h=\(form(host))&launchIde=true&ideHint=\(product)&projectHint=\(form(posix))\(user)")
         }
         guard let scheme = remoteSchemes[editor] else { return nil }
         var rooted = posix.hasPrefix("/") ? posix : "/" + posix
         if editor == "zed", posix.lowercased().hasPrefix("c:/") { rooted = String(rooted.dropFirst(3)) }
         let encoded = rooted.components(separatedBy: "/").map(encode).joined(separator: "/")
-        return URL(string: editor == "zed" ? "\(scheme)://ssh/\(encode(host))\(encoded)" : "\(scheme)://vscode-remote/ssh-remote+\(encode(host))\(encoded)")
+        if editor == "zed" {
+            // Zed reads this segment as ssh URL userinfo, so the `@` stays literal.
+            let destination = username.map { "\(encode($0))@\(encode(host))" } ?? encode(host)
+            return URL(string: "\(scheme)://ssh/\(destination)\(encoded)")
+        }
+        let destination = username.map { "\($0)@\(host)" } ?? host
+        return URL(string: "\(scheme)://vscode-remote/ssh-remote+\(encode(destination))\(encoded)\(isFile ? ":1:1" : "")")
+    }
+
+    /// `resolveRemoteOpenState` (remoteOpen.ts:78-90): an alias splits at its last `@`; a saved username wins.
+    public static func sshDestination(alias: String, username: String?) -> (host: String, username: String?) {
+        let saved = username?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard let at = alias.lastIndex(of: "@") else { return (alias, saved.isEmpty ? nil : saved) }
+        return (String(alias[alias.index(after: at)...]), saved.isEmpty ? String(alias[..<at]) : saved)
     }
 
     /// `shouldShowOpenInPicker` (OpenInPicker.logic.ts:5-25) for local environments: a project and the primary
