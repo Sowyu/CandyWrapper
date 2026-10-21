@@ -26,8 +26,9 @@ public func formatDuration(_ ms: Double) -> String {
         let tenths = (ms / 100).rounded() / 10
         return tenths >= 10 ? "10s" : String(format: "%.1fs", tenths)
     }
-    if ms < 60_000 { return "\(Int((ms / 1_000).rounded()))s" }
     let total = Int((ms / 1_000).rounded())
+    // The unit follows the rounded seconds, so 59.5 seconds never reads "60s" (bd93830550, :41-43).
+    if total < 60 { return "\(total)s" }
     let parts = [(total / 3_600, "h"), ((total % 3_600) / 60, "m"), (total % 60, "s")]
     return parts.filter { $0.0 > 0 }.map { "\($0.0)\($0.1)" }.joined(separator: " ")
 }
