@@ -710,10 +710,9 @@ final class GitController {
     /// target the operation started on, captured before any await, so a late result never lands on the thread
     /// or environment open now.
     // ponytail: T3 also stops a running session when the worktree changes; server threads with a worktree are locked here
-    // ponytail: a draft's result is dropped once another draft is open; write it by draft id if ComposerController grows that
     private func setThreadBranch(_ branch: String, worktreePath: String?, on origin: Target) {
-        switch BranchToolbarLogic.resultTarget(startedThreadId: origin.threadId?.localId.rawValue, startedDraftId: origin.draftId,
-                                               currentDraftId: composer.currentDraft?.draftId) {
+        let draftId: String
+        switch BranchToolbarLogic.resultTarget(startedThreadId: origin.threadId?.localId.rawValue, startedDraftId: origin.draftId) {
         case .thread(let threadId):
             guard let shell = environments.session(origin.environmentId), origin.branch != branch || origin.worktreePath != worktreePath else { return }
             var command: [String: JSONValue] = ["type": .string("thread.metadata.update"), "commandId": .string(ThreadCommands.newCommandId()),
@@ -723,10 +722,10 @@ final class GitController {
             return
         case .none:
             return
-        case .draft:
-            break
+        case .draft(let id):
+            draftId = id
         }
-        composer.updateDraft { d in
+        composer.updateDraft(id: draftId) { d in
             d.envMode = BranchToolbarLogic.envModeAfterBranchChange(nextWorktreePath: worktreePath, currentWorktreePath: origin.worktreePath, mode: origin.envMode)
             d.branch = branch
             d.worktreePath = worktreePath
@@ -1094,15 +1093,12 @@ final class GitController {
                 guard let self else { return }
                 dialog.preparing = nil
                 // The dialog can close mid-request and another draft open; this result belongs to `draft` only.
-                // ponytail: dropped once another draft is open; write it by draft id if ComposerController grows that
-                if self.composer.currentDraft?.draftId == draft.draftId {
-                    self.composer.updateDraft { d in
-                        d.branch = result.branch
-                        d.worktreePath = result.worktreePath
-                        d.envMode = result.worktreePath == nil ? .local : .worktree
-                    }
-                    self.refresh()
+                self.composer.updateDraft(id: draft.draftId) { d in
+                    d.branch = result.branch
+                    d.worktreePath = result.worktreePath
+                    d.envMode = result.worktreePath == nil ? .local : .worktree
                 }
+                self.refresh()
                 done()
                 // A checkout the server couldn't confirm at the head warns (PullRequestThreadDialog.tsx:176-178,
                 // pullRequestCheckoutToast.ts:1-6).
