@@ -36,20 +36,19 @@ extension MarkdownLayout {
 }
 
 /// `UserMessageIntentMarker` (MessagesTimeline.tsx:2562-2603): the line above a bubble that did
-/// not start its own turn. Steers show a redo arrow and "Steer"; queued turns show "Queued".
+/// steered the active turn: a redo arrow and "Steer". Queued turns show none since 5cda25e72b
+/// (TimelineUserMessageRow.tsx:290-293).
 /// `me-1 flex items-center justify-end gap-1 text-xs leading-none text-muted-foreground`, icon `size-3`.
 final class UserIntentMarkerView: DSView {
     static let height: CGFloat = 12
     private let icon = IconView(name: .redo2, size: 12, strokeColor: TL.c(\.mutedForeground))
     private let label = LabelView("", font: TL.font(12), color: TL.c(\.mutedForeground))
 
-    /// Label, icon and tooltip for an intent, or nil when the row shows no marker (`turn_start`, none).
+    /// Label, icon and tooltip for a steer, or nil for any other intent (TimelineUserMessageRow.tsx:463-483).
     static func presentation(_ intent: InputIntent?) -> (label: String, icon: Bool, tooltip: String)? {
-        guard let intent, intent != .turnStart else { return nil }
-        if intent == .queuedTurn { return ("From queue", false, "Queued while the agent was busy") }
+        if intent == .steer { return ("Steer", true, "Steered the active turn") }
         if intent == .promotedQueuedToSteer { return ("Steer", true, "Originally queued, then promoted to steer the active turn") }
-        // T3 falls back to the steer look for any other intent.
-        return ("Steer", true, "Steered the active turn")
+        return nil
     }
 
     override init(frame frameRect: NSRect) {
