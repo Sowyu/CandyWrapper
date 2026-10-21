@@ -88,15 +88,23 @@ public final class CommandPaletteController {
     /// The rows' mode: the overlay mode, else the open page's own, else the query's browse mode.
     private var activeMode: Mode? { mode ?? stack.last?.mode ?? browse?(query) }
 
-    /// Enters `mode` with an empty query, or back to commands with nil.
+    /// Enters `mode` with an empty query, or back to commands with nil. A mode a palette item opened ("Go to file",
+    /// "Search project contents") gives the query that led there back when it leaves (`OpenChildSearch` and
+    /// `BackToCommand`, CommandPalette.logic.ts:114-124, CommandPalette.tsx:1389,1402). Shortcuts open modes with none.
     public func setMode(_ mode: Mode?) {
+        let restored = mode == nil ? parentQuery : nil
+        parentQuery = mode == nil ? nil : runningQuery
         self.mode = mode
         stack = []
-        setQuery("")
+        setQuery(restored ?? "")
         highlightedValue = nil
         highlightCleared = false
+        if let restored { onQueryChange?(restored) }
         refresh()
     }
+    /// The command query a child mode returns to, and the query while a palette item runs.
+    private var parentQuery: String?
+    private var runningQuery: String?
     /// The palette asks to close (Escape, an item that doesn't keep it open).
     public var onClose: (() -> Void)?
     /// The query changed: the app may start a message search for it.
@@ -340,14 +348,19 @@ public final class CommandPaletteController {
         highlightedValue = view.highlightedIndex.map { flat[$0].value }
     }
 
-    /// Palette-level keybindings while it is open (`handleKeyDown`, CommandPalette.tsx:3090-3122):
-    /// `thread.jump.N` runs the item showing that shortcut. Returns true when used.
+    /// Palette-level keybindings while it is open (`handleKeyDown`, CommandPalette.tsx:2313-2339):
+    /// `thread.jump.N` runs the item showing that shortcut, and a new-thread shortcut runs its item when one
+    /// shows, unless an input method is composing. Returns true when used.
     public func handleJump(_ command: String) -> Bool {
-        guard Keymap.jumpIndex(command, prefix: "thread.jump.") != nil else { return false }
+        let isJump = Keymap.jumpIndex(command, prefix: "thread.jump.") != nil
+        let isNewThread = Self.newThreadCommands.contains(command) && !view.input.hasMarkedText
+        guard isJump || isNewThread else { return false }
         flushRefresh()
-        if let item = flat.first(where: { $0.shortcutCommand == command }) { execute(item) }
+        guard let item = flat.first(where: { $0.shortcutCommand == command }) else { return isJump }
+        execute(item)
         return true
     }
+    static let newThreadCommands: Set<String> = ["chat.new", "chat.newLocal", "chat.newWithoutProject"]
 
     // MARK: Running
 
@@ -364,6 +377,8 @@ public final class CommandPaletteController {
             push(page)
         case .run(let run, let keepOpen):
             if !keepOpen { onClose?() }
+            runningQuery = mode == nil && stack.isEmpty ? query : nil
+            defer { runningQuery = nil }
             run()
         }
     }

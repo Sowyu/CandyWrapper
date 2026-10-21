@@ -149,5 +149,34 @@ import DesignSystem
         #expect(palette.handleJump("thread.jump.2"))
         #expect(ran == ["b"])
         #expect(!palette.handleJump("chat.new"))
+        #expect(!palette.handleJump("terminal.toggle"))
+    }
+
+    /// New-thread shortcuts run the row showing them while the palette is open (#19055, CommandPalette.tsx:2318-2333).
+    @Test func newThreadShortcutRunsItsRow() {
+        var ran: [String] = []
+        var row = action("new", ["New thread"]) { ran.append("new") }
+        row.shortcutCommand = "chat.new"
+        let palette = CommandPaletteController(source: .init(rootGroups: { [PaletteGroup(value: "actions", label: "Actions", items: [row])] }))
+        #expect(palette.handleJump("chat.new"))
+        #expect(ran == ["new"])
+        #expect(!palette.handleJump("chat.newLocal"))
+    }
+
+    /// Escape out of Go to file opened from the palette gives back the query that led there (#15940,
+    /// CommandPalette.logic.ts:114-124); a shortcut-opened mode returns to an empty query.
+    @Test func leavingAChildModeRestoresTheQuery() {
+        var palette: CommandPaletteController!
+        let files = PaletteEntry(value: "files", searchTerms: ["Go to file"], title: "Go to file", icon: .search,
+                                 action: .run({ palette.setMode(.init(name: "files", placeholder: "", footerActionLabel: "") { _ in ([], "") }) }, keepOpen: true))
+        palette = CommandPaletteController(source: .init(rootGroups: { [PaletteGroup(value: "actions", label: "Actions", items: [files])] }))
+        palette.view.input.onChange?("go to")
+        _ = palette.handleCommand(#selector(NSResponder.insertNewline(_:)))
+        #expect(palette.mode?.name == "files" && palette.query.isEmpty)
+        palette.setMode(nil)
+        #expect(palette.query == "go to")
+        palette.setMode(.init(name: "files", placeholder: "", footerActionLabel: "") { _ in ([], "") })
+        palette.setMode(nil)
+        #expect(palette.query.isEmpty)
     }
 }
