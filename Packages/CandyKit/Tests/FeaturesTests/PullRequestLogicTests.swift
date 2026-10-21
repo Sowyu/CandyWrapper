@@ -267,6 +267,11 @@ struct PullRequestDetailLogicTests {
         #expect(D.selectedMergeMethod(["merge", "squash"], projectDefault: "rebase", preferred: "squash") == "squash")
         #expect(D.checkoutCommand(provider: "github", number: 12) == "gh pr checkout 12")
         #expect(D.openOnHostLabel("github") == "Open on GitHub")
+        // pullRequestDiffError.ts:1-14
+        #expect(D.describeDiffError("RpcClientError: API rate limit exceeded", providerName: "GitHub").title == "GitHub rate limit reached")
+        #expect(D.describeDiffError("HTTP 429 Too Many Requests", providerName: "GitLab").title == "GitLab rate limit reached")
+        #expect(D.describeDiffError("exit code 128", providerName: "GitHub") == ("Couldn't load the changes",
+            "The environment couldn't load this pull request's diff. Try again, or view the changes on GitHub."))
     }
 
     @Test func reviewOutcomes() {

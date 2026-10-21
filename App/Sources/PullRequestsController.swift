@@ -106,6 +106,7 @@ final class PullRequestDetailBinding {
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
             view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
             view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
+            view.onRetryDiff = { [weak self] in self?.patchKey = nil; self?.loadCode() }
             view.onStackAction = { [weak self] action in self?.runStackAction(action) }
             view.onStackRetry = { [weak self] in self?.loadStack() }
             view.reviewActions = PullRequestReviewThreadActions(
