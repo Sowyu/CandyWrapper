@@ -19,11 +19,11 @@ public struct ComposerBannerStackItem {
         self.id = id; self.view = view; self.priority = priority; self.height = height; self.onDismiss = onDismiss
     }
 
-    /// `bannerPriority` (ComposerBannerStack.tsx:33-41): activity stays attached, urgency and severity
-    /// order the notices behind it.
+    /// `bannerPriority` (ComposerBannerStack.tsx:33-41): urgent, error and warning notices come first,
+    /// so they never hide behind an activity banner, then activity, then the rest.
     var rank: Int {
-        if priority == .activity { return 0 }
-        if priority == .urgent || view.variant != .neutral { return 1 }
+        if priority == .urgent || view.variant != .neutral { return 0 }
+        if priority == .activity { return 1 }
         return 2
     }
 
