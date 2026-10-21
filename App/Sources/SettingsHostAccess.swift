@@ -62,6 +62,8 @@ extension SettingsController {
         accessTask = nil
         ticker?.invalidate()
         ticker = nil
+        linkPoll?.invalidate()
+        linkPoll = nil
         credentials = [:]
     }
 
@@ -126,7 +128,24 @@ extension SettingsController {
                 linkError = Self.message(error, fallback: "Could not read T3 Connect link state.")
             }
             linkLoading = false
+            updateLinkPoll()
             refreshPage()
+        }
+    }
+
+    /// The server rechecks reachability when the tunnel's readiness changes, so T3 rereads the link state
+    /// every 30 s while the row is mounted (SavedEnvironmentRows.tsx:489-494). Here the timer runs only
+    /// while the Connections page shows an active tunnel, the only time the reachability line shows.
+    func updateLinkPoll() {
+        let live = isOpen && section == .connections && linkState?.tunnelActive == true
+        if live, linkPoll == nil {
+            linkPoll = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.loadLinkState() }
+            }
+            linkPoll?.tolerance = 3
+        } else if !live {
+            linkPoll?.invalidate()
+            linkPoll = nil
         }
     }
 
@@ -224,10 +243,18 @@ extension SettingsController {
         // ponytail: the switch needs T3's `reconcileCloudState` (useCloudLinkController.ts:85-190: a managed or
         // publish-only link, unlinked only when neither is wanted) in front of the relay install flow
         // (`DesktopManagedController.ensureRelayClient`); left to T3 Code's app until it is ported and tried on a real account with the user
+        // The reachability line and description (SavedEnvironmentRows.tsx:495-515, 585-596).
+        // ponytail: the unreachable line leaves out T3's inline "More info" link, add it when SettingsRowView's status takes links
+        let reachability = tunnel ? linkState?.reachability : nil
+        let detail = !tunnel ? "Make this environment available to your other devices through T3 Connect."
+            : reachability?.status == "unreachable" ? "T3 Connect is on, but other devices cannot reach this environment."
+            : reachability?.status == "reachable" ? "This environment is available to your other devices through T3 Connect."
+            : "T3 Connect is on. Reachability has not been checked yet."
+        let unreachable = linkError == nil && reachability?.status == "unreachable"
         rows.append(.init(id: "t3-connect", title: "T3 Connect",
-                          detail: tunnel ? "This environment is available to your other devices through T3 Connect."
-                              : "Make this environment available to your other devices through T3 Connect.",
-                          status: linkError,
+                          detail: detail,
+                          status: linkError ?? reachability?.statusLine,
+                          statusIsError: unreachable,
                           control: .toggle(.init(isOn: tunnel, isEnabled: false, tooltip: reason ?? Self.bridgeTooltip, label: "Enable T3 Connect"))))
         // Publishing alone needs a publish-only link; with the tunnel up it is a preference the server sets.
         rows.append(.init(id: "publish-agent-activity", title: "Publish agent activity",

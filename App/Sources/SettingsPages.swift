@@ -123,6 +123,7 @@ extension SettingsController {
         if page.page !== view { page.page = view; page.scrollToTop() }
         refreshPages()
         extraPages[section]?.didShow()
+        updateLinkPoll()
         onRouteChange?()
     }
 

@@ -58,8 +58,21 @@ struct HostAccessTests {
 
     @Test func linkStateDefaultsForOlderServers() throws {
         let old = try JSONDecoder().decode(CloudLinkState.self, from: Data(#"{"linked":true,"cloudUserId":null,"relayUrl":null,"relayIssuer":null,"publishAgentActivity":false}"#.utf8))
-        #expect(old.tunnelActive && !old.holdsWebhooks)
+        #expect(old.tunnelActive && !old.holdsWebhooks && old.reachability == nil)
         let body = try JSONEncoder().encode(CloudPreferencesRequest(publishAgentActivity: true))
         #expect(String(decoding: body, as: UTF8.self) == #"{"publishAgentActivity":true}"#)
+    }
+
+    /// environmentHttp.ts:411-456 and SavedEnvironmentRows.tsx:495-503.
+    @Test func linkStateReachability() throws {
+        func state(_ r: String) throws -> CloudLinkState {
+            try JSONDecoder().decode(CloudLinkState.self, from: Data(#"{"linked":true,"managedTunnelActive":true,"publishAgentActivity":false,"reachability":\#(r)}"#.utf8))
+        }
+        let up = try state(#"{"status":"reachable","checkedAt":"2026-10-20T12:00:00.000Z","readyConnections":4,"protocol":"quic"}"#)
+        #expect(up.reachability?.statusLine == "Tunnel connected · 4 connections · QUIC")
+        let one = try state(#"{"status":"reachable","checkedAt":"x","readyConnections":1,"protocol":null}"#)
+        #expect(one.reachability?.statusLine == "Tunnel connected · 1 connection")
+        let down = try state(#"{"status":"unreachable","checkedAt":"x","cause":"edge_unreachable","reason":"The tunnel cannot reach Cloudflare.","hint":null,"fix":"Open port 7844."}"#)
+        #expect(down.reachability?.statusLine == "The tunnel cannot reach Cloudflare. Fix: Open port 7844.")
     }
 }
