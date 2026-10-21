@@ -86,6 +86,9 @@ public final class SidebarLayoutView: DSView {
     private var ditherArt: DitherArtView?
     /// Dither's tab strip in the window's top band, over the framed content panel; the app fills its tabs.
     public let tabStrip = DitherTabStripView()
+    /// Dither's history buttons, after Capy's: in the titlebar row at the sidebar's right, whatever the sidebar shows.
+    public let backButton = ButtonView(nil, icon: .chevronLeft, variant: .ghostMuted, size: .iconSm)
+    public let forwardButton = ButtonView(nil, icon: .chevronRight, variant: .ghostMuted, size: .iconSm)
     /// Preferred width; the drawn width is this clamped to the window (`effectiveWidth`).
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
@@ -117,6 +120,9 @@ public final class SidebarLayoutView: DSView {
         addSubview(tabStrip)
         tabStrip.isHidden = true
         addSubview(sidebar)
+        backButton.setAccessibilityLabel("Back")
+        forwardButton.setAccessibilityLabel("Forward")
+        for b in [backButton, forwardButton] { b.isHidden = true; addSubview(b) }
         addSubview(rail)
         addSubview(collapsedTrigger)
         collapsedTrigger.isHidden = true
@@ -262,6 +268,11 @@ public final class SidebarLayoutView: DSView {
         sidebar.showsBorder = !dither
         tabStrip.isHidden = !dither
         tabStrip.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
+        // Over the sidebar's titlebar row, right-aligned, while the sidebar is open.
+        for (i, b) in [backButton, forwardButton].enumerated() {
+            b.isHidden = !dither || !isOpen || sliding
+            b.frame = NSRect(x: gap - 8 - 28 * CGFloat(2 - i) - 2 * CGFloat(1 - i), y: (DitherChrome.band - 28) / 2, width: 28, height: 28)
+        }
         for view in main.subviews { view.frame = main.bounds }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)

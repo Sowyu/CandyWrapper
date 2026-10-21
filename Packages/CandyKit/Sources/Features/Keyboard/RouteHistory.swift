@@ -20,6 +20,10 @@ public final class RouteHistory {
     private var moving = false
     /// Shows a route; false when it no longer exists (a deleted thread, a sent draft).
     public var apply: (Route) -> Bool = { _ in false }
+    /// After every record or move, for controls that follow the history (Dither's back and forward buttons and tabs).
+    public var onChange: (() -> Void)?
+    public var canGoBack: Bool { index > 0 }
+    public var canGoForward: Bool { index >= 0 && index < entries.count - 1 }
 
     // ponytail: 100 entries; Chromium keeps 50 per tab, cap differently if memory reviews care
     static let limit = 100
@@ -28,6 +32,7 @@ public final class RouteHistory {
 
     /// A navigation happened: a new route pushes and drops the forward entries.
     public func record(_ route: Route?) {
+        defer { if !moving { onChange?() } }
         guard !moving, let route, index < 0 || entries[index] != route else { return }
         entries.removeSubrange((index + 1)...)
         entries.append(route)
@@ -49,7 +54,7 @@ public final class RouteHistory {
             moving = true
             let shown = apply(entries[i])
             moving = false
-            if shown { index = i; return true }
+            if shown { index = i; onChange?(); return true }
             entries.remove(at: i)
             if step < 0 { index -= 1; i -= 1 }
         }
