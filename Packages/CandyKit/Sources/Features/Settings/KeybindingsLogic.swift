@@ -267,12 +267,10 @@ public enum KeybindingsLogic {
         return named.contains(k) ? k : nil
     }
 
-    /// `keybindingFromKeyboardEvent` on macOS: Command records as `mod`, Control as `ctrl`.
+    /// `keybindingFromKeyboardEvent` on macOS with `layoutCharacter` (KeybindingsSettings.logic.ts:393-458):
+    /// Command records as `mod`, Control as `ctrl`.
     public static func binding(from stroke: KeyStroke) -> String? {
-        let isLetter = stroke.key.count == 1 && stroke.key.first!.isASCII && stroke.key.first!.isLetter
-        // `shortcutKeyFromEvent`: a layout letter, else the physical digit or punctuation key, else the layout key.
-        let physical = stroke.physicalKey.flatMap { $0.count == 1 && $0.first!.isLetter ? nil : $0 }
-        guard let token = keyToken(isLetter ? stroke.key : physical ?? stroke.key) else { return nil }
+        guard let token = keyToken(recordedLayoutKey(stroke)) else { return nil }
         var parts: [String] = []
         if stroke.meta { parts.append("mod") }
         if stroke.ctrl { parts.append("ctrl") }
@@ -281,6 +279,24 @@ public enum KeybindingsLogic {
         parts.append(token)
         return parts.joined(separator: "+")
     }
+
+    /// `recordedLayoutShortcutKey` (#15972): the layout character (`?`, `ä`), except Option and named keys use the
+    /// physical key, and a US shifted glyph at its US position records that key (`{` on `[` stays `[`).
+    static func recordedLayoutKey(_ stroke: KeyStroke) -> String {
+        let isLetter = stroke.key.count == 1 && stroke.key.first!.isASCII && stroke.key.first!.isLetter
+        // `shortcutKeyFromEvent`: a layout letter, else the physical digit or punctuation key, else the layout key.
+        let physical = isLetter ? stroke.key : stroke.physicalKey.flatMap { $0.count == 1 && $0.first!.isLetter ? nil : $0 } ?? stroke.key
+        let layout = stroke.key.lowercased()
+        if stroke.alt || layout.count != 1 { return physical }
+        let unshifted = stroke.shift ? usShiftedToUnshifted[layout] : nil
+        return unshifted == physical ? physical : layout
+    }
+
+    /// `US_SHIFTED_TO_UNSHIFTED_KEYS` (packages/shared/src/keybindings.ts:56-78).
+    static let usShiftedToUnshifted: [String: String] = [
+        "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0", "~": "`", "_": "-",
+        "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/",
+    ]
 
     /// `KeybindingPill` part labels on macOS.
     public static func pillParts(_ value: String) -> [String] {
