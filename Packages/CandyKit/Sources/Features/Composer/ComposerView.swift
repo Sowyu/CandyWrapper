@@ -354,7 +354,11 @@ public final class ComposerView: DSView {
             guard let self, let onFiles = self.onFiles else { return false }
             let files = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory)
             let text = pboard.string(forType: .string) ?? ""
-            guard ComposerAttachmentRules.shouldHandlePaste(files: files.map { ($0.name, $0.mimeType) }, plainText: text) else { return false }
+            // A pasted folder always becomes a reference (ChatComposer.tsx:5176-5192, `splitTransferredFiles`).
+            let isFolder = { (f: ComposerIncomingFile) in (try? f.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            let plain = files.filter { !isFolder($0) }
+            guard plain.count < files.count
+                    || ComposerAttachmentRules.shouldHandlePaste(files: plain.map { ($0.name, $0.mimeType) }, plainText: text) else { return false }
             onFiles(files)
             return true
         }
