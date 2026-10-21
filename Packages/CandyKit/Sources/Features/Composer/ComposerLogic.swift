@@ -45,16 +45,21 @@ public enum ComposerLogic {
                                     isDraft: Bool = false, keymap: Keymap = .default) -> SubmitIntent? {
         guard key.isReturn, !key.composing, !key.isRepeat else { return nil }
         let stroke = KeyStroke(key: "enter", meta: key.mod, ctrl: key.control, shift: key.shift, alt: key.option)
-        let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraft, "turnRunning": turnRunning])
+        let needsModifier = requiresModifier(mode, prompt: prompt)
+        let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraft, "turnRunning": turnRunning,
+                                         "composerRequiresModifier": needsModifier])
         let command = keymap.resolve(stroke, context: context)
         if command == "composer.sendAlternate", turnRunning { return .alternate }
         if command == "composer.sendBackground", isDraft { return .background }
         if command == "composer.sendAndNewThread", !isDraft { return .background }
         guard command == nil, !key.shift, !key.option else { return nil }
-        let multiline = prompt.contains("\n") || prompt.contains("\r")
-        let needsModifier = mode == .modEnter || (mode == .modEnterMultiline && multiline)
         if needsModifier, !key.mod, !key.control { return nil }
         return .foreground
+    }
+
+    /// `composerRequiresModifier` (composer-logic.ts:49-57).
+    public static func requiresModifier(_ mode: SendShortcut, prompt: String) -> Bool {
+        mode == .modEnter || (mode == .modEnterMultiline && (prompt.contains("\n") || prompt.contains("\r")))
     }
 
     // MARK: Placeholder

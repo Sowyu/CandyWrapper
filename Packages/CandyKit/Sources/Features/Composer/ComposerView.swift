@@ -430,6 +430,8 @@ public final class ComposerView: DSView {
     var allowsSuggestionsAtCaret: Bool { editor.codeFenceAtCaret == nil }
     public var displayText: String { editor.string }
 
+    /// `composerRequiresModifier` for the current draft: Return alone doesn't send.
+    public var requiresSendModifier: Bool { ComposerLogic.requiresModifier(sendShortcut, prompt: prompt) }
     /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
     private var hasContent: Bool {
         let text = prompt
@@ -523,9 +525,12 @@ public final class ComposerView: DSView {
             } else if face == .send {
                 primary.tooltip = "Submit message"
             } else {
-                // ponytail: no shortcut label after "Ctrl/⌘-click"; add it with the keybindings settings
+                // ComposerPrimaryActions.tsx:306, with `alternateShortcutLabel` from ChatComposer.tsx:6288-6301.
                 let action = steerByDefault ? "steer" : "queue", other = steerByDefault ? "queue" : "steer"
-                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), Ctrl/⌘-click to \(other)"
+                let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraftRoute, "turnRunning": true,
+                                                 "composerRequiresModifier": requiresSendModifier])
+                let chord = ActiveKeymap.label(for: "composer.sendAlternate", context: context).map { " or \($0)" } ?? ""
+                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), Ctrl/⌘-click\(chord) to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }

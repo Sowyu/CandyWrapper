@@ -277,9 +277,21 @@ public struct Keymap: Sendable, Equatable {
     /// shortcut both match wins, whatever its command.
     public func resolve(_ stroke: KeyStroke, context: KeybindingContext) -> String? {
         for rule in rules.reversed() where rule.whenAst?.evaluate(context) ?? true {
-            if stroke.matches(rule.shortcut) { return rule.command }
+            if stroke.matches(Self.shortcut(rule, context)) { return rule.command }
         }
         return nil
+    }
+
+    /// `shortcutForContext` (web keybindings.ts:108-124): with a send that needs a modifier, a plain
+    /// Mod+Enter `composer.sendAlternate` would clash with send, so it reads as Mod+Shift+Enter. Saved
+    /// and remapped rules stay as they are.
+    static func shortcut(_ rule: ResolvedKeybindingRule, _ context: KeybindingContext) -> KeybindingShortcut {
+        var s = rule.shortcut
+        if context["composerRequiresModifier"], rule.command == "composer.sendAlternate", s.key == "enter", s.modKey,
+           !s.metaKey, !s.ctrlKey, !s.altKey, !s.shiftKey {
+            s.shiftKey = true
+        }
+        return s
     }
 
     /// `effectiveShortcutsForCommand` (web keybindings.ts:103-130): shortcuts that still reach
@@ -288,8 +300,9 @@ public struct Keymap: Sendable, Equatable {
         var claimed = Set<String>()
         var result: [KeybindingShortcut] = []
         for rule in rules.reversed() where rule.whenAst?.evaluate(context) ?? true {
-            guard claimed.insert(rule.shortcut.conflictKey).inserted else { continue }
-            if rule.command == command { result.append(rule.shortcut) }
+            let shortcut = Self.shortcut(rule, context)
+            guard claimed.insert(shortcut.conflictKey).inserted else { continue }
+            if rule.command == command { result.append(shortcut) }
         }
         return result
     }

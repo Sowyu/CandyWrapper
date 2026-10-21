@@ -31,9 +31,23 @@ struct ComposerLogicTests {
         #expect(L.submitIntent(L.Key(isReturn: true, option: true), prompt: "", mode: .enter, turnRunning: false) == nil)
         #expect(L.submitIntent(L.Key(isReturn: true, composing: true), prompt: "", mode: .enter, turnRunning: false) == nil)
         #expect(L.submitIntent(L.Key(isReturn: true, isRepeat: true), prompt: "", mode: .enter, turnRunning: false) == nil)
-        for mode in L.SendShortcut.allCases {
-            #expect(L.submitIntent(mod, prompt: "hi", mode: mode, turnRunning: true) == .alternate)
+        // With a send that needs the modifier, Mod+Enter sends and the alternate moves to Mod+Shift+Enter
+        // (keybindings.ts:108-124, composer-logic.test.ts:124-143).
+        let modShift = L.Key(isReturn: true, shift: true, mod: true)
+        for (mode, prompt) in [(L.SendShortcut.enter, "a\nb"), (.modEnterMultiline, "hi")] {
+            #expect(L.submitIntent(mod, prompt: prompt, mode: mode, turnRunning: true) == .alternate)
+            #expect(L.submitIntent(modShift, prompt: prompt, mode: mode, turnRunning: true) == nil)
         }
+        for (mode, prompt) in [(L.SendShortcut.modEnter, "hi"), (.modEnterMultiline, "a\nb")] {
+            #expect(L.submitIntent(mod, prompt: prompt, mode: mode, turnRunning: true) == .foreground)
+            #expect(L.submitIntent(modShift, prompt: prompt, mode: mode, turnRunning: true) == .alternate)
+        }
+        // A saved Mod+Enter rule moves too; any other chord stays.
+        let ctx = KeybindingContext(["composerFocus": true, "turnRunning": true, "composerRequiresModifier": true])
+        let saved = Keymap.merged(withServer: [ResolvedKeybindingRule(key: "mod+enter", command: "composer.sendAlternate")!])
+        #expect(saved.effectiveShortcuts(for: "composer.sendAlternate", context: ctx).first?.shiftKey == true)
+        let altQ = Keymap.merged(withServer: [ResolvedKeybindingRule(key: "alt+q", command: "composer.sendAlternate")!])
+        #expect(altQ.effectiveShortcuts(for: "composer.sendAlternate", context: ctx).first?.shiftKey == false)
         // The keybindings decide first (composer-logic.test.ts): mod+enter in a draft starts in the
         // background, mod+alt+enter on a thread sends and opens a new thread.
         let modAlt = L.Key(isReturn: true, option: true, mod: true)
