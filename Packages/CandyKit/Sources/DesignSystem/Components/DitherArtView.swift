@@ -28,7 +28,13 @@ public final class DitherArtView: NSView {
         layer?.addSublayer(art)
         layer?.addSublayer(scrim)
         Self.arts.add(self)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                          name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
+
+    deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
+
+    @objc private func displayOptionsChanged(_ note: Notification) { updateScrim() }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -101,13 +107,15 @@ public final class DitherArtView: NSView {
     }
 
     var scrimAlpha: CGFloat {
-        guard let panel = superview, window != nil else { return DitherArt.pageScrim }
+        let display = (reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+                       increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+        guard let panel = superview, window != nil else { return DitherArt.scrim(.page, display) }
         func shows(_ table: NSHashTable<NSView>) -> Bool {
             table.allObjects.contains { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
         }
-        if shows(Self.heroSources) { return 0 }
-        if shows(Self.threadSources) { return DitherArt.threadScrim }
-        return DitherArt.pageScrim
+        if shows(Self.heroSources) { return DitherArt.scrim(.hero, display) }
+        if shows(Self.threadSources) { return DitherArt.scrim(.thread, display) }
+        return DitherArt.scrim(.page, display)
     }
 
     /// Main thread only, like every view method.
@@ -115,7 +123,7 @@ public final class DitherArtView: NSView {
         let dark = effectiveAppearance.isDark
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.nsColor
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.2)
+        CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2)
         scrim.backgroundColor = background.withAlphaComponent(scrimAlpha).cgColor
         CATransaction.commit()
     }
@@ -171,6 +179,20 @@ public enum DitherArt {
     nonisolated static let threadScrim: CGFloat = 0.2
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
+
+    enum Page: Sendable { case hero, thread, page }
+
+    /// The scrim for `page` under the system display options. Reduce Transparency covers the art with the solid
+    /// background, so the frosted panes over it read as solid surfaces. Increase Contrast keeps the art as a faint
+    /// texture: text on the hero and in a thread then sits on about the background itself.
+    nonisolated static func scrim(_ page: Page, _ display: (reduceTransparency: Bool, increaseContrast: Bool)) -> CGFloat {
+        if display.reduceTransparency { return 1 }
+        switch page {
+        case .hero: return display.increaseContrast ? 0.6 : 0
+        case .thread: return display.increaseContrast ? 0.75 : threadScrim
+        case .page: return display.increaseContrast ? 1 : pageScrim
+        }
+    }
 
     struct Request: Hashable, Sendable {
         var url: URL

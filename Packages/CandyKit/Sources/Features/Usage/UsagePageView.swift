@@ -279,7 +279,11 @@ public final class UsageHeaderView: TopbarDragView {
         for v in [title, slash1, slash2, environment, providers, windowLabel, metric, period, refresh, metricSelect, periodSelect, compactRefresh] as [NSView] {
             addSubview(v)
         }
-        for b in [refresh, compactRefresh] { b.iconSize = 14 }
+        for b in [refresh, compactRefresh] {
+            b.iconSize = 14
+            b.setAccessibilityLabel("Refresh usage")
+            b.toolTip = "Refresh usage"
+        }
         for s in [metricSelect, periodSelect] { s.fitsContent = true; s.alignItemWithTrigger = false; s.popupAlign = .end }
         setAccessibilityLabel("Usage breadcrumb")
     }
