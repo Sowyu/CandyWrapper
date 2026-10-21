@@ -529,7 +529,7 @@ public enum WorkLog {
 
     static func summaryActionPriority(_ action: String) -> Int {
         let first: Set<String> = [
-            "command", "edit", "delegate", "task-cancel", "thread-create", "thread-send", "thread-interrupt",
+            "command", "edit", "delegate", "task-cancel", "thread-create", "thread-send", "thread-interrupt", "workflow-stop",
             "schedule-create", "schedule-update", "schedule-delete", "schedule-run", "thread-configure", "thread-fork",
             "thread-merge", "thread-organize", "thread-update", "queue-edit", "queue-cancel", "queue-reorder",
             "queue-steer", "question-respond", "worktree-handoff", "project-create", "project-update",

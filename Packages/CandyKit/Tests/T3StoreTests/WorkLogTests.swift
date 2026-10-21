@@ -158,7 +158,7 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(T3McpTools.definition("mcp__github__delegate_task") == nil)
         #expect(T3McpTools.definition("t3-code-thread_1_t3_thread_send")?.summaryAction == "thread-send")
         #expect(T3McpTools.definition("t3_code:preview_open")?.icon == "browser")
-        #expect(T3McpTools.all.count == 81)
+        #expect(T3McpTools.all.count == 84)
     }
 
     // presentation.test.ts:197-270
@@ -262,5 +262,20 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(label("completed", counts: false) == "Context compacted")
         let done = label("completed")
         #expect(done.hasPrefix("Context compacted ") && done.hasSuffix(" tokens") && done.contains(" → "))
+    }
+}
+
+/// Nightly 3473 T3 tool summaries (181fbb2b46; client-runtime t3ToolSummary.ts:398-424).
+@Suite struct T3ToolSummary3473Tests {
+    @Test func reviewGuidesCountTheirOutcomes() {
+        func call(_ guides: [String]?) -> T3ToolSummaryCall {
+            let output: JSONValue = guides.map { .object(["guides": .array($0.map { .object(["outcome": .string($0)]) })]) } ?? .object([:])
+            return T3ToolSummaryCall(input: nil, output: output, outcome: "completed")
+        }
+        #expect(summarizeT3ToolCalls("write-pr-guides", [call(nil)]).label == "Started writing review guides")
+        #expect(summarizeT3ToolCalls("write-pr-guides", [call(["started", "failed"])]) == ("Started 1 review guide, 1 failed", 2 - 1))
+        #expect(summarizeT3ToolCalls("write-pr-guides", [call(["failed", "failed"])]).label == "Could not start 2 review guides")
+        #expect(T3McpTools.all["unwatch_pull_request"]?.running == "Unwatching")
+        #expect(T3McpTools.all["task_cancel"]?.detail == "a delegated task")
     }
 }

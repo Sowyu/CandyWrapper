@@ -22,18 +22,20 @@ public struct T3McpToolDefinition: Sendable, Equatable {
 }
 
 /// The T3 orchestration tool inventory, generated from `T3_MCP_TOOLS`
-/// (t3McpToolPresentation.ts:86-323). Regenerate when T3_VERSION moves.
+/// (t3McpToolPresentation.ts:86-334, Nightly 3473). Regenerate when T3_VERSION moves.
 public enum T3McpTools {
     static let all: [String: T3McpToolDefinition] = [
         "link_pull_request": .init(labels: ("Link", "Linking", "Linked", "a pull request"), summaryAction: "link-pr", icon: "pull-request"),
         "unlink_pull_request": .init(labels: ("Unlink", "Unlinking", "Unlinked", "a pull request"), summaryAction: "unlink-pr", icon: "pull-request"),
+        "write_pull_request_guides": .init(labels: ("Write", "Writing", "Started writing", "review guides"), summaryAction: "write-pr-guides", icon: "pull-request"),
+        "read_pull_request_guide": .init(labels: ("Read", "Reading", "Read", "a review guide"), summaryAction: "read-pr-guide", icon: "pull-request"),
         "list_thread_pull_requests": .init(labels: ("Check", "Checking", "Checked", "linked pull requests"), summaryAction: "list-prs", icon: "pull-request"),
         "watch_pull_request": .init(labels: ("Watch", "Watching", "Watching", "a pull request"), summaryAction: "watch-pr", icon: "pull-request"),
-        "unwatch_pull_request": .init(labels: ("Stop watching", "Stopping watching", "Stopped watching", "a pull request"), summaryAction: "unwatch-pr", icon: "pull-request"),
+        "unwatch_pull_request": .init(labels: ("Stop watching", "Unwatching", "Stopped watching", "a pull request"), summaryAction: "unwatch-pr", icon: "pull-request"),
         "orchestrator_capabilities": .init(labels: ("Get", "Getting", "Got", "orchestration capabilities"), summaryAction: "capabilities", icon: "t3-code"),
         "delegate_task": .init(labels: ("Delegate", "Delegating", "Delegated", "a child task"), summaryAction: "delegate", icon: "t3-code"),
         "task_status": .init(labels: ("Get", "Getting", "Got", "delegated task status"), summaryAction: "task-status", icon: "t3-code"),
-        "task_cancel": .init(labels: ("Cancel", "Canceling", "Requested cancellation of", "delegated task"), summaryAction: "task-cancel", icon: "t3-code"),
+        "task_cancel": .init(labels: ("Cancel", "Canceling", "Requested cancellation of", "a delegated task"), summaryAction: "task-cancel", icon: "t3-code"),
         "schedule_task": .init(labels: ("Schedule", "Scheduling", "Scheduled", "a recurring task"), summaryAction: "schedule-create", icon: "t3-code"),
         "list_scheduled_tasks": .init(labels: ("List", "Listing", "Listed", "scheduled tasks"), summaryAction: "schedule-list", icon: "t3-code"),
         "update_scheduled_task": .init(labels: ("Update", "Updating", "Updated", "a scheduled task"), summaryAction: "schedule-update", icon: "t3-code"),
@@ -46,6 +48,7 @@ public enum T3McpTools {
         "t3_thread_send": .init(labels: ("Send", "Sending", "Sent", "to a T3 thread"), summaryAction: "thread-send", icon: "t3-code"),
         "t3_thread_wait": .init(labels: ("Wait", "Waiting", "Waited", "for a T3 thread"), summaryAction: "thread-wait", icon: "t3-code"),
         "t3_thread_interrupt": .init(labels: ("Interrupt", "Interrupting", "Requested an interrupt of", "a T3 thread"), summaryAction: "thread-interrupt", icon: "t3-code"),
+        "t3_workflow_stop": .init(labels: ("Stop", "Stopping", "Requested a stop for", "a workflow"), summaryAction: "workflow-stop", icon: "t3-code"),
         "t3_worktree_handoff": .init(labels: ("Hand off", "Handing off", "Handed off", "thread to a git worktree"), summaryAction: "worktree-handoff", icon: "t3-code"),
         "t3_worktree_status": .init(labels: ("Get", "Getting", "Got", "thread worktree status"), summaryAction: "worktree-status", icon: "t3-code"),
         "preview_status": .init(labels: ("Get", "Getting", "Got", "preview browser status"), summaryAction: "browser", icon: "browser"),
@@ -218,7 +221,7 @@ func summarizeT3ToolCalls(_ action: String, _ calls: [T3ToolSummaryCall]) -> (la
         return Call(input: input, output: result.data, outcome: result.failed ? "failed" : call.outcome)
     }
     let completed = results.filter { $0.outcome == "completed" }
-    let failedCount = results.filter { $0.outcome == "failed" }.count
+    var failedCount = results.filter { $0.outcome == "failed" }.count
     let selected = completed.isEmpty ? results : completed
     func quantity(_ count: Int, _ noun: String, _ plural: String? = nil) -> String {
         "\(count) \(count == 1 ? noun : (plural ?? noun + "s"))"
@@ -270,6 +273,7 @@ func summarizeT3ToolCalls(_ action: String, _ calls: [T3ToolSummaryCall]) -> (la
         label = action == "thread-read" ? phrase("Read", "read", targets) : phrase("Waited on", "wait on", targets)
     case "thread-list": label = phrase("Listed", "list", "threads \(times)")
     case "thread-interrupt": label = phrase("Requested interrupts for", "interrupt", quantity(countEntities(threadIds), "thread"))
+    case "workflow-stop": label = phrase("Requested stops for", "stop", quantity(countEntities(entityIds("subagentId")), "workflow"))
     case "task-status": label = phrase("Checked", "check", "task status \(times)")
     case "task-cancel": label = phrase("Requested cancellation of", "cancel", quantity(countEntities(entityIds("taskId")), "task"))
     case "schedule-create": label = phrase("Scheduled", "schedule", quantity(countEntities(entityIds("scheduledTaskId")), "task"))
@@ -326,6 +330,20 @@ func summarizeT3ToolCalls(_ action: String, _ calls: [T3ToolSummaryCall]) -> (la
     case "unlink-pr": label = phrase("Unlinked", "unlink", quantity(selected.count, "pull request"))
     case "watch-pr": label = phrase("Watching", "watch", quantity(selected.count, "pull request"))
     case "unwatch-pr": label = phrase("Stopped watching", "stop watching", quantity(selected.count, "pull request"))
+    case "write-pr-guides":
+        // One call writes many guides and reports a refusal per guide rather than failing (t3ToolSummary.ts:398-424).
+        let outcomes = selected.flatMap { call in (call.output?["guides"]?.arrayValue ?? []).map { $0["outcome"]?.stringValue } }
+        let started = outcomes.filter { $0 != "failed" }.count
+        let failed = outcomes.count - started
+        failedCount += failed
+        if outcomes.isEmpty {
+            label = phrase("Started writing", "start writing", "review guides\(selected.count == 1 ? "" : " \(times)")")
+        } else if started == 0 {
+            label = "Could not start \(quantity(failed, "review guide"))"
+        } else {
+            label = phrase("Started", "start", "\(quantity(started, "review guide"))\(failed > 0 ? ", \(failed) failed" : "")")
+        }
+    case "read-pr-guide": label = phrase("Read", "read", quantity(selected.count, "review guide"))
     case "list-prs": label = phrase("Checked", "check", "linked pull requests\(selected.count == 1 ? "" : " \(times)")")
     case "browser": label = phrase("Used", "use", "browser \(times)")
     case "device": label = phrase("Used", "use", "device controls \(times)")
