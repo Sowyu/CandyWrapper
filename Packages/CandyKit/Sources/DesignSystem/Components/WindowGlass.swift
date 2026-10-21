@@ -162,7 +162,27 @@ public enum WindowGlass {
     public static let denseFill = Themed.color(\.codeBackground)
 
     /// A floating surface's fill (dialogs, the command palette, toasts): T3's `stock` fill, or the floating pane.
-    public static func floating(stock: NSColor) -> NSColor { pick(stock: stock, frost: Themed.color(\.popover)) }
+    public static func floating(stock: NSColor) -> NSColor {
+        let frost = Themed.color(\.popover)
+        return NSColor(name: nil) { resolve(ThemeRuntime.framesPanes(dark: $0.isDark) ? frost : stock, in: $0) }
+    }
+
+    /// A message bubble's blur in Dither, where the bubble sits over the art: puts a within-window blur under `view`'s
+    /// subviews while Dither shows and takes it out otherwise. Pass the blur it returned last time.
+    @MainActor
+    public static func syncBubbleBlur(_ blur: BackdropBlurView?, in view: NSView, radius: CGFloat) -> BackdropBlurView? {
+        let on = view.window != nil && ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark)
+        guard on else { blur?.removeFromSuperview(); return nil }
+        let made = blur ?? {
+            let b = BackdropBlurView(frame: view.bounds)
+            b.autoresizingMask = [.width, .height]
+            view.addSubview(b, positioned: .below, relativeTo: nil)
+            b.layer?.zPosition = -1
+            return b
+        }()
+        made.cornerRadius = radius
+        return made
+    }
 
     /// Puts the hairline edge and top highlight on a layer-painted pane (a selected row, the composer) while classic
     /// Glass frosts `view`, and takes them off otherwise. Pass what it returned last time.
@@ -207,7 +227,7 @@ public enum WindowGlass {
     /// leaves legible through the glass. Pass the blur it returned last time; size it in `layout`.
     @MainActor
     public static func syncPaneBlur(_ blur: BackdropBlurView?, in view: NSView, radius: CGFloat) -> BackdropBlurView? {
-        let on = view.window != nil && isActive(for: view)
+        let on = view.window != nil && ThemeRuntime.framesPanes(dark: view.effectiveAppearance.isDark)
         if on, blur == nil {
             let made = BackdropBlurView(frame: view.bounds)
             made.autoresizingMask = [.width, .height]

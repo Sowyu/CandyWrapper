@@ -78,6 +78,11 @@ public enum ThemeRuntime {
     public private(set) static var dither = (light: false, dark: false)
     public private(set) static var ditherPicture: URL?
     public static func isDither(dark: Bool) -> Bool { dark ? dither.dark : dither.light }
+    /// Whether floating panes and bubbles are frosted glass over their own blur: Glass and Dither.
+    public nonisolated static func framesPanes(dark: Bool) -> Bool {
+        isGlass(dark: dark) || (dark ? ditherFlags.dark : ditherFlags.light)
+    }
+    nonisolated(unsafe) private static var ditherFlags = (light: false, dark: false)
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -89,7 +94,8 @@ public enum ThemeRuntime {
         var changed = false
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
-            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark)) {
+            || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
+            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -106,6 +112,7 @@ public enum ThemeRuntime {
         }
         if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark || next.ditherPicture != old.ditherPicture {
             dither = (next.ditherLight, next.ditherDark)
+            ditherFlags = dither
             ditherPicture = next.ditherPicture.map { URL(filePath: $0) }
             changed = true
         }
@@ -157,6 +164,11 @@ public enum ThemeRuntime {
             })
         }
         func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
+            // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
+            // the panel's own background stay solid.
+            if !sidebar, dark ? input.ditherDark : input.ditherLight {
+                return WindowGlass.frosted(palette, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100)
+            }
             guard dark ? input.glassDark : input.glassLight else { return palette }
             let opacity = Double(input.glassOpacity) / 100
             let readable = WindowGlass.frostReadable(palette, dark: dark, sidebar: sidebar, opacity: opacity)

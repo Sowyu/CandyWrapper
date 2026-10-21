@@ -3,9 +3,9 @@ import ImageIO
 
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
-/// panel's background that keeps text readable anywhere on it. A new thread shows it
-/// fully; anywhere else a scrim of the background covers most of it, so messages and settings read as on the stock
-/// theme. It renders once per size and appearance off the main thread and runs nothing while idle.
+/// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
+/// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
+/// off the main thread and runs nothing while idle.
 public final class DitherArtView: NSView {
     private let art = CALayer()
     private let scrim = CALayer()
@@ -19,9 +19,12 @@ public final class DitherArtView: NSView {
         layerContentsRedrawPolicy = .never
         autoresizingMask = [.width, .height]
         art.magnificationFilter = .nearest
+        // One canvas pixel is exactly one dot: the layer is the canvas's size in dots (`placeArt`), so the stretch is
+        // exactly `dot` and every dot is the same whole number of device pixels.
         art.contentsGravity = .resize
         art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         scrim.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
+        layer?.masksToBounds = true
         layer?.addSublayer(art)
         layer?.addSublayer(scrim)
         Self.arts.add(self)
@@ -48,13 +51,19 @@ public final class DitherArtView: NSView {
         return current
     }
 
-    /// The new-thread screen calls this: while `source` shows inside the art's panel, the art shows unscrimmed.
+    /// How much of the art a page shows.
+    public enum Emphasis: Sendable { case hero, thread }
+
+    /// The thread panel calls this: while `source` shows inside the art's panel, the art takes `emphasis`'s scrim.
+    /// Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
     @MainActor
-    public static func setVivid(_ vivid: Bool, from source: NSView) {
-        if vivid { vividSources.add(source) } else { vividSources.remove(source) }
+    public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
+        heroSources.remove(source); threadSources.remove(source)
+        if emphasis == .hero { heroSources.add(source) } else if emphasis == .thread { threadSources.add(source) }
         for art in arts.allObjects { art.updateScrim() }
     }
-    @MainActor private static let vividSources = NSHashTable<NSView>.weakObjects()
+    @MainActor private static let heroSources = NSHashTable<NSView>.weakObjects()
+    @MainActor private static let threadSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
 
     public override func updateLayer() {
@@ -64,7 +73,7 @@ public final class DitherArtView: NSView {
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        art.frame = artRect
+        placeArt()
         scrim.frame = artRect
         CATransaction.commit()
         refresh()
@@ -83,9 +92,22 @@ public final class DitherArtView: NSView {
     /// The whole panel: the thread's top fade blends it into the header.
     var artRect: CGRect { bounds }
 
-    var isVivid: Bool {
-        guard let panel = superview, window != nil else { return false }
-        return Self.vividSources.allObjects.contains { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
+    /// The shown canvas at one dot per pixel, its top left at the panel's top left. A live resize shows the old canvas
+    /// cropped or short by a few dots until the new one renders.
+    private func placeArt() {
+        guard let shown else { return }
+        let w = CGFloat(shown.width) * DitherArt.dot, h = CGFloat(shown.height) * DitherArt.dot
+        art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
+    }
+
+    var scrimAlpha: CGFloat {
+        guard let panel = superview, window != nil else { return DitherArt.pageScrim }
+        func shows(_ table: NSHashTable<NSView>) -> Bool {
+            table.allObjects.contains { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
+        }
+        if shows(Self.heroSources) { return 0 }
+        if shows(Self.threadSources) { return DitherArt.threadScrim }
+        return DitherArt.pageScrim
     }
 
     /// Main thread only, like every view method.
@@ -94,8 +116,7 @@ public final class DitherArtView: NSView {
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.nsColor
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.2)
-        scrim.backgroundColor = background.withAlphaComponent(DitherArt.scrim).cgColor
-        scrim.opacity = isVivid ? 0 : 1
+        scrim.backgroundColor = background.withAlphaComponent(scrimAlpha).cgColor
         CATransaction.commit()
     }
 
@@ -126,6 +147,9 @@ public final class DitherArtView: NSView {
                         self.pending = nil
                         self.shown = request
                         self.art.contents = image.image
+                        CATransaction.begin(); CATransaction.setDisableActions(true)
+                        self.placeArt()
+                        CATransaction.commit()
                     }
                 }
             }
@@ -143,10 +167,10 @@ private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
-    /// Brightness levels a dot steps between, from the background to the picture's brightest.
-    nonisolated static let levels = 9
-    /// The background's share where text can sit: messages, settings and every page but a new thread.
-    nonisolated static let scrim: CGFloat = 0.9
+    /// The background's share over an open thread: the cap already keeps text readable, this calms it under messages.
+    nonisolated static let threadScrim: CGFloat = 0.45
+    /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
+    nonisolated static let pageScrim: CGFloat = 0.92
 
     struct Request: Hashable, Sendable {
         var url: URL
@@ -204,7 +228,8 @@ public enum DitherArt {
         ctx.interpolationQuality = .high
         ctx.draw(picture, in: CGRect(x: (Double(w) - pw) / 2, y: (Double(h) - ph) / 2, width: pw, height: ph))
         let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
-        let step = 255 / Double(levels - 1)
+        // Three strengths per hue (none, half the reach, the full reach): a clean halftone, not a mush of shades.
+        let step = reach / 2
         // Row 0 of the buffer is the top of the picture.
         for y in 0..<h {
             let keep = 1 - fade((Double(y) + 0.5) / Double(h))
