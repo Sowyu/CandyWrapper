@@ -108,6 +108,29 @@ struct FilesLogicTests {
         #expect(!c.hasUnsaved)
     }
 
+    /// Closing and reopening the editor flushes through the same writer, so an edit made while the old
+    /// write is in flight is saved after it and stays the file's final contents (codebase audit finding 3).
+    @MainActor @Test func saveCoordinatorFlushKeepsNewestLast() async throws {
+        var writes: [String] = []
+        var gate: CheckedContinuation<Void, Never>?
+        let c = FileSaveCoordinator(debounce: 0.01, persist: { text in
+            writes.append(text)
+            if writes.count == 1 { await withCheckedContinuation { gate = $0 } }
+            return true
+        }, onPendingChange: { _ in })
+        c.change("edit-1")
+        try await Self.waitUntil { gate != nil }
+        c.change("edit-2")
+        c.flush()
+        c.change("edit-3-newest")
+        c.flush()
+        gate?.resume()
+        try await Self.waitUntil { !c.hasUnsaved }
+        #expect(writes.first == "edit-1")
+        #expect(writes.last == "edit-3-newest")
+        #expect(!writes.dropFirst().contains("edit-2") || writes.firstIndex(of: "edit-2")! < writes.lastIndex(of: "edit-3-newest")!)
+    }
+
     @MainActor @Test func saveCoordinatorKeepsPendingWhenNotConfirmed() async throws {
         var pending: [Bool] = []
         let c = FileSaveCoordinator(debounce: 0.01, persist: { _ in false }, onPendingChange: { pending.append($0) })

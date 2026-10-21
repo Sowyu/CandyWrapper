@@ -142,18 +142,28 @@ public struct EnvironmentHTTP: Sendable {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpShouldHandleCookies = false
         if let token { try await setAuthorization(&request, token: token) }
-        let data: Data, response: URLResponse
+        let tooLarge = EnvironmentHTTPError.invalidResponse("asset larger than \(maxBytes) bytes")
         do {
-            (data, response) = try await session.data(for: request)
+            // Bounded while it streams, as `readBounded` does (projectFaviconCache.ts:51-74): a declared or
+            // running size over the limit stops the download instead of buffering it whole.
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse else { throw EnvironmentHTTPError.invalidResponse("not HTTP") }
+            guard (200..<300).contains(http.statusCode) else { throw EnvironmentHTTPError.status(http.statusCode, nil) }
+            if http.expectedContentLength > Int64(maxBytes) { bytes.task.cancel(); throw tooLarge }
+            var data = Data()
+            if http.expectedContentLength > 0 { data.reserveCapacity(Int(http.expectedContentLength)) }
+            for try await byte in bytes {
+                guard data.count < maxBytes else { bytes.task.cancel(); throw tooLarge }
+                data.append(byte)
+            }
+            return data
+        } catch let e as EnvironmentHTTPError {
+            throw e
         } catch let e as URLError where e.code == .timedOut {
             throw EnvironmentHTTPError.timedOut
         } catch {
             throw EnvironmentHTTPError.network(error.localizedDescription)
         }
-        guard let http = response as? HTTPURLResponse else { throw EnvironmentHTTPError.invalidResponse("not HTTP") }
-        guard (200..<300).contains(http.statusCode) else { throw EnvironmentHTTPError.status(http.statusCode, nil) }
-        guard data.count <= maxBytes else { throw EnvironmentHTTPError.invalidResponse("asset larger than \(maxBytes) bytes") }
-        return data
     }
 
     /// `ws(s)://host/ws?wsTicket=...&client...&orchestrationProtocol=2`, in the official order

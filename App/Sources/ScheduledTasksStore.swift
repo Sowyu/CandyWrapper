@@ -12,6 +12,8 @@ final class ScheduledTasksStore {
     var environments: Environments?
     private(set) var lists: [String: ScheduledTaskListLoad] = [:]
     private var tasks: [String: Task<Void, Never>] = [:]
+    /// The session each subscription runs on; a replaced session gets a fresh subscription.
+    private var owners: [String: ShellSession] = [:]
     /// Watchers by name, each with the environments it wants.
     private var watchers: [String: Set<String>] = [:]
     private var observers: [UUID: @MainActor () -> Void] = [:]
@@ -29,6 +31,7 @@ final class ScheduledTasksStore {
         for (id, task) in tasks where !wanted.contains(id) {
             task.cancel()
             tasks[id] = nil
+            owners[id] = nil
             lists[id] = nil
         }
         for id in wanted where tasks[id] == nil { subscribe(id) }
@@ -37,9 +40,10 @@ final class ScheduledTasksStore {
     private func subscribe(_ id: String) {
         guard let shell = environments?.session(id) else { return }
         lists[id] = lists[id] ?? .loading
+        owners[id] = shell
         tasks[id] = shell.supervisor.subscribe("scheduledTasks.subscribe", payload: { .object([:]) }, handler: { [weak self] event in
             await MainActor.run {
-                guard let self else { return }
+                guard let self, self.owners[id] === shell else { return }
                 switch event {
                 case .value(let json): self.lists[id] = .loaded(ScheduledTask.list(json))
                 case .interrupted(let error):
@@ -51,9 +55,15 @@ final class ScheduledTasksStore {
         })
     }
 
-    /// An environment without a session when it was first watched subscribes once it has one.
+    /// An environment without a session when it was first watched subscribes once it has one, and a
+    /// replaced or ended session's subscription moves to the new one.
     func environmentsChanged() {
         let wanted = watchers.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+        for id in wanted where tasks[id] != nil && owners[id] !== environments?.session(id) {
+            tasks[id]?.cancel()
+            tasks[id] = nil
+            owners[id] = nil
+        }
         for id in wanted where tasks[id] == nil { subscribe(id) }
     }
 }

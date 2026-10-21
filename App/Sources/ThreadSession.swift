@@ -802,6 +802,7 @@ final class ThreadController {
         clones.sessionChanged(environmentId)
         git.sessionChanged(environmentId)
         browser.sessionChanged(environmentId)
+        devices.sync()
         guard let session, session.environmentId == environmentId else { return }
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }

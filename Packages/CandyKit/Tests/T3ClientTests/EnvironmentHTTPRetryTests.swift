@@ -24,6 +24,44 @@ final class RefuseOnceProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+/// Serves `body` for any request, with or without a Content-Length header.
+final class OversizedAssetProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var declareLength = true
+    static let body = Data(repeating: 0x41, count: 64 * 1024)
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let headers = Self.declareLength ? ["Content-Length": "\(Self.body.count)"] : [:]
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!,
+                            cacheStoragePolicy: .notAllowed)
+        for start in stride(from: 0, to: Self.body.count, by: 8 * 1024) {
+            client?.urlProtocol(self, didLoad: Self.body.subdata(in: start..<min(start + 8 * 1024, Self.body.count)))
+        }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+@Suite(.serialized) struct EnvironmentHTTPAssetLimitTests {
+    func http() -> EnvironmentHTTP {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [OversizedAssetProtocol.self]
+        return EnvironmentHTTP(baseURL: URL(string: "https://host.example")!, session: URLSession(configuration: config))
+    }
+
+    @Test(arguments: [true, false]) func refusesBodiesOverTheLimit(declared: Bool) async throws {
+        OversizedAssetProtocol.declareLength = declared
+        await #expect(throws: EnvironmentHTTPError.self) { _ = try await http().asset("/api/assets/t/icon.png", token: nil, maxBytes: 16 * 1024) }
+    }
+
+    @Test func acceptsBodiesWithinTheLimit() async throws {
+        OversizedAssetProtocol.declareLength = false
+        let data = try await http().asset("/api/assets/t/icon.png", token: nil, maxBytes: 64 * 1024)
+        #expect(data == OversizedAssetProtocol.body)
+    }
+}
+
 struct EnvironmentHTTPRetryTests {
     /// A refused DPoP token is replaced once: the second call asks with `rejected` and gets a new token.
     @Test func a401RetriesOnceWithAFreshToken() async throws {

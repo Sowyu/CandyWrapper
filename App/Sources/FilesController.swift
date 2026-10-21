@@ -51,14 +51,24 @@ final class FilesController {
     private var workspace: Workspace?
     private var searchTask: Task<Void, Never>?
     private var fileTask: Task<Void, Never>?
-    /// Unsaved and saving edits per `cwd\0path` (`optimisticFileAtom`).
-    private var buffers: [String: Buffer] = [:]
+    /// A file's identity: environment, cwd and path (projectFilesQueryState.ts:27-32 keys by all three).
+    private struct FileKey: Hashable {
+        var environmentId: String
+        var cwd: String
+        var path: String
+    }
+    /// Unsaved and saving edits per file (`optimisticFileAtom`). A buffer keeps its one writer until the
+    /// newest edit is confirmed, across closing and reopening the editor, so an older writer can never land
+    /// after a newer one.
+    private var buffers: [FileKey: Buffer] = [:]
     private final class Buffer {
         var edited: String?
         var coordinator: FileSaveCoordinator?
     }
-    /// Read results per `cwd\0path`, dropped on refresh.
-    private var reads: [String: FileSurfaceView.Content] = [:]
+    /// Read results per file, dropped on refresh.
+    private var reads: [FileKey: FileSurfaceView.Content] = [:]
+    /// The file whose contents the editor shows now; edits are written to this file and no other.
+    private var shownFile: FileKey?
 
     static let statesKey = "rightPanel.states.v1"
     static let closedKey = "rightPanel.closed.v1"
@@ -269,7 +279,7 @@ final class FilesController {
             // `useDirectoryEntries` runs four listings at a time; folders here load in order.
             for dir in dirs {
                 let entries = await Self.list(shell.supervisor, cwd: ws.cwd, directory: dir)
-                guard let self, self.workspace == ws else { return }
+                guard let self, self.workspace?.environmentId == ws.environmentId, self.workspace?.cwd == ws.cwd else { return }
                 var model = self.panel.filesPanel.model
                 model.loading.remove(dir)
                 if let entries { model.setChildren(entries, of: dir) }
@@ -346,7 +356,7 @@ final class FilesController {
 
     // MARK: File tab
 
-    private func key(_ path: String) -> String { (workspace?.cwd ?? "") + "\u{0}" + path }
+    private func key(_ path: String, in ws: Workspace) -> FileKey { FileKey(environmentId: ws.environmentId, cwd: ws.cwd, path: path) }
 
     /// An attachment tab (AttachmentFilePreview.tsx:58-158 inside FilePreviewPanel.tsx:1347-1355): a signed
     /// inline URL for the attachment (`assets.createUrl`), rendered media from the URL, text from its first 1 MB.
@@ -358,6 +368,7 @@ final class FilesController {
         surface.attachment = .init(name: attachment.name, sizeBytes: attachment.sizeBytes, inline: true,
                                    onSave: { [weak self] in self?.onSaveAttachment?(attachment) })
         surface.show(path: path, revealLine: nil)
+        shownFile = nil
         guard fresh || force else { return }
         attachmentShown = attachment.id
         surface.setContent(.loading)
@@ -404,17 +415,21 @@ final class FilesController {
         attachmentShown = nil
         surface.projectName = ws.projectName
         surface.cwd = ws.cwd
-        let samePath = surface.path == path
+        let k = key(path, in: ws)
+        // The same relative path in another workspace or environment is another file.
+        let sameFile = surface.path == path && shownFile == k
         surface.show(path: path, revealLine: line)
         panel.filesPanel.treeView.selectedPath = path.hasPrefix("/") ? nil : path
-        if samePath, !force, case .loading = surface.content {} else if samePath, !force { return }
+        if sameFile, !force { return }
+        if surface.path == path, !sameFile { surface.setContent(.loading) }
+        shownFile = nil
         fileTask?.cancel()
-        let k = key(path)
         if let edited = buffers[k]?.edited, !surface.wantsAsset {
             surface.setContent(.text(edited, truncated: false, byteLength: edited.utf8.count, editable: true))
+            shownFile = k
             return
         }
-        if !force, let cached = reads[k] { surface.setContent(cached); return }
+        if !force, let cached = reads[k] { surface.setContent(cached); shownFile = k; return }
         guard let shell = environments.session(ws.environmentId) else { return }
         let wantsAsset = surface.wantsAsset
         fileTask = Task { [weak self] in
@@ -424,13 +439,14 @@ final class FilesController {
             } else {
                 content = await Self.read(shell.supervisor, cwd: ws.cwd, path: path)
             }
-            guard !Task.isCancelled, let self, self.activeFilePath == path, self.workspace == ws else { return }
+            guard !Task.isCancelled, let self, self.activeFilePath == path, let now = self.workspace, self.key(path, in: now) == k else { return }
             if case .text = content { self.reads[k] = content }
             if case .failure(_, _, _) = content, Self.isDirectoryFailure(content) {
                 self.panel.fileSurface.setContent(.directory)
                 return
             }
             self.panel.fileSurface.setContent(content)
+            self.shownFile = k
         }
     }
 
@@ -478,8 +494,8 @@ final class FilesController {
     /// An edit in the file tab: kept as the file's unsaved contents and autosaved after 500 ms
     /// (`useFileSaveCoordinator`). Writes need `filesystem:write`; the server refuses otherwise.
     private func edited(_ text: String) {
-        guard let path = activeFilePath, let ws = workspace else { return }
-        let k = key(path)
+        guard let k = shownFile, activeFilePath == k.path else { return }
+        let path = k.path, environmentId = k.environmentId, cwd = k.cwd
         let buffer = buffers[k] ?? Buffer()
         buffers[k] = buffer
         buffer.edited = text
@@ -487,10 +503,10 @@ final class FilesController {
         if buffer.coordinator == nil {
             buffer.coordinator = FileSaveCoordinator(
                 persist: { [weak self] contents in
-                    guard let shell = self?.environments.session(ws.environmentId) else { return false }
+                    guard let shell = self?.environments.session(environmentId) else { return false }
                     do {
                         _ = try await shell.supervisor.request("projects.writeFile", payload: .object(
-                            ["cwd": .string(ws.cwd), "relativePath": .string(path), "contents": .string(contents)]))
+                            ["cwd": .string(cwd), "relativePath": .string(path), "contents": .string(contents)]))
                         return true
                     } catch {
                         self?.panel.toasts.show(ToastView(title: "Could not save \(path)", message: "\(error)", kind: .error))
@@ -502,20 +518,24 @@ final class FilesController {
                 onConfirmed: { [weak self, weak buffer] contents in
                     guard let buffer, buffer.edited == contents else { return false }
                     buffer.edited = nil
-                    self?.reads[k] = .text(contents, truncated: false, byteLength: contents.utf8.count, editable: true)
+                    guard let self else { return true }
+                    self.reads[k] = .text(contents, truncated: false, byteLength: contents.utf8.count, editable: true)
+                    // Settled: nothing is unsaved, so the buffer and its writer go.
+                    if self.buffers[k] === buffer { self.buffers[k] = nil }
                     return true
                 })
         }
         buffer.coordinator?.change(text)
     }
 
-    /// Writes pending edits now (a tab closes, the thread changes).
+    /// Writes pending edits now (a tab closes, the thread changes). The buffer keeps its writer, so
+    /// reopening the file queues behind the write in flight instead of racing it.
     private func flushEdits(path: String? = nil) {
-        for (k, buffer) in buffers where path == nil || k == key(path!) {
+        let target = path.flatMap { p in workspace.map { key(p, in: $0) } }
+        if path != nil, target == nil { return }
+        for (k, buffer) in buffers where target == nil || k == target {
             guard let coordinator = buffer.coordinator, coordinator.hasUnsaved else { continue }
-            coordinator.dispose()
-            buffer.coordinator = nil
-            buffers[k] = buffers[k]?.edited == nil ? nil : buffers[k]
+            coordinator.flush()
         }
     }
 
@@ -580,6 +600,9 @@ final class FilesController {
         order.removeAll { $0.hasPrefix(prefix) }
         closed.removeThreads { $0.hasPrefix(prefix) }
         save()
+        for k in buffers.keys where k.environmentId == environmentId { buffers[k] = nil }
+        for k in reads.keys where k.environmentId == environmentId { reads[k] = nil }
+        if shownFile?.environmentId == environmentId { shownFile = nil }
     }
 }
 
