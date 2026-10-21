@@ -18,6 +18,8 @@ public struct ChatMessage: Sendable, Hashable, Identifiable {
     public var scheduledTaskId: String?
     public var context: JSONValue?
     public var attachments: [JSONValue]
+    /// The thread opens with this workflow script, so it shows as the workflow's opening block.
+    public var workflowOpening = false
 
     public init(
         id: MessageId, role: Role, text: String, runId: RunId? = nil, streaming: Bool = false,
@@ -121,6 +123,29 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
     public var isPersistentResourceCard: Bool {
         guard let item = eventItem?.item else { return false }
         return item.type == .fork || item.type == .threadCreated || item.type == .secretRequest
+    }
+}
+
+/// The workflow script a coordinator's thread opens with (client-runtime state/subagentRuntime.ts:294-376).
+public enum WorkflowOpening {
+    /// `WORKFLOW_SCRIPT_START` (:295): the `meta` export, after any leading comments.
+    nonisolated(unsafe) private static let scriptStart = try! NSRegularExpression(
+        pattern: #"^\s*(?:(?://[^\n]*|/\*[\s\S]*?\*/)\s*)*export\s+const\s+meta\b"#)
+
+    /// `isWorkflowScriptMessage` (:301-311): servers mark the script; older threads fall back to the text.
+    public static func isScript(role: String, text: String, workflowScript: Bool?) -> Bool {
+        guard role == "user" else { return false }
+        if let workflowScript { return workflowScript }
+        return scriptStart.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// The first user message when it is the workflow script of a provider-native subagent thread
+    /// (`workflowOpeningParentThreadId` and `resolveWorkflowOpening`, :331-376).
+    public static func messageId(_ projection: ThreadProjection) -> MessageId? {
+        guard projection.thread.isProviderNativeSubagent, projection.thread.lineage?.parentThreadId != nil,
+              let first = projection.messages.first(where: { $0.role == "user" }),
+              isScript(role: first.role, text: first.text, workflowScript: first.workflowScript) else { return nil }
+        return first.id
     }
 }
 
