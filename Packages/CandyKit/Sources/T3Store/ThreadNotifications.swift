@@ -111,7 +111,8 @@ public struct ThreadNotificationTracker: Sendable {
             let kind: ThreadNotificationEvent.Kind?
             if let attention, attention != prior.attention {
                 kind = .input
-            } else if let completion, prior.completion.map({ completion > $0 }) ?? true {
+            } else if raw.latestRunStopRequested != true, let completion, prior.completion.map({ completion > $0 }) ?? true {
+                // A run the user stopped doesn't announce itself (ThreadNotificationCoordinator.tsx:154-160).
                 kind = .completion
             } else {
                 kind = nil

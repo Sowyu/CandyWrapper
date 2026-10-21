@@ -305,6 +305,13 @@ struct ScheduledTaskLogicTests {
         #expect(ScheduledTaskLogic.relativeLabel(nil, nowMs: now) == "Not scheduled")
         #expect(ScheduledTaskLogic.outcomeLabel("rejected_signature") == "Bad signature")
         #expect(ScheduledTaskLogic.outcomeTone("expired") == "warning")
+        // scheduledTasksSettings.logic.ts:131-147 and ScheduledTasksSettings.tsx:335-347 (3473).
+        #expect(ScheduledTaskLogic.outcomeLabel("accepted", pendingWindow: true) == "Opened window")
+        #expect(ScheduledTaskLogic.outcomeLabel("coalesced") == "Coalesced")
+        #expect(ScheduledTaskLogic.outcomeLabel("future_outcome") == "future outcome")
+        #expect(["duplicate", "coalesced", "filtered", "rejected_signature", "future_outcome"].map(ScheduledTaskLogic.outcomeTone)
+            == ["warning", "warning", "outline", "error", "outline"])
+        #expect(ScheduledTaskWebhookDelivery(json: .object(["id": .string("d"), "receivedAt": .string("t"), "outcome": .string("accepted"), "pendingWindow": .bool(true)]))?.pendingWindow == true)
     }
 
     @Test func webhookAddresses() {

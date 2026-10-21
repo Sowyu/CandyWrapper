@@ -69,7 +69,9 @@ public struct SidebarThread: Sendable, Equatable, Identifiable {
         latestRun = SidebarModel.presentLatestRun(shell)
         let pending = shell.pendingRuntimeRequest
         hasPendingApprovals = pending != nil && pending?.kind != .userInput && pending?.kind != .authRefresh
-        hasPendingUserInput = pending?.kind == .userInput
+        // models.ts:226-263: an async question the run keeps working past doesn't ask for input.
+        let runtimeIsWorking = [.preparing, .starting, .running].contains(runtime?.status)
+        hasPendingUserInput = pending?.kind == .userInput && (pending?.blocking != false || !runtimeIsWorking)
     }
 }
 
@@ -166,13 +168,16 @@ public enum SidebarModel {
             completedAt: completedAt)
     }
 
-    /// Port of `resolveSidebarThreadStatus` (apps/web/src/components/Sidebar.logic.ts:983-1003).
+    /// Port of `resolveSidebarThreadStatus` (apps/web/src/components/Sidebar.logic.ts:894-921).
+    /// A running turn that waits on another thread reads as waiting.
     public static func resolveSidebarThreadStatus(
-        hasPendingApprovals: Bool, hasPendingUserInput: Bool, runtime: ThreadRuntimeSummary?
+        hasPendingApprovals: Bool, hasPendingUserInput: Bool, runtime: ThreadRuntimeSummary?,
+        blockedOnThreadWait: Bool = false
     ) -> SidebarThreadStatus {
         if hasPendingApprovals { return .approval }
         if hasPendingUserInput { return .input }
         guard let runtime else { return .ready }
+        if runtime.status == .running, blockedOnThreadWait { return .waiting }
         if activeRunStatuses.contains(runtime.status) { return .working }
         if runtime.status == .idle { return .waiting }
         if runtime.status == .failed { return runtime.lastErrorClass == .usageLimit ? .limited : .failed }
@@ -182,7 +187,7 @@ public enum SidebarModel {
     public static func resolveSidebarThreadStatus(_ thread: SidebarThread) -> SidebarThreadStatus {
         resolveSidebarThreadStatus(
             hasPendingApprovals: thread.hasPendingApprovals, hasPendingUserInput: thread.hasPendingUserInput,
-            runtime: thread.runtime)
+            runtime: thread.runtime, blockedOnThreadWait: thread.shell.blockedOnThreadWait == true)
     }
 
     /// Port of `resolveSidebarV2TopStatus` (Sidebar.logic.ts:1015-1039). The UI labels `working`
@@ -225,22 +230,24 @@ public enum SidebarModel {
         return runtime?.activeRunId != latestRun.runId
     }
 
-    /// Port of `resolveThreadStatusPill` (Sidebar.logic.ts:1164-1242), the legacy pill also used
+    /// Port of `resolveThreadStatusPill` (Sidebar.logic.ts:1061-1154), the legacy pill also used
     /// by the command palette.
     public static func resolveThreadStatusPill(
         hasPendingApprovals: Bool, hasPendingUserInput: Bool, interactionMode: InteractionMode,
         hasActionableProposedPlan: Bool, latestRun: ThreadRunSummary?, runtime: ThreadRuntimeSummary?,
-        lastVisitedAt: T3Timestamp?, pendingBackgroundTasks: [PendingBackgroundTask]
+        lastVisitedAt: T3Timestamp?, pendingBackgroundTasks: [PendingBackgroundTask],
+        blockedOnThreadWait: Bool = false
     ) -> ThreadStatusPill? {
         if hasPendingApprovals { return ThreadStatusPill(label: .pendingApproval, pulse: false) }
         if hasPendingUserInput { return ThreadStatusPill(label: .awaitingInput, pulse: false) }
-        if runtime?.status == .running || runtime?.status == .waiting {
+        let blocked = runtime?.status == .running && blockedOnThreadWait
+        if (runtime?.status == .running && !blocked) || runtime?.status == .waiting {
             return ThreadStatusPill(label: .working, pulse: true)
         }
         if runtime?.status == .preparing || runtime?.status == .starting || runtime?.status == .queued {
             return ThreadStatusPill(label: .connecting, pulse: true)
         }
-        if backgroundWorkHoldsCompletion(pendingBackgroundTasks) {
+        if blocked || backgroundWorkHoldsCompletion(pendingBackgroundTasks) {
             return ThreadStatusPill(label: .waiting, pulse: false)
         }
         if interactionMode == .plan, isLatestRunSettled(latestRun, runtime), hasActionableProposedPlan {
@@ -258,7 +265,8 @@ public enum SidebarModel {
             interactionMode: thread.shell.interactionMode,
             hasActionableProposedPlan: thread.shell.hasActionableProposedPlan, latestRun: thread.latestRun,
             runtime: thread.runtime, lastVisitedAt: lastVisitedAt,
-            pendingBackgroundTasks: thread.shell.backgroundTasks)
+            pendingBackgroundTasks: thread.shell.backgroundTasks,
+            blockedOnThreadWait: thread.shell.blockedOnThreadWait == true)
     }
 
     /// Port of `resolveProjectStatusIndicator` (Sidebar.logic.ts:1244-1260). First of the highest

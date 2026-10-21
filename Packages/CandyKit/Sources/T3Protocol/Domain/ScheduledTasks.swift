@@ -99,12 +99,15 @@ public struct ScheduledTask: Equatable, Sendable {
     public static func list(_ json: JSONValue?) -> [ScheduledTask] { (json?["tasks"]?.arrayValue ?? []).compactMap(ScheduledTask.init(json:)) }
 }
 
-/// `ScheduledTaskWebhookDeliverySummary` and `ScheduledTaskWebhookDelivery` (scheduledTask.ts:262-294).
+/// `ScheduledTaskWebhookDeliverySummary` and `ScheduledTaskWebhookDelivery` (scheduledTask.ts:329-365).
+/// `outcome` is any string, so an outcome added later still lists.
 public struct ScheduledTaskWebhookDelivery: Equatable, Sendable {
     public var id: String
     public var receivedAt: String
     public var method: String
     public var outcome: String
+    /// An accepted delivery that opened a coalesce window and hasn't run yet.
+    public var pendingWindow: Bool
     public var signatureVerified: Bool
     public var missingFields: [String]
     public var error: String?
@@ -121,6 +124,7 @@ public struct ScheduledTaskWebhookDelivery: Equatable, Sendable {
         self.receivedAt = receivedAt
         method = json["method"]?.stringValue ?? ""
         outcome = json["outcome"]?.stringValue ?? "accepted"
+        pendingWindow = json["pendingWindow"]?.boolValue == true
         signatureVerified = json["signatureVerified"]?.boolValue == true
         missingFields = json["missingFields"]?.arrayValue?.compactMap(\.stringValue) ?? []
         error = json["error"]?.stringValue
@@ -132,7 +136,9 @@ public struct ScheduledTaskWebhookDelivery: Equatable, Sendable {
         renderedPrompt = json["renderedPrompt"]?.stringValue
     }
 
-    public static func == (l: Self, r: Self) -> Bool { l.id == r.id && l.outcome == r.outcome && l.body == r.body && l.receivedAt == r.receivedAt }
+    public static func == (l: Self, r: Self) -> Bool {
+        l.id == r.id && l.outcome == r.outcome && l.pendingWindow == r.pendingWindow && l.body == r.body && l.receivedAt == r.receivedAt
+    }
 }
 
 /// The task editor's form (`DraftState`, scheduledTasksSettings.logic.ts:51-90).
@@ -366,22 +372,30 @@ public enum ScheduledTaskLogic {
         return "in \(Int(UsageFormat.jsRound(Double(hours) / 24)))d"
     }
 
-    /// `DELIVERY_OUTCOME_LABELS`.
-    public static func outcomeLabel(_ outcome: String) -> String {
+    /// `webhookDeliveryLabel` (scheduledTasksSettings.logic.ts:131-147).
+    public static func outcomeLabel(_ outcome: String, pendingWindow: Bool = false) -> String {
         switch outcome {
-        case "accepted": "Ran"
+        case "accepted": pendingWindow ? "Opened window" : "Ran"
         case "dispatch_failed": "Run failed"
+        case "duplicate": "Duplicate"
+        case "coalesced": "Coalesced"
+        case "filtered": "Filtered"
         case "rejected_signature": "Bad signature"
         case "disabled": "Task paused"
         case "rate_limited": "Rate limited"
         case "expired": "Too old"
-        default: outcome
+        default: outcome.replacingOccurrences(of: "_", with: " ")
         }
     }
 
-    /// `deliveryOutcomeVariant`: success, warning or error.
+    /// `deliveryOutcomeVariant` (ScheduledTasksSettings.tsx:335-347): a `BadgeView.Variant` name.
     public static func outcomeTone(_ outcome: String) -> String {
-        outcome == "accepted" ? "success" : ["disabled", "rate_limited", "expired"].contains(outcome) ? "warning" : "error"
+        switch outcome {
+        case "accepted": "success"
+        case "duplicate", "coalesced", "disabled", "rate_limited", "expired": "warning"
+        case "dispatch_failed", "rejected_signature": "error"
+        default: "outline"
+        }
     }
 
     /// `statusVariant` for the last run badge.

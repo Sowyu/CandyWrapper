@@ -30,6 +30,26 @@ private func pill(
 
 /// Ports of apps/web/src/components/Sidebar.logic.test.ts.
 @Suite struct SidebarLogicPortTests {
+    /// Sidebar.logic.ts:894-921 and 1061-1154, models.ts:226-263 (3473): a turn blocked on another
+    /// thread waits, and an async question keeps a working thread working.
+    @Test func threadWaitAndAsyncQuestions() {
+        #expect(S.resolveSidebarThreadStatus(hasPendingApprovals: false, hasPendingUserInput: false, runtime: runtime, blockedOnThreadWait: true) == .waiting)
+        #expect(status(runtime) == .working)
+        let blocked = S.resolveThreadStatusPill(hasPendingApprovals: false, hasPendingUserInput: false, interactionMode: .default,
+                                                hasActionableProposedPlan: false, latestRun: nil, runtime: runtime,
+                                                lastVisitedAt: nil, pendingBackgroundTasks: [], blockedOnThreadWait: true)
+        #expect(blocked == ThreadStatusPill(label: .waiting, pulse: false))
+        let question = PendingRuntimeRequestSummary(id: "request-1", kind: .userInput, createdAt: "2026-03-09T10:00:00.000Z", blocking: false)
+        let working = sidebarThread { $0.status = .running; $0.latestRunId = "run-1"; $0.activeRunId = "run-1"; $0.pendingRuntimeRequest = question }
+        #expect(!working.hasPendingUserInput)
+        #expect(S.resolveSidebarThreadStatus(working) == .working)
+        let settled = sidebarThread { $0.status = .completed; $0.latestRunId = "run-1"; $0.pendingRuntimeRequest = question }
+        #expect(settled.hasPendingUserInput)
+        var blocking = question
+        blocking.blocking = nil
+        #expect(sidebarThread { $0.status = .running; $0.latestRunId = "run-1"; $0.pendingRuntimeRequest = blocking }.hasPendingUserInput)
+    }
+
     @Test func sectionPrecedence() {
         #expect(S.resolveSidebarThreadSection(snoozed: false, settled: false, pinned: true) == .pinned)
         #expect(S.resolveSidebarThreadSection(snoozed: true, settled: true, pinned: true) == .snoozed)

@@ -201,7 +201,7 @@ final class ComposerController {
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
-    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?)] = [:]
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool)] = [:]
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
     fileprivate var fileUploadLimit: Int? { targetEnvironmentId.flatMap { capabilities[$0]?.uploadLimit } }
     private var capabilityTasks: [String: Task<Void, Never>] = [:]
@@ -2051,17 +2051,25 @@ final class ComposerController {
         (error as? RPCClientError)?.typedError?.message
     }
 
-    /// Stop: `run.interrupt` with `holdQueue` on the active run (I-composer-flow 2.1). No local
-    /// "stopping" state; the button stays until the run settles.
+    /// Stop (`interruptThreadTurn`, commands.ts:767-858). A server with `threadStop` takes
+    /// `thread.stop` and finds what to stop itself, including background work and commands left
+    /// from earlier turns. Older servers get `run.interrupt` with `holdQueue` on the active run
+    /// (I-composer-flow 2.1). No local "stopping" state; the button stays until the run settles.
     private func stop() {
         guard let shell, case .thread(let threadId) = target, let projection else { return }
-        let state = ComposerLogic.RunState(runs: projection.runs)
-        // The shell's activeRunId skips `waiting`; T3's helper falls back to the projection's last live run.
-        guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id else { return }
-        let payload: JSONValue = .object([
-            "type": .string("run.interrupt"), "commandId": .string(UUID().uuidString.lowercased()),
-            "threadId": .string(threadId.localId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
-        ])
+        let commandId = JSONValue.string(UUID().uuidString.lowercased())
+        let payload: JSONValue
+        if let env = threadId.environmentId, capabilities[env]?.threadStop == true {
+            payload = .object(["type": .string("thread.stop"), "commandId": commandId, "threadId": .string(threadId.localId.rawValue)])
+        } else {
+            let state = ComposerLogic.RunState(runs: projection.runs)
+            // The shell's activeRunId skips `waiting`; T3's helper falls back to the projection's last live run.
+            guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id else { return }
+            payload = .object([
+                "type": .string("run.interrupt"), "commandId": commandId,
+                "threadId": .string(threadId.localId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
+            ])
+        }
         let supervisor = shell.supervisor
         let key = draftKey
         Task { [weak self] in
@@ -2285,7 +2293,7 @@ extension ComposerController {
             if descriptor.capability("attachmentUploads"), case .number(let max)? = descriptor.capabilities["fileAttachments"]?["maxUploadBytes"] {
                 limit = Int(max)
             }
-            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit)
+            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"))
             menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
         }
