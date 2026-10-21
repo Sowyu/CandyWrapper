@@ -72,6 +72,31 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(expanded.contains { $0.id == "question-entry" && { if case .work(let g, _, _) = $0.kind { return g.count == 1 }; return false }($0) })
     }
 
+    // a8bb769d65: steers split a settled turn's work; the top row keeps the whole turn's time.
+    @Test func splitsASettledTurnsWorkAtEachSteer() {
+        let runId: RunId = "steered-run"
+        func at(_ second: Int) -> T3Timestamp { T3Timestamp(String(format: "2026-01-01T00:00:%02dZ", second)) }
+        func message(_ id: String, _ second: Int, _ role: ChatMessage.Role, _ intent: InputIntent? = nil) -> TimelineEntry {
+            .message(id, ChatMessage(id: MessageId(id), role: role, text: id, runId: runId, createdAt: at(second), inputIntent: intent))
+        }
+        let entries = [
+            message("prompt", 0, .user, .turnStart),
+            work("work-before-steer", WorkLogEntry(id: "w1", createdAt: at(4), runId: runId, label: "Ran command", tone: .tool)),
+            message("steer", 10, .user, .steer),
+            work("work-after-steer", WorkLogEntry(id: "w2", createdAt: at(15), runId: runId, label: "Ran command", tone: .tool)),
+            message("final", 30, .assistant),
+        ]
+        let latest = TimelineLatestRun(runId: runId, status: .completed, startedAt: at(0), completedAt: at(30))
+        let segment = RunId("steered-run:steer:steer")
+        let collapsed = rows(entries) { $0.latestRun = latest }
+        #expect(collapsed.map(\.id) == ["prompt", "turn-fold:steered-run", "steer", "turn-fold:steered-run:steer:steer", "final"])
+        let labels = collapsed.compactMap { row -> String? in if case .turnFold(_, let l, _) = row.kind { return l }; return nil }
+        #expect(labels == ["Worked for 30s", "Continued for 20s"])
+        #expect(collapsed[3].createdAt == at(10))
+        let open = rows(entries) { $0.latestRun = latest; $0.expandedRunIds = [segment] }
+        #expect(open.map(\.id) == ["prompt", "turn-fold:steered-run", "steer", "turn-fold:steered-run:steer:steer", "work-after-steer", "final"])
+    }
+
     // LT:1401
     @Test(arguments: [1, 2, 3])
     func foldsCompletedActivitiesAfterTheTerminalResponse(_ count: Int) {
