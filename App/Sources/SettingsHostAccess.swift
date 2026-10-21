@@ -136,8 +136,22 @@ extension SettingsController {
     /// The server rechecks reachability when the tunnel's readiness changes, so T3 rereads the link state
     /// every 30 s while the row is mounted (SavedEnvironmentRows.tsx:489-494). Here the timer runs only
     /// while the Connections page shows an active tunnel, the only time the reachability line shows.
+    /// A hidden, minimized or covered window holds nothing: the poll stops and, back in view, rereads once.
     func updateLinkPoll() {
-        let live = isOpen && section == .connections && linkState?.tunnelActive == true
+        if linkPollVisibility == nil, let window {
+            linkPollVisibility = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let wasPolling = self.linkPoll != nil
+                    self.updateLinkPoll()
+                    if !wasPolling, self.linkPoll != nil { self.loadLinkState() }
+                }
+            }
+        }
+        let visible = window?.occlusionState.contains(.visible) == true
+        let live = isOpen && section == .connections && linkState?.tunnelActive == true && visible
         if live, linkPoll == nil {
             linkPoll = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.loadLinkState() }
