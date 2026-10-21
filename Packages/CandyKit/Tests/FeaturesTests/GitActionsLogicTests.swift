@@ -136,6 +136,16 @@ enum VcsPullResultFixture {
 struct BranchToolbarLogicTests {
     typealias B = BranchToolbarLogic
 
+    /// A branch switch started on thread A that finishes after the user opened thread B (or a draft) still
+    /// writes to A, and a draft's result never lands on another draft.
+    @Test func branchResultStaysWithItsOrigin() {
+        #expect(B.resultTarget(startedThreadId: "thread-a", startedDraftId: nil, currentDraftId: nil) == .thread("thread-a"))
+        #expect(B.resultTarget(startedThreadId: "thread-a", startedDraftId: nil, currentDraftId: "draft-b") == .thread("thread-a"))
+        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: "draft-a") == .draft("draft-a"))
+        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: "draft-b") == .none)
+        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: nil) == .none)
+    }
+
     @Test func labels() {
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: false) == "Current checkout")
         #expect(B.workspaceLabel(mode: .local, worktreePath: "/wt", modeLocked: false) == "Current worktree")

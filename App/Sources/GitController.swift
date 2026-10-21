@@ -33,6 +33,8 @@ final class GitController {
         var environmentId: String
         /// The server thread, nil for a draft.
         var threadId: ThreadId?
+        /// The draft, nil for a server thread.
+        var draftId: String?
         var projectId: ProjectId
         var projectRoot: String
         var branch: String?
@@ -167,7 +169,7 @@ final class GitController {
             let projectId = ProjectId(draft.projectId)
             guard let project = snapshot.projects.first(where: { $0.id == projectId }), let env = projectId.environmentId else { return nil }
             let mode = draft.envMode ?? (project.defaultThreadEnvMode == "worktree" ? .worktree : .local)
-            return Target(environmentId: env, threadId: nil, projectId: projectId, projectRoot: project.workspaceRoot,
+            return Target(environmentId: env, threadId: nil, draftId: draft.draftId, projectId: projectId, projectRoot: project.workspaceRoot,
                           branch: draft.branch, worktreePath: forceNewWorktree ? nil : draft.worktreePath,
                           envMode: forceNewWorktree ? .worktree : BranchToolbarLogic.draftEnvMode(worktreePath: draft.worktreePath, draftMode: mode),
                           startFromOrigin: draft.startFromOrigin ?? false)
@@ -176,7 +178,7 @@ final class GitController {
               let thread = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id }),
               let project = snapshot.projects.first(where: { $0.id == thread.projectId }), let env = id.environmentId else { return nil }
         let worktree = thread.worktreePath.flatMap { $0.isEmpty ? nil : $0 }
-        return Target(environmentId: env, threadId: id, projectId: thread.projectId, projectRoot: project.workspaceRoot,
+        return Target(environmentId: env, threadId: id, draftId: nil, projectId: thread.projectId, projectRoot: project.workspaceRoot,
                       branch: thread.branch, worktreePath: worktree, envMode: worktree != nil ? .worktree : .local, startFromOrigin: false)
     }
 
@@ -650,12 +652,12 @@ final class GitController {
     private func selectBranch(_ ref: VcsRef) {
         guard let target else { return }
         if isSelectingWorktreeBase {
-            setThreadBranch(ref.name, worktreePath: nil)
+            setThreadBranch(ref.name, worktreePath: nil, on: target)
             return
         }
         let selection = BranchToolbarLogic.selectionTarget(projectCwd: target.projectRoot, worktreePath: target.worktreePath, ref: ref)
         if selection.reuseExistingWorktree {
-            setThreadBranch(ref.name, worktreePath: selection.nextWorktreePath)
+            setThreadBranch(ref.name, worktreePath: selection.nextWorktreePath, on: target)
             return
         }
         let name = ref.isRemote == true ? BranchToolbarLogic.localBranchName(fromRemote: ref.name) : ref.name
@@ -679,7 +681,7 @@ final class GitController {
 
     private func runBranchAction(optimistic name: String, _ body: @escaping (ShellSession) async throws -> (String, String?),
                                  failure title: @escaping () -> String) {
-        guard let shell else { return }
+        guard let origin = target, let shell else { return }
         optimisticBranch = name
         branchActionPending = true
         render()
@@ -689,7 +691,7 @@ final class GitController {
                 guard let self else { return }
                 self.optimisticBranch = nil
                 self.branchActionPending = false
-                self.setThreadBranch(branch, worktreePath: worktree)
+                self.setThreadBranch(branch, worktreePath: worktree, on: origin)
             } catch {
                 guard let self else { return }
                 self.optimisticBranch = nil
@@ -702,20 +704,28 @@ final class GitController {
         }
     }
 
-    /// `setThreadBranch`: a server thread gets `thread.metadata.update`; a draft stores the pick.
+    /// `setThreadBranch`: a server thread gets `thread.metadata.update`; a draft stores the pick. `origin` is the
+    /// target the operation started on, captured before any await, so a late result never lands on the thread
+    /// or environment open now.
     // ponytail: T3 also stops a running session when the worktree changes; server threads with a worktree are locked here
-    private func setThreadBranch(_ branch: String, worktreePath: String?) {
-        guard let target else { return }
-        if let threadId = target.threadId {
-            guard let shell, target.branch != branch || target.worktreePath != worktreePath else { return }
+    // ponytail: a draft's result is dropped once another draft is open; write it by draft id if ComposerController grows that
+    private func setThreadBranch(_ branch: String, worktreePath: String?, on origin: Target) {
+        switch BranchToolbarLogic.resultTarget(startedThreadId: origin.threadId?.localId.rawValue, startedDraftId: origin.draftId,
+                                               currentDraftId: composer.currentDraft?.draftId) {
+        case .thread(let threadId):
+            guard let shell = environments.session(origin.environmentId), origin.branch != branch || origin.worktreePath != worktreePath else { return }
             var command: [String: JSONValue] = ["type": .string("thread.metadata.update"), "commandId": .string(ThreadCommands.newCommandId()),
-                                                "threadId": .string(threadId.localId.rawValue), "branch": .string(branch)]
+                                                "threadId": .string(threadId), "branch": .string(branch)]
             command["worktreePath"] = worktreePath.map(JSONValue.string) ?? .null
             Task { _ = try? await shell.supervisor.request("orchestration.dispatchCommand", payload: .object(command)) }
             return
+        case .none:
+            return
+        case .draft:
+            break
         }
         composer.updateDraft { d in
-            d.envMode = BranchToolbarLogic.envModeAfterBranchChange(nextWorktreePath: worktreePath, currentWorktreePath: target.worktreePath, mode: target.envMode)
+            d.envMode = BranchToolbarLogic.envModeAfterBranchChange(nextWorktreePath: worktreePath, currentWorktreePath: origin.worktreePath, mode: origin.envMode)
             d.branch = branch
             d.worktreePath = worktreePath
         }
@@ -851,7 +861,7 @@ final class GitController {
             self.stopTicking()
             switch outcome {
             case .success(let result):
-                if let branch = GitActionsLogic.createdBranch(result) { self.setThreadBranch(branch, worktreePath: target.worktreePath) }
+                if let branch = GitActionsLogic.createdBranch(result) { self.setThreadBranch(branch, worktreePath: target.worktreePath, on: target) }
                 self.showSuccess(result.toast.title, result.toast.description, key: key)
             case .failure(let error):
                 self.toast("Action failed", Self.message(error), kind: .error)
@@ -1085,12 +1095,16 @@ final class GitController {
                 let result = try value.decode(as: GitPreparePullRequestThreadResult.self)
                 guard let self else { return }
                 dialog.preparing = nil
-                self.composer.updateDraft { d in
-                    d.branch = result.branch
-                    d.worktreePath = result.worktreePath
-                    d.envMode = result.worktreePath == nil ? .local : .worktree
+                // The dialog can close mid-request and another draft open; this result belongs to `draft` only.
+                // ponytail: dropped once another draft is open; write it by draft id if ComposerController grows that
+                if self.composer.currentDraft?.draftId == draft.draftId {
+                    self.composer.updateDraft { d in
+                        d.branch = result.branch
+                        d.worktreePath = result.worktreePath
+                        d.envMode = result.worktreePath == nil ? .local : .worktree
+                    }
+                    self.refresh()
                 }
-                self.refresh()
                 done()
                 // A checkout the server couldn't confirm at the head warns (PullRequestThreadDialog.tsx:176-178,
                 // pullRequestCheckoutToast.ts:1-6).
