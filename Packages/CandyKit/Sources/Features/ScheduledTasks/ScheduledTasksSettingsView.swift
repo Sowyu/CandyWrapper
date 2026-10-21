@@ -1057,12 +1057,14 @@ final class ScheduledTaskDeliveriesBody: DSView {
 
     func showDetail(_ d: ScheduledTaskWebhookDelivery, nowMs: Int64) {
         reset()
-        let head = ScheduledTaskInlineRow([BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .outline),
+        let head = ScheduledTaskInlineRow([BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.pendingWindow ? "coalesced" : d.outcome)) ?? .outline),
                                            plain("\(d.method) · \(ScheduledTaskLogic.relativeLabel(d.receivedAt, nowMs: nowMs))", Themed.color(\.foreground))]
                                           + (d.signatureVerified ? [plain("Signature verified", Themed.color(\.mutedForeground))] : []), trailing: [])
         add(head, 20)
-        if let e = d.error { let p = paragraph(e, color: Themed.color(\.destructive)); add(p.0, p.1) }
-        block("Prompt sent to the agent", d.renderedPrompt ?? "No run was started for this request.")
+        // A filter's explanation is muted, not an error; a coalescing window's run is still to come (ScheduledTasksSettings.tsx:859-880).
+        if let e = d.error { let p = paragraph(e, color: Themed.color(d.outcome == "filtered" ? \.mutedForeground : \.destructive)); add(p.0, p.1) }
+        block(d.pendingWindow ? "Scheduled run" : "Prompt sent to the agent",
+              d.renderedPrompt ?? (d.pendingWindow ? "Run scheduled when the window closes; no run started yet." : "No run was started for this request."))
         if !d.missingFields.isEmpty { let p = paragraph("Empty placeholders: \(d.missingFields.joined(separator: ", "))", color: Themed.color(\.mutedForeground)); add(p.0, p.1) }
         block("Headers", d.headers.map { "\($0.0): \($0.1)" }.joined(separator: "\n"))
         if !d.query.isEmpty { block("Query", d.query) }
@@ -1113,8 +1115,9 @@ final class ScheduledTaskDeliveryListView: DSView {
         super.init(frame: .zero)
         rows = list.map { d in
             func l(_ s: String, _ c: NSColor) -> LabelView { let x = LabelView(s, font: DSFont.ui(14), color: c); x.lineHeight = 20; return x }
-            var items: [NSView] = [BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.outcome)) ?? .outline),
+            var items: [NSView] = [BadgeView(ScheduledTaskLogic.outcomeLabel(d.outcome, pendingWindow: d.pendingWindow), variant: BadgeView.Variant(rawValue: ScheduledTaskLogic.outcomeTone(d.pendingWindow ? "coalesced" : d.outcome)) ?? .outline),
                                    l(d.method, Themed.color(\.foreground)), l(ScheduledTaskLogic.relativeLabel(d.receivedAt, nowMs: nowMs), Themed.color(\.mutedForeground))]
+            if d.outcome == "filtered", let e = d.error { items.append(l(e, Themed.color(\.mutedForeground))) }
             if !d.missingFields.isEmpty {
                 items.append(l("\(d.missingFields.count) empty placeholder\(d.missingFields.count == 1 ? "" : "s")", Themed.color(\.mutedForeground)))
             }
