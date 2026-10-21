@@ -40,6 +40,10 @@ public final class DetailsRowControl: ControlView {
     private let rule = CALayer()
     private let fill = CALayer()
     private let primaryFill = BoxDecorationLayer()
+    /// `.select`: the chevron half's own hover fill (`THREAD_DETAILS_PANEL_SELECT_ICON_CLASS`).
+    private let chevronFill = BoxDecorationLayer()
+    private var chevronArea: NSTrackingArea?
+    private var chevronHovered = false { didSet { if chevronHovered != oldValue { needsDisplay = true } } }
     private var tooltip: TooltipController?
 
     public init(kind: Kind = .row) {
@@ -50,6 +54,8 @@ public final class DetailsRowControl: ControlView {
         layer?.addSublayer(fill)
         primaryFill.host = self
         layer?.addSublayer(primaryFill)
+        chevronFill.host = self
+        layer?.addSublayer(chevronFill)
         layer?.addSublayer(rule)
         label.font = DSFont.ui(13, weight: .medium)
         label.lineHeight = 20
@@ -77,6 +83,7 @@ public final class DetailsRowControl: ControlView {
         setAccessibilityRole(kind == .locked ? .staticText : kind == .select ? .popUpButton : .button)
         restyle()
         needsLayout = true
+        updateTrackingAreas()
     }
 
     public override func layout() {
@@ -94,6 +101,10 @@ public final class DetailsRowControl: ControlView {
             chevron.frame = NSRect(x: bounds.width + 1 - 32 + 8, y: midY - 8, width: 16, height: 16)
             rule.frame = CGRect(x: bounds.width + 1 - 32 - 1, y: midY - 8, width: 1, height: 16)
             right = bounds.width + 1 - 32 - 10
+            primaryFill.frame = CGRect(x: 0, y: 0, width: bounds.width + 1 - 32, height: bounds.height)
+            primaryFill.layout(boxSize: primaryFill.frame.size)
+            chevronFill.frame = CGRect(x: bounds.width + 1 - 32, y: 0, width: 32, height: bounds.height)
+            chevronFill.layout(boxSize: chevronFill.frame.size)
         }
         if let secondary {
             secondary.frame = NSRect(x: bounds.width - 32, y: 0, width: 32, height: bounds.height)
@@ -114,7 +125,27 @@ public final class DetailsRowControl: ControlView {
 
     public override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
+        if !state.hovered { chevronHovered = false }
         restyle()
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let chevronArea { removeTrackingArea(chevronArea) }
+        chevronArea = nil
+        guard kind == .select else { return }
+        let area = NSTrackingArea(rect: NSRect(x: bounds.width + 1 - 32, y: 0, width: 32, height: bounds.height),
+                                  options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        chevronArea = area
+    }
+
+    public override func mouseEntered(with event: NSEvent) {
+        if let chevronArea, event.trackingArea === chevronArea { chevronHovered = state.enabled } else { super.mouseEntered(with: event) }
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        if let chevronArea, event.trackingArea === chevronArea { chevronHovered = false } else { super.mouseExited(with: event) }
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -129,7 +160,16 @@ public final class DetailsRowControl: ControlView {
         part.radius = 10
         part.corners = .leading
         part.fill = lit && secondary.map { !$0.state.hoverOrPressed } == true ? detailsHoverFill() : nil
+        // `.select` stacks a second fill on the hovered half, the label or the chevron
+        // (threadDetailsPanelStyles.ts:23-27, commit 2fc244a438).
+        let selectHover = kind == .select && state.enabled && state.hovered
+        if kind == .select { part.fill = selectHover && !chevronHovered ? detailsHoverFill() : nil }
         primaryFill.boxStyle = part
+        var icon = BoxStyle()
+        icon.radius = 10
+        icon.corners = .trailing
+        icon.fill = selectHover && chevronHovered ? detailsHoverFill() : nil
+        chevronFill.boxStyle = icon
         rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
     }
 
