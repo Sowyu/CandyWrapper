@@ -88,6 +88,8 @@ public enum LocalServerLaunchError: Error, Sendable, Equatable, CustomStringConv
     case notReady
     case bootstrapRejected(String)
     case incompatible(String)
+    /// A short CLI command did not finish in time and was stopped.
+    case commandTimedOut(String)
     /// Exit 78 (`SERVER_EXIT_CODE_STATE_DIR_OWNED`, desktopBootstrap.ts:6): another server owns the home.
     case stateDirOwned(home: String)
 
@@ -101,6 +103,7 @@ public enum LocalServerLaunchError: Error, Sendable, Equatable, CustomStringConv
         case .notReady: "The T3 server did not become ready."
         case .bootstrapRejected(let m): "The T3 server rejected the bootstrap credential: \(m)"
         case .incompatible(let m): "The T3 server is not compatible: \(m)"
+        case .commandTimedOut(let c): "`\(c)` did not finish in time and was stopped."
         // ServerAlreadyRunningError (serverOwnership.ts:24-36).
         case .stateDirOwned(let home): "A T3 Code server already owns \(home). Stop that server, or use a separate T3 home and pair with it, then retry. No server was stopped."
         }
@@ -394,8 +397,11 @@ public enum LocalServerLauncher {
         return pid
     }
 
-    /// Runs a short CLI command to completion and returns its stdout.
-    private static func run(executable: String, arguments: [String], environment: [String: String]) async throws -> Data {
+    /// Runs a short CLI command to completion and returns its stdout. The deadline starts at spawn
+    /// and stdout drains alongside, so a child that stalls with stdout open is stopped, as it is
+    /// when the caller cancels. Only the child spawned here is ever signalled.
+    static func run(executable: String, arguments: [String], environment: [String: String],
+                    timeout: Duration = .seconds(30)) async throws -> Data {
         var fds: [Int32] = [-1, -1]
         guard pipe(&fds) == 0 else { throw LocalServerLaunchError.spawnFailed(errno) }
         let pid: pid_t
@@ -407,11 +413,30 @@ public enum LocalServerLauncher {
             throw error
         }
         close(fds[1])
-        let reader = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true)
-        let output = await Task.detached { reader.readDataToEndOfFile() }.value
         let watcher = ChildExitWatcher(pid: pid)
-        _ = await watcher.waitForExit(timeout: .seconds(30))
-        if watcher.exitStatus == nil { kill(pid, SIGKILL) }
-        return output
+        let identity = ProcessIdentity.of(pid)
+        let reader = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true)
+        let output = Task.detached { reader.readDataToEndOfFile() }
+        let exited = await withTaskCancellationHandler {
+            await watcher.waitForExit(timeout: timeout)
+        } onCancel: {
+            Task { await stopChild(identity, watcher: watcher) }
+        }
+        if !exited || Task.isCancelled {
+            await stopChild(identity, watcher: watcher)
+            // The read ends once the pipe closes. It is not awaited, in case something else holds stdout.
+            if Task.isCancelled { throw CancellationError() }
+            throw LocalServerLaunchError.commandTimedOut(arguments.dropFirst().joined(separator: " "))
+        }
+        return await output.value
+    }
+
+    /// SIGTERM, then SIGKILL after a second, and wait for the reap.
+    private static func stopChild(_ identity: ProcessIdentity?, watcher: ChildExitWatcher) async {
+        guard let identity, watcher.exitStatus == nil else { return }
+        identity.signal(SIGTERM)
+        if await watcher.waitForExit(timeout: .seconds(1)) { return }
+        identity.signal(SIGKILL)
+        _ = await watcher.waitForExit(timeout: .seconds(2))
     }
 }
