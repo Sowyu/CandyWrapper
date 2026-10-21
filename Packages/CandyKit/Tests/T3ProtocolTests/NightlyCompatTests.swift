@@ -34,6 +34,32 @@ struct NightlyCompatTests {
         #expect(configSeen && databaseSeen && threadSeen)
     }
 
+    /// Nightly 3473 (fixtures/transcripts/22-nightly-3473.jsonl): config with `threadStop`, the
+    /// shell snapshot and a thread with forks, compaction, subagents and context transfers.
+    @Test func recorded3473ConfigShellAndThreadDecode() throws {
+        var configSeen = false, shellThreads = 0, threadSeen = false
+        for frame in try WireTests.load("22-nightly-3473") where frame.dir == "recv" && frame.kind == "ws" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                _ = try config.decode(as: ServerProviderConfig.self)
+                #expect(config["environment"]?["capabilities"]?["threadStop"] == .bool(true))
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                // The second snapshot only resolves repository identity roots.
+                if value["requestId"]?.stringValue == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    shellThreads = max(shellThreads, shell.threads.count)
+                }
+                if value["requestId"]?.stringValue == "4", let projection = item["projection"] {
+                    let decoded = try projection.decode(as: ThreadProjection.self)
+                    #expect(Set(decoded.visibleTurnItems.map(\.item.type.rawValue)).isSuperset(of: ["fork", "compaction", "subagent"]))
+                    threadSeen = true
+                }
+            }
+        }
+        #expect(configSeen && shellThreads > 100 && threadSeen)
+    }
+
     @Test func futureRecordedConfigAndFramesDecode() throws {
         var unknown = 0, configSeen = false
         for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {
