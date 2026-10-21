@@ -210,6 +210,39 @@ struct MarkdownIncrementalTests {
         #expect(view.layout(forWidth: 640).reusedBlocks > 0)
     }
 
+    /// A streaming answer's open fence shows plain and stays out of the colored-code cache on every token; once it
+    /// settles it draws exactly what a fresh view of the full text draws.
+    @Test func openFenceSkipsColoringUntilItSettles() throws {
+        let code = (1...120).map { "let value\($0) = compute(\($0)) // line \($0)" }.joined(separator: "\n")
+        let answer = "Intro.\n\n```swift\n" + code + "\n```\n\nAfter."
+        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 640, height: 10))
+        view.streaming = true
+        let context = TimelineContext()
+        let before = MarkdownLayout.coloredCodeKeys
+        for end in stride(from: 20, to: answer.utf8.count, by: 150) {
+            let text = String(answer.prefix(end))
+            view.document = context.document("m", text, lineBreaks: false, streaming: true)
+            _ = view.layout(forWidth: 640)
+            if !text.hasSuffix("\n```") && !text.contains("\n```\n") {
+                #expect(MarkdownLayout.coloredCodeKeys == before, "\(end) characters")
+            }
+        }
+        view.streaming = false
+        view.document = context.document("m", answer, lineBreaks: false)
+        let fresh = MarkdownView(frame: NSRect(x: 0, y: 0, width: 640, height: 10))
+        fresh.document = MarkdownDocument(parsing: answer)
+        #expect(Self.describe(view.layout(forWidth: 640)) == Self.describe(fresh.layout(forWidth: 640)))
+        // The settled block is colored once, and the fresh view reads it from the cache.
+        #expect(Set(MarkdownLayout.coloredCodeKeys).subtracting(before).count == 1)
+        func pixels(_ v: MarkdownView) throws -> Data? {
+            v.setFrameSize(NSSize(width: 640, height: v.height(forWidth: 640)))
+            let rep = try #require(v.bitmapImageRepForCachingDisplay(in: v.bounds))
+            v.cacheDisplay(in: v.bounds, to: rep)
+            return rep.tiffRepresentation
+        }
+        #expect(try pixels(view) == pixels(fresh))
+    }
+
     static func describe(_ layout: MarkdownLayout) -> [String] {
         layout.items.map { item -> String in
             switch item {

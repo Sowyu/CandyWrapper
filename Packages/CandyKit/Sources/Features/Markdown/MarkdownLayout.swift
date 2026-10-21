@@ -356,6 +356,8 @@ public final class MarkdownLayout {
     fileprivate private(set) var rootEnds: [RootEnd] = []
     private var reuseKey: ReuseKey?
     fileprivate var expandedTables: Set<Int> = []
+    /// The root block drawn without syntax colors: the code block a streaming answer ends with.
+    fileprivate var plainRoot: Int?
     fileprivate var rootBoxes: [Box] = []
     /// The text boxes this layout made or took over for the blocks it laid out itself. Only a
     /// layout that reused an earlier one keeps them: that is a streaming answer, whose next update
@@ -383,11 +385,14 @@ public final class MarkdownLayout {
     /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
+    /// `streaming`: a code block the answer ends with may still be open, so it shows plain until text follows it or the
+    /// answer settles. Coloring it again on every token cost work in proportion to the whole fence.
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
                 expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
-                fitsExpandedTables: Bool = false, reusing previous: MarkdownLayout? = nil) {
+                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         self.expandedTables = expandedTables
+        if streaming, case .code = document.blocks.last { plainRoot = document.blocks.count - 1 }
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
@@ -397,6 +402,7 @@ public final class MarkdownLayout {
         builder.cwd = cwd
         builder.runsShell = runsShell
         builder.fitsExpandedTables = fitsExpandedTables
+        builder.plainRoot = plainRoot
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
                            runsShell: runsShell, fitsExpandedTables: fitsExpandedTables)
         if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
@@ -462,6 +468,9 @@ private struct Builder {
     var cwd: String?
     var runsShell = false
     var fitsExpandedTables = false
+    var plainRoot: Int?
+    /// The code block being laid out is `plainRoot`.
+    var drawsPlain = false
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -485,6 +494,8 @@ private struct Builder {
             let oldCode = index == 0 ? 0 : previous.rootEnds[index - 1].codeIndex
             let oldTable = index == 0 ? 0 : previous.rootEnds[index - 1].tableIndex
             guard code == oldCode, table == oldTable, blocks[index] == previous.rootBlocks[index] else { return false }
+            // A code block laid out plain while it was open gets its colors once text follows it.
+            if index == previous.plainRoot, index != plainRoot { return false }
             let tables = table..<previous.rootEnds[index].tableIndex
             return expandedTables.intersection(tables) == previous.expandedTables.intersection(tables)
         }
@@ -515,7 +526,9 @@ private struct Builder {
                 tableIndex = previous.rootEnds[index].tableIndex
                 reusedBlocks += 1
             } else {
+                drawsPlain = root && index == plainRoot
                 box = layout(blocks[index], width: width, context: context, tight: tight)
+                drawsPlain = false
             }
             if root { rootBoxes.append(box) }
             let ownBottom = box.bottom
@@ -573,7 +586,7 @@ private struct Builder {
                 return diagramBlock(code: code, index: index, palette: diagrams.palette, width: width)
             }
             return codeBlock(language: language, title: title, code: code, width: width, wraps: wrapsCode != unwrapped.contains(index),
-                             viewToggle: mermaid)
+                             viewToggle: mermaid, plain: drawsPlain)
         case .table(let table):
             return self.table(table, width: width, context: context)
         case .rule:
@@ -816,12 +829,13 @@ private struct Builder {
     /// again. Lexing an 18,000 line block took 0.1 s of every layout.
     // ponytail: the last 16 blocks of 2,000 UTF-16 units or more; key by something cheaper than the text if it shows in profiles
     @MainActor private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
-    @MainActor private static var coloredCodeOrder: [ColoredCodeKey] = []
+    @MainActor fileprivate static var coloredCodeOrder: [ColoredCodeKey] = []
     struct ColoredCodeKey: Hashable { var code: String; var language: String; var font: NSFont }
 
     @MainActor
-    static func coloredCode(_ code: String, language: String, font: NSFont) -> NSAttributedString {
-        let cached = code.utf16.count >= 2_000
+    /// `plain` skips the tokens and the cache: an open code block of a streaming answer changes with every token.
+    static func coloredCode(_ code: String, language: String, font: NSFont, plain: Bool = false) -> NSAttributedString {
+        let cached = !plain && code.utf16.count >= 2_000
         let key = ColoredCodeKey(code: code, language: language, font: font)
         if cached, let hit = coloredCodeCache[key] { return hit }
         let paragraph = NSMutableParagraphStyle()
@@ -835,7 +849,7 @@ private struct Builder {
         let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.color,
                                                                           .paragraphStyle: paragraph])
         let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-        for token in CodeHighlighter.tokens(code, language: language) {
+        for token in plain ? [] : CodeHighlighter.tokens(code, language: language) {
             string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
             if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
         }
@@ -850,10 +864,11 @@ private struct Builder {
     // MARK: Code blocks
 
     @MainActor
-    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false) -> Box {
+    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false,
+                            plain: Bool = false) -> Box {
         let p = MarkdownStyle.codePadding
         let font = DSFont.mono(MarkdownStyle.codeFontSize)
-        let string = Self.coloredCode(code, language: language, font: font)
+        let string = Self.coloredCode(code, language: language, font: font, plain: plain)
         let inner = width - 2 - 2 * p.x
         let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
         // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
@@ -1150,6 +1165,8 @@ extension MarkdownLayout {
         }
         return (widths, max(width, widths.reduce(0, +)))
     }
+    /// The code of the cached colored blocks, oldest first (tests).
+    @MainActor static var coloredCodeKeys: [String] { Builder.coloredCodeOrder.map(\.code) }
 }
 
 private extension MarkdownLayout.Item {

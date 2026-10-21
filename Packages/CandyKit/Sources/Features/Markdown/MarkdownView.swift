@@ -141,6 +141,10 @@ public final class MarkdownView: DSView {
         didSet { if streamsInOpenFence != oldValue, hasDiagrams { invalidate() } }
     }
     private var diagramCode: Set<Int> = []
+    /// The message streams: a code block it ends with shows without syntax colors until text follows it (`MarkdownLayout`).
+    public var streaming = false {
+        didSet { if streaming != oldValue { invalidate() } }
+    }
     private var diagramObserver: NSObjectProtocol?
     private var hasDiagrams: Bool { document.blocks.contains { if case .code(let l, _, _) = $0 { l.lowercased() == "mermaid" } else { false } } }
 
@@ -263,7 +267,8 @@ public final class MarkdownView: DSView {
                                                              openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
-                                  runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false, reusing: reusable?.width == width ? reusable : nil)
+                                  runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false,
+                                  streaming: streaming, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
         cachedWidths.append(width)

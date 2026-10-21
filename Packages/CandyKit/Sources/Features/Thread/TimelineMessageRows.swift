@@ -596,6 +596,7 @@ final class AssistantMessageRowView: TimelineRowView {
         // ponytail: a diagram that appears mid-stream skips T3's 600ms fade (`.chat-markdown-mermaid`, index.css:2047-2049);
         // give it a fade band if the switch from code reads as a jump.
         markdown.streamsInOpenFence = m.streaming && MarkdownLayout.endsInOpenFence(m.text)
+        markdown.streaming = m.streaming
         // A streaming answer has no Run buttons (ChatMarkdown.tsx:3368-3372).
         markdown.onRunShellCommand = m.streaming ? nil : context.model?.runShellCommand
         markdown.citationSourceID = m.id.rawValue
