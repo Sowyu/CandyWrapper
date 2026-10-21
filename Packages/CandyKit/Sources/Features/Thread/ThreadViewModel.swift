@@ -290,6 +290,12 @@ public final class ThreadViewModel {
         if let run = match.runId.map { RunId($0) } {
             changed = expandedRunIds.insert(run).inserted
             if changed { findOpenedRuns.insert(run) }
+            // Work after a steer folds under `<run>:steer:<entry>` (a8bb769d65).
+            // ponytail: opens every steer segment of the run; map entries to their fold like `timelineTurnFoldRunIdsByEntryId` if that shows.
+            for item in items {
+                guard case .turnFold(let fold, _, _) = item.row.kind, fold.rawValue.hasPrefix("\(run.rawValue):steer:") else { continue }
+                if expandedRunIds.insert(fold).inserted { findOpenedRuns.insert(fold); changed = true }
+            }
             for attempt in projection?.attempts ?? [] where attempt.runId == run {
                 if expandedAttemptIds.insert(attempt.id).inserted { findOpenedAttempts.insert(attempt.id); changed = true }
             }

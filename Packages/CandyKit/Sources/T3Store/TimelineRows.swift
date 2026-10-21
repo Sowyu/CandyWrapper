@@ -372,6 +372,8 @@ public enum TimelineRows {
         var anchorEntryId: String
         var createdAt: T3Timestamp
         var hiddenEntryIds: Set<String>
+        /// Every entry in the segment, including the cards a fold never hides.
+        var entryIds: Set<String>
         var label: String
     }
 
@@ -443,6 +445,9 @@ public enum TimelineRows {
             var hasStreamingMessage = false
             var startBoundary: T3Timestamp?
             var anchorEntryId: String
+            /// Each steer after the turn has produced output starts a new segment at this index into `entries`,
+            /// so the steer sits between the work it split (a8bb769d65, L:1038-1042).
+            var steerSegments: [(startIndex: Int, steer: TimelineEntry)] = []
         }
         var order: [RunId] = []
         var groups: [RunId: Group] = [:]
@@ -456,6 +461,14 @@ public enum TimelineRows {
                 let boundaryRunId = entry.message?.runId ?? entry.work?.runId
                 runlessKey = boundaryRunId == nil ? RunId("runless:\(entry.id)") : nil
                 responseKey = boundaryRunId ?? runlessKey
+                continue
+            }
+            if let m = entry.message, m.role == .user, m.inputIntent == .steer || m.inputIntent == .promotedQueuedToSteer {
+                // L:1064-1075. Back-to-back steers split once, after the last of them.
+                if let steerRunId = m.runId ?? responseKey, let count = groups[steerRunId]?.entries.count, count > 0 {
+                    if groups[steerRunId]!.steerSegments.last?.startIndex == count { groups[steerRunId]!.steerSegments.removeLast() }
+                    groups[steerRunId]!.steerSegments.append((count, entry))
+                }
                 continue
             }
             guard let ownRunId = foldRunId(entry, runlessKey: runlessKey) else { continue }
@@ -499,8 +512,10 @@ public enum TimelineRows {
                 hidden.insert(entry.id)
             }
             // A lone compaction stays visible; it folds only with other work.
-            let hidesNonCompaction = group.entries.contains { hidden.contains($0.id) && $0.work?.sourceActivityKind != "context-compaction" }
-            guard !hidden.isEmpty, hidesNonCompaction, let first = group.entries.first, let last = group.entries.last else { continue }
+            func hidesNonCompaction(_ entries: ArraySlice<TimelineEntry>) -> Bool {
+                entries.contains { hidden.contains($0.id) && $0.work?.sourceActivityKind != "context-compaction" }
+            }
+            guard !hidden.isEmpty, hidesNonCompaction(group.entries[...]), let first = group.entries.first, let last = group.entries.last else { continue }
 
             let isLatest = latestRun?.runId == runId
             let lastEntryEnd = last.message?.updatedAt ?? last.createdAt
@@ -513,9 +528,27 @@ public enum TimelineRows {
             let label = isLatest && latestRun?.status == .interrupted
                 ? (duration.map { "You stopped after \($0)" } ?? "You stopped this response")
                 : (duration.map { "Worked for \($0)" } ?? "Worked")
+            // The top row keeps the whole turn's time, steers included. Work after a steer folds under its own row
+            // below that steer, keyed apart from the run so each segment opens on its own (L:1197-1221).
+            func segment(_ entries: ArraySlice<TimelineEntry>) -> (hidden: Set<String>, ids: Set<String>) {
+                let ids = Set(entries.map(\.id))
+                return (hidden.intersection(ids), ids)
+            }
+            let firstSegment = segment(group.entries[..<(group.steerSegments.first?.startIndex ?? group.entries.count)])
             folds[group.anchorEntryId] = TurnFold(
                 runId: runId, anchorEntryId: group.anchorEntryId, createdAt: group.startBoundary ?? first.createdAt,
-                hiddenEntryIds: hidden, label: label)
+                hiddenEntryIds: firstSegment.hidden, entryIds: firstSegment.ids, label: label)
+            for (index, split) in group.steerSegments.enumerated() {
+                let end = index + 1 < group.steerSegments.count ? group.steerSegments[index + 1].startIndex : group.entries.count
+                let entries = group.entries[split.startIndex..<end]
+                guard let anchor = entries.first, hidesNonCompaction(entries) else { continue }
+                let segmentEnd = entries.map { $0.message?.updatedAt ?? $0.createdAt }.reduce(nil, maxTimestamp) ?? split.steer.createdAt
+                let ms = elapsedMs(split.steer.createdAt, segmentEnd)
+                let members = segment(entries)
+                folds[anchor.id] = TurnFold(
+                    runId: RunId("\(runId.rawValue):steer:\(split.steer.id)"), anchorEntryId: anchor.id, createdAt: split.steer.createdAt,
+                    hiddenEntryIds: members.hidden, entryIds: members.ids, label: ms.map { "Continued for \(formatDuration($0))" } ?? "Continued")
+            }
         }
         return folds
     }
@@ -780,7 +813,9 @@ public enum TimelineRows {
             }
         }
 
-        var result = attachTrailingToolGroupsToAssistant(attachCreatedThreadSummaries(rows, entries))
+        var collapsedFoldMembers = Set<String>()
+        for fold in folds.values where !input.expandedRunIds.contains(fold.runId) { collapsedFoldMembers.formUnion(fold.entryIds) }
+        var result = attachTrailingToolGroupsToAssistant(attachCreatedThreadSummaries(rows, entries, collapsedFoldMembers: collapsedFoldMembers))
         for i in result.indices.dropLast() where result[i].isWorkLog && result[i + 1].isWorkLog {
             result[i].continuesWorkLog = true
         }
@@ -951,12 +986,12 @@ public enum TimelineRows {
 
     /// `attachCreatedThreadSummaries`: created chats re-appear right after the run's final answer
     /// as summary cards, even when the work that created them folded away.
-    static func attachCreatedThreadSummaries(_ rows: [TimelineRow], _ entries: [TimelineEntry]) -> [TimelineRow] {
+    /// `collapsedFoldMembers`: every entry of a closed fold's segment (a8bb769d65), so a card a steer's segment folds
+    /// moves under the answer too.
+    static func attachCreatedThreadSummaries(_ rows: [TimelineRow], _ entries: [TimelineEntry], collapsedFoldMembers: Set<String>) -> [TimelineRow] {
         var terminalIndexes: [RunId: Int] = [:]
-        var collapsedRuns = Set<RunId>()
         for (index, row) in rows.enumerated() {
             if case .message(let m, _, true, _, _, _) = row.kind, let runId = m.runId { terminalIndexes[runId] = index }
-            if case .turnFold(let runId, _, false) = row.kind { collapsedRuns.insert(runId) }
         }
         var createdByRun: [RunId: [TimelineRow]] = [:]
         for entry in entries {
@@ -972,7 +1007,7 @@ public enum TimelineRows {
         guard !createdByRun.isEmpty else { return rows }
         return rows.enumerated().flatMap { index, row -> [TimelineRow] in
             if case .event(let p, _, _) = row.kind, p.item.type == .threadCreated, let runId = p.item.runId,
-                let terminal = terminalIndexes[runId], collapsedRuns.contains(runId) || index > terminal
+                let terminal = terminalIndexes[runId], collapsedFoldMembers.contains(row.id) || index > terminal
             {
                 return []
             }
