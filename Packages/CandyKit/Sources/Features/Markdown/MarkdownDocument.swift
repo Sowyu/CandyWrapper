@@ -46,10 +46,18 @@ public struct MarkdownDocument: Sendable, Equatable {
     // ponytail: indented code blocks are scanned like prose, so `C:\x\.y` in one shows a doubled backslash; skip them
     // here too if an agent's indented code shows it.
     static func keepingWindowsPathEscapes(_ text: Substring) -> Substring {
-        let b = Array(text.utf8)
-        guard b.contains(UInt8(ascii: "\\")), b.contains(UInt8(ascii: ":")) else { return text }
+        // Only a drive letter after a non-word character, followed by `:\` or `:/`, can make the pass change
+        // anything. Most replies hold none, so one byte scan skips the copy and the pass (URLs like `https://` don't count).
         func isWord(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 }
         func isLetter(_ c: UInt8) -> Bool { (c >= 65 && c <= 90) || (c >= 97 && c <= 122) }
+        var w0: UInt8 = 32, w1: UInt8 = 32, w2: UInt8 = 32
+        var drive = false
+        for c in text.utf8 {
+            if w2 == UInt8(ascii: ":"), c == UInt8(ascii: "\\") || c == UInt8(ascii: "/"), isLetter(w1), !isWord(w0) { drive = true; break }
+            w0 = w1; w1 = w2; w2 = c
+        }
+        guard drive else { return text }
+        let b = Array(text.utf8)
         func isPunct(_ c: UInt8) -> Bool { (c >= 33 && c <= 47) || (c >= 58 && c <= 64) || (c >= 91 && c <= 96) || (c >= 123 && c <= 126) }
         // `UNFINISHED_DRIVE_PATH`, /(?:^|\W)[A-Za-z]:(?:[\\/]\S*)?$/, over a run with no whitespace.
         func unfinishedDrive(_ from: Int, _ to: Int) -> Bool {
