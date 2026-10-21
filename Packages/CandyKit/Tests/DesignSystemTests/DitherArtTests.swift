@@ -2,8 +2,8 @@ import AppKit
 import Testing
 @testable import DesignSystem
 
-/// The Dither theme's art: a picture that matches the background renders as exactly the background, and a bright
-/// picture is held to the reach that keeps text readable.
+/// The Dither theme's art: a picture that matches the background renders as exactly the background, a bright picture
+/// is held to the reach that keeps text readable in three clean strengths, and the art thins toward the bottom.
 struct DitherArtTests {
     func picture(gray: CGFloat, in dir: URL) throws -> URL {
         let ctx = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
@@ -25,12 +25,17 @@ struct DitherArtTests {
         let flat = try #require(DitherArt.render(.init(url: try picture(gray: bg, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
         #expect(Set(bytes(flat).enumerated().filter { $0.offset % 4 != 3 }.map(\.element)) == [10])
 
+        // A bright picture is held to the reach, in three strengths: none, half and full.
         let bright = try #require(DitherArt.render(.init(url: try picture(gray: 0.9, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
         let b = bytes(bright), row = bright.bytesPerRow
-        let top = (0..<80).map { Int(b[$0 * 4]) }.reduce(0, +) / 80
-        let bottom = (0..<80).map { Int(b[59 * row + $0 * 4]) }.reduce(0, +) / 80
-        // A gray picture stays gray: every dot is the background or the picture's color at some strength.
-        #expect(abs(top - (10 + Int(DitherArt.reach))) <= 8)
+        let half = 10 + Int((DitherArt.reach / 2).rounded()), full = 10 + Int(DitherArt.reach.rounded())
+        #expect(Set((0..<60).flatMap { y in (0..<80).map { Int(b[y * row + $0 * 4]) } }).isSubset(of: [10, half, full]))
+        #expect(abs((0..<80).map { Int(b[$0 * 4]) }.reduce(0, +) / 80 - full) <= 4)
+        // A mid gray, under the reach, thins toward the bottom.
+        let mid = try #require(DitherArt.render(.init(url: try picture(gray: 0.4, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
+        let m = bytes(mid), mrow = mid.bytesPerRow
+        let top = (0..<80).map { Int(m[$0 * 4]) }.reduce(0, +) / 80
+        let bottom = (0..<80).map { Int(m[59 * mrow + $0 * 4]) }.reduce(0, +) / 80
         #expect(bottom < top)
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
