@@ -51,6 +51,8 @@ public struct ClerkCodeChallenge: Sendable, Equatable {
     public var emailAddressId: String?
     /// Clerk's masked address, for "We sent a code to ...".
     public var sentTo: String?
+    /// The sign-in attempt that owns this code. A newer attempt or `cancelSignIn()` ends it.
+    public var attempt = 0
 }
 
 public enum ClerkSignInStep: Sendable, Equatable {
@@ -102,6 +104,8 @@ public actor ClerkClient: CloudTokenProvider {
     private var pendingMint: (sessionId: String, id: UUID, task: Task<String, Error>)?
     /// Bumped on sign-in and sign-out so an in-flight mint can't cache or clear a newer session.
     private var generation = 0
+    /// The sign-in attempt allowed to finish. Each new attempt and `cancelSignIn()` bump it.
+    private var attempt = 0
 
     public init(baseURL: URL = ClerkClient.productionURL, template: String = ClerkClient.relayTemplate,
                 store: any ClerkSessionStorage = ClerkKeychainStore(), device: ClerkDeviceInfo = .current,
@@ -160,14 +164,15 @@ public actor ClerkClient: CloudTokenProvider {
 
     /// Creates a sign-in and emails a code. Then call `verifyCode(_:for:)`.
     public func startEmailCode(email: String) async throws -> ClerkCodeChallenge {
-        try await beginSignIn(\.emailCodeEnabled)
-        let signIn = try await createSignIn(["identifier": email.trimmingCharacters(in: .whitespacesAndNewlines),
-                                             "locale": locale])
+        let owner = newAttempt()
+        try await beginSignIn(\.emailCodeEnabled, owner: owner)
+        let signIn = try await createSignInWithClient(["identifier": email.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                       "locale": locale], owner: owner).0
         guard let factor = signIn.emailFactor("email_code", in: signIn.supportedFirstFactors, fallbackToFirst: true) else {
             throw ClerkAuthError(.unavailable)
         }
-        let challenge = ClerkCodeChallenge(signInId: signIn.id, factor: .first,
-                                           emailAddressId: factor.emailAddressId, sentTo: factor.safeIdentifier)
+        let challenge = ClerkCodeChallenge(signInId: signIn.id, factor: .first, emailAddressId: factor.emailAddressId,
+                                           sentTo: factor.safeIdentifier, attempt: owner)
         try await resendCode(challenge)
         return challenge
     }
@@ -177,15 +182,17 @@ public actor ClerkClient: CloudTokenProvider {
         var fields = ["strategy": "email_code"]
         fields["email_address_id"] = challenge.emailAddressId
         let step = challenge.factor == .first ? "prepare_first_factor" : "prepare_second_factor"
-        _ = try await signInCall(challenge.signInId, step, fields)
+        try own(challenge.attempt)
+        _ = try await signInCall(challenge.signInId, step, fields, owner: challenge.attempt)
     }
 
     /// Checks the emailed code and finishes the sign-in.
     public func verifyCode(_ code: String, for challenge: ClerkCodeChallenge) async throws -> ClerkAccount {
         let step = challenge.factor == .first ? "attempt_first_factor" : "attempt_second_factor"
         let fields = ["code": code.trimmingCharacters(in: .whitespacesAndNewlines), "strategy": "email_code"]
-        let (signIn, client) = try await signInCall(challenge.signInId, step, fields)
-        guard case .complete(let account) = try await advance(signIn, client) else {
+        try own(challenge.attempt)
+        let (signIn, client) = try await signInCall(challenge.signInId, step, fields, owner: challenge.attempt)
+        guard case .complete(let account) = try await advance(signIn, client, owner: challenge.attempt) else {
             throw ClerkAuthError(.unavailable, message: "This account needs a sign-in step CandyWrapper does not support yet.")
         }
         return account
@@ -193,25 +200,34 @@ public actor ClerkClient: CloudTokenProvider {
 
     /// Signs in with email and password. Clerk may still ask for an emailed code on a new device.
     public func signIn(email: String, password: String) async throws -> ClerkSignInStep {
-        try await beginSignIn(\.passwordEnabled)
+        let owner = newAttempt()
+        try await beginSignIn(\.passwordEnabled, owner: owner)
         let identifier = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let (signIn, client) = try await createSignInWithClient(["identifier": identifier, "locale": locale, "password": password])
+        let (signIn, client) = try await createSignInWithClient(["identifier": identifier, "locale": locale, "password": password],
+                                                                owner: owner)
         if signIn.status == "needs_first_factor" {
             let (next, nextClient) = try await signInCall(signIn.id, "attempt_first_factor",
-                                                          ["password": password, "strategy": "password"])
-            return try await advance(next, nextClient)
+                                                          ["password": password, "strategy": "password"], owner: owner)
+            return try await advance(next, nextClient, owner: owner)
         }
-        return try await advance(signIn, client)
+        return try await advance(signIn, client, owner: owner)
     }
+
+    /// Ends the sign-in attempt in progress, when its sheet closes. Its late answers throw
+    /// `CancellationError` and change nothing.
+    public func cancelSignIn() { attempt += 1 }
 
     /// Removes the session on Clerk (`POST /v1/client/sessions/{id}/remove`, clerk-ios `Auth.signOut`)
     /// and deletes the Keychain item. Local state is cleared even when Clerk can't be reached.
     public func signOut() async {
         generation += 1
+        let started = generation
         let sessionId = session()?.sessionId
         if let sessionId {
             _ = try? await call("POST", "/v1/client/sessions/\(ConnectHTTP.pathSegment(sessionId))/remove")
         }
+        // A sign-in that finished meanwhile owns the stored session now.
+        guard generation == started else { return }
         clearLocal()
     }
 
@@ -267,46 +283,55 @@ public actor ClerkClient: CloudTokenProvider {
 
     // MARK: Sign-in steps
 
-    private func beginSignIn(_ strategy: KeyPath<ClerkEnvironment, Bool>) async throws {
+    /// Starts a sign-in attempt, ending any earlier one.
+    private func newAttempt() -> Int {
+        attempt += 1
+        return attempt
+    }
+
+    /// Throws `CancellationError` once a newer attempt or `cancelSignIn()` replaced `owner`.
+    private func own(_ owner: Int) throws {
+        guard owner == attempt else { throw CancellationError() }
+    }
+
+    private func beginSignIn(_ strategy: KeyPath<ClerkEnvironment, Bool>, owner: Int) async throws {
         let env = try await environment()
+        try own(owner)
         guard env.nativeAPIEnabled, env[keyPath: strategy] else { throw ClerkAuthError(.unavailable) }
         // single_session_mode: Clerk refuses a second sign-in on a client that has a session
         // (`session_exists`, 400). Drop ours first; a new client starts with the next request.
         if env.singleSessionMode, session()?.sessionId != nil { await signOut() }
-    }
-
-    private func createSignIn(_ fields: [String: String]) async throws -> ClerkSignInObject {
-        try await createSignInWithClient(fields).0
+        try own(owner)
     }
 
     /// `POST /v1/client/sign_ins`. If Clerk says this client is already signed in (`session_exists`,
     /// `identifier_already_signed_in`), end all its sessions (`DELETE /v1/client/sessions`, clerk-ios
     /// `Auth.signOut()` with no id) and try once more.
-    private func createSignInWithClient(_ fields: [String: String]) async throws -> (ClerkSignInObject, ClerkClientObject?) {
+    private func createSignInWithClient(_ fields: [String: String], owner: Int) async throws -> (ClerkSignInObject, ClerkClientObject?) {
         do {
-            return try decodeSignIn(try await call("POST", "/v1/client/sign_ins", fields))
+            return try decodeSignIn(try await call("POST", "/v1/client/sign_ins", fields, owner: owner))
         } catch let e as ClerkAuthError where e.kind == .clerk(status: 400, code: "session_exists")
             || e.kind == .clerk(status: 400, code: "identifier_already_signed_in") {
-            _ = try await call("DELETE", "/v1/client/sessions")
+            _ = try await call("DELETE", "/v1/client/sessions", owner: owner)
             dropSession()
-            return try decodeSignIn(try await call("POST", "/v1/client/sign_ins", fields))
+            return try decodeSignIn(try await call("POST", "/v1/client/sign_ins", fields, owner: owner))
         }
     }
 
-    private func signInCall(_ id: String, _ step: String, _ fields: [String: String]) async throws -> (ClerkSignInObject, ClerkClientObject?) {
-        try decodeSignIn(try await call("POST", "/v1/client/sign_ins/\(ConnectHTTP.pathSegment(id))/\(step)", fields))
+    private func signInCall(_ id: String, _ step: String, _ fields: [String: String], owner: Int) async throws -> (ClerkSignInObject, ClerkClientObject?) {
+        try decodeSignIn(try await call("POST", "/v1/client/sign_ins/\(ConnectHTTP.pathSegment(id))/\(step)", fields, owner: owner))
     }
 
-    private func advance(_ signIn: ClerkSignInObject, _ client: ClerkClientObject?) async throws -> ClerkSignInStep {
+    private func advance(_ signIn: ClerkSignInObject, _ client: ClerkClientObject?, owner: Int) async throws -> ClerkSignInStep {
         switch signIn.status {
         case "complete":
-            return .complete(try finish(signIn, client))
+            return .complete(try finish(signIn, client, owner: owner))
         case "needs_second_factor", "needs_client_trust":
             guard signIn.supportedSecondFactors?.contains(where: { $0.strategy == "email_code" }) == true else { break }
             let factor = signIn.emailFactor("email_code", in: signIn.supportedSecondFactors, fallbackToFirst: false)
             let challenge = ClerkCodeChallenge(signInId: signIn.id, factor: .second, emailAddressId: factor?.emailAddressId,
                                                sentTo: factor?.safeIdentifier ?? signIn.supportedSecondFactors?
-                                                .first { $0.strategy == "email_code" }?.safeIdentifier)
+                                                .first { $0.strategy == "email_code" }?.safeIdentifier, attempt: owner)
             try await resendCode(challenge)
             return .needsCode(challenge)
         default:
@@ -315,7 +340,8 @@ public actor ClerkClient: CloudTokenProvider {
         throw ClerkAuthError(.unavailable, message: "This account needs a sign-in step CandyWrapper does not support yet.")
     }
 
-    private func finish(_ signIn: ClerkSignInObject, _ client: ClerkClientObject?) throws -> ClerkAccount {
+    private func finish(_ signIn: ClerkSignInObject, _ client: ClerkClientObject?, owner: Int) throws -> ClerkAccount {
+        try own(owner)
         guard let sessionId = signIn.createdSessionId, var s = session() else { throw ClerkAuthError(.invalidResponse) }
         let clerkSession = client?.sessions.first { $0.id == sessionId }
         s.sessionId = sessionId
@@ -345,11 +371,13 @@ public actor ClerkClient: CloudTokenProvider {
     /// One Frontend API request with the SDK's query item and headers. Applies the response
     /// `Authorization` header to the stored client token, retries once on 408, 425 and 429 like
     /// clerk-ios, and maps errors. Returns the body of a 2xx. A response that arrives after a sign-in
-    /// or sign-out (a new `generation`) leaves the stored client alone and is not retried.
+    /// or sign-out (a new `generation`) leaves the stored client alone and is not retried. With an
+    /// `owner`, such a response, or one for a sign-in attempt that was replaced, throws
+    /// `CancellationError` so its body can't advance the newer sign-in.
     @discardableResult
-    private func call(_ method: String, _ path: String, _ fields: [String: String]? = nil) async throws -> Data {
+    private func call(_ method: String, _ path: String, _ fields: [String: String]? = nil, owner: Int? = nil) async throws -> Data {
         let started = generation
-        var attempt = 1
+        var retry = 1
         while true {
             let request = makeRequest(method, path, fields)
             let data: Data, response: URLResponse
@@ -363,13 +391,15 @@ public actor ClerkClient: CloudTokenProvider {
                 throw ClerkAuthError(.network)
             }
             guard let http = response as? HTTPURLResponse else { throw ClerkAuthError(.invalidResponse) }
-            if generation == started { try applyDeviceToken(http, body: data) }
+            let current = generation == started && (owner == nil || owner == attempt)
+            if current { try applyDeviceToken(http, body: data) }
+            if owner != nil, !current { throw CancellationError() }
             if (200..<300).contains(http.statusCode) { return data }
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
-            if attempt == 1, generation == started, [408, 425, 429].contains(http.statusCode) {
+            if retry == 1, current, [408, 425, 429].contains(http.statusCode) {
                 let wait = retryAfter.flatMap(ClerkAuthError.retrySeconds).map(Double.init) ?? 0.5
                 if wait <= Self.maxRetryWait {
-                    attempt += 1
+                    retry += 1
                     await sleep(min(max(wait, 0.1), Self.maxRetryWait))
                     continue
                 }

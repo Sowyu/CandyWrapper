@@ -192,6 +192,8 @@ final class T3ConnectController {
         }
         let host = ModalHost.present(dialog, in: window)
         host.onDismiss = { [weak self] in
+            // A request still in flight must not sign in after its sheet is gone.
+            Task { await account.clerk.cancelSignIn() }
             self?.modal = nil; self?.flow = nil
             let callback = self?.onOnboardingReturn; self?.onOnboardingReturn = nil; callback?()
         }

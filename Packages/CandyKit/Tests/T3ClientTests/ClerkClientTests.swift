@@ -178,7 +178,8 @@ struct ClerkSignInTests {
         let clerk = makeClient(http, store)
 
         let challenge = try await clerk.startEmailCode(email: " user@example.com ")
-        #expect(challenge == ClerkCodeChallenge(signInId: "sia_1", factor: .first, emailAddressId: "idn_1", sentTo: ClerkFixture.email))
+        #expect(challenge == ClerkCodeChallenge(signInId: "sia_1", factor: .first, emailAddressId: "idn_1", sentTo: ClerkFixture.email,
+                                                attempt: 1))
         let account = try await clerk.verifyCode("123456", for: challenge)
         #expect(account == ClerkAccount(sessionId: "sess_1", userId: "user_1", identifier: ClerkFixture.email))
 
@@ -232,6 +233,40 @@ struct ClerkSignInTests {
         #expect(http.calls.last == "POST /v1/client/sign_ins/sia_1/attempt_second_factor")
         #expect(bodyString(http.requests.last!) == "code=654321&strategy=email_code")
         #expect(store.current?.sessionId == "sess_1")
+    }
+
+    @Test func obsoleteSignInAnswerLeavesTheNewerSignInAlone() async throws {
+        let http = FakeClerk(), store = MemoryClerkStore(ClerkStoredSession(clientToken: "client-token-1")),
+            held = HeldResponse("/v1/client/sign_ins")
+        http.on("GET", "/v1/environment", ClerkFixture.environment(single: false))
+        http.on("POST", "/v1/client/sign_ins", ClerkFixture.signIn("complete", sessionId: "sess_old"),
+                headers: ["Authorization": "client-token-old"])
+        http.on("POST", "/v1/client/sign_ins", ClerkFixture.signIn("complete", sessionId: "sess_2"),
+                headers: ["Authorization": "client-token-2"])
+        let clerk = ClerkClient(store: store, device: ClerkFixture.device, locale: "en-US", send: held.wrap(http.send),
+                                sleep: { _ in })
+        let old = Task { try await clerk.signIn(email: "a@example.com", password: "p") }
+        #expect(await eventually { held.isHolding })
+        _ = try await clerk.signIn(email: ClerkFixture.email, password: "p")
+        held.release()
+        await #expect(throws: CancellationError.self) { try await old.value }
+        #expect(store.current?.sessionId == "sess_2")
+        #expect(store.current?.clientToken == "client-token-2")
+
+        // A sheet closed mid-request ends its attempt the same way.
+        let http2 = FakeClerk(), held2 = HeldResponse("/v1/client/sign_ins")
+        http2.on("GET", "/v1/environment", ClerkFixture.environment(single: false))
+        http2.on("POST", "/v1/client/sign_ins", ClerkFixture.signIn("complete", sessionId: "sess_3"),
+                 headers: ["Authorization": "client-token-3"])
+        let clerk2 = ClerkClient(store: store, device: ClerkFixture.device, locale: "en-US", send: held2.wrap(http2.send),
+                                 sleep: { _ in })
+        let dismissed = Task { try await clerk2.signIn(email: "a@example.com", password: "p") }
+        #expect(await eventually { held2.isHolding })
+        await clerk2.cancelSignIn()
+        held2.release()
+        await #expect(throws: CancellationError.self) { try await dismissed.value }
+        #expect(store.current?.sessionId == "sess_2")
+        #expect(store.current?.clientToken == "client-token-2")
     }
 
     @Test func singleSessionModeEndsTheOldSessionFirst() async throws {
@@ -397,6 +432,24 @@ struct ClerkSignOutTests {
         let clerk = makeClient(http, store)
         await clerk.signOut()
         #expect(store.current == nil)
+    }
+
+    @Test func obsoleteSignOutLeavesTheNewerSessionAlone() async throws {
+        let http = FakeClerk(), store = MemoryClerkStore(ClerkFixture.signedIn),
+            held = HeldResponse("/v1/client/sessions/sess_1/remove")
+        http.on("POST", "/v1/client/sessions/sess_1/remove", "{}")
+        http.on("GET", "/v1/environment", ClerkFixture.environment(single: false))
+        http.on("POST", "/v1/client/sign_ins", ClerkFixture.signIn("complete", sessionId: "sess_2"),
+                headers: ["Authorization": "client-token-2"])
+        let clerk = ClerkClient(store: store, device: ClerkFixture.device, locale: "en-US", send: held.wrap(http.send),
+                                sleep: { _ in })
+        let signOut = Task { await clerk.signOut() }
+        #expect(await eventually { held.isHolding })
+        _ = try await clerk.signIn(email: ClerkFixture.email, password: "p")
+        held.release()
+        await signOut.value
+        #expect(store.current?.sessionId == "sess_2")
+        #expect(await clerk.account()?.sessionId == "sess_2")
     }
 
     @Test func staleResponseLeavesTheNextSignInAlone() async throws {
