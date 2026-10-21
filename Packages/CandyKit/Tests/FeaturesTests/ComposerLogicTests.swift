@@ -62,6 +62,22 @@ struct ComposerLogicTests {
         #expect(L.submitIntent(L.Key(isReturn: true, control: true), prompt: "hi", mode: .modEnter, turnRunning: false) == .foreground)
     }
 
+    /// ThreadErrorBanner.tsx:10-27 and ExpandableText.tsx:21 (02c81ec5ea, 38c662508c).
+    @MainActor @Test func threadErrorBannerText() {
+        let json = #"{"error":{"message":"Rate limited"}}"#
+        #expect(ThreadErrorBannerView.collapsedMessage(json) == "Rate limited")
+        #expect(ThreadErrorBannerView.collapsedMessage(#"{"error":{"message":"  "}}"#) == #"{"error":{"message":"  "}}"#)
+        #expect(ThreadErrorBannerView.collapsedMessage("plain") == "plain")
+        #expect(ThreadErrorBannerView.canExpand(json))
+        #expect(!ThreadErrorBannerView.canExpand("short"))
+        #expect(ThreadErrorBannerView.canExpand("a\nb"))
+        #expect(ThreadErrorBannerView.canExpand(String(repeating: "x", count: 181)))
+        let banner = ThreadErrorBannerView()
+        banner.banner = .init(message: json, variant: .error)
+        let collapsed = banner.height(forWidth: 400)
+        #expect(abs(collapsed - 72) < 0.5) // `py-3`, one 20pt line, `mt-1` and the 20pt button
+    }
+
     @Test func sendModesAndActions() {
         #expect(L.sendMode(running: false, alternate: true, steerByDefault: false) == .auto)
         #expect(L.sendMode(running: true, alternate: false, steerByDefault: false) == .queue)
