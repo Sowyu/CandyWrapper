@@ -3624,6 +3624,7 @@ extension ComposerController {
     private func syncSendBlock() {
         // `isEnvironmentUnavailable` covers a missing provider too (ChatComposer.tsx:7651-7655, ComposerPrimaryActions.tsx:290-291).
         composer.environmentUnavailable = !connected || noProviderAvailable
+        composer.providerUnavailable = connected && noProviderAvailable
         var block = ComposerLogic.SendBlock(rewinding: threadRewindBusy, projectClone: projectCloneSendBlock)
         if case .thread(let id) = target {
             block.detailLoading = syncStatus.key == id.rawValue && syncStatus.value == .loading
