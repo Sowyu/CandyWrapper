@@ -750,11 +750,18 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let mapping = ComposerRichTextStyler.mapping(storage)
         let cursor = mapping.offsets[min(selection.location, mapping.offsets.count - 1)]
         guard let edit = ComposerListContinuation.edit(mapping.value, selection: NSRange(location: cursor, length: 0), indent: indent) else { return false }
-        let start = mapping.offsets.lastIndex(where: { $0 <= edit.range.location }) ?? 0
-        let end = mapping.offsets.lastIndex(where: { $0 <= NSMaxRange(edit.range) }) ?? start
+        func storageRange(_ range: NSRange) -> NSRange {
+            let start = mapping.offsets.lastIndex(where: { $0 <= range.location }) ?? 0
+            let end = mapping.offsets.lastIndex(where: { $0 <= NSMaxRange(range) }) ?? start
+            return NSRange(location: start, length: max(0, end - start))
+        }
         breakUndoCoalescing()
         applyingListEdit = true
-        replace(NSRange(location: start, length: max(0, end - start)), with: edit.replacement)
+        undoManager?.beginUndoGrouping()
+        // The renumbered items sit after the caret: change them last to first so earlier offsets hold.
+        for r in edit.renumber.reversed() { replace(storageRange(r.range), with: r.number) }
+        replace(storageRange(edit.range), with: edit.replacement)
+        undoManager?.endUndoGrouping()
         applyingListEdit = false
         if indent { setCaret(markdown: cursor + 2) }
         breakUndoCoalescing()
