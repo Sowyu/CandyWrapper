@@ -226,12 +226,13 @@ public actor ClerkClient: CloudTokenProvider {
         if let c = cachedJWT, c.sessionId == sessionId, c.expiresAt.timeIntervalSince(now()) > Self.jwtMargin {
             return c.jwt
         }
-        if let pending = pendingMint, pending.sessionId == sessionId { return try await pending.task.value }
+        // joinShared, so a cancelled caller (the authorizer's deadline) stops waiting at once.
+        if let pending = pendingMint, pending.sessionId == sessionId { return try await joinShared(pending.task) }
         let started = generation
         let task = Task { try await self.mint(sessionId: sessionId, generation: started) }
         pendingMint = (sessionId, task)
-        defer { if pendingMint?.sessionId == sessionId { pendingMint = nil } }
-        return try await task.value
+        defer { if pendingMint?.task == task { pendingMint = nil } }
+        return try await joinShared(task)
     }
 
     public func accountId() async throws -> String? {

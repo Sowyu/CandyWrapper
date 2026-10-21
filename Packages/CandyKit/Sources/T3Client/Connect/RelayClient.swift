@@ -141,11 +141,12 @@ public actor RelayClient {
         }
         if let hit = tokens.first(where: { $0.accountId == account && wanted.isSubset(of: $0.scopes) }) { return hit }
         let pendingKey = account + " " + scopes.sorted().joined(separator: " ")
-        if let task = pending[pendingKey] { return try await task.value }
+        // joinShared, so a cancelled caller (the authorizer's deadline) stops waiting at once.
+        if let task = pending[pendingKey] { return try await joinShared(task) }
         let task = Task { try await self.exchange(relayJWT: relayJWT, scopes: scopes, accountId: account) }
         pending[pendingKey] = task
-        defer { pending[pendingKey] = nil }
-        let token = try await task.value
+        defer { if pending[pendingKey] == task { pending[pendingKey] = nil } }
+        let token = try await joinShared(task)
         tokens.append(token)
         return token
     }
