@@ -4,6 +4,7 @@ import Features
 import T3Client
 import T3Protocol
 import T3Store
+import os
 
 /// The open thread's terminals: the drawer under the chat (ChatView.tsx `PersistentThreadTerminalDrawer`,
 /// ThreadTerminalDrawer.tsx), terminal tabs in the right panel (`PersistentThreadTerminalPanel`,
@@ -554,9 +555,15 @@ final class TerminalController {
                 _ = try? await supervisor.request(tag, payload: payload)
             }
         }
+        // An unanswered first attach retries unchanged so it can still open the shell. Once a reply arrived,
+        // resubscribing sends `resume` (client-runtime/src/state/terminal.ts:47-58).
         let payload = TerminalRPC.attachInput(threadId: local, terminalId: terminalId, launch: launch)
-        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { payload }, handler: { [weak self, weak host, weak attachment] event in
-            guard case .value(let json) = event, let item = TerminalAttachEvent(json: json) else { return }
+        let resumed = TerminalRPC.attachInput(threadId: local, terminalId: terminalId, launch: launch, resume: true)
+        let replied = OSAllocatedUnfairLock(initialState: false)
+        attachment.stream = supervisor.subscribe(TerminalRPC.attach, payload: { replied.withLock { $0 } ? resumed : payload }, handler: { [weak self, weak host, weak attachment] event in
+            guard case .value(let json) = event else { return }
+            replied.withLock { $0 = true }
+            guard let item = TerminalAttachEvent(json: json) else { return }
             await MainActor.run {
                 guard let self, let host, let attachment else { return }
                 self.apply(item, to: attachment, in: host)

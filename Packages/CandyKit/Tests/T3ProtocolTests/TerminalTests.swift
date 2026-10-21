@@ -17,6 +17,8 @@ struct TerminalTests {
         #expect(worktree.cwd == "/wt")
         #expect(TerminalRPC.attachInput(threadId: "t1", terminalId: "term-2", launch: worktree) == (try Self.json(
             #"{"threadId":"t1","terminalId":"term-2","cwd":"/wt","worktreePath":"/wt","env":{"T3CODE_PROJECT_ROOT":"/repo","T3CODE_WORKTREE_PATH":"/wt"}}"#)))
+        #expect(TerminalRPC.attachInput(threadId: "t1", terminalId: "term-1", launch: launch, resume: true) == (try Self.json(
+            #"{"threadId":"t1","terminalId":"term-1","cwd":"/repo","env":{"T3CODE_PROJECT_ROOT":"/repo"},"resume":true}"#)))
     }
 
     @Test func writeResizeClose() throws {

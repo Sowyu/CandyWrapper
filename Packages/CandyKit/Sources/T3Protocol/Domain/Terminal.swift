@@ -154,8 +154,13 @@ public enum TerminalRPC {
 
     /// Attach carries the launch so a session that is gone (closed by the server, or lost in a
     /// restart) opens again.
-    public static func attachInput(threadId: String, terminalId: String, launch: Launch) -> JSONValue {
-        openInput(threadId: threadId, terminalId: terminalId, launch: launch)
+    /// A resubscription after the first reply sends `resume`, so the server keeps a closed terminal closed
+    /// (contracts/src/terminal.ts:56-57, client-runtime/src/state/terminal.ts:48-53).
+    public static func attachInput(threadId: String, terminalId: String, launch: Launch, resume: Bool = false) -> JSONValue {
+        let input = openInput(threadId: threadId, terminalId: terminalId, launch: launch)
+        guard resume, case .object(var o) = input else { return input }
+        o["resume"] = .bool(true)
+        return .object(o)
     }
 
     public static func writeInput(threadId: String, terminalId: String, data: String) -> JSONValue {
