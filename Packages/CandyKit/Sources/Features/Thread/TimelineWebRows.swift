@@ -13,6 +13,9 @@ final class HtmlRenderRowView: TimelineRowView {
     private var reference: HtmlRenderReference?
     private var src: URL?
     private var loading: Task<Void, Never>?
+    /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view.
+    private var contentVisible = true
+    private var wantsContent: Bool { contentVisible && window != nil && !isHiddenOrHasHiddenAncestor }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -47,11 +50,12 @@ final class HtmlRenderRowView: TimelineRowView {
 
     /// Mints the page's URL once per mount, then frames it with the theme in its fragment.
     private func load() {
-        guard let ref = reference, !frameView.isLive, loading == nil, window != nil else { return }
+        guard let ref = reference, !frameView.isLive, loading == nil, wantsContent else { return }
         let id = ref.attachmentId
         loading = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             let url = await self?.context.model?.webAssetURL?(id, ref.fileName)
-            guard let self, self.reference?.attachmentId == id else { return }
+            guard let self, !Task.isCancelled, self.reference?.attachmentId == id else { return }
             self.loading = nil
             guard let url else { self.failed.isHidden = false; return }
             self.src = url
@@ -60,7 +64,7 @@ final class HtmlRenderRowView: TimelineRowView {
     }
 
     private func show(_ url: URL) {
-        guard let ref = reference, window != nil else { return }
+        guard let ref = reference, wantsContent else { return }
         let dark = effectiveAppearance.isDark
         let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
         frameView.activate(.init(src: themed, title: ref.title, dark: dark))
@@ -68,7 +72,26 @@ final class HtmlRenderRowView: TimelineRowView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { frameView.release() } else if src != nil, !frameView.isLive, let src { show(src) } else { load() }
+        syncContent()
+    }
+
+    override func setContentVisible(_ visible: Bool) {
+        guard visible != contentVisible else { return }
+        contentVisible = visible
+        syncContent()
+    }
+
+    override func viewDidHide() { super.viewDidHide(); syncContent() }
+    override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
+
+    /// Off screen the page and any pending load go; back on screen the minted URL frames again. The row's height
+    /// comes from the model's `webContentHeight`, so releasing the page doesn't move the rows around it.
+    private func syncContent() {
+        if !wantsContent {
+            loading?.cancel()
+            loading = nil
+            frameView.release()
+        } else if !frameView.isLive, let src { show(src) } else { load() }
     }
 
     override func prepareForReuse() {
@@ -78,6 +101,7 @@ final class HtmlRenderRowView: TimelineRowView {
         frameView.release()
         reference = nil
         src = nil
+        contentVisible = true
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -176,6 +200,10 @@ final class McpAppRowView: TimelineRowView {
     private var navigatedAway = false
     private var toolDefinition: JSONValue?
     private var fullscreen: ThreadMcpFullscreenView?
+    /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view or bridge,
+    /// unless the app is full screen.
+    private var contentVisible = true
+    private var wantsContent: Bool { contentVisible && window != nil && !isHiddenOrHasHiddenAncestor }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -240,6 +268,10 @@ final class McpAppRowView: TimelineRowView {
 
     private func teardown() {
         _ = setDisplayMode("inline")
+        releaseContent()
+    }
+
+    private func releaseContent() {
         loading?.cancel()
         loading = nil
         if let bridge { Task { await bridge.teardown() } }
@@ -248,9 +280,10 @@ final class McpAppRowView: TimelineRowView {
     }
 
     private func load() {
-        guard let e = entry, !frameView.isLive, loading == nil, !navigatedAway, window != nil, let model = context.model else { return }
+        guard let e = entry, !frameView.isLive, loading == nil, !navigatedAway, wantsContent, let model = context.model else { return }
         note.isHidden = true
         loading = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             let url = await model.webAssetURL?(e.app.attachmentId, e.app.fileName)
             guard let self, self.entry == e, !Task.isCancelled else { return }
             self.loading = nil
@@ -264,7 +297,7 @@ final class McpAppRowView: TimelineRowView {
     }
 
     private func start(_ e: McpAppEntry, _ url: URL) {
-        guard window != nil, let model = context.model, let actions = model.mcpApp else { return }
+        guard wantsContent, let model = context.model, let actions = model.mcpApp else { return }
         let target: [String: JSONValue] = ["threadId": .string(e.sourceThreadId.rawValue), "itemId": .string(e.itemId.rawValue)]
         let conversation = model.projection?.thread.id ?? e.sourceThreadId
         let frame = frameView
@@ -375,7 +408,8 @@ final class McpAppRowView: TimelineRowView {
                 fullscreen.removeFromSuperview(); self.fullscreen = nil
                 frameView.webView?.forwardsScroll = true
                 frameView.budgeted = true
-                if frameView.isLive { ThreadWebFrameBudget.add(frameView) }
+                // The row left the viewport while the app was full screen: the app goes with the overlay.
+                if !wantsContent { releaseContent() } else if frameView.isLive { ThreadWebFrameBudget.add(frameView) }
                 needsLayout = true
             }
         } else if mode == "fullscreen", userInitiated, frameView.isLive, fullscreen == nil, let content = window?.contentView,
@@ -441,13 +475,29 @@ final class McpAppRowView: TimelineRowView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { teardown() } else if !closed { load() }
+        syncContent()
+    }
+
+    override func setContentVisible(_ visible: Bool) {
+        guard visible != contentVisible else { return }
+        contentVisible = visible
+        syncContent()
+    }
+
+    override func viewDidHide() { super.viewDidHide(); syncContent() }
+    override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
+
+    /// Off screen the app and its bridge go and the next return loads it again. A full screen app stays until its
+    /// overlay closes or the row leaves the window. The height is the model's `webContentHeight`, so nothing moves.
+    private func syncContent() {
+        if window == nil { teardown() } else if !wantsContent { if fullscreen == nil { releaseContent() } } else if !closed { load() }
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
         teardown()
         entry = nil
+        contentVisible = true
         navigatedAway = false
         note.isHidden = true
         expand.isHidden = true
