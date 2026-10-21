@@ -56,7 +56,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "background-activity", title: "Background activity", to: .general, scope: .environmentDefaults, searchTerms: ["balanced performance battery saver advanced git fetch provider health refresh host power monitor idle policy"])),
         .item(SettingsSearchItem(id: "new-threads", title: "New threads", to: .general, scope: .projectDefaults, searchTerms: ["default workspace mode draft local worktree"])),
         .item(SettingsSearchItem(id: "worktree-submodules", title: "Submodules", to: .general, scope: .projectDefaults, searchTerms: ["git submodule init recursive top-level none worktree t3.json"])),
-        .item(SettingsSearchItem(id: "start-from-origin", title: "Start from origin", to: .general, scope: .projectDefaults, searchTerms: ["new worktrees latest matching remote branch local"])),
+        .item(SettingsSearchItem(id: "start-from-origin", title: "Start from remote", to: .general, scope: .projectDefaults, searchTerms: ["new worktrees start remote origin latest fetched branch local"])),
         .item(SettingsSearchItem(id: "add-project-starts-in", title: "Add project starts in", to: .general, scope: .environmentDefaults, searchTerms: ["base directory folder browser path home"])),
         .item(SettingsSearchItem(id: "unpin-confirmation", title: "Unpin confirmation", to: .general, searchTerms: ["ask before thread pinned section"])),
         .item(SettingsSearchItem(id: "archive-confirmation", title: "Archive confirmation", to: .general, searchTerms: ["ask before thread second click inline action"])),

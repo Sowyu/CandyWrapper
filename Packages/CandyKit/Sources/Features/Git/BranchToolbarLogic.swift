@@ -99,12 +99,11 @@ public enum BranchToolbarLogic {
         return currentGitBranch ?? threadBranch
     }
 
-    /// `resolveBranchTriggerLabel`.
+    /// `resolveBranchTriggerLabel` (BranchToolbar.logic.ts:205-227): only the server knows a local branch's remote.
     public static func triggerLabel(worktreePath: String?, mode: EnvMode, branch: String?, branchIsRemote: Bool?, startFromOrigin: Bool) -> String {
         guard let branch else { return "Select ref" }
         if mode == .worktree && worktreePath == nil {
-            let base = startFromOrigin && branchIsRemote == false ? "origin/\(branch)" : branch
-            return "From \(base)"
+            return startFromOrigin && branchIsRemote == false ? "From \(branch) (remote)" : "From \(branch)"
         }
         return branch
     }

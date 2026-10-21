@@ -3,7 +3,7 @@ import DesignSystem
 import T3Protocol
 
 /// `BranchPicker` (BranchPicker.tsx:32-262): a `ComboboxPopup` with `ComboboxSearchInput` ("Search refs..."), the
-/// ref list (`max-h-56`, `pt-2 pb-1 ps-1`, 28pt rows), "No refs found.", the "Start from origin" switch while a
+/// ref list (`max-h-56`, `py-2 ps-1`, 28pt rows), "No refs found.", the "Start from remote" switch while a
 /// new worktree's base is picked, and the paging status. The caller supplies the rows and acts on picks; the
 /// query goes back through `onQuery` so the server filters (`vcs.listRefs` with `query`).
 public final class BranchPickerView: DSView, PickerPopupBody {
@@ -20,15 +20,16 @@ public final class BranchPickerView: DSView, PickerPopupBody {
     }
 
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 28, maxListHeight: CGFloat = 224
-    /// `ComboboxList`'s `not-empty:px-1 not-empty:py-1` around LegendList's `ps-1 pe-0 pt-2 pb-1` and its 6px stable
+    /// `ComboboxList`'s `not-empty:px-1 not-empty:py-1` around LegendList's `ps-1 pe-0 py-2` and its 6px stable
     /// scrollbar gutter (BranchPicker.tsx:196-221, combobox.tsx): rows start 12 down and 8 in, and end 10 short of the
-    /// right edge (measured in T3's web client: rows 8 to 308 of 318, list 76 tall with two rows).
-    static let listTop: CGFloat = 12, listBottom: CGFloat = 8, rowLeft: CGFloat = 8, rowRight: CGFloat = 10
+    /// right edge (measured in T3's web client: rows 8 to 308 of 318, list 76 tall with two rows). 3473 keeps 8px
+    /// below the last row (#21159 05d60554ec, BranchPicker.tsx:213), so the list ends 12 below it.
+    static let listTop: CGFloat = 12, listBottom: CGFloat = 12, rowLeft: CGFloat = 8, rowRight: CGFloat = 10
 
     public var rows: [Row] = [] { didSet { reload() } }
     public var selectedValue: String?
     public var statusText: String? { didSet { status.text = statusText ?? ""; status.isHidden = statusText == nil; resizePopup() } }
-    /// "Start from origin": nil hides the row.
+    /// "Start from remote": nil hides the row.
     public var startFromOrigin: Bool? { didSet { originRow.isHidden = startFromOrigin == nil; originSwitch.isOn = startFromOrigin ?? false; resizePopup() } }
     public var width: CGFloat = 320
     public var hasNextPage = false
@@ -48,7 +49,7 @@ public final class BranchPickerView: DSView, PickerPopupBody {
     private let originRow = DSView()
     private let originRule = CALayer()
     private let originIcon = IconView(name: .refreshCw, size: 12)
-    private let originLabel = LabelView("Start from origin", font: DSFont.ui(12, weight: .medium))
+    private let originLabel = LabelView("Start from remote", font: DSFont.ui(12, weight: .medium))
     let originSwitch = SwitchView()
     private let status = LabelView("", font: DSFont.ui(12, weight: .medium))
     private(set) var highlighted: Int? { didSet { if highlighted != oldValue { rowViews.forEach { $0.restyle() }; scrollToHighlight() } } }
@@ -84,10 +85,10 @@ public final class BranchPickerView: DSView, PickerPopupBody {
         originRow.layer?.addSublayer(originRule)
         originLabel.lineHeight = 16
         originSwitch.size = .sm
-        originSwitch.setAccessibilityLabel("Start worktree from origin")
+        originSwitch.setAccessibilityLabel("Start worktree from remote")
         originSwitch.onChange = { [weak self] on in self?.onStartFromOrigin?(on) }
         for v in [originIcon, originLabel, originSwitch] as [NSView] { originRow.addSubview(v) }
-        TooltipController.attach(to: originRow, text: "Creates the worktree from the latest matching branch on origin instead of your local branch.")
+        TooltipController.attach(to: originRow, text: "Uses the latest commit of the base branch’s tracked remote branch, even if its name differs. Otherwise uses the same-named branch on origin. Uses your local branch if that remote branch is missing.")
         originRow.isHidden = true
         addSubview(originRow)
         status.lineHeight = 16
