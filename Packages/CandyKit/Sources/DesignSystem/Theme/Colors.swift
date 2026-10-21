@@ -47,6 +47,29 @@ public enum Themed {
     public static func white(_ alpha: Double) -> NSColor { NSColor(srgbRed: 1, green: 1, blue: 1, alpha: alpha) }
     public static func black(_ alpha: Double) -> NSColor { NSColor(srgbRed: 0, green: 0, blue: 0, alpha: alpha) }
 
+    /// Text on a solid token fill that T3 paints `text-white` (`bg-destructive text-white`). It stays white while
+    /// white reads at 3:1 or better, so the stock palettes match T3, and turns near-black when a theme's fill is too
+    /// pale for white.
+    public static func textOn(_ key: KeyPath<Palette, TokenColor>) -> NSColor {
+        let wrapped = TextOnKey(key: key)
+        return instancesLock.withLock {
+            if let color = textOnInstances[wrapped] { return color }
+            let color = NSColor(name: nil) { appearance in
+                let fill = ThemeRuntime.palettes.palette(dark: appearance.isDark, sidebar: false)[keyPath: key]
+                return readsWhite(on: fill) ? white(1) : darkText
+            }
+            textOnInstances[wrapped] = color
+            return color
+        }
+    }
+    nonisolated(unsafe) private static var textOnInstances: [TextOnKey: NSColor] = [:]
+    private static let darkText = NSColor(srgbRed: 0.09, green: 0.09, blue: 0.11, alpha: 1)
+
+    /// Whether white text keeps WCAG's 3:1 for large and bold UI text on `fill`.
+    nonisolated static func readsWhite(on fill: TokenColor) -> Bool {
+        1.05 / (WindowGlass.luminance(fill) + 0.05) >= 3
+    }
+
     /// Same color in both themes.
     public static func same(_ color: NSColor) -> NSColor { color }
 
@@ -54,6 +77,10 @@ public enum Themed {
     public static func pick(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { $0.isDark ? dark : light }
     }
+}
+
+private struct TextOnKey: Hashable, @unchecked Sendable {
+    let key: KeyPath<Palette, TokenColor>
 }
 
 private struct ThemedColorKey: Hashable, @unchecked Sendable {

@@ -286,7 +286,7 @@ enum ButtonStyles {
             let base: KeyPath<Palette, TokenColor> = variant == .default ? \.primary : \.destructive
             box.border = Themed.color(base)
             box.fill = Themed.color(base, hover ? 0.9 : 1)
-            look.text = variant == .default ? Themed.color(\.primaryForeground) : Themed.white(1)
+            look.text = variant == .default ? Themed.color(\.primaryForeground) : Themed.textOn(\.destructive)
             look.icon = look.text
             if state.enabled {
                 box.shadows.append(BoxShadow(y: 1, color: pressed ? Themed.black(0.08) : Themed.white(0.16), inset: true))

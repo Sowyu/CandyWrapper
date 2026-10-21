@@ -14,6 +14,13 @@ final class ThemePaletteTests: XCTestCase {
         return ThemePalette.contrast(rgb(asHex(a)), rgb(asHex(b)))
     }
 
+    /// Destructive buttons keep T3's white label on the stock reds and switch to dark text on a pale theme fill.
+    func testTextOnDestructiveFill() {
+        XCTAssertTrue(Themed.readsWhite(on: Tokens.light.destructive))
+        XCTAssertTrue(Themed.readsWhite(on: Tokens.dark.destructive))
+        XCTAssertFalse(Themed.readsWhite(on: TokenColor(srgb: SIMD4(0.97, 0.80, 0.82, 1), displayP3: SIMD4(0.97, 0.80, 0.82, 1))))
+    }
+
     func testBuiltInsAreCanonical() {
         for theme in ThemeDefinition.builtIns {
             for colors in [theme.colors] + theme.variants.values {
