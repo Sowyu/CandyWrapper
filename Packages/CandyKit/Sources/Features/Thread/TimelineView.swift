@@ -613,12 +613,8 @@ public final class TimelineView: DSView {
         tile()
     }
 
-    /// Called as the timeline scrolls, with how far it sits above its end.
-    public var onScroll: ((CGFloat) -> Void)?
-
     private func didScroll() {
         guard !adjusting else { return }
-        onScroll?(maxScroll - viewport.minY)
         followsEnd = maxScroll - viewport.minY <= 1
         updatePill()
         tile()

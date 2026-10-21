@@ -575,9 +575,9 @@ final class SidebarCardRowView: SidebarRowBase {
 
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
-        // Dither (after Capy): a neutral folder line icon instead of the colored project square, and no provider glyph.
-        monogram.isHidden = capyRow || (r.projectTitle == nil && r.projectLabel == nil)
-        capyIcon.isHidden = !capyRow
+        // Dither keeps the project icon at the row's lead, beside the title, and drops the provider glyph.
+        monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil
+        capyIcon.isHidden = !capyRow || !monogram.isHidden
         capyIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         project.text = r.projectLabel ?? ""
         project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
@@ -708,6 +708,7 @@ final class SidebarCardRowView: SidebarRowBase {
             placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
                              frame: NSRect(x: tx, y: top - 1, width: max(0, right - tx), height: 22))
         } else {
+            project.isHidden = false
             project.frame = NSRect(x: x, y: top + 2, width: max(0, slotRight - 6 - x), height: 16)
             // Line 2: title, `mt-1`.
             title.frame = NSRect(x: left, y: top + 24, width: right - left, height: 20)
@@ -729,7 +730,10 @@ final class SidebarCardRowView: SidebarRowBase {
         var bx = left
         if capy {
             bx = left + 24
-            let pw = project.text.isEmpty ? 0 : min(ceil(project.textWidth) + 1, max(0, (trailing - bx) / 2))
+            // The project icon names the project; the meta line spells it out only when there is no branch to show.
+            let showsProject = !project.text.isEmpty && branch.text.isEmpty
+            project.isHidden = !showsProject
+            let pw = showsProject ? min(ceil(project.textWidth) + 1, max(0, trailing - bx)) : 0
             project.frame = NSRect(x: bx, y: y3, width: pw, height: 16)
             if pw > 0 { bx += pw + 8 }
         }

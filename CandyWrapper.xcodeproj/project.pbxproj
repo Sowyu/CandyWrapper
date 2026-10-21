@@ -36,6 +36,7 @@
 		7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */ = {isa = PBXBuildFile; productRef = 8A26017E3FA14E25E7143DA8 /* T3Store */; };
 		7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */; };
 		7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */; };
+		80DAB922301CBC091192A970 /* DitherTabsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */; };
 		844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */; };
 		86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */; };
 		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
@@ -115,6 +116,7 @@
 		EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingController.swift; sourceTree = "<group>"; };
 		EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadAutomationsController.swift; sourceTree = "<group>"; };
 		F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "notification-completion.mp3"; sourceTree = "<group>"; };
+		F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DitherTabsController.swift; sourceTree = "<group>"; };
 		FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteAddProject.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -169,6 +171,7 @@
 				56396DA448A1952FDC05BF3E /* ComposerController.swift */,
 				E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */,
 				3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */,
+				F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */,
 				8812D0A51D97E799EF04BF25 /* Environments.swift */,
 				53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */,
 				045DDA2A8C6CDD4119BB7447 /* FilesController.swift */,
@@ -355,6 +358,7 @@
 				95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */,
 				DA045A39A44D87162AAD179E /* DesktopManagedController.swift in Sources */,
 				CC7E68D849C3162650E6B75F /* DevicePanelController.swift in Sources */,
+				80DAB922301CBC091192A970 /* DitherTabsController.swift in Sources */,
 				6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */,
 				0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */,
 				70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */,

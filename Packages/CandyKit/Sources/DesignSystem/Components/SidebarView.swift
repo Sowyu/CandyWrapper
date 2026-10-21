@@ -84,6 +84,8 @@ public final class SidebarLayoutView: DSView {
     private var glassBackdrop: WallpaperBackdropView?
     /// The Dither theme's picture in the main panel, present only while it shows.
     private var ditherArt: DitherArtView?
+    /// Dither's tab strip in the window's top band, over the framed content panel; the app fills its tabs.
+    public let tabStrip = DitherTabStripView()
     /// Preferred width; the drawn width is this clamped to the window (`effectiveWidth`).
     public private(set) var width: CGFloat
     public var widthRules = SidebarWidth() { didSet { needsLayout = true } }
@@ -112,6 +114,8 @@ public final class SidebarLayoutView: DSView {
         width = SidebarWidth.initial(stored: SidebarWidth.load(defaults), viewport: viewport)
         super.init(frame: .zero)
         addSubview(main)
+        addSubview(tabStrip)
+        tabStrip.isHidden = true
         addSubview(sidebar)
         addSubview(rail)
         addSubview(collapsedTrigger)
@@ -188,6 +192,7 @@ public final class SidebarLayoutView: DSView {
     private func updateGlass() {
         glassBackdrop = WindowGlass.syncBackdrop(glassBackdrop, in: self)
         ditherArt = DitherArtView.sync(ditherArt, in: main)
+        needsLayout = true // Dither frames the main panel
     }
 
     /// `sidebar.toggle` (Mod+B by default; the app's shortcut dispatcher calls it).
@@ -246,7 +251,17 @@ public final class SidebarLayoutView: DSView {
         CATransaction.setDisableActions(true)
         sidebar.layer?.setAffineTransform(sliding ? CGAffineTransform(translationX: gap - w, y: 0) : .identity)
         CATransaction.commit()
-        main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
+        // Dither (after Capy): the content is a rounded panel framed by the chrome, under a tab strip band.
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let inset: CGFloat = dither ? DitherChrome.frameInset : 0, band: CGFloat = dither ? DitherChrome.band : 0
+        main.frame = NSRect(x: gap, y: band, width: max(0, bounds.width - gap - inset), height: max(0, bounds.height - band - inset))
+        main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
+        main.layer?.borderWidth = dither ? 0.5 : 0
+        main.layer?.borderColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+        layer?.backgroundColor = dither ? Themed.color(\.sidebar, sidebar: true).cgColor(in: self) : nil
+        sidebar.showsBorder = !dither
+        tabStrip.isHidden = !dither
+        tabStrip.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
         for view in main.subviews { view.frame = main.bounds }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
@@ -269,6 +284,9 @@ public final class SidebarContainerView: DSView {
         addSubview(border)
         // The content names itself, "Threads" or "Settings" (AppSidebarLayout.tsx:322); this box stays transparent.
     }
+
+    /// Dither hides the border: the sidebar and the window frame are one color there.
+    public var showsBorder = true { didSet { border.isHidden = !showsBorder } }
 
     public override func layout() {
         super.layout()
@@ -438,4 +456,21 @@ public enum DitherChrome {
     /// Capy's corners: the composer and its banners 8, buttons and rows 6.
     public static let cardRadius: CGFloat = 8
     public static let controlRadius: CGFloat = 6
+    /// The main content panel inside the window frame.
+    public static let panelRadius: CGFloat = 12
+    /// The window frame's margin around the content panel, and the tab strip band above it.
+    public static let frameInset: CGFloat = 8
+    /// 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
+    public static let band: CGFloat = 52
+
+    /// T3's radius for a box, Capy's under Dither: small controls 6, cards, popovers and bubbles 8; hairline
+    /// rounding and full pills unchanged.
+    public static func radius(_ stock: CGFloat) -> CGFloat {
+        switch stock {
+        case ..<5: return stock
+        case ..<9: return controlRadius
+        case ..<30: return cardRadius
+        default: return stock
+        }
+    }
 }

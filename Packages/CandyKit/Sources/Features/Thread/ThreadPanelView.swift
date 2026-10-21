@@ -84,6 +84,9 @@ public final class ThreadHeaderView: TopbarDragView {
         if !visible { titleEditor.isHidden = true }
         threadVisible = visible
         updateParentVisibility()
+        // Dither hides the project crumb in `layout`.
+        if plain { for v in [favicon, project, slash, projectButton, title, titleHit, parentCrumb, parentSlash] as [NSView] { v.isHidden = true } }
+        needsLayout = true
     }
     public func cancelTitleRename() { titleEditor.isHidden = true; titleHit.cancelPendingMenu() }
 
@@ -164,10 +167,22 @@ public final class ThreadHeaderView: TopbarDragView {
         }
     }
 
+    /// Dither: the title alone, without the project crumb, since the tab strip and the project chip carry it.
+    private var plain: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+    }
+
     public override func layout() {
         super.layout()
         let midY = Self.height / 2
         let start = contentStart
+        let plain = self.plain
+        // Dither: the tab names the thread, so the header keeps only its panel toggles.
+        if plain { for v in [favicon, project, slash, projectButton, title, titleHit, parentCrumb, parentSlash] as [NSView] { v.isHidden = true } }
+        else if threadVisible { for v in [favicon, project, slash, title, titleHit] as [NSView] { v.isHidden = false }; updateParentVisibility() }
         // `size-3.5` favicon: the 16px monogram drawn at 14px.
         favicon.frame = NSRect(x: start, y: midY - 7, width: 14, height: 14)
         favicon.bounds = NSRect(x: 0, y: 0, width: 16, height: 16)
@@ -175,9 +190,9 @@ public final class ThreadHeaderView: TopbarDragView {
         project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
         let slashX = start + 20 + projectWidth + 12
         projectButton.frame = NSRect(x: start, y: midY - 10, width: 20 + ceil(projectWidth), height: 20)
-        projectButton.isHidden = project.text.isEmpty || !threadVisible
+        projectButton.isHidden = project.text.isEmpty || !threadVisible || plain
         slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
-        var titleX = slashX + slash.textWidth + 12
+        var titleX = plain ? start : slashX + slash.textWidth + 12
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
@@ -599,10 +614,6 @@ public final class ThreadPanelView: DSView {
         fade.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull()]
         fadeMask.actions = ["bounds": NSNull(), "position": NSNull(), "locations": NSNull()]
         layer?.addSublayer(fade)
-        timeline.onScroll = { [weak self] distance in
-            guard let self else { return }
-            DitherArtView.scrolled(distance, from: self)
-        }
         timeline.context.model = model
         model.onChange = { [weak self] change in
             guard let self else { return }
@@ -1158,6 +1169,7 @@ public final class ThreadPanelView: DSView {
         if let projectTitle {
             setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil)
             header.projectIcon = projectIconForTitle?(projectTitle)
+            hero.projectIcon = header.projectIcon
             header.threadTitle = "New thread"
             header.setThreadVisible(true)
             header.cancelTitleRename()

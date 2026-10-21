@@ -324,6 +324,7 @@ final class FillView: DSView {
         layer?.backgroundColor = fill?.cgColor(in: self)
         layer?.borderColor = border?.cgColor(in: self)
         layer?.borderWidth = border == nil ? 0 : 1
+        let radius = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.radius(self.radius) : self.radius
         layer?.cornerRadius = radius
         paneEdge = WindowGlass.syncEdge(paneEdge, on: layer, in: self, radius: radius, edge: border == nil,
                                         show: fill != nil && (pane || border != nil))
@@ -360,13 +361,7 @@ final class ShineLabelView: DSView {
         set { base.text = newValue; bright.text = newValue }
     }
 
-    var shining = false {
-        didSet {
-            guard shining != oldValue else { return }
-            bright.isHidden = !shining; loop?.update()
-            DitherArtView.setWorking(shining, from: self)
-        }
-    }
+    var shining = false { didSet { if shining != oldValue { bright.isHidden = !shining; loop?.update() } } }
 
     /// Both copies take the font and line height, or the bright one drew at its own size over the base.
     var font: NSFont {

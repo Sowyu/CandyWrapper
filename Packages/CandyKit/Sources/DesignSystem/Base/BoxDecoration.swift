@@ -174,6 +174,11 @@ enum BoxPainter {
     }
 
     static func paint(_ style: BoxStyle, in ctx: CGContext, box: CGRect, flipped: Bool) {
+        // Dither (after Capy) tightens every box's corners to its two radii.
+        var style = style
+        if ThemeRuntime.isDither(dark: NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua) {
+            style.radius = DitherChrome.radius(style.radius)
+        }
         let ySign: CGFloat = flipped ? 1 : -1 // CSS +y is down
         let shape: (CGRect, CGFloat) -> CGPath = { rect, radius in
             cornerRounded(rect, radius, corners: style.corners, flipped: flipped)
