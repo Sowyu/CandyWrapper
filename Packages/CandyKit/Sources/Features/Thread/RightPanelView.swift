@@ -386,9 +386,12 @@ final class RightPanelView: DSView {
 
     override func layout() {
         super.layout()
-        // `border-l border-border`; the content is `width - 1` wide right of it.
+        // `border-l border-border`; the content is `width - 1` wide right of it. Maximized, the panel
+        // meets the sidebar's own border and draws none (PreviewPanelShell.tsx:114-118).
+        let edge: CGFloat = isMaximized ? 0 : 1
+        border.isHidden = isMaximized
         border.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        strip.frame = NSRect(x: 1 + 8, y: 0, width: max(0, bounds.width - 1 - 8 - 112), height: Self.tabBarHeight)
+        strip.frame = NSRect(x: edge + 8, y: 0, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
         let overflow = total > strip.bounds.width
@@ -413,7 +416,7 @@ final class RightPanelView: DSView {
         }
         layoutDrag()
         add.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: 24, height: 24)
-        let content = NSRect(x: 1, y: Self.tabBarHeight, width: max(0, bounds.width - 1), height: max(0, bounds.height - Self.tabBarHeight))
+        let content = NSRect(x: edge, y: Self.tabBarHeight, width: max(0, bounds.width - edge), height: max(0, bounds.height - Self.tabBarHeight))
         lazyDiff.loaded?.frame = content
         if let files = lazyFiles.loaded, files.superview === self { files.frame = content }
         lazyFile.loaded?.frame = content
@@ -423,11 +426,12 @@ final class RightPanelView: DSView {
         terminal.frame = content
         device.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
-        lazyLauncher.loaded?.frame = NSRect(x: 1, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
+        lazyLauncher.loaded?.frame = NSRect(x: edge, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
 
     /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
+    var isMaximized = false { didSet { if isMaximized != oldValue { needsLayout = true } } }
 
     override func updateLayer() {
         layer?.backgroundColor = (isSheet ? Themed.color(\.background) : WindowGlass.inset).cgColor(in: self)
