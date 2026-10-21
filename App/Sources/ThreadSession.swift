@@ -175,7 +175,13 @@ final class ThreadSession {
         let snapshot = sidebar?.snapshot
         let shell = snapshot?.threads.first { $0.id == threadId } ?? snapshot?.archivedThreads.first { $0.id == threadId }
         guard let project = project(projection) else { return ("", nil) }
-        return (project.title, projection?.thread.worktreePath ?? shell?.worktreePath ?? project.workspaceRoot)
+        return (Self.crumbTitle(project, sidebar: sidebar), projection?.thread.worktreePath ?? shell?.worktreePath ?? project.workspaceRoot)
+    }
+
+    /// The header's project crumb: a scratch thread reads "No project" (43076b57cb, ChatHeader.tsx:80).
+    static func crumbTitle(_ project: ProjectShell, sidebar: SidebarContentView?) -> String {
+        guard let state = sidebar?.state, SidebarListBuilder.isScratch(project, state: state) else { return project.title }
+        return "No project"
     }
 
     private func project(_ projection: ThreadProjection?) -> ProjectShell? {
@@ -830,7 +836,7 @@ final class ThreadController {
         let keepRows = !force && previousEnvironment == id.environmentId
         if let shell {
             let project = snapshot?.projects.first { $0.id == shell.projectId }
-            panel.beginThreadSwitch(projectTitle: project?.title ?? "", threadTitle: shell.title, keepRows: keepRows)
+            panel.beginThreadSwitch(projectTitle: project.map { ThreadSession.crumbTitle($0, sidebar: sidebar) } ?? "", threadTitle: shell.title, keepRows: keepRows)
             panel.header.projectIcon = project.map(ProjectIconSource.init)
         } else {
             // No shell yet (a link before the first snapshot): T3 renders nothing (ThreadRouteView.tsx:181).
