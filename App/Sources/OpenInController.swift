@@ -40,14 +40,20 @@ final class OpenInController {
     /// `resolveRemoteOpenState` (remoteOpen.ts:58-97) for this client, which runs beside its primary environment:
     /// the primary execs locally; any other environment opens through deep links to its desktop SSH alias, else
     /// the first host the server advertises, else it has no SSH route.
-    private enum RemoteOpen: Equatable { case localExec, links(host: String), unavailable }
+    /// The SSH user rides along: the saved target's, else the alias's `user@` part, else the advertised one.
+    private enum RemoteOpen: Equatable { case localExec, links(host: String, username: String?), unavailable }
     private var remote: RemoteOpen {
         guard let environmentId, environmentId != environments.primaryId else { return .localExec }
-        if let alias = environments.saved.first(where: { $0.environmentId == environmentId })?.sshAlias, !alias.isEmpty { return .links(host: alias) }
-        if let host = composer.config(environmentId)?.remoteOpenTargets.first?["host"]?.stringValue { return .links(host: host) }
+        if let saved = environments.saved.first(where: { $0.environmentId == environmentId }), let alias = saved.sshAlias, !alias.isEmpty {
+            let destination = OpenInEditors.sshDestination(alias: alias, username: saved.sshTarget?.username)
+            return .links(host: destination.host, username: destination.username)
+        }
+        if let target = composer.config(environmentId)?.remoteOpenTargets.first, let host = target["host"]?.stringValue {
+            return .links(host: host, username: target["username"]?.stringValue)
+        }
         return .unavailable
     }
-    private var remoteHost: String? { if case .links(let host) = remote { host } else { nil } }
+    private var remoteHost: (host: String, username: String?)? { if case .links(let host, let username) = remote { (host, username) } else { nil } }
     /// `primaryServerAvailableEditorsAtom` locally; in remote mode the remote-capable ones (`useRemoteCapableEditors`,
     /// the primary's probe standing in for the desktop's), VS Code when none.
     private var available: [String] {
@@ -123,7 +129,9 @@ final class OpenInController {
     func openFile(_ meta: FileLinkMeta) {
         guard let environmentId, let editor = preferred else { return }
         if let remoteHost {
-            if let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost, path: meta.targetPath) { NSWorkspace.shared.open(url) }
+            if let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost.host, username: remoteHost.username, path: meta.targetPath, isFile: meta.line == nil) {
+                NSWorkspace.shared.open(url)
+            }
             return
         }
         Task { _ = try? await environments.request(environmentId, "shell.openInEditor", OpenInEditors.launchInput(cwd: meta.targetPath, editor: editor)) }
@@ -132,7 +140,8 @@ final class OpenInController {
     private func open(_ editorId: String?) {
         guard let environmentId, let cwd, let editor = editorId ?? preferred, remote != .unavailable else { return }
         if let remoteHost {
-            guard let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost, path: cwd), NSWorkspace.shared.open(url) else { return }
+            guard let url = OpenInEditors.remoteURL(editor: editor, host: remoteHost.host, username: remoteHost.username, path: cwd),
+                  NSWorkspace.shared.open(url) else { return }
             UserDefaults.standard.set(true, forKey: OpenInEditors.remoteHintSeenKey)
             UserDefaults.standard.set(editor, forKey: OpenInEditors.lastEditorKey)
             render()
