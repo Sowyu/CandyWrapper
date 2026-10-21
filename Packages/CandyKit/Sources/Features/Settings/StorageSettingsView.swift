@@ -24,7 +24,11 @@ public final class StorageSettingsView: ScopedSettingsPage {
     private var reportTasks: [String: Task<Void, Never>] = [:]
     private var deleting = false
     private var databaseTasks: [String: Task<Void, Never>] = [:]
-    private var databaseRows: [String: SettingsSectionView] = [:]
+    private var databaseRows: [String: SettingsRowView] = [:]
+    private var databaseOrder: [String] = []
+    /// `database-storage-notice-dismissed` (DatabaseStorageNotice.tsx:24-28): one list of dismissed environment ids.
+    private static let dismissedKey = "database-storage-notice-dismissed"
+    private var databaseSection: SettingsSectionView?
 
 
     public init(context: SettingsPageContext) {
@@ -115,9 +119,11 @@ public final class StorageSettingsView: ScopedSettingsPage {
     }
 
     private func syncDatabases() {
+        let dismissed = Set(UserDefaults.standard.stringArray(forKey: Self.dismissedKey) ?? [])
         let environments = window == nil || isProject ? [] : context.scope.connected.filter {
-            $0.capabilities.contains("databaseStorage") && !UserDefaults.standard.bool(forKey: "database-storage-notice-dismissed:" + $0.id)
+            $0.capabilities.contains("databaseStorage") && !dismissed.contains($0.id)
         }
+        databaseOrder = environments.map(\.id)
         let want = Set(environments.map(\.id))
         for (id, task) in databaseTasks where !want.contains(id) {
             task.cancel(); databaseTasks[id] = nil; databaseRows[id] = nil
@@ -127,21 +133,22 @@ public final class StorageSettingsView: ScopedSettingsPage {
             databaseTasks[id] = context.subscribe?(id, "server.getDatabaseStorage", .object([:])) { [weak self] value in
                 guard let self, self.databaseTasks[id] != nil else { return }
                 if let status = try? value.decode(as: DatabaseStorageStatus.self), status.recommendsCompaction {
-                    let copy = ButtonView("Copy command", variant: .outline, size: .sm)
+                    let copy = ButtonView("Copy command", variant: .outline, size: .xs)
                     copy.action = { [weak copy] in
                         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(status.compactCommand, forType: .string)
                         copy?.title = "Copied"
                     }
-                    let row = self.row(nil, title: String(format: "Reclaim %.1f GiB on %@", status.reclaimableBytes / 1_073_741_824, label),
-                        detail: "Old history is cleaned up automatically, but this database still holds the freed space. Run the command on \(label) to return it to disk; it pauses and restarts the background service. Quit the desktop app first if it hosts this environment.\n\n\(status.compactCommand)", control: copy)
-                    let dismiss = ButtonView("Dismiss", variant: .ghost, size: .sm)
+                    // ponytail: the command shows as plain detail text, not a mono `code` block; add a mono detail view if it reads wrong
+                    let row = self.row(nil, title: String(format: "%.1f GiB on %@", status.reclaimableBytes / 1_073_741_824, label),
+                                       detail: status.compactCommand, control: copy)
+                    let dismiss = ButtonView("Dismiss", variant: .ghost, size: .xs)
                     dismiss.action = { [weak self] in
-                        UserDefaults.standard.set(true, forKey: "database-storage-notice-dismissed:" + id)
+                        UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: Self.dismissedKey) ?? []) + [id], forKey: Self.dismissedKey)
                         self?.databaseTasks.removeValue(forKey: id)?.cancel(); self?.databaseRows[id] = nil
                         self?.rebuildDatabaseBody()
                     }
                     row.accessories = [dismiss]
-                    self.databaseRows[id] = self.section("storage-database-" + id, "Database", [row])
+                    self.databaseRows[id] = row
                 } else { self.databaseRows[id] = nil }
                 self.rebuildDatabaseBody()
             }
@@ -150,7 +157,14 @@ public final class StorageSettingsView: ScopedSettingsPage {
     }
 
     private func rebuildDatabaseBody() {
-        body = [notice] + databaseRows.keys.sorted().compactMap { databaseRows[$0] } + [worktrees, artifacts, cleanup]
+        // DatabaseStorageNotice.tsx:34-80: one Database section, a header row, then a row per machine.
+        let rows = databaseOrder.compactMap { databaseRows[$0] }
+        if rows.isEmpty { databaseSection = nil } else {
+            let header = row(nil, title: "Reclaim freed database space",
+                             detail: "Old history is cleaned up automatically, but these databases still hold the freed space. Run the command on each machine to return it to disk; it pauses and restarts the background service. Quit the desktop app first if it hosts the environment.")
+            databaseSection = section("storage-database", "Database", [header] + rows)
+        }
+        body = [notice] + (databaseSection.map { [$0] } ?? []) + [worktrees, artifacts, cleanup]
     }
 
     /// `hasRules` (StorageSettings.tsx:265-283): any retention or worktree rule on, at the environment or in a custom project policy.
