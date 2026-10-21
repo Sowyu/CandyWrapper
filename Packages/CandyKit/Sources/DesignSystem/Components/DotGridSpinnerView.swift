@@ -1,0 +1,72 @@
+import AppKit
+
+/// Dither's "working" mark, after Capy's: a 3 x 3 grid of dots with a light that sweeps across it diagonally. Core
+/// Animation runs the sweep, only while the view is in a window and shown; Reduce Motion leaves the grid still at
+/// half strength. Nothing runs in the app while it animates.
+public final class DotGridSpinnerView: NSView {
+    public var color: NSColor = .labelColor { didSet { needsDisplay = true } }
+    private var dots: [CALayer] = []
+    /// The sweep, in seconds.
+    static let period: CFTimeInterval = 1.2
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        for _ in 0..<9 {
+            let d = CALayer()
+            d.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
+            layer?.addSublayer(d)
+            dots.append(d)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    public override var wantsUpdateLayer: Bool { true }
+    public override var intrinsicContentSize: NSSize { NSSize(width: 16, height: 16) }
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    public override func layout() {
+        super.layout()
+        // 3pt dots 2pt apart, centered: 13pt across.
+        let dot: CGFloat = 3, gap: CGFloat = 2, side = 3 * dot + 2 * gap
+        let x0 = ((bounds.width - side) / 2).rounded(), y0 = ((bounds.height - side) / 2).rounded()
+        for (i, d) in dots.enumerated() {
+            d.frame = CGRect(x: x0 + CGFloat(i % 3) * (dot + gap), y: y0 + CGFloat(i / 3) * (dot + gap), width: dot, height: dot)
+            d.cornerRadius = dot / 2
+        }
+    }
+
+    public override func updateLayer() {
+        let c = color.cgColor(in: self)
+        for d in dots { d.backgroundColor = c }
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        sync()
+    }
+
+    public override func viewDidHide() { super.viewDidHide(); sync() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); sync() }
+
+    private func sync() {
+        let run = window != nil && !isHiddenOrHasHiddenAncestor && !Motion.reduced
+        for (i, d) in dots.enumerated() {
+            d.removeAnimation(forKey: "sweep")
+            d.opacity = run ? 0.25 : 0.5
+            guard run else { continue }
+            // Rows are y up, so the light runs from the top-left dot to the bottom-right one.
+            let step = Double(i % 3 + (2 - i / 3)) / 4
+            let a = CAKeyframeAnimation(keyPath: "opacity")
+            a.values = [0.25, 1, 0.25, 0.25]
+            a.keyTimes = [0, 0.25, 0.55, 1]
+            a.duration = Self.period
+            a.repeatCount = .infinity
+            a.beginTime = CACurrentMediaTime() - Self.period * (1 - step)
+            d.add(a, forKey: "sweep")
+        }
+    }
+}

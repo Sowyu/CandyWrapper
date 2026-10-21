@@ -501,6 +501,8 @@ final class SidebarCardRowView: SidebarRowBase {
     var surfaceFrame: CGRect { surface.frame }
     private let monogram = ProjectMonogramView()
     private let capyIcon = IconView(name: .folder, size: 16)
+    /// Dither: Capy's dot grid stands for "working", alone in the status slot.
+    private let workingGrid = DotGridSpinnerView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
     private let project = LabelView()
     let pin = PinButton()
     private let statusIcon = StatusIconSlot()
@@ -532,6 +534,8 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
+        addSubview(workingGrid)
+        workingGrid.isHidden = true
         for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
@@ -601,6 +605,15 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.color = SB.c(\.secondaryLabel)
             duration.font = SB.tabular(12)
         }
+        let grid = capyRow && r.topStatus == .working
+        if grid {
+            statusIcon.set(nil, color: .clear)
+            statusLabel.text = ""
+            duration.text = ""
+            workingGrid.color = SB.c(\.warning)
+        }
+        if workingGrid.isHidden == grid { workingGrid.isHidden = !grid }
+        HoverReveal.fade([workingGrid], visible: !showActions)
         let woke = r.topStatus == .woke
         wokeButton.isHidden = !woke || lift != nil
         if !woke { statusLabel.isUnderlined = false }
@@ -692,6 +705,7 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         if !wokeButton.isHidden { wokeButton.frame = NSRect(x: sx, y: top, width: statusRight - sx, height: 20) }
         if wokeBeside { slotLeft = sx }
+        if !workingGrid.isHidden { workingGrid.frame = NSRect(x: statusRight - 16, y: top + 2, width: 16, height: 16); sx = statusRight - 16 }
         let restWidth = max(32, slotRight - sx) // `min-w-8`
         if !showsActions { slotLeft = slotRight - restWidth }
         if lift != nil {
