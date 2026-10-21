@@ -221,6 +221,7 @@ import Testing
         #expect(ThreadRelationships.elapsed(seconds: 3900) == "1h 05m")
         #expect(ThreadRelationships.formatDuration(4_250) == "4.3s")
         #expect(ThreadRelationships.formatDuration(125_000) == "2m 5s")
+        #expect(ThreadRelationships.formatDuration(59_500) == "1m")
         let done = ThreadRelationships.SubagentStatus(status: "completed", startedAt: "2026-01-01T00:00:00.000Z", completedAt: "2026-01-01T00:00:34.400Z")
         #expect(ThreadRelationships.formatSubagentStatus(done, nowMs: 0) == "Completed in 34s")
         let live = ThreadRelationships.SubagentStatus(status: "running", startedAt: "2026-01-01T00:00:00.000Z", completedAt: nil)
