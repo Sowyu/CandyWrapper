@@ -136,6 +136,12 @@ struct ModelPickerTests {
         let grouped = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "x", favorites: [favs[0]],
                                           rail: .instance("claudeAgent"), query: "", expandedLegacy: [])
         #expect(Self.names(grouped.rows).prefix(2) == ["Claude Sonnet 5.5", "Claude Opus 5.5"])
+        // A favorited legacy model leaves the legacy group (52c76c65e3).
+        let legacyFav = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "x",
+                                            favorites: [ModelFavorite(provider: "claudeAgent", model: "claude-haiku-4-5")],
+                                            rail: .instance("claudeAgent"), query: "", expandedLegacy: [])
+        #expect(Self.names(legacyFav.rows) == ["Claude Haiku 4.5", "Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Fable 5.1",
+                                                "Claude Haiku 5.5", "Legacy models (8)"])
         #expect(ModelPickerSections.adjacentRail(.favorites, direction: 1, catalog: catalog) == .instance("claudeAgent"))
         #expect(ModelPickerSections.adjacentRail(.instance("claudeAgent"), direction: 1, catalog: catalog) == .favorites)
     }
