@@ -29,7 +29,7 @@ struct SubagentCardPresentation {
     }
 
     /// The card for a notification about a subagent the parent has a record of.
-    init(record: JSONValue, event: Event) {
+    init(record: JSONValue, event: Event?) {
         self.init(title: record["title"]?.stringValue, fallbackStatus: "completed", driver: record["driver"]?.stringValue,
                   child: record["childThreadId"]?.stringValue, event: event) { record[$0]?.stringValue }
     }
@@ -129,7 +129,19 @@ extension SubagentCardPresentation {
               let record = records.first(where: { $0["childThreadId"]?.stringValue == child }) else { return nil }
         let time = e.createdAt.epochMs.map { TL.timeOfDay(Date(timeIntervalSince1970: Double($0) / 1000),
                                                           format: ClientSettingsStore.shared.current.string("timestampFormat")) } ?? ""
-        return SubagentCardPresentation(record: record, event: notificationEvent(outcome: e.projectedItem?.item["outcome"]?.stringValue, timestamp: time))
+        let event = notificationEvent(outcome: e.projectedItem?.item["outcome"]?.stringValue, timestamp: time)
+        // A subagent resumed since this notification shows its live status, not the outcome reported then (6670dc734e).
+        let resumed = event.status != nil && resumedSince(status: record["status"]?.stringValue, startedAt: record["startedAt"]?.stringValue,
+                                                          notifiedAt: e.createdAt)
+        return SubagentCardPresentation(record: record, event: resumed ? nil : event)
+    }
+
+    /// `subagentResumedSince` (V2LifecycleRow.logic.ts:10-27): Claude resumes a finished subagent under the same id.
+    /// An active one is always on a later run; a settled one is when it started after the notification.
+    static func resumedSince(status: String?, startedAt: String?, notifiedAt: T3Timestamp) -> Bool {
+        if let status, ThreadRelationships.isWorkActive(status) { return true }
+        guard let started = startedAt.flatMap({ T3Timestamp($0).epochMs }), let notified = notifiedAt.epochMs else { return false }
+        return started > notified
     }
 }
 

@@ -85,11 +85,27 @@ struct McpFollowupsTests {
         #expect(SubagentCardPresentation.notificationEvent(outcome: "cancelled", timestamp: "").label == "Stopped")
     }
 
+    /// 6670dc734e: a subagent resumed since the notification drops the stale outcome.
+    @Test func resumedSubagentShowsItsLiveStatus() {
+        let at = T3Timestamp("2026-10-11T10:05:00Z")
+        #expect(SubagentCardPresentation.resumedSince(status: "running", startedAt: nil, notifiedAt: at))
+        #expect(SubagentCardPresentation.resumedSince(status: "completed", startedAt: "2026-10-11T10:06:00Z", notifiedAt: at))
+        #expect(!SubagentCardPresentation.resumedSince(status: "completed", startedAt: "2026-10-11T10:04:00Z", notifiedAt: at))
+        #expect(!SubagentCardPresentation.resumedSince(status: "failed", startedAt: nil, notifiedAt: at))
+        let live = SubagentCardPresentation(record: Self.record, event: nil)
+        #expect(live.status == "running" && live.event == nil)
+    }
+
     @Test func notificationCardNeedsTheParentsRecord() throws {
         let e = try Self.notification(outcome: "failed")
         #expect(SubagentCardPresentation.notificationChild(e) == "child")
         #expect(SubagentCardPresentation.notificationCard(e, records: []) == nil)
-        #expect(SubagentCardPresentation.notificationCard(e, records: [Self.record])?.status == "failed")
+        // A settled record keeps the reported outcome; a running one was resumed since (6670dc734e).
+        guard case .object(var fields) = Self.record else { return }
+        fields["status"] = .string("failed")
+        let settled = JSONValue.object(fields)
+        #expect(SubagentCardPresentation.notificationCard(e, records: [settled])?.status == "failed")
+        #expect(SubagentCardPresentation.notificationCard(e, records: [Self.record])?.event == nil)
         #expect(SubagentCardPresentation.notificationChild(try Self.notification(outcome: "completed", kind: "command")) == nil)
         // The wire shape of a subagent source (orchestrationV2.ts:1072-1090), as a real Claude subagent sends it.
         let wire = try Self.notification(outcome: "completed", kind: "background_task", work: "subagent")
