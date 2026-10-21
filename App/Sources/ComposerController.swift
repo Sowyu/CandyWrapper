@@ -214,6 +214,8 @@ final class ComposerController {
     private var savedDraftAttachments: [DraftAttachmentRecord] = []
     private var draftAttachments: [String: [ComposerAttachment]] = [:]
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
+    /// A send that is retrying failed uploads, by draft key; it goes once they are all ready.
+    private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
     private var preparingImages: [String: Int] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -1551,6 +1553,16 @@ final class ComposerController {
         // The panel closes when the next message goes.
         if !trimmed.isEmpty || !attachments.isEmpty { panel.usageLimitsBanner = nil }
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+        // Send retries failed uploads and goes once they finish (ChatView.tsx:6438-6446, 073734c1e9).
+        let failed = ComposerAttachmentRules.retryableFailures(attachments)
+        if let key = draftKey, !failed.isEmpty {
+            sendAfterRetry[key] = (text, mode, background)
+            for a in failed {
+                updateAttachment(a.id, key: key) { $0.status = .uploading(0) }
+                startUpload(a.id, key: key)
+            }
+            return
+        }
         // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
         guard ComposerAttachmentRules.uploadBlockReason(attachments) == nil else { return }
         if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
@@ -3411,7 +3423,17 @@ extension ComposerController {
             case .failed(let reason): updateAttachment(id, key: key) { $0.status = .failed(reason) }
             case .cancelled: break
             }
+            resumeSendAfterRetry(key)
         }
+    }
+
+    /// Sends the retried message once no upload runs. A retry that failed again keeps the draft.
+    private func resumeSendAfterRetry(_ key: String) {
+        guard let pending = sendAfterRetry[key], let list = draftAttachments[key] else { sendAfterRetry[key] = nil; return }
+        if list.contains(where: { if case .uploading = $0.status { true } else { false } }) { return }
+        sendAfterRetry[key] = nil
+        guard key == draftKey, ComposerAttachmentRules.retryableFailures(list).isEmpty else { return }
+        send(pending.text, mode: pending.mode, background: pending.background)
     }
 
     /// Cancels an upload and deletes its pending server copy (`releaseDraftAttachment`).
