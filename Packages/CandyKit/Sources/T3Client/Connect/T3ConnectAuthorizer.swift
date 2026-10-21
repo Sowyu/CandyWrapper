@@ -47,15 +47,16 @@ public actor T3ConnectAuthorizer {
     private let deviceId: String?
     private let send: HTTPSend
     private let now: @Sendable () -> Date
-    private var cache: [String: T3ConnectToken] = [:]
+    /// Each token with the sign-in it was issued under.
+    private var cache: [String: (token: T3ConnectToken, signIn: CloudSignIn)] = [:]
     private var pending: [String: Pending] = [:]
     /// Bumped by `reset()`, so an exchange started before a sign-out can't publish or hand out its token.
     private var generation = 0
 
-    /// One shared exchange, bound to the account and sign-in it started under (service.ts:413-415).
+    /// One shared exchange, bound to the sign-in and reset generation it started under (service.ts:413-415).
     private struct Pending {
         let id: UUID
-        let account: String
+        let signIn: CloudSignIn
         let generation: Int
         let task: Task<T3ConnectToken, Error>
     }
@@ -81,23 +82,24 @@ public actor T3ConnectAuthorizer {
     }
 
     private func selectToken(environmentId: String, rejected: String?) async throws -> (token: T3ConnectToken, fromCache: Bool) {
-        let account = try await tokens.accountId()
-        guard let account else { throw CloudSessionError.signedOut }
+        // Captured once, before any other await: everything below belongs to this sign-in (service.ts:263-268).
+        let signIn = try await tokens.currentSignIn()
+        guard let signIn else { throw CloudSessionError.signedOut }
         if let cached = cache[environmentId] {
-            if cached.accountId == account, cached.thumbprint == relay.key.thumbprint,
-               !cached.needsRenewal(at: now()), cached.accessToken != rejected {
-                return (cached, true)
+            if cached.signIn == signIn, cached.token.thumbprint == relay.key.thumbprint,
+               !cached.token.needsRenewal(at: now()), cached.token.accessToken != rejected {
+                return (cached.token, true)
             }
-            if cached.accountId != account { cache = [:] } else if cached.accessToken == rejected { cache[environmentId] = nil }
+            if cached.signIn != signIn { cache = [:] } else if cached.token.accessToken == rejected { cache[environmentId] = nil }
         }
-        // The relay key never changes for this authorizer, so the account and generation are the whole identity.
+        // The relay key never changes for this authorizer, so the sign-in and generation are the whole identity.
         let shared: Pending
-        if let p = pending[environmentId], p.account == account, p.generation == generation {
+        if let p = pending[environmentId], p.signIn == signIn, p.generation == generation {
             shared = p
         } else {
             let id = UUID(), started = generation
-            shared = Pending(id: id, account: account, generation: started, task: Task {
-                try await self.sharedExchange(environmentId: environmentId, account: account, generation: started, id: id)
+            shared = Pending(id: id, signIn: signIn, generation: started, task: Task {
+                try await self.sharedExchange(environmentId: environmentId, signIn: signIn, generation: started, id: id)
             })
             pending[environmentId] = shared
         }
@@ -109,18 +111,18 @@ public actor T3ConnectAuthorizer {
             // reset() ended the exchange this caller joined.
             throw CloudSessionError.accountChanged
         }
-        // The user may have switched accounts while this waited (service.ts:409-421).
-        guard generation == shared.generation, try await tokens.accountId() == account, generation == shared.generation else {
+        // The user may have signed in again, to any account, while this waited (service.ts:409-421).
+        guard generation == shared.generation, try await tokens.currentSignIn() == signIn, generation == shared.generation else {
             throw CloudSessionError.accountChanged
         }
         return (fresh, false)
     }
 
-    /// The exchange every caller for one environment and account shares. It checks the account itself
-    /// before caching, so the cache never takes another account's token (service.ts:424-445).
-    private func sharedExchange(environmentId: String, account: String, generation started: Int, id: UUID) async throws -> T3ConnectToken {
+    /// The exchange every caller for one environment and sign-in shares. It checks the sign-in itself
+    /// before caching, so the cache never takes another sign-in's token (service.ts:424-445).
+    private func sharedExchange(environmentId: String, signIn: CloudSignIn, generation started: Int, id: UUID) async throws -> T3ConnectToken {
         defer { if pending[environmentId]?.id == id { pending[environmentId] = nil } }
-        let work = Task { try await self.exchange(environmentId: environmentId, account: account) }
+        let work = Task { try await self.exchange(environmentId: environmentId, account: signIn.accountId) }
         let fresh: T3ConnectToken
         do {
             fresh = try await joinShared(work, timeout: Self.authorizationTimeout,
@@ -129,10 +131,10 @@ public actor T3ConnectAuthorizer {
             work.cancel()
             throw error
         }
-        guard generation == started, try await tokens.accountId() == account, generation == started else {
+        guard generation == started, try await tokens.currentSignIn() == signIn, generation == started else {
             throw CloudSessionError.accountChanged
         }
-        cache[environmentId] = fresh
+        cache[environmentId] = (fresh, signIn)
         return fresh
     }
 
@@ -208,7 +210,7 @@ public actor T3ConnectAuthorizer {
             return try await socket(token, direct: directEndpoint, timeout: Self.requestTimeout)
         } catch {
             // A direct address that refuses the socket says nothing about the token.
-            if directEndpoint == nil || error is DPoPError, cache[environmentId]?.accessToken == token.accessToken {
+            if directEndpoint == nil || error is DPoPError, cache[environmentId]?.token.accessToken == token.accessToken {
                 cache[environmentId] = nil
             }
             throw error

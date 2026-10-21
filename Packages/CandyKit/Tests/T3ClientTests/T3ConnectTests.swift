@@ -98,10 +98,14 @@ final class HeldResponse: @unchecked Sendable {
 final class FakeCloud: CloudTokenProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var subject: String? = "user_1"
-    func signIn(_ sub: String?) { lock.withLock { subject = sub } }
+    private var session = "sess_1"
+    func signIn(_ sub: String?, session: String = "sess_1") { lock.withLock { subject = sub; self.session = session } }
     func relaySessionJWT() async throws -> String {
         guard let sub = lock.withLock({ subject }) else { throw CloudSessionError.signedOut }
         return fakeJWT(sub: sub)
+    }
+    func currentSignIn() async throws -> CloudSignIn? {
+        lock.withLock { subject.map { CloudSignIn(accountId: $0, session: session) } }
     }
 }
 
@@ -635,6 +639,26 @@ struct T3ConnectAuthorizerTests {
         let url = URL(string: "https://prod-abc.tunnel.example/api/orchestration/shell")!
         #expect(try await authorizer.authorizationHeaders(environmentId: "env-1", method: "GET", url: url)["Authorization"] == "DPoP eat-2")
         #expect(http.requests("/oauth/token").count == 2)
+    }
+
+    @Test func newSignInToTheSameAccountNeverGetsTheOldSignInsToken() async throws {
+        serveHappyPath()
+        http.on("POST", "/oauth/token", 200, envTokenJSON("eat-3"))
+        let held = HeldResponse("/oauth/token")
+        let authorizer = try makeAuthorizer(send: held.wrap(http.send))
+        let a = Task { try await authorizer.token(environmentId: "env-1") }
+        #expect(await eventually { held.isHolding })
+        cloud.signIn("user_1", session: "sess_2")
+        let b = Task { try await authorizer.token(environmentId: "env-1") }
+        #expect(await eventually(seconds: 2) { http.requests("/oauth/token").count == 2 })
+        held.release()
+        #expect(try await b.value.accessToken == "eat-2")
+        await #expect(throws: CloudSessionError.accountChanged) { try await a.value }
+        #expect(try await authorizer.token(environmentId: "env-1").accessToken == "eat-2")
+        // The cached token is the sign-in's too.
+        cloud.signIn("user_1", session: "sess_3")
+        #expect(try await authorizer.token(environmentId: "env-1").accessToken == "eat-3")
+        #expect(http.requests("/oauth/token").count == 3)
     }
 
     @Test func cancelledCallerStopsWaitingWithoutEndingTheSharedExchange() async throws {

@@ -34,6 +34,25 @@ public protocol CloudTokenProvider: Sendable {
     /// cached per account and dropped when it changes (service.ts:225-238). Override with a cheap
     /// read; the default fetches a JWT and decodes it.
     func accountId() async throws -> String?
+
+    /// The current sign-in, or nil when signed out. Environment tokens belong to one sign-in, so a new
+    /// sign-in into the same account never gets the old one's (service.ts:263-268, 413-434). Defaults
+    /// to the account alone.
+    func currentSignIn() async throws -> CloudSignIn?
+}
+
+/// One signed-in session, the same until a sign-out or another sign-in replaces it, even into the same
+/// account (client-runtime/src/platform/capabilities.ts:23-25).
+public struct CloudSignIn: Sendable, Hashable {
+    /// The Clerk user id, the relay JWT `sub`.
+    public var accountId: String
+    /// Different for every sign-in.
+    public var session: String
+
+    public init(accountId: String, session: String) {
+        self.accountId = accountId
+        self.session = session
+    }
 }
 
 extension CloudTokenProvider {
@@ -45,6 +64,10 @@ extension CloudTokenProvider {
         } catch CloudSessionError.signedOut {
             return nil
         }
+    }
+
+    public func currentSignIn() async throws -> CloudSignIn? {
+        try await accountId().map { CloudSignIn(accountId: $0, session: $0) }
     }
 }
 

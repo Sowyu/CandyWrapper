@@ -260,6 +260,15 @@ public actor ClerkClient: CloudTokenProvider {
         return jwtSubject(try await relaySessionJWT())
     }
 
+    /// The Clerk session id and the generation it was stored under, read before any await.
+    public func currentSignIn() async throws -> CloudSignIn? {
+        guard let s = session(), let sessionId = s.sessionId else { return nil }
+        let signIn = "\(sessionId) \(generation)"
+        var account = s.userId
+        if account == nil { account = jwtSubject(try await relaySessionJWT()) }
+        return account.map { CloudSignIn(accountId: $0, session: signIn) }
+    }
+
     private func mint(sessionId: String, generation started: Int) async throws -> String {
         let path = "/v1/client/sessions/\(ConnectHTTP.pathSegment(sessionId))/tokens/\(ConnectHTTP.pathSegment(template))"
         let data: Data
