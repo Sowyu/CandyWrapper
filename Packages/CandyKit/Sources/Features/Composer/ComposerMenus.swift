@@ -35,6 +35,7 @@ public enum ComposerTriggers {
         while lineStart > 0, ns.character(at: lineStart - 1) != 10 { lineStart -= 1 }
         let linePrefix = ns.substring(with: NSRange(location: lineStart, length: cursor - lineStart))
         if linePrefix.hasPrefix("/"), !linePrefix.dropFirst().contains(where: { $0.isWhitespace }) {
+            if isPathWord(ns, wordStart: lineStart, cursor: cursor) { return nil }
             return ComposerTrigger(kind: .slashCommand, query: String(linePrefix.dropFirst()), rangeStart: lineStart, rangeEnd: cursor)
         }
         var tokenStart = cursor
@@ -42,6 +43,7 @@ public enum ComposerTriggers {
         let token = ns.substring(with: NSRange(location: tokenStart, length: cursor - tokenStart))
         // A `/` token mid-message searches commands and skills too (composer-logic.ts, T3 3105 a01c48f86).
         if token.hasPrefix("/") {
+            if isPathWord(ns, wordStart: tokenStart, cursor: cursor) { return nil }
             return ComposerTrigger(kind: .slashCommand, query: String(token.dropFirst()), rangeStart: tokenStart, rangeEnd: cursor)
         }
         if token.hasPrefix("#"), matches(pullRequestToken, token) {
@@ -53,6 +55,14 @@ public enum ComposerTriggers {
         }
         guard token.hasPrefix("@") else { return nil }
         return ComposerTrigger(kind: .path, query: String(token.dropFirst()), rangeStart: tokenStart, rangeEnd: cursor)
+    }
+
+    /// `isPathWord` (shared composerTrigger.ts:48-63): a slash word with a second slash, like
+    /// `/tmp/build.sh`, is a path. The whole word counts, so a caret before the second slash sees it too.
+    static func isPathWord(_ ns: NSString, wordStart: Int, cursor: Int) -> Bool {
+        var end = cursor
+        while end < ns.length, !isWhitespace(ns.character(at: end)) { end += 1 }
+        return ns.substring(with: NSRange(location: wordStart + 1, length: end - wordStart - 1)).contains("/")
     }
 
     private static let pullRequestToken = try! NSRegularExpression(pattern: #"^#([\p{L}\p{N}][\p{L}\p{N}_-]*)?$"#)
