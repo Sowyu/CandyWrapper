@@ -193,11 +193,19 @@ public final class SidebarListCache {
         if !resort.isEmpty || !replaced.isEmpty {
             var shelves = ctx.shelves
             for section in resort { shelves[section] = sortedShelf(section) }
-            // Same shelf, same sort key: the new value takes the old one's place.
+            // Same shelf, same sort key: the new value takes the old one's place. One index per shelf, so a
+            // refresh that changes every thread costs one pass over each shelf, not one per thread.
+            var bySection: [SidebarSection: [SidebarThread]] = [:]
             for i in replaced {
-                guard let section = entries[i]?.placement?.section, !resort.contains(section), let thread = threads[i],
-                      let at = shelves[section].firstIndex(where: { $0.id == thread.id }) else { continue }
-                shelves[section][at] = thread
+                guard let section = entries[i]?.placement?.section, !resort.contains(section), let thread = threads[i] else { continue }
+                bySection[section, default: []].append(thread)
+            }
+            for (section, changes) in bySection {
+                var shelf = shelves[section]
+                shelves[section] = []
+                let index = Dictionary(shelf.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+                for thread in changes { if let at = index[thread.id] { shelf[at] = thread } }
+                shelves[section] = shelf
             }
             ctx.shelves = shelves
         }

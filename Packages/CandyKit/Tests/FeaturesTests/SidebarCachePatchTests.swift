@@ -36,4 +36,17 @@ struct SidebarCachePatchTests {
         }
     }
 
+    /// Every thread changes in place at once: the shelves still equal a fresh build.
+    @Test func everyThreadChangedInPlaceMatchesFreshBuild() {
+        var state = SidebarListState()
+        state.settledExpanded = true
+        state.settledVisibleCount = 2_000
+        let nowMs = TimestampFormat.nowMs(SidebarPreview.referenceNow)
+        let cache = SidebarListCache()
+        var snap = SidebarLoadTests.loadSnapshot()
+        _ = SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs, cache: cache)
+        for i in snap.threads.indices { snap.threads[i].title += " (edited)" }
+        let cached = SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs, cache: cache)
+        #expect(cached == SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs))
+    }
 }
