@@ -606,7 +606,7 @@ final class PaletteCommands {
 
     /// `buildThreadActionItems` over every unarchived thread, newest first, with message matches for `query`;
     /// `limit` keeps the newest only, as its `input.limit` does (CommandPalette.logic.ts:337).
-    // ponytail: text description and match line; T3 draws the project favicon, provider icon, status pill and highlighted match
+    // ponytail: text description, match line and pull request badge; T3 draws the project favicon, provider icon, status pill and highlighted match
     private func threadItems(query: String?, limit: Int? = nil) -> [PaletteEntry] {
         guard let snapshot else { return [] }
         let open = threads.openThreadId
@@ -628,12 +628,17 @@ final class PaletteCommands {
                 let stamp = (thread.latestUserMessageAt ?? thread.updatedAt).raw
                 let id = thread.id
                 var entry = PaletteEntry(value: "thread:\(thread.id.rawValue)",
-                                    searchTerms: [thread.title, projectTitle ?? "", thread.branch ?? "", matches[thread.id]?.snippet ?? "", thread.id.localId.rawValue],
+                                    searchTerms: [thread.title] + ThreadPullRequests.searchTerms(thread)
+                                        + [projectTitle ?? "", thread.branch ?? "", matches[thread.id]?.snippet ?? "", thread.id.localId.rawValue],
                                     title: thread.title, description: parts.joined(separator: " \u{00B7} "), match: match,
                                     timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms),
                                     searchRecency: Int64(SidebarModel.getThreadSortTimestamp(thread, .updatedAt)), icon: .messageSquare,
                                     action: .run({ [weak self] in self?.openThread(id) }, keepOpen: false))
                 if let m = matches[thread.id] { entry.matchIsUser = m.source == "user"; entry.matchQuery = query }
+                if let query {
+                    entry.pullRequestBadge = SidebarPullRequestBadge.search(thread, query: query)
+                    entry.pullRequestBadgeSettled = thread.settledOverride == .settled
+                }
                 return entry
             }
     }

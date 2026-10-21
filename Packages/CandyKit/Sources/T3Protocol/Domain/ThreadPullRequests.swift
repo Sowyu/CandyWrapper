@@ -141,6 +141,17 @@ public enum ThreadPullRequests {
         links.filter { $0.source != .stackDismissed }
     }
 
+    /// `threadPullRequestSearchTerms` (threadPullRequests.ts:341-364): `#n`, `repo#n` and the URL of
+    /// the branch's pull request and each visible link (with its title), else of the legacy link.
+    public static func searchTerms(_ thread: ThreadShell) -> [String] {
+        func terms(_ r: ThreadLinkedPullRequest) -> [String] { ["#\(r.number)", "\(r.repository)#\(r.number)", r.url] }
+        let branch = thread.branchPullRequest.map(terms) ?? []
+        if let links = thread.pullRequests, !links.isEmpty {
+            return branch + visible(links).flatMap { ["#\($0.number)", "\($0.repository)#\($0.number)", $0.url, $0.snapshot?.title ?? ""] }
+        }
+        return branch + (thread.linkedPullRequest.map(terms) ?? [])
+    }
+
     private static func isOpen(_ link: ThreadPullRequestLink) -> Bool { link.snapshot == nil || link.snapshot?.state == .open }
 
     private static func ms(_ t: T3Timestamp?) -> Double { t?.epochMs.map(Double.init) ?? 0 }

@@ -34,6 +34,8 @@ public struct CommandPaletteItem: Sendable {
     public var trailingCheckbox: Bool?
     /// The note drawn as the warning-outline micro button ("Setup Required").
     public var noteIsWarning = false
+    /// `titleTrailingContent` as a view, sized by its `intrinsicContentSize` (a thread's pull request badge).
+    public var makeTrailing: (@MainActor @Sendable () -> NSView)?
 
     public init(_ title: String, icon: IconName? = nil, description: String? = nil, shortcut: String? = nil,
                 timestamp: String? = nil, isSubmenu: Bool = false, isDisabled: Bool = false,
@@ -469,6 +471,7 @@ final class CommandRowView: DSView {
     private let shortcut = TrackedLabelView("", font: DSFont.ui(12, weight: .medium), tracking: 1.2, color: .clear, lineHeight: 16)
     private var iconView: IconView?
     private var customIcon: NSView?
+    private var trailingView: NSView?
     private var chevron: IconView?
     private var trailingGlyph: IconView?
     private var checkbox: CheckboxView?
@@ -505,6 +508,10 @@ final class CommandRowView: DSView {
         if let n = item.note {
             noteLabel.text = n; noteLabel.font = DSFont.ui(12); noteLabel.lineHeight = 16; noteLabel.truncates = false
             addSubview(noteLabel)
+        }
+        if let make = item.makeTrailing {
+            trailingView = make()
+            addSubview(trailingView!)
         }
         if let make = item.makeIcon {
             customIcon = make()
@@ -579,6 +586,11 @@ final class CommandRowView: DSView {
             let h: CGFloat = item.noteIsWarning ? 20 : 16
             noteLabel.frame = NSRect(x: right - w, y: (bounds.height - h) / 2, width: w, height: h)
             right -= w + 8
+        }
+        if let trailingView {
+            let size = trailingView.intrinsicContentSize
+            trailingView.frame = NSRect(x: right - size.width, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
+            right -= size.width + 8
         }
         title.frame = NSRect(x: x, y: 6, width: max(0, right - x), height: 20)
         var y: CGFloat = 26

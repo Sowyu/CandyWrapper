@@ -57,6 +57,74 @@ public struct SidebarPullRequestBadge: Equatable, Sendable {
     }
 }
 
+extension SidebarPullRequestBadge {
+    /// `ThreadSearchPullRequestNumber` (ThreadStatusIndicators.tsx:1031-1096): the sidebar's badge on a
+    /// thread search row whose pull request terms match `query`. Without the panel's links, it names the
+    /// legacy link or the branch's pull request that matches.
+    public static func search(_ thread: ThreadShell, query: String) -> SidebarPullRequestBadge? {
+        guard PaletteSearch.pullRequestMatches(ThreadPullRequests.searchTerms(thread), query: query) else { return nil }
+        if ThreadPullRequests.badge(ThreadPullRequests.visible(thread.pullRequests ?? [])) != nil { return SidebarPullRequestBadge(thread) }
+        let stored = [thread.linkedPullRequest, thread.branchPullRequest].compactMap { $0 }.first { r in
+            PaletteSearch.pullRequestMatches(["#\(r.number)", "\(r.repository)#\(r.number)", r.url], query: query)
+        }
+        guard let stored else { return nil }
+        var badge = SidebarPullRequestBadge(glyph: .unknown, tone: nil, text: "\(stored.number)",
+                                            label: "PR #\(stored.number), status pending", opensList: false)
+        badge.legacy = (stored.number, stored.url)
+        return badge
+    }
+}
+
+/// The badge on a palette thread row (`inline-flex gap-0.5 text-xs tabular-nums`, a `size-3` glyph in
+/// the text's color). The row is the button, so this only draws.
+public final class SearchPullRequestBadgeView: DSView {
+    private let icon: IconView
+    private let label = LabelView("", font: DSFont.ui(12))
+    private let tone: PullRequestStateTone?
+    private let settled: Bool
+
+    public init(_ badge: SidebarPullRequestBadge, settled: Bool) {
+        tone = badge.tone
+        self.settled = settled
+        let name: IconName = switch badge.glyph {
+        case .stack: .layers
+        case .state(let t): PullRequestStyle.icon(t)
+        case .unknown: .gitPullRequestArrow
+        }
+        icon = IconView(name: name, size: 12)
+        super.init(frame: .zero)
+        label.text = badge.text
+        label.lineHeight = 16
+        [icon, label].forEach(addSubview)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(badge.label)
+        restyle()
+    }
+
+    public required init?(coder: NSCoder) { nil }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    public override var intrinsicContentSize: NSSize { NSSize(width: 12 + 2 + ceil(label.textWidth) + 1, height: 16) }
+
+    public override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 0, y: 2, width: 12, height: 12)
+        label.frame = NSRect(x: 14, y: 0, width: max(0, bounds.width - 14), height: 16)
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
+    private func restyle() {
+        let color = settled ? Themed.color(\.contrastSecondaryLabel) : tone.map(PullRequestStyle.color) ?? Themed.color(\.contrastMutedForeground)
+        icon.strokeColor = color
+        label.color = color
+    }
+}
+
 /// The badge itself: a 12pt glyph and `text-xs tabular-nums` in the tone, an inline button.
 public final class PullRequestBadgeView: DSView {
     private var icon: IconView?
