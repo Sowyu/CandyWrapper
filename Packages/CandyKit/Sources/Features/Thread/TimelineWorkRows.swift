@@ -90,6 +90,20 @@ final class WorkLineView: DSView {
     enum Style { case tool, plain, destructive, warning }
 
     private var iconView = IconView(name: .zap, size: 16)
+    /// Dither's working mark in the icon slot (the Thinking row).
+    private var dotGrid: DotGridSpinnerView?
+    var showsDotGrid = false {
+        didSet {
+            guard showsDotGrid != oldValue else { return }
+            if showsDotGrid, dotGrid == nil {
+                let g = DotGridSpinnerView(frame: NSRect(x: 4, y: 4, width: 16, height: 16))
+                g.color = WorkIcons.muted
+                addSubview(g)
+                dotGrid = g
+            } else if !showsDotGrid { dotGrid?.removeFromSuperview(); dotGrid = nil }
+            iconView.isHidden = showsDotGrid
+        }
+    }
     private var iconName: IconName = .zap
     let label = ShineLabelView()
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
@@ -181,6 +195,7 @@ final class WorkLineView: DSView {
             iconView = IconView(name: icon, size: 16)
             iconName = icon
             addSubview(iconView)
+            iconView.isHidden = showsDotGrid
         }
         switch style {
         case .destructive:
@@ -208,6 +223,7 @@ final class WorkLineView: DSView {
         super.layout()
         let h: CGFloat = 24
         iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
+        dotGrid?.frame = iconView.frame
         // Trailing slot, right to left: chevron cell (16), timestamp.
         let chevronX = timeOnlyTrailing ? bounds.width + 3 : bounds.width - 16
         chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
@@ -778,6 +794,9 @@ final class ThinkingRowView: WorkRowBase {
         l.configure(icon: .brain, text: "Thinking", style: .tool, time: nil, expanded: false, active: !blank, now: context.now())
         l.label.style = .focus // `LiveActivityRow ... shimmer` (MessagesTimeline.tsx:3796)
         l.expandable = false
+        // Dither: Capy's dot grid in place of the brain.
+        let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        l.showsDotGrid = capy && !blank
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 28 + blockPadding }
