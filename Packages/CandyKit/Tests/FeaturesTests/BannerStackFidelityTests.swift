@@ -40,8 +40,10 @@ struct BannerStackFidelityTests {
     }
 
     /// A column as ThreadPanelView lays it out: the stack view, then the front item attached under it.
+    /// The references predate 09b464cf83, which put urgent notices before activity, so the column keeps
+    /// the given order; `orderAndDismiss` checks the sort.
     static func stack(_ items: [ComposerBannerStackItem], expanded: Bool, width: CGFloat) -> NSView {
-        let ordered = ComposerBannerStackItem.ordered(items)
+        let ordered = items
         let stack = ComposerBannerStackView()
         stack.update(ordered)
         let column = DSView()
@@ -127,7 +129,7 @@ struct BannerStackFidelityTests {
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-banner-stack.html"), atomically: true, encoding: .utf8)
     }
 
-    /// `bannerPriority` and the stable sort: activity first, then urgent, error and warning, then the rest,
+    /// `bannerPriority` and the stable sort: urgent, error and warning first, then activity, then the rest,
     /// each in producer order.
     @Test func orderAndDismiss() async throws {
         let notice = Self.update, warn = Self.recovery, env = Self.environment, goal = Self.goal
@@ -139,7 +141,7 @@ struct BannerStackFidelityTests {
             ComposerBannerStackItem(id: "goal", view: goal, priority: .activity, height: { _ in 51 }),
         ]
         let ordered = ComposerBannerStackItem.ordered(items)
-        #expect(ordered.map(\.id) == ["goal", "recovery", "env", "notice"])
+        #expect(ordered.map(\.id) == ["recovery", "env", "goal", "notice"])
         let stack = ComposerBannerStackView()
         stack.update(ordered)
         #expect(stack.hasStack)
