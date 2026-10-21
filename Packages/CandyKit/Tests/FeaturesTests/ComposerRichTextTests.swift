@@ -66,6 +66,11 @@ struct ComposerRichTextTests {
         #expect(split?.renumber == [.init(range: NSRange(location: 5, length: 1), number: "3"),
                                     .init(range: NSRange(location: 20, length: 1), number: "4")])
         #expect(ComposerListContinuation.edit("1) a\n2. b", selection: NSRange(location: 4, length: 0))?.renumber == [])
+        // Numbers past JavaScript's safe integers renumber nothing, and UInt64.max must not trap.
+        for huge in ["18446744073709551615", "9007199254740990"] {
+            let text = "\(huge). a\n2. b"
+            #expect(ComposerListContinuation.edit(text, selection: NSRange(location: huge.count + 3, length: 0))?.renumber == [])
+        }
     }
 }
 
