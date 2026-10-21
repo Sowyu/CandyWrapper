@@ -562,15 +562,42 @@ public enum ThreadRelationships {
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 
-    /// `formatModelSelectionEffort` (RT/threadExecution.ts:170-185): the first reasoning select's current label.
-    public static func effortLabel(_ selection: ModelSelection, model: ServerProviderModel?) -> String? {
+    /// `formatModelSelectionEffort` (RT/threadExecution.ts:162-186): the first reasoning select the selection states,
+    /// or the provider reported for the same instance and model. A catalog default or `currentValue` no longer
+    /// counts (53ef45feac, shared/src/model.ts:214-287).
+    public static func effortLabel(_ selection: ModelSelection, model: ServerProviderModel?, reported: ModelSelection? = nil) -> String? {
         guard let model else { return nil }
-        let selections = (try? selection.options?.decode(as: [ProviderOptionSelection].self)) ?? nil
-        let descriptors = ModelTraits.descriptors(model, selections: selections)
+        func values(_ options: JSONValue?) -> [String: ProviderOptionValue] {
+            let list = (try? options?.decode(as: [ProviderOptionSelection].self)) ?? nil
+            return Dictionary((list ?? []).map { ($0.id, $0.value) }, uniquingKeysWith: { first, _ in first })
+        }
+        let stated = values(selection.options)
+        let sameRun = reported.map { $0.instanceId == selection.instanceId && $0.model == selection.model } ?? false
+        let reportedValues = sameRun ? values(reported?.options) : [:]
         for id in ModelTraits.reasoningEffortIds {
-            guard let d = descriptors.first(where: { $0.id == id }), d.type == .select else { continue }
-            if let label = ModelTraits.currentLabel(d) { return label }
+            guard let d = model.optionDescriptors.first(where: { $0.id == id }), d.type == .select else { continue }
+            let reportedValue = stated[id] == nil ? reportedValues[id] : nil
+            let value = stated[id] ?? reportedValue
+            if value == nil && id != "variant" { continue }
+            if case .bool? = value { continue }
+            // `getProviderOptionCurrentValue` with the stated value as `currentValue`.
+            let current: String? = if let r = reportedValue?.string { r }
+                else if id == "variant" && stated[id] == nil { nil }
+                else if let v = value?.string, !v.isEmpty { v }
+                else { d.options.first { $0.isDefault == true }?.id }
+            let label = d.options.first { $0.id == current }?.label
+                ?? (reportedValue?.string == "default" ? "Default" : id == "variant" ? "Unknown" : nil)
+            if let label { return label }
         }
         return nil
+    }
+
+    /// `deriveReportedModelSelection` (RT/threadExecution.ts:143-152): what the active provider thread reports running.
+    public static func reportedSelection(_ projection: ThreadProjection, instanceId: ProviderInstanceId?) -> ModelSelection? {
+        guard let active = projection.thread.activeProviderThreadId, let instanceId else { return nil }
+        let thread = projection.providerThreads.first {
+            $0["id"]?.stringValue == active && $0["providerInstanceId"]?.stringValue == instanceId.rawValue
+        }
+        return (try? thread?["nativeMetadata"]?["modelSelection"]?.decode(as: ModelSelection.self)) ?? nil
     }
 }
