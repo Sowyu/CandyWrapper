@@ -88,6 +88,17 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             body = [notice, info, overview, defaults, actions, checkouts, danger]
         }
         notice.message = message ?? ""
+        // ProjectsSettings.tsx:13-30 (#18692): a gone selection on one machine offers every environment.
+        if case .unavailable = scope.kind, scope.selection.machine != nil {
+            if notice.button == nil {
+                let show = ButtonView("Show all environments", icon: .layers, variant: .outline, size: .xs)
+                show.action = { [weak self] in
+                    guard let self else { return }
+                    self.context.selectScope?(SettingsScopeSelection(machine: nil, project: self.context.scope.selection.project))
+                }
+                notice.button = show
+            }
+        } else { notice.button = nil }
         setHidden(notice, message == nil)
         for item in [info, overview, defaults, actions, checkouts, danger] as [NSView & SettingsGroupRow] { setHidden(item, message != nil) }
         guard message == nil, let group else { return }

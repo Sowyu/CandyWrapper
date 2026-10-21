@@ -421,8 +421,17 @@ final class SettingsNoticeView: DSView, SettingsGroupRow {
         addSubview(text)
     }
     var message: String { get { text.text } set { text.text = newValue; needsLayout = true } }
-    func height(forWidth width: CGFloat) -> CGFloat { text.height(forWidth: width) }
-    override func layout() { super.layout(); text.frame = bounds }
+    /// A button under the message (`flex flex-col items-start gap-3`), such as "Show all environments".
+    var button: ButtonView? { didSet { oldValue?.removeFromSuperview(); button.map(addSubview); needsLayout = true } }
+    func height(forWidth width: CGFloat) -> CGFloat {
+        text.height(forWidth: width) + (button.map { $0.isHidden ? 0 : 12 + $0.intrinsicContentSize.height } ?? 0)
+    }
+    override func layout() {
+        super.layout()
+        let h = text.height(forWidth: bounds.width)
+        text.frame = NSRect(x: 0, y: 0, width: bounds.width, height: button == nil ? bounds.height : h)
+        if let button { button.frame = NSRect(origin: NSPoint(x: 0, y: h + 12), size: button.intrinsicContentSize) }
+    }
 }
 
 /// The settings select (`SelectTrigger size="sm"`, `SelectPopup align="end" alignItemWithTrigger={false}`).
