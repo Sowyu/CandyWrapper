@@ -338,9 +338,9 @@ public final class GeneralSettingsView: SettingsPageBase {
     // MARK: Projects & threads, Confirmations
 
     private func projectsSection() -> SettingsSectionView {
-        let origin = serverSwitch("start-from-origin", "Creates the worktree from the latest matching branch on origin instead of your local branch.",
-                                  key: "newWorktreesStartFromOrigin", reset: "new worktrees start from origin",
-                                  label: "Start new worktrees from origin by default")
+        let origin = serverSwitch("start-from-origin", "Uses the latest commit of the base branch’s tracked remote branch, even if its name differs. Otherwise uses the same-named branch on origin. Uses your local branch if that remote branch is missing.",
+                                  key: "newWorktreesStartFromOrigin", reset: "new worktrees start from remote",
+                                  label: "Start new worktrees from remote by default")
         let input = InputView(placeholder: "~/", text: "", size: .sm)
         input.frame.size = NSSize(width: 288, height: 28)
         input.setAccessibilityLabel("Add project base directory")

@@ -141,7 +141,7 @@ struct BranchToolbarLogicTests {
         #expect(B.workspaceLabel(mode: .worktree, worktreePath: "/wt", modeLocked: true) == "Worktree")
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: true) == "Local checkout")
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: false, forceNewWorktree: true) == "New worktree")
-        #expect(B.triggerLabel(worktreePath: nil, mode: .worktree, branch: "main", branchIsRemote: false, startFromOrigin: true) == "From origin/main")
+        #expect(B.triggerLabel(worktreePath: nil, mode: .worktree, branch: "main", branchIsRemote: false, startFromOrigin: true) == "From main (remote)")
         #expect(B.triggerLabel(worktreePath: nil, mode: .worktree, branch: "origin/x", branchIsRemote: true, startFromOrigin: true) == "From origin/x")
         #expect(B.triggerLabel(worktreePath: nil, mode: .local, branch: "main", branchIsRemote: nil, startFromOrigin: true) == "main")
         #expect(B.triggerLabel(worktreePath: nil, mode: .local, branch: nil, branchIsRemote: nil, startFromOrigin: false) == "Select ref")

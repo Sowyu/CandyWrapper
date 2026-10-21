@@ -490,7 +490,7 @@ extension SettingsController {
         labels += server("responseStreamingMode", "Response streaming") + server("enableProviderUpdateChecks", "Provider update checks")
         labels += server("continueThreadsAfterServerUpdate", "Continue threads after restarts")
         labels += BackgroundActivity.isChanged(s) ? ["Background activity"] : []
-        labels += server("defaultThreadEnvMode", "New thread mode") + server("newWorktreesStartFromOrigin", "New worktrees start from origin")
+        labels += server("defaultThreadEnvMode", "New thread mode") + server("newWorktreesStartFromOrigin", "New worktrees start from remote")
         labels += server("addProjectBaseDirectory", "Add project base directory")
         labels += client("confirmThreadUnpin", "Unpin confirmation") + client("confirmThreadArchive", "Archive confirmation")
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
