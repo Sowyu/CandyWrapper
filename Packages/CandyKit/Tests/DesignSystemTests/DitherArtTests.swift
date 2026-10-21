@@ -40,3 +40,56 @@ struct DitherArtTests {
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
 }
+
+/// The art yields to the system display options: Reduce Transparency covers it with the solid background, and
+/// Increase Contrast keeps every page's scrim heavy enough that text sits on about the background.
+struct DitherArtDisplayOptionTests {
+    typealias Display = (reduceTransparency: Bool, increaseContrast: Bool)
+    let standard: Display = (false, false)
+
+    @Test func standardScrimsMatchTheDesign() {
+        #expect(DitherArt.scrim(.hero, standard) == 0)
+        #expect(DitherArt.scrim(.thread, standard) == DitherArt.threadScrim)
+        #expect(DitherArt.scrim(.page, standard) == DitherArt.pageScrim)
+    }
+
+    @Test func reduceTransparencyHidesTheArt() {
+        for page in [DitherArt.Page.hero, .thread, .page] {
+            #expect(DitherArt.scrim(page, (true, false)) == 1)
+            #expect(DitherArt.scrim(page, (true, true)) == 1)
+        }
+    }
+
+    @Test func increaseContrastThickensEveryScrim() {
+        for page in [DitherArt.Page.hero, .thread, .page] {
+            #expect(DitherArt.scrim(page, (false, true)) > DitherArt.scrim(page, standard) || DitherArt.scrim(page, standard) == 1)
+            #expect(DitherArt.scrim(page, (false, true)) >= 0.6)
+        }
+    }
+}
+
+@MainActor
+struct DitherTabStripAccessibilityTests {
+    @Test func tabsAreATabGroupWithACloseAction() throws {
+        let strip = DitherTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 40))
+        var closed: [String] = []
+        strip.onClose = { closed.append($0) }
+        strip.tabs = [.init(id: "a", title: "First", icon: .messageSquare), .init(id: "b", title: "Second", icon: .messageSquare)]
+        strip.selected = "a"
+        #expect(strip.accessibilityRole() == .tabGroup)
+        let tabs = try #require(strip.accessibilityTabs() as? [NSView])
+        #expect(tabs.map { $0.accessibilityLabel() } == ["First", "Second"])
+        #expect(tabs.map { $0.accessibilityRole() } == [.radioButton, .radioButton])
+        let close = try #require(tabs[1].accessibilityCustomActions()?.first)
+        #expect(close.name == "Close tab")
+        #expect(close.handler?() == true)
+        #expect(closed == ["b"])
+    }
+
+    @Test func restingTabsStayReadable() {
+        let normal = DitherTabStripView.TabView.restingAlpha(increaseContrast: false)
+        let high = DitherTabStripView.TabView.restingAlpha(increaseContrast: true)
+        #expect(normal.label >= 0.7)
+        #expect(high.label > normal.label && high.icon > normal.icon)
+    }
+}

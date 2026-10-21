@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candykit:
+    name: CandyKit build and tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+          swift --version
+      - name: Build package and tests
+        working-directory: Packages/CandyKit
+        run: swift build --build-tests
+      # Pixel-fidelity suites compare against reference renders from the developer's Mac and the integration
+      # suites need a local T3 server, so CI runs the logic suites; scripts/test still runs everything locally.
+      - name: Logic tests
+        working-directory: Packages/CandyKit
+        run: swift test --skip-build --skip 'Fidelity|Integration|Stress|FrameDecoder|Pixel|Snapshot'
+
+  app:
+    name: App build
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Build
+        run: |
+          xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build -quiet
