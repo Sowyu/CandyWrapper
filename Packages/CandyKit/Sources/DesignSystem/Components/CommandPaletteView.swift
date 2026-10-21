@@ -544,7 +544,9 @@ final class CommandRowView: DSView {
         super.layout()
         var x: CGFloat = 8
         if let icon = customIcon ?? iconView {
-            icon.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            // `CommandPaletteTitleIcon` (CommandPaletteResults.tsx:153-155): `h-5 self-start pt-0.5`, so the
+            // icon sits with the title line, 3pt into it, however many lines follow.
+            icon.frame = NSRect(x: x, y: 6 + 3, width: 16, height: 16)
             x += 16 + 8
         }
         var right = bounds.width - 8
