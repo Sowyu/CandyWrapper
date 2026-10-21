@@ -572,6 +572,9 @@ final class AssistantMessageRowView: TimelineRowView {
             self.context.onMarkdownHeightChange?(id)
         }
         markdown.messageID = m.id.rawValue
+        // The timeline caches this row's height with the reader's choices, so a recycled view takes them back.
+        markdown.layoutChoices = context.markdownChoices[m.id.rawValue] ?? .init()
+        markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
         markdown.fadesNewBlocks = m.streaming
         if let summary, !summary.files.isEmpty {
             cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
