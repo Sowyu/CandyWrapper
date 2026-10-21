@@ -9,12 +9,15 @@ import T3Protocol
 /// overscan keeps its view but drops the web view and bridge, and a URL that resolves after it left can't revive it.
 @MainActor
 struct WebRowViewportTests {
-    /// Hands out the page URL at once, or holds it until `open` when `delayed`.
+    /// Hands out the page URL at once, or holds it until `open` when `delayed`. It counts the asks, as the app's
+    /// `webAssetURL` remints a URL near expiry on each one.
     @MainActor final class Assets {
         var delayed = false
+        var calls = 0
         var waiting: [CheckedContinuation<URL?, Never>] = []
         let url = URL(string: "http://127.0.0.1:47391/page.html")!
         func resolve() async -> URL? {
+            calls += 1
             guard delayed else { return url }
             return await withCheckedContinuation { waiting.append($0) }
         }
@@ -80,6 +83,7 @@ struct WebRowViewportTests {
         await Self.until { frame.isLive }
         #expect(frame.isLive)
         #expect(row.frame.height == height)
+        #expect(assets.calls == 2, "re-entry asks for the URL again, since a kept signed URL may have expired")
         row.isHidden = true
         #expect(!frame.isLive, "a hidden row holds no page")
         row.isHidden = false
