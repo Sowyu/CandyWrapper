@@ -37,7 +37,7 @@ public final class TimelineView: DSView {
     /// Distance from the top that asks for older history.
     static let nearTop: CGFloat = 600
 
-    enum Kind: Hashable { case user, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, htmlRender, mcpApp }
+    enum Kind: Hashable { case user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, htmlRender, mcpApp }
 
     let context = TimelineContext()
     let scrollView = ComposerTimelineScrollView()
@@ -744,7 +744,7 @@ public final class TimelineView: DSView {
 
     static func kind(_ row: TimelineRow) -> Kind {
         switch row.kind {
-        case .message(let m, _, _, _, _, _): m.role == .user ? .user : .assistant
+        case .message(let m, _, _, _, _, _): m.role == .user ? (m.workflowOpening ? .workflowOpening : .user) : .assistant
         case .assistantMeta: .meta
         case .proposedPlan: .plan
         case .work: .work
@@ -771,6 +771,7 @@ public final class TimelineView: DSView {
         createdRowViews += 1
         let view: TimelineRowView = switch kind {
         case .user: UserMessageRowView()
+        case .workflowOpening: WorkflowOpeningRowView()
         case .assistant: AssistantMessageRowView()
         case .meta: AssistantMetaRowView()
         case .plan: PlanRowView()

@@ -145,6 +145,8 @@ public struct ConversationMessage: Codable, Hashable, Sendable, Identifiable {
     /// Set on automatic deliveries, which the queue strip leaves out (`getUserQueuedThreadRuns`).
     public var delegatedCompletion: JSONValue?
     public var notification: JSONValue?
+    /// The script a provider-native workflow runs, not prose (orchestrationV2.ts:1095-1099).
+    public var workflowScript: Bool?
 }
 
 /// `OrchestrationV2PlanArtifact` (orchestrationV2.ts:1170-1191), flat over its `kind`.

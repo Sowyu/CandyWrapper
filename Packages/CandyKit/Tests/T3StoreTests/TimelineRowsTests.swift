@@ -268,3 +268,14 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(!TimelineRows.copyState(text: "Done", showCopyButton: false, streaming: false).visible)
     }
 }
+
+/// `isWorkflowScriptMessage` (client-runtime state/subagentRuntime.ts:301-311).
+@Suite struct WorkflowOpeningTests {
+    @Test func theFlagWinsAndOlderThreadsFallBackToTheMetaExport() {
+        #expect(WorkflowOpening.isScript(role: "user", text: "// plan\n/* x */\nexport const meta = {}", workflowScript: nil))
+        #expect(!WorkflowOpening.isScript(role: "user", text: "please export const meta", workflowScript: nil))
+        #expect(!WorkflowOpening.isScript(role: "user", text: "export const meta = {}", workflowScript: false))
+        #expect(WorkflowOpening.isScript(role: "user", text: "prose", workflowScript: true))
+        #expect(!WorkflowOpening.isScript(role: "assistant", text: "export const meta = {}", workflowScript: true))
+    }
+}

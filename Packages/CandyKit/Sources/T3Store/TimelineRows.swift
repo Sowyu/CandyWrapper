@@ -163,8 +163,14 @@ public struct TimelineRowsInput: Sendable {
     /// lists the entries replaced in place; nil when the entry list changed shape.
     public static func derive(projection: ThreadProjection, memo: inout Memo) -> (input: TimelineRowsInput, changed: [Int]?) {
         let rows = TimelineEntries.projectingQuestionHistory(projection.visibleTurnItems, requests: projection.runtimeRequests)
-        let (entries, changed) = TimelineEntries.derive(
+        var (entries, changed) = TimelineEntries.derive(
             visibleTurnItems: rows, attempts: projection.attempts, nodes: projection.nodes, plans: projection.plans, memo: &memo.entries)
+        if let opening = WorkflowOpening.messageId(projection),
+           let i = entries.firstIndex(where: { $0.message?.id == opening && $0.message?.role == .user }),
+           case .message(var m, let projected) = entries[i].kind {
+            m.workflowOpening = true
+            entries[i].kind = .message(m, projectedItem: projected)
+        }
         let state = TimelineRunState(projection: projection)
         // Equal summaries keep the old array, so the row pass sees the same value cheaply.
         if projection.checkpoints != memo.checkpoints || projection.messages != memo.messages {

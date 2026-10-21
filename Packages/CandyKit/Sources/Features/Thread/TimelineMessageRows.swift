@@ -343,6 +343,106 @@ final class UserMessageRowView: TimelineRowView {
     }
 }
 
+/// `WorkflowOpeningBlock` (WorkflowOpeningBlock.tsx:39-99, 202-236): a workflow coordinator's thread opens
+/// with "Workflow started" in place of its script, then the script as a fenced block folded like a long
+/// message. `flex-col gap-3 px-1 py-0.5`, then the row's `pb-4`.
+// ponytail: no phases, member agents or agent counts, which come from the parent thread's coordinator row;
+// add them when the thread view loads the parent projection (ChatView.tsx:1055-1066).
+final class WorkflowOpeningRowView: TimelineRowView {
+    private let icon = IconView(name: .workflow, size: 14, strokeColor: TL.c(\.mutedForeground))
+    private let eyebrow = LabelView("Workflow started", font: TL.font(11, .medium), color: TL.c(\.mutedForeground))
+    private let title = LabelView("Workflow", font: TL.font(14, .medium), color: TL.c(\.foreground))
+    private let markdown = MarkdownView(frame: .zero)
+    private let toggle = ButtonView("Show full script", variant: .ghostMuted, size: .xs)
+    private let fadeMask = CAGradientLayer()
+    private var collapsible = false
+
+    /// The script as a fenced block one backtick longer than its longest run (`scriptMarkdown`, :31-36).
+    static func scriptMarkdown(_ script: String) -> String {
+        var longest = 2, run = 0
+        for c in script { run = c == "`" ? run + 1 : 0; longest = max(longest, run) }
+        let fence = String(repeating: "`", count: longest + 1)
+        var body = script
+        while body.last?.isWhitespace == true { body.removeLast() }
+        return "\(fence)javascript\n\(body)\n\(fence)"
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        eyebrow.lineHeight = 16
+        title.lineHeight = 20
+        for v in [icon, eyebrow, title, markdown, toggle] as [NSView] { addSubview(v) }
+        fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        toggle.action = { [weak self] in
+            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            self.context.model?.toggleMessage(m.id.rawValue)
+        }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Workflow started: Workflow")
+    }
+
+    override func configure(_ item: TimelineItem) {
+        super.configure(item)
+        guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
+        markdown.cwd = nil
+        markdown.document = context.document(item.id, Self.scriptMarkdown(m.text), lineBreaks: false)
+        collapsible = shouldCollapseUserMessage(m.text)
+        toggle.title = item.ui.messageExpanded ? "Show less" : "Show full script"
+        toggle.isHidden = !collapsible
+        toggle.setAccessibilityExpanded(item.ui.messageExpanded)
+        needsLayout = true
+    }
+
+    /// A match below the fold opens it (`findRevealRef`, :204).
+    override func activeFindRect() -> CGRect? {
+        guard let rect = markdown.activeFindRect() else { return nil }
+        if collapsible, item?.ui.messageExpanded != true, rect.maxY > UserMessageRowView.collapsedHeight - UserMessageRowView.fade,
+           case .message(let m, _, _, _, _, _)? = item?.row.kind {
+            context.model?.toggleMessage(m.id.rawValue)
+            return nil
+        }
+        return markdown.convert(rect, to: self)
+    }
+
+    private static let header: CGFloat = 16 + 2 + 20
+
+    private func body(_ width: CGFloat) -> (shown: CGFloat, full: CGFloat) {
+        let full = markdown.height(forWidth: max(0, width - 8))
+        let folded = collapsible && item?.ui.messageExpanded != true
+        return (folded ? min(full, UserMessageRowView.collapsedHeight) : full, full)
+    }
+
+    override func height(forWidth width: CGFloat) -> CGFloat {
+        2 + Self.header + 12 + body(width).shown + (collapsible ? 24 : 0) + 2 + 16
+    }
+
+    override func layout() {
+        super.layout()
+        let width = bounds.width
+        icon.frame = NSRect(x: 4, y: 4, width: 14, height: 14)
+        eyebrow.frame = NSRect(x: 26, y: 2, width: max(0, width - 30), height: 16)
+        title.frame = NSRect(x: 26, y: 20, width: max(0, width - 30), height: 20)
+        let b = body(width)
+        let top = 2 + Self.header + 12
+        markdown.frame = NSRect(x: 4, y: top, width: max(0, width - 8), height: b.full)
+        layer?.masksToBounds = true
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if b.shown < b.full {
+            // `FOLDED_SCRIPT_MASK`: `linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)`.
+            let fade = UserMessageRowView.fade
+            fadeMask.frame = CGRect(x: 0, y: 0, width: markdown.bounds.width, height: b.full)
+            fadeMask.locations = [0, NSNumber(value: Double((b.shown - fade) / b.full)), NSNumber(value: Double(b.shown / b.full))]
+            markdown.layer?.mask = fadeMask
+        } else {
+            markdown.layer?.mask = nil
+        }
+        CATransaction.commit()
+        let size = toggle.intrinsicContentSize
+        toggle.frame = NSRect(x: 0, y: top + b.shown, width: size.width, height: size.height)
+    }
+}
+
 /// `AssistantTimelineRow` (:2745-2793): markdown in `px-1 py-0.5`, then the meta row that shows on
 /// hover when this is the turn's final answer. 16px under a final answer, 8px under commentary.
 final class AssistantMessageRowView: TimelineRowView {
