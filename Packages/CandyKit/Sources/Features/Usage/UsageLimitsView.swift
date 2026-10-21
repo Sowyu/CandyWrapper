@@ -1,10 +1,20 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import T3Store
 
 /// `formatUpcomingTimestamp` (timestampFormat.ts:202-222) with the `timestampFormat` setting.
 @MainActor
 enum UsageTime {
+    /// `resolveHour12` (timestampFormat.ts:94-96): "locale" follows the system's hour cycle.
+    static func hour12(format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> Bool {
+        switch format {
+        case "12-hour": true
+        case "24-hour": false
+        default: DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: TimestampFormat.t3Locale)?.contains("a") ?? true
+        }
+    }
+
     static func upcoming(_ iso: String, nowMs: Int64, format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> String {
         guard let ms = T3Timestamp.parseEpochMs(iso) else { return "" }
         let date = Date(timeIntervalSince1970: Double(ms) / 1000), now = Date(timeIntervalSince1970: Double(nowMs) / 1000)

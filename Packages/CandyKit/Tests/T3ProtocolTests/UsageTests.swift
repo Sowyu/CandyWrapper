@@ -135,6 +135,10 @@ struct UsageTests {
         #expect(UsageFormat.hourShort("2026-10-10T12:00:00.000Z", timeZone: "UTC") == "12 PM")
         #expect(UsageFormat.relativeHourShort("2026-10-10T12:00:00.000Z", relativeTo: "2026-10-10T20:00:00.000Z", timeZone: "UTC") == "12 PM today")
         #expect(UsageFormat.relativeHourShort("2026-10-09T12:00:00.000Z", relativeTo: "2026-10-10T20:00:00.000Z", timeZone: "UTC") == "12 PM yesterday")
+        // 24-hour time names the hour (usageFormat.ts:117-128).
+        #expect(UsageFormat.hourShort("2026-10-10T14:00:00.000Z", timeZone: "UTC", hour12: false) == "14:00")
+        #expect(UsageFormat.dateTimeShort("2026-08-11T14:00:00.000Z", timeZone: "UTC", hour12: false) == "Aug 11, 14:00")
+        #expect(UsageFormat.relativeHourShort("2026-10-10T09:00:00.000Z", relativeTo: "2026-10-10T20:00:00.000Z", timeZone: "UTC", hour12: false) == "09:00 today")
     }
 
     // MARK: Limits

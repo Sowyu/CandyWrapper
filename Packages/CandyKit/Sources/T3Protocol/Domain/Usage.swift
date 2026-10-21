@@ -711,31 +711,36 @@ public enum UsageFormat {
 
     private static func date(_ iso: String) -> Date? { T3Timestamp.parseEpochMs(iso).map { Date(timeIntervalSince1970: Double($0) / 1000) } }
 
-    /// `formatHourShort`: `2 PM`, with the zone name on a repeated fall-back hour.
-    public static func hourShort(_ hourStart: String, timeZone: String?) -> String {
+    /// `hourOptions` and `formatHour` (usageFormat.ts:117-128): `2 PM`, or `14:00` with 24-hour time.
+    private static func hourPattern(_ hour12: Bool) -> String { hour12 ? "h a" : "HH:00" }
+
+    /// `formatHourShort`: `2 PM` or `14:00`, with the zone name on a repeated fall-back hour.
+    public static func hourShort(_ hourStart: String, timeZone: String?, hour12: Bool = true) -> String {
         guard let d = date(hourStart) else { return hourStart }
         let wall = formatter("yyyy-MM-dd HH", timeZone)
         let w = wall.string(from: d)
         let repeated = [-3600.0, 3600.0].contains { wall.string(from: d.addingTimeInterval($0)) == w }
-        return formatter(repeated ? "h a zzz" : "h a", timeZone).string(from: d)
+        return formatter(hourPattern(hour12) + (repeated ? " zzz" : ""), timeZone).string(from: d)
     }
 
-    /// `formatDateTimeShort`: `Aug 11, 2 PM`.
-    public static func dateTimeShort(_ iso: String, timeZone: String?) -> String {
+    /// `formatDateTimeShort`: `Aug 11, 2 PM` or `Aug 11, 14:00`.
+    public static func dateTimeShort(_ iso: String, timeZone: String?, hour12: Bool = true) -> String {
         guard let d = date(iso) else { return iso }
-        return formatter("MMM d, h a", timeZone).string(from: d)
+        return formatter("MMM d, " + hourPattern(hour12), timeZone).string(from: d)
     }
 
     /// `formatRelativeHourShort`: `2 PM today`, `2 PM yesterday`, else `Aug 11, 2 PM`.
-    public static func relativeHourShort(_ hourStart: String, relativeTo: String, timeZone: String?) -> String {
-        guard let d = date(hourStart), let r = date(relativeTo) else { return dateTimeShort(hourStart, timeZone: timeZone) }
+    public static func relativeHourShort(_ hourStart: String, relativeTo: String, timeZone: String?, hour12: Bool = true) -> String {
+        guard let d = date(hourStart), let r = date(relativeTo) else { return dateTimeShort(hourStart, timeZone: timeZone, hour12: hour12) }
         let f = formatter("yyyy-MM-dd", timeZone)
-        guard let a = dayStart(f.string(from: d)), let b = dayStart(f.string(from: r)) else { return dateTimeShort(hourStart, timeZone: timeZone) }
+        guard let a = dayStart(f.string(from: d)), let b = dayStart(f.string(from: r)) else {
+            return dateTimeShort(hourStart, timeZone: timeZone, hour12: hour12)
+        }
         let ago = Int((b.timeIntervalSince(a) / 86_400).rounded())
-        let hour = hourShort(hourStart, timeZone: timeZone)
+        let hour = hourShort(hourStart, timeZone: timeZone, hour12: hour12)
         if ago == 0 { return "\(hour) today" }
         if ago == 1 { return "\(hour) yesterday" }
-        return dateTimeShort(hourStart, timeZone: timeZone)
+        return dateTimeShort(hourStart, timeZone: timeZone, hour12: hour12)
     }
 
     /// `makeWindow(days, now, resolution)`: calendar days in the viewer's zone, or a rolling 24 hours.
