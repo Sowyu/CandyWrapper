@@ -62,7 +62,12 @@ public final class DiffListView: DSView {
     public var onNearEnd: (@MainActor () -> Void)?
 
     private(set) var rowLayout = DiffLayout(diff: UnifiedDiff(""), collapsed: [], style: .unified, width: 0, wrap: true, ch: 7.8)
-    private var highlighter = DiffHighlighter(diff: UnifiedDiff(""))
+    private lazy var highlighter: DiffHighlighter = {
+        let highlighter = DiffHighlighter(diff: UnifiedDiff(""))
+        // A large file's colors arrived: redraw the plain rows.
+        highlighter.onReady = { [weak self] _ in self?.reconfigureAll() }
+        return highlighter
+    }()
     private var visible: [Int: DiffRowView] = [:]
     private var pools: [DiffLayout.Row.Kind: [DiffRowView]] = [:]
     private var clipObserver: NSObjectProtocol?
@@ -86,7 +91,7 @@ public final class DiffListView: DSView {
     public func setDiff(_ diff: UnifiedDiff, collapsedByDefault: Bool = true) {
         self.diff = diff
         collapsed = collapsedByDefault ? Set(diff.files.indices) : []
-        highlighter = DiffHighlighter(diff: diff)
+        highlighter.reset(diff)
         for view in visible.values { recycle(view) }
         visible = [:]
         scrollX = 0
