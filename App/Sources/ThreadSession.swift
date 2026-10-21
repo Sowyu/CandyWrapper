@@ -1210,6 +1210,8 @@ final class ThreadController {
             }
         } else {
             noProjectsHero.removeFromSuperview()
+            // The first project arrived: land in its draft instead of leaving the panel empty.
+            if session == nil && !panel.isDraft { landOnIndex() }
         }
     }
 
