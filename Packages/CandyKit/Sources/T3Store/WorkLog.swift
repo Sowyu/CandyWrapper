@@ -164,13 +164,20 @@ public enum WorkLog {
         return (label, message + delay)
     }
 
-    /// `contextCompactionLabel` (work-log/presentation.ts:52-62).
+    /// `contextCompactionLabel` (client-runtime work-log/presentation.ts:70-79).
     static func contextCompactionLabel(_ item: TurnItem) -> String {
-        if item.status == .running { return "Compacting context" }
-        if let before = item["beforeTokenCount"]?.doubleValue, let after = item["afterTokenCount"]?.doubleValue {
-            return "Context compacted \(formatTokens(before)) → \(formatTokens(after)) tokens"
-        }
+        if item.status == .failed { return "Context compaction failed" }
+        if item.status == .cancelled || item.status == .interrupted { return "Context compaction stopped" }
+        if ThreadRelationships.isWorkActive(item.status.rawValue) { return "Compacting context" }
+        if let tokens = contextCompactionTokenCounts(item) { return "Context compacted \(tokens.before) → \(tokens.after) tokens" }
         return "Context compacted"
+    }
+
+    /// `contextCompactionTokenCounts` (presentation.ts:57-68): the row draws an arrow icon between them.
+    public static func contextCompactionTokenCounts(_ item: TurnItem) -> (before: String, after: String)? {
+        guard item.status != .running, let before = item["beforeTokenCount"]?.doubleValue,
+              let after = item["afterTokenCount"]?.doubleValue else { return nil }
+        return (formatTokens(before), formatTokens(after))
     }
 
     /// `extractToolActivityPresentation` (work-log/toolPresentation.ts:110-131).
