@@ -81,6 +81,8 @@ final class SettingsController {
     var ticker: Timer?
     /// Rereads the T3 Connect link state every 30 s while Connections shows a tunnel (`updateLinkPoll`).
     var linkPoll: Timer?
+    /// Stops that poll while the window is hidden or covered, and restarts it when the window shows again.
+    var linkPollVisibility: NSObjectProtocol?
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
