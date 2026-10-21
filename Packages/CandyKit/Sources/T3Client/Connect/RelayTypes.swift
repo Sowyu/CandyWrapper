@@ -117,10 +117,12 @@ public struct RelayErrorBody: Codable, Sendable, Equatable {
     public var reason: String?
     public var dpopFailureReason: String?
     public var maxTunnels: Double?
+    /// `provisioningStage` on `RelayEnvironmentLinkUnavailableError` (relay.ts:546).
+    public var provisioningStage: String?
     public var traceId: String?
 
     enum CodingKeys: String, CodingKey {
-        case tag = "_tag", code, reason, dpopFailureReason, maxTunnels, traceId
+        case tag = "_tag", code, reason, dpopFailureReason, maxTunnels, provisioningStage, traceId
     }
 
     /// The tags in `RelayProtectedError` (relay.ts:595-608). Any other body is not one T3 decodes.

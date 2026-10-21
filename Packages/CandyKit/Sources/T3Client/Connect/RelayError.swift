@@ -130,7 +130,10 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
         case "RelayEnvironmentEndpointUnavailableError": return "Relay could not reach the environment endpoint (\(reason))."
         case "RelayEnvironmentEndpointTimedOutError": return "Relay timed out while contacting the environment endpoint."
         case "RelayEnvironmentLinkFailedError": return "Relay could not link the environment (\(reason))."
-        case "RelayEnvironmentLinkUnavailableError": return "Relay cannot provision the managed endpoint (\(reason))."
+        case "RelayEnvironmentLinkUnavailableError":
+            // relay/errorPresentation.ts:61-64
+            let stage = body.provisioningStage.map { " Failed stage: \($0)." } ?? ""
+            return "Relay cannot provision the managed endpoint (\(reason)).\(stage)"
         case "RelayEnvironmentLinkLimitExceededError":
             let max = body.maxTunnels.map { String(Int($0)) } ?? "?"
             return "Relay refused the link: this account already has its maximum of \(max) managed tunnels. Unlink an environment to free one up."
