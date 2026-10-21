@@ -114,8 +114,9 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
         }
         #expect(sawLiveSteer)
         let rows = TimelineRows.derive(TimelineRowsInput(projection: try #require(reducer.projection)))
-        // Settled: the run folds behind the first prompt; both steers stay out of the fold, before the answer.
-        #expect(rows.map(describe) == ["user", "turn-fold", "user", "user", "assistant"])
+        // Settled: the run folds behind the first prompt and both steers stay out of the fold. Since 3473 the work
+        // after back-to-back steers folds under its own row after the last of them (MessagesTimeline.logic.ts:1064-1075).
+        #expect(rows.map(describe) == ["user", "turn-fold", "user", "user", "turn-fold", "assistant"])
         #expect(userRows(rows).map(\.intent) == [.turnStart, .promotedQueuedToSteer, .steer])
         guard case .message(let steer, _, _, _, _, _) = rows[3].kind else { Issue.record("expected the steer"); return }
         #expect(steer.text == "Then also say: steered")
