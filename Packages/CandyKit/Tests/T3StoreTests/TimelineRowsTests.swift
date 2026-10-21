@@ -52,6 +52,26 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(fold(expanded)?.expanded == true)
     }
 
+    // 80df91b52b: an answered question keeps its own row outside tool groups and the turn fold.
+    @Test func answeredQuestionsStayVisibleAfterTheTurnSettles() {
+        let runId: RunId = "turn-1"
+        func command(_ id: String, _ second: Int) -> TimelineEntry {
+            work("\(id)-entry", WorkLogEntry(id: id, createdAt: T3Timestamp("2026-01-01T00:00:0\(second)Z"), runId: runId, label: "Ran command",
+                                          tone: .tool, itemType: .commandExecution, toolLifecycleStatus: .completed))
+        }
+        let question = work("question-entry", WorkLogEntry(
+            id: "question", createdAt: "2026-01-01T00:00:02Z", runId: runId, label: "Answered questions", tone: .info,
+            itemType: .userInputRequest, questionAnswer: .object(["requestId": "scope"])))
+        let entries = [
+            user("user-entry", "user-1", at: "2026-01-01T00:00:00Z"), command("before", 1), question, command("after", 3),
+            assistant("answer-entry", "answer", run: runId, at: "2026-01-01T00:00:05Z", updated: "2026-01-01T00:00:05Z"),
+        ]
+        let latest = TimelineLatestRun(runId: runId, status: .completed, startedAt: "2026-01-01T00:00:00Z", completedAt: "2026-01-01T00:00:06Z")
+        #expect(rows(entries) { $0.latestRun = latest }.map(\.id) == ["user-entry", "turn-fold:turn-1", "question-entry", "answer-entry"])
+        let expanded = rows(entries) { $0.latestRun = latest; $0.expandedRunIds = [runId] }
+        #expect(expanded.contains { $0.id == "question-entry" && { if case .work(let g, _, _) = $0.kind { return g.count == 1 }; return false }($0) })
+    }
+
     // LT:1401
     @Test(arguments: [1, 2, 3])
     func foldsCompletedActivitiesAfterTheTerminalResponse(_ count: Int) {

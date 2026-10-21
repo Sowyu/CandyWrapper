@@ -494,6 +494,8 @@ public enum TimelineRows {
                 // Linked resources and still-working children outlive their run.
                 if entry.isPersistentResourceCard || liveSubagentEntryIds.contains(entry.id) { continue }
                 if entry.work?.itemType == .notification { continue }
+                // User input stays visible after the surrounding work settles (80df91b52b, MessagesTimeline.logic.ts:1151-1152).
+                if entry.work?.questionAnswer != nil { continue }
                 hidden.insert(entry.id)
             }
             // A lone compaction stays visible; it folds only with other work.
@@ -589,7 +591,7 @@ public enum TimelineRows {
             while index >= activeTurnHeaderIndex {
                 let entry = entries[index]
                 guard let w = entry.work, w.tone != .error, w.sourceActivityKind != "runtime.error",
-                    w.itemType != .systemNotice, w.itemType != .notification, runIsActiveResponse(w.runId),
+                    w.itemType != .systemNotice, w.itemType != .notification, w.questionAnswer == nil, runIsActiveResponse(w.runId),
                     w.sourceActivityKind != "context-compaction", !collapsed.contains(entry.id),
                     !collapsedSuperseded.contains(entry.id), folds[entry.id] == nil, attemptFolds[entry.id] == nil
                 else { break }
@@ -669,7 +671,7 @@ public enum TimelineRows {
             case .work(let work):
                 if (work.runId.map { failed.contains($0) } ?? false) || (work.itemType == .error && work.toolLifecycleStatus == .failed)
                     || work.tone == .error || work.sourceActivityKind == "runtime.error" || work.itemType == .systemNotice
-                    || work.itemType == .notification
+                    || work.itemType == .notification || work.questionAnswer != nil
                 {
                     rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .work(groupedEntries: [work], isExpandedToolGroup: false, displayLabel: nil)))
                     continue
@@ -680,7 +682,7 @@ public enum TimelineRows {
                     let next = entries[cursor]
                     guard let nextWork = next.work, nextWork.sourceActivityKind != "context-compaction", nextWork.tone != .error,
                         nextWork.sourceActivityKind != "runtime.error", nextWork.itemType != .systemNotice,
-                        nextWork.itemType != .notification, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
+                        nextWork.itemType != .notification, nextWork.questionAnswer == nil, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
                         !collapsedSuperseded.contains(next.id), folds[next.id] == nil, attemptFolds[next.id] == nil,
                         nextWork.runId == work.runId, next.attempt?.id == entry.attempt?.id
                     else { break }
