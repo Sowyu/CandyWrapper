@@ -74,8 +74,9 @@ public struct ProjectedSubagent: Sendable, Equatable {
 
     /// `liveSubagent` (ThreadRelationshipsControl.tsx:177-194): while the child thread has a live run, the
     /// row's timer and card follow that run, not the settled task.
+    /// A supervisor still waiting on its worker keeps its own status (321b86b05d, ThreadRelationshipsControl.tsx:178-182).
     public func following(_ child: ThreadShell?) -> ProjectedSubagent {
-        guard let live = child?.activityRunStatus?.rawValue else { return self }
+        guard !ThreadRelationships.isWorkActive(status), let live = child?.activityRunStatus?.rawValue else { return self }
         let started: T3Timestamp? = if case .value(let t) = child?.activityRunStartedAt { t } else { nil }
         return ProjectedSubagent(id: id, childThreadId: childThreadId, origin: origin, driver: driver, providerInstanceId: providerInstanceId,
                                  title: title, model: model, status: live == "running" || live == "waiting" ? live : "pending",
@@ -166,9 +167,13 @@ public enum ThreadRelationships {
             let owner = projection.thread.id
             for s in projection.subagents.compactMap(ProjectedSubagent.init) {
                 guard let child = s.childThreadId else { continue }
-                // The record settles with the delegated task's first run; a live run on the child outranks it.
-                add(ThreadRelationshipEdge(sourceThreadId: owner, targetThreadId: child, kind: .subagent,
-                                           status: byId[child]?.activityRunStatus?.rawValue ?? s.status))
+                // The record settles with the delegated task's first run; a live run on the child outranks it, and a
+                // later run's status does too unless the agent is still working (deriveThreadRelationshipGraph,
+                // RT/threadRelationships.ts:101-111).
+                let shell = byId[child]
+                let status = shell?.activityRunStatus?.rawValue
+                    ?? (shell?.latestRunId != nil && !isWorkActive(s.status) ? shell!.status.rawValue : s.status)
+                add(ThreadRelationshipEdge(sourceThreadId: owner, targetThreadId: child, kind: .subagent, status: status))
             }
             for transfer in projection.contextTransfers {
                 guard let source = transfer["sourceThreadId"]?.stringValue, let target = transfer["targetThreadId"]?.stringValue,
