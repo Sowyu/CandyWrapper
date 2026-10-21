@@ -36,6 +36,20 @@ struct TerminalTests {
         #expect(TerminalRPC.writeChunks("") == [])
     }
 
+    @Test func writeChunksFitJavaScriptLength() {
+        // 40,000 emoji are 80,000 UTF-16 code units, which the server counts as the length.
+        let emoji = String(repeating: "😀", count: 40_000)
+        let combining = String(repeating: "e\u{301}\u{302}", count: 30_000)
+        let endless = "a" + String(repeating: "\u{301}", count: 70_000)
+        for text in [emoji, combining, emoji + combining, endless] {
+            let chunks = TerminalRPC.writeChunks(text)
+            #expect(chunks.count > 1)
+            #expect(chunks.allSatisfy { !$0.isEmpty && $0.utf16.count <= TerminalRPC.maxWriteLength })
+            #expect(Array(chunks.joined().unicodeScalars) == Array(text.unicodeScalars))
+        }
+        #expect(TerminalRPC.writeChunks(emoji).map(\.utf16.count) == [65_536, 14_464])
+    }
+
     @Test func attachEvents() throws {
         let snapshot = try Self.json(#"{"type":"snapshot","snapshot":{"threadId":"t","terminalId":"term-1","cwd":"/repo","worktreePath":null,"status":"running","pid":42,"history":"$ ls\r\n","exitCode":null,"exitSignal":null,"label":"zsh","updatedAt":"2026-10-10T12:00:00.000Z","sequence":3}}"#)
         guard case .snapshot(let s)? = TerminalAttachEvent(json: snapshot) else { Issue.record("snapshot"); return }
