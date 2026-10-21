@@ -587,7 +587,7 @@ final class SidebarCardRowView: SidebarRowBase {
         project.text = r.projectLabel ?? ""
         project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
         project.color = SB.c(\.secondaryLabel)
-        pin.isHidden = !showsPin(r)
+        pin.isHidden = !showsPin(r) || capyRow && r.inProjectSection
 
         let showActions = hovered
         if let top = r.topStatus {
@@ -642,6 +642,11 @@ final class SidebarCardRowView: SidebarRowBase {
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
+        // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
+        if capyRow && r.inProjectSection {
+            branch.text = [branch.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+            if r.topStatus == nil { duration.text = "" }
+        }
         branch.color = capyRow ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
         branch.font = SB.font(capyRow ? 11 : 12)
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
@@ -717,8 +722,9 @@ final class SidebarCardRowView: SidebarRowBase {
         slotRight = slotLeft
         if !pin.isHidden { pin.frame = NSRect(x: slotRight - 6 - 12, y: top + 4, width: 12, height: 12); slotRight -= 18 }
         if capy {
-            // Title beside the icon, before the status slot; the meta line under it starts with the project.
-            let tx = left + 24
+            // Title beside the icon, before the status slot; the meta line under it starts with the project. In a
+            // section the header carries the icon and the row sits flush with it.
+            let tx = row?.inProjectSection == true ? left : left + 24
             title.frame = NSRect(x: tx, y: top, width: max(0, slotRight - 6 - tx), height: 20)
             placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
                              frame: NSRect(x: tx, y: top - 1, width: max(0, right - tx), height: 22))
@@ -744,7 +750,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
         if capy {
-            bx = left + 24
+            bx = row?.inProjectSection == true ? left : left + 24
             // The project icon names the project; the meta line spells it out only when there is no branch to show.
             let showsProject = !project.text.isEmpty && branch.text.isEmpty && row?.inProjectSection != true
             project.isHidden = !showsProject
@@ -1101,38 +1107,46 @@ final class TerminalStatusGlyph: DSView {
     }
 }
 
-/// Dither (after Capy): a project section's header, its icon, name and thread count, with a chevron that turns as
-/// the section folds. Clicking anywhere on it folds or unfolds the section.
+/// Dither (after Capy): a section's header, quiet so the threads lead. A 14pt project icon (a pin for Pinned), the name
+/// in the muted 12pt of the "Threads" label, the count a step lighter, and a chevron after the count that shows on
+/// hover or while the section is folded. It sits on the lower part of its 32pt, so sections breathe above.
 final class SidebarProjectHeaderRowView: SidebarRowBase {
     private let icon = ProjectMonogramView()
-    private let label = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
-    private let count = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground))
+    private let pinIcon = IconView(name: .pin, size: 14)
+    private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
+    private let count = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground, 0.6))
     private let chevron = IconView(name: .chevronRight, size: 12)
-    private let surface = CALayer()
+    private var expanded = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        layer?.addSublayer(surface)
-        label.lineHeight = 18
-        count.lineHeight = 18
-        [icon, label, count, chevron].forEach(addSubview)
+        label.lineHeight = 16
+        count.lineHeight = 16
+        icon.scale = 14 / 16
+        [icon, pinIcon, label, count, chevron].forEach(addSubview)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        refresh()
+    }
+
     override func refresh() {
         guard case .projectHeader(let h)? = item else { return }
-        icon.projectTitle = h.projectTitle
-        icon.source = h.projectIcon
+        expanded = h.expanded
+        icon.isHidden = h.isPinned
+        pinIcon.isHidden = !h.isPinned
+        if !h.isPinned { icon.projectTitle = h.projectTitle; icon.source = h.projectIcon }
+        let hovered = state.hovered || isKeyboardFocused
         label.text = h.label
+        label.color = SB.c(hovered ? \.sidebarForeground : \.sidebarMutedForeground)
         count.text = "\(h.count)"
+        pinIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         chevron.strokeColor = SB.c(\.sidebarMutedForeground)
         chevron.setRotation(h.expanded ? 90 : 0, motion: window == nil ? .none : .ease(0.15))
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.cornerRadius = rowRadius
-        surface.backgroundColor = state.hovered || isKeyboardFocused ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-        CATransaction.commit()
+        chevron.alphaValue = hovered || !h.expanded ? 1 : 0
         setAccessibilityLabel("\(h.label), \(h.count) threads")
         setAccessibilityExpanded(h.expanded)
         needsLayout = true
@@ -1140,16 +1154,14 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
-        let h = bounds.height
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.frame = bounds.insetBy(dx: 0, dy: 1)
-        CATransaction.commit()
-        icon.frame = NSRect(x: 8, y: ((h - 16) / 2).rounded(), width: 16, height: 16)
-        chevron.frame = NSRect(x: bounds.width - 8 - 12, y: ((h - 12) / 2).rounded(), width: 12, height: 12)
+        // The content row is the bottom 22pt.
+        let mid = bounds.height - 11
+        icon.frame = NSRect(x: 8, y: (mid - 7).rounded(), width: 14, height: 14)
+        pinIcon.frame = icon.frame
+        let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - 30 - 60))
+        label.frame = NSRect(x: 30, y: (mid - 8).rounded(), width: lw, height: 16)
         let cw = ceil(count.textWidth) + 1
-        let lw = min(ceil(label.textWidth) + 1, max(0, chevron.frame.minX - 6 - 32 - cw - 6))
-        label.frame = NSRect(x: 32, y: ((h - 18) / 2).rounded(), width: lw, height: 18)
-        count.frame = NSRect(x: label.frame.maxX + 6, y: label.frame.minY, width: cw, height: 18)
+        count.frame = NSRect(x: label.frame.maxX + 5, y: label.frame.minY, width: cw, height: 16)
+        chevron.frame = NSRect(x: count.frame.maxX + 4, y: (mid - 6).rounded(), width: 12, height: 12)
     }
 }
-
