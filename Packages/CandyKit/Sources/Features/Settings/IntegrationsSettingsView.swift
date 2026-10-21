@@ -86,7 +86,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
                                  key: "browserRecordingShowMousePresses", label: "Show mouse presses in recordings")
         let links = clientSelect("browser-link-target",
                                  "Where links in the chat and terminal open. Hold ⌘ or Ctrl while clicking a link to open it in your default browser either way.",
-                                 key: "browserLinkTarget", options: [("system", "Your default browser"), ("app", "T3 Code")], width: 160,
+                                 key: "browserLinkTarget", options: [("system", "Your default browser"), ("app", "CandyWrapper")], width: 160,
                                  reset: "link target", label: "Open links in")
         let floating = clientSwitch("browser-auto-show-floating-preview",
                                     "Show the floating preview when an agent opens a browser or device unless the agent says otherwise.",
