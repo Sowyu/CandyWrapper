@@ -3,8 +3,10 @@ import DesignSystem
 
 /// `ThreadErrorBanner` (chat/ThreadErrorBanner.tsx): an `Alert` with `surface="glass"` and
 /// `controlAlignment="first-line"`, centered at the top of the chat column, 12px below the header
-/// (`pt-3`), `w-fit`, at most `min(48rem, 100% - 2rem)` wide. Circle-alert icon, the message
-/// clamped to 3 lines with the full text in a tooltip, and a ghost `icon-xs` X ("Dismiss error").
+/// (`pt-3`), `w-fit`, at most `min(48rem, 100% - 2rem)` wide. Circle-alert icon, the message in an
+/// `ExpandableText` (settings/ExpandableText.tsx): a JSON error shows its nested message, a long or
+/// multi-line one clamps to 3 lines, and "Show full error" / "Show less" swaps in the full text
+/// (ThreadErrorBanner.tsx:10-27,79, 02c81ec5ea). A ghost `icon-xs` X ("Dismiss error").
 /// Glass (`alert-glass`, index.css:344-372): the background at 80% under a 4% tint of the variant
 /// color, over a 12px backdrop blur; border and text keep the variant colors (alert.tsx:22-27).
 /// The provider status banner (ProviderStatusBanner.tsx:95-152) is the same alert with an info
@@ -14,14 +16,16 @@ public final class ThreadErrorBannerView: DSView {
         didSet {
             guard banner != oldValue else { return }
             isHidden = banner == nil
-            text.text = banner?.message ?? ""
+            expanded = false
+            applyText()
             title.text = banner?.title ?? ""
             title.isHidden = banner?.title == nil
             setup.isHidden = banner?.setupLink != true
             icon.isHidden = banner?.info == true
             infoIcon.isHidden = banner?.info != true
             close.setAccessibilityLabel(banner?.title.map { _ in "Dismiss provider status" } ?? "Dismiss error")
-            tooltip.text = banner?.message ?? ""
+            // The provider status banner keeps its hover tooltip; thread errors expand instead.
+            tooltip.text = banner?.title == nil ? "" : banner?.message ?? ""
             needsDisplay = true
             restyle()
             needsLayout = true
@@ -42,6 +46,36 @@ public final class ThreadErrorBannerView: DSView {
     /// "Open provider setup" (`InlineButton`).
     public let setup = ButtonView("Open provider setup", variant: .link, size: .xs)
     private let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
+    /// `InlineButton tone="muted"` with `mt-1` under the text.
+    private let expand = ExpandTextButton()
+    private var expanded = false
+
+    /// `getThreadErrorBannerMessage` (ThreadErrorBanner.tsx:10-27): `{"error":{"message":"..."}}` shows
+    /// only the nested message when it isn't blank.
+    public static func collapsedMessage(_ error: String) -> String {
+        guard let data = error.data(using: .utf8), let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let nested = payload["error"] as? [String: Any], let message = nested["message"] as? String,
+              !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return error }
+        return message
+    }
+
+    /// `canExpand` (ExpandableText.tsx:21).
+    public static func canExpand(_ error: String) -> Bool {
+        collapsedMessage(error) != error || error.utf16.count > 180 || error.contains("\n")
+    }
+
+    private var canExpand: Bool { banner?.title == nil && Self.canExpand(banner?.message ?? "") }
+
+    private func applyText() {
+        let message = banner?.message ?? ""
+        let collapsible = canExpand
+        text.text = expanded || banner?.title != nil ? message : Self.collapsedMessage(message)
+        // The provider status banner keeps its 3-line clamp.
+        text.maxLines = banner?.title != nil || collapsible && !expanded ? 3 : 0
+        expand.isHidden = !collapsible
+        expand.title = expanded ? "Show less" : "Show full error"
+        expand.setAccessibilityExpanded(expanded)
+    }
     private lazy var tooltip = TooltipController.attach(to: text, text: "", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
 
     static let radius: CGFloat = 14
@@ -78,6 +112,15 @@ public final class ThreadErrorBannerView: DSView {
         addSubview(setup)
         close.setAccessibilityLabel("Dismiss error")
         addSubview(close)
+        expand.isHidden = true
+        expand.action = { [weak self] in
+            guard let self else { return }
+            expanded.toggle()
+            applyText()
+            needsLayout = true
+            superview?.needsLayout = true
+        }
+        addSubview(expand)
         _ = tooltip
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("alert")
@@ -88,7 +131,8 @@ public final class ThreadErrorBannerView: DSView {
 
     /// `w-fit` up to `maxWidth`.
     public func fittingWidth(max maxWidth: CGFloat) -> CGFloat {
-        let column = max(ceil(text.naturalWidth), title.isHidden ? 0 : ceil(title.textWidth), setup.isHidden ? 0 : setup.intrinsicContentSize.width)
+        let column = max(ceil(text.naturalWidth), title.isHidden ? 0 : ceil(title.textWidth), setup.isHidden ? 0 : setup.intrinsicContentSize.width,
+                         expand.isHidden ? 0 : expand.intrinsicContentSize.width)
         let natural = column + 2 * Self.padX + 16 + 8 + 8 + 24
         return min(maxWidth, natural)
     }
@@ -116,6 +160,9 @@ public final class ThreadErrorBannerView: DSView {
             y += Self.line + 2
         }
         text.frame = NSRect(x: Self.padX + 24, y: y, width: w, height: text.height(forWidth: w))
+        if !expand.isHidden {
+            expand.frame = NSRect(x: Self.padX + 24, y: text.frame.maxY + 4, width: min(w, expand.intrinsicContentSize.width), height: Self.line)
+        }
         if !setup.isHidden {
             let s = setup.intrinsicContentSize
             setup.frame = NSRect(x: Self.padX + 24, y: text.frame.maxY + 10, width: min(w, s.width), height: Self.line)
@@ -124,7 +171,9 @@ public final class ThreadErrorBannerView: DSView {
     }
 
     /// The title row and the link under the message.
-    private var extraHeight: CGFloat { (title.isHidden ? 0 : Self.line + 2) + (setup.isHidden ? 0 : 10 + Self.line) }
+    private var extraHeight: CGFloat {
+        (title.isHidden ? 0 : Self.line + 2) + (setup.isHidden ? 0 : 10 + Self.line) + (expand.isHidden ? 0 : 4 + Self.line)
+    }
 
     public override func updateLayer() { restyle() }
 
@@ -142,4 +191,35 @@ public final class ThreadErrorBannerView: DSView {
         text.color = Themed.color(warning ? \.warningForeground : \.errorForeground, 0.8)
         title.color = Themed.color(warning ? \.warningForeground : \.errorForeground)
     }
+}
+
+/// `InlineButton tone="muted"` (ui/button.tsx:99-113): 14px medium muted text, foreground and underlined
+/// on hover.
+private final class ExpandTextButton: ControlView {
+    private let label = LabelView("", font: DSFont.ui(14, weight: .medium))
+    var title: String {
+        get { label.text }
+        set { label.text = newValue; setAccessibilityLabel(newValue); invalidateIntrinsicContentSize() }
+    }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        label.lineHeight = ThreadErrorBannerView.line
+        label.smoothsFont = false
+        addSubview(label)
+        setAccessibilityRole(.button)
+        restyle()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth), height: ThreadErrorBannerView.line) }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        restyle()
+    }
+    private func restyle() {
+        label.color = Themed.color(state.hoverOrPressed ? \.foreground : \.mutedForeground)
+        label.isUnderlined = state.hoverOrPressed
+    }
+    override func layout() { super.layout(); label.frame = bounds }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
