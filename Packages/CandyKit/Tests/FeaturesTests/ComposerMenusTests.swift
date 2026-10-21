@@ -22,6 +22,11 @@ struct ComposerMenusTests {
         #expect(ComposerTriggers.detect("fix #", cursor: 5)?.kind == .pullRequest)
         #expect(ComposerTriggers.detect("fix #-x", cursor: 7) == nil)
         #expect(ComposerTriggers.detect("plain", cursor: 5) == nil)
+        // deb5b3941d: a path is not a command, also with the caret before the second slash.
+        #expect(ComposerTriggers.detect("/tmp/build.sh", cursor: 13) == nil)
+        #expect(ComposerTriggers.detect("/tmp/build.sh", cursor: 3) == nil)
+        #expect(ComposerTriggers.detect("run /tmp/x", cursor: 7) == nil)
+        #expect(ComposerTriggers.detect("/tmp next/", cursor: 4)?.query == "tmp")
         // The caret decides: before the token there is none.
         #expect(ComposerTriggers.detect("a @b", cursor: 1) == nil)
     }
