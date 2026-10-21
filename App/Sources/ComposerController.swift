@@ -1564,10 +1564,8 @@ final class ComposerController {
         let failed = ComposerAttachmentRules.retryableFailures(attachments)
         if let key = draftKey, !failed.isEmpty {
             sendAfterRetry[key] = (text, mode, background)
-            for a in failed {
-                updateAttachment(a.id, key: key) { $0.status = .uploading(0) }
-                startUpload(a.id, key: key)
-            }
+            // `retryAttachmentUpload` (attachmentUploadQueue.ts:556-572) deletes the failed server copy first.
+            for a in failed { retryAttachment(a.id) }
             return
         }
         // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
