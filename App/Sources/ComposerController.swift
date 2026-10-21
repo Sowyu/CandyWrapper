@@ -158,8 +158,16 @@ final class ComposerController {
         return "The link asked for \(model), which \(provider) does not offer here, so its default model is used."
     }
 
-    /// Changes the open draft's workspace picks and stores them.
-    func updateDraft(_ change: (inout DraftSession) -> Void) {
+    /// Changes a draft's workspace picks and stores them: the open draft, or the stored draft `draftId` when
+    /// another one is open (T3 writes by draft id, `setDraftThreadContext`, composerDraftStore.ts:2617). A gone
+    /// draft is skipped.
+    func updateDraft(id draftId: String? = nil, _ change: (inout DraftSession) -> Void) {
+        if let draftId, currentDraft?.draftId != draftId {
+            guard let key = sessions.first(where: { $0.value.draftId == draftId })?.key else { return }
+            change(&sessions[key]!)
+            scheduleSave()
+            return
+        }
         guard case .draft(var session) = target else { return }
         change(&session)
         if let key = sessions.first(where: { $0.value.draftId == session.draftId })?.key { sessions[key] = session }

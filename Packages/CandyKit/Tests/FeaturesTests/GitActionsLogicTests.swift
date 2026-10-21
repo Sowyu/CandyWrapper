@@ -137,13 +137,11 @@ struct BranchToolbarLogicTests {
     typealias B = BranchToolbarLogic
 
     /// A branch switch started on thread A that finishes after the user opened thread B (or a draft) still
-    /// writes to A, and a draft's result never lands on another draft.
+    /// writes to A, and a draft's result goes to that draft by id even after another one opened.
     @Test func branchResultStaysWithItsOrigin() {
-        #expect(B.resultTarget(startedThreadId: "thread-a", startedDraftId: nil, currentDraftId: nil) == .thread("thread-a"))
-        #expect(B.resultTarget(startedThreadId: "thread-a", startedDraftId: nil, currentDraftId: "draft-b") == .thread("thread-a"))
-        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: "draft-a") == .draft("draft-a"))
-        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: "draft-b") == .none)
-        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a", currentDraftId: nil) == .none)
+        #expect(B.resultTarget(startedThreadId: "thread-a", startedDraftId: nil) == .thread("thread-a"))
+        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: "draft-a") == .draft("draft-a"))
+        #expect(B.resultTarget(startedThreadId: nil, startedDraftId: nil) == .none)
     }
 
     @Test func labels() {

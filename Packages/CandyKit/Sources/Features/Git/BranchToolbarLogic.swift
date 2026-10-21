@@ -12,11 +12,10 @@ public enum BranchToolbarLogic {
     /// A branch operation writes to the thread or draft it started on, never to whatever is open when it ends
     /// (T3 binds `setThreadBranch` to its render's thread, BranchToolbarBranchSelector.tsx:168-194, and git
     /// actions to their checkout, GitActionsControl.tsx:1205-1206). A server thread is updated by its id on its
-    /// own environment. A draft is only reachable while it is still the open one.
-    public static func resultTarget(startedThreadId: String?, startedDraftId: String?, currentDraftId: String?) -> ResultTarget {
+    /// own environment, a draft by its draft id, open or not.
+    public static func resultTarget(startedThreadId: String?, startedDraftId: String?) -> ResultTarget {
         if let startedThreadId { return .thread(startedThreadId) }
-        guard let startedDraftId, startedDraftId == currentDraftId else { return .none }
-        return .draft(startedDraftId)
+        return startedDraftId.map(ResultTarget.draft) ?? .none
     }
 
     /// `resolveLocalCheckoutBranchMismatch` (BranchToolbar.logic.ts:250-264): a Current checkout thread whose
