@@ -139,7 +139,8 @@ public actor ClerkClient: CloudTokenProvider {
     public func profile() async throws -> ClerkProfile? {
         guard let sid = session()?.sessionId else { return nil }
         let envelope = try decode(ClerkClientEnvelope.self, try await call("GET", "/v1/client"))
-        guard let s = (envelope.response ?? envelope.client)?.sessions.first(where: { $0.id == sid }) else { return nil }
+        // A sign-out or another sign-in during the request makes this profile someone else's.
+        guard session()?.sessionId == sid, let s = (envelope.response ?? envelope.client)?.sessions.first(where: { $0.id == sid }) else { return nil }
         let user = s.user, pub = s.publicUserData
         let image = (user?.imageUrl ?? pub?.imageUrl).flatMap { URL(string: $0) }
         return ClerkProfile(imageURL: image, firstName: user?.firstName ?? pub?.firstName,
@@ -339,9 +340,11 @@ public actor ClerkClient: CloudTokenProvider {
 
     /// One Frontend API request with the SDK's query item and headers. Applies the response
     /// `Authorization` header to the stored client token, retries once on 408, 425 and 429 like
-    /// clerk-ios, and maps errors. Returns the body of a 2xx.
+    /// clerk-ios, and maps errors. Returns the body of a 2xx. A response that arrives after a sign-in
+    /// or sign-out (a new `generation`) leaves the stored client alone and is not retried.
     @discardableResult
     private func call(_ method: String, _ path: String, _ fields: [String: String]? = nil) async throws -> Data {
+        let started = generation
         var attempt = 1
         while true {
             let request = makeRequest(method, path, fields)
@@ -356,10 +359,10 @@ public actor ClerkClient: CloudTokenProvider {
                 throw ClerkAuthError(.network)
             }
             guard let http = response as? HTTPURLResponse else { throw ClerkAuthError(.invalidResponse) }
-            try applyDeviceToken(http, body: data)
+            if generation == started { try applyDeviceToken(http, body: data) }
             if (200..<300).contains(http.statusCode) { return data }
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After")
-            if attempt == 1, [408, 425, 429].contains(http.statusCode) {
+            if attempt == 1, generation == started, [408, 425, 429].contains(http.statusCode) {
                 let wait = retryAfter.flatMap(ClerkAuthError.retrySeconds).map(Double.init) ?? 0.5
                 if wait <= Self.maxRetryWait {
                     attempt += 1

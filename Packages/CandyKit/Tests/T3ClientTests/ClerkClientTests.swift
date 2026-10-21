@@ -377,6 +377,27 @@ struct ClerkSignOutTests {
         await clerk.signOut()
         #expect(store.current == nil)
     }
+
+    @Test func staleResponseLeavesTheNextSignInAlone() async throws {
+        for staleToken in ["client-token-old", "Bearer"] {
+            let http = FakeClerk(), store = MemoryClerkStore(ClerkFixture.signedIn), held = HeldResponse("/v1/client")
+            http.on("GET", "/v1/client", #"{"response":{"id":"client_1","sessions":[]},"client":null}"#,
+                    headers: ["Authorization": staleToken])
+            http.on("GET", "/v1/environment", ClerkFixture.environment())
+            http.on("POST", "/v1/client/sign_ins", ClerkFixture.signIn("complete", sessionId: "sess_2"),
+                    headers: ["Authorization": "client-token-2"])
+            let clerk = ClerkClient(store: store, device: ClerkFixture.device, locale: "en-US", send: held.wrap(http.send),
+                                    sleep: { _ in })
+            let profile = Task { try await clerk.profile() }
+            #expect(await eventually { held.isHolding })
+            await clerk.signOut()
+            _ = try await clerk.signIn(email: ClerkFixture.email, password: "p")
+            held.release()
+            #expect(try await profile.value == nil)
+            #expect(store.current?.clientToken == "client-token-2")
+            #expect(store.current?.sessionId == "sess_2")
+        }
+    }
 }
 
 // MARK: Errors
