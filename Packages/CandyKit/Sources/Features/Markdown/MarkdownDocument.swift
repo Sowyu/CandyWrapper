@@ -261,7 +261,7 @@ public struct MarkdownDocument: Sendable, Equatable {
     private static func blocks(from node: Node) -> [MarkdownBlock] {
         switch node.kind {
         case .paragraph:
-            let runs = node.runs
+            let runs = breakingAroundImageLines(node.runs)
             if let image = standaloneImage(runs) { return [image] }
             return runs.isEmpty ? [] : [.paragraph(runs)]
         case .header(let level):
@@ -363,6 +363,28 @@ public struct MarkdownDocument: Sendable, Equatable {
         }
         if runs.isEmpty { children.removeFirst() } else { children[0] = .paragraph(runs) }
         return kind
+    }
+
+    /// `remarkBreakAroundImageLines` (e27a03e94d, shared/src/markdownPipeline.ts): an image alone on its source line
+    /// keeps that line, so a `**Palette**` label above a screenshot no longer puts the image beside it. The soft
+    /// breaks around it become line breaks; prose and inline badges still wrap.
+    static func breakingAroundImageLines(_ runs: [InlineRun]) -> [InlineRun] {
+        guard runs.contains(where: { $0.image != nil }) else { return runs }
+        var out = runs
+        var i = 0
+        while i < runs.count {
+            guard let image = runs[i].image else { i += 1; continue }
+            // An alt with markup arrives as several runs of one image.
+            var end = i + 1
+            while end < runs.count, runs[end].image == image, !runs[end].isBreak { end += 1 }
+            let before = i > 0 ? runs[i - 1] : nil, after = end < runs.count ? runs[end] : nil
+            if before?.isBreak ?? true, after?.isBreak ?? true {
+                if before != nil { out[i - 1].text = "\n" }
+                if after != nil { out[end].text = "\n" }
+            }
+            i = end
+        }
+        return out
     }
 
     private static func standaloneImage(_ runs: [InlineRun]) -> MarkdownBlock? {
