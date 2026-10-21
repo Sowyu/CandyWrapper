@@ -26,7 +26,14 @@ public final class DitherTabStripView: TopbarDragView {
         plus.setAccessibilityLabel("New thread")
         plus.action = { [weak self] in self?.onNew?() }
         addSubview(plus)
+        // A tab group, as VoiceOver knows NSTabView's: the tabs are its radio buttons.
+        setAccessibilityElement(true)
+        setAccessibilityRole(.tabGroup)
+        setAccessibilityLabel("Thread tabs")
     }
+
+    public override func accessibilityTabs() -> [Any]? { views }
+    public override func accessibilityChildren() -> [Any]? { views + [plus] }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -91,7 +98,24 @@ public final class DitherTabStripView: TopbarDragView {
             [icon, label, close].forEach(addSubview)
             setAccessibilityRole(.radioButton)
             setAccessibilityLabel(tab.title)
+            // The close button only shows on hover or selection; VoiceOver and Switch Control close any tab here.
+            setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Close tab") { [weak self] in
+                guard let onClose = self?.onClose else { return false }
+                onClose()
+                return true
+            }])
+            NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                              name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
             refresh()
+        }
+
+        deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
+
+        @objc private func displayOptionsChanged(_ note: Notification) { refresh() }
+
+        /// An unselected tab's text and icon strength: Increase Contrast keeps them near full.
+        static func restingAlpha(increaseContrast: Bool) -> (label: CGFloat, icon: CGFloat) {
+            increaseContrast ? (0.9, 0.85) : (0.72, 0.6)
         }
 
         @available(*, unavailable)
@@ -105,10 +129,11 @@ public final class DitherTabStripView: TopbarDragView {
 
         private func refresh() {
             // Faded, never hidden: hiding it as the pointer moved onto it ended the tab's hover and lost the click.
-            close.alphaValue = isSelected || state.hovered || close.state.hovered ? 1 : 0
-            let strong = isSelected || state.hovered
-            label.color = Themed.color(\.foreground, strong ? 1 : 0.66)
-            icon.strokeColor = Themed.color(\.foreground, strong ? 0.9 : 0.55)
+            close.alphaValue = isSelected || state.hovered || close.state.hovered || state.focusVisible ? 1 : 0
+            let strong = isSelected || state.hovered || state.focusVisible
+            let resting = Self.restingAlpha(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+            label.color = Themed.color(\.foreground, strong ? 1 : resting.label)
+            icon.strokeColor = Themed.color(\.foreground, strong ? 0.9 : resting.icon)
             setAccessibilityValue(isSelected ? 1 : 0)
         }
 
@@ -122,8 +147,10 @@ public final class DitherTabStripView: TopbarDragView {
 
         override func updateLayer() {
             layer?.cornerRadius = DitherChrome.cardRadius
-            layer?.borderWidth = isSelected ? 0.5 : 0
-            layer?.borderColor = Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
+            // Keyboard focus shows T3's ring (`focus-visible:ring-2 ring-ring`); the tabs drew none before.
+            layer?.borderWidth = state.focusVisible ? 2 : isSelected ? 0.5 : 0
+            layer?.borderColor = state.focusVisible ? Themed.color(\.ring).cgColor(in: self)
+                : Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
             layer?.backgroundColor = isSelected ? Themed.color(\.surfaceRaised).cgColor(in: self)
                 : state.hovered ? Themed.color(\.foreground, 0.04).cgColor(in: self) : nil
         }

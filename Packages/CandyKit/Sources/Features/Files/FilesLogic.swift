@@ -276,6 +276,14 @@ public final class FileSaveCoordinator {
         schedule(debounceInterval)
     }
 
+    /// Writes the newest contents now and stays the file's writer: later edits queue behind it.
+    public func flush() {
+        guard !disposed else { return }
+        timer?.cancel()
+        timer = nil
+        if hasUnsaved { Task { await persistLatest() } }
+    }
+
     /// Flushes the newest contents now (the tab closes or the thread changes).
     public func dispose() {
         disposed = true

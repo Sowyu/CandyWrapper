@@ -52,8 +52,12 @@ final class CodexAuthCallbackReceiver {
             done(.failure(CodexAuthError("This sign-in is already open on this computer.")))
             return
         }
+        guard let port = NWEndpoint.Port(rawValue: request.port) else {
+            done(.failure(CodexAuthError(Self.portInUse)))
+            return
+        }
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: request.port)!)
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
         parameters.allowLocalEndpointReuse = true
         guard let listener = try? NWListener(using: parameters) else {
             done(.failure(CodexAuthError(Self.portInUse)))

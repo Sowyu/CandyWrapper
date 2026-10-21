@@ -89,6 +89,9 @@ final class DiffFileHeaderView: DiffRowView {
         title.text = file.path
         stat.set(additions: file.additions, deletions: file.deletions, style: statStyle)
         setAccessibilityLabel(file.path)
+        chevron.setAccessibilityLabel("\(collapsed ? "Expand" : "Collapse") \(file.path)")
+        chevron.setAccessibilityValue(collapsed ? 0 : 1)
+        copy.setAccessibilityLabel("Copy path")
         needsLayout = true
     }
 
