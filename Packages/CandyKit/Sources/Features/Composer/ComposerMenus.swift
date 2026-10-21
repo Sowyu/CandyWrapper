@@ -743,6 +743,16 @@ public enum ComposerContext {
         }
     }
 
+    /// `threadContextsOutsideEnvironment` (shared composerContextReferences.ts:326-341): thread records the
+    /// prompt references that live on another environment, whose agent can't read them.
+    public static func threadsOutsideEnvironment(_ prompt: String, records: [String: JSONValue], environmentId: String) -> [JSONValue] {
+        referencedIds(prompt).compactMap { id in
+            guard let record = records[id], record["kind"]?.stringValue == "thread", record["threadId"] != nil,
+                  record["environmentId"]?.stringValue != environmentId else { return nil }
+            return record
+        }
+    }
+
     /// `projectPendingUserInputAnswer` (pendingUserInput.ts, T3 3105 34f845832): a question's answer is plain text,
     /// so its thread chips go as `[title](t3-thread://v1/<id>)` links with the real thread ids.
     public static func projectAnswer(_ answer: String, records: [String: JSONValue]) -> String {

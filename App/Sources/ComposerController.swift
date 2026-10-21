@@ -1504,13 +1504,28 @@ final class ComposerController {
             if loadBalanceTask != nil {
                 toast(.warning, "Checking machine resources", "Resource checks are still running. You can choose a machine in the composer.")
             } else {
-                toast(.warning, "Choose a machine to continue", "No eligible machine has available resources. Choose a machine in the composer to override.")
+                // ChatView.tsx:4686-4695: attached threads no single machine can read.
+                let threads = ComposerContext.referencedIds(text).compactMap { menuState.records[$0] }
+                    .filter { $0["kind"]?.stringValue == "thread" }.compactMap { $0["environmentId"]?.stringValue }
+                let readable = runOnTargets(group).contains { t in threads.allSatisfy { $0 == t.option.environmentId } }
+                toast(.warning, "Choose a machine to continue", !threads.isEmpty && !readable
+                      ? "No machine can read every attached thread. Choose a machine in the composer or remove the threads."
+                      : "No eligible machine has available resources. Choose a machine in the composer to override.")
             }
             return
         }
         // `activeEnvironmentUnavailable` (ChatView.tsx:8797-8811).
         if !connected, target != nil, pendingMessageId == nil {
             toastEnvironmentUnavailable()
+            return
+        }
+        // ChatView.tsx:4780-4796 (c1377176b1): this machine's agent can't read a thread from another one.
+        if let env = targetEnvironmentId,
+           let stranded = ComposerContext.threadsOutsideEnvironment(text, records: menuState.records, environmentId: env).first {
+            let owner = stranded["environmentId"]?.stringValue.flatMap { sidebarEnvironments.labels[$0] } ?? "its machine"
+            let title = stranded["title"]?.stringValue ?? ""
+            toast(.warning, "Attached thread is on another machine",
+                  "This machine's agent can't read \"\(title)\". Remove it, or switch back to \(owner) to send.")
             return
         }
         var text = text
