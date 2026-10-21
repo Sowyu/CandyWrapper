@@ -38,16 +38,21 @@ public final class DitherTabStripView: TopbarDragView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Keeps the views of tabs that stay, so a rebuild during a click (the sidebar refreshes often) never drops it.
     private func rebuild() {
-        for v in views { v.removeFromSuperview() }
+        var kept: [String: TabView] = [:]
+        for v in views { kept[v.tab.id] = v }
         views = tabs.map { tab in
+            if let v = kept.removeValue(forKey: tab.id) { v.tab = tab; return v }
+            let id = tab.id
             let v = TabView(tab: tab)
-            v.isSelected = tab.id == selected
-            v.action = { [weak self] in self?.onSelect?(tab.id) }
-            v.onClose = { [weak self] in self?.onClose?(tab.id) }
+            v.action = { [weak self] in self?.onSelect?(id) }
+            v.onClose = { [weak self] in self?.onClose?(id) }
             addSubview(v)
             return v
         }
+        for v in kept.values { v.removeFromSuperview() }
+        for v in views { v.isSelected = v.tab.id == selected }
         needsLayout = true
     }
 
@@ -66,10 +71,19 @@ public final class DitherTabStripView: TopbarDragView {
 
     /// One tab: icon, title, and a close button.
     final class TabView: ControlView {
-        let tab: Tab
+        var tab: Tab {
+            didSet {
+                guard tab != oldValue else { return }
+                label.text = tab.title
+                if tab.icon != oldValue.icon { icon.removeFromSuperview(); icon = IconView(name: tab.icon, size: 14); addSubview(icon) }
+                setAccessibilityLabel(tab.title)
+                refresh()
+                needsLayout = true
+            }
+        }
         var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; refresh() } } }
         var onClose: (() -> Void)?
-        private let icon: IconView
+        private var icon: IconView
         private let label: LabelView
         private let close = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
 
@@ -114,7 +128,8 @@ public final class DitherTabStripView: TopbarDragView {
         }
 
         private func refresh() {
-            close.isHidden = !(isSelected || state.hovered)
+            // Faded, never hidden: hiding it as the pointer moved onto it ended the tab's hover and lost the click.
+            close.alphaValue = isSelected || state.hovered || close.state.hovered || state.focusVisible ? 1 : 0
             let strong = isSelected || state.hovered || state.focusVisible
             let resting = Self.restingAlpha(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
             label.color = Themed.color(\.foreground, strong ? 1 : resting.label)
