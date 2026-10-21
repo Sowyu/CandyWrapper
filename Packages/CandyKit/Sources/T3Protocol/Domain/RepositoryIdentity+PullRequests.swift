@@ -30,6 +30,13 @@ extension RepositoryIdentity {
     public func owns(_ link: ChangeRequestURL.Link) -> Bool {
         guard let host = pullRequestHost, let repository = pullRequestRepository else { return false }
         if provider == "azure-devops" {
+            // `isChangeRequestAuthorityOfProject` (source-control-core definition.ts:94-108): a
+            // link with a port needs an HTTP remote on that port, and an SSH remote can't tell.
+            if let authority = link.authority, case .object(let o) = locator, let remote = o["remoteUrl"]?.stringValue,
+               let url = URL(string: remote), url.scheme == "http" || url.scheme == "https", let remoteHost = url.host {
+                let port = url.port.flatMap { $0 == (url.scheme == "https" ? 443 : 80) ? nil : $0 }
+                guard (port.map { "\(remoteHost.lowercased()):\($0)" } ?? remoteHost.lowercased()) == authority else { return false }
+            }
             return ChangeRequestURL.canonicalRepositoryKey(canonicalKey.lowercased())
                 == ChangeRequestURL.canonicalRepositoryKey("\(link.host)/\(link.repository)".lowercased())
         }
