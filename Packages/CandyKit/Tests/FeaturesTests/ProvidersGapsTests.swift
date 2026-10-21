@@ -27,11 +27,27 @@ struct ProvidersGapsTests {
         #expect(!ProviderUpdateToastModel.canOneClick(a, among: [a, other]))
         let manual = outdated("codex", canUpdate: false)
         #expect(!ProviderUpdateToastModel.canOneClick(manual, among: [manual]))
-        #expect(ProviderUpdateToastModel.initial([manual])?.message == "Codex can be updated from provider settings.")
+        // Installs the server can't update get their own sentence (#18110, logic.ts:237-262).
+        #expect(ProviderUpdateToastModel.initial([manual])?.message == "Update Codex with the app or tool that installed it.")
+        let claude = outdated("claudeAgent", driver: "claudeAgent", canUpdate: false)
+        #expect(ProviderUpdateToastModel.initial([outdated("codex", command: nil), claude])?.message
+            == "Codex can be updated from provider settings. Update Claude with the app or tool that installed it.")
         var running = a
         running.updateState = .init(status: "running", finishedAt: nil, message: nil)
         #expect(!ProviderUpdateToastModel.canOneClick(running, among: [running]))
         #expect(ProviderUpdateToastModel.rejected(count: 2, message: "denied").title == "Provider updates failed")
+    }
+
+    /// Antigravity's health check can't see the Google sign-in: a neutral status without a dot (#18623, providerStatus.ts:27-79).
+    @Test func antigravitySignInNotChecked() {
+        var p = ServerProvider(instanceId: .init("antigravity"), driver: "antigravity")
+        p.status = .warning
+        p.auth = .object(["status": .string("unknown"), "type": .string("oauth-personal")])
+        #expect(ProvidersLogic.summary(p).headline == "Installed · Sign-in not checked")
+        #expect(ProvidersLogic.statusKey(p) == "neutral")
+        p.auth = .object(["status": .string("unknown"), "type": .string("api-key")])
+        #expect(ProvidersLogic.summary(p).headline == "Needs attention")
+        #expect(ProvidersLogic.statusKey(p) == "warning")
     }
 
     @Test func dismissalsPersistKeys() {

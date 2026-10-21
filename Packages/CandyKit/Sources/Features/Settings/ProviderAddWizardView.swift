@@ -154,7 +154,10 @@ public final class ProviderAddWizardView: DialogView {
         searchTask?.cancel(); searchGeneration += 1; let generation = searchGeneration, environment = environment
         searchTask = Task { [weak self] in
             do {
-                let result = try await request(environment, "server.searchAcpRegistry", .object(["query": .string(query)]))
+                // An empty search lists every compatible agent (AcpRegistrySearchStep.tsx:72-78, #19145).
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                let input: JSONValue = trimmed.isEmpty ? .object(["query": .string(""), "limit": .number(512)]) : .object(["query": .string(trimmed)])
+                let result = try await request(environment, "server.searchAcpRegistry", input)
                 guard let self, !Task.isCancelled, generation == self.searchGeneration else { return }
                 self.agents = result["agents"]?.arrayValue ?? []; self.error = self.agents.isEmpty ? "No ACPs found. Try a broader search." : nil; self.rebuild()
             } catch { guard !Task.isCancelled else { return }; self?.error = String(describing: error); self?.rebuild() }

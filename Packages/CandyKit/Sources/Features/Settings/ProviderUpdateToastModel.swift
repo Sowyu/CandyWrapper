@@ -44,8 +44,17 @@ public struct ProviderUpdateToastModel: Equatable, Sendable {
         let oneClick = candidates.contains { canOneClick($0, among: providers) }
         return .init(key: candidates.map { $0.driver + ":" + ($0.latestVersion ?? "") }.sorted().joined(separator: "|"),
                      title: candidates.count == 1 ? "Update Available: \(name) \(version)" : "Updates Available: \(candidates.count) providers",
-                     message: oneClick ? "Install the update now or review provider settings."
-                        : "\(SidebarProviderUpdatePillModel.list(candidates)) can be updated from provider settings.", phase: "initial")
+                     message: describeInitialUpdates(candidates, oneClick: oneClick), phase: "initial")
+    }
+
+    /// `describeInitialUpdates` (logic.ts:237-262, #18110): installs the server can't update get their own sentence.
+    static func describeInitialUpdates(_ candidates: [ServerProvider], oneClick: Bool) -> String {
+        let canUpdate = { (p: ServerProvider) in p.versionAdvisory?["canUpdate"]?.boolValue == true }
+        let fromSettings = candidates.filter(canUpdate), manual = candidates.filter { !canUpdate($0) }
+        return [oneClick ? "Install the update now or review provider settings."
+                    : fromSettings.isEmpty ? nil : "\(SidebarProviderUpdatePillModel.list(fromSettings)) can be updated from provider settings.",
+                manual.isEmpty ? nil : "Update \(SidebarProviderUpdatePillModel.list(manual)) with the app or tool that installed \(manual.count == 1 ? "it" : "them")."]
+            .compactMap { $0 }.joined(separator: " ")
     }
 
     /// `getProviderUpdateRejectedToastView`.
