@@ -17,6 +17,12 @@ public struct UserMessagePresentation: Equatable, Sendable {
                 createdBy: message.createdBy, scheduledTaskId: message.scheduledTaskId)
     }
 
+    /// `resolveUserMessagePresentation(message).attribution === null` (userMessage.ts:10-55): the user
+    /// typed it. Automations and other agents (`createdBy: "agent"`) send user-role messages too.
+    public static func isTypedByUser(_ message: ChatMessage) -> Bool {
+        message.role == .user && !resolve(message).isAutomation && message.createdBy != "agent"
+    }
+
     public static func resolve(id: String?, isUser: Bool, text: String, createdBy: String?, scheduledTaskId: String?) -> UserMessagePresentation {
         guard isUser else { return .init(text: text, isAutomation: false, scheduledTaskId: nil) }
         if let scheduledTaskId { return .init(text: text, isAutomation: true, scheduledTaskId: scheduledTaskId) }
