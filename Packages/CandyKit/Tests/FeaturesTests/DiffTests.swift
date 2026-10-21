@@ -192,7 +192,7 @@ struct DiffTests {
         for _ in 0..<100 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await requests.all.last == .fullThread(GetFullThreadDiffInput(threadId: "t1", toTurnCount: 1, ignoreWhitespace: true)))
         #expect(panel.list.diff.files.map(\.path) == ["hello.py", "notes.md"])
-        #expect(panel.list.collapsed == [0, 1]) // scrolled to, still collapsed
+        #expect(panel.list.collapsed == [0]) // scrolled to and expanded
         panel.open(runId: "run2", filePath: nil)
         for _ in 0..<100 where await requests.all.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(await requests.all.last == .turn(GetTurnDiffInput(threadId: "t1", fromTurnCount: 1, toTurnCount: 2, ignoreWhitespace: true)))
