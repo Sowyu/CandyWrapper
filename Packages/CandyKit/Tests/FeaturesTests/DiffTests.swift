@@ -243,6 +243,37 @@ struct DiffTests {
         #expect(choices[0].value(selected: nil) == "main")
     }
 
+    /// Resizing an annotation keeps the reader's line in place instead of jumping to the file header.
+    @Test func reloadAnnotationsKeepsScrollPosition() {
+        final class Card: NSView, DiffAnnotationContent {
+            var height: CGFloat = 40
+            func height(forWidth width: CGFloat) -> CGFloat { height }
+        }
+        var patch = "diff --git a/big.ts b/big.ts\nnew file mode 100644\n--- /dev/null\n+++ b/big.ts\n@@ -0,0 +1,2000 @@\n"
+        for i in 0..<2_000 { patch += "+let v\(i) = \(i)\n" }
+        let list = DiffListView()
+        let card = Card()
+        list.annotationView = { _ in card }
+        let scroll = ScrollAreaView(documentView: list)
+        scroll.frame = NSRect(x: 0, y: 0, width: 460, height: 800)
+        list.setDiff(UnifiedDiff(patch), collapsedByDefault: false)
+        list.annotations = [DiffAnnotation(path: "big.ts", right: true, line: 1_500, id: "c")]
+        scroll.layoutSubtreeIfNeeded()
+        scroll.scroll(to: NSPoint(x: 0, y: 10_007))
+        let origin = scroll.scrollView.contentView.bounds.origin
+        #expect(origin.y == 10_007)
+        list.reloadAnnotations()
+        #expect(scroll.scrollView.contentView.bounds.origin == origin)
+        card.height = 400 // below the viewport
+        list.reloadAnnotations()
+        #expect(scroll.scrollView.contentView.bounds.origin == origin)
+        list.annotations = [DiffAnnotation(path: "big.ts", right: true, line: 10, id: "c")]
+        scroll.scroll(to: NSPoint(x: 0, y: 10_007))
+        card.height = 100 // above the viewport: the content above shrinks by 300pt
+        list.reloadAnnotations()
+        #expect(abs(scroll.scrollView.contentView.bounds.origin.y - (10_007 - 300)) < 0.01)
+    }
+
     /// A 20,000-line diff in one expanded file: layout is a flat array, and the list only builds
     /// views for rows near the viewport.
     @Test func largeDiffStaysVirtual() throws {
