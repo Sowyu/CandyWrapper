@@ -627,9 +627,10 @@ public final class MarkdownView: DSView {
 
     /// T3's native file menu (ChatMarkdown.tsx:2115-2160 `showFileContextMenu`): "Preview media" for images and video,
     /// "Open in <editor>" where the environment runs shell actions, "Open in integrated browser" for HTML and PDF,
-    /// the reveal item, then the two copies.
+    /// the reveal item, then the copies. "Copy relative path" shows only inside the workspace and keeps the position
+    /// (`markdownFileCopyMenuItems`, a81961d756, MarkdownFileLink.logic.ts:32-49).
     fileprivate func chipMenu(_ chip: FileChip, event: NSEvent, view: NSView) {
-        let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) } ?? chip.meta.targetPath
+        let relative = chip.meta.workspaceRelativePath.map { FileLinks.format($0, chip.meta.line, chip.meta.column) }
         let shell = Self.fileChipShell?()
         let actions = chipActions(chip.meta)
         var items: [ThreadMenuItem] = []
@@ -637,14 +638,15 @@ public final class MarkdownView: DSView {
         if let open = shell?.openLabel { items.append(ThreadMenuItem("open", open)) }
         if actions.browser { items.append(ThreadMenuItem("open-in-browser", "Open in integrated browser")) }
         if let reveal = shell?.revealLabel { items.append(ThreadMenuItem("reveal", reveal)) }
-        items += [ThreadMenuItem("relative", "Copy relative path"), ThreadMenuItem("full", "Copy full path")]
+        if relative != nil { items.append(ThreadMenuItem("relative", "Copy relative path")) }
+        items.append(ThreadMenuItem("full", "Copy full path"))
         let menu = NativeItemContextMenu.make(items) { [weak self, weak view] action in
             if action == "preview-media" { self?.previewMedia(chip.meta); return }
             if action == "open" { Self.onOpenFileInEditor?(chip.meta); return }
             if action == "open-in-browser" { Self.onOpenFileInBrowser?(chip.meta); return }
             if action == "reveal" { Self.onRevealFile?(chip.meta); return }
             NSPasteboard.general.clearContents()
-            let copied = NSPasteboard.general.setString(action == "relative" ? relative : chip.meta.targetPath, forType: .string)
+            let copied = NSPasteboard.general.setString(action == "relative" ? relative ?? chip.meta.targetPath : chip.meta.targetPath, forType: .string)
             if let view { AnchoredCopyToast.show(from: view, success: copied) }
         }
         NSMenu.popUpContextMenu(menu, with: event, for: view)
