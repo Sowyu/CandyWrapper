@@ -80,6 +80,9 @@ struct RunOnFidelityTests {
     @Test func behaviour() {
         let c = Self.control(selected: "local")
         #expect(c.interactive)
+        // 70bdbc30b2: the tooltip names the label and the `composer.host` chord.
+        c.shortcutCommand = "composer.host"
+        #expect(c.tooltipString == "This Mac · " + (ActiveKeymap.label(for: "composer.host") ?? ""))
         var picked: [String] = []
         c.onChange = { picked.append($0) }
         let items = c.listItems()

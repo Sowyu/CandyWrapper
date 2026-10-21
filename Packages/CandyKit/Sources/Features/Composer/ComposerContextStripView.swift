@@ -61,6 +61,8 @@ public final class ComposerContextStripView: DSView {
         clip.addSubview(surface)
         addSubview(runOn)
         runContext.setAccessibilityLabel("Workspace")
+        runContext.shortcutCommand = "composer.workspace"
+        runOn.shortcutCommand = "composer.host"
         runContext.plainChevron = true
         branch.plainChevron = true
         branch.glyphs = [IconName.gitBranch.definition]
@@ -176,7 +178,14 @@ open class ComposerContextControl: ControlView {
     public var middleTruncates = false { didSet { textChanged() } }
     public var interactive = true { didSet { if interactive != oldValue { update() } } }
     /// The tooltip; nil shows the label.
-    public var tooltipText: String? { didSet { tooltip?.text = tooltipText ?? text } }
+    public var tooltipText: String? { didSet { updateTooltip() } }
+    /// The command that opens the control: an interactive control's tooltip ends in " · <shortcut>"
+    /// (BranchToolbarEnvironmentSelector.tsx:131-134, BranchToolbarEnvModeSelector.tsx:143-148, 70bdbc30b2).
+    public var shortcutCommand: String? { didSet { updateTooltip() } }
+    private func updateTooltip() {
+        let chord = interactive ? shortcutCommand.flatMap { ActiveKeymap.label(for: $0) }.map { " · " + $0 } ?? "" : ""
+        tooltip?.text = (tooltipText ?? text) + chord
+    }
     /// A child `ChevronDownIcon` (stroke 2, `-mx-0.5`) instead of `ComposerSelectControl`'s own chevron
     /// (stroke 2.25, `ms-0 -me-1`): the run context and branch triggers.
     public var plainChevron = false {
@@ -201,6 +210,7 @@ open class ComposerContextControl: ControlView {
     private let fill = CALayer()
     private let ring = CALayer()
     private var tooltip: TooltipController?
+    var tooltipString: String { tooltip?.text ?? "" }
 
     public init() {
         super.init(frame: .zero)
@@ -240,13 +250,14 @@ open class ComposerContextControl: ControlView {
         middle.value = middleTruncates ? text : ""
         label.isHidden = middleTruncates
         middle.isHidden = !middleTruncates
-        tooltip?.text = tooltipText ?? text
+        updateTooltip()
         setAccessibilityValue(text)
         update()
     }
 
     func update() {
         chevron.isHidden = !interactive
+        updateTooltip()
         setAccessibilityRole(interactive ? .popUpButton : .staticText)
         restyle()
         invalidateIntrinsicContentSize()
