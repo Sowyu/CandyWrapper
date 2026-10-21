@@ -270,6 +270,10 @@ struct MarkdownWindowsPathTests {
         #expect(text(#"See C:\x and \*this\* and Note:\*that\*."#) == #"See C:\x and *this* and Note:*that*."#)
         #expect(text(#"`C:\me\.t3` and C:\me\.t3"#) == #"<code>C:\me\.t3</code> and C:\me\.t3"#)
         #expect(MarkdownDocument(parsing: "```\nC:\\me\\.t3\n```").blocks == [.code(language: "text", title: nil, code: #"C:\me\.t3"#)])
+        // Without a drive path the pass returns its input untouched: a URL's scheme is no drive.
+        let url: Substring = #"See https://x.dev/a\.b and http:\*x\*"#
+        #expect(MarkdownDocument.keepingWindowsPathEscapes(url) == url)
+        #expect(MarkdownDocument.keepingWindowsPathEscapes(#"C:\me\.t3"#) != #"C:\me\.t3"#)
     }
 }
 
