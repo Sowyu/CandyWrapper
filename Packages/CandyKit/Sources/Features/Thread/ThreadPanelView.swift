@@ -1187,6 +1187,7 @@ public final class ThreadPanelView: DSView {
     public func setDraft(projectTitle: String?, isScratch: Bool = false) {
         isDraft = projectTitle != nil
         hero.isHidden = !isDraft
+        DitherArtView.setVivid(isDraft, from: hero)
         hero.projectTitle = projectTitle ?? ""
         hero.isScratch = isScratch
         if let projectTitle {
