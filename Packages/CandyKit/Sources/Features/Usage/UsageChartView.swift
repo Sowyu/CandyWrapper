@@ -18,9 +18,9 @@ public enum UsageStyle {
         }
     }
 
-    /// `barColor`: the limits bars take the cost chart's series color for Codex and Claude.
+    /// `barColor` (UsageLimits.tsx:46-51): the limits bars take the provider's series color, else the foreground.
     public static func barColor(driver: String) -> NSColor {
-        driver == "codex" ? color(.codex) : driver == "claudeAgent" ? color(.claude) : Themed.color(\.foreground)
+        UsageProviderKind.allCases.first { $0.driverKind == driver }.map(color) ?? Themed.color(\.foreground)
     }
 
     /// `ink(percent)`: a neutral step between background and foreground.
