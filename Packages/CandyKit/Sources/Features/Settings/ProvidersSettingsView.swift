@@ -68,10 +68,26 @@ public enum ProvidersLogic {
         case "unauthenticated": return (authLabel.map { "Not authenticated · \($0)" } ?? "Not authenticated", p.message)
         default: break
         }
+        if isAntigravitySignInUnchecked(p) { return ("Installed · Sign-in not checked", p.message) }
         if p.status.rawValue == "warning" { return ("Needs attention", p.message ?? "The provider is installed, but the server could not fully verify it.") }
         if p.status.rawValue == "error" { return ("Unavailable", p.message ?? "The provider failed its startup checks.") }
         if p.auth?["status"]?.stringValue == "authenticated" { return (authLabel.map { "Authenticated · \($0)" } ?? "Authenticated", p.message) }
         return ("Available", p.message)
+    }
+
+    /// `isAntigravitySignInUnchecked` (providerStatus.ts:27-39, #18623): Antigravity's health check verifies the
+    /// install, not the Google sign-in. API key and Agent Platform warnings still need attention.
+    static func isAntigravitySignInUnchecked(_ p: ServerProvider) -> Bool {
+        let type = p.auth?["type"]?.stringValue
+        return p.driver == "antigravity" && p.installed && p.status.rawValue == "warning" && p.auth?["status"]?.stringValue == "unknown"
+            && (type == nil || type == "oauth-personal" || type == "oauth-business")
+    }
+
+    /// `getProviderStatusKey` (providerStatus.ts:41-45): disabled, neutral (no dot) or the server's status.
+    public static func statusKey(_ p: ServerProvider?) -> String {
+        if let p, !p.enabled { return "disabled" }
+        if let p, isAntigravitySignInUnchecked(p) { return "neutral" }
+        return p?.status.rawValue ?? "warning"
     }
 
     /// `getProviderVersionLabel`.
@@ -1119,7 +1135,7 @@ final class ProviderListRow: ControlView {
         icon = ProviderIcon.make(driver: row.driver, displayName: displayName, size: 16, color: Themed.color(\.foreground, 0.8),
                                  badge: ProviderBadge.settingsCard(row, displayName: displayName))
         enabled = on
-        let key = on ? provider?.status.rawValue ?? "warning" : "disabled"
+        let key = on ? ProvidersLogic.statusKey(provider.map { var p = $0; p.enabled = true; return p }) : "disabled"
         showsDot = key == "warning" || key == "error"
         super.init(frame: .zero)
         scalesWhenPressed = false
