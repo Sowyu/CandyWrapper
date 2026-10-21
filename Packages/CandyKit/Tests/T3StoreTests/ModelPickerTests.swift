@@ -46,6 +46,10 @@ struct ModelPickerTests {
         #expect(ModelTraits.triggerLabel([effort, tier("default")], provider: "codex") == "Medium")
         #expect(ModelTraits.triggerLabel([effort, tier("fast")], provider: "codex") == "Medium Fast")
         #expect(ModelTraits.triggerLabel([effort, tier("default")], provider: "claudeAgent") == "Medium · Standard")
+        // Cursor's `reasoning_effort` counts as the reasoning select (dd86a02096).
+        let cursor = ProviderOptionDescriptor(id: "reasoning_effort", label: "Effort", type: .select,
+                                              options: [.init(id: "high", label: "High", isDefault: true)])
+        #expect(ModelTraits.triggerLabel([cursor, tier("fast")], provider: "codex") == "High Fast")
     }
 
     /// `resolveComposerInteractionMode(...).enabled`, which gates Implement in a new thread.

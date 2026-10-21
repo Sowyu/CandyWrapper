@@ -562,7 +562,7 @@ public enum ThreadRelationships {
         guard let model else { return nil }
         let selections = (try? selection.options?.decode(as: [ProviderOptionSelection].self)) ?? nil
         let descriptors = ModelTraits.descriptors(model, selections: selections)
-        for id in ["reasoningEffort", "effort", "reasoning", "variant"] {
+        for id in ModelTraits.reasoningEffortIds {
             guard let d = descriptors.first(where: { $0.id == id }), d.type == .select else { continue }
             if let label = ModelTraits.currentLabel(d) { return label }
         }
