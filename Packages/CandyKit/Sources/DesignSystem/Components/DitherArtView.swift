@@ -6,7 +6,7 @@ import ImageIO
 /// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
 /// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
 /// off the main thread. It moves only in answer to something: dots resolve in when a new thread opens, the art drifts
-/// a little as a thread scrolls back, a ring of brighter dots runs out from the composer on send, and edge dots
+/// a little as a thread scrolls back, and edge dots
 /// shimmer while an agent works. Nothing runs while idle.
 public final class DitherArtView: NSView {
     private let art = CALayer()
@@ -103,41 +103,6 @@ public final class DitherArtView: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         art.placeArt()
         CATransaction.commit()
-    }
-
-    /// The composer calls this on send: a ring of brighter dots runs out from it, as frames of the art.
-    @MainActor
-    public static func ripple(from source: NSView) {
-        guard let art = art(behind: source) else { return }
-        art.playRipple(at: art.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), from: source))
-    }
-
-    func playRipple(at point: CGPoint) {
-        let art = self
-        guard let field = art.field, let shown = art.shown else { return }
-        // Canvas row 0 is the art layer's top, `margin` dots above the panel's top until the parallax brings it down.
-        let cx = Double(point.x / DitherArt.dot)
-        let cy = Double((art.bounds.height - point.y + CGFloat(Self.margin) * DitherArt.dot - art.parallax) / DitherArt.dot)
-        let reach = hypot(Double(max(cx, Double(shown.width) - cx)), Double(max(cy, Double(shown.height) - cy)))
-        let target = Handoff(value: art)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let count = 16
-            let frames = Handoff(value: (1...count).compactMap { k -> CGImage? in
-                let t = Double(k) / Double(count), eased = 1 - pow(1 - t, 2.2)
-                return DitherArt.image(field, .init(ring: (cx, cy, eased * reach, 14 + 30 * t, 1.4 * (1 - t))))
-            })
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    let view = target.value
-                    guard !frames.value.isEmpty else { return }
-                    let ripple = CAKeyframeAnimation(keyPath: "contents")
-                    ripple.values = frames.value + [view.art.contents as Any]
-                    ripple.calculationMode = .discrete
-                    ripple.duration = 1.1
-                    view.art.add(ripple, forKey: "ripple")
-                }
-            }
-        }
     }
 
     /// Starts or stops the shimmer: while an agent works in this window, the dots on an edge twinkle. Its six frames
@@ -365,8 +330,6 @@ public enum DitherArt {
         var gain = 1.0
         /// Nudges each threshold by a hash of the position and this seed, so dots on an edge flicker.
         var jitter: (seed: Int, amount: Double)?
-        /// A ring of brighter dots: center and radius in dots, its width, and the extra gain at its middle.
-        var ring: (x: Double, y: Double, radius: Double, width: Double, boost: Double)?
     }
 
     /// The picture covering the canvas, centered, faded into the background and dithered, or nil if it can't be read.
@@ -426,11 +389,7 @@ public enum DitherArt {
                     hash ^= hash >> 13; hash = hash &* 0x5bd1e995; hash ^= hash >> 15
                     threshold += (Double(hash & 1023) / 1023 - 0.5) * jitter.amount
                 }
-                var gain = pattern.gain
-                if let ring = pattern.ring {
-                    let off = abs(hypot(Double(x) - ring.x, Double(y) - ring.y) - ring.radius) / (ring.width / 2)
-                    if off < 1 { gain *= 1 + ring.boost * (1 - off * off) }
-                }
+                let gain = pattern.gain
                 let d0 = Double(field.deviation[f]) * gain, d1 = Double(field.deviation[f + 1]) * gain
                 let d2 = Double(field.deviation[f + 2]) * gain
                 let m = max(abs(d0), abs(d1), abs(d2))

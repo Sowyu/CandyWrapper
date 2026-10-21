@@ -40,17 +40,11 @@ struct DitherArtTests {
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
 
-    /// The motion frames: no reveal shows only the background, and a send's ring is brighter on its band than off it.
-    @Test func motionFramesRevealAndRing() throws {
+    /// The motion frames: no reveal shows only the background.
+    @Test func motionFramesReveal() throws {
         let field = DitherArt.Field(width: 40, height: 40, background: [10, 10, 10],
                                     deviation: [Float](repeating: 40, count: 40 * 40 * 3))
         let hidden = try #require(DitherArt.image(field, .init(reveal: 0)))
         #expect(Set(bytes(hidden).enumerated().filter { $0.offset % 4 != 3 }.map(\.element)) == [10])
-        let ring = try #require(DitherArt.image(field, .init(ring: (20, 20, 10, 6, 1.4))))
-        let b = bytes(ring), row = ring.bytesPerRow
-        func mean(_ cells: [(Int, Int)]) -> Int { cells.map { Int(b[$0.1 * row + $0.0 * 4]) }.reduce(0, +) / cells.count }
-        let onBand = mean((16...24).flatMap { x in [(x, 10), (x, 30)] })
-        let center = mean((16...24).flatMap { x in [(x, 19), (x, 20)] })
-        #expect(onBand > center)
     }
 }
