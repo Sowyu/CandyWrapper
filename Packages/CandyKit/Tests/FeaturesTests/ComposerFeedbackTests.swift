@@ -32,8 +32,8 @@ struct ComposerFeedbackTests {
 
     @Test func transportErrorsShowNoBanner() {
         for message in ["SocketCloseError: 1006", "Socket is not connected", "The environment is not connected.",
-                        "Server stopped responding.", "ping timeout", "RpcClientError: boom",
-                        "Relay disconnected. Your DNS or firewall may be blocking T3 Connect. Try another network, such as a phone hotspot."] {
+                        "Server stopped responding.", "Mac stopped responding for 15s. It may be overloaded, asleep, or off the network.", "ping timeout", "RpcClientError: boom",
+                        "Relay disconnected. Your DNS or firewall may be blocking T3 Connect. Try another network, such as a different Wi-Fi or mobile data."] {
             #expect(F.isTransportError(message), "\(message)")
             #expect(F.surface(for: .send(message)) == .none)
         }

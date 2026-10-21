@@ -70,13 +70,14 @@ public enum ComposerFeedback {
 
     // MARK: Transport errors (client-runtime errors/transport.ts)
 
-    private static let networkHint = "Your DNS or firewall may be blocking T3 Connect. Try another network, such as a phone hotspot."
+    private static let networkHint = "Your DNS or firewall may be blocking T3 Connect. Try another network, such as a different Wi-Fi or mobile data."
     private static let transportPatterns: [NSRegularExpression] = {
         let hint = NSRegularExpression.escapedPattern(for: networkHint)
         return [
             #"\bSocketCloseError\b"#, #"\bSocketOpenError\b"#, #"\bSocket is not connected\b"#,
             #"Unable to connect to the T3 server WebSocket\."#,
             #"\b(?:is not connected|disconnected|stopped responding|could not establish a WebSocket connection)\.(?: "# + hint + ")?$",
+            #"\bstopped responding for \d+s\. It may be overloaded, asleep, or off the network\.$"#,
             #"\bClientProtocolError\b"#, #"\bRpcClientError\b"#, #"\bping timeout\b"#,
         ].map { try! NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     }()
