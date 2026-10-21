@@ -4168,11 +4168,15 @@ extension ComposerController {
         guard let checkpoint = ThreadPromptRewind.checkpoint(before: message, in: projection) else {
             toast(.warning, "No ready checkpoint is available before this message."); return
         }
-        let dialog = DialogView(kind: .alertDialog, title: "Edit from here?", message: "Rewind chat to before this message. Your prompt and attachments return to the composer.")
+        // ChatOverlayHosts.tsx:212-225 (7116325f03). The files sentence goes with the button it names.
+        let revertsFiles = projection.thread.worktreePath != nil
+        let description = "Rewind chat to before this message. Your prompt and attachments return to the composer."
+            + (revertsFiles ? " \u{201C}Revert files too\u{201D} also undoes your own edits." : "")
+        let dialog = DialogView(kind: .alertDialog, title: "Edit from here?", message: description)
         let cancel = ButtonView("Cancel", variant: .outline)
         let keep = ButtonView("Revert and keep changes")
-        let files = ButtonView("Revert files too", variant: .destructive)
-        dialog.footerButtons = projection.thread.worktreePath == nil ? [cancel, keep] : [cancel, files, keep]
+        let files = ButtonView("Revert files too", variant: .destructiveOutline)
+        dialog.footerButtons = revertsFiles ? [cancel, files, keep] : [cancel, keep]
         let host = ModalHost.present(dialog, in: window)
         cancel.action = { [weak host] in host?.close() }
         let perform: (Bool) -> Void = { [weak self, weak host] restoreFiles in
