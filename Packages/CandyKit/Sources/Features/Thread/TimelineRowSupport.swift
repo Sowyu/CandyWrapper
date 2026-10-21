@@ -360,7 +360,13 @@ final class ShineLabelView: DSView {
         set { base.text = newValue; bright.text = newValue }
     }
 
-    var shining = false { didSet { if shining != oldValue { bright.isHidden = !shining; loop?.update() } } }
+    var shining = false {
+        didSet {
+            guard shining != oldValue else { return }
+            bright.isHidden = !shining; loop?.update()
+            DitherArtView.setWorking(shining, from: self)
+        }
+    }
 
     /// Both copies take the font and line height, or the bright one drew at its own size over the base.
     var font: NSFont {
