@@ -438,7 +438,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The header's new-thread button: with several projects the palette's "New thread in..." (Sidebar.tsx:4944-4962).
         sidebar.actions.newThread = { [weak palette] in palette?.newThreadFromSidebar(shift: NSEvent.modifierFlags.contains(.shift)) }
         commands.openAddProject = { [weak palette] in palette?.openAddProject() }
-        ditherTabs = DitherTabsController(strip: layout.tabStrip, sidebar: sidebar)
         // The no-projects hero (NoProjectsHero.tsx).
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
@@ -526,6 +525,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         self.routeHistory = history
+        ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute)
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,
