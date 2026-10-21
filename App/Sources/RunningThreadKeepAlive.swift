@@ -13,6 +13,8 @@ final class RunningThreadKeepAlive {
         let store: ThreadStore
         let relay: ShellSession.ChangeRelay
         let subscription: Task<Void, Never>
+        /// The supervisor the stream runs on. A re-paired environment gets a new one, and the stream moves to it.
+        let supervisor: ObjectIdentifier
     }
 
     private let environments: Environments
@@ -53,6 +55,14 @@ final class RunningThreadKeepAlive {
             kept[id] = nil
             if id != open { retain(id, ThreadSession.Retained(store: entry.store, relay: entry.relay)) }
         }
+        // A replaced session (re-pairing) leaves the old supervisor disconnected for good, so the stream
+        // moves to the new one with the same store, which resumes from its cursor.
+        for (id, entry) in kept {
+            guard let env = id.environmentId, let session = environments.session(env),
+                  ObjectIdentifier(session.supervisor) != entry.supervisor else { continue }
+            entry.subscription.cancel()
+            kept[id] = subscribe(store: entry.store, relay: entry.relay, session: session)
+        }
         for id in running where kept[id] == nil && id != open {
             guard let env = id.environmentId, let session = environments.session(env) else { continue }
             let retained = takeRetained(id)
@@ -60,14 +70,18 @@ final class RunningThreadKeepAlive {
             relay.set {}
             let store = retained?.store ?? ThreadStore(threadId: id.localId, cache: environments.threadCache, environmentId: env,
                                                        onChange: { relay.fire() })
-            let subscription = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
-                ThreadSession.encode(await store.subscribeInput())
-            }, handler: { event in
-                guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
-                await store.apply([item])
-            })
-            kept[id] = Kept(store: store, relay: relay, subscription: subscription)
+            kept[id] = subscribe(store: store, relay: relay, session: session)
         }
+    }
+
+    private func subscribe(store: ThreadStore, relay: ShellSession.ChangeRelay, session: ShellSession) -> Kept {
+        let subscription = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
+            ThreadSession.encode(await store.subscribeInput())
+        }, handler: { event in
+            guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
+            await store.apply([item])
+        })
+        return Kept(store: store, relay: relay, subscription: subscription, supervisor: ObjectIdentifier(session.supervisor))
     }
 
     /// The supervisor each environment last heard from, and what it heard.
