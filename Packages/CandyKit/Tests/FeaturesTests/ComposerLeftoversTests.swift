@@ -56,6 +56,9 @@ struct ComposerLeftoversTests {
                                                "percent": .number(45), "detail": .string("12.3 MiB | 5.0 MiB/s")])])
         let clone = try #require(ProjectCloneSnapshot.list(json).first)
         #expect(clone.displayName == "repo" && clone.progressSummary == "Receiving objects · 45% · 12.3 MiB | 5.0 MiB/s")
+        var stalled = clone
+        stalled.stalled = true
+        #expect(stalled.progressSummary == "Receiving objects · 45% · Stalled" && stalled.renderKey != clone.renderKey)
     }
 
     @Test func projectScriptHelpers() {
