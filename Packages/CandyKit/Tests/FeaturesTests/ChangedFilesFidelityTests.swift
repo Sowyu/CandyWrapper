@@ -30,8 +30,8 @@ struct ChangedFilesFidelityTests {
             let json = try JSONSerialization.data(withJSONObject: ["threadId": projection.thread.id.rawValue, "fromTurnCount": 0, "toTurnCount": 1, "diff": patch])
             return try JSONDecoder().decode(ThreadTurnDiff.self, from: json)
         }
-        // The sandbox's diff layout setting is split since the 09 capture.
-        panel.diffPanel.layoutStyle = .split
+        // The 3473 recapture ran in a fresh browser profile, so the diff uses the default unified layout.
+        panel.diffPanel.layoutStyle = .unified
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()
         let summary = try #require(TurnDiffs.summaries(projection).first { !$0.files.isEmpty })
@@ -69,11 +69,15 @@ struct ChangedFilesFidelityTests {
                     "design/reference/\(reference).\(theme).png"))))
                 let (panel, image) = try await Self.render(dark: theme == "dark", openDiff: openDiff, cardTop: cardTop)
                 let x0 = full.pixelsWide - W
+                // Since 3473 a file opened from the card expands in the panel (DiffPanel.tsx:551-580), so the panel
+                // compares with a 3473 capture of the same state. The chat column keeps the 2861 capture.
+                let panelRef = openDiff ? try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
+                    "design/reference/\(reference)-3473.\(theme).png")))) : full
                 let regions: [(String, Int, Int, Int)] = openDiff
                     ? [("chat", 0, chat, compared), ("panel", chat, W - chat, Int(Self.size.height * 2))]
                     : [("main", 0, W, compared)]
                 for (name, x, width, height) in regions {
-                    let ref = ThreadFidelityTests.crop(full, x: x0 + x, width: width, height: height)
+                    let ref = ThreadFidelityTests.crop(name == "panel" ? panelRef : full, x: x0 + x, width: width, height: height)
                     let ours = ThreadFidelityTests.crop(image, x: x, width: width, height: height)
                     let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [(name, 0, height / 2)])
                     let base = "\(reference).\(name).\(theme)"
