@@ -69,6 +69,8 @@ public final class DotGridSpinnerView: NSView {
     public override func viewDidHide() { super.viewDidHide(); sync() }
     public override func viewDidUnhide() { super.viewDidUnhide(); sync() }
 
+    var sweepingForTesting: Bool { dots.contains { $0.animation(forKey: "sweep") != nil } }
+
     private func sync() {
         let visible = window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false
         let run = visible && !isHiddenOrHasHiddenAncestor && !Motion.reduced
