@@ -13,6 +13,12 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
+
+- [ ] M. Readable thread text over the art, the panel fade from the very top with no black band, and the gap at the fade's right edge (taken 2026-10-22, agent dither-art). Files: `DitherArtView`, `DitherChrome`, `SidebarLayoutView`, the thread panel's top.
+- [ ] N. A working dot grid on tabs and hover on account menu rows (taken 2026-10-22, agent dither-tabs2). Files: `DitherTabStripView`, `DitherTabsController`, `SidebarAccountRowView`'s menu, `MenuView` hover under Dither.
+- [ ] O. Settings redesigned for Redesign (taken 2026-10-22, agent dither-settings2). Files: `Features/Settings/**` (Dither paths), the settings shell.
+
 ### Dither round 5, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [x] K. One size and stroke for Redesign's icons and smooth continuous corners everywhere (done 2026-10-22, agent dither-shape: Hugeicons glyphs draw 14pt in 11-14pt boxes and 16pt in 15-16pt boxes with one 1.2pt stroke and no duotone tint at those sizes, menu and picker glyphs passed as lucide definitions now swap to Hugeicons too; continuous corners on every layer radius and BoxDecoration path under Dither, radii 8 controls, 12 cards and rows, 16 panel and composer; checked on screen in dark and light against a before build: the hovered row's clock, check and PR glyph, the project menu, settings cards and the composer). Also the panel gap: the main panel runs flush to the window's right and bottom edges and up to the tab strip band, its top blends into the band's color (`DitherArtView` blend, the thread's top fade in the band color at full strength on top), and the hairline stays only on the sidebar side; checked in dark and light on a thread, a new thread and Settings, header toggles and the toast sit below the band. Not fixed: the toast's close button overlapping the right panel toggle, which predates this. Files: DesignSystem icons, `DitherChrome`, `BoxDecoration`, sidebar row trailing controls.
