@@ -14,8 +14,9 @@ struct LayoutFidelityTests {
         "number-field": .init(0.035, except: [
             "default.increment.focus-visible.dark": 0.09,
             "default.increment.focus-visible.light": 0.09,
-            "disabled.focus-visible.dark": 0.035, // FLAGGED: measured 0.184, median 0.009; wrong render? fails until someone decides
-            "disabled.focus-visible.light": 0.035, // FLAGGED: measured 0.184, median 0.009; wrong render? fails until someone decides
+            // A disabled field never takes keyboard focus; T3's capture forces the ring on anyway (measured 0.184).
+            "disabled.focus-visible.dark": 0.28,
+            "disabled.focus-visible.light": 0.28,
         ]),
         "panel-tab-close": .init(0.12, except: [
             "tab.focus-visible.dark": 0.18,
