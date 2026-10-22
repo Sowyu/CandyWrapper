@@ -5,10 +5,14 @@ import DesignSystem
 
 /// The thread notification toasts and the hold-to-quit overlay against T3's markup in Chromium (specs from
 /// scripts/gen-notifications-spec.py, references in design/component-reference/{thread-toast,quit-hold-overlay}).
-/// Writes ref, ours and diff PNGs plus report-notifications.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-notifications.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct NotificationsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/notifications")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "notifications": .init(0.05),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("notifications")
 
     static func view(_ component: String, _ n: [String: String]) -> NSView {
         if component == "quit-hold-overlay" {
@@ -63,6 +67,7 @@ struct NotificationsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("notifications", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("notifications", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY notifications: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Notifications</title><body style='font:13px -apple-system'>" + images

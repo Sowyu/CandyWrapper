@@ -6,10 +6,14 @@ import T3Protocol
 
 /// The settings shell, Settings > Connections and the Add Environment dialog against T3's markup in
 /// Chromium (spec from scripts/gen-connections-spec.py, references in design/component-reference/connections).
-/// Writes ref, ours and diff PNGs plus report-connections.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-connections.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ConnectionsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/connections")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "connections": .init(0.065, except: ["create-link-dialog.rest.light": 0.07]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("connections")
 
     final class Canvas: DSView {
         override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
@@ -159,6 +163,7 @@ struct ConnectionsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("connections", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("connections", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY connections: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Connections</title><body style='font:13px -apple-system'>" + images

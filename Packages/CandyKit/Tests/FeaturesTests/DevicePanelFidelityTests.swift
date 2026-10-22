@@ -5,8 +5,12 @@ import T3Store
 @testable import Features
 
 /// Device empty and unavailable states against official markup in headless Chromium.
-@MainActor
+@MainActor @Suite(.fidelity)
 struct DevicePanelFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "devicePanel": .init(0.03),
+    ]
     static let out = SidebarFidelityTests.repo.appendingPathComponent("design/device-panel-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
@@ -45,6 +49,7 @@ struct DevicePanelFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("device-panels", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("devicePanel", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY device-panels: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Device panels</title><body style='font:13px -apple-system'>" + images

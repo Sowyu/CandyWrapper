@@ -10,10 +10,15 @@ import T3Store
 /// bottom 17px under the composer's top) on the main panel's surface, and the compared band runs
 /// from just above the banner to the composer's top edge. The data is the reference threads'
 /// (fixtures/transcripts/04-threads.jsonl). Writes ref, ours and diff PNGs plus
-/// report-panels.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// report-panels.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct PanelsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/panels")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "dockedInPanel": .init(0.115),
+        "panels": .init(0.04),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("panels")
     /// Main panel: 844 wide at x 256; banner x and width inside it.
     static let panelWidth: CGFloat = 844, bannerX: CGFloat = 76, bannerWidth: CGFloat = 692
 
@@ -62,7 +67,7 @@ struct PanelsFidelityTests {
 
     @Test func panels() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for reference in ["05-approval-request", "06-user-input-request"] {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(Self.file(reference, theme)))))
@@ -81,10 +86,12 @@ struct PanelsFidelityTests {
                 let line = "\(base): \(String(format: "%.2f", total * 100))% differ"
                 print("panels", line)
                 lines.append(line)
+                cases.append((base, total))
                 images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.5' src='panels/\(base).\($0).png'>" }.joined() + "</p>"
                 #expect(total < 0.05, "\(line)")
             }
         }
+        Self.ceilings.check("panels", cases)
         let html = "<!doctype html><meta charset=utf-8><title>Panels</title><body style='font:13px -apple-system'>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-panels.html"), atomically: true, encoding: .utf8)
     }
@@ -133,7 +140,7 @@ struct PanelsFidelityTests {
     /// band runs from the banner's top to the panel's bottom.
     @Test func dockedInPanel() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for reference in ["05-approval-request", "06-user-input-request"] {
             for theme in ["light", "dark"] {
                 let dark = theme == "dark"
@@ -178,11 +185,13 @@ struct PanelsFidelityTests {
                 let line = "\(base): \(String(format: "%.2f", total * 100))% differ, composer \(panel.composer.frame.height) tall"
                 print("panels", line)
                 lines.append(line)
+                cases.append((base, total))
                 images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='panels/\(base).\($0).png'>" }.joined() + "</p>"
                 // Light carries the composer's drop shadow, which offscreen snapshots don't draw (about 5 points of it).
                 #expect(total < 0.09, "\(line)")
             }
         }
+        Self.ceilings.check("dockedInPanel", cases)
         let html = "<!doctype html><meta charset=utf-8><title>Docked panels</title><body style='font:13px -apple-system'>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-panels-docked.html"), atomically: true, encoding: .utf8)
     }

@@ -5,10 +5,14 @@ import DesignSystem
 
 /// Settings > Appearance's Themes heading and cards, and the theme editor, against T3's markup in Chromium (spec
 /// from scripts/gen-theme-settings-spec.py, references in design/component-reference/theme-settings). Writes ref,
-/// ours and diff PNGs plus report-theme-settings.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// ours and diff PNGs plus report-theme-settings.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ThemeSettingsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/theme-settings")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "themeSettings": .init(0.055),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("theme-settings")
 
     static func make(_ kind: String, size: NSSize) -> NSView {
         switch kind {
@@ -74,6 +78,7 @@ struct ThemeSettingsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("theme-settings", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("themeSettings", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY theme-settings: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Theme settings</title><body style='font:13px -apple-system'>" + images

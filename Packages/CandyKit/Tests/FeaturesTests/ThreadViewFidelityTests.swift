@@ -7,10 +7,17 @@ import T3Protocol
 /// The thread details card at each density and the context chips in a sent message, against T3's markup in
 /// Chromium (spec from scripts/gen-threadview-spec.py, references in design/component-reference/threadview).
 /// The full card is the thread details panel of design/reference/44-thread-details-panel.
-/// Writes ref, ours and diff PNGs plus /tmp/candywrapper-fidelity/report-threadview.html.
-@MainActor
+/// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-threadview.html.
+@MainActor @Suite(.fidelity)
 struct ThreadViewFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/threadview")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "threadview": .init(0.1, except: [
+            "chip.image.rest.dark": 0.12,
+            "chip.image.rest.light": 0.12,
+        ]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("threadview")
 
     static func card(_ density: ThreadDetailsCardView.Density, size: CGSize) -> ThreadDetailsCardView {
         let card = ThreadDetailsCardView(frame: NSRect(origin: NSPoint(x: 8, y: 8), size: size))
@@ -115,6 +122,7 @@ struct ThreadViewFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("threadview", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("threadview", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY threadview: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Thread view</title><body style='font:13px -apple-system'>" + images

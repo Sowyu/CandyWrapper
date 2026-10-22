@@ -7,10 +7,14 @@ import T3Protocol
 /// The settings nav with search results, a General section and a Keybindings section against T3's markup in
 /// Chromium (spec from scripts/gen-settings-spec.py, references in design/component-reference/settings-pages).
 /// The Keybindings section is the first rows of design/reference/19-settings-keybindings.
-/// Writes ref, ours and diff PNGs plus report-settings-pages.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-settings-pages.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct SettingsPagesFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/settings-pages")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "settingsPages": .init(0.05),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("settings-pages")
 
     static func context() -> SettingsPageContext {
         let c = SettingsPageContext()
@@ -82,6 +86,7 @@ struct SettingsPagesFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("settings-pages", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("settingsPages", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY settings-pages: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Settings pages</title><body style='font:13px -apple-system'>" + images

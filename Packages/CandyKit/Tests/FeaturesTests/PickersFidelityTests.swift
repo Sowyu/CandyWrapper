@@ -9,10 +9,14 @@ import T3Store
 /// select), light and dark, plus the footer controls against the closed footer in 03c. Each popup
 /// is cropped at its border box from the capture; the data is the recorded server config in
 /// fixtures/transcripts/01-basic.jsonl with Claude Haiku 5.5 selected, as in the captures. Writes
-/// ref, ours and diff PNGs plus report-pickers.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// ref, ours and diff PNGs plus report-pickers.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct PickersFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/pickers")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "popupsAgainstReferences": .init(0.055),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("pickers")
 
     static func recordedConfig() throws -> ServerProviderConfig {
         let text = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/transcripts/01-basic.jsonl"), encoding: .utf8)
@@ -89,7 +93,7 @@ struct PickersFidelityTests {
 
     @Test func popupsAgainstReferences() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for c in Self.cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
@@ -105,6 +109,7 @@ struct PickersFidelityTests {
                 let line = "\(base): \(String(format: "%.2f", total * 100))% differ, natural size \(natural.width)x\(natural.height) vs \(c.rect.width)x\(c.rect.height)"
                 print("pickers", line)
                 lines.append(line)
+                cases.append((base, total))
                 images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.5' src='pickers/\(base).\($0).png'>" }.joined() + "</p>"
                 #expect(total < 0.05, "\(line)")
                 #expect(abs(natural.width - c.rect.width) < 1 && abs(natural.height - c.rect.height) < 1, "\(line)")
@@ -127,16 +132,20 @@ struct PickersFidelityTests {
             let line = "\(base): \(String(format: "%.2f", total * 100))% differ, width \(width)"
             print("pickers", line)
             lines.append(line)
+            cases.append((base, total))
             images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img src='pickers/\(base).\($0).png'>" }.joined() + "</p>"
             #expect(total < 0.05, "\(line)")
         }
+        Self.ceilings.check("popupsAgainstReferences", cases)
         let html = "<!doctype html><meta charset=utf-8><title>Pickers</title><body style='font:13px -apple-system'>"
             + "<p>T3 web client capture, ours, diff (red where a channel differs by more than \(SidebarFidelityTests.tolerance)/255).</p>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-pickers.html"), atomically: true, encoding: .utf8)
     }
 
-    /// The gallery sections render; written next to the fidelity images for eyeballing.
-    @Test func gallerySections() throws {
+    /// The gallery sections render; written next to the fidelity images for eyeballing. An export tool, not a test:
+    /// runs only with CW_EXPORT=1.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CW_EXPORT"] != nil, "export tool, set CW_EXPORT=1"))
+    func gallerySections() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         for (i, section) in PickersGallery.sections.enumerated() {
             let view = section.make()

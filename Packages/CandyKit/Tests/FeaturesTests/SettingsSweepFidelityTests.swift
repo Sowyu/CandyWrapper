@@ -3,14 +3,19 @@ import Testing
 @testable import Features
 import DesignSystem
 
-@MainActor struct SettingsSweepFidelityTests {
+@MainActor @Suite(.fidelity)
+struct SettingsSweepFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "settingsSweepStates": .init(0.075),
+    ]
     @Test func settingsSweepStates() throws {
         let repo = SidebarFidelityTests.repo
         let refDir = repo.appendingPathComponent("design/component-reference/settings-sweep")
         let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
-        let out = repo.appendingPathComponent(".settings-sweep-fidelity")
+        let out = Fidelity.root.appendingPathComponent("settings-sweep")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        var differences: [Double] = []
+        var differences: [(String, Double)] = []
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         for name in manifest.keys.sorted() {
@@ -32,14 +37,15 @@ import DesignSystem
                 let reference = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(base + ".png"))))
                 let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(reference.pixelsWide) / 2, height: CGFloat(reference.pixelsHigh) / 2), scale: 2, dark: theme == "dark")
                 let (difference, _, diff) = SidebarFidelityTests.compare(reference, ours, bands: [])
-                differences.append(difference)
+                differences.append((base, difference))
                 try Snapshot.writePNG(ours, to: out.appendingPathComponent(base + ".ours.png"))
                 try Snapshot.writePNG(diff, to: out.appendingPathComponent(base + ".diff.png"))
                 print(String(format: "settings-sweep %@ %.2f%%", base, difference * 100))
                 #expect(difference < 0.09)
             }
         }
-        print(String(format: "FIDELITY settings-sweep: %d cases, mean differing %.2f%%", differences.count, differences.reduce(0, +) / Double(differences.count) * 100))
+        print(String(format: "FIDELITY settings-sweep: %d cases, mean differing %.2f%%", differences.count, differences.map(\.1).reduce(0, +) / Double(differences.count) * 100))
+        Self.ceilings.check("settingsSweepStates", differences)
     }
 }
 

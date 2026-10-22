@@ -5,15 +5,19 @@ import DesignSystem
 import T3Store
 @testable import Features
 
-@MainActor
+@MainActor @Suite(.fidelity)
 struct ThreadCompletionFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "threadCompletionControls": .init(0.06),
+    ]
     @Test func threadCompletionControls() throws {
         let repo = SidebarFidelityTests.repo
         let dir = repo.appendingPathComponent("design/component-reference/thread-completion")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/thread-completion.json"))) as! [String: Any]
-        let out = repo.appendingPathComponent(".wp710c-fidelity")
+        let out = Fidelity.root.appendingPathComponent("wp710c")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        var differences: [Double] = []
+        var differences: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String, n = c["native"] as! [String: Any]
             for theme in ["light", "dark"] {
@@ -45,14 +49,15 @@ struct ThreadCompletionFidelityTests {
                 canvas.addSubview(view)
                 let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2), scale: 2, dark: theme == "dark")
                 let (difference, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
-                differences.append(difference)
+                differences.append(("\(name).\(theme)", difference))
                 try Snapshot.writePNG(ours, to: out.appendingPathComponent("\(name).\(theme).png"))
                 try Snapshot.writePNG(diff, to: out.appendingPathComponent("\(name).\(theme).diff.png"))
                 print("thread-completion \(name).\(theme): \(String(format: "%.2f", difference * 100))%")
             }
         }
-        let mean = differences.reduce(0,+) / Double(differences.count)
-        print("FIDELITY thread-completion: \(differences.count) cases, mean \(String(format: "%.2f", mean * 100))%, worst \(String(format: "%.2f", (differences.max() ?? 0) * 100))%")
+        Self.ceilings.check("threadCompletionControls", differences)
+        let mean = differences.map(\.1).reduce(0, +) / Double(differences.count)
+        print("FIDELITY thread-completion: \(differences.count) cases, mean \(String(format: "%.2f", mean * 100))%, worst \(String(format: "%.2f", (differences.map(\.1).max() ?? 0) * 100))%")
         #expect(mean < 0.05)
     }
 }

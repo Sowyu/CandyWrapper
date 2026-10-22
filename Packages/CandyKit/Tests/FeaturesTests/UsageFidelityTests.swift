@@ -7,10 +7,14 @@ import T3Store
 
 /// The Usage header, a cost chart, the /usage-limits banner, the Scheduled Tasks list and the editor's schedule
 /// rows against T3's markup in Chromium (spec from scripts/gen-usage-spec.py, references in
-/// design/component-reference/usage). Writes ref, ours and diff PNGs plus report-usage.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// design/component-reference/usage). Writes ref, ours and diff PNGs plus report-usage.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct UsageFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/usage")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "usage": .init(0.095),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("usage")
 
     static func sized(_ v: NSView, _ size: NSSize) -> NSView {
         v.frame = NSRect(origin: .zero, size: size)
@@ -118,6 +122,7 @@ struct UsageFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("usage", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("usage", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY usage: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Usage</title><body style='font:13px -apple-system'>" + images

@@ -6,10 +6,14 @@ import T3Protocol
 
 /// WP7.18 SSH password and relay install dialog bodies against the official markup in Chromium
 /// (scripts/gen-desktop-managed-spec.py). Writes ref, ours and diff PNGs plus report-desktop-managed.html
-/// to /tmp/candywrapper-fidelity.
-@MainActor
+/// to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct DesktopManagedFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/desktop-managed")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "desktopManaged": .init(0.055),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("desktop-managed")
 
     static func make(_ n: [String: String], size: NSSize) throws -> NSView {
         if n["kind"] == "ssh" {
@@ -49,6 +53,7 @@ struct DesktopManagedFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("desktop-managed", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("desktopManaged", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY desktop-managed: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Desktop-managed environments</title><body style='font:13px -apple-system'>" + images

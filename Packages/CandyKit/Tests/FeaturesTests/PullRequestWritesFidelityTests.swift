@@ -8,10 +8,14 @@ import T3Store
 /// WP7.5c's popups against T3's markup in Chromium: the checks popover, the composer's review form and a
 /// pull request link's preview card (spec from scripts/gen-pull-request-writes-spec.py, references in
 /// design/component-reference/pull-request-writes). Writes ref, ours and diff PNGs plus
-/// report-pull-request-writes.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// report-pull-request-writes.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct PullRequestWritesFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/pull-request-writes")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "pullRequestWrites": .init(0.11),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("pull-request-writes")
     static let nowMs = T3Timestamp.parseEpochMs("2026-10-10T16:00:00Z")!
 
     static func view(_ name: String, size: CGSize) throws -> NSView {
@@ -68,6 +72,7 @@ struct PullRequestWritesFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("pull-request-writes", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("pullRequestWrites", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY pull-request-writes: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Pull request writes</title><body style='font:13px -apple-system'>" + images

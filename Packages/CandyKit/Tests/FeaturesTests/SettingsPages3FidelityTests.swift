@@ -6,10 +6,14 @@ import T3Protocol
 
 /// WP7.14: Bitbucket credentials, a provider's Environment section and the provider version popover against T3's
 /// markup in Chromium (spec from scripts/gen-settings-pages3-spec.py, references in design/component-reference/settings-pages3).
-/// Writes ref, ours and diff PNGs plus report-settings-pages3.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-settings-pages3.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct SettingsPages3FidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/settings-pages3")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "settingsPages3": .init(0.11),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("settings-pages3")
 
     static func make(_ n: [String: String], size: NSSize) throws -> NSView {
         let sized = SettingsPages2FidelityTests.sized
@@ -76,6 +80,7 @@ struct SettingsPages3FidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("settings-pages3", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("settingsPages3", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY settings-pages3: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Settings pages 3</title><body style='font:13px -apple-system'>" + images

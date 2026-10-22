@@ -4,9 +4,13 @@ import DesignSystem
 @testable import Features
 
 /// The small areas sweep's new states against design/component-reference/small-areas (scripts/gen-small-areas-spec.py).
-@MainActor
+@MainActor @Suite(.fidelity)
 struct SmallAreasFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/small-areas")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "smallAreas": .init(0.06),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("small-areas")
 
     static func make(_ native: [String: String], size: NSSize) -> NSView {
         switch native["kind"] {
@@ -68,6 +72,7 @@ struct SmallAreasFidelityTests {
             }
         }
         for (base, total) in lines { print("small-areas", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("smallAreas", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY small-areas: %d cases, mean differing %.2f%%, worst %.2f%%", lines.count, mean * 100,
                      (lines.map(\.1).max() ?? 0) * 100))

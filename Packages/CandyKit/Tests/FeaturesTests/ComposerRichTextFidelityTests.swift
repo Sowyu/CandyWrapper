@@ -6,10 +6,14 @@ import T3Protocol
 
 /// Inline marks and blocks (lists, a nested list, a quote, headings, tasks) against T3's markup in Chromium
 /// (spec from scripts/gen-composer-rich-spec.py, references in design/component-reference/composer-rich).
-/// Writes ref, ours and diff PNGs plus report-composer-rich.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-composer-rich.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ComposerRichTextFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/composer-rich")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "composerRichText": .init(0.06),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("composer-rich")
 
     @Test func composerRichText() throws {
         let repo = SidebarFidelityTests.repo
@@ -43,6 +47,7 @@ struct ComposerRichTextFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("composer-rich", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("composerRichText", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY composer-rich: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Composer rich text</title><body style='font:13px -apple-system'>" + images

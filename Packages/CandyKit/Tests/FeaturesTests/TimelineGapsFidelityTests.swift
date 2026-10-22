@@ -8,10 +8,14 @@ import T3Store
 /// The timeline task's surfaces against T3's markup in Chromium (spec from scripts/gen-timeline-gaps-spec.py,
 /// references in design/component-reference/timeline-gaps): the plan's save dialog and Implement split, the
 /// citation comment popover, the inspector's rich blocks and the attachment preview header.
-/// Writes ref, ours and diff PNGs plus /tmp/candywrapper-fidelity/report-timeline-gaps.html.
-@MainActor
+/// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-timeline-gaps.html.
+@MainActor @Suite(.fidelity)
 struct TimelineGapsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/timeline-gaps")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "timelineGaps": .init(0.075),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("timeline-gaps")
 
     static func item(_ fields: [String: JSONValue]) -> TurnItem {
         var o: [String: JSONValue] = ["id": .string("item-1"), "threadId": .string("t"), "ordinal": .number(1), "status": .string("completed"),
@@ -134,6 +138,7 @@ struct TimelineGapsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("timeline-gaps", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("timelineGaps", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY timeline-gaps: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Timeline gaps</title><body style='font:13px -apple-system'>" + images

@@ -6,10 +6,14 @@ import DesignSystem
 /// The composer footer's narrow states and the "..." overflow menu against T3's markup in Chromium
 /// (spec from scripts/gen-composer-footer-spec.py, references in design/component-reference/composer-footer).
 /// The cluster cases start at the traits separator. Writes ref, ours and diff PNGs plus
-/// report-composer-footer.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// report-composer-footer.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ComposerFooterFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/composer-footer")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "composerFooter": .init(0.06),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("composer-footer")
 
     /// Lays the cluster out at the widest width that gives the wanted fit.
     static func fitted(_ p: ComposerPickers, iconOnly: Int, hidden: Int) -> PickerControlsView {
@@ -69,6 +73,7 @@ struct ComposerFooterFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("composer-footer", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("composerFooter", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY composer-footer: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Composer footer</title><body style='font:13px -apple-system'>" + images

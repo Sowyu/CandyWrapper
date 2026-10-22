@@ -7,10 +7,14 @@ import T3Store
 /// The right panel's tab strip, the surface launcher, the Files surface and a file tab's subheader
 /// against T3's markup in Chromium (spec from scripts/gen-files-spec.py, references in
 /// design/component-reference/files). Writes ref, ours and diff PNGs plus report-files.html to
-/// /tmp/candywrapper-fidelity.
-@MainActor
+/// `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct FilesFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/files")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "files": .init(0.045),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("files")
 
     /// Clips the panel's left border off, as the reference has none.
     final class Clip: DSView {}
@@ -79,6 +83,7 @@ struct FilesFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("files", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("files", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY files: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Files</title><body style='font:13px -apple-system'>" + images

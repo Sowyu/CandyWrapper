@@ -8,10 +8,14 @@ import T3Store
 /// The Pull Requests page's rows, the pull request panel's header and tab bar, and the Link pull request
 /// dialog against T3's markup in Chromium (spec from scripts/gen-pull-requests-spec.py, references in
 /// design/component-reference/pull-requests). Writes ref, ours and diff PNGs plus report-pull-requests.html
-/// to /tmp/candywrapper-fidelity.
-@MainActor
+/// to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct PullRequestsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/pull-requests")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "pullRequests": .init(0.07),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("pull-requests")
     static let nowMs = T3Timestamp.parseEpochMs("2026-10-10T16:00:00Z")!
 
     /// The list's groups as the page lays them out (`space-y-3` groups, `space-y-0.5` rows).
@@ -92,6 +96,7 @@ struct PullRequestsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("pull-requests", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("pullRequests", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY pull-requests: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Pull requests</title><body style='font:13px -apple-system'>" + images

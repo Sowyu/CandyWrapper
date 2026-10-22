@@ -8,10 +8,14 @@ import T3Store
 /// The terminal drawer's chrome (with one terminal, empty, and two side by side with the list) against T3's markup in Chromium
 /// (spec from scripts/gen-terminal-drawer-spec.py, references in design/component-reference/
 /// terminal-drawer). Writes ref, ours and diff PNGs plus report-terminal-drawer.html to
-/// /tmp/candywrapper-fidelity.
-@MainActor
+/// `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct TerminalDrawerFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/terminal-drawer")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "terminalDrawer": .init(0.035),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("terminal-drawer")
 
     static func view(_ name: String, size: CGSize) -> NSView {
         let drawer = TerminalDrawerView(frame: NSRect(x: 8, y: 8, width: size.width, height: size.height))
@@ -68,6 +72,7 @@ struct TerminalDrawerFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("terminal-drawer", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("terminalDrawer", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY terminal-drawer: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Terminal drawer</title><body style='font:13px -apple-system'>" + images

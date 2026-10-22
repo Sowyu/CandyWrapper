@@ -5,10 +5,14 @@ import T3Protocol
 @testable import Features
 
 /// WP7.14b provider setup against the official markup in Chromium.
-/// Writes ref, ours and diff PNGs plus report-provider-setup.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-provider-setup.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ProviderSetupFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/provider-setup")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "providerSetup": .init(0.145),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("provider-setup")
 
     static func make(_ n: [String: String], size: NSSize) throws -> NSView {
         if n["kind"] == "drivers" { return ProviderAddDriverGrid(choices: [("codex", "Codex"), ("claudeAgent", "Claude")], selected: "codex") }
@@ -51,6 +55,7 @@ struct ProviderSetupFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("provider-setup", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("providerSetup", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY provider-setup: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Settings pages 3</title><body style='font:13px -apple-system'>" + images

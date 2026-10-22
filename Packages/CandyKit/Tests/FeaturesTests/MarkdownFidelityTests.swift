@@ -5,13 +5,18 @@ import DesignSystem
 
 /// MarkdownView against T3's ChatMarkdown markup rendered in Chromium with T3's Shiki
 /// (spec from scripts/gen-markdown-spec.py, references in design/component-reference/markdown).
-/// Writes ref, ours and diff PNGs plus /tmp/candywrapper-fidelity/report-markdown.html.
-@MainActor
+/// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-markdown.html.
+@MainActor @Suite(.fidelity)
 struct MarkdownFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "markdown": .init(0.055),
+        "wideTables": .init(0.085),
+    ]
     static let repo = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity")
+    static let out = Fidelity.root
     static let tolerance = 8
 
     final class Canvas: DSView {
@@ -24,7 +29,7 @@ struct MarkdownFidelityTests {
         let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
         let dir = Self.out.appendingPathComponent("markdown")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var rows = "", lines: [String] = [], total = 0.0, count = 0
+        var rows = "", lines: [String] = [], cases: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String
             let native = c["native"] as! [String: String]
@@ -51,22 +56,23 @@ struct MarkdownFidelityTests {
                 let refHeight = manifest[name]?["height"] ?? 0
                 let line = String(format: "%@ %@: %.2f%% differ, height ref %.2f ours %.2f", name, theme, share * 100, refHeight, height)
                 lines.append(line)
-                total += share; count += 1
+                cases.append((base, share))
                 rows += "<tr><td>\(line)</td>" + ["ref", "ours", "diff"].map { "<td><img src='markdown/\(base).\($0).png'></td>" }.joined() + "</tr>"
             }
         }
         for line in lines { print("MARKDOWN", line) }
-        print(String(format: "FIDELITY Markdown: %d cases, mean differing %.2f%%", count, total / Double(max(count, 1)) * 100))
+        print(String(format: "FIDELITY Markdown: %d cases, mean differing %.2f%%", cases.count, cases.map(\.1).reduce(0, +) / Double(max(cases.count, 1)) * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Markdown fidelity</title><style>body{font:13px -apple-system}td{vertical-align:top}img{zoom:.5}</style>"
             + "<p>T3 in Chromium, ours, diff (red where a channel differs by more than \(Self.tolerance)/255).</p><table>\(rows)</table>"
         try html.write(to: Self.out.appendingPathComponent("report-markdown.html"), atomically: true, encoding: .utf8)
-        #expect(count > 0)
+        Self.ceilings.check("markdown", cases)
     }
 
     @Test func wideTables() throws {
         let refDir = Self.repo.appendingPathComponent("design/component-reference/wide-tables")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repo.appendingPathComponent("design/component-reference/wide-tables.json"))) as! [String: Any]
         let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
+        var cases: [(String, Double)] = []
         for entry in spec["cases"] as! [[String: Any]] {
             let name = entry["name"] as! String, native = entry["native"] as! [String: String]
             for theme in ["light", "dark"] {
@@ -85,9 +91,10 @@ struct MarkdownFidelityTests {
                 try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent("wide-\(name)-\(theme)-diff.png"))
                 print("WIDE TABLE", name, theme, "difference", share, "height", height, "reference", manifest[name]?["height"] ?? 0)
                 #expect(abs(height - (manifest[name]?["height"] ?? 0)) < 1)
-                #expect(share < 0.08)
+                cases.append(("\(name).\(theme)", share))
             }
         }
+        Self.ceilings.check("wideTables", cases)
     }
 
     static func pixels(_ rep: NSBitmapImageRep, _ w: Int, _ h: Int) -> [UInt8] {

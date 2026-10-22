@@ -6,8 +6,12 @@ import T3Protocol
 @testable import Features
 
 /// Review draft and SSH fields against official markup in headless Chromium.
-@MainActor
+@MainActor @Suite(.fidelity)
 struct PanelLeftoversFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "panelLeftovers": .init(0.06),
+    ]
     static let out = SidebarFidelityTests.repo.appendingPathComponent("design/panel-leftovers-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
@@ -53,6 +57,7 @@ struct PanelLeftoversFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("panel-leftovers", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("panelLeftovers", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY panel-leftovers: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Device panels</title><body style='font:13px -apple-system'>" + images

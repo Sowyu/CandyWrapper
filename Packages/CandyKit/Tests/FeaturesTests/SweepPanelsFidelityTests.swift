@@ -6,8 +6,12 @@ import T3Protocol
 @testable import Features
 
 /// Code-language search and empty states against official component markup.
-@MainActor
+@MainActor @Suite(.fidelity)
 struct SweepPanelsFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "panelLeftovers": .init(0.095),
+    ]
     static let out = SidebarFidelityTests.repo.appendingPathComponent("design/sweep-panels-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
@@ -48,6 +52,7 @@ struct SweepPanelsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("sweep-panels", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("panelLeftovers", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY sweep-panels: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Device panels</title><body style='font:13px -apple-system'>" + images

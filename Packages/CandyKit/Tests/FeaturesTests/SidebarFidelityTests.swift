@@ -7,13 +7,17 @@ import T3Store
 
 /// Whole-sidebar comparison: our sidebar at 256x780, 2x, with the reference dataset, against the left 256pt
 /// of design/reference/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
-/// report-sidebar-whole.html to /tmp/candywrapper-fidelity. Text differs where the data differs.
-@MainActor
+/// report-sidebar-whole.html to `Fidelity.root`. Text differs where the data differs.
+@MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "wholeSidebar": .init(0.11),
+    ]
     static let repo = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/sidebar-whole")
+    static let out = Fidelity.root.appendingPathComponent("sidebar-whole")
     static let tolerance = 8
 
     static func render(dark: Bool) -> NSBitmapImageRep {
@@ -72,7 +76,7 @@ struct SidebarFidelityTests {
         // The 80pt header band is CandyWrapper's candy art, not T3's NightlySkyArt, so it differs by design.
         let bands = [("titlebar", 0, 52), ("search", 52, 100), ("first card", 100, 184), ("list", 100, 740), ("footer", 740, 780),
                      ("below the art", 80, 780)]
-        var lines: [String] = []
+        var lines: [String] = [], cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
                 "design/reference/02-sidebar-populated.\(theme).png"))))
@@ -86,9 +90,12 @@ struct SidebarFidelityTests {
                 + perBand.map { "\($0.0) \(String(format: "%.2f", $0.1 * 100))%" }.joined(separator: ", ")
             print("sidebar-whole", line)
             lines.append(line)
+            // The titlebar and search bands hold the candy art, not T3's NightlySkyArt, so they differ by design.
+            cases += perBand.filter { !["titlebar", "search"].contains($0.0) }.map { ("\(theme).\($0.0)", $0.1) }
         }
         let html = "<!doctype html><title>Sidebar</title><body style='font:13px -apple-system'>" + lines.map { "<p>\($0)</p>" }.joined()
             + ["light", "dark"].map { t in "<p>" + ["ref", "ours", "diff"].map { "<img style='zoom:.5' src='sidebar-whole/\(t).\($0).png'>" }.joined() + "</p>" }.joined()
+        Self.ceilings.check("wholeSidebar", cases)
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-sidebar-whole.html"), atomically: true, encoding: .utf8)
     }
 }

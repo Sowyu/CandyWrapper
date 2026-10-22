@@ -6,10 +6,17 @@ import T3Protocol
 
 /// The branch toolbar under the draft composer, the thread details card, the git actions menu and the commit
 /// dialog against T3's markup in Chromium (spec from scripts/gen-git-spec.py, references in
-/// design/component-reference/git). Writes ref, ours and diff PNGs plus report-git.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// design/component-reference/git). Writes ref, ours and diff PNGs plus report-git.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct GitFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/git")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "git": .init(0.06, except: [
+            "strip.checkout.rest.light": 0.155,
+            "strip.worktree.rest.light": 0.155,
+        ]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("git")
 
     static func icon(_ name: String) -> IconDefinition { IconName(rawValue: name)!.definition }
 
@@ -89,6 +96,7 @@ struct GitFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("git", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("git", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY git: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Git</title><body style='font:13px -apple-system'>" + images

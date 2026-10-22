@@ -7,10 +7,14 @@ import DesignSystem
 /// against T3's markup in Chromium (spec from scripts/gen-banner-stack-spec.py, references in
 /// design/component-reference/banner-stack). Offscreen snapshots draw no shadows, so the peek's
 /// `shadow-md` is the one known difference. Writes ref, ours and diff PNGs plus report-banner-stack.html
-/// to /tmp/candywrapper-fidelity.
-@MainActor
+/// to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct BannerStackFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/banner-stack")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "bannerStack": .init(0.06),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("banner-stack")
 
     static func notice(_ content: ComposerNoticeBannerView.Content) -> ComposerNoticeBannerView {
         let v = ComposerNoticeBannerView()
@@ -123,6 +127,7 @@ struct BannerStackFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("banner-stack", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("bannerStack", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY banner-stack: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Banner stack</title><body style='font:13px -apple-system'>" + images

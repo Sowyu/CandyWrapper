@@ -6,7 +6,7 @@ import T3Store
 
 /// Reuse must return to the existing rest state, including child action buttons.
 /// T3 Sidebar.tsx:1582-1593 derives the surface from current pointer state.
-@MainActor
+@MainActor @Suite(.fidelity)
 struct SidebarReuseFidelityTests {
     @Test func recycledRowMatchesFreshRestState() throws {
         let items = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(),

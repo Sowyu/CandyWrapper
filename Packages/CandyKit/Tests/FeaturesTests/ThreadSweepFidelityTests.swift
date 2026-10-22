@@ -3,14 +3,18 @@ import Testing
 import DesignSystem
 @testable import Features
 
-@MainActor
+@MainActor @Suite(.fidelity)
 struct ThreadSweepFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "threadSweepStates": .init(0.07, except: ["permission-stacked.light": 0.17]),
+    ]
     @Test func threadSweepStates() throws {
         let repo = SidebarFidelityTests.repo
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/thread-sweep.json"))) as! [String: Any]
-        let out = repo.appendingPathComponent(".thread-sweep-fidelity")
+        let out = Fidelity.root.appendingPathComponent("thread-sweep")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        var errors: [Double] = []
+        var errors: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String, n = c["native"] as! [String: Any]
             for theme in ["light", "dark"] {
@@ -28,14 +32,15 @@ struct ThreadSweepFidelityTests {
                 canvas.addSubview(view)
                 let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2), scale: 2, dark: theme == "dark")
                 let (error, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
-                errors.append(error)
+                errors.append(("\(name).\(theme)", error))
                 try Snapshot.writePNG(ours, to: out.appendingPathComponent("\(name).\(theme).png"))
                 try Snapshot.writePNG(diff, to: out.appendingPathComponent("\(name).\(theme).diff.png"))
                 print("thread-sweep \(name).\(theme): \(String(format: "%.2f", error * 100))%")
             }
         }
-        let mean = errors.reduce(0, +) / Double(errors.count)
-        print("FIDELITY thread-sweep: \(errors.count) cases, mean \(String(format: "%.2f", mean * 100))%, worst \(String(format: "%.2f", (errors.max() ?? 0) * 100))%")
+        Self.ceilings.check("threadSweepStates", errors)
+        let mean = errors.map(\.1).reduce(0, +) / Double(errors.count)
+        print("FIDELITY thread-sweep: \(errors.count) cases, mean \(String(format: "%.2f", mean * 100))%, worst \(String(format: "%.2f", (errors.map(\.1).max() ?? 0) * 100))%")
         #expect(mean < 0.05)
     }
 }

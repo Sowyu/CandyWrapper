@@ -7,10 +7,14 @@ import T3Store
 
 /// Search result rows, draft rows, status lines and the project scope popup against T3's markup in
 /// Chromium (spec from scripts/gen-sidebar-search-spec.py, references in design/component-reference/sidebar-search).
-/// Writes ref, ours and diff PNGs plus report-sidebar-search.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-sidebar-search.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct SidebarSearchFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/sidebar-search")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "sidebarSearch": .init(0.06),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("sidebar-search")
 
     /// The page's `--background` behind each case.
     final class Canvas: DSView {
@@ -102,6 +106,7 @@ struct SidebarSearchFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("sidebar-search", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("sidebarSearch", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY sidebar-search: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Sidebar search</title><body style='font:13px -apple-system'>" + images

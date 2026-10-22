@@ -8,10 +8,14 @@ import T3Store
 /// The browser's chrome row, empty states, unreachable page and Search project contents against
 /// T3's markup in Chromium (spec from scripts/gen-browser-spec.py, references in
 /// design/component-reference/browser). Writes ref, ours and diff PNGs plus report-browser.html to
-/// /tmp/candywrapper-fidelity.
-@MainActor
+/// `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct BrowserFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/browser")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "browser": .init(0.075),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("browser")
 
     static func view(_ name: String, size: CGSize) -> NSView {
         let frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
@@ -89,6 +93,7 @@ struct BrowserFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("browser", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("browser", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY browser: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Browser</title><body style='font:13px -apple-system'>" + images

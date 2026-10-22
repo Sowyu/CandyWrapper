@@ -6,10 +6,17 @@ import T3Protocol
 
 /// The `/`, `@`, `$` and `#` menu and the editor's inline chips against T3's markup in Chromium
 /// (spec from scripts/gen-composer-menu-spec.py, references in design/component-reference/composer-menu).
-/// Writes ref, ours and diff PNGs plus report-composer-menu.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-composer-menu.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ComposerMenuFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/composer-menu")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "composerMenu": .init(0.045, except: [
+            "chips.rest.dark": 0.18,
+            "chips.rest.light": 0.175,
+        ]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("composer-menu")
 
     static func item(_ id: String, _ kind: ComposerMenuItem.Kind, _ label: String, _ description: String) -> ComposerMenuItem {
         ComposerMenuItem(id: id, kind: kind, label: label, description: description)
@@ -103,6 +110,7 @@ struct ComposerMenuFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("composer-menu", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("composerMenu", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY composer-menu: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Composer menu</title><body style='font:13px -apple-system'>" + images

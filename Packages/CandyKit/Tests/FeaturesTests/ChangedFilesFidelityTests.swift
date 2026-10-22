@@ -10,10 +10,14 @@ import T3Store
 /// the main panel above the composer; 48 compares the chat column above the composer and the whole
 /// right panel, after clicking notes.md in the card. The diff comes from the recorded
 /// `getFullThreadDiff` reply in fixtures/transcripts/03-turn2.jsonl. Writes ref, ours and diff PNGs
-/// plus report-changed-files.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// plus report-changed-files.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ChangedFilesFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/changed-files")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "cardAndDiff": .init(0.075),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("changed-files")
     static let size = ThreadFidelityTests.size
     static let thread = "Add notes and docstring"
 
@@ -62,7 +66,7 @@ struct ChangedFilesFidelityTests {
         let W = Int(Self.size.width * 2), compared = Int(ThreadFidelityTests.compared * 2)
         // Chat column width beside the open panel: 844 - 484.
         let chat = 360 * 2
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
             for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 317.5), ("48-diff-turn-file", true, 476.75)] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
@@ -87,6 +91,7 @@ struct ChangedFilesFidelityTests {
                     let line = "\(base): \(String(format: "%.2f", total * 100))% differ"
                     print("changed-files", line)
                     lines.append(line)
+                    cases.append((base, total))
                     images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='changed-files/\(base).\($0).png'>" }.joined() + "</p>"
                     #expect(total < 0.05, "\(line)")
                 }
@@ -96,6 +101,7 @@ struct ChangedFilesFidelityTests {
                 }
             }
         }
+        Self.ceilings.check("cardAndDiff", cases)
         let html = "<!doctype html><meta charset=utf-8><title>Changed files</title><body style='font:13px -apple-system'>"
             + "<p>T3 web client capture, ours, diff (red where a channel differs by more than \(SidebarFidelityTests.tolerance)/255).</p>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-changed-files.html"), atomically: true, encoding: .utf8)
