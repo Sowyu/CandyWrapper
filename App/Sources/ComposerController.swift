@@ -232,6 +232,8 @@ final class ComposerController {
     private var stashInFlight: Set<String> = []
     private var stashPulseWork: DispatchWorkItem?
     private var stashKeyMonitor: Any?
+    /// The open stash delete confirmation's Delete action, nil while none is up.
+    private var stashDeleteConfirm: (@MainActor () -> Void)?
     /// `useDelayedStatus` for the thread's sync row: the phase, when it was asked for and shown.
     private var syncStatus = DelayedStatus()
     /// The attachments the chips were last drawn for; chips rebuild only when these change.
@@ -3936,6 +3938,16 @@ extension ComposerController {
 
     /// The menu's keys while it is open, before the composer's (a capture-phase listener in T3).
     func handleStashMenuKey(_ event: NSEvent) -> Bool {
+        // A dialog over the menu owns the keyboard: Return is the delete confirmation's default button, Escape
+        // reaches the dialog's Cancel, and nothing reaches the menu (no restore, no second confirmation).
+        if ModalHost.isPresented(in: composer.window) {
+            let plain = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+            if let confirm = stashDeleteConfirm, event.type == .keyDown, plain, event.keyCode == 36 || event.keyCode == 76 {
+                confirm()
+                return true
+            }
+            return false
+        }
         guard panel.stashMenuOpen, let menu = panel.lazyStashMenu.loaded, !menu.isHidden else { return false }
         return menu.handleKey(event)
     }
@@ -4211,7 +4223,7 @@ extension ComposerController {
     /// own guard (the user lost a big prompt to one click); T3 deletes at once.
     private func deleteStash(_ entry: PromptStashEntry) {
         // No window to ask in: keep the prompt.
-        guard let window = composer.window else { return }
+        guard let window = composer.window, stashDeleteConfirm == nil, !ModalHost.isPresented(in: window) else { return }
         let preview = entry.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let excerpt = preview.count > 80 ? String(preview.prefix(80)) + "…" : preview
         let dialog = DialogView(kind: .alertDialog, title: "Delete this stashed prompt?",
@@ -4220,11 +4232,14 @@ extension ComposerController {
         let ok = ButtonView("Delete", variant: .destructive)
         dialog.footerButtons = [cancel, ok]
         let host = ModalHost.present(dialog, in: window)
+        host.onDismiss = { [weak self] in self?.stashDeleteConfirm = nil }
         cancel.action = { [weak host] in host?.close() }
         ok.action = { [weak self, weak host] in
+            self?.stashDeleteConfirm = nil
             host?.close()
             self?.deleteStashNow(entry)
         }
+        stashDeleteConfirm = ok.action
     }
 
     private func deleteStashNow(_ entry: PromptStashEntry) {
