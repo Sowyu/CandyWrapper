@@ -136,6 +136,7 @@ final class WorkLineView: DSView {
         addSubview(label)
         time.lineHeight = 16
         time.alphaValue = 0
+        time.halo = true
         addSubview(time)
         chevron.strokeColor = WorkIcons.muted
         addSubview(chevron)
@@ -832,6 +833,7 @@ final class WorkingRowView: TimelineRowView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.lineHeight = TL.relaxed
+        label.halo = true
         addSubview(label)
         compactingLabel.font = TL.tabular(14)
         compactingLabel.lineHeight = TL.relaxed

@@ -3,9 +3,9 @@ import ImageIO
 
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
-/// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread with its
-/// brightness capped where the thread's muted text needs it (`DitherArt.capped`), the same across the whole panel, and
-/// every other page under a heavy scrim. It renders once per size and appearance off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s; otherwise it holds
+/// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
+/// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
+/// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s; otherwise it holds
 /// still and runs nothing.
 public final class DitherArtView: NSView {
     private let art = CALayer()
@@ -17,8 +17,6 @@ public final class DitherArtView: NSView {
     /// edge (`DitherChrome.bandBlend`), so the art shows from the panel's top with no solid strip.
     public static let topBlend: CGFloat = DitherChrome.band
     private var shown: DitherArt.Request?
-    /// The shown art in full, for the new thread and other pages, and capped for an open thread.
-    private var full: CGImage?, capped: CGImage?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
     /// A new thread opened before the art had rendered: the first render resolves in.
@@ -188,20 +186,6 @@ public final class DitherArtView: NSView {
         CATransaction.setAnimationDuration(duration)
         scrim.backgroundColor = background.withAlphaComponent(DitherArt.scrim(page, display)).cgColor
         CATransaction.commit()
-        // An open thread shows the capped art; switching to or from it crossfades. The reveal's own frames win while
-        // it plays.
-        let image = page == .thread ? capped : full
-        if let image, art.contents.map({ $0 as! CGImage }) !== image {
-            if duration > 0, art.contents != nil, art.animation(forKey: "reveal") == nil {
-                let fade = CATransition()
-                fade.type = .fade
-                fade.duration = duration
-                art.add(fade, forKey: "swap")
-            }
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            art.contents = image
-            CATransaction.commit()
-        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
@@ -218,13 +202,9 @@ public final class DitherArtView: NSView {
         guard let window, rect.width >= 1, rect.height >= 1 else { return }
         let dark = effectiveAppearance.isDark
         guard let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen) else {
-            art.contents = nil; shown = nil; full = nil; capped = nil; return
+            art.contents = nil; shown = nil; return
         }
-        let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
-        let background = palette.background
-        func rgb(_ c: TokenColor) -> [Double] { [c.srgb.x, c.srgb.y, c.srgb.z] }
-        // The thread's muted labels: the summary and work rows.
-        let texts = [rgb(palette.mutedForeground), rgb(palette.secondaryLabel)]
+        let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         let scale = window.backingScaleFactor
         let request = DitherArt.Request(url: url, width: Int((rect.width / DitherArt.dot).rounded(.up)),
                                         height: Int((rect.height / DitherArt.dot).rounded(.up)),
@@ -235,20 +215,13 @@ public final class DitherArtView: NSView {
         // A live resize lands here every frame; the last size renders, the old art stretches meanwhile.
         let work = DispatchWorkItem { [weak self] in
             DispatchQueue.global(qos: .utility).async {
-                let rendered = DitherArt.render(request)
-                let image = DitherArtImage(image: rendered)
-                let thread = DitherArtImage(image: rendered.flatMap {
-                    DitherArt.capped($0, background: request.background, texts: texts)
-                })
+                let image = DitherArtImage(image: DitherArt.render(request))
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         guard let self, self.pending == request else { return }
                         self.pending = nil
                         self.shown = request
-                        self.full = image.image
-                        self.capped = thread.image
-                        self.art.contents = nil
-                        self.updateScrim()
+                        self.art.contents = image.image
                         CATransaction.begin(); CATransaction.setDisableActions(true)
                         self.placeArt()
                         CATransaction.commit()
@@ -271,8 +244,9 @@ private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
-    /// The background's share over an open thread: none, since its art is `capped` instead.
-    nonisolated static let threadScrim: CGFloat = 0
+    /// The background's share over an open thread: light, so the art shows in its own colors (the user: vivid art over
+    /// a dimmed one). Muted timeline labels carry their own soft halo instead (`LabelView.halo`).
+    nonisolated static let threadScrim: CGFloat = 0.2
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
 
@@ -330,77 +304,6 @@ public enum DitherArt {
         guard let screen = screen ?? NSScreen.main, let url = NSWorkspace.shared.desktopImageURL(for: screen), url.isFileURL,
               let path = WallpaperBlur.unguardedPath(url.path, home: NSHomeDirectory()) else { return nil }
         return URL(filePath: path)
-    }
-
-    nonisolated static func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
-    /// WCAG relative luminance of an sRGB 0...1 color.
-    nonisolated static func luminance(_ c: [Double]) -> Double { 0.2126 * linear(c[0]) + 0.7152 * linear(c[1]) + 0.0722 * linear(c[2]) }
-    nonisolated static func contrast(_ a: [Double], _ b: [Double]) -> Double {
-        let la = luminance(a), lb = luminance(b)
-        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
-    }
-
-    /// The art for an open thread: every dot pulled toward the background just enough that each text color holding
-    /// 4.5:1 on the plain background (the thread's muted labels) keeps it over the dot, and the same everywhere on
-    /// the panel. Dots well inside the limit keep their strength and dots past it ease into it (a soft knee), so a
-    /// bright picture still shows its shapes as a dimmer texture and a dark one passes untouched. Each dot keeps its
-    /// hue, moving only along the line to the background. Nil when no text needs a limit.
-    ///
-    /// Why not a scrim: a scrim dims every dot by the brightest one's need, so a bright spot anywhere flattens the
-    /// whole picture. Capping each dot dims only what is too bright.
-    nonisolated static func capped(_ art: CGImage, background: [Double], texts: [[Double]]) -> CGImage? {
-        let goal = 4.6, bgL = luminance(background)
-        let needed = texts.filter { contrast($0, background) >= goal }
-        guard !needed.isEmpty, background.count == 3 else { return nil }
-        // Light text over a dark background needs dots no lighter than `limit`, dark text over a light one no darker.
-        let lighter = luminance(needed[0]) > bgL
-        let limit = lighter ? needed.map { (luminance($0) + 0.05) / goal - 0.05 }.min()!
-                            : needed.map { goal * (luminance($0) + 0.05) - 0.05 }.max()!
-        let room = lighter ? limit - bgL : bgL - limit
-        guard room > 0 else { return nil }
-        let w = art.width, h = art.height
-        guard w > 0, h > 0,
-              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
-        ctx.draw(art, in: CGRect(x: 0, y: 0, width: w, height: h))
-        let bg = background.map { $0 * 255 }
-        let lum = (0..<256).map { linear(Double($0) / 255) }
-        // `linear` by table, for 0...255: the halving below runs it a few million times on a large panel.
-        let fine = (0...1024).map { linear(Double($0) / 1024) }
-        func lin(_ v: Double) -> Double {
-            let x = min(max(v / 255, 0), 1) * 1024, i = min(Int(x), 1023)
-            return fine[i] + (fine[i + 1] - fine[i]) * (x - Double(i))
-        }
-        func distance(_ c: [Double]) -> Double {
-            let l = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
-            return lighter ? l - bgL : bgL - l
-        }
-        // The knee: distances up to half the room pass, the rest approach the room and never reach it.
-        let knee = room / 2
-        var last: (key: UInt32, value: (UInt8, UInt8, UInt8))?
-        for i in stride(from: 0, to: w * h * 4, by: 4) {
-            let key = UInt32(data[i]) | UInt32(data[i + 1]) << 8 | UInt32(data[i + 2]) << 16
-            if let last, last.key == key { (data[i], data[i + 1], data[i + 2]) = last.value; continue }
-            let dot = (0..<3).map { Double(data[i + $0]) }
-            let toward = (lighter ? 1.0 : -1.0) * (0.2126 * lum[Int(data[i])] + 0.7152 * lum[Int(data[i + 1])] + 0.0722 * lum[Int(data[i + 2])] - bgL)
-            if toward > knee {
-                let target = knee + (room - knee) * (1 - exp(-(toward - knee) / (room - knee)))
-                // The share of the dot's offset from the background that lands on `target`, found by halving.
-                var low = 0.0, high = 1.0
-                for _ in 0..<12 {
-                    let t = (low + high) / 2
-                    if distance((0..<3).map { bg[$0] + (dot[$0] - bg[$0]) * t }) > target { high = t } else { low = t }
-                }
-                // Rounding toward the background keeps the dot inside the limit.
-                for c in 0..<3 {
-                    let v = bg[c] + (dot[c] - bg[c]) * low
-                    data[i + c] = UInt8(min(max(dot[c] > bg[c] ? v.rounded(.down) : v.rounded(.up), 0), 255))
-                }
-            }
-            last = (key, (data[i], data[i + 1], data[i + 2]))
-        }
-        return ctx.makeImage()
     }
 
     /// The picture covering the canvas, centered, faded into the background and dithered, or nil if it can't be read.
