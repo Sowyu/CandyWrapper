@@ -191,109 +191,194 @@ struct RPCConnectionTests {
         await #expect(throws: RPCTransportError.pingTimedOut) { try await c.ping(timeout: .milliseconds(30)) }
     }
 
+    // MARK: Frames the connection can't use
+
+    @Test func anUndecodableFrameClosesTheConnectionAndFailsPendingCalls() async throws {
+        let (c, socket) = await makeConnection()
+        let call = Task { try await c.request("server.getConfig") }
+        #expect(await eventually { socket.sent.count == 1 })
+        socket.deliverRaw(Data("not json {".utf8))
+        guard case .failure(let e as RPCClientError) = await call.result, e.isTransport else {
+            Issue.record("expected the call to fail with a transport error"); return
+        }
+        #expect(await c.waitUntilClosed() == .transport(.invalidFrame("undecodable frame")))
+        #expect(await c.isClosed)
+        #expect(socket.isClosed)
+    }
+
+    @Test func aFailedSendClosesTheConnectionAndFailsPendingCalls() async throws {
+        let (c, socket) = await makeConnection()
+        let stream = await c.stream("orchestration.subscribeShell")
+        let consumer = Task { for try await _ in stream {} }
+        #expect(await eventually { socket.sent.count == 1 })
+        socket.failNextSend()
+        let call = Task { try await c.request("server.getConfig") }
+        for result in [await call.result.map { _ in () }, await consumer.result] {
+            guard case .failure(let e as RPCClientError) = result, e.isTransport else {
+                Issue.record("expected a transport error, got \(result)"); continue
+            }
+        }
+        guard case .transport(.closed(let reason)) = await c.waitUntilClosed() else {
+            Issue.record("expected a closed transport error"); return
+        }
+        #expect(reason.hasPrefix("send failed"))
+        #expect(socket.isClosed)
+    }
+
     // MARK: Liveness while a reply is owed (the abuse test's half-closed socket, 2026-10-12)
 
-    func makeWatchedConnection(interval: Duration = .milliseconds(60)) async -> (RPCConnection, FakeSocket) {
+    static let interval = Duration.seconds(5)
+
+    func makeWatchedConnection() async -> (RPCConnection, FakeSocket, ManualClock) {
         let socket = FakeSocket()
-        let connection = RPCConnection(socket: socket, livenessInterval: interval)
+        let clock = ManualClock()
+        let connection = RPCConnection(socket: socket, livenessInterval: Self.interval, clock: clock.clock)
         await connection.start()
-        return (connection, socket)
+        return (connection, socket, clock)
     }
 
     func pings(_ socket: FakeSocket) -> Int { socket.sent.filter { $0 == .ping }.count }
 
+    /// Moves the clock one liveness interval and waits until the watchdog has run its tick: it either
+    /// sleeps again or has stopped.
+    func tick(_ c: RPCConnection, _ clock: ManualClock) async {
+        #expect(await eventually { clock.waiting == 1 }, "the watchdog sleeps")
+        let before = clock.sleepCount
+        clock.advance(by: Self.interval)
+        #expect(await eventually {
+            if clock.sleepCount > before { return true }
+            return await !c.watchdogRunning
+        })
+    }
+
+    /// Delivers a Pong and waits until the connection has taken it.
+    func pong(_ c: RPCConnection, _ socket: FakeSocket) async {
+        socket.deliver(.pong)
+        #expect(await eventually { !(await c.pingOutstanding) })
+    }
+
     @Test func aSilentSocketWithACallOwedIsClosed() async throws {
-        let (c, socket) = await makeWatchedConnection()
+        let (c, socket, clock) = await makeWatchedConnection()
         let call = Task { try await c.request("server.getConfig") }
-        // Nothing comes back: one quiet interval sends a Ping, a second one without a Pong closes.
+        #expect(await eventually { socket.sent.count == 1 })
+        // Nothing comes back: one quiet interval sends a Ping, three without any frame close.
+        await tick(c, clock)
         #expect(await eventually { pings(socket) == 1 })
-        #expect(await eventually { await c.isClosed })
+        await tick(c, clock)
+        #expect(await !c.isClosed)
+        await tick(c, clock)
+        #expect(await c.isClosed)
+        #expect(pings(socket) == 1)
         guard case .failure(let e as RPCClientError) = await call.result, e == .transport(.pingTimedOut) else {
             Issue.record("expected the call to fail with pingTimedOut"); return
         }
     }
 
     @Test func aSlowCallOnALiveSocketKeepsItOpenAndTheWatchdogEnds() async throws {
-        let (c, socket) = await makeWatchedConnection()
+        let (c, socket, clock) = await makeWatchedConnection()
         let call = Task { try await c.request("git.slowThing") }
+        #expect(await eventually { socket.sent.count == 1 })
         // Answer two pings, then the call.
         for n in 1...2 {
+            await tick(c, clock)
             #expect(await eventually { pings(socket) == n })
-            socket.deliver(.pong)
+            await pong(c, socket)
         }
         #expect(await !c.isClosed)
         socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
         _ = try await call.value
-        // Nothing is owed any more: no further pings.
-        let after = pings(socket)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(pings(socket) == after)
+        // Nothing is owed any more: the watchdog is gone, so time passing sends nothing.
+        #expect(await !c.watchdogRunning)
+        clock.advance(by: Self.interval * 10)
+        #expect(clock.waiting == 0)
+        #expect(pings(socket) == 2)
         #expect(await !c.isClosed)
     }
 
     @Test func aQuietSubscriptionNeedsOnePongThenNothing() async throws {
-        let (c, socket) = await makeWatchedConnection()
+        let (c, socket, clock) = await makeWatchedConnection()
         let stream = await c.stream("terminal.subscribe")
         let consumer = Task { for try await _ in stream {} }
+        #expect(await eventually { socket.sent.count == 1 })
+        await tick(c, clock)
         #expect(await eventually { pings(socket) == 1 })
-        socket.deliver(.pong)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(pings(socket) == 1)
+        // The Pong answers the subscription, so the watchdog stops with it.
+        await pong(c, socket)
+        #expect(await !c.watchdogRunning)
         #expect(await !c.isClosed)
-        // A stream that answers at once never pings at all.
-        let (c2, socket2) = await makeWatchedConnection()
-        let shell = await c2.stream("orchestration.subscribeShell")
-        let consumer2 = Task { for try await _ in shell {} }
-        #expect(await eventually { socket2.sent.count == 1 })
-        socket2.deliver(.chunk(requestId: .string("1"), values: [.object([:])]))
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(pings(socket2) == 0)
-        consumer.cancel(); consumer2.cancel()
+        consumer.cancel()
+        #expect(await eventually { socket.sent.last == .interrupt(.string("1")) })
+        #expect(pings(socket) == 1)
+    }
+
+    @Test func aStreamThatAnswersAtOnceNeverPings() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        let shell = await c.stream("orchestration.subscribeShell")
+        let consumer = Task { for try await _ in shell {} }
+        #expect(await eventually { socket.sent.count == 1 })
+        socket.deliver(.chunk(requestId: .string("1"), values: [.object([:])]))
+        #expect(await eventually { socket.sent.contains(.ack(.string("1"))) })
+        #expect(await !c.watchdogRunning)
+        clock.advance(by: Self.interval * 10)
+        #expect(pings(socket) == 0)
+        consumer.cancel()
     }
 
     /// T3 allows 15 s, three of its 5 s ping intervals, without any frame (rpc/protocol.ts:10-12).
     @Test func aServerBusyForTwoIntervalsIsNotDropped() async throws {
-        // Longer intervals than the other tests: the 0.5 interval margin before the third must survive a loaded runner.
-        let (c, socket) = await makeWatchedConnection(interval: .milliseconds(200))
+        let (c, socket, clock) = await makeWatchedConnection()
         let call = Task { try await c.request("server.getConfig") }
-        // Silent for two and a half intervals: the old watchdog closed after two.
-        try await Task.sleep(for: .milliseconds(500))
+        #expect(await eventually { socket.sent.count == 1 })
+        // Silent for two intervals: the old watchdog closed here.
+        await tick(c, clock)
+        await tick(c, clock)
         #expect(await !c.isClosed)
         socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
         _ = try await call.value
         #expect(await !c.isClosed)
     }
 
-    @Test func aWatchedIdleSocketIsCheckedAndAnUnwatchedOneIsNot() async throws {
-        let (idle, idleSocket) = await makeWatchedConnection()
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(idleSocket.sent.isEmpty, "nothing owed, nothing watched: no traffic")
-        #expect(await !idle.isClosed)
+    @Test func anUnwatchedIdleSocketSendsNothing() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        clock.advance(by: Self.interval * 10)
+        #expect(clock.sleepCount == 0, "nothing owed, nothing watched: no watchdog")
+        #expect(await !c.watchdogRunning)
+        #expect(socket.sent.isEmpty)
+        #expect(await !c.isClosed)
+    }
 
-        // Watched and answering: open, with pings only while quiet.
-        await idle.setWatched(true)
+    @Test func aWatchedSocketPingsWhileQuietAndStopsWhenUnwatched() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        await c.setWatched(true)
         for n in 1...2 {
-            #expect(await eventually { pings(idleSocket) == n })
-            idleSocket.deliver(.pong)
+            await tick(c, clock)
+            #expect(await eventually { pings(socket) == n })
+            await pong(c, socket)
         }
-        #expect(await !idle.isClosed)
-        await idle.setWatched(false)
-        try await Task.sleep(for: .milliseconds(150))
-        let after = pings(idleSocket)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(pings(idleSocket) == after, "unwatched again: the watchdog stopped")
+        #expect(await !c.isClosed)
+        await c.setWatched(false)
+        // The next tick sees nothing watched or owed and ends the watchdog without a Ping.
+        await tick(c, clock)
+        #expect(await !c.watchdogRunning)
+        #expect(pings(socket) == 2)
+    }
 
-        // An older toggle that lands late changes nothing.
-        await idle.setWatched(false, generation: 2)
-        await idle.setWatched(true, generation: 1)
-        try await Task.sleep(for: .milliseconds(250))
-        #expect(pings(idleSocket) == after, "a stale watch didn't restart the watchdog")
+    @Test func aStaleWatchToggleChangesNothing() async throws {
+        let (c, _, clock) = await makeWatchedConnection()
+        await c.setWatched(false, generation: 2)
+        await c.setWatched(true, generation: 1)
+        #expect(await !c.watchdogRunning)
+        #expect(clock.sleepCount == 0)
+    }
 
-        // Watched and silent: closed.
-        let (dead, deadSocket) = await makeWatchedConnection()
-        await dead.setWatched(true)
-        #expect(await eventually { pings(deadSocket) == 1 })
-        #expect(await eventually { await dead.isClosed })
-        #expect(await dead.waitUntilClosed() == .transport(.pingTimedOut))
+    @Test func aWatchedSilentSocketIsClosed() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        await c.setWatched(true)
+        await tick(c, clock)
+        #expect(await eventually { pings(socket) == 1 })
+        await tick(c, clock)
+        await tick(c, clock)
+        #expect(await c.isClosed)
+        #expect(await c.waitUntilClosed() == .transport(.pingTimedOut))
     }
 }

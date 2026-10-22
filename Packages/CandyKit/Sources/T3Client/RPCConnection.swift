@@ -61,19 +61,30 @@ public actor RPCConnection {
     /// supervisor reconnect. A server busy for less than that never trips it. Nothing runs while
     /// nothing is owed or watched.
     private let livenessInterval: Duration
-    private var lastInbound = ContinuousClock.now
+    private let clock: SleepClock
+    private var lastInbound: ContinuousClock.Instant
     private var watchdog: Task<Void, Never>?
-    private var pingOutstanding = false
+    private(set) var pingOutstanding = false
     /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
     private var watched = false
     private var watchGeneration = 0
     private let traceNumber = RPCTrace.connectionNumber()
 
     public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
+        self.init(socket: socket, livenessInterval: livenessInterval, clock: .continuous)
+    }
+
+    /// `clock` drives the watchdog; tests step it by hand.
+    init(socket: any RPCSocket, livenessInterval: Duration, clock: SleepClock) {
         self.socket = socket
         self.livenessInterval = livenessInterval
+        self.clock = clock
+        lastInbound = clock.now()
         (outboxStream, outbox) = AsyncStream<Data>.makeStream()
     }
+
+    /// True while the liveness watchdog runs. For tests.
+    var watchdogRunning: Bool { watchdog != nil }
 
     /// Starts reading and writing. Call once, before the first request.
     public func start() {
@@ -274,7 +285,7 @@ public actor RPCConnection {
     }
 
     private func handle(_ messages: [RPCServerMessage]) {
-        lastInbound = ContinuousClock.now
+        lastInbound = clock.now()
         pingOutstanding = false
         defer { if watchdog != nil, !needsWatchdog { watchdog?.cancel(); watchdog = nil } }
         for message in messages {
@@ -324,12 +335,13 @@ public actor RPCConnection {
     private func armWatchdog() {
         guard watchdog == nil, closedWith == nil else { return }
         // The silence counts from when a reply became owed, not from the last frame of an idle hour.
-        lastInbound = ContinuousClock.now
+        lastInbound = clock.now()
         pingOutstanding = false
         let interval = livenessInterval
+        let clock = clock
         watchdog = Task { [weak self] in
             while true {
-                do { try await Task.sleep(for: interval) } catch { return }
+                do { try await clock.sleep(interval, nil) } catch { return }
                 guard let self, await self.livenessTick() else { return }
             }
         }
@@ -340,7 +352,7 @@ public actor RPCConnection {
     /// per interval.
     private func livenessTick() -> Bool {
         guard closedWith == nil, needsWatchdog else { watchdog = nil; return false }
-        let quiet = ContinuousClock.now - lastInbound
+        let quiet = clock.now() - lastInbound
         if quiet >= livenessInterval * 3 {
             watchdog = nil
             shutDown(.transport(.pingTimedOut))
