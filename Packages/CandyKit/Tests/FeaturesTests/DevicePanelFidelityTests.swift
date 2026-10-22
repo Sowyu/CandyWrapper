@@ -11,7 +11,7 @@ struct DevicePanelFidelityTests {
     static let ceilings: FidelityCeilings = [
         "devicePanel": .init(0.03),
     ]
-    static let out = SidebarFidelityTests.repo.appendingPathComponent("design/device-panel-fidelity")
+    static let out = Fidelity.root.appendingPathComponent("device-panel-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
         let view = DevicePanelEmptyView(frame: NSRect(x: 8, y: 8, width: size.width, height: size.height))

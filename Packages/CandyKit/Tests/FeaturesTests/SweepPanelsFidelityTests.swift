@@ -12,7 +12,7 @@ struct SweepPanelsFidelityTests {
     static let ceilings: FidelityCeilings = [
         "panelLeftovers": .init(0.095),
     ]
-    static let out = SidebarFidelityTests.repo.appendingPathComponent("design/sweep-panels-fidelity")
+    static let out = Fidelity.root.appendingPathComponent("sweep-panels-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
         let view = ComposerCodeLanguagePickerView(info: "swift")

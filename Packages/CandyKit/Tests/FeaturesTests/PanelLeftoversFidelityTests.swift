@@ -12,7 +12,7 @@ struct PanelLeftoversFidelityTests {
     static let ceilings: FidelityCeilings = [
         "panelLeftovers": .init(0.06),
     ]
-    static let out = SidebarFidelityTests.repo.appendingPathComponent("design/panel-leftovers-fidelity")
+    static let out = Fidelity.root.appendingPathComponent("panel-leftovers-fidelity")
 
     static func view(_ name: String, size: CGSize) -> NSView {
         if name == "host-failed" {
