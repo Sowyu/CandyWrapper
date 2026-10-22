@@ -60,4 +60,45 @@ struct SidebarDitherRowTests {
         let row = try #require(patch.compactMap { if case .row(let r) = $0.item, r.id.rawValue.hasSuffix("t1") { r } else { nil } }.first)
         #expect(row.title == "Renamed" && row.inProjectSection && row.dither)
     }
+
+    @Test func threadMenuLeadsWithSettleAndSnoozeAndEndsWithTheKeyedActions() {
+        var state = ThreadActionMenu.State()
+        state.branch = "main"
+        let built = DitherThreadMenu.items(ThreadActionMenu.items(state), presets: [], openInNewTab: true) { _ in }
+        let titles = built.items.map { if case .separator = $0.kind { "-" } else { $0.title } }
+        #expect(Array(titles.prefix(4)) == ["Settle", "Snooze", "-", "Open in new tab"])
+        #expect(Array(titles.suffix(4)) == ["-", "Mark as unread", "Archive", "Delete"])
+        #expect(built.items.allSatisfy { if case .separator = $0.kind { true } else { $0.icon != nil } })
+        #expect(built.items.last?.isDestructive == true)
+        for (key, title) in [("s", "Settle"), ("z", "Snooze"), ("u", "Mark as unread"), ("a", "Archive"), ("d", "Delete")] {
+            #expect(built.keys[key].map { built.items[$0].title } == title)
+        }
+    }
+
+    @Test func hoveredRowShowsSettleSnoozePinArchiveAndMore() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var dither = previous
+        dither.ditherLight = true; dither.ditherDark = true
+        ThemeRuntime.apply(dither)
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = content
+        content.frame = NSRect(x: 0, y: 0, width: 255, height: 780)
+        content.setSnapshot(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
+            SidebarPreview.thread("d1", "Finished work", project: "p1", kind: .done, minutesAgo: 3),
+        ]), animated: false)
+        content.layoutSubtreeIfNeeded()
+        let card = try #require(content.list.rowView("thread:d1") as? SidebarCardRowView)
+        card.isKeyboardFocused = true
+        card.refresh()
+        card.layoutSubtreeIfNeeded()
+        let shown = card.subviews.compactMap { $0 as? RowActionButton }.filter { !$0.isHidden }
+        #expect(shown.map(\.toolTip) == ["Settle thread", "Snooze thread", "Pin thread", "Archive thread", "More actions"])
+        #expect(zip(shown, shown.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX && $0.frame.width == $1.frame.width })
+        window.contentView = nil
+    }
 }

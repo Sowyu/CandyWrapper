@@ -21,6 +21,10 @@ public struct SidebarActions {
     public var openPullRequestURL: (ThreadId, String) -> Void = { _, _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
+    /// Dither's row hover group: pin, archive, and ⋯, which opens the thread menu under the given button.
+    public var pin: (ThreadId) -> Void = { _ in }
+    public var archive: (ThreadId) -> Void = { _ in }
+    public var moreMenu: (ThreadId, NSView) -> Void = { _, _ in }
     /// The undo notice's button (`undoLatestThreadAction`).
     public var undo: () -> Void = {}
     /// The footer's Back on a utility page (SidebarChrome.tsx:203-210).
@@ -306,7 +310,10 @@ public final class SidebarContentView: DSView {
             unpin: { [weak self] in self?.actions.unpin($0) }, acknowledgeWake: { [weak self] in self?.actions.acknowledgeWake($0) },
             pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
             pullRequestURL: { [weak self] in self?.actions.openPullRequestURL($0, $1) },
-            contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) })
+            contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) },
+            pin: { [weak self] in self?.actions.pin($0) }, archive: { [weak self] in self?.actions.archive($0) },
+            moreMenu: { [weak self] in self?.actions.moreMenu($0, $1) },
+            jumpHint: { [weak self] in self?.jumpHint($0) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
         brand.action = { [weak self] in self?.actions.goHome() }
@@ -545,6 +552,18 @@ public final class SidebarContentView: DSView {
             selectionAnchor = id
         }
         state.selectedThreadIds = next
+    }
+
+    /// Dither's hover badge: the `thread.jump.N` shortcut for one of the first nine rows, as `orderedThreadIds` counts them.
+    func jumpHint(_ id: ThreadId) -> String? {
+        var n = 0
+        for item in list.items {
+            guard case .row(let r) = item else { continue }
+            n += 1
+            if r.id == id { return ActiveKeymap.keymap.label(for: "thread.jump.\(n)") }
+            if n == 9 { return nil }
+        }
+        return nil
     }
 
     /// `navigateToThread` (Sidebar.tsx:3144-3158) for opens that don't come from a row click, such as
