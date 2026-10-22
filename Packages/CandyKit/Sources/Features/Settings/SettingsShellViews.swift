@@ -461,7 +461,7 @@ final class DitherSettingsNavRow: ControlView {
 }
 
 /// One settings search result (SettingsSidebarNav.tsx:296-322): `SidebarMenuButton size="sm"` with
-/// `h-auto min-h-10 items-start`, the page's icon (`mt-0.5 size-3.5`, muted at 60%), the title (14px
+/// `h-auto min-h-10 items-start`, the page's icon (`size-3.5 h-5`, centered on the title's line, muted at 60%), the title (14px
 /// medium) over the page label (`text-2xs`, muted at 75%). The active result is `data-active`.
 final class SettingsSearchResultRow: ControlView {
     static let height: CGFloat = 8 + 20 + 16 + 8
@@ -518,7 +518,7 @@ final class SettingsSearchResultRow: ControlView {
     override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        icon.frame = NSRect(x: 8, y: 10, width: 14, height: 14)
+        icon.frame = NSRect(x: 8, y: 11, width: 14, height: 14)
         title.frame = NSRect(x: 30, y: 8, width: max(0, bounds.width - 38), height: 20)
         subtitle.frame = NSRect(x: 30, y: 28, width: max(0, bounds.width - 38), height: 16)
     }

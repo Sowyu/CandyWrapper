@@ -220,7 +220,8 @@ public final class ToastView: DSView {
         f.message = CGRect(x: left, y: columnTop + titleHeight + 2, width: messageRight - left, height: messageHeight)
         f.messageLink.origin.y += f.message.minY
         f.descriptionButton = CGRect(x: messageRight - buttonSize.width, y: f.message.maxY + 8, width: buttonSize.width, height: buttonSize.height)
-        f.chevron = CGRect(x: messageRight + 6, y: f.message.minY + 2, width: 14, height: 14)
+        // `size-3.5 h-lh`: centered on the description's first 20pt line (toast.tsx:239-244, T3 26c6df72f8).
+        f.chevron = CGRect(x: messageRight + 6, y: f.message.minY + 3, width: 14, height: 14)
         f.details = CGRect(x: left, y: f.message.maxY + buttonRow + 10, width: right - left, height: detailsHeight)
         f.action = CGRect(x: right + 6, y: top + (row - actionSize.height) / 2, width: actionSize.width, height: actionSize.height)
         f.height = top + row + 12 + 1
