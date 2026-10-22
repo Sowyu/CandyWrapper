@@ -165,6 +165,8 @@ public struct UsageLimitPoolWindow: Equatable, Sendable {
     public struct Column: Equatable, Sendable {
         public var account: UsageLimitAccount
         public var window: UsageLimitWindow?
+        /// `LimitPoolMember.refillPercent`: how much of the account's share its next reset hands back.
+        public var refillPercent: Double = 0
     }
     public struct Reset: Equatable, Sendable {
         public var account: UsageLimitAccount
@@ -433,8 +435,10 @@ public enum UsageLimitsLogic {
             let members = byDriver[driver]!
             let orderWindow = members.flatMap(\.limits.windows).enumerated()
                 .min { l, r in (kindOrder[l.element.kind] ?? 3, l.offset) < (kindOrder[r.element.kind] ?? 3, r.offset) }?.element
+            // The next refill, which for an account out of weekly quota is when its session is usable again.
             func orderReset(_ a: UsageLimitAccount) -> Double {
-                guard let o = orderWindow, let w = a.limits.windows.first(where: { $0.kind == o.kind && $0.id == o.id }), let at = w.resetMs else {
+                guard let o = orderWindow, let w = a.limits.windows.first(where: { $0.kind == o.kind && $0.id == o.id }),
+                      let at = poolMember(a, w, nowMs: nowMs).window.resetMs else {
                     return .infinity
                 }
                 return Double(at)
@@ -452,14 +456,48 @@ public enum UsageLimitsLogic {
         }
     }
 
+    /// `poolMember` (usageLimits.ts:416-457, T3 5b72385065): with no weekly quota left (Claude's `seven_day`, Codex's
+    /// weekly window) an account's session shows 0% left. Its refill depends on both resets: a spent session must also
+    /// reset, and a partly spent one only gets its unused part back when the week resets. A stale or missing reset
+    /// time gives no estimate.
+    static func poolMember(_ account: UsageLimitAccount, _ reported: UsageLimitWindow, nowMs: Int64)
+        -> (window: UsageLimitWindow, refillPercent: Double) {
+        let spentWeekly = reported.kind == "session" ? account.limits.windows.first { w in
+            w.usedPercent >= 100 && (account.driver == "claudeAgent" ? w.id == "seven_day" : account.driver == "codex" && w.kind == "weekly")
+        } : nil
+        guard let spentWeekly else { return (reported, reported.usedPercent) }
+        var resetsAt: String?
+        var refill: Double = 0
+        // `Date.parse` of a bad checkedAt is NaN, and every comparison with it fails.
+        if let weekly = spentWeekly.resetMs, let session = reported.resetMs, let checked = T3Timestamp.parseEpochMs(account.limits.checkedAt) {
+            let cutoff = max(nowMs, checked)
+            if weekly > cutoff && session > cutoff {
+                if session <= weekly {
+                    resetsAt = spentWeekly.resetsAt; refill = 100
+                } else if reported.usedPercent >= 100 {
+                    resetsAt = reported.resetsAt; refill = 100
+                } else {
+                    resetsAt = spentWeekly.resetsAt; refill = 100 - max(0, min(100, reported.usedPercent))
+                }
+            }
+        }
+        // Suppression is not session spending, so it has no session pace clock.
+        var window = reported
+        window.usedPercent = 100
+        window.resetsAt = resetsAt
+        window.windowDurationMins = nil
+        return (window, refill)
+    }
+
     static func poolWindows(_ accounts: [UsageLimitAccount], nowMs: Int64) -> [UsageLimitPoolWindow] {
         var keys: [String] = []
-        var byKey: [String: [(account: UsageLimitAccount, window: UsageLimitWindow)]] = [:]
+        var byKey: [String: [(account: UsageLimitAccount, window: UsageLimitWindow, refill: Double)]] = [:]
         for a in accounts {
-            for w in a.limits.windows {
+            for reported in a.limits.windows {
+                let (w, refill) = poolMember(a, reported, nowMs: nowMs)
                 let key = "\(w.kind):\(w.id)"
                 if byKey[key] == nil { keys.append(key) }
-                byKey[key, default: []].append((a, w))
+                byKey[key, default: []].append((a, w, refill))
             }
         }
         let pools = keys.map { key -> UsageLimitPoolWindow in
@@ -472,11 +510,14 @@ public enum UsageLimitsLogic {
             let resets = members.compactMap { m -> UsageLimitPoolWindow.Reset? in
                 guard let at = m.window.resetMs else { return nil }
                 return .init(account: m.account, window: m.window, at: at,
-                             restoresPercent: Int(UsageFormat.jsRound(m.window.usedPercent / Double(members.count))))
+                             restoresPercent: Int(UsageFormat.jsRound(m.refill / Double(members.count))))
             }.enumerated().sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }.map(\.element)
             return UsageLimitPoolWindow(
                 id: first.id, kind: first.kind, label: first.label,
-                columns: accounts.map { a in .init(account: a, window: members.first { $0.account.key == a.key }?.window) },
+                columns: accounts.map { a in
+                    let m = members.first { $0.account.key == a.key }
+                    return .init(account: a, window: m?.window, refillPercent: m?.refill ?? 0)
+                },
                 remainingPercent: Int(UsageFormat.jsRound(100 - used)), usedPercent: Int(UsageFormat.jsRound(used)),
                 pace: meanElapsed.map { pace(used: timedUsed, elapsed: $0) }, resets: resets)
         }
@@ -509,17 +550,36 @@ public enum UsageLimitsLogic {
     public static func report(instanceId: String, providers: [ServerProvider], sources: [UsageLimitSourceSnapshot], nowMs: Int64) -> UsageLimitsReport? {
         guard let selected = providers.first(where: { $0.instanceId.rawValue == instanceId }),
               hasLimits(driver: selected.driver, providers: providers, sources: sources) else { return nil }
-        let native = providersWithLimits(providers).filter { $0.driver == selected.driver }
         let resolveKey = accountKeyResolver(providers.filter(\.enabled).map(AccountReport.init) + sources.flatMap(\.accounts).map(AccountReport.init))
-        let nativeAccounts = Set(native.compactMap { p -> String? in
-            guard let key = resolveKey(AccountReport(p)), let l = p.usageLimits, !l.windows.isEmpty,
-                  l.unavailableReason == nil else { return nil }
+        // One account on several instances counts once (usageLimits.ts:669-697, T3 780b62dd26): a usable reading beats
+        // one with a notice, else the fresher one wins, and the freshest reading with reset credits supplies them.
+        typealias Snapshot = (provider: ServerProvider, limits: ProviderUsageLimits)
+        var order: [String] = []
+        var byAccount: [String: (usage: Snapshot, credits: Snapshot?)] = [:]
+        for p in providersWithLimits(providers) where p.driver == selected.driver {
+            guard let limits = p.usageLimits else { continue }
+            let snapshot: Snapshot = (p, limits)
+            let key = resolveKey(AccountReport(p)) ?? "instance:\(p.instanceId.rawValue)"
+            let previous = byAccount[key]
+            let previousUsable = previous.map { notice($0.usage.limits) == nil } ?? false
+            let usable = notice(limits) == nil
+            let wins = previous.map { (usable && !previousUsable) || (usable == previousUsable && limits.checkedMs > $0.usage.limits.checkedMs) } ?? true
+            let previousCredits = previous?.credits ?? nil
+            let credits = limits.resetCredits != nil && previousCredits.map({ limits.checkedMs > $0.limits.checkedMs }) ?? true
+                ? snapshot : previousCredits
+            if previous == nil { order.append(key) }
+            byAccount[key] = (wins ? snapshot : previous!.usage, credits)
+        }
+        let native = order.compactMap { byAccount[$0] }
+        let nativeAccounts = Set(native.compactMap { n -> String? in
+            guard let key = resolveKey(AccountReport(n.usage.provider)), !n.usage.limits.windows.isEmpty,
+                  n.usage.limits.unavailableReason == nil else { return nil }
             return key
         })
         var accounts: [UsageLimitsReport.Account] = []
         var notices: [String] = []
-        for p in native {
-            guard let limits = p.usageLimits else { continue }
+        for (usage, credits) in native {
+            let p = usage.provider, limits = usage.limits
             let key = resolveKey(AccountReport(p))
             let hub = sources.flatMap { s in s.accounts.map { (source: s, account: $0) } }
                 .filter { key != nil && resolveKey(AccountReport($0.account)) == key
@@ -527,16 +587,16 @@ public enum UsageLimitsLogic {
                 .enumerated().sorted { ($1.element.account.usageLimits.checkedMs, $0.offset) < ($0.element.account.usageLimits.checkedMs, $1.offset) }
                 .first?.element
             let hubCreditId = hub?.account.usageLimits.resetCredits?.nextCreditId
-            let showHubCredits = hub.map { limits.resetCredits == nil || $0.account.usageLimits.checkedMs > limits.checkedMs } ?? false
+            let showHubCredits = hub.map { h in credits.map { h.account.usageLimits.checkedMs > $0.limits.checkedMs } ?? true } ?? false
             let display = p.displayName?.trimmingCharacters(in: .whitespaces)
             var shown = limits
-            if showHubCredits { shown.resetCredits = hub?.account.usageLimits.resetCredits }
+            if let c = showHubCredits ? hub?.account.usageLimits.resetCredits : credits?.limits.resetCredits { shown.resetCredits = c }
             accounts.append(.init(
                 id: p.instanceId.rawValue, driver: p.driver,
                 label: "\(display?.isEmpty == false ? display! : p.driver) [\(p.instanceId.rawValue)]",
                 plan: authLabel(p).flatMap { $0.isEmpty ? nil : $0 }, email: authEmail(p), sourceLabel: nil, instanceId: p.instanceId.rawValue,
                 resetCreditTarget: hubCreditId.flatMap { id in hub.map { .hub(sourceId: $0.source.id, accountId: $0.account.id, creditId: id) } }
-                    ?? .instance(p.instanceId.rawValue),
+                    ?? .instance(credits?.provider.instanceId.rawValue ?? p.instanceId.rawValue),
                 displayName: p.displayName.flatMap { $0.isEmpty ? nil : $0 }, accentColor: p.accentColor.flatMap { $0.isEmpty ? nil : $0 }, limits: shown))
         }
         for s in sources {
