@@ -166,10 +166,15 @@ public final class AppUsageReadoutView: DSView {
         super.layout()
         var x: CGFloat = 0
         let h = bounds.height
-        for (icon, meter, label) in [(cpuIcon, cpuMeter, cpuLabel), (memoryIcon, memoryMeter, memoryLabel)] {
+        let segments = [(cpuIcon, cpuMeter, cpuLabel), (memoryIcon, memoryMeter, memoryLabel)]
+        // In a narrow sidebar the meters go first, so the numbers and units never truncate.
+        let full = segments.reduce(-8) { $0 + 12 + 3 + AppUsageMeterView.width + 3 + ceil($1.2.textWidth) + 8 }
+        let meters = full <= bounds.width
+        for (icon, meter, label) in segments {
             icon.frame = NSRect(x: x, y: (h - 12) / 2, width: 12, height: 12)
-            meter.frame = NSRect(x: x + 12 + 3, y: 0, width: AppUsageMeterView.width, height: h)
-            let lx = meter.frame.maxX + 3, w = ceil(label.textWidth)
+            meter.isHidden = !meters
+            meter.frame = NSRect(x: x + 12 + 3, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
+            let lx = meters ? meter.frame.maxX + 3 : x + 12 + 4, w = ceil(label.textWidth)
             label.frame = NSRect(x: lx, y: (h - 16) / 2, width: min(w, max(0, bounds.width - lx)), height: 16)
             x = lx + w + 8
         }
@@ -193,7 +198,8 @@ public final class AppUsageReadoutView: DSView {
         let visible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false
         let run = visible && NSApp.isActive && !isHiddenOrHasHiddenAncestor && sidebarOpen
         guard run != (timer != nil) else { return }
-        guard run else { timer?.invalidate(); timer = nil; return }
+        // A fresh baseline on every resume, so the first reading isn't averaged over the hidden stretch.
+        guard run else { timer?.invalidate(); timer = nil; last = nil; hotStreak = 0; return }
         sample(animated: false)
         // ponytail: 5s sampling while visible, event-driven if it shows in perf-review
         let t = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.sample(animated: true) } }
