@@ -65,8 +65,8 @@ struct DitherArtDisplayOptionTests {
     @Test func standardScrimsMatchTheDesign() {
         #expect(DitherArt.scrim(.hero, standard) == 0)
         #expect(DitherArt.scrim(.thread, standard) == DitherArt.threadScrim)
-        // The user wants the thread's art vivid: a light veil, never a dimming one.
-        #expect(DitherArt.threadScrim <= 0.2)
+        // The user wants the thread's art vivid with a slight dim: never a heavy veil.
+        #expect(DitherArt.threadScrim <= 0.4)
         #expect(DitherArt.scrim(.page, standard) == DitherArt.pageScrim)
     }
 

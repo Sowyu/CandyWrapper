@@ -3,10 +3,10 @@ import DesignSystem
 
 /// Redesign's floating chrome for everything around the composer (the user, 2026-10-22: "no more things sticking out of
 /// the prompt field, only floating rounded rectangle pills"): the composer's frosted glass, a hairline border and a
-/// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 28pt with control corners; panels
+/// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 30pt with control corners; panels
 /// (approvals, the queue, the stash list) use card corners. Nothing draws while idle: the shadow has a fixed path.
 public enum DitherPill {
-    public static let height: CGFloat = 28
+    public static let height: CGFloat = 30
     /// Control corners. Rows of pills sit `inset` in from the composer's sides, so a pill's smaller corner stays
     /// inside the composer's 16pt curve instead of looking like it hangs off it (the user, 2026-10-22).
     public static let radius: CGFloat = DitherChrome.controlRadius

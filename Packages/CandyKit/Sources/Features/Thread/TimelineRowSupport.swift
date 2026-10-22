@@ -405,7 +405,6 @@ final class ShineLabelView: DSView {
         }
         base.color = TL.c(\.secondaryLabel)
         // Work rows and the Working line sit right on Redesign's art.
-        base.halo = true
         bright.color = TL.c(\.foreground)
         bright.isHidden = true
         band.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]

@@ -99,10 +99,6 @@ public final class LabelView: DSView {
     /// Core Text font smoothing (stem darkening). Chromium draws text on transparent composited
     /// layers (backdrop-filter surfaces such as the composer) without it, so those labels turn it off.
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
-    /// Under Redesign, a soft glow of the panel's background around the glyphs, so muted text over the art reads
-    /// without the art being dimmed (the user: vivid art, the lightest touch local to the text). Other themes draw
-    /// nothing extra.
-    public var halo = false { didSet { if halo != oldValue { needsDisplay = true } } }
     /// Text appended after `text` in the semibold weight of `font` (a `<span class="font-semibold">`).
     public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
     /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
@@ -213,20 +209,6 @@ public final class LabelView: DSView {
         ctx.translateBy(x: x, y: baseline)
         ctx.scaleBy(x: 1, y: -1)
         ctx.textPosition = .zero
-        if halo, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            // The glyphs' outline, 2.8pt wide in the background's color, blurred by a shadow of the same color, under
-            // the text. It draws once per change, like the text.
-            let glow = ThemeRuntime.palettes.palette(dark: effectiveAppearance.isDark, sidebar: false).background.nsColor
-            let outline: [NSAttributedString.Key: Any] = [.foregroundColor: glow.withAlphaComponent(0.6),
-                                                          .strokeColor: glow.withAlphaComponent(0.6), .strokeWidth: 20]
-            let shape = NSMutableAttributedString(attributedString: attributed())
-            shape.addAttributes(outline, range: NSRange(location: 0, length: shape.length))
-            ctx.saveGState()
-            ctx.setShadow(offset: .zero, blur: 4, color: glow.cgColor)
-            CTLineDraw(fitted(shape, outline).line, ctx)
-            ctx.restoreGState()
-            ctx.textPosition = .zero
-        }
         CTLineDraw(line.line, ctx)
         ctx.restoreGState()
         if isUnderlined {
