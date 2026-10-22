@@ -859,6 +859,8 @@ final class WorkingRowView: TimelineRowView {
         } else {
             ticker?.removeFromSuperview(); ticker = nil
         }
+        // Redesign drops the hairline under "Working for": it read as a stray line over the art (the user).
+        rule.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         label.isHidden = compacting || ticker != nil
         needsLayout = true
         tick(animated: false)
