@@ -47,7 +47,7 @@ Run them from the repo root.
 
 T3Client and T3Store build on T3Protocol. Features builds on DesignSystem and T3Store but never on T3Client, and the app target joins them. Tests live in `Packages/CandyKit/Tests/<Module>Tests`.
 
-Fidelity tests (`*FidelityTests`) draw a view offscreen and compare it pixel by pixel with references taken from the official app, in `design/reference/` and `design/component-reference/`. They capture the resting state, so an animation must end exactly on the pixels it had before. If one fails after a visual change, the change is usually wrong. `docs/research/fidelity-coverage-2026-10-12.md` maps references to tests.
+Fidelity tests (`*FidelityTests`) draw a view offscreen and compare it pixel by pixel with references taken from the official app, in `design/reference/` and `design/component-reference/`. They cover only what should look like T3: the default themes. Redesign (Experimental) is CandyWrapper's own look, so it gets no T3 references, and never pull it toward T3. Each suite has a ceiling per case, so a test fails when one render goes wrong, and a missing reference fails too. They capture the resting state, so an animation must end exactly on the pixels it had before. If one fails after a visual change to a default theme, the change is usually wrong. If it fails because T3 changed the component, recapture the reference instead of raising the ceiling. `docs/research/fidelity-coverage-2026-10-12.md` maps references to tests.
 
 ## Check it on screen
 
