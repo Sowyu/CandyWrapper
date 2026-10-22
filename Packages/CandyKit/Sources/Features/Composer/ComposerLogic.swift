@@ -236,10 +236,14 @@ public enum ComposerLogic {
         return phase == "running" && !agentDone
     }
 
-    /// `projectCloneSendBlockReason` (ChatView.tsx:2527-2533): nil without a clone (`running` nil).
-    public static func projectCloneSendBlockReason(running: Bool?, done: Bool) -> String? {
-        guard let running else { return nil }
-        return running ? "Cloning repository" : done ? nil : "Repository not cloned"
+    /// `projectCloneSendBlockReason` (ChatView.tsx:1339-1346 in 3473): nil without a clone (`running` nil), and
+    /// "Copying files" while Add to another machine still copies ignored files into a finished clone.
+    public static func projectCloneSendBlockReason(running: Bool?, done: Bool, copyingFiles: Bool = false) -> String? {
+        if let running {
+            if running { return "Cloning repository" }
+            if !done { return "Repository not cloned" }
+        }
+        return copyingFiles ? "Copying files" : nil
     }
 
     /// `submitStatus` (ComposerPrimaryActions.tsx:292-304): the send button's tooltip and label while

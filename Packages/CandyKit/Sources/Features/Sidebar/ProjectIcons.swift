@@ -73,6 +73,15 @@ public final class ProjectIconStore {
     public func forget(environmentId: String) {
         entries = entries.filter { $0.key.environmentId != environmentId }
     }
+
+    /// Asks again for one workspace's icon, such as a clone whose files just landed: the server reports the icon
+    /// missing until then (`createProjectFaviconUrlAtomFamily` asks again when the clone's phase changes,
+    /// client-runtime state/assets.ts:222-230).
+    public func forget(environmentId: String, cwd: String) {
+        let before = entries.count
+        entries = entries.filter { $0.key.environmentId != environmentId || $0.key.cwd != cwd }
+        if entries.count != before { NotificationCenter.default.post(name: Self.didChange, object: self) }
+    }
     enum State { case loading, missing(Date), image(CGImage, gray: CGImage?) }
 
     /// Pixel size icons decode to.
