@@ -441,6 +441,10 @@ final class SidebarNavRowView: ControlView {
 /// Usage and Appearance, then "Update all (N)" while updates wait.
 public final class SidebarAccountRowView: ControlView {
     public static let height: CGFloat = 44
+    /// Its distance from the sidebar's left, right and bottom edges.
+    public static let inset: CGFloat = 8
+    /// Concentric with the window's bottom left corner, which it sits `inset` inside.
+    public static let radius: CGFloat = DitherChrome.windowRadius - inset
     private let avatar = CALayer()
     private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
@@ -462,6 +466,10 @@ public final class SidebarAccountRowView: ControlView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         scalesWhenPressed = false
+        layer?.masksToBounds = false
+        layer?.borderWidth = 0.5
+        layer?.shadowColor = Themed.black(1).cgColor
+        layer?.shadowRadius = 4
         avatar.masksToBounds = true
         avatar.contentsGravity = .resizeAspectFill
         avatar.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -516,9 +524,14 @@ public final class SidebarAccountRowView: ControlView {
 
     public override func updateLayer() {
         updateRedaction(animated: false)
-        layer?.cornerRadius = DitherChrome.controlRadius
-        layer?.backgroundColor = menuOpen ? SB.c(\.sidebarRowActive).cgColor(in: self)
-            : state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        // A floating pill: an opaque resting fill a step up from the sidebar, so its shadow stays outside, lit a
+        // step more on hover and while the menu is open, under a light hairline.
+        let dark = effectiveAppearance.isDark
+        let lift: CGFloat = menuOpen ? 2 : state.hoverOrPressed ? 1 : 0
+        layer?.cornerRadius = Self.radius
+        layer?.backgroundColor = NSColor(white: dark ? 0.085 + 0.03 * lift : 1 - 0.025 * lift, alpha: 1).cgColor
+        layer?.borderColor = SB.c(\.sidebarForeground, dark ? 0.08 : 0.07).cgColor(in: self)
+        layer?.shadowOpacity = dark ? 0.4 : 0.08
         avatar.backgroundColor = SB.c(\.sidebarForeground, 0.12).cgColor(in: self)
         chevron.strokeColor = menuOpen || state.hoverOrPressed ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
     }
@@ -527,6 +540,8 @@ public final class SidebarAccountRowView: ControlView {
         super.layout()
         let h = bounds.height
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer?.shadowOffset = CGSize(width: 0, height: layer?.isGeometryFlipped == true ? 2 : -2)
+        layer?.shadowPath = SmoothCorners.path(bounds, Self.radius, flipped: false)
         avatar.frame = CGRect(x: 8, y: (h - 28) / 2, width: 28, height: 28)
         avatar.cornerRadius = 14
         CATransaction.commit()

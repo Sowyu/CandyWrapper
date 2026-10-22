@@ -13,7 +13,7 @@ public final class DraftHeroView: DSView {
 
     /// The height at `width`: the headline wraps as T3's `h1` does when the column is narrower than it.
     public func height(forWidth width: CGFloat) -> CGFloat {
-        if capy { return 28 }
+        if capy { return DitherPill.height }
         return isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
     }
 

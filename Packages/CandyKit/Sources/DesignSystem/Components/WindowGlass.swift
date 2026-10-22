@@ -116,8 +116,13 @@ public enum WindowGlass {
         "--input", "--contrast-input", "--toolbar-border", "--contrast-toolbar-border",
     ]
 
+    /// The lines among them. Dither's dark palette paints them opaque, a step off the panel, so on a frosted pane over
+    /// the art they read near black; `lines` turns them into white overlays like the composer's border.
+    nonisolated static let lineMembers: Set<String> = ["--border", "--contrast-border", "--input", "--contrast-input"]
+
     /// `palette` with its surfaces turned into frosted panes and its light fills into overlays.
-    nonisolated static func frosted(_ palette: Palette, dark: Bool, sidebar: Bool, opacity: Double) -> Palette {
+    nonisolated static func frosted(_ palette: Palette, dark: Bool, sidebar: Bool, opacity: Double,
+                                    lines: Bool = false) -> Palette {
         let members = palette.members
         let base = sidebar ? palette.sidebar : palette.background
         return Palette(members: { i in
@@ -125,6 +130,7 @@ public enum WindowGlass {
             guard c.srgb.w >= 1 else { return c }
             if let level = paneMembers[name] { return c.withAlpha(paneAlpha(level, dark: dark, opacity: opacity)) }
             if !dark, tintMembers.contains(name) { return overlay(c, over: base) }
+            if lines, lineMembers.contains(name) { return overlay(c, over: base) }
             return c
         })
     }

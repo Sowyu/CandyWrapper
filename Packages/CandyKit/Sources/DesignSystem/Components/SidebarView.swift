@@ -506,6 +506,9 @@ public enum DitherChrome {
     /// The main content panel inside the window frame, and the composer: its send button sits 9 in, so 16 keeps
     /// the button's 8 close to concentric.
     public static let panelRadius: CGFloat = 16
+    /// The window's own corner, measured on macOS 27 for a titled window without a toolbar.
+    /// ponytail: measured constant, read it from the window if a macOS release changes the frame's corner
+    public static let windowRadius: CGFloat = 16
     /// The tab strip band above the content panel: 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
     public static let band: CGFloat = 52
 

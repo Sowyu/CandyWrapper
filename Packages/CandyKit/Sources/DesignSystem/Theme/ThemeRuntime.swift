@@ -174,7 +174,8 @@ public enum ThemeRuntime {
             // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
             // the panel's own background stay solid.
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
-                return WindowGlass.frosted(palette, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100)
+                return WindowGlass.frosted(palette, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100,
+                                           lines: true)
             }
             guard dark ? input.glassDark : input.glassLight else { return palette }
             let opacity = Double(input.glassOpacity) / 100
