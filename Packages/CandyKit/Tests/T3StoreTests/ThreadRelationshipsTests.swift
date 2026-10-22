@@ -186,6 +186,19 @@ import Testing
         #expect(l.title == "Lineage · 2 running")
     }
 
+    /// A provider-native parent shows its own status from its projection unless it has a live run (3473,
+    /// ThreadRelationshipsControl.tsx:440-443).
+    @Test func aNativeParentRowShowsItsOwnStatus() {
+        let p = projection("me", thread: "\"lineage\":{\"parentThreadId\":\"boss\",\"rootThreadId\":\"boss\",\"relationshipToParent\":\"subagent\"}")
+        let me = thread("me") { $0.lineage.parentThreadId = "boss"; $0.lineage.relationshipToParent = .subagent }
+        let boss = thread("boss") { $0.status = .idle }
+        #expect(ThreadRelationships.lineage(threadId: "me", threads: [me, boss], projection: p).related[0].status == "idle")
+        let native = ThreadRelationships.lineage(threadId: "me", threads: [me, boss], projection: p, parentStatus: ("boss", "running"))
+        #expect(native.related[0].status == "running")
+        let live = thread("boss") { $0.status = .idle; $0.activityRunStatus = .waiting }
+        #expect(ThreadRelationships.lineage(threadId: "me", threads: [me, live], projection: p, parentStatus: ("boss", "running")).related[0].status == "waiting")
+    }
+
     @Test func mergeBackUsesTheNewestFinishedRunUnlessANewerOneRuns() {
         func runs(_ list: [(Int, String)]) -> ThreadProjection {
             projection("f", runs: "[" + list.map { #"{"id":"r\#($0.0)","threadId":"f","ordinal":\#($0.0),"status":"\#($0.1)","requestedAt":"2026-01-01T00:00:00.000Z"}"# }.joined(separator: ",") + "]")

@@ -427,6 +427,20 @@ final class ThreadController {
             return try await environments.request(env, method, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        // A second `orchestration.subscribeThread` for the parent, only while the lineage controller needs it.
+        lineage.watchThread = { [weak environments] id, onProjection in
+            guard let env = id.environmentId, let supervisor = environments?.session(env)?.supervisor else { return {} }
+            let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
+            let task = supervisor.subscribe("orchestration.subscribeThread", payload: {
+                ThreadSession.encode(await store.subscribeInput())
+            }, handler: { event in
+                guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
+                await store.apply([item])
+                guard let projection = await store.takeUpdate()?.projection else { return }
+                await MainActor.run { onProjection(projection) }
+            })
+            return { task.cancel() }
+        }
         lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
         lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
         // The open thread's snooze ended with no push: the visit rules see it woke while shown.

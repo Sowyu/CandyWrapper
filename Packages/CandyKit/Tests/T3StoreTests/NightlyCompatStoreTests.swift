@@ -89,4 +89,25 @@ struct NightlyCompatStoreTests {
         // Subagents from servers before 2994 have no workflow.
         #expect(SubagentWorkflowGroup(coordinator: Self.json(#"{"id":"x","status":"running"}"#)) == nil)
     }
+
+    /// A workflow opening reads its plan from the parent's coordinator row (`resolveWorkflowOpening` and
+    /// `workflowOpeningHeadline`, client-runtime state/subagentRuntime.ts:331-420).
+    @Test func workflowOpeningPlanFromTheParent() throws {
+        let rows = [Self.json(#"{"id":"other","childThreadId":"t-x","status":"running"}"#), Self.json(#"""
+        {"id":"sub-1","childThreadId":"wf","status":"running","title":"Review the repo","driver":"claudeAgent","providerInstanceId":"claude",
+         "workflow":{"name":"Review","agents":[
+          {"index":0,"label":"A","state":"running","phaseIndex":0},{"index":1,"label":"B","state":"completed","phaseIndex":0},
+          {"index":2,"label":"C","state":"failed"},{"index":3,"label":"D","state":"interrupted"}]}}
+        """#)]
+        let coordinator = try #require(WorkflowOpening.Plan.coordinator(of: ThreadId("wf"), in: rows))
+        let plan = WorkflowOpening.Plan(coordinator: coordinator)
+        #expect(plan.driver == "claudeAgent" && plan.providerInstanceId == "claude" && plan.group?.unphased.count == 2)
+        let headline = plan.headline
+        #expect(headline.title == "Review" && headline.description == "Review the repo")
+        #expect(headline.agents == "4 agents · 1 working · 1 done · 1 failed · 1 stopped")
+        // Before the parent loads, or for a coordinator without a workflow, only the name falls back.
+        #expect(WorkflowOpening.Plan(coordinator: nil).headline.title == "Workflow")
+        let plain = WorkflowOpening.Plan(coordinator: Self.json(#"{"id":"s","status":"completed","title":"Fix tests"}"#)).headline
+        #expect(plain.title == "Fix tests" && plain.description == nil && plain.agents == nil)
+    }
 }

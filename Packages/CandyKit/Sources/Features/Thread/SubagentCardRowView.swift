@@ -22,6 +22,9 @@ struct SubagentCardPresentation {
     var child: ThreadId?
     var startedAt: T3Timestamp?
     var completedAt: T3Timestamp?
+    /// A workflow member in the opening block (`WorkflowMemberRow`, WorkflowOpeningBlock.tsx:107-203): no status
+    /// beside the title, and no detail line when the member has nothing to say.
+    var memberRow = false
 
     init(_ p: ProjectedTurnItem, live: JSONValue? = nil) {
         self.init(title: p.item.title, fallbackStatus: p.item.status.rawValue, driver: p.string("driver"),
@@ -47,6 +50,29 @@ struct SubagentCardPresentation {
             default: nil
             }
         }
+    }
+
+    /// A workflow member: the coordinator's driver, the member's own title, and its error, result or prompt once it
+    /// settled, else its prompt, without backticks (WorkflowOpeningBlock.tsx:115-125).
+    init(member m: SubagentWorkflowGroup.Member, driver: String?) {
+        self.init(title: m.title, fallbackStatus: m.status, driver: driver, child: m.childThreadId?.rawValue, event: nil) { key in
+            switch key {
+            case "status": m.status
+            case "model": m.model
+            case "result": m.result ?? m.error
+            case "progress": m.progress
+            case "startedAt": m.startedAt?.raw
+            case "completedAt": m.completedAt?.raw
+            default: nil
+            }
+        }
+        title = m.title
+        memberRow = true
+        let settled = ["completed", "failed", "cancelled", "interrupted"].contains(m.status)
+        let raw = settled ? m.error ?? m.result ?? m.progress : m.progress
+        let plain = raw?.replacingOccurrences(of: "`", with: "").replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        detail = plain?.isEmpty == false ? plain : nil
     }
 
     private init(title raw: String?, fallbackStatus: String, driver: String?, child: String?, event: Event?, _ string: (String) -> String?) {
@@ -92,7 +118,7 @@ struct SubagentCardPresentation {
         }
     }
     /// The small label after the title: only beside a detail, and never for a plain completed card.
-    var showsStatusBesideTitle: Bool { detail != nil && (event != nil || status != "completed") }
+    var showsStatusBesideTitle: Bool { !memberRow && detail != nil && (event != nil || status != "completed") }
     /// `SubagentElapsed` from the record, or the event's time.
     func trailing(now: Int64) -> String { event?.timestamp ?? elapsed(now: now) }
     /// Ticks only for a live card about a running agent.
@@ -180,6 +206,8 @@ final class SubagentCardRowView: TimelineRowView {
 final class SubagentCardLinkView: ControlView {
     /// `py-1.5` around the 16pt title and the `text-2xs leading-relaxed` line.
     static let height: CGFloat = 46
+    /// A member row without a detail line: `py-1.5` around the 24pt avatar.
+    static func height(_ p: SubagentCardPresentation) -> CGFloat { p.memberRow && p.detail == nil ? 36 : height }
     private(set) var presentation: SubagentCardPresentation?
     private let avatar = FillView(), dot = FillView()
     private var glyph: NSView?
@@ -210,10 +238,10 @@ final class SubagentCardLinkView: ControlView {
         presentation = p
         title.text = p.title
         status.text = p.showsStatusBesideTitle ? p.statusLabel : ""
-        let text = p.detail ?? p.statusLabel
+        let text = p.detail ?? (p.memberRow ? "" : p.statusLabel)
         detail.value = text; plainDetail.text = text
         let path = text.contains("/") && !text.contains(" ")
-        detail.isHidden = !path; plainDetail.isHidden = path
+        detail.isHidden = !path || text.isEmpty; plainDetail.isHidden = path || text.isEmpty
         chevron.isHidden = p.child == nil
         glyph?.removeFromSuperview()
         let v = p.driver.isEmpty ? IconView(name: .bot, size: 14, strokeColor: TL.c(\.mutedForeground)) : ProviderIcon.make(driver: p.driver, displayName: p.driver, size: 14)
@@ -272,18 +300,22 @@ final class SubagentCardLinkView: ControlView {
     }
     override func layout() {
         super.layout()
-        avatar.frame = NSRect(x: 8, y: 11, width: 24, height: 24)
-        glyph?.frame = NSRect(x: 13, y: 16, width: 14, height: 14)
-        dot.frame = NSRect(x: 24, y: 27, width: 8, height: 8)
+        // Items center in the row; a member without a detail line is a 36pt row.
+        let dy = (bounds.height - Self.height) / 2
+        avatar.frame = NSRect(x: 8, y: 11 + dy, width: 24, height: 24)
+        glyph?.frame = NSRect(x: 13, y: 16 + dy, width: 14, height: 14)
+        dot.frame = NSRect(x: 24, y: 27 + dy, width: 8, height: 8)
         var right = bounds.width - 8
-        if !chevron.isHidden { chevron.frame = NSRect(x: right - 14, y: 16, width: 14, height: 14); right -= 24 }
+        if !chevron.isHidden { chevron.frame = NSRect(x: right - 14, y: 16 + dy, width: 14, height: 14); right -= 24 }
         let ew = ceil(elapsed.textWidth)
-        elapsed.frame = NSRect(x: right - ew, y: 15, width: ew, height: 16); right -= ew + 10
+        elapsed.frame = NSRect(x: right - ew, y: 15 + dy, width: ew, height: 16); right -= ew + 10
         let lead: CGFloat = dotGrid == nil ? 0 : 16
-        dotGrid?.frame = NSRect(x: 40, y: 6, width: 14, height: 16)
         let available = max(0, right - 42), sw = status.text.isEmpty ? 0 : ceil(status.textWidth) + 8
         let tw = min(ceil(title.textWidth), max(0, available - sw - lead))
-        title.frame = NSRect(x: 42 + lead, y: 6, width: tw, height: 16)
+        let lone = detail.isHidden && plainDetail.isHidden
+        let titleY: CGFloat = lone ? (bounds.height - 16) / 2 : 6
+        dotGrid?.frame = NSRect(x: 40, y: titleY, width: 14, height: 16)
+        title.frame = NSRect(x: 42 + lead, y: titleY, width: tw, height: 16)
         status.frame = NSRect(x: 42 + lead + tw + 8, y: 8, width: max(0, sw - 8), height: 14)
         detail.frame = NSRect(x: 42, y: 22, width: available, height: 17.875)
         plainDetail.frame = detail.frame

@@ -569,6 +569,8 @@ public final class ThreadPanelView: DSView {
     private var detailsPopoverMonitor: Any?
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
+    /// The details card opened or closed, by the toggle or because the column changed width.
+    public var onDetailsVisibilityChange: (@MainActor () -> Void)?
     /// `rightPanelState.maximized` (ChatView.tsx:2390 in 2994, 71f6f1db8): the thread's panel asked to fill the
     /// window. A narrow window shows the panel as a sheet and cannot maximize; widening it again restores the
     /// maximized panel. It stays with the thread through a close, a thread switch and a relaunch.
@@ -748,6 +750,7 @@ public final class ThreadPanelView: DSView {
         if open { detailsCard.isHidden = false } else { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
         needsLayout = true
+        onDetailsVisibilityChange?()
     }
 
     /// Watches for the outside press or Escape that closes the popover, only while it shows.
@@ -787,6 +790,7 @@ public final class ThreadPanelView: DSView {
         header.toggles[0].isPressed = detailsOpen
         if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
+        onDetailsVisibilityChange?()
     }
 
     /// T3 closes the popover when the card turns inline (ThreadDetailsCard.tsx:81-85), and on another thread it

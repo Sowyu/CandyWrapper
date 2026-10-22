@@ -35,6 +35,13 @@ public final class ThreadLineageController {
     public var acknowledgeWake: ((ThreadId, T3Timestamp) -> Void)?
     /// The composer's model for the next send.
     public var selectedModel: (() -> ModelSelection?)?
+    /// Streams another thread's projection by scoped id (`useThreadProjection`); calling the returned closure stops it.
+    public var watchThread: ((ThreadId, @escaping @MainActor @Sendable (ThreadProjection) -> Void) -> (@MainActor () -> Void))?
+    /// The parent thread streamed while it is needed: a workflow coordinator's thread shows the plan from its parent's
+    /// coordinator row (ChatView.tsx:1044-1060), and Lineage shows a provider-native parent's own status
+    /// (ThreadRelationshipsControl.tsx:228-239, 254-256, 440-443). Ordinary threads never load their parent.
+    private var parentWatch: (id: ThreadId, stop: @MainActor () -> Void)?
+    private var parentProjection: ThreadProjection?
     /// The open thread's shell as of the last `sync`.
     private var shell: ThreadShell?
 
@@ -62,6 +69,7 @@ public final class ThreadLineageController {
             section.onStopWorkflow = { [weak self] id, coordinator in self?.stopWorkflow(id, coordinator: coordinator) }
             section.onDetach = { [weak self] in self?.detach() }
         }
+        panel.onDetailsVisibilityChange = { [weak self] in self?.sync() }
         panel.model.onForkFromRun = { [weak self] source, run in self?.fork(source: source, run: run) }
     }
 
@@ -77,6 +85,7 @@ public final class ThreadLineageController {
     public func sync() {
         let card = panel.lazyDetailsCard
         guard let threadId, let env = threadId.environmentId, let projection else {
+            watchParent(nil)
             card.set(\.lineage.lineage, ThreadRelationships.Lineage())
             panel.composer.replacement = nil
             panel.timeline.setHeader(nil, height: 0)
@@ -88,7 +97,13 @@ public final class ThreadLineageController {
         }
         let all = shells?() ?? []
         let local = ThreadRelationships.unscoped(ThreadRelationships.related(all, to: threadId, projection: projection), environmentId: env)
-        var lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection)
+        let parentId = neededParent(projection, shells: local)
+        watchParent(parentId.map { $0.scoped(to: env) })
+        let parent = parentProjection.flatMap { $0.thread.id == parentId ? $0 : nil }
+        let workflowParent = WorkflowOpening.parentThreadId(projection)
+        panel.model.parentSubagents = workflowParent != nil && parent?.thread.id == workflowParent ? parent?.subagents : nil
+        let parentStatus = parent.flatMap { p in ThreadRelationships.providerSubagentStatus(p).map { (p.thread.id, $0.status) } }
+        var lineage = ThreadRelationships.lineage(threadId: threadId.localId, threads: local, projection: projection, parentStatus: parentStatus)
         #if DEBUG
         if let count = ProcessInfo.processInfo.environment["CANDY_FAKE_LINEAGE"].flatMap(Int.init) {
             lineage.previous += ThreadRelationships.Lineage.syntheticPrevious(count, current: threadId.localId)
@@ -215,6 +230,34 @@ public final class ThreadLineageController {
             self?.statusBusy = nil
             self?.sync()
         }
+    }
+
+    /// The parent to stream, by local id: a workflow opening's parent while the thread shows, else a provider-native
+    /// parent while the details card (and its Lineage) shows.
+    private func neededParent(_ projection: ThreadProjection, shells: [ThreadShell]) -> ThreadId? {
+        if let workflow = WorkflowOpening.parentThreadId(projection) { return workflow }
+        guard panel.detailsOpen else { return nil }
+        let current = shells.first { $0.id == projection.thread.id }
+        let parentId = current?.forkedFrom?.type == "run" ? current?.forkedFrom?.threadId : projection.thread.lineage?.parentThreadId
+        guard let parentId, shells.first(where: { $0.id == parentId })?.isProviderNativeSubagent == true else { return nil }
+        return parentId
+    }
+
+    private func watchParent(_ id: ThreadId?) {
+        guard id != parentWatch?.id else { return }
+        parentWatch?.stop()
+        parentWatch = nil
+        parentProjection = nil
+        guard let id, let watchThread else { return }
+        let stop = watchThread(id) { [weak self] projection in
+            guard let self, self.parentWatch?.id == id else { return }
+            // Only the parts shown here: the subagent rows and the root turn's status.
+            let old = self.parentProjection
+            self.parentProjection = projection
+            if old?.subagents != projection.subagents || old.flatMap(ThreadRelationships.providerSubagentStatus)
+                != ThreadRelationships.providerSubagentStatus(projection) { self.sync() }
+        }
+        parentWatch = (id, stop)
     }
 
     /// The bar stands in for the composer only on a provider-native subagent thread.
