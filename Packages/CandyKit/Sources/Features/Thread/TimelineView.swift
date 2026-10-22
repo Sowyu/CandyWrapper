@@ -446,7 +446,7 @@ public final class TimelineView: DSView {
         // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
         // keeps 48px beside an open right panel.
         let padding: CGFloat = viewportWidth >= 640 ? 48 : 12
-        return ThreadDetailsPlacement.lane(width: w, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), padding: padding, cardLeft: detailsCardLeft)
+        return ThreadDetailsPlacement.lane(width: w, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: padding, cardLeft: detailsCardLeft)
     }
 
     /// The window's width, or the outermost view's when there is no window (tests).

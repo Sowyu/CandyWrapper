@@ -81,7 +81,8 @@ public struct ThreadFindResult: Decodable, Equatable, Sendable {
 
 /// index.css:2076-2084. Shared by messages and the composer.
 public enum ThreadChatWidth {
-    public static func maximum(_ setting: String) -> CGFloat {
-        switch setting { case "wide": 1152; case "full": .greatestFiniteMagnitude; default: 736 }
+    /// Redesign's Comfortable follows Capy's thread column (`mx-auto max-w-4xl px-4`, 864 inside), wider than T3's 736.
+    public static func maximum(_ setting: String, dither: Bool = false) -> CGFloat {
+        switch setting { case "wide": 1152; case "full": .greatestFiniteMagnitude; default: dither ? 864 : 736 }
     }
 }
