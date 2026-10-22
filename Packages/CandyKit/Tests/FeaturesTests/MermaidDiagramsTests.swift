@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 @testable import Features
 
@@ -51,5 +51,22 @@ struct MermaidDiagramsTests {
         let layout = MarkdownLayout(document: doc, width: 600, diagrams: diagrams)
         let toggles = layout.controls.filter { if case .toggleDiagram = $0.action { true } else { false } }
         #expect(toggles.count == 1) // the open fence has no view toggle
+    }
+}
+
+extension MermaidDiagramsTests {
+    /// The natural sizes and stand-ins go with a diagram's last cached render, so the cache stays at 64 diagrams.
+    @Test func metadataLeavesWithTheLastRender() throws {
+        let diagrams = MermaidDiagrams()
+        let palette = MermaidDiagrams.Palette(css: "--pele-bg:red", font: "x")
+        let image = try #require(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        for i in 0..<100 {
+            let source = "graph TD\n  A\(i) --> B"
+            let base = MermaidDiagrams.base(source, palette)
+            diagrams.store((base, base + "\n300", source, palette, 300), .rendered(image, CGSize(width: 1, height: 1)), natural: (200, false))
+        }
+        #expect(diagrams.metadataCount.naturals == 64 && diagrams.metadataCount.latest == 64)
+        #expect(MermaidDiagrams.base(ofKey: "a\nb\nn") == "a\nb")
     }
 }
