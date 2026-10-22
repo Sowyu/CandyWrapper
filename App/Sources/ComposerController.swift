@@ -86,8 +86,9 @@ final class ComposerController {
     var onModelChange: (() -> Void)?
     /// The model the next send uses.
     var selectedModel: ModelSelection? { pickers.current.modelSelection }
-    /// After each refresh (a keystroke, a projection, a target change): the branch change notice follows the prompt.
+    /// After thread state or prompt content presence changes: the branch notice follows the prompt.
     var onRefresh: (() -> Void)?
+    private var refreshedHasUserContent: Bool?
     /// `composerDraftHasUserContent` (composerDraftStore.ts:426-441): typed text or an attachment.
     var hasUserContent: Bool { !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !currentAttachments.isEmpty }
 
@@ -252,7 +253,9 @@ final class ComposerController {
     private var prompts: [String: String]
     private var sessions: [String: DraftSession]
     private var saveWork: DispatchWorkItem?
-    private var refreshQueued = false
+    private lazy var refreshes = ComposerRefreshCoordinator(
+        threadState: { [weak self] in self?.refreshThreadState() },
+        promptState: { [weak self] in self?.refreshPromptState() })
 
     init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments) {
         self.panel = panel
@@ -553,7 +556,7 @@ final class ComposerController {
     }
 
     /// An environment's grants arrived: the send button may now say it can't change threads.
-    func grantsChanged() { refreshAfterCommit() }
+    func grantsChanged() { syncSendBlock() }
 
     /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.
     func applySettings(_ environmentId: String, _ raw: JSONValue) {
@@ -1229,23 +1232,14 @@ final class ComposerController {
         pickers.prompt = text
         // An open queued edit keeps its text out of the thread's prompt.
         guard queuedEdit == nil, let key = draftKey else { return }
+        let attachments = currentAttachments
         pruneUnreferencedFiles(text, key: key)
         if panel.stashMenuOpen { setStashMenu(false) }
         prompts[key] = text.isEmpty ? nil : text
         scheduleSave()
-        // The composer already updated its own send state; the thread-wide refresh (meter, tasks,
-        // queue, banners) does not change the typed glyph, so it runs after that frame.
-        refreshAfterCommit()
-    }
-
-    /// One `refresh()` after the frame now being built, however many edits ask for it.
-    private func refreshAfterCommit() {
-        guard !refreshQueued else { return }
-        refreshQueued = true
-        AfterCommit.run { [weak self] in
-            guard let self, self.refreshQueued else { return }
-            self.refresh()
-        }
+        // Removing a file chip changes attachment-dependent send and plan state. Ordinary
+        // typing only changes prompt links, menus and the branch notice.
+        if attachments != currentAttachments { refresh() } else { refreshes.promptChanged() }
     }
 
     private func flushPrompt() {
@@ -1348,11 +1342,21 @@ final class ComposerController {
         refresh()
     }
 
-    private func refresh() {
-        refreshQueued = false
+    private func refresh() { refreshes.refresh() }
+
+    private func refreshPromptState() {
+        panel.lazyDiffPanel.set(\.reviewComments, contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") })
+        if panel.menus.isOpen { panel.menus.reload() }
+        let content = hasUserContent
+        if refreshedHasUserContent != content {
+            refreshedHasUserContent = content
+            onRefresh?()
+        }
+    }
+
+    private func refreshThreadState() {
         panel.model.commandOutputEnabled = targetEnvironmentId.flatMap { serverConfigs[$0] }?.capabilities.contains("commandOutputStreaming") == true
         panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
-        panel.lazyDiffPanel.set(\.reviewComments, contextRecords(for: composer.text).values.filter { $0["kind"]?.stringValue == "review-comment" }.sorted { ($0["contextId"]?.stringValue ?? "") < ($1["contextId"]?.stringValue ?? "") })
         if threadFindTarget != openThreadId { closeThreadFind() }
 
         syncWorktreeSetup()
@@ -1406,7 +1410,6 @@ final class ComposerController {
         updateThreadBanners()
         updateRunOn()
         refreshWorkspaceSnapshot()
-        if panel.menus.isOpen { panel.menus.reload() }
         let banner = draftKey.flatMap { threadErrors.visible($0, shell: shellThread) }
         if banner != panel.errorBanner.banner {
             panel.errorBanner.banner = banner
@@ -1428,6 +1431,7 @@ final class ComposerController {
             panel.needsLayout = true
         }
         panel.updateComposerShown()
+        refreshedHasUserContent = hasUserContent
         onRefresh?()
     }
 
