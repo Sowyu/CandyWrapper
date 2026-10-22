@@ -47,8 +47,9 @@ public final class SwitchView: ControlView {
         }
         ring.actions = ["opacity": NSNull()]
         thumbSlide.anchorPoint = .zero
-        layer?.addSublayer(ring)
         layer?.addSublayer(track)
+        // Over the track: the ring is inset (3473 switch.tsx:14, `focus-visible:ring-inset`), under the thumb.
+        layer?.addSublayer(ring)
         layer?.addSublayer(thumbSlide)
         thumbSlide.addSublayer(thumbStretch)
         thumbStretch.addSublayer(thumb)
@@ -103,13 +104,18 @@ public final class SwitchView: ControlView {
         var ringStyle = BoxStyle()
         ringStyle.radius = 9999
         if state.focusVisible {
-            ringStyle.shadows = BoxShadow.focusRing(ring: Themed.color(\.ring), offset: Themed.color(\.background))
+            ringStyle.shadows = BoxShadow.focusRing(ring: Themed.color(\.ring), offset: Themed.color(\.background)).map { s in
+                var s = s
+                s.inset = true
+                return s
+            }
         }
         ring.boxStyle = ringStyle
 
         var thumbStyle = BoxStyle()
         thumbStyle.radius = 9999
-        thumbStyle.fill = Themed.color(\.background)
+        // `dark:data-unchecked:bg-muted-foreground` keeps an off switch visible in dark (3473 switch.tsx:36, 8a948076bb).
+        thumbStyle.fill = isOn ? Themed.color(\.background) : Themed.color(light: \.background, dark: \.contrastMutedForeground)
         thumbStyle.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.05)),
                               BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.05))]
         thumb.boxStyle = thumbStyle
