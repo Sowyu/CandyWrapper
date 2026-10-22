@@ -67,6 +67,11 @@ final class ComposerController {
     var onNewThread: (() -> Void)?
     /// The draft picker's "Add project" row.
     var onAddProject: (() -> Void)?
+    /// Dither's project popover: "No project" starts a draft in this machine's scratch project, nil hides the row.
+    var scratchEnvironment: (() -> String?)?
+    var onStartWithoutProject: ((String) -> Void)?
+    /// Dither's project popover: "Manage projects" opens Settings, Projects.
+    var onManageProjects: (() -> Void)?
     /// The open draft's project is a Git repository: the strip shows the run context and branch.
     var draftIsGitRepo = false { didSet { if draftIsGitRepo != oldValue { updateRunOn() } } }
     /// The target changed (a thread or draft opened, or the draft's workspace changed).
@@ -291,6 +296,7 @@ final class ComposerController {
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
+        panel.hero.onPickMachine = { [weak self] anchor in self?.panel.contextStrip.runOn.open(from: anchor) }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none && ClientSettingsStore.shared.current.string("environmentIdentificationMode") == "artwork"
@@ -701,7 +707,9 @@ final class ComposerController {
             // Only the machine picker carries `composer.host`, and only with a choice of machines on an
             // unlocked draft (BranchToolbar.tsx:297-299, 697-699); otherwise the key does nothing.
             guard case .draft = self.target, !self.panel.contextStrip.runOn.locked else { return true }
-            if !call.isRepeat, !self.panel.contextStrip.isHidden {
+            if !call.isRepeat, self.panel.contextStrip.isHidden, ThemeRuntime.isDither(dark: self.panel.effectiveAppearance.isDark) {
+                self.panel.contextStrip.runOn.open(from: self.panel.hero.machineChip)
+            } else if !call.isRepeat, !self.panel.contextStrip.isHidden {
                 if self.panel.contextStrip.showsGitControls { self.panel.contextStrip.runContext.performAction() } else { self.panel.contextStrip.runOn.open() }
             }
             return true
@@ -992,6 +1000,7 @@ final class ComposerController {
         guard case .draft(let session) = target, let group = group(of: ProjectId(session.projectId)) else {
             if case .thread = target { return } // GitController supplies the active thread's context.
             panel.showsContextStrip = false
+            panel.hero.setMachine(label: nil, kind: "server", online: false, interactive: false)
             return
         }
         let targets = runOnTargets(group)
@@ -1013,6 +1022,11 @@ final class ComposerController {
         // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
         panel.contextStrip.showsGitControls = draftIsGitRepo
         panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
+        // Dither's machine chip shows the draft's machine whether or not there is a choice.
+        let machine = runOn.selected
+        panel.hero.setMachine(label: runOn.autoBalanceLabel ?? machine?.label, kind: machine?.machine ?? "server",
+                              online: env.flatMap { environments.state($0) }?.status == .connected, interactive: !runOn.locked)
+        panel.needsLayout = true
     }
 
     /// "Auto balance" picked (`onAutoEnvironment`, ChatView.tsx:4398-4428): the draft drops its machine, branch and
@@ -1099,6 +1113,7 @@ final class ComposerController {
     // ponytail: no "No project" or "Add project" rows; add them with scratch threads and Add Project
     private func pickProject(from anchor: NSView) {
         guard let snapshot = sidebar?.snapshot, case .draft(let current) = target else { return }
+        if ThemeRuntime.isDither(dark: anchor.effectiveAppearance.isDark) { return pickProjectDither(from: anchor, snapshot: snapshot, current: current) }
         let envs = sidebarEnvironments
         let currentId = ProjectId(current.projectId)
         var groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
@@ -1112,16 +1127,45 @@ final class ComposerController {
             guard let self else { return }
             guard let key else { self.onAddProject?(); return }
             guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
-            let project = group.members.first { $0.id.environmentId == currentId.environmentId } ?? group.representative
-            // `selectProject` (DraftHeroHeadline.tsx:211-247 in 2994, 38571328a): an empty draft opens the project's
-            // own draft; one with content moves there and keeps its prompt.
-            guard case .draft(let open) = self.target, self.hasUserContent(open, prompt: self.composer.text) else { return self.showDraft(project) }
-            let r = DraftProjectMove.move(open, to: project.id, key: key, in: self.sessions) {
-                self.hasUserContent($0, prompt: self.prompts[$0.draftId] ?? "")
-            }
-            self.sessions = r.sessions
-            self.showDraft(project, stored: r.moved)
+            self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
         }
+    }
+
+    /// Dither's project popover (Capy's): the projects without the scratch one, "No project" (the scratch draft,
+    /// `startScratchThread`), "New project" (Add project) and "Manage projects" (Settings, Projects).
+    private func pickProjectDither(from anchor: NSView, snapshot: ShellSnapshot, current: DraftSession) {
+        let envs = sidebarEnvironments
+        let currentId = ProjectId(current.projectId)
+        let groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
+            .filter { !isScratch($0.representative) }
+        let scratch = snapshot.projects.first { $0.id == currentId }.map(isScratch) ?? false
+        let scratchEnv = scratchEnvironment?()
+        let active = groups.first { $0.memberProjectIds.contains(currentId) }
+        DitherProjectPopoverView.show(groups: groups, selectedKey: active?.key, noProjectMachine: scratchEnv.map { envs.labels[$0] ?? "This device" },
+                                      isScratch: scratch, from: anchor) { [weak self] choice in
+            guard let self else { return }
+            switch choice {
+            case .project(let key):
+                guard key != active?.key || scratch, let group = groups.first(where: { $0.key == key }) else { return }
+                self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
+            case .noProject:
+                if !scratch, let scratchEnv { self.onStartWithoutProject?(scratchEnv) }
+            case .newProject: self.onAddProject?()
+            case .manageProjects: self.onManageProjects?()
+            }
+        }
+    }
+
+    /// `selectProject` (DraftHeroHeadline.tsx:211-247 in 2994, 38571328a): an empty draft opens the project's own
+    /// draft; one with content moves there and keeps its prompt.
+    private func openPickedGroup(_ group: SidebarModel.ProjectGroup, key: String, currentEnvironment: String?) {
+        let project = group.members.first { $0.id.environmentId == currentEnvironment } ?? group.representative
+        guard case .draft(let open) = target, hasUserContent(open, prompt: composer.text) else { return showDraft(project) }
+        let r = DraftProjectMove.move(open, to: project.id, key: key, in: sessions) {
+            self.hasUserContent($0, prompt: self.prompts[$0.draftId] ?? "")
+        }
+        sessions = r.sessions
+        showDraft(project, stored: r.moved)
     }
 
     private func hasUserContent(_ session: DraftSession, prompt: String) -> Bool {

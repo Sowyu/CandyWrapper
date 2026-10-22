@@ -407,11 +407,13 @@ public final class RunOnControl: ComposerContextControl {
 
     /// Opens the list (`composer.host`, mod+shift+h). `SelectPopup alignItemWithTrigger={false}`: under the
     /// trigger, start aligned, 4 below, at least as wide as it; a "Run on" group label, then one item per machine.
-    public func open() {
-        guard interactive, let host = popupHost else { return }
+    /// Dither opens it from the machine chip over the composer (`anchor`).
+    public func open(from anchor: NSView? = nil) {
+        let trigger = anchor ?? self
+        guard interactive, let host = trigger.popupHost else { return }
         let list = MenuPopupView(items: listItems(), style: .select)
-        list.minimumWidth = bounds.width
-        list.hostPopup = host.open(list, trigger: self, placement: .dropdown, swallowsOutsideClick: true)
+        list.minimumWidth = trigger.bounds.width
+        list.hostPopup = host.open(list, trigger: trigger, placement: .dropdown, swallowsOutsideClick: true)
         list.highlightedIndex = options.firstIndex { $0.environmentId == selectedId }.map { $0 + 1 }
         openList = list
     }

@@ -459,6 +459,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
         threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
+        threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }
+        threads.composer.onStartWithoutProject = { [weak palette] env in palette?.startScratchThread(env) }
+        threads.composer.onManageProjects = { [weak commands, weak settings] in
+            commands?.closeUtilityPage()
+            settings?.open()
+            settings?.show(.projects)
+        }
         threads.noProjectsHero.startWithoutProject.action = { [weak palette, weak environments] in
             guard let palette, let env = palette.scratchEnvironmentId(environments?.primaryId) else { return }
             palette.startScratchThread(env)
