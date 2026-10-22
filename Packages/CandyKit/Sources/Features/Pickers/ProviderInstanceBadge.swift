@@ -61,8 +61,8 @@ extension ProviderIcon {
 
     /// The glyph with its badge on top; nil `badge` returns the glyph alone.
     static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground),
-                     badge: ProviderBadge?) -> NSView {
-        let glyph = make(driver: driver, displayName: displayName, size: size, color: color)
+                     model: Bool = false, badge: ProviderBadge?) -> NSView {
+        let glyph = make(driver: driver, displayName: displayName, size: size, color: color, model: model)
         guard let badge else { return glyph }
         return ProviderBadgedIconView(glyph: glyph, badge: badge)
     }

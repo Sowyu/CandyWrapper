@@ -514,7 +514,8 @@ final class ModelRowView: DSView {
                 addSubview(b)
                 newBadge = b
             }
-            let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: 12, color: Themed.color(\.contrastMutedForeground))
+            let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: 12, color: Themed.color(\.contrastMutedForeground),
+                                         model: true)
             addSubview(icon)
             providerIcon = icon
             if let jumpLabel {
