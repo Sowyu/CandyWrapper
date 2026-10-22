@@ -57,10 +57,10 @@ Still open, roughly by how often a user meets them:
 
 - [ ] Sending while approvals are pending declines them and redirects the agent, with four race toasts (ChatComposer.tsx:6177, ChatView.tsx:5225-5263). CW still locks the composer. Large.
 - [ ] The background work banner above the composer, with "Show" for one subagent (ThreadActivityBanners.tsx:100-170). Medium.
-- [ ] Thread links in assistant Markdown render as chips (MarkdownThreadLink.tsx, 15dc7b0130). Medium.
-- [ ] Mermaid diagrams use T3's new "pele" renderer, and closed fences render while streaming (fcb20e49aa, 48b486bd73). CW bundles mermaid 11. Large; the bundle can come from the 3473 runtime's `client/` assets.
+- [x] Thread links in assistant Markdown render as chips (MarkdownThreadLink.tsx, 15dc7b0130), with the project icon on every thread chip. Links to a thread on another machine stay unresolved.
+- [x] Mermaid diagrams use T3's new "pele" renderer, and closed fences render while streaming (fcb20e49aa, 48b486bd73). CW bundles pele 1.8.0 (`scripts/fetch-pele`) in place of mermaid; the diagram face's buttons moved to T3's top row (5a4e998053). Left: KaTeX in `$$` labels and the 600ms fade of a diagram that appears mid-stream.
 - [ ] Opt-in math rendering with KaTeX (`mathRenderingEnabled`, MarkdownMath.tsx, MathTypeset.tsx). Large, and it needs the user's decision on a WKWebView renderer (see PROGRESS.md).
-- [ ] Workflow phases and member agents in the opening block, and the native coordinator status on the parent Lineage row. Both need the parent thread's projection, which CW doesn't load.
+- [x] Workflow phases and member agents in the opening block, and the native coordinator status on the parent Lineage row (3ff5b3c82a, 6eff4a9647). The parent thread streams only while a workflow opening or the details card needs it. Not seen on screen: no sandbox has a workflow coordinator.
 - [ ] PR panel: review thread replies nested with "More replies" and "View on host" (70a869d262), the change breakdown tooltip through `pullRequests.changeBreakdown` (92a6f6d731), and checks popover columns (618c46478a).
 - [ ] Connection diagnosis: a failure model with hop, cause, trace id and the "Details" block with "What to try", "Retry now" and "Copy diagnostics" (packages/client-runtime/src/connection/diagnosis.ts). Large.
 - [x] Add to another machine: the dialog, `projects.listIgnoredFiles` and the ignored file copy (AddProjectToMachineDialog.tsx, lib/addProjectToMachine.ts), with #22254's landing on the clone, no clone toasts and the favicon asked again once the clone lands. Done 2026-10-22 (`AddProjectToMachineController`, `Features/Composer/AddProjectToMachine*.swift`); checked on screen against two 3473 servers in dark and light. No fidelity reference exists for the dialog.
@@ -91,7 +91,7 @@ The first perf review flagged the huge-thread micro-benchmarks as up to 24 times
 
 Performance (docs/perf/2026-10-21-80ed242-w1.md, against a 3473 server): 218 ms to the first window, 0.045% idle CPU, 39.2 MB idle footprint and 421 ms of scroll CPU, with no app metric past its threshold. Against the median of the saved runs from 2026-10-18 and 19, the review flagged Markdown parsing and layout, the huge-thread update benchmarks and the sidebar item list. A same-hour A/B with a39a89b5, the commit before this run (kept out of docs/perf), shows those were already slower before this run: this run moved no benchmark by more than 13% (row derive +12%, Markdown line parsing +13%) and made the huge-thread updates 11 to 30% faster. The Windows path pass in Markdown now skips text without a drive path. Why a39a89b5 already measured slower than the 2026-10-19 runs (a commit, the Swift 6.3 build change or the machine) is an open task in PROGRESS.md.
 
-Still open: section 2's list. Also: T3 always offers "Revert files too" in "Edit from here?", where CandyWrapper offers it only for a thread with a worktree (a rule older than this run), and the parent thread's projection, which would unlock workflow phases and the parent Lineage row status, is not loaded.
+Still open: section 2's list. Also: T3 always offers "Revert files too" in "Edit from here?", where CandyWrapper offers it only for a thread with a worktree (a rule older than this run),.
 
 ## 6. Commits the first pass missed
 
