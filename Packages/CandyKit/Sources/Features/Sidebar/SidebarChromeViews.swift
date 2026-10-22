@@ -451,6 +451,8 @@ public final class SidebarAccountRowView: ControlView {
     /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
     public var updateAllCount = 0
     public var onUpdateAll: (() -> Void)?
+    /// Room at the right edge for the update button, which sits inside the row; the chevron moves left of it.
+    public var trailingReserve: CGFloat = 0 { didSet { if trailingReserve != oldValue { needsLayout = true } } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -501,10 +503,11 @@ public final class SidebarAccountRowView: ControlView {
         avatar.cornerRadius = 14
         CATransaction.commit()
         initials.frame = NSRect(x: 8, y: (h - 16) / 2, width: 28, height: 16)
-        let tx: CGFloat = 8 + 28 + 10, right = bounds.width - 8 - 12 - 6
+        let end = bounds.width - trailingReserve
+        let tx: CGFloat = 8 + 28 + 10, right = end - 8 - 12 - 6
         name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
         detail.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
-        chevron.frame = NSRect(x: bounds.width - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
+        chevron.frame = NSRect(x: end - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
     }
 
     private func showMenu() {
