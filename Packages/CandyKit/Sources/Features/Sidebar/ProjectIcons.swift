@@ -114,12 +114,11 @@ public final class ProjectIconStore {
         guard let loader else { return }
         entries[key] = .loading
         let generation = generation
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .utility) { [weak self] in
             let image: CGImage?
             do { image = try await loader(key.environmentId, key.cwd, key.path).flatMap(Self.decode) } catch { image = nil }
             await MainActor.run {
-                let store = ProjectIconStore.shared
-                guard store.generation == generation else { return }
+                guard let store = self, store.generation == generation else { return }
                 store.entries[key] = image.map { .image($0, gray: nil) } ?? .missing(Date())
                 if image != nil { NotificationCenter.default.post(name: Self.didChange, object: store) }
             }

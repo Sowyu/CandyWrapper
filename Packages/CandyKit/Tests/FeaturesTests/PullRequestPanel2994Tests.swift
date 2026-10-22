@@ -37,12 +37,12 @@ struct PullRequestCommentFilterTests {
                 == "Use this link and code item")
         #expect(PullRequestDetailLogic.allCommentsHiddenNote(1) == "The only comment is hidden by the filter.")
         #expect(PullRequestDetailLogic.allCommentsHiddenNote(3) == "All 3 comments are hidden by the filter.")
-        let defaults = try #require(UserDefaults(suiteName: "prpanel-filter-test"))
-        defaults.removePersistentDomain(forName: "prpanel-filter-test")
+        let suite = "prpanel-filter-test-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
         #expect(F.load(defaults) == F())
         F(bots: true).save(defaults)
         #expect(F.load(defaults) == F(bots: true))
-        defaults.removePersistentDomain(forName: "prpanel-filter-test")
+        defaults.removePersistentDomain(forName: suite)
     }
 }
 
@@ -55,8 +55,10 @@ struct InlineActionConfirmTests {
         #expect(PullRequestDetailLogic.filterComments(d, .init()).shown.map(\.id) == ["IC_2", "RT_2"])
     }
 
-    @Test func armsThenConfirms() async throws {
+    @Test func armsThenConfirms() throws {
         let confirm = InlineActionConfirm()
+        var timeouts: [(Double, DispatchWorkItem)] = []
+        confirm.schedule = { timeouts.append(($0, $1)) }
         var disarmed: [String] = []
         let press = { (action: String, slot: String) in
             confirm.press(action, slot: slot, contains: { _ in true }, onDisarm: { disarmed.append(slot) })
@@ -74,9 +76,13 @@ struct InlineActionConfirmTests {
         #expect(disarmed == ["header", "menu:close"])
         #expect(!press("close", "menu:close")) // disarmed: the next press arms again
         confirm.disarm()
-        confirm.timeoutSeconds = 0.05
+        // Every arm set a 3 s timeout; the ones before were cancelled when their control disarmed.
+        #expect(timeouts.allSatisfy { $0.0 == 3 })
+        #expect(timeouts.allSatisfy { $0.1.isCancelled })
         #expect(!press("revert", "menu:revert"))
-        try await Task.sleep(for: .milliseconds(300))
+        let timeout = try #require(timeouts.last?.1)
+        #expect(!timeout.isCancelled)
+        timeout.perform()
         #expect(!confirm.isArmed("revert", slot: "menu:revert"))
         #expect(disarmed.last == "menu:revert")
     }

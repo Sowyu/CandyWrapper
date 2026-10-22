@@ -40,22 +40,22 @@ struct ProjectIconTests {
 
     /// The monogram shows until the icon arrives; a missing icon never asks again within the recheck window.
     @Test func storeLoadsOnceAndFallsBack() async throws {
-        let store = ProjectIconStore.shared
+        // Its own store: sidebar rows in other suites ask the shared one.
+        let store = ProjectIconStore()
         let calls = Counter()
         let png = Self.png(width: 64, height: 64)
         store.loader = { _, cwd, _ in await calls.bump(cwd); return cwd == "/has-icon" ? png : nil }
-        defer { store.loader = nil }
         let withIcon = ProjectIconSource(title: "A", workspaceRoot: "/has-icon")
         let without = ProjectIconSource(title: "B", workspaceRoot: "/none")
         #expect(store.image(for: withIcon) == nil)
         #expect(store.image(for: without) == nil)
-        for _ in 0..<100 where store.image(for: withIcon) == nil { try await Task.sleep(nanoseconds: 10_000_000) }
+        _ = await eventually { store.image(for: withIcon) != nil }
         #expect(store.image(for: withIcon)?.width == 32)
         #expect(store.image(for: withIcon, grayscale: true) != nil)
         #expect(store.image(for: without) == nil)
         // A chosen icon wins over the file.
         #expect(store.image(for: ProjectIconSource(title: "A", workspaceRoot: "/has-icon", override: .emoji("x"))) == nil)
-        // Other suites draw sidebar rows in parallel, so count only these two roots.
+        _ = await eventually { await calls.value["/none"] != nil }
         let counts = await calls.value
         #expect(counts["/has-icon"] == 1 && counts["/none"] == 1)
     }
