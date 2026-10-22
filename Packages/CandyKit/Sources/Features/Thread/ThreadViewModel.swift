@@ -251,6 +251,26 @@ public final class ThreadViewModel {
     /// the last `rowsSettled()` (benchmarks).
     private var offMainApplyCost: Double = 0
 
+    /// Visit marks do not change the timeline or panel chrome (T3 ee33c4c65,
+    /// packages/client-runtime/src/state/threadDetail.ts:82-87, 128-159).
+    /// Keep the live read state without deriving rows again. Compare every other field so a
+    /// visit batched with a real update still takes the normal path.
+    func acceptReadState(_ next: ThreadProjection?) -> Bool {
+        guard let next, let previous = projection,
+              case .object(var before) = previous.thread.raw,
+              case .object(var after) = next.thread.raw else { return false }
+        for key in ["lastVisitedAt", "updatedAt"] { before[key] = nil; after[key] = nil }
+        guard before == after else { return false }
+        var comparable = next
+        comparable.thread = previous.thread
+        guard comparable == previous else { return false }
+        projection = next
+        return true
+    }
+
+    /// Counts projection derivations, including requests coalesced behind an active pass.
+    private(set) var projectionDerivationCount = 0
+
     /// Replaces the projection (nil clears the view) and re-derives the rows that changed.
     public func setProjection(_ projection: ThreadProjection?) {
         if projection == nil, self.projection == nil { return }
@@ -269,6 +289,7 @@ public final class ThreadViewModel {
             expandedChangedFiles = []; folderOverrides = [:]
             dropOutputs()
         }
+        projectionDerivationCount += 1
         projectionDirty = true
         derive()
         if subagentsChanged && !threadChanged {
