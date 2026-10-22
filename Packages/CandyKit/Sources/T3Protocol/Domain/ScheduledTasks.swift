@@ -10,7 +10,8 @@ public enum ScheduledTaskSchedule: Equatable, Sendable {
     case interval(everyMs: Double)
     /// `timeOfDay` is local `HH:MM`; `weekdays` 0 (Sunday) to 6, nil for every day.
     case fixedTime(timeOfDay: String, weekdays: [Int]?)
-    case webhook(signature: ScheduledTaskWebhookSignature?, maxDeliveryAgeMinutes: Int?)
+    case webhook(signature: ScheduledTaskWebhookSignature?, maxDeliveryAgeMinutes: Int?,
+                 dedupe: ScheduledTaskWebhookDedupe = .init(), filters: [ScheduledTaskWebhookFilter] = [])
 
     init?(json: JSONValue?) {
         switch json?["type"]?.stringValue {
@@ -25,7 +26,11 @@ public enum ScheduledTaskSchedule: Equatable, Sendable {
             let signature = sig?["header"]?.stringValue.map {
                 ScheduledTaskWebhookSignature(header: $0, encoding: sig?["encoding"]?.stringValue ?? "hex", prefix: sig?["prefix"]?.stringValue ?? "")
             }
-            self = .webhook(signature: signature, maxDeliveryAgeMinutes: json?["maxDeliveryAgeMinutes"]?.intValue)
+            let dedupe = json?["dedupe"]
+            self = .webhook(signature: signature, maxDeliveryAgeMinutes: json?["maxDeliveryAgeMinutes"]?.intValue,
+                            dedupe: ScheduledTaskWebhookDedupe(replayKey: dedupe?["replayKey"]?.stringValue, coalesceKey: dedupe?["coalesceKey"]?.stringValue,
+                                                               coalesceWindowSeconds: dedupe?["coalesceWindowSeconds"]?.intValue),
+                            filters: json?["filters"]?.arrayValue?.compactMap(ScheduledTaskWebhookFilter.init(json:)) ?? [])
         default: return nil
         }
     }
@@ -39,6 +44,41 @@ public struct ScheduledTaskWebhookSignature: Equatable, Sendable {
     public var encoding: String
     public var prefix: String
     public init(header: String, encoding: String, prefix: String) { self.header = header; self.encoding = encoding; self.prefix = prefix }
+}
+
+/// `ScheduledTaskWebhookDedupe` (3473 scheduledTask.ts:95-106): replay and coalesce key templates and
+/// the coalesce window in seconds (the server's default is 120).
+public struct ScheduledTaskWebhookDedupe: Equatable, Sendable {
+    public var replayKey: String?
+    public var coalesceKey: String?
+    public var coalesceWindowSeconds: Int?
+    public init(replayKey: String? = nil, coalesceKey: String? = nil, coalesceWindowSeconds: Int? = nil) {
+        self.replayKey = replayKey; self.coalesceKey = coalesceKey; self.coalesceWindowSeconds = coalesceWindowSeconds
+    }
+}
+
+/// `ScheduledTaskWebhookFilter` (3473 scheduledTask.ts:108-139): a request value under `body`, `headers`
+/// or `query`, and a test. `in` holds a list, `exists` no value, the others one string.
+public struct ScheduledTaskWebhookFilter: Equatable, Sendable {
+    public var path: String
+    /// `equals`, `notEquals`, `in`, `startsWith` or `exists`.
+    public var op: String
+    public var value: String?
+    public var values: [String]?
+    public init(path: String, op: String, value: String? = nil, values: [String]? = nil) {
+        self.path = path; self.op = op; self.value = value; self.values = values
+    }
+
+    init?(json: JSONValue) {
+        guard let path = json["path"]?.stringValue, let op = json["op"]?.stringValue else { return nil }
+        self.init(path: path, op: op, value: json["value"]?.stringValue, values: json["value"]?.arrayValue?.compactMap(\.stringValue))
+    }
+
+    public var json: JSONValue {
+        var o: [String: JSONValue] = ["path": .string(path), "op": .string(op)]
+        if op == "in" { o["value"] = .array((values ?? []).map(JSONValue.string)) } else if op != "exists" { o["value"] = .string(value ?? "") }
+        return .object(o)
+    }
 }
 
 /// `ScheduledTaskWebhookEndpoint`.
@@ -173,6 +213,24 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     /// Write-only: empty keeps the stored secret.
     public var signatureSecret = ""
     public var maxDeliveryAgeMinutes = ""
+    public var replayKey = ""
+    public var coalesceKey = ""
+    public var coalesceWindowSeconds = ""
+    public var filters: [WebhookFilterDraft] = []
+    /// The filter rows the form opened with.
+    public var savedFilters: [WebhookFilterDraft] = []
+
+    /// `WebhookFilterDraft` (3473 scheduledTaskWebhook.ts:24-32): one editable filter row. `in` takes a
+    /// comma-separated list; `exists` ignores the value. `id` is the row's identity in the form only.
+    public struct WebhookFilterDraft: Equatable, Sendable {
+        public var id: String
+        public var path = ""
+        public var op = "equals"
+        public var value = ""
+        public init(id: String, path: String = "", op: String = "equals", value: String = "") {
+            self.id = id; self.path = path; self.op = op; self.value = value
+        }
+    }
 
     /// `EMPTY_DRAFT`.
     public init() {}
@@ -201,6 +259,99 @@ public enum ScheduledTaskLogic {
         }
     }
 
+    /// `MAX_WEBHOOK_FILTERS`.
+    public static let maxWebhookFilters = 16
+    /// `WEBHOOK_FILTER_OPS`: the test and the words the form shows for it.
+    public static let webhookFilterOps: [(op: String, label: String)] = [
+        ("equals", "equals"), ("notEquals", "does not equal"), ("in", "is one of"), ("startsWith", "starts with"), ("exists", "exists"),
+    ]
+
+    nonisolated(unsafe) private static var lastFilterDraftId = 0
+    /// `emptyWebhookFilterDraft`.
+    public static func emptyFilterDraft() -> ScheduledTaskDraft.WebhookFilterDraft {
+        lastFilterDraftId += 1
+        return .init(id: "filter-\(lastFilterDraftId)")
+    }
+
+    /// `webhookFilterDrafts`: stored filters as form rows, an `in` list joined with ", ".
+    static func filterDrafts(_ filters: [ScheduledTaskWebhookFilter]) -> [ScheduledTaskDraft.WebhookFilterDraft] {
+        filters.map { f in
+            lastFilterDraftId += 1
+            return .init(id: "filter-\(lastFilterDraftId)", path: f.path, op: f.op,
+                         value: f.op == "exists" ? "" : f.op == "in" ? (f.values ?? []).joined(separator: ", ") : f.value ?? "")
+        }
+    }
+
+    /// `parseWebhookFilterDrafts`: the rows as the server's filters, checked by its schema
+    /// (scheduledTask.ts:108-139), or the message naming the first row that would not save.
+    public static func parseFilterDrafts(_ drafts: [ScheduledTaskDraft.WebhookFilterDraft]) -> Result<[ScheduledTaskWebhookFilter], FilterError> {
+        if drafts.count > maxWebhookFilters { return .failure(FilterError(message: "Use at most \(maxWebhookFilters) filters.")) }
+        var filters: [ScheduledTaskWebhookFilter] = []
+        for (i, d) in drafts.enumerated() {
+            let path = d.path.trimmingCharacters(in: .whitespacesAndNewlines)
+            // `TrimmedNonEmptyString` matching `^(body|headers|query)(\.|$)`.
+            let pathOK = path.range(of: #"^(body|headers|query)(\.|$)"#, options: .regularExpression) != nil
+            var filter: ScheduledTaskWebhookFilter?
+            switch d.op {
+            case "exists": filter = pathOK ? .init(path: path, op: "exists") : nil
+            case "in":
+                let values = d.value.split(separator: ",", omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                filter = pathOK && !values.isEmpty ? .init(path: path, op: "in", values: values) : nil
+            case "equals", "notEquals", "startsWith": filter = pathOK ? .init(path: path, op: d.op, value: d.value) : nil
+            default: filter = nil
+            }
+            guard let filter else {
+                let tail = d.op == "exists" ? "." : d.op == "in" ? ", and at least one value." : ", and a value."
+                return .failure(FilterError(message: "Filter \(i + 1) needs a path under body, headers or query\(tail)"))
+            }
+            filters.append(filter)
+        }
+        return .success(filters)
+    }
+
+    public struct FilterError: Error, Equatable, Sendable { public var message: String }
+
+    /// `webhookFilterDraftsChanged`: a save sends `filters` only when the rows differ from the ones
+    /// the form opened with, so editing the title can't overwrite filters another device changed.
+    public static func filterDraftsChanged(_ saved: [ScheduledTaskDraft.WebhookFilterDraft], _ current: [ScheduledTaskDraft.WebhookFilterDraft]) -> Bool {
+        saved.count != current.count || zip(saved, current).contains { a, b in
+            a.path != b.path || a.op != b.op || (a.op != "exists" && a.value != b.value)
+        }
+    }
+
+    /// `isWebhookDedupeTemplate` (3473 scheduledTask.ts:86-91): at least one `{{body.…}}`, `{{headers.…}}`,
+    /// `{{query.…}}` or `{{request}}`, and no stray braces around them.
+    public static func isDedupeTemplate(_ template: String) -> Bool {
+        let pattern = #"\{\{\s*(?:(?:body|headers|query)(?:\.[^{}.\s]+)*|request)\s*\}\}"#
+        guard template.range(of: pattern, options: .regularExpression) != nil else { return false }
+        let remainder = template.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        return !remainder.contains("{{") && !remainder.contains("}}")
+    }
+
+    /// `webhookDraftErrors` (3473 scheduledTasksSettings.logic.ts:102-129): the age limit first, alone,
+    /// then each bad key and the window.
+    public static func webhookDraftErrors(_ d: ScheduledTaskDraft) -> [ValidationError] {
+        guard d.scheduleMode == .webhook else { return [] }
+        if parseMaxDeliveryAge(d.maxDeliveryAgeMinutes) == nil { return [.invalidAge] }
+        var errors: [ValidationError] = []
+        for (label, value) in [("Replay key", d.replayKey), ("Coalesce key", d.coalesceKey)] {
+            let t = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty, !isDedupeTemplate(t) { errors.append(.invalidWebhook("\(label) must contain a valid request placeholder.")) }
+        }
+        let window = d.coalesceWindowSeconds.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !window.isEmpty, coalesceWindow(window) == nil {
+            errors.append(.invalidWebhook("Coalesce window must be whole seconds from 10 to 3600."))
+        }
+        return errors
+    }
+
+    /// JS `Number(window)` as whole seconds from 10 to 3600.
+    static func coalesceWindow(_ t: String) -> Int? {
+        guard let n = Double(t), n == n.rounded(), n >= 10, n <= 3600 else { return nil }
+        return Int(n)
+    }
+
     /// `parseMaxDeliveryAge`: blank is no limit (`.some(nil)`), nil is not a valid limit.
     public static func parseMaxDeliveryAge(_ value: String) -> Int?? {
         let t = value.trimmingCharacters(in: .whitespaces)
@@ -215,11 +366,12 @@ public enum ScheduledTaskLogic {
         return UsageFormat.jsRound(m * 60_000)
     }
 
-    /// `scheduleFromDraft` as the upsert's `schedule` JSON. Nil when the webhook age limit is invalid.
+    /// `scheduleFromDraft` as the upsert's `schedule` JSON. Nil when a webhook setting is invalid.
     public static func schedulePayload(_ d: ScheduledTaskDraft) -> JSONValue? {
         switch d.scheduleMode {
         case .webhook:
-            guard let age = parseMaxDeliveryAge(d.maxDeliveryAgeMinutes) else { return nil }
+            guard webhookDraftErrors(d).isEmpty, let age = parseMaxDeliveryAge(d.maxDeliveryAgeMinutes),
+                  case .success(let filters) = parseFilterDrafts(d.filters) else { return nil }
             let secret = d.signatureSecret.trimmingCharacters(in: .whitespaces)
             var signature: JSONValue = .null
             if d.signatureEnabled {
@@ -228,7 +380,19 @@ public enum ScheduledTaskLogic {
                 if !secret.isEmpty { s["secret"] = .string(secret) }
                 signature = .object(s)
             }
-            return .object(["type": .string("webhook"), "signature": signature, "maxDeliveryAgeMinutes": age.map { .number(Double($0)) } ?? .null])
+            // Always a `dedupe`, empty when every field is, so clearing the fields clears the stored ones.
+            var dedupe: [String: JSONValue] = [:]
+            let replayKey = d.replayKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let coalesceKey = d.coalesceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !replayKey.isEmpty { dedupe["replayKey"] = .string(replayKey) }
+            if !coalesceKey.isEmpty { dedupe["coalesceKey"] = .string(coalesceKey) }
+            if let window = coalesceWindow(d.coalesceWindowSeconds.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                dedupe["coalesceWindowSeconds"] = .number(Double(window))
+            }
+            var o: [String: JSONValue] = ["type": .string("webhook"), "signature": signature,
+                                          "maxDeliveryAgeMinutes": age.map { .number(Double($0)) } ?? .null, "dedupe": .object(dedupe)]
+            if filterDraftsChanged(d.savedFilters, d.filters) { o["filters"] = .array(filters.map(\.json)) }
+            return .object(o)
         case .interval:
             return .object(["type": .string("interval"), "everyMs": intervalMs(d.intervalMinutes).map(JSONValue.number) ?? .number(.nan)])
         case .fixed:
@@ -254,8 +418,13 @@ public enum ScheduledTaskLogic {
             d.scheduleMode = .fixed
             d.timeOfDay = time
             d.weekdays = days.map { $0.isEmpty ? Set(0...6) : Set($0) } ?? Set(0...6)
-        case .webhook(let signature, let age):
+        case .webhook(let signature, let age, let dedupe, let filters):
             d.scheduleMode = .webhook
+            d.replayKey = dedupe.replayKey ?? ""
+            d.coalesceKey = dedupe.coalesceKey ?? ""
+            d.coalesceWindowSeconds = dedupe.coalesceWindowSeconds.map(String.init) ?? ""
+            d.filters = filterDrafts(filters)
+            d.savedFilters = d.filters
             d.weekdays = Set(0...6)
             if let signature {
                 d.signatureEnabled = true
@@ -290,6 +459,14 @@ public enum ScheduledTaskLogic {
 
     public enum ValidationError: Error, Equatable, Sendable {
         case incomplete, invalidAge, signatureSecret, invalidInterval, checkoutPath
+        /// `Invalid filter` with the row's message.
+        case invalidFilter(String)
+        /// `Invalid webhook settings` with a key or window message.
+        case invalidWebhook(String)
+        /// More than one webhook problem; T3 shows a toast for each.
+        case several([ValidationError])
+
+        public var all: [ValidationError] { if case .several(let list) = self { list } else { [self] } }
         /// The toast's title and description (ScheduledTasksSettings.tsx:870-915).
         public var copy: (title: String, description: String) {
             switch self {
@@ -298,6 +475,9 @@ public enum ScheduledTaskLogic {
             case .signatureSecret: ("Signing secret is required", "Enter the signature header and secret.")
             case .invalidInterval: ("Invalid interval", "Enter an interval of at least one minute.")
             case .checkoutPath: ("Checkout path is required", "Enter the path of the checkout to run in.")
+            case .invalidFilter(let message): ("Invalid filter", message)
+            case .invalidWebhook(let message): ("Invalid webhook settings", message)
+            case .several(let list): list.first?.copy ?? ("", "")
             }
         }
     }
@@ -308,7 +488,11 @@ public enum ScheduledTaskLogic {
                                    storedSecret: Bool, creationSource: String = "web") -> Result<JSONValue, ValidationError> {
         let title = d.title.trimmingCharacters(in: .whitespacesAndNewlines), prompt = d.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !prompt.isEmpty, projectExists, let selection else { return .failure(.incomplete) }
-        guard let schedule = schedulePayload(d) else { return .failure(.invalidAge) }
+        if d.scheduleMode == .webhook, case .failure(let e) = parseFilterDrafts(d.filters) { return .failure(.invalidFilter(e.message)) }
+        guard let schedule = schedulePayload(d) else {
+            let errors = webhookDraftErrors(d)
+            return .failure(errors.count > 1 ? .several(errors) : errors.first ?? .invalidAge)
+        }
         if d.scheduleMode == .webhook, d.signatureEnabled,
            d.signatureHeader.trimmingCharacters(in: .whitespaces).isEmpty
             || (d.signatureSecret.trimmingCharacters(in: .whitespaces).isEmpty && !storedSecret) {

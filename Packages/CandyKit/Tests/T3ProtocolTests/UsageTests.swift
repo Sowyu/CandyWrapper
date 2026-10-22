@@ -255,6 +255,58 @@ struct ScheduledTaskLogicTests {
         #expect(ScheduledTaskLogic.parseMaxDeliveryAge("2.5") == nil)
     }
 
+    /// 3473 webhook filters and dedupe (scheduledTasksSettings.logic.ts:102-198, scheduledTaskWebhook.ts:75-131).
+    @Test func webhookFiltersAndDedupe() {
+        let t = ScheduledTask(json: UsageTests.json(#"""
+        {"id": "t1", "title": "Hook", "prompt": "P", "enabled": true, "projectId": "p", "threadId": null,
+         "schedule": {"type": "webhook", "signature": null, "maxDeliveryAgeMinutes": null,
+                      "dedupe": {"replayKey": "{{headers.delivery-id}}", "coalesceWindowSeconds": 300},
+                      "filters": [{"path": "body.action", "op": "in", "value": ["opened", "reopened"]}, {"path": "headers.x-event", "op": "exists"}]},
+         "workspaceStrategy": {"type": "root"}, "modelSelection": {"instanceId": "c", "model": "m"},
+         "runtimeMode": "full-access", "interactionMode": "default", "createdBy": {}, "creationSource": "web",
+         "createdAt": "2026-10-10T00:00:00.000Z", "updatedAt": "2026-10-10T00:00:00.000Z", "nextRunAt": null,
+         "lastRunAt": null, "lastRunStatus": "never", "lastRunError": null, "runCount": 0}
+        """#))!
+        var d = ScheduledTaskLogic.draft(t)
+        #expect(d.replayKey == "{{headers.delivery-id}}" && d.coalesceKey == "" && d.coalesceWindowSeconds == "300")
+        #expect(d.filters.map(\.value) == ["opened, reopened", ""] && d.filters.map(\.op) == ["in", "exists"])
+        // Untouched filters stay out of the payload; the dedupe always goes, empty fields left out.
+        var w = ScheduledTaskLogic.schedulePayload(d)
+        #expect(w?["filters"] == nil)
+        #expect(w?["dedupe"] == .object(["replayKey": .string("{{headers.delivery-id}}"), "coalesceWindowSeconds": .number(300)]))
+        d.filters[0].value = "opened,  closed, "
+        d.filters.append(ScheduledTaskLogic.emptyFilterDraft())
+        d.filters[2].path = " query.source "
+        d.filters[2].op = "startsWith"
+        d.replayKey = ""; d.coalesceWindowSeconds = ""
+        w = ScheduledTaskLogic.schedulePayload(d)
+        #expect(w?["dedupe"] == .object([:]))
+        #expect(w?["filters"] == .array([
+            .object(["path": .string("body.action"), "op": .string("in"), "value": .array([.string("opened"), .string("closed")])]),
+            .object(["path": .string("headers.x-event"), "op": .string("exists")]),
+            .object(["path": .string("query.source"), "op": .string("startsWith"), "value": .string("")]),
+        ]))
+        // Clearing every row sends [] to clear the stored ones.
+        var cleared = d
+        cleared.filters = []
+        #expect(ScheduledTaskLogic.schedulePayload(cleared)?["filters"] == .array([]))
+        // Errors: the row's message, then each bad key and the window as their own toasts.
+        d.title = "T"
+        d.filters[2].path = "path.x"
+        let upsert = { ScheduledTaskLogic.upsertInput(d, projectId: "p", projectExists: true, selection: ("c", "m"), storedSecret: false) }
+        #expect(upsert() == .failure(.invalidFilter("Filter 3 needs a path under body, headers or query, and a value.")))
+        d.filters[2].path = "query"
+        d.replayKey = "delivery"
+        d.coalesceKey = "{{body.id}}"
+        d.coalesceWindowSeconds = "5"
+        #expect(upsert() == .failure(.several([.invalidWebhook("Replay key must contain a valid request placeholder."),
+                                               .invalidWebhook("Coalesce window must be whole seconds from 10 to 3600.")])))
+        #expect(ScheduledTaskLogic.isDedupeTemplate("{{ request }}") && ScheduledTaskLogic.isDedupeTemplate("gh-{{headers.x-id}}"))
+        #expect(!ScheduledTaskLogic.isDedupeTemplate("{{body}} }}") && !ScheduledTaskLogic.isDedupeTemplate("{{ query..a }}"))
+        #expect(ScheduledTaskLogic.parseFilterDrafts(Array(repeating: .init(id: "x", path: "body"), count: 17))
+                == .failure(.init(message: "Use at most 16 filters.")))
+    }
+
     @Test func taskRoundTripsThroughTheDraft() {
         let t = ScheduledTask(json: UsageTests.json(#"""
         {"id": "t1", "title": "Nightly", "prompt": "Check", "enabled": true, "schedule": {"type": "interval", "everyMs": 900000},

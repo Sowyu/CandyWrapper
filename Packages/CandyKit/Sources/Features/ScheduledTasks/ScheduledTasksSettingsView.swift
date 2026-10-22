@@ -390,7 +390,9 @@ final class ScheduledTaskEditor {
         changed()
     }
 
-    private func report(_ e: ScheduledTaskLogic.ValidationError) { context.toast?(e.copy.title, e.copy.description, .error) }
+    private func report(_ e: ScheduledTaskLogic.ValidationError) {
+        for one in e.all { context.toast?(one.copy.title, one.copy.description, .error) }
+    }
 
     private func save() {
         guard !saving, !editingTaskMissing, connected, let request = context.request else { return }
@@ -595,6 +597,20 @@ final class ScheduledTaskFormView: DSView {
             let age = InputView(placeholder: "Run every request", text: d.maxDeliveryAgeMinutes)
             age.onChange = { [weak e] t in e?.draft.maxDeliveryAgeMinutes = t }
             rows.append(field("Skip requests older than", hint: "minutes, optional", age, height: 32))
+            // Filters and dedupe (3473 ScheduledTasksSettings.tsx:1545-1603).
+            let filters = ScheduledTaskWebhookFiltersField(editor: e)
+            rows.append((filters, filters.height(forWidth: 528)))
+            let replay = InputView(placeholder: "{{headers.delivery-id}}", text: d.replayKey)
+            replay.onChange = { [weak e] t in e?.draft.replayKey = t }
+            rows.append(field("Replay key", hint: "template, optional", replay, height: 32))
+            let coalesce = InputView(placeholder: "{{body.id}}", text: d.coalesceKey)
+            coalesce.onChange = { [weak e] t in e?.draft.coalesceKey = t }
+            rows.append(field("Coalesce key", hint: "template, optional", coalesce, height: 32))
+            let window = InputView(placeholder: "120", text: d.coalesceWindowSeconds)
+            window.onChange = { [weak e] t in e?.draft.coalesceWindowSeconds = t }
+            rows.append(field("Coalesce window", hint: "seconds, 10–3600", window, height: 32))
+            rows.append(text("Replay keys suppress repeat deliveries for 7 days. Coalescing runs the latest payload once when the window from the first delivery closes. Empty keys run normally.",
+                             color: Themed.color(\.mutedForeground), size: 12))
             let sig = SwitchView(isOn: d.signatureEnabled)
             sig.onChange = { [weak e] on in e?.draft.signatureEnabled = on; e?.changed() }
             rows.append(switchRow("Require signature", "Reject requests without a valid HMAC-SHA256 signature of the body.", sig))
@@ -654,6 +670,95 @@ final class ScheduledTaskFormView: DSView {
         for r in rows {
             r.view.frame = NSRect(x: 0, y: y, width: bounds.width, height: r.height)
             y += r.height + 20
+        }
+    }
+}
+
+/// `WebhookFiltersField` (3473 ScheduledTasksSettings.tsx:162-250): "Filters" with its note and "Add filter"
+/// (up to 16), then per filter the path with its trash button over the test (`w-44`) and its value,
+/// which `exists` leaves out. Always stacked, as T3 keeps it in the narrow dialog.
+final class ScheduledTaskWebhookFiltersField: DSView {
+    private weak var editor: ScheduledTaskEditor?
+    private let label = FormLabel.make("Filters")
+    private let note = TextBlockView()
+    private let add = ButtonView("Add filter", icon: .plus, variant: .outline, size: .sm)
+    private var rows: [(path: InputView, remove: ButtonView, op: SelectView, value: InputView?)] = []
+
+    init(editor: ScheduledTaskEditor) {
+        self.editor = editor
+        super.init(frame: .zero)
+        note.text = "Run only when every filter matches. Other requests are logged as filtered. Separate “is one of” values with commas; a value can't contain a comma."
+        note.font = DSFont.ui(14); note.lineHeight = 20; note.color = Themed.color(\.mutedForeground)
+        let filters = editor.draft.filters
+        add.isEnabled = filters.count < ScheduledTaskLogic.maxWebhookFilters
+        add.action = { [weak editor] in
+            guard let editor else { return }
+            editor.draft.filters.append(ScheduledTaskLogic.emptyFilterDraft())
+            editor.changed()
+        }
+        [label, note, add].forEach(addSubview)
+        let ops = ScheduledTaskLogic.webhookFilterOps
+        rows = filters.enumerated().map { index, f in
+            let id = f.id
+            let update: (@escaping (inout ScheduledTaskDraft.WebhookFilterDraft) -> Void) -> Void = { [weak editor] change in
+                guard let editor, let i = editor.draft.filters.firstIndex(where: { $0.id == id }) else { return }
+                change(&editor.draft.filters[i])
+            }
+            let path = InputView(placeholder: "body.action", text: f.path)
+            path.setAccessibilityLabel("Filter \(index + 1) path")
+            path.onChange = { t in update { $0.path = t } }
+            let remove = ButtonView(nil, icon: .trash2, variant: .ghost, size: .iconSm)
+            remove.setAccessibilityLabel("Remove filter \(index + 1)")
+            // By id, so a removed row's identity never passes to the row after it (`removeWebhookFilterDraft`).
+            remove.action = { [weak editor] in
+                guard let editor else { return }
+                editor.draft.filters.removeAll { $0.id == id }
+                editor.changed()
+            }
+            let op = SelectView(options: ops.map(\.label), selected: ops.firstIndex { $0.op == f.op }, size: .sm)
+            op.setAccessibilityLabel("Filter \(index + 1) test")
+            op.onChange = { [weak editor] i in
+                update { $0.op = ops[i].op }
+                editor?.changed()
+            }
+            var value: InputView?
+            if f.op != "exists" {
+                let v = InputView(placeholder: f.op == "in" ? "opened, reopened" : "opened", text: f.value)
+                v.setAccessibilityLabel("Filter \(index + 1) value")
+                v.onChange = { t in update { $0.value = t } }
+                value = v
+            }
+            [path, remove, op].forEach(addSubview)
+            value.map(addSubview)
+            return (path, remove, op, value)
+        }
+    }
+
+    private var noteWidth: (CGFloat) -> CGFloat { { width in max(0, width - 8 - ceil(self.add.intrinsicContentSize.width)) } }
+    private func headerHeight(_ width: CGFloat) -> CGFloat { max(28, 16 + 4 + note.height(forWidth: noteWidth(width))) }
+
+    /// The header, then each filter `space-y-2 pt-1`: 4 + 32 + 8 + 32.
+    func height(forWidth width: CGFloat) -> CGFloat { headerHeight(width) + CGFloat(rows.count) * (8 + 4 + 32 + 8 + 32) }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        let h = headerHeight(w)
+        let block = 16 + 4 + note.height(forWidth: noteWidth(w))
+        let top = ((h - block) / 2).rounded()
+        label.frame = NSRect(x: 0, y: top, width: ceil(label.textWidth) + 1, height: 16)
+        note.frame = NSRect(x: 0, y: top + 20, width: noteWidth(w), height: note.height(forWidth: noteWidth(w)))
+        let aw = ceil(add.intrinsicContentSize.width)
+        add.frame = NSRect(x: w - aw, y: ((h - 28) / 2).rounded(), width: aw, height: 28)
+        var y = h
+        for r in rows {
+            y += 8 + 4
+            r.path.frame = NSRect(x: 0, y: y, width: w - 8 - 28, height: 32)
+            r.remove.frame = NSRect(x: w - 28, y: y + 2, width: 28, height: 28)
+            y += 32 + 8
+            r.op.frame = NSRect(x: 0, y: y + 2, width: 176, height: 28)
+            r.value?.frame = NSRect(x: 176 + 8, y: y, width: w - 176 - 8, height: 32)
+            y += 32
         }
     }
 }
