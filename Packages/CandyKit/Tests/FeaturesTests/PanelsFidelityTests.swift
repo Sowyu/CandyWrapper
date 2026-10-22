@@ -29,13 +29,19 @@ struct PanelsFidelityTests {
         id: "Which language or runtime should it be written in?", header: "Language", question: "Which language or runtime should it be written in?",
         options: [.init(label: "Python (Recommended)", description: "Fast to write, standard library covers most CLI needs, no build step.")])
 
+    /// The capture each state compares with. 05 comes from the 3473 web client, where the composer
+    /// stays usable under an approval (a93b03c8a5); 06 is still the 2861 one.
+    static func file(_ reference: String, _ theme: String) -> String {
+        "design/reference/\(reference == "05-approval-request" ? "05-approval-request-3473" : reference).\(theme).png"
+    }
+
     /// The banner view and the composer top (css px) measured on the capture.
     static func banner(_ reference: String) -> (ComposerBannerView, CGFloat, CGFloat) {
         if reference == "05-approval-request" {
             let panel = ApprovalPanelView()
             panel.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil, detail: "approval-demo.txt",
                                             appName: nil, options: nil, canRespond: true), pendingCount: 1, threadId: "t")
-            return (panel, panel.preferredHeight(width: bannerWidth), 694)
+            return (panel, panel.preferredHeight(width: bannerWidth), 616)
         }
         let panel = QuestionPanelView()
         panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [purpose, language], responseCapability: "live",
@@ -59,8 +65,7 @@ struct PanelsFidelityTests {
         var lines: [String] = [], images = ""
         for reference in ["05-approval-request", "06-user-input-request"] {
             for theme in ["light", "dark"] {
-                let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference).\(theme).png"))))
+                let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(Self.file(reference, theme)))))
                 let (rendered, top, composerTop) = Self.render(reference, dark: theme == "dark")
                 // The banner plus 8px of surface around it, down to the composer's top edge.
                 let rect = CGRect(x: Self.bannerX - 8, y: top - 8, width: Self.bannerWidth + 16, height: composerTop - top + 8)
@@ -124,15 +129,15 @@ struct PanelsFidelityTests {
     }
 
     /// The docked states in the real thread panel: the banner in the drawer slot and the composer
-    /// under it (66 tall with an approval; `pt-2`, Stop and the Next pill with a question). The
+    /// under it (the full composer with Stop under an approval; `pt-2`, Stop and the Next pill with a question). The
     /// band runs from the banner's top to the panel's bottom.
     @Test func dockedInPanel() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         var lines: [String] = [], images = ""
-        let pickers = PickersPreview.pickers()
         for reference in ["05-approval-request", "06-user-input-request"] {
             for theme in ["light", "dark"] {
                 let dark = theme == "dark"
+                let pickers = PickersPreview.pickers()
                 let panel = ComposerFidelityTests.panel(width: Self.panelWidth, dark: dark)
                 let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
                 panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
@@ -143,6 +148,8 @@ struct PanelsFidelityTests {
                     panel.approvalPanel.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil,
                         detail: "approval-demo.txt", appName: nil, options: nil, canRespond: true), pendingCount: 1, threadId: "t")
                     panel.drawer = .approval
+                    // The reference thread runs Supervised, which is what asks for the approval.
+                    PickerMenuView(entries: pickers.accessEntries(), style: .select, minimumWidth: 264).pick(0)
                     placeholder.approvalPending = true
                     panel.composer.pending = .approval
                 } else {
@@ -159,8 +166,7 @@ struct PanelsFidelityTests {
                 let banner: NSView = reference == "05-approval-request" ? panel.approvalPanel : panel.questionPanel
                 let top = banner.frame.minY - 8
                 let rendered = Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
-                let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference).\(theme).png"))))
+                let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(Self.file(reference, theme)))))
                 let w = Int(Self.panelWidth * 2), h = Int((780 - top) * 2)
                 let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: CGRect(x: full.pixelsWide - w, y: Int(top * 2), width: w, height: h))!)
                 let ours = NSBitmapImageRep(cgImage: rendered.cgImage!.cropping(to: CGRect(x: 0, y: Int(top * 2), width: w, height: h))!)
