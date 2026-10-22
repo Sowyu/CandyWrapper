@@ -14,20 +14,23 @@ public struct StorageCleanupReport: Sendable, Equatable {
         public var path: String?
         public var threadId: String?
         public var threadTitle: String?
+        /// The workspace root of the project a worktree belonged to (3473 settings.ts:1056, 5803c8b299);
+        /// absent from older servers.
+        public var projectPath: String?
         public var bytes: Double?
         public var files: Double?
 
         public init(kind: String, outcome: String, reason: String, path: String? = nil, threadId: String? = nil,
-                    threadTitle: String? = nil, bytes: Double? = nil, files: Double? = nil) {
+                    threadTitle: String? = nil, projectPath: String? = nil, bytes: Double? = nil, files: Double? = nil) {
             self.kind = kind; self.outcome = outcome; self.reason = reason; self.path = path
-            self.threadId = threadId; self.threadTitle = threadTitle; self.bytes = bytes; self.files = files
+            self.threadId = threadId; self.threadTitle = threadTitle; self.projectPath = projectPath; self.bytes = bytes; self.files = files
         }
 
         init?(json: JSONValue) {
             guard let kind = json["kind"]?.stringValue, let outcome = json["outcome"]?.stringValue else { return nil }
             self.init(kind: kind, outcome: outcome, reason: json["reason"]?.stringValue ?? "", path: json["path"]?.stringValue,
                       threadId: json["threadId"]?.stringValue, threadTitle: json["threadTitle"]?.stringValue,
-                      bytes: json["bytes"]?.doubleValue, files: json["files"]?.doubleValue)
+                      projectPath: json["projectPath"]?.stringValue, bytes: json["bytes"]?.doubleValue, files: json["files"]?.doubleValue)
         }
     }
 
