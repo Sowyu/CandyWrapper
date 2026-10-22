@@ -140,9 +140,13 @@ final class Shortcuts {
         } else {
             heldUndoKey = nil
         }
+        // Any key but the undo one hands Mod+Z back to text fields before a component can take it, so a key the
+        // composer handles itself, like Mod+B, releases the claim too (AppSidebarLayout.tsx:273-297 in 3473).
+        let stroke = KeyStroke(event)
+        if stroke.flatMap(resolve) != "thread.undo" { releaseUndoShortcut() }
         let paletteOpen = paletteOpen()
         if !paletteOpen, keyHandlers.contains(where: { $0(event) }) { return true }
-        guard let stroke = KeyStroke(event) else { return false }
+        guard let stroke else { return false }
         let used = run(stroke, paletteOpen: paletteOpen)
         if used, lastCommand == "thread.undo" { heldUndoKey = event.keyCode }
         return used
@@ -173,14 +177,7 @@ final class Shortcuts {
     @discardableResult
     func run(_ stroke: KeyStroke, paletteOpen: Bool? = nil) -> Bool {
         let paletteOpen = paletteOpen ?? self.paletteOpen()
-        var context = context()
-        var command = ActiveKeymap.keymap.resolve(stroke, context: context)
-        // Right after a thread action Mod+Z undoes it even from the composer: `thread.undo` resolves as if no
-        // text field had focus. Any other key hands the field its own undo back (AppSidebarLayout.tsx:286-299 in 3473).
-        if command != "thread.undo", context["editableFocus"], undoClaimsShortcut() {
-            context["editableFocus"] = false
-            if ActiveKeymap.keymap.resolve(stroke, context: context) == "thread.undo" { command = "thread.undo" }
-        }
+        let command = resolve(stroke)
         if command != "thread.undo" { releaseUndoShortcut() }
         lastCommand = command
         guard let command else { return false }
@@ -190,6 +187,18 @@ final class Shortcuts {
         }
         if let handler = handlers[command] { return handler(invocation) }
         return prefixHandlers.first { command.hasPrefix($0.0) }?.1(invocation) ?? false
+    }
+
+    /// The command a stroke runs. Right after a thread action Mod+Z undoes it even from the composer: `thread.undo`
+    /// resolves as if no text field had focus. Any other key hands the field its own undo back (AppSidebarLayout.tsx:286-299 in 3473).
+    private func resolve(_ stroke: KeyStroke) -> String? {
+        var context = context()
+        let command = ActiveKeymap.keymap.resolve(stroke, context: context)
+        if command != "thread.undo", context["editableFocus"], undoClaimsShortcut() {
+            context["editableFocus"] = false
+            if ActiveKeymap.keymap.resolve(stroke, context: context) == "thread.undo" { return "thread.undo" }
+        }
+        return command
     }
 
     /// `editableFocus`: a text field or editor has the keyboard (lib/editableFocus.ts).
