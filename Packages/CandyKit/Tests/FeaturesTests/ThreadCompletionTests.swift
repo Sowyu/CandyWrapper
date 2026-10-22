@@ -86,14 +86,34 @@ struct ThreadCompletionTests {
         let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: " Fix  it ", assistantText: "## Done\n\n**Bold** and `code`\n\n- one\n- two\n\n```swift\nlet x = 1\n```")
         #expect(item.preview == "Fix it\n\nDone Bold and code one two let x = 1")
     }
-    /// Redesign's ticks: 4pt for an empty turn, wider as the turn grows, never past 12.
-    @Test func minimapLengthHintGrowsWithTheTurn() {
-        func width(_ chars: Int) -> CGFloat {
-            ThreadMinimapView.lengthHint(ThreadMinimapItem(id: "u", rowIndex: 0, userText: String(repeating: "a", count: chars)))
+    /// Redesign's ticks all draw the same size whatever the turn's length; the turn on screen only draws brighter.
+    @Test func ditherMinimapTicksShareOneSize() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var dither = previous
+        dither.ditherLight = true; dither.ditherDark = true
+        ThemeRuntime.apply(dither)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 60, height: 140), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        let map = ThreadMinimapView(frame: NSRect(x: 0, y: 0, width: 40, height: 118))
+        window.contentView = map
+        map.items = [0, 5_000, 20, 100_000, 1, 300].enumerated().map { i, n in
+            ThreadMinimapItem(id: String(i), rowIndex: i, userText: String(repeating: "a", count: n))
         }
-        #expect(width(0) == 4)
-        #expect(width(40) < width(400) && width(400) < width(4_000))
-        #expect(width(1_000_000) == 12)
+        map.inView = IndexSet(integer: 2)
+        let rep = try #require(map.bitmapImageRepForCachingDisplay(in: map.bounds))
+        map.cacheDisplay(in: map.bounds, to: rep)
+        // Each tick's widest pixel row, counting pixels well above the backing and the band. Rounded ends antialias, so
+        // the bright tick may light one more pixel a side than a quiet one; the old hints differed by 4 to 12 points.
+        var ticks: [Int] = [], current = 0
+        for y in 0..<rep.pixelsHigh {
+            let lit = (0..<rep.pixelsWide).filter { (rep.colorAt(x: $0, y: y)?.brightnessComponent ?? 0) > 0.3 }.count
+            if lit > 0 { current = max(current, lit) } else if current > 0 { ticks.append(current); current = 0 }
+        }
+        if current > 0 { ticks.append(current) }
+        #expect(ticks.count == 6)
+        #expect((ticks.max() ?? 0) - (ticks.min() ?? 0) <= 2, "\(ticks)")
     }
     @Test func taskSummaryUsesRunningThenPendingThenLast() {
         let steps = [ThreadTaskStep(text: "A", status: "pending"), ThreadTaskStep(text: "B", status: "running")]
