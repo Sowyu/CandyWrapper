@@ -2,7 +2,7 @@
 
 - [ ] Port upstream timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
 
-- [ ] Port upstream diff, git and pull request performance bucket b4 (taken 2026-10-22, perf-diffgit). Linked PR rows now virtualized; nine focused tests and dark real-window scrolling passed. Viewed-mark invalidation next.
+- [x] Audited upstream diff, git and pull request performance bucket b4 (2026-10-22, perf-diffgit): linked PR rows mount only the viewport, and viewed-state refreshes update header controls without rebuilding code rows. Counting tests and area fidelity passed (nine tests, then six); dark real-window scrolling and Viewed fold/unfold checked. The timeline owner still needs ChangedFilesCardView virtualization; PR diff pagination still reparses accumulated patches.
 
 The current state and the open work. Before you stop, tick what you finished, add what the next agent must know, and keep this file short: finished work belongs in the git log, and the full history up to 2026-10-12 is in `docs/history/`.
 
