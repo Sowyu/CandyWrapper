@@ -779,13 +779,33 @@ final class GitController {
             host?.close()
             self?.runAction(.commit, commitMessage: commit.commitMessage, featureBranch: true, filePaths: commit.selection.filePaths, skipDefaultPrompt: true)
         }
-        // `openChangedFileInEditor` (GitActionsControl.tsx:1492-1502, 771fd93fc5): paths are relative to the
-        // repository root, which differs from the project folder when the project is a subfolder.
+        // `openChangedFileInEditor` (GitActionsControl.tsx:1492-1516, 771fd93fc5): paths are relative to the
+        // repository root, which differs from the project folder when the project is a subfolder. The file opens
+        // in the preferred editor on the repository's machine, never through this Mac's default opener, which
+        // would open a same-named local path and could launch an app.
         // ponytail: older servers send no root and get the project folder as before; T3 refuses then, match it when pre-3473 servers drop out
         let root = status?.workingTree.rootPath
         commit.onOpenFile = { [weak self] path in
-            guard let base = root ?? self?.target?.cwd else { return }
-            NSWorkspace.shared.open(URL(fileURLWithPath: path.hasPrefix("/") ? path : base + "/" + path))
+            guard let self else { return }
+            guard let env = self.target?.environmentId, let base = root ?? self.target?.cwd else {
+                self.toast("Editor opening is unavailable.", nil, kind: .error)
+                return
+            }
+            let file = FileLinks.resolveAgainst(path, cwd: base)
+            let defaults = UserDefaults.standard
+            guard let editor = OpenInEditors.preferred(available: self.composer.config(env)?.availableEditors ?? [],
+                                                       last: defaults.string(forKey: OpenInEditors.lastEditorKey)) else {
+                self.toast("Unable to open file", "No available editor can open \(file) in environment \(env).", kind: .error)
+                return
+            }
+            defaults.set(editor, forKey: OpenInEditors.lastEditorKey)
+            Task { [weak self] in
+                do {
+                    _ = try await self?.environments.request(env, "shell.openInEditor", OpenInEditors.launchInput(cwd: file, editor: editor))
+                } catch {
+                    self?.toast("Unable to open file", (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "An error occurred.", kind: .error)
+                }
+            }
         }
         window.makeFirstResponder(commit.message)
     }
