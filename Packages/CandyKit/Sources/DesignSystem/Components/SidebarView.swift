@@ -538,4 +538,8 @@ public enum DitherChrome {
     /// The corner for a shape `inset` inside one with corner `outer`: concentric, so both curves run parallel
     /// (the user, 2026-10-22: "the corner radiuses for everything isnt consistent"). Never under 4.
     public static func nested(in outer: CGFloat, inset: CGFloat) -> CGFloat { max(4, outer - inset) }
+
+    /// The 1pt rim every floating surface draws on its continuous corner: the composer, the pills, the details card,
+    /// the header's toggles and the popovers (the user, 2026-10-23: "an outline like the prompting field and the stash").
+    public nonisolated static func rim(dark: Bool) -> NSColor { dark ? Themed.white(0.08) : Themed.black(0.08) }
 }

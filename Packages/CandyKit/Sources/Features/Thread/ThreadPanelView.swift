@@ -230,7 +230,12 @@ public final class ThreadHeaderView: TopbarDragView {
         cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
         let cluster = ([cost] + toggles).filter { $0.superview === self && !$0.isHidden }.map(\.frame).reduce(nil as NSRect?) { $0?.union($1) ?? $1 }
         frost.isHidden = !plain || cluster == nil
-        if let cluster { frost.frame = cluster.insetBy(dx: -4, dy: -2); frost.cornerRadius = DitherChrome.controlRadius }
+        if let cluster {
+            frost.frame = cluster.insetBy(dx: -4, dy: -2)
+            frost.cornerRadius = DitherChrome.controlRadius
+            frost.layer?.borderWidth = 1
+            frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
+        }
     }
 }
 

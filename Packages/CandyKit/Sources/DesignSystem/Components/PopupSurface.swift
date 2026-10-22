@@ -31,7 +31,8 @@ public enum PopupSurface {
         switch self {
         case .glass, .tooltipGlass:
             box.fill = Self.glassFill
-            box.border = Themed.color(\.contrastForeground, 0.1)
+            let stock = Themed.color(\.contrastForeground, 0.1)
+            box.border = NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? DitherChrome.rim(dark: $0.isDark) : WindowGlass.resolve(stock, in: $0) }
             if self == .glass {
                 box.shadows = [BoxShadow(y: 16, blur: 40, spread: -18, color: Themed.pick(light: Themed.black(0.55), dark: .clear)),
                                BoxShadow(y: 18, blur: 44, spread: -18, color: Themed.pick(light: .clear, dark: Themed.black(0.8)))]

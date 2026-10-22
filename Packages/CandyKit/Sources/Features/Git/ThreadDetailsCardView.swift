@@ -708,8 +708,12 @@ public final class ThreadDetailsCardView: DSView {
         let dark = effectiveAppearance.isDark
         let frost = ThemeRuntime.isDither(dark: dark)
         box.fill = frost ? Themed.color(dark ? \.surfaceRaised : \.card, 0.62) : PopupSurface.glassFill
-        box.border = Themed.color(\.contrastForeground, 0.1)
+        // Redesign: the composer's rim on the card's own layer, which composites over the blur and the rows.
+        box.border = frost ? nil : Themed.color(\.contrastForeground, 0.1)
         decoration.boxStyle = box
+        layer?.cornerRadius = frost ? DitherChrome.radius(box.radius) : 0
+        layer?.borderWidth = frost ? 1 : 0
+        layer?.borderColor = frost ? DitherChrome.rim(dark: dark).cgColor : nil
         blur.isHidden = !frost || CommandLine.arguments.contains("--no-blur")
         blur.cornerRadius = DitherChrome.radius(box.radius)
         // The rows clip inside the border's curve: 22 less 1, or Redesign's 16 less 1.

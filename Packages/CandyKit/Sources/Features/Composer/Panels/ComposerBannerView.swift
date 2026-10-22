@@ -74,7 +74,7 @@ public class ComposerBannerView: DSView {
         switch variant {
         case .neutral:
             tint.backgroundColor = nil
-            surface.layer?.borderColor = ditherFloating ? DitherPill.border(dark: dark) : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+            surface.layer?.borderColor = ditherFloating ? DitherChrome.rim(dark: dark).cgColor : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         case .warning:
             tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)
