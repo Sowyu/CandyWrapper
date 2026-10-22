@@ -445,6 +445,9 @@ public final class SidebarAccountRowView: ControlView {
     private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
     private let detail = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
+    /// Redesign shows the e-mail as T3's blurred scramble (`RedactedSensitiveText`), for screen shares, and fades to
+    /// the real `detail` while the pointer is over the row.
+    private let redacted = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
     private let chevron = IconView(name: .chevronUp, size: 12)
     public var onOpenSettings: (() -> Void)?
     public var onOpenUsage: (() -> Void)?
@@ -462,7 +465,9 @@ public final class SidebarAccountRowView: ControlView {
         avatar.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(avatar)
         initials.alignment = .center
-        for l in [initials, name, detail] { l.lineHeight = 16; addSubview(l) }
+        for l in [initials, name, detail, redacted] { l.lineHeight = 16; addSubview(l) }
+        layerUsesCoreImageFilters = true
+        redacted.layer?.filters = [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 2])].compactMap { $0 }
         addSubview(chevron)
         setAccessibilityRole(.button)
         action = { [weak self] in self?.showMenu() }
@@ -474,21 +479,41 @@ public final class SidebarAccountRowView: ControlView {
     public func set(name: String, detail: String, image: CGImage?, initials: String?) {
         self.name.text = name
         self.detail.text = detail
+        redacted.text = UsageRedactedTextView.placeholder(detail)
+        updateRedaction(animated: false)
         avatar.contents = image
         let letters = initials ?? name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
         self.initials.text = letters
         self.initials.isHidden = image != nil
         setAccessibilityLabel("\(name), account menu")
+        // VoiceOver reads the real line, blurred or not.
+        setAccessibilityValue(detail)
         needsLayout = true
         needsDisplay = true
     }
 
     public override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
+        if old.hovered != state.hovered { updateRedaction(animated: true) }
         needsDisplay = true
     }
 
+    /// Under Redesign an e-mail rests blurred and shows while hovered; other themes and other lines show as they are.
+    private func updateRedaction(animated: Bool) {
+        let redacts = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && detail.text.contains("@")
+        redacted.isHidden = !redacts
+        let hidden = redacts && !state.hovered
+        guard detail.alphaValue != (hidden ? 0 : 1) else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animated && !Motion.reduced ? 0.15 : 0
+            context.allowsImplicitAnimation = animated
+            detail.animator().alphaValue = hidden ? 0 : 1
+            redacted.animator().alphaValue = hidden ? 1 : 0
+        }
+    }
+
     public override func updateLayer() {
+        updateRedaction(animated: false)
         layer?.cornerRadius = DitherChrome.controlRadius
         layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
         avatar.backgroundColor = SB.c(\.sidebarForeground, 0.12).cgColor(in: self)
@@ -507,6 +532,7 @@ public final class SidebarAccountRowView: ControlView {
         let tx: CGFloat = 8 + 28 + 10, right = end - 8 - 12 - 6
         name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
         detail.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
+        redacted.frame = detail.frame
         chevron.frame = NSRect(x: end - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
     }
 
