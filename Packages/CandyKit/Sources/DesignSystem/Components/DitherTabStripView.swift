@@ -9,7 +9,12 @@ public final class DitherTabStripView: TopbarDragView {
         public var id: String
         public var title: String
         public var icon: IconName
-        public init(id: String, title: String, icon: IconName) { self.id = id; self.title = title; self.icon = icon }
+        /// The thread's run, as the sidebar shows it: working, or waiting on the user. Either shows the dot grid.
+        public var activity: Activity?
+        public enum Activity: Sendable { case working, waiting }
+        public init(id: String, title: String, icon: IconName, activity: Activity? = nil) {
+            self.id = id; self.title = title; self.icon = icon; self.activity = activity
+        }
     }
 
     public var tabs: [Tab] = [] { didSet { if tabs != oldValue { if drag != nil, tabs.map(\.id) != oldValue.map(\.id) { endDrag(commit: false) }; rebuild() } } }
@@ -177,6 +182,7 @@ public final class DitherTabStripView: TopbarDragView {
                 label.text = tab.title
                 if tab.icon != oldValue.icon { icon.removeFromSuperview(); icon = IconView(name: tab.icon, size: 14); addSubview(icon) }
                 setAccessibilityLabel(tab.title)
+                if tab.activity != nil, grid == nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
                 refresh()
                 needsLayout = true
             }
@@ -191,6 +197,8 @@ public final class DitherTabStripView: TopbarDragView {
         private var icon: IconView
         private let label: LabelView
         private let close = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
+        /// The working grid in the close button's slot, made the first time the thread works.
+        private var grid: DotGridSpinnerView?
 
         init(tab: Tab) {
             self.tab = tab
@@ -201,6 +209,7 @@ public final class DitherTabStripView: TopbarDragView {
             close.setAccessibilityLabel("Close tab")
             close.action = { [weak self] in self?.onClose?() }
             [icon, label, close].forEach(addSubview)
+            if tab.activity != nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
             setAccessibilityRole(.radioButton)
             setAccessibilityLabel(tab.title)
             // The close button only shows on hover or selection; VoiceOver and Switch Control close any tab here.
@@ -267,7 +276,17 @@ public final class DitherTabStripView: TopbarDragView {
 
         private func refresh() {
             // Faded, never hidden: hiding it as the pointer moved onto it ended the tab's hover and lost the click.
-            close.alphaValue = isSelected || state.hovered || close.state.hovered || state.focusVisible ? 1 : 0
+            // A working tab shows the grid in the close button's slot until the pointer or focus reaches it, as the
+            // sidebar's working rows do. Hidden, the grid stops its animation.
+            let reached = state.hovered || close.state.hovered || state.focusVisible
+            let activity = tab.activity
+            close.alphaValue = reached || (isSelected && activity == nil) ? 1 : 0
+            if let grid {
+                let shown = activity != nil && !reached
+                if grid.isHidden == shown { grid.isHidden = !shown }
+                // The sidebar's colors: Working in its warning color, Waiting in the foreground.
+                if let activity { grid.color = Themed.color(activity == .working ? \.warning : \.foreground, sidebar: true) }
+            }
             let strong = isSelected || state.hovered || state.focusVisible
             let resting = Self.restingAlpha(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
             label.color = Themed.color(\.foreground, strong ? 1 : resting.label)
@@ -280,6 +299,7 @@ public final class DitherTabStripView: TopbarDragView {
             icon.frame = NSRect(x: 10, y: (bounds.height - 14) / 2, width: 14, height: 14)
             let closeX = bounds.width - 6 - 16
             close.frame = NSRect(x: closeX, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            grid?.frame = close.frame
             label.frame = NSRect(x: 30, y: (bounds.height - 18) / 2, width: max(0, closeX - 4 - 30), height: 18)
         }
 
