@@ -4,16 +4,11 @@ import Testing
 @testable import T3Client
 
 struct CredentialStoreTests {
-    @Test func saveLoadReplaceDelete() throws {
+    /// The real login Keychain. A locked keychain fails here instead of passing silently.
+    @Test(.integration) func saveLoadReplaceDelete() throws {
         let store = CredentialStore(service: "dev.candywrapper.t3.test-\(UUID().uuidString)")
         let env = "test-environment"
-        do {
-            try store.save(token: "first", environmentId: env)
-        } catch let e as CredentialStore.KeychainError {
-            // A locked keychain with no GUI login can't be written. Not a code failure.
-            print("keychain unavailable, skipping: \(e)")
-            return
-        }
+        try store.save(token: "first", environmentId: env)
         defer { try? store.delete(environmentId: env) }
         #expect(try store.load(environmentId: env) == "first")
         try store.save(token: "second", environmentId: env)

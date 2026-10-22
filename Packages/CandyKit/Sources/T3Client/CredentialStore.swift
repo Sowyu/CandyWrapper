@@ -1,13 +1,25 @@
 import Foundation
+import os
 import Security
 
 /// Bearer tokens in the macOS Keychain, one generic password per environment id.
 /// Tokens never go to disk elsewhere, and nothing here logs them.
 public struct CredentialStore: Sendable {
     public let service: String
+    /// Tests only: tokens in this dictionary instead of the Keychain.
+    private let memory: OSAllocatedUnfairLock<[String: String]>?
 
     public init(service: String = "dev.candywrapper.t3.environment-token") {
         self.service = service
+        memory = nil
+    }
+
+    /// A store that never touches the Keychain, for tests of the code around it.
+    static func inMemory() -> CredentialStore { CredentialStore(memory: OSAllocatedUnfairLock(initialState: [:])) }
+
+    private init(memory: OSAllocatedUnfairLock<[String: String]>) {
+        service = "in-memory"
+        self.memory = memory
     }
 
     public struct KeychainError: Error, Sendable, Equatable, CustomStringConvertible {
@@ -18,6 +30,7 @@ public struct CredentialStore: Sendable {
     }
 
     public func save(token: String, environmentId: String) throws {
+        if let memory { return memory.withLock { $0[environmentId] = token } }
         let query = baseQuery(environmentId)
         let attributes: [String: Any] = [kSecValueData as String: Data(token.utf8)]
         var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
@@ -28,6 +41,7 @@ public struct CredentialStore: Sendable {
     }
 
     public func load(environmentId: String) throws -> String? {
+        if let memory { return memory.withLock { $0[environmentId] } }
         var query = baseQuery(environmentId)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -40,6 +54,7 @@ public struct CredentialStore: Sendable {
 
     /// "Forget this environment". There is no server-side logout (protocol.md 4.7).
     public func delete(environmentId: String) throws {
+        if let memory { return memory.withLock { $0[environmentId] = nil } }
         let status = SecItemDelete(baseQuery(environmentId) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError(status: status) }
     }

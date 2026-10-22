@@ -6,22 +6,13 @@ struct EnvironmentCatalogTests {
     private func makeCatalog() -> (EnvironmentCatalog, URL) {
         let dir = FileManager.default.temporaryDirectory.appending(path: "cw-catalog-\(UUID().uuidString)")
         let catalog = EnvironmentCatalog(file: dir.appending(path: "environments.json"),
-                                         credentials: CredentialStore(service: "dev.candywrapper.t3.test-\(UUID().uuidString)"))
+                                         credentials: .inMemory())
         return (catalog, dir)
-    }
-
-    private func keychainWorks(_ store: CredentialStore) -> Bool {
-        do { try store.save(token: "probe", environmentId: "probe"); try store.delete(environmentId: "probe"); return true } catch {
-            // A locked keychain with no GUI login can't be written. Not a code failure.
-            print("keychain unavailable, skipping: \(error)")
-            return false
-        }
     }
 
     @Test func addPersistsWithoutSecretsAndRemoveForgetsTheToken() throws {
         let (catalog, dir) = makeCatalog()
         defer { try? FileManager.default.removeItem(at: dir) }
-        guard keychainWorks(catalog.credentials) else { return }
         #expect(catalog.load().isEmpty)
         let a = EnvironmentRegistration(environmentId: "env-a", label: "Studio", httpBaseURL: URL(string: "http://10.0.0.2:3773")!,
                                         machine: "mac-studio", createdAt: Date(timeIntervalSince1970: 1_800_000_000))
