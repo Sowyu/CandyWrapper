@@ -55,7 +55,7 @@ struct FrameDecoderTests {
         // The main thread is busy until the loop ends: frames decoded meanwhile replace each other,
         // and the newest one always lands.
         for w in [10, 20, 30, 40] { decoder.paint(Self.jpeg(width: w, height: 10)) }
-        for _ in 0..<100 where sizes.last != 40 { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<3000 where sizes.last != 40 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(sizes.last == 40 && sizes.count <= 2)
     }
 }

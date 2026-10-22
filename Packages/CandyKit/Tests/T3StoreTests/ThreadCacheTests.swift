@@ -85,12 +85,17 @@ import Testing
         await probe.flush(first)
         let size = try #require(try FileManager.default.attributesOfItem(atPath: probe.fileURL(first).path)[.size] as? Int)
         let cache = ThreadCache(directory: dir, maxBytes: size * 2 + size / 2)
+        // Explicit times order the files, so the test needn't wait for the file system's clock.
+        func age(_ key: ThreadCache.Key, seconds: TimeInterval) throws {
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -seconds)], ofItemAtPath: cache.fileURL(key).path)
+        }
+        try age(first, seconds: 300)
         for (i, id) in ["b", "c"].enumerated() {
-            try await Task.sleep(for: .milliseconds(20))
             if i == 1 { _ = cache.load(first) } // `a` was used, so `b` is now the oldest
             let key = ThreadCache.Key(environmentId: "env-1", threadId: ThreadId(id))
             await cache.offer(key, sequence: 1, projection: p, history: ThreadHistoryMeta())
             await cache.flush(key)
+            if i == 0 { try age(key, seconds: 200) }
         }
         #expect(cache.load(first) != nil)
         #expect(cache.load(ThreadCache.Key(environmentId: "env-1", threadId: "b")) == nil)

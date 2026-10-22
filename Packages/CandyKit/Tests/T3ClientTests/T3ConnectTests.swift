@@ -631,7 +631,7 @@ struct T3ConnectAuthorizerTests {
         cloud.signIn("user_2")
         let b = Task { try await authorizer.token(environmentId: "env-1") }
         // B runs its own exchange instead of waiting for A's.
-        #expect(await eventually(seconds: 2) { http.requests("/oauth/token").count == 2 })
+        #expect(await eventually { http.requests("/oauth/token").count == 2 })
         held.release()
         let tb = try await b.value
         #expect(tb.accessToken == "eat-2" && tb.accountId == "user_2")
@@ -650,7 +650,7 @@ struct T3ConnectAuthorizerTests {
         #expect(await eventually { held.isHolding })
         cloud.signIn("user_1", session: "sess_2")
         let b = Task { try await authorizer.token(environmentId: "env-1") }
-        #expect(await eventually(seconds: 2) { http.requests("/oauth/token").count == 2 })
+        #expect(await eventually { http.requests("/oauth/token").count == 2 })
         held.release()
         #expect(try await b.value.accessToken == "eat-2")
         await #expect(throws: CloudSessionError.accountChanged) { try await a.value }

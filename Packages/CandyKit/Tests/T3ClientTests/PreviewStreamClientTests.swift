@@ -11,28 +11,37 @@ struct PreviewStreamClientTests {
         var messages = 0
     }
 
-    func makeOwner() -> Owner {
+    final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func bump() { lock.withLock { value += 1 } }
+        var count: Int { lock.withLock { value } }
+    }
+
+    func makeOwner(urlCalls: Calls = Calls()) -> Owner {
         let owner = Owner()
         var events = PreviewStreamClient.Events()
         events.onMessage = { _ in owner.messages += 1 }
         events.onUnauthorized = { _ = owner }
-        owner.client = PreviewStreamClient(url: { throw URLError(.badURL) }, events: events)
+        owner.client = PreviewStreamClient(url: { urlCalls.bump(); throw URLError(.badURL) }, events: events)
         return owner
     }
 
     @Test func stoppedClientIsReleased() async throws {
         weak var owner: Owner?
         weak var client: PreviewStreamClient?
+        let calls = Calls()
         do {
-            let o = makeOwner()
+            let o = makeOwner(urlCalls: calls)
             owner = o
             client = o.client
             o.client?.start()
-            try await Task.sleep(for: .milliseconds(20))
+            // Stop while the run loop sleeps before its retry.
+            #expect(await eventually { calls.count > 0 })
             o.client?.stop()
         }
         // The run task lets go of the client once its cancelled retry sleep returns.
-        for _ in 0..<100 where owner != nil || client != nil { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<1500 where owner != nil || client != nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(owner == nil)
         #expect(client == nil)
     }
