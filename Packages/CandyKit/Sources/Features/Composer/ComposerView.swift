@@ -32,12 +32,17 @@ public final class ComposerView: DSView {
     static let inset: CGFloat = 1, pad: CGFloat = 16, footerHeight: CGFloat = 32
     /// `min-h-19.5` and `max-h-52` less the `p-1 -m-1` pair.
     static let editorMin: CGFloat = 70, editorMax: CGFloat = 200
+    /// Dither: Capy's prompt bar, measured in Capy 2026-10-22. 28pt footer controls 9 from the bottom and right
+    /// edges, the attach "+" at the left, one prompt line (79 tall) in a thread and 118 tall on the new-thread page.
+    var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    static let capyEdge: CGFloat = 9, capyRow: CGFloat = 28, capyGap: CGFloat = 2, capyDraftEditorMin: CGFloat = 62
+    private var editorMinimum: CGFloat { capy ? (isDraftRoute ? Self.capyDraftEditorMin : ceil(ComposerEditor.lineHeight)) : Self.editorMin }
 
     // MARK: Inputs
 
     /// The thread's runs as the primary action reads them.
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
-    public var isDraftRoute = false
+    public var isDraftRoute = false { didSet { if isDraftRoute != oldValue { relayoutHeight() } } }
     public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
     public var runState = ComposerLogic.RunState() { didSet { if runState != oldValue { refresh() } } }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
@@ -56,7 +61,8 @@ public final class ComposerView: DSView {
     /// rest too (files above the prompt, images inline after it); a failed image upload, the plan follow-up and
     /// the open approval or question (the top drawer) keep it expanded.
     public var isResting: Bool {
-        scrollCollapsed && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
+        // Capy's prompt bar never rests: in a thread it is already one line tall.
+        scrollCollapsed && !capy && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
             && !imageAttention && !environmentUnavailable && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
     }
     /// `hasImageAttachmentAttention`: a failed upload stays actionable in the expanded tray.
@@ -68,7 +74,7 @@ public final class ComposerView: DSView {
     private var promptWraps: Bool { editor.contentHeight > ComposerEditor.lineHeight * 1.5 }
     public func recordTimelineScroll(delta: CGFloat, canScroll: Bool, towardEnd: Bool) {
         if scrollGesture.record(now: ProcessInfo.processInfo.systemUptime, delta: delta,
-            eligible: collapseOnScroll && !isDraftRoute && pending == .none && !isResting && !promptWraps && restingBlocked?() != true && dropHighlight.isHidden,
+            eligible: collapseOnScroll && !capy && !isDraftRoute && pending == .none && !isResting && !promptWraps && restingBlocked?() != true && dropHighlight.isHidden,
             canScroll: canScroll, towardEnd: towardEnd) {
             scrollCollapsed = true
             if isResting { window?.makeFirstResponder(nil); needsLayout = true; onHeightChange?() }
@@ -242,7 +248,9 @@ public final class ComposerView: DSView {
         case .approval: return Self.inset * 2 + Self.pad + editorHeight + Self.pad
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
         case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
-        case .none: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
+        case .none:
+            if capy { return Self.inset + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + Self.capyGap + Self.capyRow + Self.capyEdge }
+            return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
         }
     }
 
@@ -612,7 +620,7 @@ public final class ComposerView: DSView {
     }
 
     private func relayoutHeight() {
-        let minimum = pending == .approval ? 32 : Self.editorMin
+        let minimum = pending == .approval ? 32 : editorMinimum
         let height = min(Self.editorMax, max(minimum, editor.contentHeight))
         // Most keystrokes keep the height; the text view grows itself, so only a new height
         // needs the composer (and its footer measuring) laid out again.
@@ -787,6 +795,8 @@ public final class ComposerView: DSView {
 
     public override func layout() {
         super.layout()
+        // A theme or appearance change moves the editor's minimum.
+        relayoutHeight()
         resetBlockedScrollCollapse()
         defer { reconcileLayoutHeight() }
         let w = bounds.width, h = bounds.height
@@ -867,18 +877,24 @@ public final class ComposerView: DSView {
         scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
         setEditorGeometry(minSize: NSSize(width: textWidth + 8, height: editorHeight + 8), width: textWidth + 8)
         // `absolute inset-0` over the editor (ComposerPromptEditorTiptap.tsx:1791-1798): a long placeholder wraps.
-        placeholder.maxLines = 0
-        placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth, height: placeholder.height(forWidth: textWidth))
+        // Capy keeps the placeholder on one line, so a narrow prompt bar never runs it into the footer.
+        placeholder.maxLines = capy ? 1 : 0
+        placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth,
+                                   height: capy ? ComposerEditor.lineHeight : placeholder.height(forWidth: textWidth))
         placeholder.isHidden = !editor.string.isEmpty
 
         // ponytail: the length message overlaps the footer's top edge; T3 grows the box for it (ComposerPromptLengthValidation)
         validation.frame = NSRect(x: Self.inset + Self.pad, y: textTop + editorHeight - 16, width: textWidth, height: 16)
 
         // Footer row: 32 tall, 16 from the bottom.
-        let rowHeight: CGFloat = questionFooter == nil ? Self.footerHeight : 28
-        let rowY = h - Self.inset - Self.pad - rowHeight
+        let capyFooter = capy && questionFooter == nil
+        let edge = capyFooter ? Self.capyEdge : Self.inset + Self.pad
+        let rowHeight: CGFloat = capyFooter ? Self.capyRow : questionFooter == nil ? Self.footerHeight : 28
+        let rowY = h - edge - rowHeight
         let midY = rowY + rowHeight / 2
-        let right = w - Self.inset - Self.pad
+        let right = w - edge
+        let attachIcon: IconName = capyFooter ? .plus : .paperclip
+        if attach.icon != attachIcon { attach.icon = attachIcon }
         // No footer with an approval open.
         let footerShown = pending != .approval
         footerControls.forEach { $0.isHidden = !footerShown }
@@ -912,7 +928,7 @@ public final class ComposerView: DSView {
             [questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
             primary.isHidden = !footerShown
             attach.isHidden = !footerShown
-            primary.frame = NSRect(x: right - 32, y: rowY, width: 32, height: 32)
+            primary.frame = NSRect(x: right - rowHeight, y: rowY, width: rowHeight, height: rowHeight)
             actionsLeft = primary.frame.minX
         }
         let splitCompact = showsCompactPill && footerShown && primary.face == .send && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
@@ -960,12 +976,19 @@ public final class ComposerView: DSView {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX
         }
-        attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,
-        // separators 1x16 with 2px margins.
+        // separators 1x16 with 2px margins. Capy puts its "+" first and the model icon at x 50.
         var x = Self.inset + Self.pad - 10
-        // The left cluster is `flex-1` up to the right cluster, less the footer gap.
-        let limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
+        let limit: CGFloat
+        if capyFooter {
+            attach.frame = NSRect(x: Self.capyEdge, y: midY - 14, width: 28, height: 28)
+            if !attach.isHidden { x = attach.frame.maxX + 3 }
+            limit = actionsLeft - 8
+        } else {
+            attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
+            // The left cluster is `flex-1` up to the right cluster, less the footer gap.
+            limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
+        }
         for (i, control) in footerControls.enumerated() {
             if i > 0 {
                 let sep = separators[i - 1]
