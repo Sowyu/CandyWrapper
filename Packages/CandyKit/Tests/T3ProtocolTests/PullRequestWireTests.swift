@@ -33,7 +33,9 @@ struct PullRequestWireTests {
         #expect(d.checks.first?.required == true)
         let activity = try Self.json("activity.json").decode(as: PullRequestActivity.self)
         d.apply(activity)
-        #expect(d.comments.count == 3 && d.commentCount == 3)
+        // The count is never lower than the remarks in hand, review thread replies included
+        // (usePullRequestDetail.ts:156-163): 3 comments plus 1 thread reply.
+        #expect(d.comments.count == 3 && d.commentCount == 4)
         #expect(d.comments[1].reactions?.first?.viewerHasReacted == true)
         #expect(d.reviewThreads.first?.isResolved == true)
         #expect(d.commits[1].additions == nil)
