@@ -236,7 +236,7 @@ public final class ThreadViewModel {
     /// The projection changed since the last row request.
     private var projectionDirty = false
     /// A row request running off the main thread, and whether another came in meanwhile.
-    private var rowsTask: Task<Void, Never>?
+    private(set) var rowsTask: Task<Void, Never>?
     private var rowsWanted = false
     /// Bumped when the thread changes, so a late result for the old thread is dropped.
     private var generation = 0

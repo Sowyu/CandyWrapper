@@ -90,9 +90,11 @@ struct TimelinePipelineTests {
         let model = ThreadViewModel()
         model.backgroundRowsThreshold = a.visibleTurnItems.count
         model.setProjection(a)  // off the main thread
+        let late = try #require(model.rowsTask)
         model.setProjection(b)  // below the threshold: on it, at once
         await model.rowsSettled()
-        try await Task.sleep(for: .milliseconds(50))
+        // The old thread's pass has finished and handed in its rows.
+        await late.value
         let reference = ThreadViewModel()
         reference.setProjection(b)
         #expect(model.items.map(\.row) == reference.items.map(\.row))

@@ -16,7 +16,8 @@ extension WebFrameSuites {
             var delayed = false
             var calls = 0
             var waiting: [CheckedContinuation<URL?, Never>] = []
-            let url = URL(string: "http://127.0.0.1:47391/page.html")!
+            // A host that never resolves: nothing here needs the page to load, and no test reaches a real server.
+            let url = URL(string: "http://page.invalid/page.html")!
             func resolve() async -> URL? {
                 calls += 1
                 guard delayed else { return url }
@@ -38,8 +39,14 @@ extension WebFrameSuites {
                 HtmlRenderReference(attachmentId: "page", title: "Page", height: 240))))
         }
 
+        /// Waits for something that will happen, such as a page mounting; never for something that must not.
         static func until(_ done: () -> Bool) async {
-            for _ in 0..<300 where !done() { try? await Task.sleep(for: .milliseconds(10)) }
+            _ = await eventually { done() }
+        }
+
+        /// The row's pending URL lookup.
+        static func loading(_ row: TimelineRowView) -> Task<Void, Never>? {
+            (row as? HtmlRenderRowView)?.loading ?? (row as? McpAppRowView)?.loading
         }
 
         /// A timeline whose first row is the web row, above enough filler to scroll it away.
@@ -100,10 +107,11 @@ extension WebFrameSuites {
             defer { row.prepareForReuse(); _ = (window, model) }
             await Self.until { !assets.waiting.isEmpty }
             #expect(!assets.waiting.isEmpty)
+            let lookup = try #require(Self.loading(row))
             Self.scrollAway(t, row)
             assets.open()
-            for _ in 0..<10 { await Task.yield() }
-            try? await Task.sleep(for: .milliseconds(50))
+            // The lookup has run to its end with the URL in hand: it had its one chance to mount the page.
+            await lookup.value
             #expect(!frame.isLive)
             TimelineTilingTests.userScroll(t, to: 0)
             await Self.until { !assets.waiting.isEmpty }
@@ -144,6 +152,8 @@ extension WebFrameSuites {
             try send(#"{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"ui://capture/data"}}"#)
             await Self.until { !held.isEmpty }
             #expect(held.count == 1)
+            let app = try #require(row as? McpAppRowView)
+            let old = try #require(app.bridge)
             Self.scrollAway(t, row)
             TimelineTilingTests.userScroll(t, to: 0)
             await Self.until { frame.isLive }
@@ -151,8 +161,10 @@ extension WebFrameSuites {
             var posted: [JSONValue] = []
             frame.onPost = { posted.append($0) }
             held.forEach { $0.resume(returning: .object(["contents": .array([])])) }
-            for _ in 0..<10 { await Task.yield() }
-            try? await Task.sleep(for: .milliseconds(50))
+            // The old bridge answers in the same main actor turn that clears its pending count, so once that count
+            // is zero its answer went wherever it was going to go.
+            await Self.until { old.pending == 0 }
+            #expect(old.pending == 0)
             #expect(!posted.contains { $0["id"] == .number(5) }, "the old bridge's answer stays out of the new page")
         }
     }

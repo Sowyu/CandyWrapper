@@ -47,7 +47,8 @@ public final class McpAppHostBridge {
     private var disposed = false
     private var toolCall: (arguments: JSONValue, result: JSONValue?)?
     private var toolCallSent = false
-    private var pending = 0
+    /// Requests from the app still waiting for their answer.
+    public private(set) var pending = 0
     private var sentContext: JSONValue?
     private var hostRequests: [String: () -> Void] = [:]
     private var nextHostRequestId = 0
