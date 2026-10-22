@@ -2,6 +2,8 @@
 
 Traps earlier agents hit the hard way. Skim the ones in your area before you code.
 
+- Measuring colors in screenshots (2026-10-23): the user's screenshots are Display P3. `NSBitmapImageRep.colorAt(...).usingColorSpace(.sRGB)` on an `NSImage`'s `tiffRepresentation` misreads them and our own captures alike (Capy's #2b948b switch read as #5ba19c, and our #5ba19c as #6bafac). Draw the `CGImage` from `CGImageSource` into a `CGContext` in sRGB and read the bytes. Values measured the old way, like Redesign's settings card in 5d2453ea, need a second look.
+
 - Remote desktop locking (2026-10-18): Screen Sharing can restore a previously locked screen when the viewer disconnects, even with sleep disabled. The user asked to keep it available; `/Library/Preferences/com.apple.RemoteManagement` now has `RestoreMachineState = false`. Check this before repeatedly asking for an unlock. [Diagnosis and setting](research/mcp-fullscreen-2026-10-18.md#remote-desktop-interruption).
 
 

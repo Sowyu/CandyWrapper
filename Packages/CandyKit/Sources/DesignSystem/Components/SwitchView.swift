@@ -97,8 +97,11 @@ public final class SwitchView: ControlView {
         thumb.setNeedsDisplay()
     }
 
-    /// Capy's on track in dark, measured on its settings page.
-    static let ditherDarkTrack = NSColor(srgbRed: 0x5b / 255, green: 0xa1 / 255, blue: 0x9c / 255, alpha: 1)
+    /// Redesign's switch in dark, measured on Capy's settings page (2x, converted from Display P3 to sRGB): a 30 by 18
+    /// track, a 14pt knob inset 2pt, the knob solid `--panel` #131314 with no shadow. The on track is the accent
+    /// (#2b948b for teal), the off track Capy's `--muted` #353537.
+    static let ditherDarkKnob = NSColor(srgbRed: 0x13 / 255, green: 0x13 / 255, blue: 0x14 / 255, alpha: 1)
+    static let ditherDarkOffTrack = NSColor(srgbRed: 0x35 / 255, green: 0x35 / 255, blue: 0x37 / 255, alpha: 1)
 
     private func apply(animated: Bool) {
         let animate = animated && window != nil && !Motion.reduced
@@ -118,15 +121,22 @@ public final class SwitchView: ControlView {
         var thumbStyle = BoxStyle()
         thumbStyle.radius = 9999
         // `dark:data-unchecked:bg-muted-foreground` keeps an off switch visible in dark (3473 switch.tsx:36, 8a948076bb).
-        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        thumbStyle.fill = isOn ? Themed.color(dither ? \.card : \.background) : Themed.color(light: \.background, dark: \.contrastMutedForeground)
-        thumbStyle.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.05)),
-                              BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.05))]
+        let dark = effectiveAppearance.isDark
+        let ditherDark = dark && ThemeRuntime.isDither(dark: true)
+        if ditherDark {
+            // Redesign in dark: a solid knob, crisp, the same in both states. The card color is a frosted pane, so not that.
+            thumbStyle.fill = Self.ditherDarkKnob
+        } else {
+            let dither = ThemeRuntime.isDither(dark: dark)
+            thumbStyle.fill = isOn ? (dither ? .white : Themed.color(\.background)) : Themed.color(light: \.background, dark: \.contrastMutedForeground)
+            thumbStyle.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.05)),
+                                  BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.05))]
+        }
         thumb.boxStyle = thumbStyle
 
-        // Dither (after Capy's settings switches): a lighter teal track, #5ba19c in dark, under a card-colored knob.
-        let onColor = dither ? Themed.pick(light: Themed.color(\.primary), dark: Self.ditherDarkTrack) : Themed.color(\.primary)
-        let trackColor = (isOn && !isMixed ? onColor : Themed.color(\.contrastInput)).cgColor(in: self)
+        let onColor = ditherDark ? ThemeRuntime.ditherAccent.darkColor : Themed.color(\.primary)
+        let offColor = ditherDark ? Self.ditherDarkOffTrack : Themed.color(\.contrastInput)
+        let trackColor = (isOn && !isMixed ? onColor : offColor).cgColor(in: self)
         let offset = isMixed ? (t - 4) / 2 : (isOn ? t - 4 : 0)
         let slide = CATransform3DMakeTranslation(offset, 0, 0)
         let stretched = state.active && state.enabled
