@@ -638,8 +638,15 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.frame = NSRect(x: 4, y: 2, width: max(0, bounds.width - 8), height: body)
         empty.frame = NSRect(x: 4, y: 2, width: bounds.width - 8, height: TL.relaxed)
         let cardSpace = self.cardSpace, flow = body - collapsedMargin(bounds.width)
-        if cardSpace > 0 { card.frame = NSRect(x: 4, y: 2 + flow + 16, width: max(0, bounds.width - 8), height: cardSpace - 16) }
+        if cardSpace > 0 {
+            card.frame = NSRect(x: 4, y: 2 + flow + 16, width: max(0, bounds.width - 8), height: cardSpace - 16)
+            card.updateVisibleRows()
+        }
         meta.frame = NSRect(x: 4, y: 2 + flow + cardSpace + 6, width: bounds.width - 8, height: 24)
+    }
+
+    override func setContentVisible(_ visible: Bool) {
+        if cardFiles != nil { card.updateVisibleRows() }
     }
 
     /// `group/assistant` sits on the whole row, padding included (MessagesTimeline.tsx:2032-2035).

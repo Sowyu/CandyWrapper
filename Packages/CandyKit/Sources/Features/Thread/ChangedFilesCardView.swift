@@ -24,7 +24,11 @@ final class ChangedFilesCardView: DSView {
     private let total = DiffStatView()
     private let foldAll = ButtonView(nil, icon: .chevronsUpDown, variant: .ghostMuted, size: .iconXs)
     private let openDiff = ButtonView("Open diff", icon: .fileDiff, variant: .ghostMuted, size: .xs)
-    private var rowViews: [ChangedFileRowView] = []
+    private var rowViews: [Int: ChangedFileRowView] = [:]
+    private var rowPool: [ChangedFileRowView] = []
+    private var rowTops: [CGFloat] = []
+    private var anyDirectory = false
+    private(set) var createdRowViews = 0
     private(set) var rows: [Row] = []
     private var summary: TurnDiffSummary?
     private var hasDirectories = false
@@ -89,22 +93,13 @@ final class ChangedFilesCardView: DSView {
         foldAll.setAccessibilityLabel(label)
         foldAll.toolTip = label
         rows = Self.rows(files, allExpanded: allExpanded, overrides: overrides)
-        let anyDirectory = rows.contains { if case .directory = $0.node { true } else { false } }
-        while rowViews.count < rows.count {
-            let view = ChangedFileRowView()
-            rowViews.append(view)
-            addSubview(view)
+        anyDirectory = rows.contains { if case .directory = $0.node { true } else { false } }
+        var y = Self.headerHeight + 8
+        rowTops = rows.map { row in
+            defer { y += Self.height(of: row) }
+            return y
         }
-        for (i, view) in rowViews.enumerated() {
-            view.isHidden = i >= rows.count
-            guard i < rows.count else { continue }
-            let row = rows[i]
-            view.configure(row, spacer: anyDirectory || row.depth > 0)
-            view.action = { [weak self] in
-                guard let self, let run = self.summary?.runId else { return }
-                if case .directory(_, let path, _, _) = row.node { model?.toggleChangedFolder(run, path) } else { model?.onOpenTurnDiff?(run, row.node.path) }
-            }
-        }
+        updateVisibleRows(reconfigure: true)
         needsLayout = true
     }
 
@@ -121,12 +116,68 @@ final class ChangedFilesCardView: DSView {
         x -= open.width
         openDiff.frame = NSRect(x: x, y: midY - 12, width: open.width, height: 24)
         foldAll.frame = NSRect(x: x - 4 - 24, y: midY - 12, width: 24, height: 24)
-        var y = Self.headerHeight + 8
-        for (i, row) in rows.enumerated() {
-            let h: CGFloat = if case .directory = row.node { Self.folderRowHeight } else { Self.rowHeight }
-            rowViews[i].frame = NSRect(x: 8, y: y, width: max(0, bounds.width - 16), height: h)
-            y += h
+        updateVisibleRows()
+    }
+
+    private static func height(of row: Row) -> CGFloat {
+        if case .directory = row.node { return folderRowHeight }
+        return rowHeight
+    }
+
+    /// The timeline calls this on scrolling, including when the assistant row's frame stays fixed.
+    /// T3 f36dadb78, ChangedFilesTree.tsx:273-307, windows the tree in the ancestor viewport too.
+    func updateVisibleRows(reconfigure: Bool = false) {
+        let range: Range<Int>
+        if rows.count <= 100 {
+            range = 0..<rows.count
+        } else {
+            let rect = visibleRect
+            func lowerBound(_ y: CGFloat, bottom: Bool) -> Int {
+                var lo = 0, hi = rows.count
+                while lo < hi {
+                    let mid = (lo + hi) / 2
+                    let edge = rowTops[mid] + (bottom ? Self.height(of: rows[mid]) : 0)
+                    if edge <= y { lo = mid + 1 } else { hi = mid }
+                }
+                return lo
+            }
+            if rect.isEmpty || isHiddenOrHasHiddenAncestor {
+                range = 0..<0
+            } else {
+                range = max(0, lowerBound(rect.minY, bottom: true) - 4)..<min(rows.count, lowerBound(rect.maxY, bottom: false) + 4)
+            }
         }
+        for index in Array(rowViews.keys) where !range.contains(index) {
+            guard let view = rowViews.removeValue(forKey: index) else { continue }
+            view.isHidden = true
+            view.action = nil
+            rowPool.append(view)
+        }
+        for index in range {
+            let existing = rowViews[index]
+            let view: ChangedFileRowView
+            if let existing { view = existing }
+            else if let pooled = rowPool.popLast() { view = pooled }
+            else {
+                view = ChangedFileRowView()
+                createdRowViews += 1
+                addSubview(view)
+            }
+            rowViews[index] = view
+            view.isHidden = false
+            let row = rows[index]
+            if existing == nil || reconfigure {
+                view.configure(row, spacer: anyDirectory || row.depth > 0)
+                view.action = { [weak self] in
+                    guard let self, let run = self.summary?.runId else { return }
+                    if case .directory(_, let path, _, _) = row.node { model?.toggleChangedFolder(run, path) }
+                    else { model?.onOpenTurnDiff?(run, row.node.path) }
+                }
+            }
+            view.frame = NSRect(x: 8, y: rowTops[index], width: max(0, bounds.width - 16), height: Self.height(of: row))
+        }
+        // Keep a small reserve across fractional scroll steps and release a larger old viewport.
+        while rowPool.count > 8 { rowPool.removeLast().removeFromSuperview() }
     }
 
     override func updateLayer() {
@@ -169,6 +220,7 @@ final class ChangedFileRowView: DSView {
     func configure(_ row: ChangedFilesCardView.Row, spacer: Bool) {
         // The same folder toggled in place turns its chevron (ChangedFilesTree.tsx:185-190, 150ms).
         let sameNode = self.row?.node.path == row.node.path
+        if !sameNode { hovered = false }
         self.row = row
         self.spacer = spacer
         let isDirectory: Bool
