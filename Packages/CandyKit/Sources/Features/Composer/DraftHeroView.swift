@@ -17,10 +17,10 @@ public final class DraftHeroView: DSView {
         return isScratch ? Self.height : Self.height + CGFloat(headlineLines(width: width).count - 1) * 36
     }
 
-    public var projectTitle = "" { didSet { if projectTitle != oldValue { chipIcon.projectTitle = projectTitle; needsDisplay = true; superview?.needsLayout = true } } }
+    public var projectTitle = "" { didSet { if projectTitle != oldValue { updateChips(); needsDisplay = true; superview?.needsLayout = true } } }
     /// A draft in the scratch project: "What should we work on?" with the picker, "No project", on the
     /// line below (DraftHeroHeadline.tsx:244-246, 326, 366-383).
-    public var isScratch = false { didSet { if isScratch != oldValue { needsDisplay = true; superview?.needsLayout = true } } }
+    public var isScratch = false { didSet { if isScratch != oldValue { updateChips(); needsDisplay = true; superview?.needsLayout = true } } }
     /// The project name was clicked; show the project menu under `anchor`.
     public var onPickProject: ((NSView) -> Void)?
 
@@ -30,21 +30,57 @@ public final class DraftHeroView: DSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
-    /// Dither (after Capy's composer chips): no headline, just the project as a small chip over the composer's left edge.
+    /// Dither (after Capy's new-thread page): no headline, the project and machine chips over the composer's left edge.
     private var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    private let chipIcon = ProjectMonogramView()
+    private let chipIcon = ProjectMonogramView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+    private let scratchIcon = IconView(name: .folder, size: 14)
+    /// The project chip; `onPickProject` gets it as the anchor.
+    public private(set) lazy var projectChip = DitherChipView(icon: chipIcon, accessibilityLabel: "Project")
+    /// The machine chip (`RunOnControl`'s machine); `onPickMachine` gets it as the anchor.
+    public private(set) lazy var machineChip = DitherChipView(icon: IconView(name: .laptop, size: 14), accessibilityLabel: "Run on")
     /// The project's icon for the chip; set after `projectTitle`.
     public var projectIcon: ProjectIconSource? { didSet { chipIcon.source = projectIcon } }
-    private let chipChevron = IconView(name: .chevronDown, size: 12)
-    static var chipFont: NSFont { DSFont.ui(13, weight: .medium) }
-    private var chipText: String { isScratch ? "No project" : projectTitle }
+    /// The machine chip was clicked; open the machine list under `anchor`.
+    public var onPickMachine: ((NSView) -> Void)?
+
+    /// The current machine for the Dither machine chip, nil to hide it. `interactive` with a choice of machines.
+    public func setMachine(label: String?, kind: String, online: Bool, interactive: Bool) {
+        machineChip.isHidden = label == nil || !capy
+        machineChip.text = label ?? ""
+        machineChip.online = online
+        machineChip.interactive = interactive
+        if machineKind != kind {
+            machineKind = kind
+            machineChip.replaceIcon(IconView(definition: EnvironmentMachineIcon.definition(kind), size: 14))
+        }
+        machineLabel = label
+        needsLayout = true
+    }
+    private var machineKind = "laptop"
+    private var machineLabel: String?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         clipsToBounds = true
         addSubview(projectAnchor)
-        addSubview(chipIcon)
-        addSubview(chipChevron)
+        chipIcon.scale = 14 / 16
+        projectChip.action = { [weak self] in
+            guard let self else { return }
+            self.onPickProject?(self.projectChip)
+        }
+        machineChip.muted = true
+        machineChip.action = { [weak self] in
+            guard let self else { return }
+            self.onPickMachine?(self.machineChip)
+        }
+        for chip in [projectChip, machineChip] { chip.isHidden = true; addSubview(chip) }
+        updateChips()
+    }
+
+    private func updateChips() {
+        chipIcon.projectTitle = projectTitle
+        projectChip.text = isScratch ? "No project" : projectTitle
+        projectChip.replaceIcon(isScratch ? scratchIcon : chipIcon)
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -55,13 +91,15 @@ public final class DraftHeroView: DSView {
 
     public override func layout() {
         super.layout()
-        chipIcon.isHidden = !capy
-        chipChevron.isHidden = !capy
+        projectChip.isHidden = !capy
+        machineChip.isHidden = !capy || machineLabel == nil
         guard capy else { return }
-        let textWidth = ceil(TextLine(NSAttributedString(string: chipText, attributes: [.font: Self.chipFont])).width)
-        chipIcon.frame = NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        chipChevron.frame = NSRect(x: 8 + 20 + textWidth + 4, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        projectAnchor.frame = NSRect(x: 4, y: 0, width: 8 + 20 + textWidth + 4 + 12 + 4, height: bounds.height)
+        // Capy: the chips start 12 in from the composer's edge, 4 apart (`gap-1`).
+        let project = projectChip.intrinsicContentSize
+        projectChip.frame = NSRect(x: 12, y: (bounds.height - project.height) / 2, width: project.width, height: project.height)
+        let machine = machineChip.intrinsicContentSize
+        machineChip.frame = NSRect(x: projectChip.frame.maxX + 4, y: (bounds.height - machine.height) / 2,
+                                   width: min(machine.width, max(0, bounds.width - projectChip.frame.maxX - 4)), height: machine.height)
         window?.invalidateCursorRects(for: self)
     }
 
@@ -94,18 +132,7 @@ public final class DraftHeroView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
-        if capy {
-            let color = Themed.color(\.foreground, hovered ? 1 : 0.85)
-            chipChevron.strokeColor = Themed.color(\.mutedForeground)
-            if hovered {
-                ctx.setFillColor(Themed.color(\.foreground, 0.08).cgColor(in: self))
-                ctx.addPath(CGPath(roundedRect: projectAnchor.frame, cornerWidth: 6, cornerHeight: 6, transform: nil))
-                ctx.fillPath()
-            }
-            let line = TextLine(NSAttributedString(string: chipText, attributes: [.font: Self.chipFont, .foregroundColor: color]))
-            draw(line.line, at: CGPoint(x: 28, y: line.baseline(top: 4, lineHeight: 20)), in: ctx)
-            return
-        }
+        if capy { return }
         if isScratch { drawScratch(ctx); return }
         let (_, range) = pieces()
         let lines = headlineLines(width: bounds.width)
@@ -206,12 +233,12 @@ public final class DraftHeroView: DSView {
         projectAnchor.frame.contains(convert(event.locationInWindow, from: nil))
     }
 
-    public override func mouseMoved(with event: NSEvent) { hovered = overProject(event) }
+    public override func mouseMoved(with event: NSEvent) { hovered = !capy && overProject(event) }
     public override func mouseExited(with event: NSEvent) { hovered = false }
     public override func mouseDown(with event: NSEvent) {
-        if overProject(event) { onPickProject?(projectAnchor) }
+        if !capy, overProject(event) { onPickProject?(projectAnchor) }
     }
-    public override func resetCursorRects() { addCursorRect(projectAnchor.frame, cursor: .pointingHand) }
+    public override func resetCursorRects() { if !capy { addCursorRect(projectAnchor.frame, cursor: .pointingHand) } }
 }
 
 extension DraftHeroView {

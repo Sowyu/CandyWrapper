@@ -353,7 +353,9 @@ final class GitController {
 
         // The composer strip (drafts only): the machine shows when it can be picked or isn't this one.
         let strip = panel.contextStrip
-        let indicator = runOnChoices || (env != nil && target.environmentId != environments.primaryId)
+        // Dither names the draft's machine in its chip over the composer, so the strip keeps to the checkout.
+        let indicator = !(target.isDraft && ThemeRuntime.isDither(dark: panel.effectiveAppearance.isDark))
+            && (runOnChoices || (env != nil && target.environmentId != environments.primaryId))
         strip.runContext.glyphs = indicator ? [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)] : [folderIcon(target)]
         strip.runContext.text = strip.runOn.autoBalanceLabel ?? (indicator ? env?.label ?? "Run on" : label)
         strip.runContext.tooltipText = label

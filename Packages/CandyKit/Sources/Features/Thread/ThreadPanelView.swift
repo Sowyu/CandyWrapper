@@ -1283,10 +1283,13 @@ public final class ThreadPanelView: DSView {
         let height = composer.preferredHeight
         let x = placement.x.rounded()
         let y: CGFloat
+        // Dither's draft shows the machine as a chip over the composer, so the strip below only carries the checkout and branch.
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let showsStrip = showsContextStrip && !(isDraft && dither && !contextStrip.showsGitControls)
         if isDraft {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
             // A draft without the strip (a scratch project has no checkout) centers without its 32px.
-            let block = height + (showsContextStrip ? 32 : 0) + 20
+            let block = height + (showsStrip ? 32 : 0) + 20
             let top = chatTop + (chatHeight - chatTop - block) / 2
             y = top.rounded()
             // The banner stack sits between the hero and the composer: the front notice and the peek.
@@ -1294,13 +1297,13 @@ public final class ThreadPanelView: DSView {
             let notice = (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0)
                 + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
             let heroHeight = hero.height(forWidth: width)
-            hero.frame = NSRect(x: x, y: y - 16 - notice - heroHeight, width: width, height: heroHeight)
+            hero.frame = NSRect(x: x, y: y - (dither ? 6 : 16) - notice - heroHeight, width: width, height: heroHeight)
         } else {
             y = chatHeight - 20 - height
         }
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
-        let strip = (isDraft || ClientSettingsStore.shared.current.bool("persistComposerContextStrip")) && showsContextStrip && !composer.isHidden
+        let strip = (isDraft || ClientSettingsStore.shared.current.bool("persistComposerContextStrip")) && showsStrip && !composer.isHidden
         contextStrip.isHidden = !strip
         composer.joinsContextStrip = strip
         let stripInset = ComposerContextStripView.inset
