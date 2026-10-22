@@ -89,10 +89,6 @@ struct NightlyCompatFeaturesTests {
         // Two phase headers, the running phase's two members open, the failed phase closed.
         #expect(v.preferredHeight == folded + 32 * 4)
         #expect(ThreadDetailsScrollTests.views(ThreadLineageWorkflowMemberView.self, in: v).map(\.member.title) == ["Scan sources", "Scan tests"])
-        v.frame = NSRect(x: 0, y: 0, width: 280, height: v.preferredHeight)
-        v.layoutSubtreeIfNeeded()
-        let image = Snapshot.image(of: v, size: v.frame.size, dark: true)
-        try Snapshot.writePNG(image, to: URL(fileURLWithPath: "/tmp/candywrapper-fidelity/nightly-compat-workflow-lineage.png"))
     }
 
     @Test func nameOnlyProjectStartsItsFirstThreadLocally() {

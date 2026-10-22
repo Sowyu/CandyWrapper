@@ -113,36 +113,16 @@ struct NicheGapsTests {
         #expect(!v.titleDetailsButton.isHidden)
         #expect(v.titleDetailsButton.accessibilityLabel() == "Show title details")
         #expect(v.titleDetailsButton.frame.maxX <= v.bounds.width - 4)
+        // A cut error with actions keeps its details button next to them.
+        v.apply(.init(variant: .error, icon: .download, title: "Failed to clone repo",
+                      description: "fatal: could not read Username for 'https://github.com': terminal prompts disabled, and more",
+                      actions: ["Remove project", "Retry"]))
+        v.frame = NSRect(x: 0, y: 0, width: 560, height: ComposerNoticeBannerView.height)
+        v.layoutSubtreeIfNeeded()
+        #expect(!v.detailsButton.isHidden)
         let popup = NoticeDetailsPopupView(text: "Receiving")
         #expect(popup.accessibilityLabel() == "Notice details")
         #expect(popup.popupSize.width <= 480)
-    }
-
-    /// Writes the cut notice with its details button, the details popup and the branch notice to
-    /// /tmp/candywrapper-fidelity/nichea for a look (no reference: T3 shows them only in live states).
-    @Test func noticeRenders() throws {
-        let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/nichea")
-        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        let cut = ComposerNoticeBannerView()
-        cut.apply(.init(variant: .error, icon: .download, title: "Failed to clone repo",
-                        description: "fatal: could not read Username for 'https://github.com': terminal prompts disabled, and more",
-                        actions: ["Remove project", "Retry"]))
-        let branch = ComposerNoticeBannerView()
-        branch.apply(.init(variant: .neutral, icon: .gitBranch, title: "feature/a-rather-long-branch-name-for-the-notice", actions: ["Restore branch"],
-                           dismissLabel: "Dismiss branch change notice", titlePrefix: "Branch changed \u{2014} was", titleCode: true))
-        let popup = NoticeDetailsPopupView(text: "fatal: could not read Username for 'https://github.com': terminal prompts disabled, and more")
-        for dark in [false, true] {
-            for (name, view, size) in [("cut", cut as NSView, NSSize(width: 560, height: 51)), ("branch", branch, NSSize(width: 460, height: 51)),
-                                       ("popup", popup, popup.popupSize)] {
-                let canvas = SidebarSearchFidelityTests.Canvas(frame: .zero)
-                view.frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
-                canvas.addSubview(view)
-                let image = Snapshot.image(of: canvas, size: NSSize(width: size.width + 16, height: size.height + 16), scale: 2, dark: dark)
-                try Snapshot.writePNG(image, to: out.appendingPathComponent("\(name).\(dark ? "dark" : "light").png"))
-                view.removeFromSuperview()
-            }
-        }
-        #expect(!cut.detailsButton.isHidden)
     }
 
     @Test func emptyServerThreadLine() {

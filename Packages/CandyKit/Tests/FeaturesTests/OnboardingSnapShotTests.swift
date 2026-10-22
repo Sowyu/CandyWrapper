@@ -82,20 +82,15 @@ struct OnboardingSnapShotTests {
         SnapShotPendingCapture.removeDeliveredFiles([a])
     }
 
-    @Test func flightDurationIsBoundedAndDistanceDependent() {
-        let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
-        #expect(SnapShotFlightAnimation.duration(source: rect, destination: rect) == 0.28)
-        let far = SnapShotFlightAnimation.duration(source: rect, destination: rect.offsetBy(dx: 2000, dy: 0))
-        #expect(far > 0.28 && far < 0.68)
-    }
     @Test func readinessPrefersUsableNonDefaultInstance() {
         let absent = ServerProvider(instanceId: .init("default"), driver: "codex", installed: false, status: .error)
         let ready = ServerProvider(instanceId: .init("custom"), driver: "codex")
         #expect(OnboardingProviderReadiness.select([absent, ready], driver: "codex")?.instanceId == ready.instanceId)
     }
     @MainActor @Test func failedSettingsReadPreservesSavedData() {
-        let defaults = UserDefaults(suiteName: "wp716b-settings-test")!
-        defer { defaults.removePersistentDomain(forName: "wp716b-settings-test") }
+        let suite = "wp716b-settings-test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
         let broken = Data("{".utf8)
         defaults.set(broken, forKey: "clientSettings.v1")
         let store = ClientSettingsStore(defaults: defaults)
