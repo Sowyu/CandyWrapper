@@ -750,7 +750,12 @@ final class PaletteCommands {
 
     /// The sidebar's new-thread button (`handleNewThreadClick`): one project or Shift creates at once,
     /// several open "New thread in..." (`openCommandPalette({open: "new-thread-in"})`).
+    /// Dither skips the palette and opens a draft with no project, picked later from the project chip (Capy's).
     func newThreadFromSidebar(shift: Bool) {
+        if ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark), let env = scratchTargetEnvironmentId {
+            startScratchThread(env)
+            return
+        }
         if shift || projectGroups().count <= 1 { newThreadFromContext(); return }
         if let controller = overlay?.controller, let page = newThreadInPage() { controller.setMode(nil); controller.push(page); return }
         open(newThreadIn: true)
