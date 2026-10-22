@@ -450,6 +450,9 @@ final class DitherSettingsNavRow: ControlView {
         let fill: NSColor? = isActive ? Themed.color(\.sidebarRowSelected, sidebar: true)
             : state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: true) : nil
         layer?.backgroundColor = fill?.cgColor(in: self)
+        // Keyboard focus shows T3's ring (`focus-visible:ring-2 ring-ring`), as Dither's tabs do.
+        layer?.borderWidth = state.focusVisible ? 2 : 0
+        layer?.borderColor = state.focusVisible ? Themed.color(\.ring).cgColor(in: self) : nil
         // Capy: muted labels that brighten on hover and selection; icons stay muted.
         let lit = isActive || state.hoverOrPressed
         label.color = Themed.color(\.sidebarForeground, lit ? 1 : 0.82, sidebar: true)
