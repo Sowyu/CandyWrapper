@@ -135,9 +135,11 @@ struct NightlyCompatTests {
     }
 
     @Test func hostFreezeNotice() throws {
-        let json = #"{"providers":[],"lastEventLoopStall":{"detectedAt":"2026-10-20T12:00:00.000Z","durationMs":12400,"loadAverage":9.6,"cpuCount":8}}"#
+        let json = #"{"providers":[],"environment":{"label":"Build box"},"lastEventLoopStall":{"detectedAt":"2026-10-20T12:00:00.000Z","durationMs":12400,"loadAverage":9.6,"cpuCount":8}}"#
         let config = try JSONDecoder().decode(ServerProviderConfig.self, from: Data(json.utf8))
         let stall = try #require(config.lastEventLoopStall)
+        // The toast's fallback label when no saved environment names the host (HostFreezeToastCoordinator.tsx:22-24).
+        #expect(config.environmentLabel == "Build box")
         #expect(stall.notice(hostLabel: "Mac mini") == ("Mac mini froze for 12s", "Its CPU is overloaded (load 10 on 8 cores)."))
         let busy = ServerEventLoopStall(detectedAt: "x", durationMs: 3500, cpuCount: 8)
         #expect(busy.notice(hostLabel: "Mac mini") == ("Mac mini froze for 4s", "T3 Code on Mac mini was too busy to answer."))

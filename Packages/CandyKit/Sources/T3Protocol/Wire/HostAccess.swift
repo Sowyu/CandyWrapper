@@ -125,6 +125,18 @@ public struct ConnectReachability: Codable, Sendable, Equatable {
         self.cause = cause; self.reason = reason; self.hint = hint; self.fix = fix
     }
 
+    /// `connectReachabilityHelpUrl` (contracts environmentHttp.ts:479-492): the troubleshooting section for the cause.
+    public var helpURL: String? {
+        let sections = [
+            "not_linked": "sign-in-account-or-link-problems", "connector_not_running": "the-hosts-tunnel-is-offline",
+            "connector_not_ready": "the-hosts-tunnel-is-offline", "no_connector": "the-hosts-tunnel-is-offline",
+            "edge_unreachable": "port-7844-is-blocked-on-the-host", "origin_unreachable": "the-tunnel-works-but-t3-code-does-not-answer",
+            "unexpected_response": "the-tunnel-works-but-t3-code-does-not-answer",
+            "dns_failed": "the-t3-connect-address-does-not-resolve-or-answer", "timeout": "the-t3-connect-address-does-not-resolve-or-answer",
+        ]
+        return cause.flatMap { sections[$0] }.map(t3ConnectTroubleshootingURL)
+    }
+
     /// The row's status line: `formatConnectReachable` ("Tunnel connected · 4 connections · QUIC", :445-456)
     /// or the unreachable reason, hint and fix (SavedEnvironmentRows.tsx:500-503). Nil for other statuses.
     public var statusLine: String? {
@@ -311,4 +323,10 @@ public enum AccessTime {
     public static func absolute(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
     }
+}
+
+/// `t3ConnectTroubleshootingUrl` (contracts environmentHttp.ts:474-477): a section of docs/user/t3-connect-troubleshooting.md,
+/// which clients link as "More info".
+public func t3ConnectTroubleshootingURL(_ section: String) -> String {
+    "https://github.com/pingdotgg/t3code/blob/main/docs/user/t3-connect-troubleshooting.md#\(section)"
 }
