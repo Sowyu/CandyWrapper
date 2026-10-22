@@ -158,7 +158,9 @@ public enum OptimisticThreadUpdate: Sendable, Equatable {
             guard !blocked, let wake = until.epochMs, let nowMs = now.epochMs, wake > nowMs else { return thread }
             t.pendingRuntimeRequest = nil
             t.snoozedUntil = until
-            t.snoozedAt = thread.snoozedUntil?.epochMs == wake ? (thread.snoozedAt ?? now) : now
+            // Restamp even for the same wake time, so a re-snooze after a wake hides the thread again
+            // (threadCommands.ts:446, T3 699c1c5d4c).
+            t.snoozedAt = now
         case .unsnooze:
             t.snoozedUntil = nil
             t.snoozedAt = nil

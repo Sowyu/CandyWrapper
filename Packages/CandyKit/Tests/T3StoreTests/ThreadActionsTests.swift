@@ -122,6 +122,9 @@ struct OptimisticThreadUpdateTests {
         #expect(OptimisticThreadUpdate.snooze(until: "2026-10-10T11:00:00.000Z").apply(t, now: now, accepted: true) == t)
         let starting = thread { $0.status = .starting }
         #expect(OptimisticThreadUpdate.snooze(until: later).apply(starting, now: now, accepted: false) == starting)
+        // T3 699c1c5d4c: the same wake time still restamps snoozedAt.
+        let woke = thread { $0.snoozedUntil = later; $0.snoozedAt = "2026-10-09T00:00:00.000Z" }
+        #expect(OptimisticThreadUpdate.snooze(until: later).apply(woke, now: now, accepted: false).snoozedAt == now)
     }
 
     @Test func pinUnsettlesAndWakes() {
