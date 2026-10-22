@@ -991,8 +991,13 @@ public final class ComposerView: DSView {
             planPill.frame = NSRect(x: x - w, y: midY - 16, width: w, height: 32)
             actionsLeft = planPill.frame.minX
         }
-        contextWindowMeter.isHidden = (contextWindowMeter.usage == nil && !contextWindowMeter.reserved) || questionFooter != nil
-        if !contextWindowMeter.isHidden {
+        // Capy's ring sits under the composer; the thread panel takes the meter there.
+        if capy {
+            if contextWindowMeter.superview === self { contextWindowMeter.isHidden = true }
+        } else if contextWindowMeter.superview === self {
+            contextWindowMeter.isHidden = (contextWindowMeter.usage == nil && !contextWindowMeter.reserved) || questionFooter != nil
+        }
+        if !capy, contextWindowMeter.superview === self, !contextWindowMeter.isHidden {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX
         }

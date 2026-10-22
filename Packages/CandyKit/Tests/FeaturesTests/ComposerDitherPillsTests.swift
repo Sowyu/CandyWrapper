@@ -24,6 +24,8 @@ struct ComposerDitherPillsTests {
         panel.showsStashBadge = true
         panel.backgroundWorkBanner.apply(.init(variant: .neutral, icon: .info, title: "Running: Publish", actions: ["Stop"], priority: .activity))
         panel.showsBackgroundWork = true
+        panel.goalBanner.apply(.init(variant: .neutral, icon: .target, title: "Goal: ship", actions: ["Clear"]))
+        panel.showsGoal = true
         panel.layoutSubtreeIfNeeded()
         return (panel, window)
     }
@@ -33,9 +35,9 @@ struct ComposerDitherPillsTests {
         defer { ThemeRuntime.apply(previous) }
         let (panel, window) = try panel(dither: true)
         defer { window.contentView = nil }
-        let composer = panel.composer.frame, stash = panel.stashBadge.frame, work = panel.backgroundWorkBanner.frame
-        #expect(!panel.stashBadge.isHidden && !panel.backgroundWorkBanner.isHidden)
-        #expect(panel.stashBadge.placement == .floating && panel.backgroundWorkBanner.placement == .floating)
+        let composer = panel.composer.frame, stash = panel.stashBadge.frame, work = panel.goalBanner.frame
+        #expect(!panel.stashBadge.isHidden && !panel.goalBanner.isHidden)
+        #expect(panel.stashBadge.placement == .floating && panel.goalBanner.placement == .floating)
         // One pill row, 8 above the composer: the work pill from the left, Stash at the right, apart.
         for pill in [stash, work] {
             #expect(pill.height == DitherPill.height)
@@ -44,6 +46,29 @@ struct ComposerDitherPillsTests {
         // Inside the composer's corners: `DitherPill.inset` in from each side.
         #expect(work.minX == composer.minX + DitherPill.inset && stash.maxX == composer.maxX - DitherPill.inset)
         #expect(work.maxX < stash.minX)
+    }
+
+    /// Capy's row under the composer: the background work becomes the waiting indicator at the right, left of the
+    /// context ring, and leaves the pill row above.
+    @Test func waitingIndicatorSitsUnderTheComposerAtTheRight() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(dither: true)
+        defer { window.contentView = nil }
+        panel.waitingIndicator.configure(title: "Waiting on subagent", waiting: true, header: "Waiting on subagent Fix it",
+                                         links: [.init("Show subagent") {}], stop: .init("Stop") {})
+        panel.composer.contextWindowMeter.usage = ThreadContextWindowUsage(used: 32_800, maximum: 400_000, automatically: true)
+        panel.layoutSubtreeIfNeeded()
+        let composer = panel.composer.frame, ring = panel.composer.contextWindowMeter.frame, waiting = panel.waitingIndicator.frame
+        #expect(panel.backgroundWorkBanner.isHidden)
+        #expect(!panel.waitingIndicator.isHidden && panel.waitingIndicator.showsLabel)
+        #expect(panel.composer.contextWindowMeter.superview === panel && !panel.composer.contextWindowMeter.isHidden)
+        for v in [ring, waiting] { #expect(v.minY == composer.maxY + DitherPill.gap && v.height == DitherPill.height) }
+        #expect(ring.maxX == composer.maxX - DitherPill.inset)
+        #expect(waiting.maxX == ring.minX - DitherPill.spacing)
+        // Short label only: no task title.
+        #expect(BackgroundWorkPresentation.shortTitle(.init(title: "Waiting on subagent Fix it", items: [
+            .init(taskId: "a", kind: .subagent, label: "Fix it", childThreadId: ThreadId("c"))], waiting: true)) == "Waiting on subagent")
     }
 
     @Test func composerStaysPutAsPillsComeAndGo() throws {

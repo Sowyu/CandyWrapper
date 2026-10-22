@@ -74,6 +74,9 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
 
     private var rows: [PickerMenuRowView] = []
     private var tracking: NSTrackingArea?
+    /// Dither: Capy's menus (measured in Capy 2026-10-22): 13pt rows, the checked row marked by a check at the right
+    /// instead of a fill, a faint hover and full-width separators.
+    var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     init(entries: [PickerMenuEntry], style: Style, minimumWidth: CGFloat) {
         self.entries = entries
@@ -175,6 +178,8 @@ final class PickerMenuRowView: DSView {
     private var badge: BadgeView?
     private var detail: TextBlockView?
     private var line: CALayer?
+    /// Dither's check at the row's right edge.
+    private var check: IconView?
 
     init(menu: PickerMenuView, index: Int) {
         self.owner = menu
@@ -199,7 +204,7 @@ final class PickerMenuRowView: DSView {
         case .option:
             title.text = e.title
             // Select rows put the label in `font-medium text-foreground`.
-            title.font = DSFont.ui(14, weight: owner.style == .select ? .medium : .regular)
+            title.font = owner.capy ? DSFont.ui(13) : DSFont.ui(14, weight: owner.style == .select ? .medium : .regular)
             title.lineHeight = 20
             addSubview(title)
             if let name = e.icon {
@@ -218,6 +223,11 @@ final class PickerMenuRowView: DSView {
                 v.smoothsFont = false
                 addSubview(v)
                 detail = v
+            }
+            if owner.capy, e.checked {
+                let v = IconView(name: .check, size: 14)
+                addSubview(v)
+                check = v
             }
             alphaValue = e.disabled ? 0.64 : 1
         }
@@ -279,7 +289,7 @@ final class PickerMenuRowView: DSView {
                 let w = TextLine(NSAttributedString(string: d.text, attributes: [.font: d.font])).width
                 return owner.style == .menu ? min(224, w) : w
             } ?? 0
-            return 16 + max(first, second)
+            return 16 + max(first + (owner.capy ? 14 + 12 : 0), second)
         }
     }
 
@@ -291,7 +301,7 @@ final class PickerMenuRowView: DSView {
         let e = owner.entry(index)
         switch e.kind {
         case .separator:
-            line?.frame = CGRect(x: 8, y: 4, width: bounds.width - 16, height: 1)
+            line?.frame = owner.capy ? CGRect(x: -4, y: 4, width: bounds.width + 8, height: 1) : CGRect(x: 8, y: 4, width: bounds.width - 16, height: 1)
         case .label:
             title.frame = NSRect(x: 8, y: 6, width: bounds.width - 16, height: 16)
         case .option:
@@ -301,7 +311,9 @@ final class PickerMenuRowView: DSView {
                 icon.frame = NSRect(x: x, y: top + 3, width: 14, height: 14)
                 x += 14 + 6
             }
-            let w = min(title.textWidth, bounds.width - 8 - x - (badge.map { spaceWidth + $0.intrinsicContentSize.width } ?? 0))
+            check?.frame = NSRect(x: bounds.width - 8 - 14, y: top + 3, width: 14, height: 14)
+            let checkRoom: CGFloat = owner.capy ? 14 + 12 : 0
+            let w = min(title.textWidth, bounds.width - 8 - x - checkRoom - (badge.map { spaceWidth + $0.intrinsicContentSize.width } ?? 0))
             title.frame = NSRect(x: x, y: top, width: max(0, w), height: 20)
             if let badge {
                 let size = badge.intrinsicContentSize
@@ -335,8 +347,14 @@ final class PickerMenuRowView: DSView {
             let color: NSColor? = owner.style == .menu
                 ? (highlighted ? accent : (e.checked ? checked : nil))
                 : (e.checked ? checked : (highlighted ? accent : nil))
-            fill.backgroundColor = color?.cgColor(in: self)
-            title.color = highlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
+            if owner.capy {
+                fill.backgroundColor = highlighted ? Themed.color(\.contrastForeground, 0.07).cgColor(in: self) : nil
+                title.color = Themed.color(\.contrastForeground)
+                check?.strokeColor = Themed.color(\.contrastForeground)
+            } else {
+                fill.backgroundColor = color?.cgColor(in: self)
+                title.color = highlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
+            }
             icon?.strokeColor = Themed.color(\.contrastMutedForeground)
             detail?.color = Themed.color(\.contrastMutedForeground, owner.style == .menu ? 0.8 : 1)
         }

@@ -1370,7 +1370,7 @@ final class ComposerController {
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
         contextWindow = ThreadContextWindowUsage.derive(projection)
-        composer.contextWindowMeter.usage = ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") ? contextWindow : nil
+        composer.contextWindowMeter.usage = meterEnabled ? contextWindow : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
         var runState = ComposerLogic.RunState(runs: runs)
@@ -4629,6 +4629,17 @@ extension ComposerController {
         let presentation = composer.runState.canInterrupt ? nil : thread.flatMap { BackgroundWorkPresentation.present($0.backgroundTasks) }
         panel.showsBackgroundWork = presentation != nil
         guard let thread, let presentation else { return }
+        let stopWork: @MainActor () -> Void = { [weak self] in
+            guard let self, self.stoppingBackgroundWork != thread.id, self.openThreadId == thread.id else { return }
+            self.stoppingBackgroundWork = thread.id
+            self.updateThreadBanners()
+            // Acceptance does not confirm termination: Stop comes back for a retry while the tasks wind down.
+            self.stop { [weak self] in
+                guard let self, self.stoppingBackgroundWork == thread.id else { return }
+                self.stoppingBackgroundWork = nil
+                self.updateThreadBanners()
+            }
+        }
         typealias Part = ComposerNoticeBannerView.Content.DescriptionPart
         var parts: [Part] = []
         let items = presentation.items
@@ -4660,17 +4671,17 @@ extension ComposerController {
             guard let position = links.firstIndex(of: index), position < children.count else { return }
             self?.openThread?(children[position])
         }
-        banner.onAction = { [weak self] index in
-            guard let self, index == 0, self.stoppingBackgroundWork != thread.id, self.openThreadId == thread.id else { return }
-            self.stoppingBackgroundWork = thread.id
-            self.updateThreadBanners()
-            // Acceptance does not confirm termination: Stop comes back for a retry while the tasks wind down.
-            self.stop { [weak self] in
-                guard let self, self.stoppingBackgroundWork == thread.id else { return }
-                self.stoppingBackgroundWork = nil
-                self.updateThreadBanners()
+        banner.onAction = { index in if index == 0 { stopWork() } }
+        // Redesign's indicator: the short label, and the banner's links and Stop in its menu.
+        let canStop = !stopping && environments.canOperate(thread.id.environmentId)
+        let menuLinks = items.compactMap { item in
+            item.childThreadId.map { child in
+                DitherWaitingView.Action(items.count == 1 ? "Show subagent" : item.label) { [weak self] in self?.openThread?(child) }
             }
         }
+        panel.waitingIndicator.configure(title: BackgroundWorkPresentation.shortTitle(presentation), waiting: presentation.waiting,
+                                         header: presentation.title, links: menuLinks,
+                                         stop: DitherWaitingView.Action(stopping ? "Stopping..." : "Stop", enabled: canStop, run: stopWork))
     }
 
     private func updateThreadBanners() {
@@ -4877,6 +4888,11 @@ extension ComposerController {
         }
     }
 
+    /// The "Context window indicator" setting; Redesign always shows its ring under the composer, as Capy does.
+    fileprivate var meterEnabled: Bool {
+        ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") || ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)
+    }
+
     /// `shouldReserveContextWindowMeter` (ChatComposer.tsx:2385-2392): the meter's slot stays while a started
     /// thread's detail loads.
     fileprivate func updateMeterSlot() {
@@ -4884,7 +4900,7 @@ extension ComposerController {
         let thread = shellThread
         let loading = openThreadId.map { syncStatus.key == $0.rawValue && syncStatus.value == .loading } ?? false
         let reserved = ComposerCompaction.reservesMeter(
-            meterEnabled: ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled"), detailLoading: loading,
+            meterEnabled: meterEnabled, detailLoading: loading,
             threadStarted: thread?.latestRunId != nil || thread?.latestUserMessageAt != nil,
             providerReportsContextWindow: menuProvider.map { $0.reportsContextWindow == true })
         guard reserved != meter.reserved else { return }

@@ -73,6 +73,16 @@ public enum BackgroundWorkPresentation {
         }
     }
 
+    /// Dither's short label, without the task titles: "Waiting on subagent", "Waiting on 2 commands", or just
+    /// "Waiting" when the kinds are mixed.
+    public static func shortTitle(_ value: Value) -> String {
+        let orders = Set(value.items.map { noun($0.kind).order })
+        guard orders.count == 1, let kind = value.items.first?.kind else { return value.waiting ? "Waiting" : "Running" }
+        let n = noun(kind), count = value.items.count
+        if value.waiting { return "Waiting on " + (count == 1 ? n.singular : "\(count) \(n.plural)") }
+        return "Running " + (count == 1 ? "a \(n.singular)" : "\(count) \(n.plural)")
+    }
+
     public static func present(_ tasks: [PendingBackgroundTask]) -> Value? {
         guard !tasks.isEmpty else { return nil }
         let waiting = SidebarModel.backgroundWorkHoldsCompletion(tasks)
