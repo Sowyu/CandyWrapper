@@ -146,7 +146,7 @@ import T3Protocol
         if Set(ids).count != ids.count { problems.append("thread ids repeat") }
         if Set(s.projects.map(\.id)).count != s.projects.count { problems.append("project ids repeat") }
         if !Set(ids).isDisjoint(with: s.archivedThreads.map(\.id)) { problems.append("a thread is both active and archived") }
-        let threads = s.threads.map(SidebarThread.init)
+        let threads = s.threads.map { SidebarThread($0) }
         let nowMs: Int64 = 1_790_000_000_000
         for working in [false, true] {
             let shelves = SidebarModel.buildShelves(threads, capabilities: .init(threadSettlement: true, threadSnooze: true),

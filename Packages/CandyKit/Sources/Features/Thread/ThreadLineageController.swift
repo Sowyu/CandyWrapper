@@ -44,6 +44,9 @@ public final class ThreadLineageController {
     private var parentProjection: ThreadProjection?
     /// The open thread's shell as of the last `sync`.
     private var shell: ThreadShell?
+    /// What the open thread's hidden subagents wait on the user for, which ends a snooze (T3 f4df794777).
+    private var subagentRequest: PendingSubagentRequest?
+    private var presented: SidebarThread? { shell.map { SidebarThread($0, pendingSubagentRequest: subagentRequest) } }
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
@@ -127,6 +130,7 @@ public final class ThreadLineageController {
         }
         updateBar(projection, shell: byId[thread.id], parent: thread.lineage?.parentThreadId, env: env)
         shell = all.first { $0.id == threadId }
+        subagentRequest = PendingSubagentRequests.byThread(all)[threadId]
         syncFooter()
         updateChildInputs(all, threadId: threadId)
         armWake()
@@ -134,16 +138,16 @@ public final class ThreadLineageController {
 
     /// Milliseconds until a snoozed shell wakes, plus 50 and capped like `setTimeout`, or nil when it is not
     /// snoozed (ChatView.tsx:4769-4779).
-    public static func wakeDelay(_ shell: ThreadShell?, nowMs: Int64) -> Int64? {
-        guard let shell, SidebarModel.effectiveSnoozed(SidebarThread(shell), nowMs: nowMs),
-              let wake = shell.snoozedUntil?.epochMs else { return nil }
+    public static func wakeDelay(_ thread: SidebarThread?, nowMs: Int64) -> Int64? {
+        guard let thread, SidebarModel.effectiveSnoozed(thread, nowMs: nowMs),
+              let wake = thread.shell.snoozedUntil?.epochMs else { return nil }
         return min(max(0, wake - nowMs) + 50, 2_147_483_647)
     }
 
     /// One timer for the open thread's wake time, re-armed when the thread or its snooze changes and dropped
     /// when it is not snoozed or no thread is open. A timer that fires early re-arms through `sync`.
     private func armWake() {
-        let delay = threadId == nil ? nil : Self.wakeDelay(shell, nowMs: TimestampFormat.nowMs())
+        let delay = threadId == nil ? nil : Self.wakeDelay(presented, nowMs: TimestampFormat.nowMs())
         let key = delay == nil ? nil : "\(threadId?.rawValue ?? "") \(shell?.snoozedUntil?.raw ?? "")"
         guard key != wakeKey || (key != nil && wakeTimer == nil) else { return }
         wakeTimer?.cancel()
@@ -163,15 +167,17 @@ public final class ThreadLineageController {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delay)), execute: work)
     }
 
-    /// `childInputBannerItem` (ChatView.tsx:7462-7497): subagents waiting on a question, unless this thread waits on
-    /// the user itself. Hidden subagent rows still ask through their parent.
+    /// `childInputBannerItem` (ThreadActivityBanners.tsx:19-50): subagents waiting on an approval or a question, unless
+    /// this thread waits on the user itself. Hidden subagent rows still ask through their parent.
     // ponytail: the children's titles are plain text where T3 makes each an inline button; Open question opens the first
     private func updateChildInputs(_ all: [ThreadShell], threadId: ThreadId) {
         let children = shell?.pendingRuntimeRequest == nil ? ChildThreadInputs.pending(for: threadId, in: all) : []
         guard let first = children.first else { panel.childInputKey = nil; return }
-        panel.childInputBanner.apply(.init(variant: .neutral, icon: .messageCircle,
-                                           title: children.count == 1 ? "Subagent needs input" : "\(children.count) subagents need input",
-                                           description: children.map(\.title).joined(separator: ", "), actions: ["Open question"],
+        let approval = ChildThreadInputs.isApproval(first)
+        panel.childInputBanner.apply(.init(variant: .neutral, icon: approval ? .shieldQuestion : .messageCircle,
+                                           title: ChildThreadInputs.title(children),
+                                           description: children.map(\.title).joined(separator: ", "),
+                                           actions: [approval ? "Open approval" : "Open question"],
                                            priority: .activity))
         panel.childInputBanner.onAction = { [weak self] index in if index == 0 { self?.openThread?(first.id) } }
         panel.childInputKey = first.id.rawValue
@@ -196,7 +202,8 @@ public final class ThreadLineageController {
         guard let shell, let threadId else { return false }
         let now = TimestampFormat.nowMs()
         let busy = statusBusy == threadId
-        if SidebarModel.effectiveSnoozed(SidebarThread(shell), nowMs: now) {
+        let thread = SidebarThread(shell, pendingSubagentRequest: subagentRequest)
+        if SidebarModel.effectiveSnoozed(thread, nowMs: now) {
             statusLine.icon = .alarmClock
             statusLine.label = shell.snoozedUntil.map { "Snoozed, " + TimestampFormat.formatRelativeTimeUntilLabel($0.raw, nowMs: now) } ?? "Snoozed"
             statusLine.actionLabel = busy ? "Waking..." : "Wake now"
@@ -206,10 +213,10 @@ public final class ThreadLineageController {
             statusLine.label = shell.settledAt.map { "Settled " + TimestampFormat.formatRelativeTimeLabel($0.raw, nowMs: now) } ?? "Settled"
             statusLine.actionLabel = busy ? "Un-settling..." : "Un-settle"
             statusLine.onAction = { [weak self] in self?.statusAction(ThreadCommands.unsettle(threadId.localId), "Could not un-settle thread") }
-        } else if let wake = SidebarModel.threadWokeAt(SidebarThread(shell), nowMs: now),
+        } else if let wake = SidebarModel.threadWokeAt(thread, nowMs: now),
                   (wake.epochMs ?? 0) > max(
                     SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt, local: localVisit?(threadId))?.epochMs ?? Int64.min,
-                    SidebarThread(shell).latestRun?.completedAt?.epochMs ?? Int64.min) {
+                    thread.latestRun?.completedAt?.epochMs ?? Int64.min) {
             statusLine.icon = .alarmClock
             statusLine.label = "Woke from snooze"
             statusLine.actionLabel = "Dismiss"

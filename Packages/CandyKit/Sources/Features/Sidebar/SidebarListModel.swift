@@ -335,7 +335,9 @@ public enum SidebarListBuilder {
             scopedGroup = scoped
             let scopedIds = scoped.map { Set($0.memberProjectIds) } ?? state.scopedProjectIds
             self.scopedIds = scopedIds
-            let threads = snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(SidebarThread.init)
+            let requests = PendingSubagentRequests.byThread(snapshot.threads)
+            let threads = snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
+                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }
             let returns = state.inboxReturns
             shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
                                                 workingShelf: state.workingShelfEnabled, returnedAt: { returns?.returnedAt($0) })

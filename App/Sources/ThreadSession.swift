@@ -1043,7 +1043,9 @@ final class ThreadController {
         let now = TimestampFormat.nowMs()
         // Opening a woken thread dismisses its Woke pill. T3 keeps a timer wake through a visit until the pill or the
         // footer's Dismiss is clicked (Sidebar.tsx:1276-1282); the user asked for it to clear once seen (decisions.md).
-        let thread = SidebarThread(shell)
+        // A subagent's request wakes a snoozed thread too (T3 f4df794777); only a snoozed thread needs the scan.
+        let request = shell.snoozedUntil == nil ? nil : PendingSubagentRequests.byThread(sidebar.snapshot?.threads ?? [])[id]
+        let thread = SidebarThread(shell, pendingSubagentRequest: request)
         if let wake = SidebarModel.threadWokeAt(thread, nowMs: now), acknowledgedWake != id.rawValue + wake.raw,
            SidebarModel.isWoke(thread, lastVisitedAt: SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt,
                                                                                              local: sidebar.state.localVisits[id]), nowMs: now) {

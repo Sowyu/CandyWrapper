@@ -388,7 +388,9 @@ public final class SidebarContentView: DSView {
         list.nowMs = ms
         // `inboxReturns.observe(workingShelfEnabled ? threads : null)` on every list rebuild.
         if let tracker = state.inboxReturns, let snapshot {
-            tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(SidebarThread.init), nowMs: ms)
+            let requests = PendingSubagentRequests.byThread(snapshot.threads)
+            tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
+                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }, nowMs: ms)
         }
         if isSearching {
             var items = searchItems(nowMs: ms)

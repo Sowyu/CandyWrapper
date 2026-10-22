@@ -463,9 +463,10 @@ extension SidebarModel {
         }
     }
 
-    /// `canSnooze` (threadSettled.ts:137-153): never on work blocked on the user or a queued turn.
+    /// `canSnooze` (threadSettled.ts:141-159): never on work blocked on the user, a subagent's included, or a queued turn.
     public static func canSnooze(_ thread: SidebarThread, nowMs: Int64) -> Bool {
-        !thread.hasPendingApprovals && !thread.hasPendingUserInput && !hasQueuedTurnStart(thread, nowMs: nowMs)
+        !thread.hasPendingApprovals && !thread.hasPendingUserInput && thread.pendingSubagentRequest == nil
+            && !hasQueuedTurnStart(thread, nowMs: nowMs)
     }
 
     /// `threadRuntimeCanArchive` (client-runtime state/models.ts:70-77): archive refuses a running provider.
@@ -628,10 +629,10 @@ public final class ThreadUndoLedger {
     private var current: [String: Int] = [:]
     private var nextToken = 0
     private var live: [Entry] = []
-    /// What the notice shows, nil when there is nothing to undo.
     /// A new notice owns Mod+Z even inside a text field until the user presses another key or edits text.
     /// After that Mod+Z is the field's own undo again (showThreadUndoNotice.ts in 3473, 21da3061aa).
     private var shortcutClaimed = false
+    /// What the notice shows, nil when there is nothing to undo.
     public private(set) var notice: (action: Action, count: Int)?
     public var onChange: (() -> Void)?
 
@@ -664,17 +665,17 @@ public final class ThreadUndoLedger {
     public func show(_ action: Action, claim: Claim, undo: @escaping @MainActor () async -> Void) {
         guard isCurrent(claim) else { return }
         live.append(Entry(action: action, claim: claim, undo: undo))
-        refresh()
         shortcutClaimed = true
+        refresh()
     }
 
-    /// Runs the shown group's undos; false when nothing is left to undo.
     /// Whether Mod+Z should undo the notice's actions even while a text field has focus (`threadUndoClaimsShortcut`).
     public var claimsShortcut: Bool { shortcutClaimed && notice != nil }
 
     /// Any other keypress or text edit hands Mod+Z back to text fields (`releaseThreadUndoShortcut`).
     public func releaseShortcut() { shortcutClaimed = false }
 
+    /// Runs the shown group's undos; false when nothing is left to undo.
     @discardableResult
     public func undoLatest() -> Bool {
         guard let latest = live.last else { return false }
