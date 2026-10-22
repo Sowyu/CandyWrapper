@@ -16,7 +16,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ### Dither round 5, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [ ] K. One size and stroke for Redesign's icons and smooth continuous corners everywhere (taken 2026-10-22, agent dither-shape). Files: DesignSystem icons, `DitherChrome`, `BoxDecoration`, sidebar row trailing controls.
-- [ ] L. Update button and "Update all (N)" (taken 2026-10-22, agent dither-updates). Files: the sidebar update button, the account menu, `UpdateController`, server update wiring in `App/Sources`.
+- [x] L. Update button and "Update all (N)" (2026-10-22): in Redesign, server, runtime and provider updates wait while a thread runs in the local environment (`UpdateEverythingLogic.offered`), the account menu gets "Update all (N)" under Appearance, and the button is a 44pt square with the row's radius and fill. Checked on screen in dark against the sandbox with `CANDY_DEBUG_PENDING_PROVIDERS=2` plus its real Claude update: "Update all (3)" idle, the button and item gone during two Haiku turns and back after. Light mode not checked on screen.
 
 ### Dither round 4, 2026-10-22: four agents plus a GPT-6.1 Sol audit (taken 2026-10-22, main agent)
 

@@ -874,7 +874,8 @@ public final class SidebarContentView: DSView {
         accountRule.isHidden = !accountFooter
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, usageButton] { b.isHidden = true }
-            let pill: CGFloat = updatePill.isHidden ? 0 : 32 + 4
+            // The update button pairs with the row: a square of the row's height (the user, 2026-10-22).
+            let pill: CGFloat = updatePill.isHidden ? 0 : SidebarAccountRowView.height + 4
             accountRow.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pill), height: SidebarAccountRowView.height)
             CATransaction.begin(); CATransaction.setDisableActions(true)
             accountRule.frame = CGRect(x: 0, y: menuTop - 8, width: w, height: 0.5)
@@ -885,7 +886,8 @@ public final class SidebarContentView: DSView {
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
         let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
         backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
-        updatePill.frame = NSRect(x: w - 8 - 32, y: accountFooter ? menuTop + 6 : menuTop, width: 32, height: 32)
+        let pillSide: CGFloat = accountFooter ? SidebarAccountRowView.height : 32
+        updatePill.frame = NSRect(x: w - 8 - pillSide, y: menuTop, width: pillSide, height: pillSide)
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true

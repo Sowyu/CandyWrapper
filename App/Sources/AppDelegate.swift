@@ -321,6 +321,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                                           providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
         updateEverything = everything
+        everything.account = sidebar.accountRow
+        updates?.holdsServerUpdates = { [weak everything] in everything?.holdsServerUpdates ?? false }
+        everything.onHoldChange = { [weak self] in self?.updates?.refresh() }
         threads.composer.configObservers.append { [weak everything] _ in everything?.providersChanged() }
         if !Self.isPreview { updater.start(); runtime.start() }
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,

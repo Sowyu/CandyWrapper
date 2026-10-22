@@ -19,6 +19,13 @@ final class UpdateEverything {
     private let providers: (String) -> [ServerProvider]
     private var run: L.Run? { didSet { refresh() } }
     private var plan: Plan?
+    /// Dither's account row: its menu's "Update all (N)" runs `updateAll`.
+    weak var account: SidebarAccountRowView? {
+        didSet { account?.onUpdateAll = { [weak self] in self?.updateAll() }; refresh() }
+    }
+    /// The hold flipped: `UpdateUI` re-reads whether the runtime update shows.
+    var onHoldChange: (() -> Void)?
+    private var held = false
 
     struct Plan {
         var summary: String
@@ -42,6 +49,11 @@ final class UpdateEverything {
         environments.observe { [weak self] in self?.refresh() }
         serverUpdates.observe { [weak self] in self?.refresh() }
         updater.observe { [weak self] in self?.refresh() }
+        // Turns starting and stopping on this Mac, and a switch to or from Dither, move the hold.
+        environments.observeShell { [weak self] in self?.holdMayHaveChanged() }
+        NotificationCenter.default.addObserver(forName: ThemeRuntime.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.holdMayHaveChanged() }
+        }
         // A pass that ended with this app's relaunch reports once the app is back (`DesktopUpdateLaunchNotice`).
         DispatchQueue.main.async { [weak self] in self?.showSavedResult() }
     }
@@ -50,6 +62,32 @@ final class UpdateEverything {
     func providersChanged() { refresh() }
 
     private var action: DesktopUpdateLogic.ButtonAction { DesktopUpdateLogic.buttonAction(updater.state) }
+
+    /// A thread runs on this Mac: in the local environment, the one CandyWrapper starts or was pointed at first.
+    private var runningOnThisMac: Bool {
+        guard let id = environments.primaryId else { return false }
+        return environments.snapshot(id)?.threads.contains { RunningThreadKeepAlive.isRunning($0.status) } ?? false
+    }
+
+    // ponytail: the hold reads the window's appearance only when the shell or theme changes; a light/dark flip with Dither in one
+    // appearance alone waits for the next turn event, observe effectiveAppearance if that shows
+    /// Dither holds server, runtime and provider updates while a thread runs on this Mac (`UpdateEverythingLogic.offered`).
+    var holdsServerUpdates: Bool {
+        ThemeRuntime.isDither(dark: window?.effectiveAppearance.isDark ?? false) && runningOnThisMac
+    }
+
+    private func holdMayHaveChanged() {
+        let now = holdsServerUpdates
+        guard now != held else { return }
+        held = now
+        refresh()
+        onHoldChange?()
+    }
+
+    private var runtimeHasUpdate: Bool {
+        guard let r = serverUpdates.runtimeUpdater?.state, r.enabled else { return false }
+        return DesktopUpdateLogic.buttonAction(r) != .none
+    }
 
     private func machines() -> [L.Machine] {
         environments.environmentIds.filter { serverUpdates.ownRuntimeState($0) == nil && !serverUpdates.isOwnServer($0) }.map { id in
@@ -84,7 +122,19 @@ final class UpdateEverything {
         // and service-managed servers retain their own update actions while it waits.
         let runtime = serverUpdates.runtimeUpdater?.state
         let runtimeOffer = runtime.map { $0.enabled && (DesktopUpdateLogic.buttonAction($0) != .none || $0.status == .downloading || $0.isRestarting) } ?? false
-        pill?.everythingSummary = runtimeOffer || (next.servers.isEmpty && next.providerMachines.isEmpty) ? nil : next.summary
+        held = holdsServerUpdates
+        var pending = L.Pending(app: action != .none, runtime: runtimeHasUpdate, servers: next.servers.count,
+                                providers: next.providerMachines.reduce(0) { $0 + $1.candidates.count })
+        var summary = next.summary
+        #if DEBUG
+        // Pretend providers wait, to see the button and "Update all (N)" against a server with nothing to update.
+        if let fake = ProcessInfo.processInfo.environment["CANDY_DEBUG_PENDING_PROVIDERS"].flatMap(Int.init), fake > 0 {
+            pending.providers += fake
+            summary = "Update \(fake) providers"
+        }
+        #endif
+        pill?.everythingSummary = held || runtimeOffer || pending.servers + pending.providers == 0 ? nil : summary
+        account?.updateAllCount = L.offered(pending, runningOnThisMac: runningOnThisMac).count
         pill?.run = run.map { (runTooltip($0), $0.localVersion != nil) }
     }
 
@@ -101,6 +151,17 @@ final class UpdateEverything {
         return L.runTooltip(statuses, local: local)
     }
 
+    /// Dither's "Update all (N)": the Update everything pass when servers or providers wait (the runtime asks after it),
+    /// else what the update button does now, which is the runtime's or this app's own update.
+    private func updateAll() {
+        let plan = makePlan()
+        if !holdsServerUpdates, !(plan.servers.isEmpty && plan.providerMachines.isEmpty) {
+            confirm(runtimeAfter: runtimeHasUpdate)
+        } else {
+            pill?.performAction()
+        }
+    }
+
     // MARK: Confirmation (UpdateEverythingDialog.tsx)
 
     /// Running threads on the servers that restart; `continuing` counts those that can resume after.
@@ -113,7 +174,8 @@ final class UpdateEverything {
         return (stopped, continuing)
     }
 
-    private func confirm() {
+    /// `runtimeAfter`: CandyWrapper's runtime asks to update once the pass ends ("Update all").
+    private func confirm(runtimeAfter: Bool = false) {
         let plan = makePlan()
         guard run == nil, let window, !(plan.servers.isEmpty && plan.providerMachines.isEmpty) else { return }
         let dialog = DialogView(kind: .alertDialog, title: "\(plan.summary)?", message: plan.lines.joined(separator: "\n"))
@@ -126,7 +188,7 @@ final class UpdateEverything {
         dialog.footerButtons = [cancel, ok]
         let host = ModalHost.present(dialog, in: window)
         cancel.action = { [weak host] in host?.close() }
-        ok.action = { [weak self, weak host] in host?.close(); self?.start() }
+        ok.action = { [weak self, weak host] in host?.close(); self?.start(runtimeAfter: runtimeAfter) }
     }
 
     /// `<p className="pt-2 text-sm">` paragraphs under the description, each keeping its line breaks.
@@ -162,7 +224,7 @@ final class UpdateEverything {
 
     // MARK: The pass (useUpdateEverything.ts `run`)
 
-    private func start() {
+    private func start(runtimeAfter: Bool = false) {
         guard run == nil else { return }
         let plan = makePlan()
         let act = action
@@ -183,6 +245,8 @@ final class UpdateEverything {
             await self?.perform(plan, action: act, localVersion: localVersion)
             self?.run = nil
             self?.pill?.isActionPending = false
+            // Reached only when this app didn't restart into its update.
+            if runtimeAfter { self?.serverUpdates.runtimeUpdater?.request() }
         }
     }
 

@@ -438,7 +438,7 @@ final class SidebarNavRowView: ControlView {
 
 /// Dither (after Capy): the account row at the foot of the sidebar. A 28pt round avatar (the picture, or initials on a
 /// muted disc), the name and a muted second line, and a chevron. A click opens the account menu above it: Settings,
-/// Usage and Appearance.
+/// Usage and Appearance, then "Update all (N)" while updates wait.
 public final class SidebarAccountRowView: ControlView {
     public static let height: CGFloat = 44
     private let avatar = CALayer()
@@ -448,6 +448,9 @@ public final class SidebarAccountRowView: ControlView {
     private let chevron = IconView(name: .chevronUp, size: 12)
     public var onOpenSettings: (() -> Void)?
     public var onOpenUsage: (() -> Void)?
+    /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
+    public var updateAllCount = 0
+    public var onUpdateAll: (() -> Void)?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -510,11 +513,14 @@ public final class SidebarAccountRowView: ControlView {
         let appearance = [("light", "Light"), ("dark", "Dark"), ("system", "System")].map { key, title in
             MenuItem.radio(title, checked: mode == key) { _ in lib.setAppearanceMode(key) }
         }
-        let items: [MenuItem] = [
+        var items: [MenuItem] = [
             MenuItem("Settings", icon: .settings, shortcut: "⌘,") { [weak self] in self?.onOpenSettings?() },
             MenuItem("Usage", icon: .chartNoAxesColumn) { [weak self] in self?.onOpenUsage?() },
             .submenu("Appearance", icon: .moon, appearance),
         ]
+        if updateAllCount > 0 {
+            items.append(MenuItem("Update all (\(updateAllCount))", icon: .circleArrowUp) { [weak self] in self?.onUpdateAll?() })
+        }
         MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none))
     }
 }

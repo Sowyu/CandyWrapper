@@ -147,6 +147,22 @@ public enum UpdateEverythingLogic {
         return "\(threads) will be interrupted. \(continuing) can resume after the restart."
     }
 
+    /// What waits to update: this app, CandyWrapper's own runtime, other servers and providers.
+    public struct Pending: Equatable, Sendable {
+        public var app: Bool, runtime: Bool, servers: Int, providers: Int
+        public init(app: Bool = false, runtime: Bool = false, servers: Int = 0, providers: Int = 0) {
+            self.app = app; self.runtime = runtime; self.servers = servers; self.providers = providers
+        }
+        /// N in the account menu's "Update all (N)".
+        public var count: Int { (app ? 1 : 0) + (runtime ? 1 : 0) + servers + providers }
+    }
+
+    /// Dither (the user's rule, 2026-10-22): this app's own update shows at once, but servers, the runtime and
+    /// providers wait until no thread runs on this Mac, so an update never cuts off local work. Remote turns don't hold them.
+    public static func offered(_ pending: Pending, runningOnThisMac: Bool) -> Pending {
+        runningOnThisMac ? Pending(app: pending.app) : pending
+    }
+
     static func count(_ n: Int, _ noun: String) -> String? { n == 0 ? nil : "\(n) \(noun)\(n == 1 ? "" : "s")" }
 
     static func joinList(_ parts: [String]) -> String {

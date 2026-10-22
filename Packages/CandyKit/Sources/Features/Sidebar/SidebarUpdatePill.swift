@@ -160,7 +160,12 @@ public final class SidebarUpdatePillView: ControlView {
         let enabled = !isInteractionDisabled
         let fg = Themed.color(\.contrastSidebarForeground, sidebar: true)
         var color = Themed.color(\.sidebarIconColor, sidebar: true)
-        if showUpdateIconState {
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Dither: one card with the account row beside it, the row's corner and fills (the user, 2026-10-22).
+            box.radius = DitherChrome.controlRadius
+            box.fill = Themed.color(enabled && (state.hovered || state.active) ? \.sidebarRowActive : \.sidebarRowHover, sidebar: true)
+            if showUpdateIconState || enabled && state.hovered { color = fg }
+        } else if showUpdateIconState {
             box.fill = Themed.color(\.sidebarControlSurface, sidebar: true)
             color = fg
             if enabled, state.hovered { box.fill = Themed.color(\.sidebarRowHover, sidebar: true) }
@@ -189,7 +194,7 @@ public final class SidebarUpdatePillView: ControlView {
         glyph?.frame = iconBox.bounds
         // The ring: a 32px SVG, r 14, turned -90deg so it starts at the top and runs clockwise.
         let ring = CGMutablePath()
-        ring.addArc(center: CGPoint(x: 16, y: 16), radius: 14, startAngle: .pi / 2, endAngle: .pi / 2 - 2 * .pi, clockwise: true)
+        ring.addArc(center: CGPoint(x: bounds.midX, y: bounds.midY), radius: 14, startAngle: .pi / 2, endAngle: .pi / 2 - 2 * .pi, clockwise: true)
         for l in [ringTrack, ringArc] { l.frame = bounds; l.path = ring }
         // iconBox is flipped like every DSView: y runs down, as in CSS.
         dotRing.frame = CGRect(x: 10, y: -4, width: 10, height: 10); dotRing.cornerRadius = 5      // ring-2 around a size-1.5 dot
