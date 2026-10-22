@@ -23,6 +23,7 @@ public actor ShellCache {
     public nonisolated let directory: URL
     public nonisolated let quietPeriod: Duration
     private var pending: [String: ShellSnapshot] = [:]
+    private var encoders: [String: ShellCacheEncoder] = [:]
     private var lastChange = ContinuousClock.now
     private var writer: Task<Void, Never>?
 
@@ -97,6 +98,7 @@ public actor ShellCache {
 
     public func remove(environmentId: String) {
         pending[environmentId] = nil
+        encoders[environmentId] = nil
         try? FileManager.default.removeItem(at: fileURL(environmentId: environmentId))
     }
 
@@ -118,20 +120,57 @@ public actor ShellCache {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for (environmentId, snapshot) in batch {
             let entry = Entry(version: Entry.currentVersion, environmentId: environmentId, savedAt: Date(), snapshot: snapshot)
-            guard let data = try? Self.encoder.encode(entry) else { continue }
+            var encoder = encoders[environmentId] ?? ShellCacheEncoder()
+            guard let data = try? encoder.encode(entry) else { continue }
+            encoders[environmentId] = encoder
             try? CacheFile.write(data, to: fileURL(environmentId: environmentId))
         }
     }
-
-    private static let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
-    }()
 
     private static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         return d
     }()
+}
+
+/// Stores only the latest snapshot's row encodings. Unchanged rows skip Codable on later saves.
+/// The envelope remains the same JSON document that `ShellCache.Entry` reads.
+struct ShellCacheEncoder {
+    private var rows: [ThreadId: (ThreadShell, Data)] = [:]
+
+    mutating func encode(_ entry: ShellCache.Entry,
+                         encodeRow: ((ThreadShell) throws -> Data)? = nil) throws -> Data {
+        struct Header: Encodable {
+            var version: Int
+            var environmentId: String
+            var savedAt: Date
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var data = try encoder.encode(Header(version: entry.version, environmentId: entry.environmentId, savedAt: entry.savedAt))
+        data.removeLast() // Open the header object to append the snapshot.
+        let snapshot = entry.snapshot
+        data.append(contentsOf: ",\"snapshot\":{\"schemaVersion\":\(snapshot.schemaVersion),\"snapshotSequence\":\(snapshot.snapshotSequence),\"projects\":".utf8)
+        data.append(try encoder.encode(snapshot.projects))
+        var retained: [ThreadId: (ThreadShell, Data)] = [:]
+        func appendRows(_ values: [ThreadShell], key: String) throws {
+            data.append(contentsOf: ",\"\(key)\":[".utf8)
+            for (index, row) in values.enumerated() {
+                if index > 0 { data.append(0x2c) }
+                let encoded: Data
+                if let cached = rows[row.id], cached.0 == row { encoded = cached.1 }
+                else if let encodeRow { encoded = try encodeRow(row) }
+                else { encoded = try encoder.encode(row) }
+                data.append(encoded)
+                retained[row.id] = (row, encoded)
+            }
+            data.append(0x5d)
+        }
+        try appendRows(snapshot.threads, key: "threads")
+        try appendRows(snapshot.archivedThreads, key: "archivedThreads")
+        data.append(contentsOf: "}}".utf8)
+        rows = retained
+        return data
+    }
 }
