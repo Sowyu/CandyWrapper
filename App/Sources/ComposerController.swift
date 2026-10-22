@@ -44,6 +44,10 @@ final class ComposerController {
     /// The "Not connected" toasts on screen, at most three (`ENVIRONMENT_UNAVAILABLE_SEND_TOAST_TRAIL_SIZE`).
     private var environmentToastIds: [Int] = []
     private var recoveryPending: Set<ThreadId> = []
+    /// The user's `followUpBehavior` is steer; pending approvals steer regardless.
+    private var followUpSteers = false
+    /// A send is declining approvals before it goes (`sendInFlightRef` in T3).
+    private var declineInFlight = false
     /// The thread whose background work Stop is stopping (`stoppingBackgroundWorkKey`, ChatView.tsx:3794).
     private var stoppingBackgroundWork: ThreadId?
     private var recoveryErrors: [ThreadId: String] = [:]
@@ -516,7 +520,8 @@ final class ComposerController {
         composer.sendShortcut = ComposerLogic.SendShortcut(rawValue: c.string("sendShortcut")) ?? .enter
         composer.collapseOnScroll = c.bool("composerCollapseOnScroll")
         composer.richTextEnabled = c.bool("composerRichTextEnabled")
-        composer.steerByDefault = c.string("followUpBehavior") == "steer"
+        followUpSteers = c.string("followUpBehavior") == "steer"
+        composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
     }
 
     /// `activeProjectSettings.settings.newWorktreesStartFromOrigin` for the open draft: the project's
@@ -691,12 +696,11 @@ final class ComposerController {
             return true
         }
         // `composer.increaseEffort` and `composer.decreaseEffort` (no default keys, ChatView.tsx:5563-5568):
-        // one reasoning step per press, repeats ignored. Nothing happens with no provider, an open approval
-        // or question, or a queued edit (ChatComposer.tsx:6055-6063).
+        // one reasoning step per press, repeats ignored. Nothing happens with no provider, an open question
+        // or a queued edit (ChatComposer.tsx:6055-6063; approvals stopped counting in a93b03c8a5).
         shortcuts.on(["composer.increaseEffort", "composer.decreaseEffort"]) { [weak self] call in
             guard let self, self.isActive else { return false }
-            if !call.isRepeat, !self.noProviderAvailable, self.panel.drawer != .approval,
-               self.questionRequestId == nil, self.queuedEdit == nil,
+            if !call.isRepeat, !self.noProviderAvailable, self.questionRequestId == nil, self.queuedEdit == nil,
                let step = self.pickers.stepEffort(call.command == "composer.increaseEffort" ? 1 : -1, cursor: self.composer.expandedCaret),
                step.prompt != self.composer.text {
                 self.composer.text = step.prompt
@@ -1376,6 +1380,9 @@ final class ComposerController {
         // ponytail: ignores the PR-watch background work that also creates a runtime; add it with PR watches
         placeholder.disconnected = !ComposerLogic.QueueState.hasStartedSession(projection)
         placeholder.approvalPending = requests.activeApproval != nil
+        // A send declines the shown approvals, so it steers the waiting turn instead of queueing behind it
+        // (`followUpBehavior`, ChatComposer.tsx:2286-2292).
+        composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
         composer.placeholderInput = placeholder
         updateRequests()
         syncSendBlock()
@@ -1503,21 +1510,41 @@ final class ComposerController {
     /// `runtime-request.respond` or `thread.user-input.dismiss` (ChatView.tsx:10114-10230). The
     /// actions stay disabled until the call returns; the request leaves the composer when the
     /// stream marks it resolved, not on the reply.
-    private func respond(_ payload: JSONValue, failure: @escaping (String?) -> ComposerFeedback.Failure) {
-        guard let shell, case .string(let requestId)? = payload["requestId"], !responding.contains(requestId) else { return }
+    /// `done` gets whether the server accepted the answer.
+    private func respond(_ payload: JSONValue, failure: @escaping (String?) -> ComposerFeedback.Failure,
+                         done: (@MainActor (Bool) -> Void)? = nil) {
+        guard let shell, case .string(let requestId)? = payload["requestId"], !responding.contains(requestId) else { done?(false); return }
         let key = draftKey
         responding.insert(requestId)
         refresh()
         let supervisor = shell.supervisor
         Task { [weak self] in
-            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) } catch {
+            var accepted = false
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload); accepted = true } catch {
                 if let rpc = error as? RPCClientError, rpc.isTransport {} else {
                     self?.report(failure(Self.message(error)), key: key)
                 }
             }
             self?.responding.remove(requestId)
             self?.refresh()
+            done?(accepted)
         }
+    }
+
+    /// `declinePendingApprovals` (threadRequests.ts:18-29): declines every approval a redirect replaces, in turn.
+    /// One the provider can no longer answer is skipped; one that is gone or refused stops it.
+    private func declineApprovals(_ approvals: [PendingApproval], threadId: ThreadId) async -> Bool {
+        for approval in approvals where approval.canRespond {
+            // `onRespondToApproval` answers only a live request still pending (usePendingThreadRequests.ts:304-310):
+            // the agent may have resolved it while the send got here.
+            guard requests.approvals.contains(where: { $0.requestId == approval.requestId && $0.canRespond }) else { return false }
+            let payload = RuntimeRequestCommands.respond(threadId: threadId.localId, requestId: approval.requestId, decision: .decline)
+            let accepted = await withCheckedContinuation { continuation in
+                respond(payload, failure: ComposerFeedback.Failure.approval) { continuation.resume(returning: $0) }
+            }
+            if !accepted { return false }
+        }
+        return true
     }
 
     /// The pickers follow the draft key, the server config and the open thread.
@@ -1574,8 +1601,10 @@ final class ComposerController {
 
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
-    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false) {
-        guard !threadRewindBusy else { return }
+    /// `redirecting`: the pending approvals were just declined for this send, which now goes.
+    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false) {
+        guard !threadRewindBusy, !declineInFlight else { return }
+        let sentText = text
         // A send now would leave a still-compressing pasted image behind (ChatComposer.tsx:4222-4237).
         if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
             toast(.info, "Still compressing a pasted image.", "Send again once its thumbnail appears.")
@@ -1716,6 +1745,36 @@ final class ComposerController {
         if case .draft(let session) = target, let multiple = pickers.currentMultiple {
             sendFanout(multiple, session: session, text: text, messageText: messageText, trimmed: trimmed, attachments: attachments,
                        uploaded: uploaded, picks: picks, supervisor: shell.supervisor)
+            return
+        }
+        // A message sent while approvals are pending redirects the agent. They are declined only here, after
+        // everything above accepted the send, and the send goes once they are (ChatView.tsx:5181-5263, a93b03c8a5).
+        if case .thread(let threadId) = target, !redirecting, !requests.approvals.isEmpty {
+            let approvals = requests.approvals
+            let promptAtSend = composer.text, attachmentIds = attachments.map(\.id), key = draftKey
+            // A draft edited since send, or a paste still landing in it, is no longer the message the user sent.
+            let changed = { [weak self] () -> Bool in
+                guard let self else { return true }
+                if let key, (self.preparingImages[key] ?? 0) > 0 { return true }
+                let now = self.currentAttachments
+                return ComposerAttachmentRules.uploadBlockReason(now) != nil || self.composer.text != promptAtSend || now.map(\.id) != attachmentIds
+            }
+            let changedBefore = changed()
+            let answering = approvals.contains { responding.contains($0.requestId) }
+            let before = Set(requests.approvals.map(\.requestId))
+            declineInFlight = true
+            Task { [weak self] in
+                guard let self else { return }
+                let declined = !changedBefore && !answering ? await self.declineApprovals(approvals, threadId: threadId) : false
+                self.declineInFlight = false
+                let outcome = ComposerLogic.approvalRedirect(
+                    declined: declined, draftChanged: changedBefore || changed(), approvalResponding: answering,
+                    // An approval that arrived during the decline would block the redirect; the draft stays for the next send.
+                    approvalArrived: self.requests.approvals.contains { !before.contains($0.requestId) },
+                    threadChanged: self.target != .thread(threadId))
+                if let title = outcome.toast { self.toast(.info, title, "Send again when it's ready.") }
+                if outcome.sends { self.send(sentText, mode: mode, background: background, redirecting: true) }
+            }
             return
         }
         // The send goes ahead: the thread's local error clears (ChatView.tsx:9782).
@@ -3190,7 +3249,7 @@ extension ComposerController {
     fileprivate func syncAttachmentViews() {
         persistDraftAttachments()
         let attachments = currentAttachments
-        let hidden = questionRequestId != nil || requests.activeApproval != nil
+        let hidden = questionRequestId != nil
         composer.imageTiles = hidden ? [] : attachments.filter { $0.kind == .image }.map {
             ComposerImageShelfView.Tile(id: $0.id, name: $0.name, status: $0.status, fileURL: $0.fileURL, source: $0.snapShotSource)
         }
@@ -3401,7 +3460,6 @@ extension ComposerController {
             return
         }
         let imagesGetChips = !ComposerContext.stripReferences(composer.text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || requests.activeApproval != nil
         var reserved = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0)
         let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
         var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
@@ -3959,10 +4017,10 @@ extension ComposerController {
     }
 
     /// `composer.stash` (ChatComposer.tsx:5696-5720): always claimed; with a question open it toggles
-    /// the menu, during an approval or without a project it does nothing, else it stashes.
+    /// the menu, without a project it does nothing, else it stashes, approvals or not (a93b03c8a5).
     func stashShortcut() {
-        if questionRequestId != nil, requests.activeApproval == nil { toggleStashMenu(); return }
-        if requests.activeApproval != nil || target == nil { return }
+        if questionRequestId != nil { toggleStashMenu(); return }
+        if target == nil { return }
         stashCurrentPrompt()
     }
 

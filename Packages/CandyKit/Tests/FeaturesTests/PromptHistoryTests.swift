@@ -103,9 +103,9 @@ struct PromptHistoryTests {
         // A typed draft never starts browsing.
         composer.text = "draft"
         #expect(up() == false)
-        // A question or approval owns the keys.
+        // A question owns the keys; an approval no longer does (ChatComposer.tsx:3607, a93b03c8a5).
         composer.text = ""
-        composer.pending = .approval
+        composer.pending = .question(.init(label: "Submit", compactLabel: "Submit", enabled: true, showsPrevious: false, responding: false, showsAttach: false))
         #expect(up() == false)
     }
 

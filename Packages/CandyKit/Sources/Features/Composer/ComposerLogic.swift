@@ -62,6 +62,23 @@ public enum ComposerLogic {
         mode == .modEnter || (mode == .modEnterMultiline && (prompt.contains("\n") || prompt.contains("\r")))
     }
 
+    // MARK: Approvals
+
+    /// A send while approvals are pending declines them first, then goes only if every one was declined,
+    /// the draft stayed as sent, no approval arrived meanwhile and the thread is still open
+    /// (ChatView.tsx:5222-5263, a93b03c8a5). `toast` is the info toast's title when it stops for a reason
+    /// the user can act on; its description is "Send again when it's ready."
+    public static func approvalRedirect(declined: Bool, draftChanged: Bool, approvalResponding: Bool, approvalArrived: Bool,
+                                        threadChanged: Bool) -> (sends: Bool, toast: String?) {
+        if declined, !draftChanged, !approvalArrived, !threadChanged { return (true, nil) }
+        guard draftChanged || approvalResponding || (declined && approvalArrived) else { return (false, nil) }
+        let title = draftChanged
+            ? declined ? "Approval declined. Your message changed, so it wasn't sent." : "Your message changed, so it wasn't sent."
+            : approvalResponding ? "An approval is already being answered, so your message wasn't sent."
+            : "Another approval arrived, so your message wasn't sent."
+        return (false, title)
+    }
+
     // MARK: Placeholder
 
     /// The states `ChatComposer.tsx:7482-7499` reads, in priority order.
@@ -82,7 +99,8 @@ public enum ComposerLogic {
 
     /// `composerPlaceholder.ts:1-2` and the rule list in I-composer-flow 7.2. The plan follow-up row is skipped (no plan mode yet).
     public static func placeholder(_ s: PlaceholderInput) -> String {
-        if s.approvalPending { return "Resolve this approval request to continue" }
+        // A send declines the approvals and redirects the agent (ChatComposer.tsx:6175-6177, a93b03c8a5).
+        if s.approvalPending { return "Send a message to decline and redirect the agent" }
         if let choiceOnly = s.questionChoiceOnly {
             return choiceOnly ? "Choose an option above" : "Type your own answer, or leave this blank to use the selected option"
         }

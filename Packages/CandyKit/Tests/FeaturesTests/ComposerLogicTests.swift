@@ -114,7 +114,24 @@ struct ComposerLogicTests {
             == "Prompt is 1 character over the 120,000-character limit. Shorten or split it before sending.")
         #expect(L.lengthValidationMessage(String(repeating: "a", count: 121_500))?.hasPrefix("Prompt is 1,500 characters over") == true)
         #expect(L.placeholder(.init()) == "Ask anything, @tag files/folders, $use skills, or / for commands")
-        #expect(L.placeholder(.init(approvalPending: true, disconnected: true)) == "Resolve this approval request to continue")
+        #expect(L.placeholder(.init(approvalPending: true, disconnected: true)) == "Send a message to decline and redirect the agent")
+    }
+
+    /// The send after declining pending approvals and its four race toasts (ChatView.tsx:5222-5263, a93b03c8a5).
+    @Test func approvalRedirectSendsOnlyAfterACleanDecline() {
+        func outcome(declined: Bool = true, changed: Bool = false, answering: Bool = false, arrived: Bool = false, moved: Bool = false) -> (Bool, String?) {
+            let o = L.approvalRedirect(declined: declined, draftChanged: changed, approvalResponding: answering, approvalArrived: arrived, threadChanged: moved)
+            return (o.sends, o.toast)
+        }
+        #expect(outcome() == (true, nil))
+        #expect(outcome(changed: true) == (false, "Approval declined. Your message changed, so it wasn't sent."))
+        #expect(outcome(declined: false, changed: true) == (false, "Your message changed, so it wasn't sent."))
+        #expect(outcome(declined: false, answering: true) == (false, "An approval is already being answered, so your message wasn't sent."))
+        #expect(outcome(arrived: true) == (false, "Another approval arrived, so your message wasn't sent."))
+        // A refused decline or an approval the agent resolved first already shows its error; leaving the thread says nothing.
+        #expect(outcome(declined: false) == (false, nil))
+        #expect(outcome(declined: false, arrived: true) == (false, nil))
+        #expect(outcome(moved: true) == (false, nil))
     }
 
     /// The queue strip over the recorded 07-queue.jsonl: three queued, edit, two reorders, two

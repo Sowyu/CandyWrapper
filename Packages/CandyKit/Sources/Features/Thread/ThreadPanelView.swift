@@ -415,7 +415,7 @@ public final class ThreadPanelView: DSView {
 
     public enum Drawer: Sendable { case none, approval, question }
     public var drawer = Drawer.none { didSet { if drawer != oldValue { needsLayout = true } } }
-    /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero and during approvals.
+    /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero.
     public let stashBadge = ComposerStashBadgeView()
     public var showsStashBadge = false { didSet { if showsStashBadge != oldValue { needsLayout = true } } }
     /// The stash list, docked where the `/` menu goes; the `/` menu wins when both are open.
@@ -1327,7 +1327,7 @@ public final class ThreadPanelView: DSView {
             commandMenu.frame = NSRect(x: x + ComposerBannerView.drawerInset, y: y + ComposerBannerView.overlap - h,
                                        width: max(0, width - 2 * ComposerBannerView.drawerInset), height: h)
         }
-        let stashShown = !menuShown && stashMenuOpen && !composer.isHidden && drawer != .approval
+        let stashShown = !menuShown && stashMenuOpen && !composer.isHidden
         lazyStashMenu.loaded?.isHidden = !stashShown
         if stashShown {
             stashMenu.isHidden = false
@@ -1339,7 +1339,7 @@ public final class ThreadPanelView: DSView {
         let docked = !composer.isHidden && !isDraft
         // The dock (`ComposerBanner.Dock`, `flex items-end gap-1`): the column of attachments, then
         // the stash tab at the right, both ending 17pt under the composer's top.
-        let badgeShown = showsStashBadge && !composer.isHidden && drawer != .approval
+        let badgeShown = showsStashBadge && !composer.isHidden
         stashBadge.isHidden = !badgeShown
         let badgeWidth = badgeShown ? stashBadge.preferredWidth : 0
         let dockRight = x + width - ComposerBannerView.drawerInset
