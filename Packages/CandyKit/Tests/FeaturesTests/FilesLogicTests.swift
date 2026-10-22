@@ -96,9 +96,10 @@ struct FilesLogicTests {
         #expect(!t.hasNoSearchMatches)
     }
 
-    /// Polls (the suite runs in parallel, so fixed sleeps are flaky), at most 5 s.
+    /// Waits for a write the coordinator will make. The 10 ms debounce runs on the real clock, so
+    /// the cap is long enough for a busy machine.
     @MainActor static func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<500 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(await eventually { condition() })
     }
 
     @MainActor @Test func saveCoordinatorNewestWins() async throws {
@@ -148,9 +149,12 @@ struct FilesLogicTests {
 
     @MainActor @Test func saveCoordinatorKeepsPendingWhenNotConfirmed() async throws {
         var pending: [Bool] = []
-        let c = FileSaveCoordinator(debounce: 0.01, persist: { _ in false }, onPendingChange: { pending.append($0) })
+        var writes = 0
+        // The debounce never fires here; the test runs the write the timer would run.
+        let c = FileSaveCoordinator(debounce: 3600, persist: { _ in writes += 1; return false }, onPendingChange: { pending.append($0) })
         c.change("x")
-        try await Task.sleep(for: .milliseconds(300))
+        await c.persistLatest()
+        #expect(writes == 1)
         #expect(pending == [true])
         #expect(c.hasUnsaved)
     }

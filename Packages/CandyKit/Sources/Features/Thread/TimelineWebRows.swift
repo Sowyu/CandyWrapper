@@ -11,7 +11,7 @@ final class HtmlRenderRowView: TimelineRowView {
     private let failed = LabelView("", font: TL.font(12))
     private let open = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var reference: HtmlRenderReference?
-    private var loading: Task<Void, Never>?
+    private(set) var loading: Task<Void, Never>?
     /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view.
     private var contentVisible = true
     private var wantsContent: Bool { contentVisible && window != nil && !isHiddenOrHasHiddenAncestor }
@@ -191,8 +191,8 @@ final class McpAppRowView: TimelineRowView {
     private let showApp = ButtonView("Show app", variant: .ghost, size: .xs)
     private let expand = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var entry: McpAppEntry?
-    private var bridge: McpAppHostBridge?
-    private var loading: Task<Void, Never>?
+    private(set) var bridge: McpAppHostBridge?
+    private(set) var loading: Task<Void, Never>?
     private var navigatedAway = false
     private var toolDefinition: JSONValue?
     private var fullscreen: ThreadMcpFullscreenView?

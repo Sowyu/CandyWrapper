@@ -21,7 +21,7 @@ extension WebFrameSuites {
             let entry = McpAppEntry(app: app, sourceThreadId: ThreadId("sandbox"), itemId: TurnItemId("capture"), revision: "1")
             row.configure(TimelineItem(row: TimelineRow(id: "capture", createdAt: nil, kind: .mcpApp(entry))))
             let frame = try #require(row.subviews.compactMap { $0 as? ThreadWebFrameView }.first)
-            frame.activate(.init(src: URL(string: "http://127.0.0.1:47391/capture.html")!, title: "Capture", dark: true))
+            frame.activate(.init(src: URL(string: "http://capture.invalid/capture.html")!, title: "Capture", dark: true))
             return (window, row, frame)
         }
 
@@ -51,7 +51,7 @@ extension WebFrameSuites {
             #expect(row.setDisplayMode("fullscreen", userInitiated: true) == "fullscreen")
             #expect(!web.forwardsScroll)
             for other in otherFrames {
-                other.activate(.init(src: URL(string: "http://127.0.0.1:47391/other.html")!, title: "Other", dark: true))
+                other.activate(.init(src: URL(string: "http://other.invalid/other.html")!, title: "Other", dark: true))
             }
             #expect(frame.webView === web)
             #expect(!frame.budgeted)
