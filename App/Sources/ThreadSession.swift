@@ -311,6 +311,14 @@ final class ThreadController {
     let panel = ThreadPanelView()
     /// Redesign's header figure, after Capy's: what the open thread would cost at API prices.
     private var cost: ThreadCostEstimate.Breakdown?
+    /// The projection and thread the figure reads, kept so subagent usage that arrives later can join it.
+    private var costProjection: ThreadProjection?
+    private var costThreadId: ThreadId?
+    /// Subagent threads' own usage, read when the cost card opens, with the shell `updatedAt` it was read at
+    /// (nil after a failed read, so the next open retries).
+    // ponytail: kept for the session, a few numbers per subagent thread; drop entries on archive if it grows
+    private var subagentCosts: [ThreadId: (updatedAt: T3Timestamp?, own: ThreadCostEstimate.Breakdown?)] = [:]
+    private var readingSubagentCosts: Set<ThreadId> = []
     /// Whether the window shows a thread route; Settings and the utility pages hide the figure.
     var costRouteShowsThread = true { didSet { syncCost() } }
     private(set) var terminal: TerminalController!
@@ -438,6 +446,7 @@ final class ThreadController {
         lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
         // The open thread's snooze ended with no push: the visit rules see it woke while shown.
         lineage.onWake = { [weak self] in self?.syncVisit() }
+        panel.header.cost.onOpen = { [weak self] in self?.readSubagentCosts() }
         // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
         // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
         panel.model.webAssetURL = { [weak self] id, name in
@@ -909,7 +918,7 @@ final class ThreadController {
             }
             self?.composer.projectionChanged(projection, threadId: id)
             self?.lineage.update(threadId: id, projection: projection)
-            self?.setCost(projection)
+            self?.setCost(projection, id: id)
         }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
@@ -981,11 +990,60 @@ final class ThreadController {
         keepAlive?.update()
     }
 
-    private func setCost(_ projection: ThreadProjection?) {
-        let next = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false) ? ThreadCostEstimate.breakdown(projection) : nil
+    private func setCost(_ projection: ThreadProjection?, id: ThreadId? = nil) {
+        costProjection = projection
+        costThreadId = projection == nil ? nil : id
+        var next: ThreadCostEstimate.Breakdown?
+        if ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false), let projection, let id {
+            let byParent = subagentShellsByParent()
+            next = ThreadCostEstimate.breakdown(projection, id: id) { [subagentCosts] parent in
+                (byParent[parent] ?? []).map { .init(id: $0.id, title: $0.title, own: subagentCosts[$0.id]?.own) }
+            }
+        }
         guard next != cost || projection == nil else { return }
         cost = next
         syncCost()
+    }
+
+    /// Subagent threads by their parent, archived ones included (lineage, orchestrationV2.ts:108-112).
+    private func subagentShellsByParent() -> [ThreadId: [ThreadShell]] {
+        let shells = (sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? [])
+        return Dictionary(grouping: shells.filter { $0.lineage.relationshipToParent == .subagent && $0.lineage.parentThreadId != nil },
+                          by: { $0.lineage.parentThreadId! })
+    }
+
+    /// Reads each subagent thread under the open one that changed since its last read, nested ones included.
+    /// Neither the shell nor the subagent record carries usage (orchestrationV2.ts:700-731, 1836-1928), so this
+    /// takes the child's projection (`orchestration.getThreadProjection`, rpc.ts:1675-1682) once, when the card opens.
+    private func readSubagentCosts() {
+        guard let root = costThreadId, let env = root.environmentId else { return }
+        let byParent = subagentShellsByParent()
+        var stale: [ThreadShell] = [], queue = [root], seen: Set<ThreadId> = [root]
+        while let parent = queue.popLast() {
+            for child in byParent[parent] ?? [] where seen.insert(child.id).inserted {
+                queue.append(child.id)
+                if subagentCosts[child.id]?.updatedAt != child.updatedAt, !readingSubagentCosts.contains(child.id) { stale.append(child) }
+            }
+        }
+        guard !stale.isEmpty else { return }
+        readingSubagentCosts.formUnion(stale.map(\.id))
+        let environments = environments
+        Task { [weak self] in
+            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?).self) { group in
+                for child in stale {
+                    group.addTask {
+                        let payload: JSONValue = .object(["threadId": .string(child.id.localId.rawValue)])
+                        guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload) else { return (child.id, nil, nil) }
+                        return (child.id, child.updatedAt, (try? json.decode(as: ThreadProjection.self)).map(ThreadCostEstimate.own))
+                    }
+                }
+                for await (id, at, own) in group { self?.subagentCosts[id] = (at, own) }
+            }
+            guard let self else { return }
+            self.readingSubagentCosts.subtract(stale.map(\.id))
+            self.setCost(self.costProjection, id: self.costThreadId)
+            self.panel.header.cost.refreshCard()
+        }
     }
 
     private func syncCost() {
