@@ -13,6 +13,11 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+### Dither round 5, 2026-10-22 (taken 2026-10-22, main agent)
+
+- [ ] K. One size and stroke for Redesign's icons and smooth continuous corners everywhere (taken 2026-10-22, agent dither-shape). Files: DesignSystem icons, `DitherChrome`, `BoxDecoration`, sidebar row trailing controls.
+- [ ] L. Update button and "Update all (N)" (taken 2026-10-22, agent dither-updates). Files: the sidebar update button, the account menu, `UpdateController`, server update wiring in `App/Sources`.
+
 ### Dither round 4, 2026-10-22: four agents plus a GPT-6.1 Sol audit (taken 2026-10-22, main agent)
 
 The user's feedback on 1.10.3. Each task applies only under Dither and owns the files named; ask the main agent before editing another task's files. The 3473 port agents (`port3473-*`, `fixw2-3473`, `undofix3473`) and `fix/sol-audit` are also running, so rebase often.
