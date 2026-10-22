@@ -370,11 +370,31 @@ struct ComposerRichTextT3InlineTests {
 
     @Test(arguments: [
         "> quoted", "> line one\n> line two", ">no space", ">  two spaces", "> a\n>b", ">", "> **bold** and @README.md inside",
-        "> - looks like a list but stays quote text", "> > nested stays literal inside the quote", "before\n> quoted\nafter",
-        "> quote\n\n> another", "- item\n> quote after list",
+        "> - looks like a list but stays quote text", "> > nested stays literal inside the quote", "before\n> quoted",
+        "> quote\n\n> another", "- item\n> quote after list", "> quoted\n\ncomment", "> line one\n> line two\n\ncomment",
     ])
     func roundTripsTheQuote(_ value: String) {
         #expect(roundTrip(value) == value)
+    }
+
+    /// A paragraph after a quote is written after a blank line, or Markdown folds it into the
+    /// quote (02e9d2417a, composer-rich-text-doc.test.ts:484-541).
+    @Test func writesABlankLineBeforeAParagraphAfterAQuote() {
+        #expect(roundTrip("before\n> quoted\nafter") == "before\n> quoted\n\nafter")
+        #expect(roundTrip("> a\n> b\ncomment") == "> a\n> b\n\ncomment")
+        // The empty line the user left is that blank line already.
+        #expect(roundTrip("> quoted\n\nComment to it") == "> quoted\n\nComment to it")
+        for next in ["# Heading", "- item", "3. item", "---", "```\ncode\n```"] {
+            #expect(roundTrip("> quoted\n\(next)") == "> quoted\n\(next)")
+        }
+        let editor = makeEditor()
+        editor.setText("> quoted\nComment")
+        expectMonotonicMapping(editor, editor.expandedText)
+        let map = mapping(editor)
+        // The caret at the end of the quote stays on it; the blank line clamps to the comment.
+        #expect(map.offsets[1 + "quoted".count] == "> quoted".count)
+        #expect(map.offsets[2 + "quoted".count] == "> quoted\n\n".count)
+        #expect(display(map, markdown: "> quoted\n".count) == 2 + "quoted".count)
     }
 
     @Test(arguments: ["---", "***", "___", "- - -", "* * *", "-----", "---   ", "text\n---\nmore", "- item\n---\n- item two", "```\n---\n```", "--", "-- -", "---text"])
@@ -851,5 +871,65 @@ struct ComposerRichTextT3InlineTests {
         #expect(editor.expandedText == "---")
         type(editor, "x")
         #expect(editor.expandedText == "---\nx")
+    }
+}
+
+/// `inline code entry` (composer-rich-text-doc.test.ts:1160-1277, 7259e4f594): text typed between a typed pair of
+/// backticks stays literal until the caret leaves through the closing one, then becomes inline code.
+@MainActor struct ComposerCodePairTests {
+    private func type(_ editor: ComposerEditor, _ text: String) {
+        for c in text { editor.insertText(String(c), replacementRange: editor.selectedRange()) }
+    }
+    private func codeText(_ editor: ComposerEditor) -> String {
+        var out = ""
+        editor.textStorage!.enumerateAttribute(.composerMarks, in: NSRange(location: 0, length: editor.textStorage!.length)) { value, range, _ in
+            if ComposerRichTextStyler.marks(value).contains(.code) { out += (editor.string as NSString).substring(with: range) }
+        }
+        return out
+    }
+
+    @Test(arguments: ["", "prefix "])
+    func formatsAFilledPairAndLeavesTheFollowingTextPlain(_ prefix: String) {
+        let editor = makeEditor()
+        type(editor, prefix)
+        let offset = editor.selectedRange().location
+        type(editor, "``")
+        editor.setSelectedRange(NSRange(location: offset + 1, length: 0))
+        type(editor, "hello world")
+        // Still literal while the caret is inside.
+        #expect(editor.string == prefix + "`hello world`")
+        #expect(codeText(editor).isEmpty)
+        editor.setSelectedRange(NSRange(location: offset + 13, length: 0))
+        #expect(editor.string == prefix + "hello world")
+        #expect(codeText(editor) == "hello world")
+        #expect(editor.expandedText == prefix + "`hello world`")
+        type(editor, " next `typed`")
+        #expect(editor.expandedText == prefix + "`hello world` next `typed`")
+    }
+
+    @Test(arguments: [("````", 2), ("```", 1)])
+    func leavesDoubledDelimitersUnchanged(_ delimiters: String, _ caret: Int) {
+        let editor = makeEditor()
+        type(editor, delimiters)
+        editor.setSelectedRange(NSRange(location: caret, length: 0))
+        type(editor, "literal")
+        let before = editor.expandedText
+        editor.setSelectedRange(NSRange(location: caret + "literal".count + 1, length: 0))
+        #expect(editor.expandedText == before)
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        #expect(editor.expandedText == before)
+        #expect(codeText(editor).isEmpty)
+    }
+
+    @Test func leavesABoldPairUnchanged() {
+        let editor = makeEditor()
+        editor.toggleMark(.bold)
+        type(editor, "``")
+        editor.setSelectedRange(NSRange(location: 1, length: 0))
+        type(editor, "literal")
+        let before = editor.expandedText
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        #expect(editor.expandedText == before)
+        #expect(codeText(editor).isEmpty)
     }
 }

@@ -6,6 +6,9 @@ extension NSAttributedString.Key {
     static let composerCodeBlock = NSAttributedString.Key("ComposerCodeBlock")
     /// On every quote line: the result offset where its run of same-prefix quote lines starts.
     static let composerQuote = NSAttributedString.Key("ComposerQuote")
+    /// A typed pair of backticks and what is typed between them (`codePairCaretPlugin`, 7259e4f594): an id,
+    /// so the text stays literal until the caret leaves the pair through its closing backtick.
+    static let composerCodePair = NSAttributedString.Key("ComposerCodePair")
 }
 
 @MainActor
@@ -234,6 +237,17 @@ enum ComposerRichTextStyler {
                 // A fence opened above existing blocks or chips takes their source as code.
                 result.append(NSAttributedString(string: source(input, range), attributes: attrs))
             } else {
+                // A typed pair stays literal while it is still one: backticks around plain text, no chips or marks.
+                var literalPairs: Set<Int> = []
+                input.enumerateAttribute(.composerCodePair, in: range, options: .longestEffectiveRangeNotRequired) { value, sub, _ in
+                    guard let id = value as? Int else { return }
+                    var whole = sub
+                    _ = input.attribute(.composerCodePair, at: sub.location, longestEffectiveRange: &whole, in: range)
+                    let pair = text.substring(with: whole)
+                    if pair.count >= 2, pair.hasPrefix("`"), pair.hasSuffix("`"), !pair.dropFirst().dropLast().contains("`"),
+                       !input.containsAttachments(in: whole),
+                       ComposerRichTextStyler.plain(input, whole) { literalPairs.insert(id) }
+                }
                 var plain = ""
                 func flushPlain() {
                     for span in ComposerRichText.parse(plain, typing: typing) {
@@ -257,6 +271,11 @@ enum ComposerRichTextStyler {
                         result.append(kept)
                     } else if attrs[.attachment] != nil {
                         flushPlain(); result.append(part)
+                    } else if let id = attrs[.composerCodePair] as? Int, literalPairs.contains(id) {
+                        flushPlain()
+                        var pairAttributes = attributes([], base: lineBase)
+                        pairAttributes[.composerCodePair] = id
+                        result.append(NSAttributedString(string: part.string, attributes: pairAttributes))
                     } else if !existing.isEmpty {
                         flushPlain()
                         result.append(NSAttributedString(string: part.string, attributes: attributes(existing, base: lineBase)))
@@ -350,6 +369,13 @@ enum ComposerRichTextStyler {
     }
 
 
+    /// No inline marks anywhere in `range`.
+    static func plain(_ input: NSAttributedString, _ range: NSRange) -> Bool {
+        var plain = true
+        input.enumerateAttribute(.composerMarks, in: range) { value, _, stop in if !marks(value).isEmpty { plain = false; stop.pointee = true } }
+        return plain
+    }
+
     /// The Markdown of `range` with every atom written as its source.
     private static func source(_ input: NSAttributedString, _ range: NSRange) -> String {
         var out = ""
@@ -417,6 +443,17 @@ enum ComposerRichTextStyler {
                 if let last = block.source.last, last != " ", last != "\t", i + 1 < spans.count, !isNewline(i + 1) { spans[i].text += " " }
             default: break
             }
+        }
+        // A paragraph on the line right after a quote reads as part of it in Markdown (a lazy
+        // continuation), so the draft writes a blank line between them. The newline before it
+        // writes both, and the blank line holds no caret (`needsBlankLineAfterQuote`, 02e9d2417a).
+        func isQuote(_ i: Int) -> Bool { if i < blocks.count, case .quote? = blocks[i]?.kind { true } else { false } }
+        var quoteLine = isQuote(0)
+        for i in spans.indices where isNewline(i) {
+            if quoteLine, i + 1 < spans.count, blocks[i + 1] == nil, !isNewline(i + 1) {
+                spans[i] = .init(text: "\n\n", marks: [], atomic: true)
+            }
+            quoteLine = isQuote(i + 1)
         }
         return ComposerRichText.mapping(spans)
     }
