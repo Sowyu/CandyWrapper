@@ -42,20 +42,36 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
         return order.compactMap { byDriver[$0] }
     }
 
+    /// `latestTerminalProvidersByDriver` (logic.ts:486-503, T3 f15aa815f3): the most recently finished instance per driver.
+    static func latestFinishedByDriver(_ providers: [ServerProvider]) -> [ServerProvider] {
+        var order: [String] = []
+        var byDriver: [String: ServerProvider] = [:]
+        for p in providers {
+            if let current = byDriver[p.driver] {
+                if (p.updateState?.finishedAt ?? "") >= (current.updateState?.finishedAt ?? "") { byDriver[p.driver] = p }
+            } else {
+                order.append(p.driver)
+                byDriver[p.driver] = p
+            }
+        }
+        return order.compactMap { byDriver[$0] }
+    }
+
     public static func resolve(_ providers: [ServerProvider], visibleAfter: String?, dismissed: Set<String>) -> SidebarProviderUpdatePillModel? {
-        let deduped = dedupe(providers)
-        let active = deduped.filter { $0.updateState?.status == "queued" || $0.updateState?.status == "running" }
+        // Update state lives per instance, so pick the instances with an update before collapsing to one per driver
+        // (logic.ts:505-535, T3 f15aa815f3). Deduping first hid an update on a non-default instance.
+        let active = dedupe(providers.filter { $0.updateState?.status == "queued" || $0.updateState?.status == "running" })
         if let first = active.first {
             let key = "loading:" + active.map { "\($0.driver):\($0.updateState?.status ?? "idle")" }.sorted().joined(separator: "|")
             return .init(key: key, tone: .loading,
                          title: active.count == 1 ? "Updating \(name(first.driver))" : "Updating \(active.count) providers",
                          description: active.count == 1 ? "\(list(active)) update in progress." : "\(list(active)) updates are in progress.")
         }
-        let recent = deduped.filter { p in
+        let recent = latestFinishedByDriver(providers.filter { p in
             guard let status = p.updateState?.status, ["failed", "unchanged", "succeeded"].contains(status) else { return false }
             guard let visibleAfter else { return true }
             return (p.updateState?.finishedAt).map { $0 >= visibleAfter } ?? false
-        }
+        })
         func key(_ prefix: String, _ ps: [ServerProvider]) -> String {
             prefix + ":" + ps.map { "\($0.driver):\($0.updateState?.finishedAt ?? "pending"):\($0.updateState?.message ?? "")" }.sorted().joined(separator: "|")
         }
