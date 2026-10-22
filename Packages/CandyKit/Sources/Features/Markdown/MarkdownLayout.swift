@@ -28,8 +28,9 @@ enum MarkdownStyle {
     static var codeLineHeight: CGFloat { 13 * FontRuntime.codeScale * 1.375 }
     static let codePadding = (x: CGFloat(14.4), y: CGFloat(12.8))
     static let codeHeader: CGFloat = 30
-    /// `.chat-markdown pre::-webkit-scrollbar { height: 7px }` (index.css:1978-1980): the lane an overflowing block adds below its padding.
-    static let codeScrollbar: CGFloat = 7
+    /// `.chat-markdown pre::-webkit-scrollbar { height: var(--app-scrollbar-width) }`, 6px (index.css:90, 2072-2074,
+    /// T3 b5a0696a98): the lane an overflowing block adds below its padding.
+    static let codeScrollbar: CGFloat = 6
     static let tableFontSize: CGFloat = 12
     static let tableLineHeight: CGFloat = 12 * 1.625
     static let imageMaxWidth: CGFloat = 480

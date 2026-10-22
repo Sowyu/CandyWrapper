@@ -720,7 +720,7 @@ public final class MarkdownView: DSView {
         return new
     }
 
-    /// The scrollbar thumb of an overflowing body (index.css:1978-1985): a 7px pill along the bottom lane, as long as the
+    /// The scrollbar thumb of an overflowing body (index.css:2072-2079): a 6px pill along the bottom lane, as long as the
     /// visible share of the scroll width and at least as long as it is thick; nil when the code fits.
     static func codeThumb(_ viewport: CGRect, _ contentWidth: CGFloat, _ offset: CGFloat) -> CGRect? {
         guard contentWidth > viewport.width else { return nil }
