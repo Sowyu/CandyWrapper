@@ -17,8 +17,8 @@ struct AppUsageReadoutTests {
     @Test func numbersAreShort() {
         #expect(L.cpuText(0.4) == "0.4%")
         #expect(L.cpuText(12.3) == "12%")
-        #expect(L.memoryText(182 << 20) == "182M")
-        #expect(L.memoryText(1288 << 20) == "1.3G")
+        #expect(L.memoryText(182 << 20) == "182 MB")
+        #expect(L.memoryText(1288 << 20) == "1.3 GB")
         #expect(L.tooltip(cpu: 0.4, footprint: 182 << 20) == "CandyWrapper CPU 0.4% of one core · Memory 182 MB")
     }
 
@@ -36,7 +36,7 @@ struct AppUsageReadoutTests {
         v.show(cpu: 80, footprint: 1 << 28, animated: false)
         #expect(v.cpuMeter.hot)
         v.show(cpu: 1, footprint: 1 << 28, animated: false)
-        #expect(!v.cpuMeter.hot && v.cpuLabel.text == "1.0%" && v.memoryLabel.text == "256M")
+        #expect(!v.cpuMeter.hot && v.cpuLabel.text == "1.0%" && v.memoryLabel.text == "256 MB")
         #expect(AppUsageSample.read() != nil)
         // Offscreen, nothing samples.
         #expect(!v.isSampling)

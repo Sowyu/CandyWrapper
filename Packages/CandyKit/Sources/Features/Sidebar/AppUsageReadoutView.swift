@@ -47,7 +47,7 @@ public enum AppUsageLogic {
 
     public static func memoryText(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / 1_048_576
-        return mb < 999.5 ? String(format: "%.0fM", mb) : String(format: "%.1fG", mb / 1024)
+        return mb < 999.5 ? String(format: "%.0f MB", mb) : String(format: "%.1f GB", mb / 1024)
     }
 
     /// Lit dots for a 0...1 level: rounded, and at least one while there is any.
