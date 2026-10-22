@@ -6,7 +6,9 @@
 
 - [x] Narrow Pull Requests Shift quick actions (2026-10-22, perf-leftovers): retain buttons and skip list derivation and row configuration on modifier changes. Counting and PullRequestsFidelityTests passed.
 
-- [ ] Retain provider model rows across favorite and filter changes (taken 2026-10-22, perf-leftovers).
+- [x] Retain provider model rows across favorite and filter changes (2026-10-22, perf-leftovers): one replacement per changed favorite, zero across filters; keep the Models section and update move controls in place. Seven focused checks, final counting checks and provider/settings fidelity passed.
+
+- [ ] Suppress stale PR Changed labels during optimistic viewed updates (taken 2026-10-22, perf-leftovers).
 
 - [x] Port upstream timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline): audited 17 commits. Visit marks and equal projections skip panel layout and row derivation; pending changed-turn opens still run. All 16 focused counting and thread/Markdown fidelity tests passed. Other timeline patterns already have native guards; fork clone URL belongs to the project/protocol area.
 
