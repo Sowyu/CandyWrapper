@@ -157,7 +157,7 @@ public final class PullRequestCodeView: DSView {
             list.viewedState = { [weak self] (path: String) -> (viewed: Bool, stale: Bool)? in
                 guard let self else { return nil }
                 let viewed = PullRequestDetailLogic.isFileViewed(path, states: self.states, overlay: self.overlay)
-                let stale = PullRequestDetailLogic.isStale(path, states: self.states)
+                let stale = self.overlay[path] == nil && PullRequestDetailLogic.isStale(path, states: self.states)
                 return (viewed: viewed, stale: stale)
             }
         }
