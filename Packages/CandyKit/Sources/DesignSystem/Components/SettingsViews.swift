@@ -32,7 +32,9 @@ public final class SettingsRowView: DSView {
     public var accessories: [NSView] = [] {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; accessories.forEach(addSubview); needsLayout = true }
     }
-    /// A view in place of the description text, laid out at its frame height (the keybinding `When` line).
+    /// A view in place of the description text, laid out at its frame height (the keybinding `When` line),
+    /// or at the height it asks for at the description's width when it is a `SettingsGroupRow`
+    /// (the storage cleanup result's grid).
     public var detailView: NSView? {
         didSet { oldValue?.removeFromSuperview(); detailView.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
@@ -119,6 +121,7 @@ public final class SettingsRowView: DSView {
                           height: s.height == NSView.noIntrinsicMetric ? c.frame.height : s.height)
         } ?? .zero
         func detailHeight(_ w: CGFloat) -> CGFloat {
+            if let row = detailView as? SettingsGroupRow { return row.height(forWidth: min(576, w)) }
             if let detailView { return detailView.frame.height }
             return detail == nil ? 0 : detailText.height(forWidth: min(576, w))
         }
@@ -183,7 +186,11 @@ public final class SettingsRowView: DSView {
             ax += s.width + 6
         }
         detailText.frame = f.detail
-        if let detailView { detailView.frame = NSRect(x: f.detail.minX, y: f.detail.minY, width: f.title.width, height: detailView.frame.height) }
+        if let row = detailView as? SettingsGroupRow {
+            row.frame = f.detail
+        } else if let detailView {
+            detailView.frame = NSRect(x: f.detail.minX, y: f.detail.minY, width: f.title.width, height: detailView.frame.height)
+        }
         if let footer {
             let fh = footer.height(forWidth: bounds.width - 2 * Self.paddingX)
             footer.frame = NSRect(x: Self.paddingX, y: bounds.height - 4 - fh, width: bounds.width - 2 * Self.paddingX, height: fh)

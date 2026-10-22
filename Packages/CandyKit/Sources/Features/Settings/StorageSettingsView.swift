@@ -214,7 +214,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
         lastRun.summary = shown.map { e, r in
             (labeled ? "\(e.label): " : "") + "\(r.removed) removed, \(r.kept) kept" + (r.failed > 0 ? ", \(r.failed) failed" : "")
         }.joined(separator: " · ")
-        lastRun.results = shown.flatMap { e, r in CleanupLastRunView.rows(r, environmentLabel: labeled ? e.label : nil) }
+        lastRun.results = shown.flatMap { e, r in CleanupLastRunView.rows(r, environmentLabel: e.label) }
         cleanup.group.rows = cleanup.group.rows
         onHeightChange?()
     }
