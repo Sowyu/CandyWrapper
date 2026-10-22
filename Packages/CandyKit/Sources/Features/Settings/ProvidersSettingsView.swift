@@ -279,7 +279,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         var canWrite: Bool
         var shared: Bool
     }
-    private var modelsCache: (ModelsInput, SettingsSectionView)?
+    private var modelsCache: (ModelsInput, SettingsSectionView, ProviderModelsView)?
 
     /// The checked label reads the live timestamps; the cards do not display them.
     private static func contentProvider(_ provider: ServerProvider?) -> ServerProvider? {
@@ -920,6 +920,12 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let modelsInput = ModelsInput(row: row, models: provider?.models ?? [],
                                       favorites: resolved.favorites.filter { $0.provider.rawValue == row.instanceId }, preferences: prefs,
                                       environment: env.id, canWrite: env.canWrite, shared: shared)
+        var stableInput = modelsInput
+        if let cached = modelsCache {
+            stableInput.favorites = cached.0.favorites
+            stableInput.preferences = cached.0.preferences
+        }
+        let retainedModels = modelsCache.flatMap { $0.0 == stableInput ? $0.2 : nil }
         let modelsSection: SettingsSectionView
         if let cached = modelsCache, cached.0 == modelsInput {
             modelsSection = cached.1
@@ -929,8 +935,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             let favorites = Set(resolved.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
             let custom = ProvidersLogic.customModels(row.instance)
             let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
-            let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
+            let modelsView = retainedModels ?? ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
                                                 sharedPreferences: shared)
+            if retainedModels != nil { modelsView.update(models: models, favorites: favorites, hidden: Set(hidden)) }
             modelsView.builtinModels = provider?.models ?? []
             modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
             modelsView.onAddOpen = { [weak self] open in
@@ -979,8 +986,8 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
             }
             modelsView.onHeightChange = { [weak self] in self?.onHeightChange?() }
-            modelsSection = SettingsSectionView(title: "Models", rows: [modelsView])
-            modelsCache = (modelsInput, modelsSection)
+            modelsSection = retainedModels != nil ? modelsCache!.1 : SettingsSectionView(title: "Models", rows: [modelsView])
+            modelsCache = (modelsInput, modelsSection, modelsView)
         }
         sections.append(modelsSection)
         e.sections = sections
@@ -1341,9 +1348,9 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     private var rows: [NSView] = []
     var builtinModels: [ServerProviderModel] = []
     private let driver: String
-    private let models: [ProvidersLogic.DisplayModel]
-    private let favorites: Set<String>
-    private let hiddenSlugs: Set<String>
+    private var models: [ProvidersLogic.DisplayModel]
+    private var favorites: Set<String>
+    private var hiddenSlugs: Set<String>
     private let canManage: Bool
     var onFavorite: ((String) -> Void)?
     var onHidden: (([String]) -> Void)?
@@ -1417,6 +1424,32 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         syncAdd()
     }
 
+    private struct RowInput: Equatable {
+        var model: ProvidersLogic.DisplayModel
+        var favorite: Bool
+        var hidden: Bool
+    }
+    private var rowCache: [String: (RowInput, ModelRow)] = [:]
+    private(set) var createdModelRows = 0
+
+    func update(models: [ProvidersLogic.DisplayModel], favorites: Set<String>, hidden: Set<String>) {
+        guard self.models != models || self.favorites != favorites || hiddenSlugs != hidden else { return }
+        self.models = models
+        self.favorites = favorites
+        hiddenSlugs = hidden
+        filter.isHidden = models.count <= 8
+        let builtIn = models.filter { !$0.isCustom }
+        bulk.title = !builtIn.isEmpty && builtIn.allSatisfy { hidden.contains($0.slug) } ? "Enable all" : "Disable all"
+        bulk.isHidden = builtIn.isEmpty
+        let fav = models.filter { favorites.contains($0.slug) }.count
+        let hid = models.filter { !$0.isCustom && hidden.contains($0.slug) }.count
+        count.text = "\(models.count) model\(models.count == 1 ? "" : "s")" + (fav > 0 ? " · \(fav) favorite\(fav == 1 ? "" : "s")" : "") + (hid > 0 ? " · \(hid) hidden" : "")
+        let slugs = Set(models.map(\.slug))
+        rowCache = rowCache.filter { slugs.contains($0.key) }
+        rebuild()
+        onHeightChange?()
+    }
+
     private func syncAdd() {
         for v in [addInput, addConfirm, addCancel] as [NSView] { v.isHidden = !addOpen || !canManage }
         addButton.isHidden = !canManage || addOpen
@@ -1443,7 +1476,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     }
 
     private func rebuild() {
-        rows.forEach { $0.removeFromSuperview() }
+        let previousRows = rows
         rows = []
         let q = filter.text.trimmingCharacters(in: .whitespaces).lowercased()
         let visible = filtering ? models.filter { $0.name.lowercased().contains(q) || $0.slug.lowercased().contains(q) } : models
@@ -1466,8 +1499,17 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             let index = models.firstIndex { $0.slug == m.slug }!
             let canUp = !filtering && index > 0 && group(models[index - 1]) == g
             let canDown = !filtering && index + 1 < models.count && group(models[index + 1]) == g
-            let row = ModelRow(model: m, favorite: favorites.contains(m.slug), hidden: !m.isCustom && hiddenSlugs.contains(m.slug), canUp: canUp, canDown: canDown,
-                               showMoves: !filtering && !(!m.isCustom && hiddenSlugs.contains(m.slug)), canManage: canManage)
+            let state = RowInput(model: m, favorite: favorites.contains(m.slug), hidden: !m.isCustom && hiddenSlugs.contains(m.slug))
+            let row: ModelRow
+            if let cached = rowCache[m.slug], cached.0 == state {
+                row = cached.1
+            } else {
+                row = ModelRow(model: m, favorite: state.favorite, hidden: state.hidden, canUp: canUp, canDown: canDown,
+                               showMoves: !filtering && !state.hidden, canManage: canManage)
+                createdModelRows += 1
+                rowCache[m.slug] = (state, row)
+            }
+            row.setMovement(canUp: canUp, canDown: canDown, showMoves: !filtering && !state.hidden)
             row.onFavorite = { [weak self] in self?.onFavorite?(m.slug) }
             row.onHidden = { [weak self] hide in
                 guard let self else { return }
@@ -1478,6 +1520,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             row.onMove = { [weak self] dir in
                 guard let self else { return }
                 var order = self.models.map(\.slug)
+                guard let index = order.firstIndex(of: m.slug), order.indices.contains(index + dir) else { return }
                 order.swapAt(index, index + dir)
                 self.onOrder?(order)
             }
@@ -1492,7 +1535,9 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
                 rows.append(editor)
             }
         }
-        rows.forEach(addSubview)
+        let mounted = Set(rows.map(ObjectIdentifier.init))
+        previousRows.filter { !mounted.contains(ObjectIdentifier($0)) }.forEach { $0.removeFromSuperview() }
+        rows.filter { $0.superview !== self }.forEach(addSubview)
         needsLayout = true
     }
 
@@ -1556,7 +1601,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         private let remove = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
         private let edit = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconMicro)
         private let toggle = SwitchView(isOn: true, size: .sm)
-        private let showMoves: Bool
+        private var showMoves: Bool
         private let isCustom: Bool
         /// `rounded-md transition-colors hover:bg-muted/30` (ProviderModelsSection.tsx:478).
         private var hover: HoverGroup?
@@ -1613,6 +1658,16 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             for v in [star, name, slug, custom, caps, up, down, remove, edit, toggle] as [NSView] { addSubview(v) }
             layer?.cornerRadius = 6
             hover = HoverGroup(self) { [weak self] _ in self?.restyleHover(transitioning: true) }
+        }
+
+        func setMovement(canUp: Bool, canDown: Bool, showMoves: Bool) {
+            guard up.isEnabled != canUp || down.isEnabled != canDown || self.showMoves != showMoves else { return }
+            self.showMoves = showMoves
+            up.isEnabled = canUp
+            down.isEnabled = canDown
+            up.isHidden = !showMoves
+            down.isHidden = !showMoves
+            needsLayout = true
         }
 
         private func restyleHover(transitioning: Bool) {

@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import DesignSystem
 import T3Protocol
 import T3Store
 @testable import Features
@@ -71,16 +72,21 @@ struct ProviderSettingsPerformanceTests {
         #expect(models === page.providers.editor?.sections.last)
     }
 
-    @Test func modelPreferencesRefreshTheSelectedEditor() {
+    @Test func modelPreferencesRefreshTheSelectedEditor() throws {
         let context = makeContext()
+        context.configs["sandbox"]!.providers[0].models = (0..<12).map { .init(slug: "model-\($0)", name: "Model \($0)") }
         var favorites: [ModelFavorite] = []
         context.modelPreferences = { _ in (favorites, .object([:])) }
         let page = ProvidersSettingsView(context: context)
         let editor = page.providers.editor
         let models = editor?.sections.last
-        favorites = [.init(provider: .init("codex"), model: "new-model")]
+        let section = try #require(models as? SettingsSectionView)
+        let list = try #require(section.group.rows.first as? ProviderModelsView)
+        #expect(list.createdModelRows == 12)
+        favorites = [.init(provider: .init("codex"), model: "model-5")]
         page.refresh()
         #expect(editor !== page.providers.editor)
-        #expect(models !== page.providers.editor?.sections.last)
+        #expect(models === page.providers.editor?.sections.last)
+        #expect(list.createdModelRows == 13)
     }
 }
