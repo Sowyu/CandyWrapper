@@ -90,6 +90,12 @@ public final class MarkdownView: DSView {
         didSet { if bodyColor != oldValue { invalidate() } }
     }
 
+    /// How much wider the timeline lane is than this markdown (`@container/chat-lane`, MessagesTimeline.tsx:1428-1431).
+    /// From a 36rem lane up an expanded table fits the lane (index.css:2164-2178). Nil outside the timeline.
+    public var chatLaneInset: CGFloat? {
+        didSet { if chatLaneInset != oldValue { invalidate() } }
+    }
+
     /// The directory relative file paths resolve against: T3's `markdownCwd`, the thread's worktree
     /// or else the project's workspace root. Path-shaped inline code and file links render as chips.
     public var cwd: String? {
@@ -228,7 +234,7 @@ public final class MarkdownView: DSView {
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
-                                  runsShell: onRunShellCommand != nil, reusing: reusable?.width == width ? reusable : nil)
+                                  runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false, reusing: reusable?.width == width ? reusable : nil)
         if reusable?.width == width { reusable = nil }
         cache[width] = made
         cachedWidths.append(width)

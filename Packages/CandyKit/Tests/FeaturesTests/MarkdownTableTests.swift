@@ -75,6 +75,32 @@ struct MarkdownTableTests {
         #expect(copy.frame.maxX == 480)
     }
 
+    /// T3 f8b06c5fd0 (index.css:2164-2178): from a 36rem lane an expanded table shrinks to fit, down to its longest words.
+    @Test func expandedTableFitsAWideLane() throws {
+        func cells(_ rows: [[String]]) -> [[NSAttributedString]] { rows.map { $0.map { NSAttributedString(string: $0) } } }
+        let natural = { (s: NSAttributedString) in CGFloat(s.length * 10) }
+        let rows = cells([["Name", "A very long header"], ["x", String(repeating: "word ", count: 20) + "unbreakable"]])
+        // Narrow lanes keep max-content: the body column stops at 384, the header column doesn't.
+        let narrow = MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 300, fitsLane: false, natural: natural)
+        #expect(narrow.widths == [64, 384] && narrow.tableWidth == 448)
+        // A wide lane splits the room over each column's longest word (64 and 134) by how much more each wants.
+        let wide = MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 300, fitsLane: true, natural: natural)
+        #expect(wide.tableWidth == 300 && abs(wide.widths[1] - (134 + 102 * 250 / 250)) < 0.01)
+        // Below the longest words it overflows again.
+        #expect(MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 100, fitsLane: true, natural: natural).tableWidth == 198)
+        // A view outside the timeline never fits; one in a wide lane scrolls less.
+        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 600, height: 200))
+        view.setMarkdown(Self.source)
+        view.toggleTable(0)
+        func contentWidth(_ layout: MarkdownLayout) -> CGFloat? {
+            layout.items.compactMap { if case .scroll(_, _, let w) = $0 { return w }; return nil }.first
+        }
+        let scrolling = try #require(contentWidth(view.layout(forWidth: 600)))
+        view.chatLaneInset = 8
+        let fitted = try #require(contentWidth(view.layout(forWidth: 600)))
+        #expect(scrolling > 600 && fitted == 600)
+    }
+
     @Test func wideTableScrollsAndClamps() throws {
         let view = view()
         let scroller = try #require(view.layout(forWidth: 480).items.compactMap { item -> (Int, CGRect, CGFloat)? in

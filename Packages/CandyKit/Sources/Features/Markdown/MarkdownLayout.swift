@@ -320,6 +320,7 @@ public final class MarkdownLayout {
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
+        var fitsExpandedTables: Bool
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
@@ -329,12 +330,13 @@ public final class MarkdownLayout {
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
     /// `runsShell`: shell code blocks get "Run in terminal" (an assistant answer that finished, with a project).
+    /// `fitsExpandedTables`: the markdown sits in a chat lane at least 36rem wide, where expanded tables fit the lane.
     /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
                 expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
-                reusing previous: MarkdownLayout? = nil) {
+                fitsExpandedTables: Bool = false, reusing previous: MarkdownLayout? = nil) {
         self.width = width
         self.expandedTables = expandedTables
         let files = FileChipResolver(document: document, cwd: cwd)
@@ -345,8 +347,9 @@ public final class MarkdownLayout {
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
+        builder.fitsExpandedTables = fitsExpandedTables
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
-                           runsShell: runsShell)
+                           runsShell: runsShell, fitsExpandedTables: fitsExpandedTables)
         if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
         reusedBlocks = builder.reusedBlocks
@@ -409,6 +412,7 @@ private struct Builder {
     var contexts: MarkdownContextChips?
     var cwd: String?
     var runsShell = false
+    var fitsExpandedTables = false
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
@@ -957,7 +961,13 @@ private struct Builder {
         // T3 shows the wrap toggle only when a header or body cell is clipped unwrapped (ChatMarkdown.tsx:540-560, :665).
         // Columns stop at 384pt, so a cell clips when its text outgrows its column. Expanding keeps the same widths.
         let clipped = naturals.contains { $0.width + 24 > widths[$0.column] }
-        let tableWidth = max(width, total)
+        var tableWidth = max(width, total)
+        let wraps = expanded && fitsExpandedTables
+        if expanded {
+            (widths, tableWidth) = MarkdownLayout.expandedTableWidths(([table.header] + table.rows).enumerated().map { r, row in
+                row.prefix(columns).enumerated().map { c, runs in cellString(runs, header: r == 0, column: c).string }
+            }, columns: columns, width: width, fitsLane: wraps, natural: natural)
+        }
 
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
         var y: CGFloat = 0
@@ -972,7 +982,7 @@ private struct Builder {
                 let inline = cellString(runs, header: r == 0, column: c)
                 let s = inline.string, chips = inline.code
                 let displayed = NSMutableAttributedString(attributedString: s)
-                if !expanded || r == 0, displayed.length > 0 {
+                if !expanded || (r == 0 && !wraps), displayed.length > 0 {
                     let paragraph = (displayed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
                     paragraph.lineBreakMode = .byTruncatingTail
                     displayed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: displayed.length))
@@ -1050,6 +1060,40 @@ private struct Builder {
             }
         }.joined(separator: " | ") + " |"
         return ([row(table.header), rule] + table.rows.map(row)).joined(separator: "\n")
+    }
+}
+
+extension MarkdownLayout {
+    /// Column widths of an expanded table, cell padding included, and the table's width. Headers lose the 24rem cap,
+    /// body cells keep it (index.css:2151-2162). Without `fitsLane` the table keeps `min-width: max-content` and
+    /// scrolls. With it, a lane at least 36rem wide (index.css:2164-2178, T3 f8b06c5fd0) drops that minimum, so
+    /// headers wrap and the table shrinks to the lane, each column giving up its room above its longest word in
+    /// proportion, as Chromium's auto table layout does. The table only overflows when the longest words don't fit.
+    private static let unbroken = try! NSRegularExpression(pattern: "\\S+")
+
+    static func expandedTableWidths(_ rows: [[NSAttributedString]], columns: Int, width: CGFloat, fitsLane: Bool,
+                                    natural: (NSAttributedString) -> CGFloat) -> (widths: [CGFloat], tableWidth: CGFloat) {
+        var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
+        for (r, row) in rows.enumerated() {
+            for (c, cell) in row.enumerated() where c < columns {
+                let cap: CGFloat = r == 0 ? .infinity : 384
+                maxs[c] = max(maxs[c], min(cap, natural(cell) + 24))
+                guard fitsLane else { continue }
+                // ponytail: breaks only at spaces, not after hyphens, add UAX 14 opportunities if a column comes out wide
+                let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
+                    .map { natural(cell.attributedSubstring(from: $0.range)) }.max() ?? 0
+                mins[c] = max(mins[c], min(cap, longest + 24))
+            }
+        }
+        let maxSum = maxs.reduce(0, +), minSum = mins.reduce(0, +)
+        var widths = maxs
+        if maxSum < width, maxSum > 0 {
+            widths = maxs.map { $0 + (width - maxSum) * $0 / maxSum }
+        } else if fitsLane, maxSum > width {
+            let room = max(0, width - minSum), spread = maxSum - minSum
+            widths = zip(mins, maxs).map { lo, hi in spread > 0 ? lo + room * (hi - lo) / spread : lo }
+        }
+        return (widths, max(width, widths.reduce(0, +)))
     }
 }
 

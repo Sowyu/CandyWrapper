@@ -122,6 +122,8 @@ final class UserMessageAttributionView: ControlView {
 /// `UserTimelineRow` (MessagesTimeline.tsx:2198-2560): a right-aligned bubble at most 80% of the
 /// lane, then a hover row with the time and a copy button that always keeps its 24px. A steered or
 /// queued message gets its intent marker above the bubble (`flex-col gap-1`).
+// ponytail: no chatLaneInset, so an expanded table in a user bubble keeps scrolling in wide lanes; set it from the
+// bubble width if tables in user messages turn up
 final class UserMessageRowView: TimelineRowView {
     static let padding: CGFloat = 12
     static let collapsedHeight: CGFloat = 176
@@ -370,6 +372,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
         super.init(frame: frameRect)
         eyebrow.lineHeight = 16
         title.lineHeight = 20
+        markdown.chatLaneInset = 8
         for v in [icon, eyebrow, title, markdown, toggle] as [NSView] { addSubview(v) }
         fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         toggle.action = { [weak self] in
@@ -456,6 +459,7 @@ final class AssistantMessageRowView: TimelineRowView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(markdown)
+        markdown.chatLaneInset = 8
         empty.lineHeight = TL.relaxed
         addSubview(empty)
         addSubview(meta)
@@ -668,6 +672,7 @@ final class PlanRowView: TimelineRowView {
         actionsButton.action = { [weak self] in self?.showActions() }
         for view in [badge, title, actionsButton, markdown, fadeView, toggle] as [NSView] { card.addSubview(view) }
         markdown.bodyColor = TL.c(\.foreground)
+        markdown.chatLaneInset = 8 + 42
         fadeView.layer?.addSublayer(fade)
         toggle.action = { [weak self] in
             guard let self, case .proposedPlan(let p)? = self.item?.row.kind else { return }
