@@ -14,6 +14,8 @@ final class UpdateUI {
     private weak var settings: SettingsController?
     private let toasts: () -> ToastViewport?
     private let showWindow: () -> Void
+    /// Dither holds CandyWrapper's runtime update while a thread runs on this Mac (`UpdateEverything.holdsServerUpdates`).
+    var holdsServerUpdates: () -> Bool = { false }
 
     init(updater: UpdateController, runtime: RuntimeUpdateController, window: NSWindow, pill: SidebarUpdatePillView, settings: SettingsController,
          toasts: @escaping () -> ToastViewport?, showWindow: @escaping () -> Void) {
@@ -33,18 +35,18 @@ final class UpdateUI {
         let c = settings.pageContext
         c.updateButton = { [weak self] in self?.settingsButton() }
         c.setUpdateTrack = { [weak self] channel in self?.setTrack(channel) }
-        updater.observe { [weak self] in self?.stateChanged() }
-        runtime.observe { [weak self] in self?.stateChanged() }
+        updater.observe { [weak self] in self?.refresh() }
+        runtime.observe { [weak self] in self?.refresh() }
         c.runtimeUpdateButton = { [weak runtime] in runtime?.request() }
     }
 
     private var showsRuntime: Bool {
         if runtime.state.isRestarting || runtime.state.status == .downloading { return true }
-        guard DesktopUpdateLogic.buttonAction(updater.state) == .none, updater.state.status != .downloading else { return false }
+        guard DesktopUpdateLogic.buttonAction(updater.state) == .none, updater.state.status != .downloading, !holdsServerUpdates() else { return false }
         return runtime.state.enabled && (DesktopUpdateLogic.buttonAction(runtime.state) != .none || runtime.state.status == .checking)
     }
 
-    private func stateChanged() {
+    func refresh() {
         pill?.update = showsRuntime ? runtime.state : updater.state
         settings?.pageContext.update = updater.state
         settings?.pageContext.runtimeUpdate = runtime.state.enabled ? runtime.state : nil

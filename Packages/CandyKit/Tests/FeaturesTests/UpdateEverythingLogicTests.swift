@@ -57,4 +57,13 @@ struct UpdateEverythingLogicTests {
         #expect(L.threadsLine(stopped: 1, continuing: 2) == "3 running threads will be interrupted. 2 can resume after the restart.")
         #expect(L.channel("0.0.46-nightly.20261014.3105") == "nightly" && L.channel("0.0.46") == "stable")
     }
+
+    /// Dither: a turn on this Mac holds every update but this app's own; nothing running offers them all.
+    @Test func localWorkHoldsServerUpdates() {
+        let all = L.Pending(app: true, runtime: true, servers: 2, providers: 3)
+        #expect(all.count == 7)
+        #expect(L.offered(all, runningOnThisMac: false) == all)
+        #expect(L.offered(all, runningOnThisMac: true) == L.Pending(app: true))
+        #expect(L.offered(L.Pending(servers: 1), runningOnThisMac: true).count == 0)
+    }
 }
