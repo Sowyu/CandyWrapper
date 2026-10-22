@@ -619,6 +619,7 @@ public final class TimelineView: DSView {
         updatePill()
         tile()
         updateMinimapPosition()
+        minimap.revealForScroll()
         if viewport.minY < Self.nearTop, let first = items.first?.id, first != lastNearTopId, onNearTop != nil {
             lastNearTopId = first
             onNearTop?()
@@ -630,7 +631,11 @@ public final class TimelineView: DSView {
         minimap.isHidden = minimap.items.count < 2 || gutter <= 12
         minimap.persistentGutter = gutter >= 48
         let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - topClearance - 288))
-        minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
+        // Redesign pads the column for its backing and viewport band, and keeps it as wide as its widest tick; the ticks
+        // stay where they were.
+        let pad = minimap.padding
+        minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(pad > 0 ? 24 : 40, max(0, gutter - 12)), height: height)
+            .insetBy(dx: -pad, dy: -pad)
         updateMinimapPosition()
     }
     /// The first turn on screen is the current one, else the last above it; every turn on screen lights its strip
