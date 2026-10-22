@@ -118,24 +118,24 @@ public final class ComposerContextStripView: DSView {
         }
         for (i, pill) in pills.enumerated() {
             pill.isHidden = !floatsAsPills || i >= frames.count
-            if !pill.isHidden { pill.frame = frames[i].1.insetBy(dx: -2, dy: -2) }
+            if !pill.isHidden { pill.frame = frames[i].1.insetBy(dx: -4, dy: -2) }
         }
     }
 
     /// Redesign: how wide the pills are, so the host can tell what fits beside them.
     public var pillsWidth: CGFloat {
         let shown = showsGitControls ? [runContext, branch] : [runOn]
-        return shown.reduce(0) { $0 + $1.intrinsicContentSize.width + 4 } + DitherPill.spacing * CGFloat(shown.count - 1)
+        return shown.reduce(0) { $0 + $1.intrinsicContentSize.width + 8 } + DitherPill.spacing * CGFloat(shown.count - 1)
     }
 
     /// `ps-1 pe-2 pt-5`: the 24px row starts 20 down.
     private func controlFrames(width w: CGFloat) -> [(ComposerContextControl, NSRect)] {
         if floatsAsPills {
-            // Left to right in 28pt pills, the control 2 in from each edge.
-            var x: CGFloat = 2
+            // Left to right in 28pt pills, the control 4 in from each side and 2 from top and bottom.
+            var x: CGFloat = 4
             return (showsGitControls ? [runContext, branch] : [runOn]).map { control in
-                let width = min(control.intrinsicContentSize.width, max(0, w - x - 2))
-                defer { x += width + 4 + DitherPill.spacing }
+                let width = min(control.intrinsicContentSize.width, max(0, w - x - 4))
+                defer { x += width + 8 + DitherPill.spacing }
                 return (control, NSRect(x: x, y: ((bounds.height - 24) / 2).rounded(), width: width, height: 24))
             }
         }
