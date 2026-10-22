@@ -38,6 +38,10 @@ public final class ComposerContextStripView: DSView {
             needsLayout = true
         }
     }
+    /// Redesign: the strip is a row of floating pills over the composer instead of a tray under it. The host sets it.
+    public var floatsAsPills = false { didSet { if floatsAsPills != oldValue { needsLayout = true; needsDisplay = true } } }
+    /// One pill under each shown control, built the first time the strip floats.
+    private var pills: [DitherPillSurface] = []
     private let clip = DSView()
     private let blur = BackdropBlurView()
     private let surface = DSView()
@@ -79,8 +83,8 @@ public final class ComposerContextStripView: DSView {
         surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         // Dither (after Capy's machine and worktree row): the controls sit plain under the composer, no strip card.
         let capy = ThemeRuntime.isDither(dark: dark)
-        surface.isHidden = capy
-        blur.isHidden = capy
+        surface.isHidden = capy || floatsAsPills
+        blur.isHidden = capy || floatsAsPills
         surface.layer?.borderColor = (dark ? Themed.white(0.07) : Themed.black(0.08)).cgColor
         // Dark only: rgb(0 0 0 / 18%) at the seam fading out over 10px, over a 1% white fill.
         seam.isHidden = !dark
@@ -104,11 +108,37 @@ public final class ComposerContextStripView: DSView {
         seam.endPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 1 : 0)
         CATransaction.commit()
         if updateCompact(width: w) { return }
-        for (control, frame) in controlFrames(width: w) { control.frame = frame }
+        let frames = controlFrames(width: w)
+        for (control, frame) in frames { control.frame = frame }
+        guard floatsAsPills || !pills.isEmpty else { return }
+        while pills.count < frames.count {
+            let pill = DitherPillSurface()
+            addSubview(pill, positioned: .below, relativeTo: runOn)
+            pills.append(pill)
+        }
+        for (i, pill) in pills.enumerated() {
+            pill.isHidden = !floatsAsPills || i >= frames.count
+            if !pill.isHidden { pill.frame = frames[i].1.insetBy(dx: -2, dy: -2) }
+        }
+    }
+
+    /// Redesign: how wide the pills are, so the host can tell what fits beside them.
+    public var pillsWidth: CGFloat {
+        let shown = showsGitControls ? [runContext, branch] : [runOn]
+        return shown.reduce(0) { $0 + $1.intrinsicContentSize.width + 4 } + DitherPill.spacing * CGFloat(shown.count - 1)
     }
 
     /// `ps-1 pe-2 pt-5`: the 24px row starts 20 down.
     private func controlFrames(width w: CGFloat) -> [(ComposerContextControl, NSRect)] {
+        if floatsAsPills {
+            // Left to right in 28pt pills, the control 2 in from each edge.
+            var x: CGFloat = 2
+            return (showsGitControls ? [runContext, branch] : [runOn]).map { control in
+                let width = min(control.intrinsicContentSize.width, max(0, w - x - 2))
+                defer { x += width + 4 + DitherPill.spacing }
+                return (control, NSRect(x: x, y: ((bounds.height - 24) / 2).rounded(), width: width, height: 24))
+            }
+        }
         guard showsGitControls else {
             let size = runOn.intrinsicContentSize
             return [(runOn, NSRect(x: 4, y: 20, width: min(size.width, max(0, w - 12)), height: size.height))]
@@ -148,7 +178,7 @@ public final class ComposerContextStripView: DSView {
         // The label boxes resize over 180 ms `ease-drawer` and the text fades with them, the controls
         // after them keeping their place (BranchToolbar.tsx:404-405, 532-556; ComposerContextLabel.tsx:28).
         // Core Animation runs it; nothing ticks after.
-        guard window != nil, !Motion.reduced else { return false }
+        guard window != nil, !Motion.reduced, !floatsAsPills else { return false }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)

@@ -90,7 +90,7 @@ public final class ComposerCommandMenuView: ComposerBannerView {
     public override func layout() {
         super.layout()
         let w = bounds.width
-        let listHeight = max(0, bounds.height - Self.overlap)
+        let listHeight = max(0, bounds.height - tail)
         scroll.frame = NSRect(x: 0, y: 0, width: w, height: listHeight)
         document.frame = NSRect(x: 0, y: 0, width: w, height: contentHeight)
         var y = Self.listPad

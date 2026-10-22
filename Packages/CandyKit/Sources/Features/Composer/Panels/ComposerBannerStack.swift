@@ -87,12 +87,16 @@ public final class ComposerBannerStackView: DSView {
         column.setAccessibilityLabel("Other notices")
     }
 
+    /// The view playing its exit, if any.
+    public var exitingView: ComposerBannerView? { items.first { $0.id == exitingId }?.view }
+
     /// Whether there is anything behind the front item.
     public var hasStack: Bool { items.count > 1 }
 
     /// The ordered items; the first is the front, attached outside this view. Reparents the stacked
-    /// views into the column and makes them floating.
-    public func update(_ ordered: [ComposerBannerStackItem]) {
+    /// views into the column and makes them floating. Redesign passes `adopting: false`: every item is its own pill
+    /// that the host places, so the stack only runs their exits and draws nothing.
+    public func update(_ ordered: [ComposerBannerStackItem], adopting: Bool = true) {
         if let exitingId {
             let listed = ordered.contains(where: { $0.id == exitingId })
             if !listed || dismissFired {
@@ -107,6 +111,13 @@ public final class ComposerBannerStackView: DSView {
             }
         }
         items = ordered
+        guard adopting else {
+            expanded = false
+            clip.isHidden = true
+            for view in column.subviews { view.removeFromSuperview() }
+            isHidden = true
+            return
+        }
         if ordered.count < 2, expanded { expanded = false }
         for item in stacked {
             if item.view.superview !== column { column.addSubview(item.view) }
@@ -183,7 +194,8 @@ public final class ComposerBannerStackView: DSView {
         if index == 0 { peek.isHidden = true }
         if !Motion.reduced, let layer = item.view.layer {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
-            slide.toValue = index == 0 ? 64 : 112
+            // Redesign's pills sink 4pt as they fade, the way they came in.
+            slide.toValue = item.view.ditherFloating ? 4 : index == 0 ? 64 : 112
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.toValue = 0
             for a in [slide, fade] {

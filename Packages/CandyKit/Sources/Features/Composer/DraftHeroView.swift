@@ -89,17 +89,26 @@ public final class DraftHeroView: DSView {
         superview?.needsLayout = true
     }
 
+    /// Redesign: where the chips end, so the checkout and branch pills can follow them in the row.
+    public var chipsWidth: CGFloat {
+        guard capy else { return 0 }
+        var w = projectChip.intrinsicContentSize.width
+        if machineLabel != nil { w += DitherPill.spacing + machineChip.intrinsicContentSize.width }
+        return w
+    }
+
     public override func layout() {
         super.layout()
         projectChip.isHidden = !capy
         machineChip.isHidden = !capy || machineLabel == nil
         guard capy else { return }
-        // Capy: the chips start 12 in from the composer's edge, 4 apart (`gap-1`).
+        // Redesign: floating pills from the composer's left edge, `DitherPill.spacing` apart.
         let project = projectChip.intrinsicContentSize
-        projectChip.frame = NSRect(x: 12, y: (bounds.height - project.height) / 2, width: project.width, height: project.height)
+        projectChip.frame = NSRect(x: 0, y: (bounds.height - project.height) / 2, width: project.width, height: project.height)
         let machine = machineChip.intrinsicContentSize
-        machineChip.frame = NSRect(x: projectChip.frame.maxX + 4, y: (bounds.height - machine.height) / 2,
-                                   width: min(machine.width, max(0, bounds.width - projectChip.frame.maxX - 4)), height: machine.height)
+        let gap = DitherPill.spacing
+        machineChip.frame = NSRect(x: projectChip.frame.maxX + gap, y: (bounds.height - machine.height) / 2,
+                                   width: min(machine.width, max(0, bounds.width - projectChip.frame.maxX - gap)), height: machine.height)
         window?.invalidateCursorRects(for: self)
     }
 

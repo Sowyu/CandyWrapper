@@ -186,9 +186,21 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     /// `py-1.25` around the 24pt row, plus the overlap under the composer.
     public static let height: CGFloat = 5 + 24 + 5 + ComposerBannerView.overlap
 
+    /// Redesign's pill: as wide as the row's content with nothing cut, 4 in from each side plus 6 after the text.
+    public var pillWidth: CGFloat {
+        var w: CGFloat = 4 + 24 + 4
+        if !prefix.isHidden { w += ceil(prefix.textWidth) + 6 }
+        w += ceil(title.textWidth) + 1
+        if !detail.text.isEmpty { w += 4 + ceil(detail.textWidth) + 2 }
+        for b in buttons { w += 4 + b.intrinsicContentSize.width }
+        if !dismiss.isHidden { w += 4 + dismiss.intrinsicContentSize.width }
+        return ceil(w + 6 + 4)
+    }
+
     public override func layout() {
         super.layout()
-        let rowY: CGFloat = 5
+        // Floating the row sits in the middle: 5 in T3's 34pt card, 2 in Redesign's 28pt pill.
+        let rowY: CGFloat = placement == .floating ? ((bounds.height - 24) / 2).rounded() : 5
         iconView.frame = NSRect(x: 4 + 6, y: rowY + 6, width: 12, height: 12)
         spinnerView?.frame = iconView.frame
         dotView?.frame = NSRect(x: 4 + 9, y: rowY + 9, width: 6, height: 6)

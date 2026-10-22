@@ -1302,9 +1302,15 @@ public final class ThreadPanelView: DSView {
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
+        }
+        // Back from Redesign: everything docks again.
+        contextStrip.floatsAsPills = false
+        for case let view? in ditherDockViews { view.placement = .attached }
+        ditherShown = []
         let y: CGFloat
-        // Dither's draft shows the machine as a chip over the composer, so the strip below only carries the checkout and branch.
-        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let dither = false
         let showsStrip = showsContextStrip && !(isDraft && dither && !contextStrip.showsGitControls)
         if isDraft {
             // ponytail: the strip holds only "Run on"; the checkout and branch pickers come with the branch toolbar
@@ -1447,6 +1453,191 @@ public final class ThreadPanelView: DSView {
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    /// What the composer docks that is not in the banner stack.
+    private var ditherDockViews: [ComposerBannerView?] {
+        [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, queue, stashBadge,
+         commandMenu, lazyStashMenu.loaded]
+    }
+    /// The pills and cards Redesign showed on the last pass, to animate what comes and goes.
+    private var ditherShown: [NSView] = []
+    private var ditherLeaving: [NSView] = []
+
+    /// Redesign (the user, 2026-10-22: "no more things sticking out of the prompt field, only floating rounded rectangle
+    /// pills"): nothing touches the composer. What T3 docks on its top edge floats `DitherPill.gap` above it, in rows:
+    /// the context pills (project, machine, checkout, branch) from the left with Stash at the right, then the status
+    /// pills (sync, background work, server update and the other notices) filling rows from the left, then the cards
+    /// (the request panel, tasks, wide notices, the queue). The composer never moves for them; they fade in and out.
+    private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
+        let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
+        let overlap = ComposerBannerView.overlap
+        // The draft centers the composer alone, so pills coming and going above it never move it.
+        let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - height
+        let oldFrames = Dictionary(uniqueKeysWithValues: ditherShown.map { (ObjectIdentifier($0), $0.frame) })
+        composer.frame = NSRect(x: x, y: y, width: width, height: height)
+        composer.isHidden = !composerShown || chat == 0
+        composer.joinsContextStrip = false
+        let visible = !composer.isHidden
+        let docked = visible && !isDraft
+        var shown: [NSView] = []
+        var top = y
+
+        // The context row: the draft's chips (the hero), checkout and branch, Stash at the right.
+        let rowY = y - gap - pillH
+        var left = x, right = x + width
+        if isDraft {
+            let w = hero.chipsWidth
+            hero.frame = NSRect(x: x, y: rowY, width: w, height: pillH)
+            if w > 0 { left += w + spacing; top = rowY }
+        }
+        let badgeShown = showsStashBadge && visible
+        stashBadge.isHidden = !badgeShown
+        stashBadge.placement = .floating
+        if badgeShown {
+            let w = stashBadge.preferredWidth
+            stashBadge.frame = NSRect(x: right - w, y: rowY, width: w, height: pillH)
+            right -= w + spacing
+            top = rowY
+            shown.append(stashBadge)
+        }
+        // The machine is a chip on the draft, so the strip carries only the checkout and branch there.
+        let strip = visible && showsContextStrip && (isDraft ? contextStrip.showsGitControls : ClientSettingsStore.shared.current.bool("persistComposerContextStrip"))
+        contextStrip.floatsAsPills = true
+        contextStrip.isHidden = !strip
+        if strip {
+            contextStrip.frame = NSRect(x: left, y: rowY, width: max(0, right - left), height: pillH)
+            left += contextStrip.pillsWidth + spacing
+            top = rowY
+            shown.append(contextStrip)
+        }
+
+        // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.
+        let ordered = ComposerBannerStackItem.ordered(bannerStackItems(docked: docked, composerVisible: visible))
+        let exiting = bannerStack.exitingView
+        bannerStack.update(ordered, adopting: false)
+        var pills: [(ComposerBannerView, CGFloat)] = []
+        var cards: [(ComposerBannerView, CGFloat)] = []
+        if docked && showsActivity { pills.append((activityRow, activityRow.pillWidth)) }
+        if docked && showsPlanFollowUp { pills.append((planFollowUpBanner, planFollowUpBanner.pillWidth)) }
+        for item in ordered {
+            if let notice = item.view as? ComposerNoticeBannerView {
+                pills.append((notice, notice.pillWidth))
+            } else {
+                cards.append((item.view, item.height(width) - overlap))
+            }
+        }
+
+        // Status pills fill rows from the left: beside Stash when the context row has no pills, else above it.
+        var rowTop = left > x ? rowY - gap - pillH : rowY
+        var rowRight = left > x ? x + width : right
+        var cursor = x
+        for (view, natural) in pills {
+            let w = min(natural, width)
+            if cursor + w > rowRight && (cursor > x || rowRight < x + width) {
+                rowTop -= gap + pillH
+                rowRight = x + width
+                cursor = x
+            }
+            view.frame = NSRect(x: cursor, y: rowTop, width: w, height: pillH)
+            cursor += w + spacing
+            top = min(top, rowTop)
+            shown.append(view)
+        }
+
+        // Cards stack above the pills, full width.
+        let request: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
+        if let request {
+            lazyQuestionPanel.loaded?.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let h = request === approvalPanel ? approvalPanel.preferredHeight(width: width) : questionPanel.preferredHeight(width: width)
+            cards.insert((request, h - overlap), at: 0)
+        }
+        if docked && !tasksView.steps.isEmpty {
+            tasksView.frame.size.width = width
+            cards.insert((tasksView, tasksView.height - overlap), at: request == nil ? 0 : 1)
+        }
+        let queueHeight = docked ? queue.preferredHeight : 0
+        if queueHeight > 0 { cards.append((queue, queueHeight - overlap)) }
+        for (view, h) in cards {
+            view.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
+            top = view.frame.minY
+            shown.append(view)
+        }
+
+        // Show what is placed, hide the rest, all floating.
+        let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
+                                                 lazyChildInputBanner.loaded, lazyGoalBanner.loaded, lazyBackgroundWorkBanner.loaded, lazyRecoveryBanner.loaded,
+                                                 lazyBranchBanner.loaded, usageLimitsBanner]
+        for case let view? in candidates + ditherDockViews where view !== commandMenu && view !== lazyStashMenu.loaded {
+            view.placement = .floating
+            view.joinsAbove = false
+            let on = shown.contains { $0 === view }
+            if on && view.superview !== self { addSubview(view, positioned: .above, relativeTo: queue) }
+            view.isHidden = !on
+        }
+
+        // The menus float as panels: `/` above the composer, the stash list above its pill.
+        let menuShown = menus.isOpen && visible
+        commandMenu.isHidden = !menuShown
+        commandMenu.placement = .floating
+        if menuShown {
+            let h = min(commandMenu.preferredHeight - overlap, max(96, y - gap - 24))
+            commandMenu.frame = NSRect(x: x, y: y - gap - h, width: width, height: h)
+        }
+        let stashShown = !menuShown && stashMenuOpen && visible
+        lazyStashMenu.loaded?.isHidden = !stashShown
+        if stashShown {
+            stashMenu.isHidden = false
+            stashMenu.placement = .floating
+            let base = badgeShown ? stashBadge.frame.minY : y
+            let maxList = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let h = min(stashMenu.preferredHeight(maxList: maxList) - overlap, max(96, base - gap - 24))
+            stashMenu.frame = NSRect(x: x, y: base - gap - h, width: width, height: h)
+        }
+
+        animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
+
+        let inset = docked ? 8 + (y - top) + height + 20 : 0
+        if timeline.bottomInset != inset {
+            timeline.bottomInset = inset
+            if terminalOpen { needsLayout = true }
+        }
+        if isDraft { timeline.isHidden = true }
+    }
+
+    /// New pills rise 4pt and fade in, leaving ones fade out where they were, and when the set changes the others slide
+    /// to their new rows over the same 150 ms. Nothing runs while the set stays the same (typing, resizing).
+    private func animateDitherDock(shown: [NSView], oldFrames: [ObjectIdentifier: NSRect], exiting: NSView?) {
+        let before = ditherShown
+        ditherShown = shown
+        guard window != nil, !Motion.reduced else { ditherLeaving = []; return }
+        let changed = before.count != shown.count || zip(before, shown).contains { $0 !== $1 }
+        defer { for view in ditherLeaving where !shown.contains(where: { $0 === view }) { view.isHidden = false } }
+        guard changed else { return }
+        for view in shown where oldFrames[ObjectIdentifier(view)] == nil {
+            view.alphaValue = 1
+            DitherPill.animateIn(view)
+        }
+        let leaving = before.filter { view in !shown.contains { $0 === view } && view !== exiting && view.superview === self }
+        ditherLeaving.removeAll { view in shown.contains { $0 === view } }
+        ditherLeaving += leaving
+        let moving = shown.compactMap { view in oldFrames[ObjectIdentifier(view)].flatMap { $0 != view.frame ? (view, $0, view.frame) : nil } }
+        for (view, old, _) in moving { view.frame = old }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.15
+            context.timingFunction = DitherPill.curve
+            for (view, _, new) in moving { view.animator().frame = new }
+            for view in leaving { view.animator().alphaValue = 0 }
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                for view in leaving {
+                    view.alphaValue = 1
+                    guard let self else { continue }
+                    self.ditherLeaving.removeAll { $0 === view }
+                    if !self.ditherShown.contains(where: { $0 === view }) { view.isHidden = true }
+                }
+            }
+        })
     }
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {

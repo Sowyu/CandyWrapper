@@ -63,7 +63,7 @@ public final class ThreadTasksView: ComposerBannerView {
         // `@min-[560px]:flex` on the segments, against the banner's own width.
         header.showsSegments = bounds.width >= 560
         header.frame = NSRect(x: 0, y: 5, width: bounds.width, height: 24)
-        scroller.frame = NSRect(x: 8, y: 34, width: bounds.width - 16, height: max(0, height - 34 - Self.overlap))
+        scroller.frame = NSRect(x: 8, y: 34, width: bounds.width - 16, height: max(0, bounds.height - 34 - tail))
         let width = scroller.contentSize.width
         var y: CGFloat = 4
         for label in labels {

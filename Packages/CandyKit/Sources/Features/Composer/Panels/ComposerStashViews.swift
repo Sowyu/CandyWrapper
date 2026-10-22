@@ -67,7 +67,9 @@ public final class ComposerStashBadgeView: ComposerBannerView {
 
     public override func layout() {
         super.layout()
-        row.frame = NSRect(x: Self.padX, y: Self.padY, width: max(0, bounds.width - 2 * Self.padX), height: Self.row)
+        // Floating (Redesign's 28pt pill) the row sits in the middle.
+        let padY = placement == .floating ? ((bounds.height - Self.row) / 2).rounded() : Self.padY
+        row.frame = NSRect(x: Self.padX, y: padY, width: max(0, bounds.width - 2 * Self.padX), height: Self.row)
         icon.frame = NSRect(x: 6, y: 6, width: 12, height: 12)
         title.frame = NSRect(x: 28, y: 4, width: ceil(title.textWidth), height: 16)
         let cw = ceil(countLabel.textWidth), box = max(Self.row, cw)
@@ -212,7 +214,7 @@ public final class ComposerStashMenuView: ComposerBannerView {
         let cw = ceil(headerCount.textWidth)
         headerCount.frame = NSRect(x: inner - 24 - 4 - 24 + (24 - cw) / 2, y: 4, width: cw, height: 16)
         chevron.frame = NSRect(x: inner - 24 + 5, y: 5, width: 14, height: 14)
-        let visible = max(0, bounds.height - Self.overlap - Self.pad * 2 - Self.row)
+        let visible = max(0, bounds.height - tail - Self.pad * 2 - Self.row)
         scroll.frame = NSRect(x: Self.pad, y: Self.pad + Self.row, width: inner, height: visible)
         list.frame = NSRect(x: 0, y: 0, width: inner, height: listHeight)
         empty.frame = NSRect(x: 28, y: 2, width: max(0, inner - 28 - 8), height: 16)
@@ -359,10 +361,13 @@ public final class ComposerActivityRowView: ComposerBannerView {
     }
 
     public var preferredHeight: CGFloat { 4 + 24 + 4 + Self.overlap }
+    /// Redesign's pill: the spinner, the label and 10 after it.
+    public var pillWidth: CGFloat { 4 + 28 + ceil(label.textWidth) + 10 }
 
     public override func layout() {
         super.layout()
-        spinner.frame = NSRect(x: 4 + 6, y: 4 + 6, width: 12, height: 12)
-        label.frame = NSRect(x: 4 + 28, y: 8, width: max(0, bounds.width - 40), height: 16)
+        let rowY: CGFloat = placement == .floating ? ((bounds.height - 24) / 2).rounded() : 4
+        spinner.frame = NSRect(x: 4 + 6, y: rowY + 6, width: 12, height: 12)
+        label.frame = NSRect(x: 4 + 28, y: rowY + 4, width: max(0, bounds.width - 40), height: 16)
     }
 }
