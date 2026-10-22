@@ -34,19 +34,28 @@ struct ShellCacheTests {
     @Test func debouncesBurstsIntoOneWriteAfterQuiet() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        // The quiet period is long next to the gaps, so a loaded test machine can't stretch a gap past it.
-        let cache = ShellCache(directory: dir, quietPeriod: .seconds(2))
-        for seq in 1...5 {
+        let clock = ManualClock()
+        let cache = ShellCache(directory: dir, quietPeriod: .seconds(2), clock: clock.clock)
+        await cache.noteChanged(ShellSnapshot(schemaVersion: 1, snapshotSequence: 1), environmentId: "env")
+        await waitForSleeper(clock)
+        for seq in 2...5 {
+            clock.advance(by: .milliseconds(300))
             await cache.noteChanged(ShellSnapshot(schemaVersion: 1, snapshotSequence: seq), environmentId: "env")
-            try await Task.sleep(for: .milliseconds(30))
         }
-        // Still inside the quiet period after the last change: nothing written yet.
-        #expect(cache.load(environmentId: "env") == nil)
-        let deadline = ContinuousClock.now + .seconds(10)
-        while cache.load(environmentId: "env") == nil, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(100))
-        }
+        // The writer wakes 2 s after the first change, sees the last one 0.8 s old and sleeps again.
+        clock.advance(by: .milliseconds(800))
+        await waitForSleeper(clock, count: 2)
+        #expect(cache.load(environmentId: "env") == nil, "still inside the quiet period after the last change")
+        // 2 s after the last change it writes once, with the newest snapshot.
+        clock.advance(by: .milliseconds(1200))
+        #expect(await eventually { cache.load(environmentId: "env") != nil })
         #expect(cache.load(environmentId: "env")?.afterSequence == 5)
+        #expect(clock.sleepCount == 2)
+    }
+
+    /// Waits until the writer has begun its `count`th sleep and is waiting in it.
+    func waitForSleeper(_ clock: ManualClock, count: Int = 1) async {
+        #expect(await eventually { clock.sleepCount == count && clock.waiting == 1 })
     }
 
     @Test func ignoresCorruptFilesAndSanitizesIds() async throws {

@@ -24,7 +24,8 @@ public actor ShellCache {
     public nonisolated let quietPeriod: Duration
     private var pending: [String: ShellSnapshot] = [:]
     private var encoders: [String: ShellCacheEncoder] = [:]
-    private var lastChange = ContinuousClock.now
+    private let clock: SleepClock
+    private var lastChange: ContinuousClock.Instant
     private var writer: Task<Void, Never>?
 
     /// `~/Library/Application Support/CandyWrapper/ShellCache`.
@@ -33,8 +34,15 @@ public actor ShellCache {
     }
 
     public init(directory: URL = ShellCache.defaultDirectory, quietPeriod: Duration = .seconds(2)) {
+        self.init(directory: directory, quietPeriod: quietPeriod, clock: .continuous)
+    }
+
+    /// `clock` drives the debounce; tests step it by hand.
+    init(directory: URL, quietPeriod: Duration, clock: SleepClock) {
         self.directory = directory
         self.quietPeriod = quietPeriod
+        self.clock = clock
+        lastChange = clock.now()
     }
 
     public nonisolated func fileURL(environmentId: String) -> URL {
@@ -84,7 +92,7 @@ public actor ShellCache {
 
     public func noteChanged(_ snapshot: ShellSnapshot, environmentId: String) {
         pending[environmentId] = snapshot
-        lastChange = .now
+        lastChange = clock.now()
         guard writer == nil else { return }
         writer = Task(priority: .utility) { await self.writeWhenQuiet() }
     }
@@ -104,9 +112,9 @@ public actor ShellCache {
 
     private func writeWhenQuiet() async {
         while !Task.isCancelled {
-            let wait = lastChange + quietPeriod - .now
+            let wait = lastChange + quietPeriod - clock.now()
             if wait <= .zero { break }
-            try? await Task.sleep(for: wait, tolerance: quietPeriod / 10)
+            try? await clock.sleep(wait, quietPeriod / 10)
         }
         guard !Task.isCancelled else { return }
         writer = nil
