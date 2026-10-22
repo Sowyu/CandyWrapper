@@ -8,13 +8,18 @@ public struct TimelineLatestRun: Sendable, Hashable {
     public var requestedAt: T3Timestamp?
     public var startedAt: T3Timestamp?
     public var completedAt: T3Timestamp?
+    /// The run is still open but its provider turn already ended, so nothing generates while the server settles it
+    /// (models.ts:44-48, T3 07d38b8d17).
+    public var turnEnded: Bool
 
-    public init(runId: RunId, status: ThreadStatus, requestedAt: T3Timestamp? = nil, startedAt: T3Timestamp? = nil, completedAt: T3Timestamp? = nil) {
+    public init(runId: RunId, status: ThreadStatus, requestedAt: T3Timestamp? = nil, startedAt: T3Timestamp? = nil,
+                completedAt: T3Timestamp? = nil, turnEnded: Bool = false) {
         self.runId = runId
         self.status = status
         self.requestedAt = requestedAt
         self.startedAt = startedAt
         self.completedAt = completedAt
+        self.turnEnded = turnEnded
     }
 }
 
@@ -215,7 +220,8 @@ public struct TimelineRunState: Sendable, Hashable {
         let unheld = projection.runs.filter { !($0.status == .queued && $0.queueHeld == true) }.max { $0.ordinal < $1.ordinal }
         let activity = newest([.preparing, .starting, .running, .waiting]) ?? unheld
         latestRun = activity.map {
-            TimelineLatestRun(runId: $0.id, status: $0.status, requestedAt: $0.requestedAt, startedAt: $0.startedAt, completedAt: $0.completedAt)
+            TimelineLatestRun(runId: $0.id, status: $0.status, requestedAt: $0.requestedAt, startedAt: $0.startedAt, completedAt: $0.completedAt,
+                              turnEnded: Self.turnEnded($0, projection.providerTurns))
         }
         runningRunId = newest([.preparing, .starting, .running])?.id
         isWorking = activity.map { [.preparing, .starting, .queued, .running, .waiting].contains($0.status) } ?? false
@@ -232,6 +238,16 @@ public struct TimelineRunState: Sendable, Hashable {
             activeTurnStartedAt = runlessWorkStartedAt
         }
         isWorking = isWorking || runlessWorkStartedAt != nil
+    }
+
+    /// `turnEnded` in `summarizeThreadRun` (threadExecution.ts:52-71): an active run whose attempt's latest provider
+    /// turn is neither pending nor running.
+    static func turnEnded(_ run: Run, _ providerTurns: [JSONValue]) -> Bool {
+        guard [.preparing, .starting, .running, .waiting].contains(run.status), let attempt = run.activeAttemptId?.rawValue else { return false }
+        func ordinal(_ turn: JSONValue) -> Double { if case .number(let n)? = turn["ordinal"] { return n }; return 0 }
+        let latest = providerTurns.filter { $0["runAttemptId"]?.stringValue == attempt }.max { ordinal($0) < ordinal($1) }
+        guard let status = latest?["status"]?.stringValue else { return false }
+        return status != "pending" && status != "running"
     }
 
     /// The server half of `isCompacting` (ChatView.tsx:3598-3615): the latest user message is a bare
@@ -799,7 +815,7 @@ public enum TimelineRows {
         if compacting, let i = rows.firstIndex(where: { $0.id == workingRowId }) {
             rows[i].kind = .working(compacting: true)
         }
-        if input.isWorking, !head, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
+        if input.isWorking, input.latestRun?.turnEnded != true, !head, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
                 let groupId = workGroupId(anchor.id)
