@@ -2,6 +2,7 @@ import AppKit
 import DesignSystem
 import Features
 import T3Protocol
+import T3Store
 
 /// Dither's tab strip and history buttons (after Capy). Each tab shows one route from the window's `RouteHistory`: a
 /// thread, the new-thread draft, Settings, Pull requests or Usage. Like Capy and a browser, navigating shows the new
@@ -65,12 +66,17 @@ final class DitherTabsController {
             }
         }
         let threads = sidebar.snapshot?.threads ?? []
+        // The sidebar's status, so a tab's grid follows its row: subagents waiting on the user count for their parent.
+        let requests = list.tabs.contains { if case .thread = $0 { true } else { false } } ? PendingSubagentRequests.byThread(threads) : [:]
         strip.tabs = list.tabs.map { route in
             let key = DitherTabList.key(route)
             switch route {
             case .thread(let id):
-                let title = threads.first { $0.id == id }?.title ?? ""
-                return .init(id: key, title: title.isEmpty ? "Untitled" : title, icon: .messageSquare)
+                let shell = threads.first { $0.id == id }
+                let title = shell?.title ?? ""
+                let status = shell.map { SidebarModel.resolveSidebarThreadStatus(SidebarThread($0, pendingSubagentRequest: requests[id])) }
+                let activity: DitherTabStripView.Tab.Activity? = status == .working ? .working : status == .waiting ? .waiting : nil
+                return .init(id: key, title: title.isEmpty ? "Untitled" : title, icon: .messageSquare, activity: activity)
             case .draft: return .init(id: key, title: "New thread", icon: .squarePen)
             case .settings: return .init(id: key, title: "Settings", icon: .settings)
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
