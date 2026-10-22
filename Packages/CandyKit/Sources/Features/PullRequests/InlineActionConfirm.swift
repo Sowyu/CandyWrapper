@@ -21,6 +21,8 @@ public final class InlineActionConfirm {
     private var timeout: DispatchWorkItem?
     /// How long a control stays armed (`window.setTimeout(disarm, 3000)`).
     var timeoutSeconds: Double = 3
+    /// Runs the timeout after its delay. Tests replace it to fire the timeout by hand.
+    var schedule: (Double, DispatchWorkItem) -> Void = { DispatchQueue.main.asyncAfter(deadline: .now() + $0, execute: $1) }
 
     public init() {}
 
@@ -56,7 +58,7 @@ public final class InlineActionConfirm {
         }
         let work = DispatchWorkItem { [weak self] in self?.disarm() }
         timeout = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds, execute: work)
+        schedule(timeoutSeconds, work)
         return false
     }
 

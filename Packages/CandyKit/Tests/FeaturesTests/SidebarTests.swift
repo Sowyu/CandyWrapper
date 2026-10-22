@@ -189,12 +189,17 @@ struct SidebarListTests {
         content.now = { SidebarPreview.referenceNow }
         let window = host(content)
         defer { window.contentView = nil }
+        let before = Date()
         content.setSnapshot(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
             SidebarPreview.thread("s1", "Look again", project: "p1", kind: .read, minutesAgo: 400,
                                   extra: ["snoozedUntil": SidebarPreview.iso(-0.5), "snoozedAt": SidebarPreview.iso(60)]),
         ]), animated: false)
-        let due = try #require(content.pendingLabelRefresh).timeIntervalSinceNow
-        #expect(due > 29 && due < 32)
+        let after = Date()
+        // The snooze ends 30 s after the sidebar's `now`; the clock wakes 50 ms later, rounded up to a whole second
+        // of the real clock. Bounding by the real time around the call keeps a slow machine from failing it.
+        let due = try #require(content.pendingLabelRefresh)
+        #expect(due.timeIntervalSince(before) >= 30.05 - 0.001)
+        #expect(due.timeIntervalSince(after) <= 31.05 + 0.001)
     }
 
     /// Snoozing the open thread turns its card into a slim row in the collapsed shelf, and unsnoozing

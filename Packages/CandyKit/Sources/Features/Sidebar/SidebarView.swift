@@ -177,7 +177,9 @@ public final class SidebarContentView: DSView {
     public private(set) var searchHighlight = 0
     private var searchMatches: [ThreadSearchMatch] = []
     private var searchPending = false
-    private var searchTask: Task<Void, Never>?
+    private(set) var searchTask: Task<Void, Never>?
+    /// The wait for a settled query before the server search. Tests replace it to skip the real clock.
+    var searchDebounce: @MainActor () async -> Void = { try? await Task.sleep(for: .milliseconds(SidebarModel.threadSearchDebounceMs)) }
     private var searchOrderKey = ""
     /// The open draft as it was when it opened (`frozenActive`, Sidebar.tsx:972-995).
     private var frozenDraft: (id: String?, draft: SidebarDraft?) = (nil, nil)
@@ -443,7 +445,7 @@ public final class SidebarContentView: DSView {
         searchPending = q.count >= SidebarModel.threadSearchMinLength
         if searchPending {
             searchTask = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(SidebarModel.threadSearchDebounceMs))
+                await self?.searchDebounce()
                 guard !Task.isCancelled, let search = self?.actions.searchThreads else { return }
                 let matches = await search(q)
                 guard !Task.isCancelled, let self,

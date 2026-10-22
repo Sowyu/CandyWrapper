@@ -92,12 +92,15 @@ struct SidebarSearchTests {
             queries.append(q)
             return [ThreadSearchMatch(threadId: ThreadId("r10"), projectId: ProjectId("p2"), source: "user", snippet: "the store actor")]
         }
+        var debounces = 0
+        c.searchDebounce = { debounces += 1 }
         c.setSearchText("x")
         c.setSearchText("xy")
         c.setSearchText("xyz")
         #expect(c.list.items == [.emptyText("Searching thread messages\u{2026}", search: true)])
-        // The main actor is shared with other suites; wait up to 3 s for the 200 ms debounce.
-        for _ in 0..<60 where queries.isEmpty || keys(c) != ["search:r10"] { try await Task.sleep(for: .milliseconds(50)) }
+        // Each keystroke cancels the last query's task before it runs, so only the settled query reaches the server.
+        await c.searchTask?.value
+        #expect(debounces >= 1)
         #expect(queries == ["xyz"])
         #expect(keys(c) == ["search:r10"])
     }
