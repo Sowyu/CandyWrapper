@@ -373,6 +373,29 @@ struct RelayErrorMappingTests {
         for (e, expected) in cases { #expect(e.failure == expected) }
     }
 
+    /// Where each relay failure happened (connection/errors.ts:39-180, relay.ts:389-398 in 3473).
+    @Test func relayFailuresNameTheirHopAndCause() {
+        let endpoint = error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_request_failed","endpointFailure":"origin_unreachable","endpointStatus":502,"traceId":"tr-1"}"#).located
+        #expect(endpoint.hop == .server && endpoint.via == .relay && endpoint.cause == "origin_unreachable")
+        #expect(endpoint.httpStatus == 502 && endpoint.traceId == "tr-1" && endpoint.reason == "endpoint-unavailable" && !endpoint.blocked)
+        let tunnel = error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_request_failed","endpointFailure":"tunnel_down","traceId":"t"}"#).located
+        #expect(tunnel.hop == .tunnel && tunnel.cause == "tunnel_down")
+        let invalid = error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_response_invalid","traceId":"t"}"#).located
+        #expect(invalid.hop == .server && invalid.cause == "invalid_response")
+        let notLinked = error(403, #"{"_tag":"RelayEnvironmentConnectNotAuthorizedError","code":"environment_connect_not_authorized","reason":"environment_link_not_found","traceId":"t"}"#).located
+        #expect(notLinked.hop == .relay && notLinked.cause == "not_linked" && notLinked.blocked && notLinked.reason == "permission")
+        let clock = error(401, #"{"_tag":"RelayAuthInvalidError","code":"auth_invalid","reason":"invalid_dpop","dpopFailureReason":"time_window","traceId":"t"}"#).located
+        #expect(clock.cause == "clock_skew" && clock.reason == "authentication")
+        #expect(RelayError(.relay(status: 500, body: nil), action: .connect).located.cause == "relay_error")
+        #expect(RelayError(.timedOut, action: .connect).located.hop == .relay)
+        // Through the connector's wrapper, the supervisor still sees the plain failure.
+        let wrapped = LocatedConnectionFailure(.transient("x"), endpoint)
+        #expect(ConnectionFailure.classify(wrapped) == .transient("x") && ConnectionFailure.locate(wrapped) == endpoint)
+        // A direct route that does not answer failed at the server; over T3 Connect at the tunnel.
+        #expect(ConnectionFailure.locate(EnvironmentHTTPError.network("down")).hop == .server)
+        #expect(T3Connect.locate(EnvironmentHTTPError.network("down")).hop == .tunnel)
+    }
+
     @Test func transportFailuresAreTransientWithTheNetworkHint() async throws {
         let http = FakeHTTP()
         http.fail("GET", "/v1/environments", URLError(.timedOut))

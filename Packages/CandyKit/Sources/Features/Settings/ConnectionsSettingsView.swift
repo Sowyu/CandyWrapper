@@ -55,6 +55,13 @@ public struct ConnectionsPageModel: Equatable {
         public var updateAction: UpdateAction?
         /// `ServerUpdateProgress` under the subtitle while an update runs or after it failed.
         public var updateProgress: ServerUpdateState = .idle
+        /// What failed on the way, while switched on and neither connected nor unsupported (`useConnectionDiagnosis`).
+        public var diagnosis: ConnectionDiagnosis?
+        /// The supervisor's next retry while it backs off, and its attempt number.
+        public var retryAt: Date?
+        public var attempt = 0
+        /// Reached only through T3 Connect: the diagnosis offers "Add direct route".
+        public var relayOnly = false
         public init(id: String, label: String, machine: String, enabled: Bool, unsupported: Bool = false, subtitle: String,
                     statusIsError: Bool, tooltip: String, routes: [Route], traceId: String? = nil, mcpURL: String? = nil, removing: Bool = false,
                     permissions: Permissions = Permissions(routeContext: true, grants: nil), iconMenu: IconMenu? = nil) {
@@ -132,6 +139,8 @@ public struct ConnectionsPageModel: Equatable {
 public struct ConnectionsActions {
     public var addEnvironment: () -> Void = {}
     public var addRoute: (String) -> Void = { _ in }
+    /// The diagnosis's "Retry now" (`environmentCatalog.retryNow`).
+    public var retryNow: (String) -> Void = { _ in }
     public var setEnabled: (String, Bool) -> Void = { _, _ in }
     public var remove: (String) -> Void = { _ in }
     public var removeRoute: (String, ConnectionsPageModel.Route) -> Void = { _, _ in }
@@ -209,6 +218,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     /// The primary environment's id, for the Icon submenu of This machine.
     public var primaryId: String?
     private var openPermissions: Set<String> = []
+    private var openDiagnoses: Set<String> = []
     private let environmentsSection: SettingsSectionView
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
@@ -287,6 +297,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         var groupRows: [any SettingsGroupRow] = []
         for env in model.environments {
             let row = rows[env.id] ?? EnvironmentRowView()
+            row.diagnosisOpen = openDiagnoses.contains(env.id)
             row.routesOpen = openRoutes.contains(env.id)
             row.permissionsOpen = openPermissions.contains(env.id)
             row.configure(env)
@@ -302,6 +313,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         openRoutes = openRoutes.filter { next[$0] != nil }
         openPermissions = openPermissions.filter { next[$0] != nil }
+        openDiagnoses = openDiagnoses.filter { id in model.environments.contains { $0.id == id && $0.diagnosis != nil } }
         // The T3 Connect rows (`CloudRemoteEnvironmentRows`) follow the saved ones. With nothing saved
         // they stand alone: a skeleton while loading, the failure, or the empty state.
         var nextCloud: [String: CloudMachineRowView] = [:]
@@ -402,6 +414,16 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         let id = env.id
         row.onToggleRoutes = { [weak self] in self?.toggleRoutes(id) }
         row.onTogglePermissions = { [weak self] in self?.togglePermissions(id) }
+        row.onToggleDiagnosis = { [weak self] in
+            guard let self else { return }
+            if self.openDiagnoses.remove(id) == nil { self.openDiagnoses.insert(id) }
+            self.set(self.model)
+        }
+        row.onRetry = { [weak self] in self?.actions.retryNow(id) }
+        row.onCopyDiagnostics = { [weak self] in
+            guard let self, let env = self.model.environments.first(where: { $0.id == id }), let d = env.diagnosis else { return }
+            self.actions.copy(d.text(hostLabel: env.label), "Diagnostics copied", "")
+        }
         row.onReorder = { [weak self] urls in self?.actions.reorderRoutes(id, urls) }
         row.onSwitch = { [weak self] on in self?.actions.setEnabled(id, on) }
         row.onAddRoute = { [weak self] in self?.actions.addRoute(id) }
@@ -655,6 +677,13 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     private var outdatedButton: ButtonView?
     var onUpdate: (() -> Void)?
 
+    private let diagnosisSummary = ConnectionDiagnosisSummaryView()
+    private let diagnosisPanel = ConnectionDiagnosisPanelView()
+    private var hasDiagnosis = false
+    var diagnosisOpen = false { didSet { needsLayout = true } }
+    var onToggleDiagnosis: (() -> Void)?
+    var onRetry: (() -> Void)? { didSet { diagnosisPanel.onRetry = onRetry } }
+    var onCopyDiagnostics: (() -> Void)? { didSet { diagnosisPanel.onCopy = onCopyDiagnostics } }
     var routesOpen = false { didSet { routesList.isHidden = !routesOpen; routesButton.isOpen = routesOpen; needsLayout = true } }
     var permissionsOpen = false {
         didSet { permissions.isHidden = !permissionsOpen; permissionsRule.isHidden = !permissionsOpen; permissionsButton.isOpen = permissionsOpen; needsLayout = true }
@@ -662,7 +691,7 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     var onToggleRoutes: (() -> Void)?
     var onTogglePermissions: (() -> Void)?
     var onSwitch: ((Bool) -> Void)?
-    var onAddRoute: (() -> Void)? { didSet { routesList.onAddRoute = onAddRoute } }
+    var onAddRoute: (() -> Void)? { didSet { routesList.onAddRoute = onAddRoute; diagnosisPanel.onAddRoute = onAddRoute } }
     var onRemoveRoute: ((ConnectionsPageModel.Route) -> Void)? { didSet { routesList.onRemove = onRemoveRoute } }
     var onReorder: (([URL]) -> Void)? { didSet { routesList.onReorder = onReorder } }
     var menuItems: (() -> [MenuItem])?
@@ -682,6 +711,7 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         permissions.isHidden = true
         permissionsRule.isHidden = true
         more.iconSize = 14
+        diagnosisSummary.details.action = { [weak self] in self?.onToggleDiagnosis?() }
         routesButton.action = { [weak self] in self?.onToggleRoutes?() }
         permissionsButton.action = { [weak self] in self?.onTogglePermissions?() }
         toggle.onChange = { [weak self] on in self?.onSwitch?(on) }
@@ -711,6 +741,16 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         permissions.configure(env.permissions)
         // `opacity-60` on the whole row while switched off.
         alphaValue = env.enabled && !env.unsupported ? 1 : 0.6
+        hasDiagnosis = env.diagnosis != nil
+        if let d = env.diagnosis {
+            diagnosisSummary.configure(d, retryAt: env.retryAt, attempt: env.attempt, expanded: diagnosisOpen)
+            diagnosisPanel.configure(d, canAddRoute: env.relayOnly)
+            install(diagnosisSummary)
+            if diagnosisOpen { install(diagnosisPanel) } else { diagnosisPanel.removeFromSuperview() }
+        } else {
+            diagnosisSummary.removeFromSuperview()
+            diagnosisPanel.removeFromSuperview()
+        }
         configureUpdate(env)
         needsLayout = true
     }
@@ -770,8 +810,26 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
 
     /// `px-4 py-2.5`, the 36pt text column; the routes list spans the text and control columns.
     func height(forWidth width: CGFloat) -> CGFloat {
-        10 + 36 + progressHeight + (routesOpen ? routesList.height(forWidth: detailWidth(width)) : 0) + permissionsHeight(width) + 10
+        10 + 36 + summaryHeight(width) + progressHeight + diagnosisHeight(width) + (routesOpen ? routesList.height(forWidth: detailWidth(width)) : 0)
+            + permissionsHeight(width) + 10
     }
+
+    /// The text column's width: the row less the glyph column and the controls, as `layout` places them.
+    private func textColumnWidth(_ width: CGFloat) -> CGFloat {
+        var controls: CGFloat = 16 + 24 + 4 + toggle.intrinsicContentSize.width
+        if let b = outdatedButton, b.superview === self {
+            controls += 4 + b.intrinsicContentSize.width
+        } else if updateButton.superview === self {
+            controls += 4 + 24
+        } else if updateText.superview === self {
+            controls += 4 + ceil(updateText.textWidth) + 1
+        }
+        return max(0, width - controls - 12 - 44)
+    }
+    /// `below`: the failure headline and the retry line, under the subtitle.
+    private func summaryHeight(_ width: CGFloat) -> CGFloat { hasDiagnosis ? diagnosisSummary.height(forWidth: textColumnWidth(width)) : 0 }
+    /// `detail`: the open panel, first of the detail parts.
+    private func diagnosisHeight(_ width: CGFloat) -> CGFloat { hasDiagnosis && diagnosisOpen ? diagnosisPanel.height(forWidth: detailWidth(width)) : 0 }
 
     /// `below`: `mt-1` and one `text-xs` line.
     private var progressHeight: CGFloat { showsProgress ? 4 + 16 : 0 }
@@ -781,26 +839,28 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
     override func layout() {
         super.layout()
         let w = bounds.width
+        // `items-center`: the controls center on the text column, which the failure summary makes taller.
+        let column = 36 + summaryHeight(w)
         let ts = toggle.intrinsicContentSize
         var x = w - 16 - 24
-        more.frame = NSRect(x: x, y: 10 + (36 - 24) / 2, width: 24, height: 24)
+        more.frame = NSRect(x: x, y: 10 + (column - 24) / 2, width: 24, height: 24)
         x -= 4 + ts.width
-        toggle.frame = NSRect(x: x, y: 10 + (36 - ts.height) / 2, width: ts.width, height: ts.height)
+        toggle.frame = NSRect(x: x, y: 10 + (column - ts.height) / 2, width: ts.width, height: ts.height)
         // The controls column (`flex items-center gap-1`): the update control comes before the switch.
         if let b = outdatedButton, b.superview === self {
             let s = b.intrinsicContentSize
             x -= 4 + s.width
-            b.frame = NSRect(x: x, y: 10 + (36 - s.height) / 2, width: s.width, height: s.height)
+            b.frame = NSRect(x: x, y: 10 + (column - s.height) / 2, width: s.width, height: s.height)
         } else if updateButton.superview === self {
             x -= 4 + 24
-            updateButton.frame = NSRect(x: x, y: 10 + (36 - 24) / 2, width: 24, height: 24)
+            updateButton.frame = NSRect(x: x, y: 10 + (column - 24) / 2, width: 24, height: 24)
         } else if updateText.superview === self {
             let w = ceil(updateText.textWidth) + 1
             x -= 4 + w
-            updateText.frame = NSRect(x: x, y: 10 + (36 - 16) / 2, width: w, height: 16)
+            updateText.frame = NSRect(x: x, y: 10 + (column - 16) / 2, width: w, height: 16)
         }
         let textRight = x - 12
-        glyph.frame = NSRect(x: 16, y: 10 + 10, width: 16, height: 16)
+        glyph.frame = NSRect(x: 16, y: 10 + (column - 16) / 2, width: 16, height: 16)
         let textX: CGFloat = 44
         let textWidth = max(0, textRight - textX)
         title.frame = NSRect(x: textX, y: 10, width: textWidth, height: 20)
@@ -816,10 +876,20 @@ final class EnvironmentRowView: DSView, SettingsGroupRow {
         permissionsButton.frame = NSRect(x: dot2.frame.maxX + 4, y: 30, width: permW, height: 16)
         let lw = detailWidth(w)
         var y: CGFloat = 46
+        if hasDiagnosis {
+            let h = summaryHeight(w)
+            diagnosisSummary.frame = NSRect(x: textX, y: y, width: textWidth, height: h)
+            y += h
+        }
         if showsProgress {
             // `mt-1 max-w-md`.
             progress.frame = NSRect(x: textX, y: y + 4, width: min(448, textWidth), height: 16)
             y += progressHeight
+        }
+        if hasDiagnosis && diagnosisOpen {
+            let h = diagnosisHeight(w)
+            diagnosisPanel.frame = NSRect(x: textX, y: y, width: lw, height: h)
+            y += h
         }
         if routesOpen {
             let h = routesList.height(forWidth: lw)

@@ -1,4 +1,5 @@
 import Foundation
+import T3Protocol
 
 /// T3's network hint for relay and T3 Connect failures (client-runtime/src/errors/network.ts:3-4).
 public let t3ConnectNetworkHint = "Your DNS or firewall may be blocking T3 Connect. Try another network, such as a different Wi-Fi or mobile data."
@@ -106,6 +107,55 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
         switch kind {
         case .scopesUnexpected: return .blocked(.permission, description)
         default: return .transient(description)
+        }
+    }
+
+    /// Where the failure happened, as `relayProtectedError` and `mapManagedRelayError` say (connection/errors.ts:39-180).
+    public var located: ConnectionFailureInfo {
+        let failure = self.failure
+        func info(_ reason: String, _ hop: ConnectionFailureInfo.Hop, cause: String? = nil, via: ConnectionFailureInfo.Via? = nil,
+                  httpStatus: Int? = nil) -> ConnectionFailureInfo {
+            var blocked = false
+            if case .blocked = failure { blocked = true }
+            return ConnectionFailureInfo(reason: reason, blocked: blocked, detail: failure.detail, hop: hop, via: via, cause: cause,
+                                         httpStatus: httpStatus, traceId: body?.traceId)
+        }
+        if let body {
+            switch body.tag {
+            case "RelayAuthInvalidError":
+                return info("authentication", .relay, cause: body.dpopFailureReason == "time_window" ? "clock_skew" : nil)
+            case "RelayEnvironmentLinkProofExpiredError", "RelayAgentActivityPublishProofExpiredError", "RelayAgentActivityPublishProofInvalidError":
+                return info("authentication", .relay)
+            case "RelayEnvironmentConnectNotAuthorizedError":
+                switch body.reason {
+                case "managed_endpoint_allocation_not_ready": return info("endpoint-unavailable", .tunnel, cause: "tunnel_pending")
+                case "endpoint_provider_not_managed": return info("permission", .tunnel, cause: "tunnel_not_enabled")
+                case "environment_link_not_found": return info("permission", .relay, cause: "not_linked")
+                default: return info("permission", .relay)
+                }
+            case "RelayEnvironmentLinkProofInvalidError", "RelayEnvironmentLinkLimitExceededError":
+                return info("permission", .relay)
+            case "RelayEnvironmentEndpointTimedOutError":
+                return info("timeout", .tunnel, cause: "timeout")
+            case "RelayEnvironmentEndpointUnavailableError":
+                let endpointFailure = body.endpointFailure ?? (body.reason == "endpoint_response_invalid" ? "invalid_response" : nil)
+                // The tunnel carried the request when T3 Code is what failed to answer.
+                let server = endpointFailure == "origin_unreachable" || endpointFailure == "invalid_response"
+                return info("endpoint-unavailable", server ? .server : .tunnel, cause: endpointFailure, via: .relay,
+                            httpStatus: body.endpointStatus.map { Int($0) })
+            case "RelayEnvironmentLinkUnavailableError":
+                return info("endpoint-unavailable", .tunnel)
+            default:
+                // Link failed, internal error.
+                return info("relay-unavailable", .relay, cause: "relay_error")
+            }
+        }
+        switch kind {
+        // A status means the relay answered, so this device did reach it.
+        case .relay(let status, _): return info("relay-unavailable", .relay, cause: "relay_error", httpStatus: status)
+        case .transport, .invalidResponse: return info("relay-unavailable", .relay)
+        case .timedOut: return info("timeout", .relay)
+        case .scopesUnexpected: return info("permission", .relay)
         }
     }
 

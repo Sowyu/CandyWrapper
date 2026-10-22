@@ -115,6 +115,7 @@ final class SettingsController {
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
         actions.addRoute = { [weak self] id in self?.presentAdd(routeTarget: id) }
+        actions.retryNow = { [weak self] id in self?.environments.reconnect(id) }
         actions.setEnabled = { [weak self] id, on in self?.setEnabled(id, on) }
         actions.remove = { [weak self] id in self?.confirmRemove(id) }
         actions.removeRoute = { [weak self] id, route in self?.confirmRemoveRoute(id, route) }
@@ -280,7 +281,12 @@ final class SettingsController {
             let mismatch = serverUpdates?.mismatch(id)
             var resuming = false
             if case .running(.resuming, _, _) = update { resuming = true }
-            let subtitle = [transport(r, inUse: inUse), resuming ? "Restarting" : status.text, r.enabled ? mismatch?.server : nil]
+            // What failed on the way (`useConnectionDiagnosis`, ConnectionDiagnosisDetails.tsx:27-52). With a direct route as
+            // well, the relay's health says nothing about the route in use.
+            let diagnosis = r.enabled && !resuming && state?.status != .connected && state?.status != .unsupported
+                ? state.flatMap { diagnosisInput(r, $0) }.flatMap(ConnectionDiagnosis.present) : nil
+            // The headline below names the failure in full (SavedEnvironmentRows.tsx:210-218).
+            let subtitle = [transport(r, inUse: inUse), diagnosis != nil ? nil : resuming ? "Restarting" : status.text, r.enabled ? mismatch?.server : nil]
                 .compactMap { $0 }.joined(separator: " · ")
             var tooltip = EnvironmentRowStatus.tooltip(enabled: r.enabled, state: state)
             if let mismatch { tooltip += "\nUpdate available: \(mismatch.server) → \(mismatch.client)" }
@@ -302,12 +308,17 @@ final class SettingsController {
                 id: id, label: r.label, machine: environments.machine(id) ?? r.machine ?? "server",
                 enabled: r.enabled, unsupported: state?.status == .unsupported,
                 subtitle: subtitle,
-                statusIsError: status.isError && !resuming, tooltip: tooltip,
+                statusIsError: status.isError && !resuming && diagnosis == nil, tooltip: tooltip,
                 routes: routes, mcpURL: EnvironmentRoute.origin(mcpBase) + "/mcp",
                 removing: environments.removing.contains(id),
                 permissions: permissions(id, routeContext: true), iconMenu: iconMenu(id))
             row.updateAction = updateAction
             row.updateProgress = update
+            row.diagnosis = diagnosis
+            row.attempt = state?.attempt ?? 0
+            if state?.phase == .backoff, let at = state?.retryAt { row.retryAt = Date(timeIntervalSinceNow: Self.seconds(at - .now)) }
+            row.relayOnly = r.isRelayOnly
+            row.traceId = state?.failure?.traceId
             return row
         }
         m.canUpdateAll = !(serverUpdates?.updateAllTargets().isEmpty ?? true)
@@ -315,6 +326,23 @@ final class SettingsController {
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
         m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)
         return m
+    }
+
+    /// `useConnectionDiagnosis`'s input from the supervisor's state and, for a machine reached only through T3 Connect,
+    /// the relay's last health check.
+    private func diagnosisInput(_ r: EnvironmentRegistration, _ state: ConnectionState) -> ConnectionDiagnosis.Input {
+        let relay = r.isRelayOnly ? t3.machines?.first { $0.environmentId == r.environmentId }?.status : nil
+        return ConnectionDiagnosis.Input(
+            hostLabel: r.label, offline: state.phase == .offline, failure: state.failure, via: r.isRelayOnly ? .relay : .direct,
+            relayStatus: relay.map { .init(status: $0.status, endpointFailure: $0.endpointFailure, endpointStatus: $0.endpointStatus.map { Int($0) },
+                                           offlineReason: $0.offlineReason) },
+            attempt: state.attempt, retryAt: state.retryAt.map { Date(timeIntervalSinceNow: Self.seconds($0 - .now)) },
+            clientVersion: ServerVersionSkewLogic.clientVersion,
+            serverVersion: serverUpdates?.descriptor(r.environmentId)?.serverVersion)
+    }
+
+    private static func seconds(_ d: Duration) -> TimeInterval {
+        Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
     }
 
     /// `LoadBalancingSettings` over `loadBalancingEnvironments`: this machine, then the switched-on saved ones; only

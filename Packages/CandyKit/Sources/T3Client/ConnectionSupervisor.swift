@@ -36,6 +36,7 @@ public enum ConnectionFailure: Error, Sendable, Equatable {
     public static func classify(_ error: Error) -> ConnectionFailure {
         switch error {
         case let f as ConnectionFailure: return f
+        case let l as LocatedConnectionFailure: return l.failure
         case let e as EnvironmentHTTPError:
             switch e {
             case .status(let code, let body):
@@ -58,6 +59,44 @@ public enum ConnectionFailure: Error, Sendable, Equatable {
         default: return .transient(error.localizedDescription)
         }
     }
+
+    /// The failure with where it happened (`ConnectionFailureInfo`), as client-runtime/src/connection/errors.ts:184-277
+    /// maps a direct route's errors. Over T3 Connect the relay already reached the host, so a request that never
+    /// arrives was blocked between this device and the tunnel.
+    public static func locate(_ error: Error, via: ConnectionFailureInfo.Via = .direct) -> ConnectionFailureInfo {
+        if let located = error as? LocatedConnectionFailure { return located.info }
+        let failure = classify(error)
+        var info: ConnectionFailureInfo
+        switch failure {
+        case .blocked(let reason, let detail): info = ConnectionFailureInfo(reason: reason.rawValue, blocked: true, detail: detail)
+        case .transient(let detail): info = ConnectionFailureInfo(reason: "transport", blocked: false, detail: detail)
+        }
+        switch error {
+        case let e as EnvironmentHTTPError:
+            info.via = via
+            switch e {
+            case .status(_, let body):
+                info.hop = .server
+                info.traceId = body?.traceId
+                if case .transient = failure { info.reason = "remote-unavailable" }
+            case .network: info.reason = "network"; info.hop = via == .relay ? .tunnel : .server
+            case .timedOut: info.reason = "timeout"; info.hop = via == .relay ? .tunnel : .server
+            case .invalidResponse: info.reason = "remote-unavailable"; info.hop = .server
+            }
+        case let e as RPCTransportError:
+            if case .upgradeRejected(401) = e { info.hop = .server; info.via = via }
+        default: break
+        }
+        return info
+    }
+}
+
+/// A connection failure that knows where it happened. Connectors throw it; `classify` and `locate` unwrap it.
+public struct LocatedConnectionFailure: Error, Sendable, Equatable {
+    public var failure: ConnectionFailure
+    public var info: ConnectionFailureInfo
+    public init(_ failure: ConnectionFailure, _ info: ConnectionFailureInfo) { self.failure = failure; self.info = info }
+
 }
 
 /// Supervisor phases (client-runtime connection/model.ts:130-136) and the presented status
@@ -79,6 +118,8 @@ public struct ConnectionState: Sendable, Equatable {
     /// Increments for each established session.
     public var generation = 0
     public var lastFailure: String?
+    /// Where and why the last attempt failed, for the connection diagnosis.
+    public var failure: ConnectionFailureInfo?
     /// When the next attempt runs, while in backoff.
     public var retryAt: ContinuousClock.Instant?
 
@@ -391,6 +432,7 @@ public actor ConnectionSupervisor {
             connectedAt = deps.now()
             state.generation += 1
             state.lastFailure = nil
+            state.failure = nil
             state.retryAt = nil
             setPhase(.connected)
             let generation = state.generation
@@ -403,12 +445,14 @@ public actor ConnectionSupervisor {
             applyWatch()
         case .failure(let error):
             if error is CancellationError { evaluate(); return }
+            let info = ConnectionFailure.locate(error)
             switch ConnectionFailure.classify(error) {
             case .blocked(let reason, let detail):
                 state.lastFailure = detail
+                state.failure = info
                 setPhase(.blocked(reason))
             case .transient(let detail):
-                scheduleRetry(detail)
+                scheduleRetry(detail, info)
             }
         }
     }
@@ -419,11 +463,16 @@ public actor ConnectionSupervisor {
         pingTask?.cancel()
         pingTask = nil
         if let connectedAt, deps.now() - connectedAt >= Backoff.resetAfter { failures = 0 }
-        if desired && online { scheduleRetry(reason.description) } else { evaluate() }
+        if desired && online {
+            scheduleRetry(reason.description, ConnectionFailureInfo(reason: "transport", blocked: false, detail: reason.description))
+        } else {
+            evaluate()
+        }
     }
 
-    private func scheduleRetry(_ detail: String) {
+    private func scheduleRetry(_ detail: String, _ info: ConnectionFailureInfo) {
         state.lastFailure = detail
+        state.failure = info
         failures += 1
         let delay: Duration = skipNextDelay ? .zero : .milliseconds(Backoff.delayMilliseconds(failureCount: failures - 1, random: deps.random()))
         skipNextDelay = false

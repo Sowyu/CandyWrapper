@@ -225,7 +225,7 @@ public actor T3ConnectAuthorizer {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                throw T3Connect.failure(for: error)
+                throw LocatedConnectionFailure(T3Connect.failure(for: error), T3Connect.locate(error))
             }
         }
     }
@@ -294,6 +294,38 @@ public enum T3ConnectError: Error, Sendable, Equatable {
 }
 
 public enum T3Connect {
+    /// Where a failure on the T3 Connect route happened (connection/errors.ts:37-192, 280-299).
+    public static func locate(_ error: Error) -> ConnectionFailureInfo {
+        let failure = failure(for: error)
+        var blocked = false
+        if case .blocked = failure { blocked = true }
+        func info(_ reason: String, _ hop: ConnectionFailureInfo.Hop?, cause: String? = nil) -> ConnectionFailureInfo {
+            ConnectionFailureInfo(reason: reason, blocked: blocked, detail: failure.detail, hop: hop, via: .relay, cause: cause)
+        }
+        switch error {
+        case let e as LocatedConnectionFailure: return e.info
+        case let e as RelayError: return e.located
+        case is CloudSessionError: return info("authentication", .relay)
+        case is DPoPError:
+            if case .blocked(let reason, _) = failure { return info(reason.rawValue, .device) }
+            return info("configuration", .device)
+        case let e as EnvironmentHTTPError:
+            // mapRemoteDpopEnvironmentError: a refused DPoP credential can name a clock that is off.
+            if case .status(401, let body) = e, body?.reason == "invalid_credential" {
+                var located = info("authentication", .server, cause: body?.dpopFailureReason == "time_window" ? "clock_skew" : nil)
+                located.traceId = body?.traceId
+                return located
+            }
+            var located = ConnectionFailure.locate(e, via: .relay)
+            located.detail = failure.detail
+            return located
+        default:
+            var located = ConnectionFailure.locate(error, via: .relay)
+            located.via = .relay
+            return located
+        }
+    }
+
     /// Maps any error from the sequence to T3's connection error (connection/errors.ts:37-192).
     public static func failure(for error: Error) -> ConnectionFailure {
         switch error {
