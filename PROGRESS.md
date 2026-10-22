@@ -35,6 +35,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ### Dither round 8, 2026-10-22 (taken 2026-10-22, main agent)
 
+- [ ] T. Capy's composer footer and the row under it: a white Claude logo, Capy's dropdowns and popovers, the context ring with its popover, and a minimal waiting indicator at the bottom right (taken 2026-10-22, agent dither-footer). Files: `Features/Composer/**`, `Features/Pickers/**`, the composer row in `ThreadPanelView.swift`.
 - [x] S. Light hairlines in the details card, a floating account pill, thicker composer pills with checkout and ref below the composer, and matching corners (done 2026-10-22, agent dither-polish8). Dither's frosted palette turns the opaque dark border and input lines into overlays, the account row is an 8pt-inset pill concentric with the 16pt window corner, pills are 32pt with 10pt continuous corners, and checkout and ref float 8 under the composer. Checked on screen in dark and light.
 
 ### Dither round 7, 2026-10-22 (taken 2026-10-22, main agent)
