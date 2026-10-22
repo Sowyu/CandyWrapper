@@ -41,6 +41,9 @@ public struct RelayEnvironmentStatus: Codable, Sendable, Equatable {
     public var error: String?
     /// Absent or `tunnel_released`.
     public var offlineReason: String?
+    /// The relay's last check names the failed part of the path (relay.ts:852-853).
+    public var endpointFailure: String?
+    public var endpointStatus: Double?
     public var traceId: String?
 
     public var isOnline: Bool { status == "online" }
@@ -119,10 +122,14 @@ public struct RelayErrorBody: Codable, Sendable, Equatable {
     public var maxTunnels: Double?
     /// `provisioningStage` on `RelayEnvironmentLinkUnavailableError` (relay.ts:546).
     public var provisioningStage: String?
+    /// `endpointFailure` and `endpointStatus` on `RelayEnvironmentEndpointUnavailableError` (relay.ts:389-398, 503-504):
+    /// which part of the path from the relay to the environment failed, and the status it answered with.
+    public var endpointFailure: String?
+    public var endpointStatus: Double?
     public var traceId: String?
 
     enum CodingKeys: String, CodingKey {
-        case tag = "_tag", code, reason, dpopFailureReason, maxTunnels, provisioningStage, traceId
+        case tag = "_tag", code, reason, dpopFailureReason, maxTunnels, provisioningStage, endpointFailure, endpointStatus, traceId
     }
 
     /// The tags in `RelayProtectedError` (relay.ts:595-608). Any other body is not one T3 decodes.
