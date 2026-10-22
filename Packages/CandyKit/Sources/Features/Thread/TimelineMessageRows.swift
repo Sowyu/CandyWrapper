@@ -344,19 +344,27 @@ final class UserMessageRowView: TimelineRowView {
     }
 }
 
-/// `WorkflowOpeningBlock` (WorkflowOpeningBlock.tsx:39-99, 202-236): a workflow coordinator's thread opens
-/// with "Workflow started" in place of its script, then the script as a fenced block folded like a long
-/// message. `flex-col gap-3 px-1 py-0.5`, then the row's `pb-4`.
-// ponytail: no phases, member agents or agent counts, which come from the parent thread's coordinator row;
-// add them when the thread view loads the parent projection (ChatView.tsx:1055-1066).
+/// `WorkflowOpeningBlock` (WorkflowOpeningBlock.tsx:39-104, 202-236): a workflow coordinator's thread opens
+/// with "Workflow started" in place of its script: the workflow's name and description with its agent counts,
+/// each phase that has members with its members, the members outside phases, then the script as a fenced block
+/// folded like a long message. `flex-col gap-3 px-1 py-0.5`, then the row's `pb-4`. The plan comes from the
+/// parent thread's coordinator row (`item.ui.workflowCoordinator`), so until that loads only the script shows.
 final class WorkflowOpeningRowView: TimelineRowView {
     private let icon = IconView(name: .workflow, size: 14, strokeColor: TL.c(\.mutedForeground))
     private let eyebrow = LabelView("Workflow started", font: TL.font(11, .medium), color: TL.c(\.mutedForeground))
     private let title = LabelView("Workflow", font: TL.font(14, .medium), color: TL.c(\.foreground))
+    /// `text-xs text-muted-foreground`, wrapping.
+    private let summary = TextBlockView("", font: TL.font(12), lineHeight: 16, color: TL.c(\.mutedForeground))
+    /// `text-2xs tabular-nums text-muted-foreground`, at the header's right.
+    private let agents = LabelView("", font: SB.tabular(11), color: TL.c(\.mutedForeground))
     private let markdown = MarkdownView(frame: .zero)
     private let toggle = ButtonView("Show full script", variant: .ghostMuted, size: .xs)
     private let fadeMask = CAGradientLayer()
     private var collapsible = false
+    /// One phase heading (`px-2 pb-0.5 text-2xs font-medium`) with its "settled/total", then its member rows.
+    private struct Section { let heading: LabelView?; let count: LabelView?; let members: [SubagentCardLinkView] }
+    private var sections: [Section] = []
+    private var plan = WorkflowOpening.Plan()
 
     /// The script as a fenced block one backtick longer than its longest run (`scriptMarkdown`, :31-36).
     static func scriptMarkdown(_ script: String) -> String {
@@ -372,8 +380,9 @@ final class WorkflowOpeningRowView: TimelineRowView {
         super.init(frame: frameRect)
         eyebrow.lineHeight = 16
         title.lineHeight = 20
+        agents.lineHeight = 16
         markdown.chatLaneInset = 8
-        for v in [icon, eyebrow, title, markdown, toggle] as [NSView] { addSubview(v) }
+        for v in [icon, eyebrow, title, summary, agents, markdown, toggle] as [NSView] { addSubview(v) }
         fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         toggle.action = { [weak self] in
             guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
@@ -387,6 +396,15 @@ final class WorkflowOpeningRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
+        let next = WorkflowOpening.Plan(coordinator: item.ui.workflowCoordinator)
+        if next != plan { plan = next; rebuildPlan() }
+        let headline = plan.headline
+        title.text = headline.title
+        summary.text = headline.description ?? ""
+        summary.isHidden = headline.description == nil
+        agents.text = headline.agents ?? ""
+        agents.isHidden = headline.agents == nil
+        setAccessibilityLabel("Workflow started: \(headline.title)")
         markdown.cwd = nil
         markdown.document = context.document(item.id, Self.scriptMarkdown(m.text), lineBreaks: false)
         collapsible = shouldCollapseUserMessage(m.text)
@@ -394,6 +412,35 @@ final class WorkflowOpeningRowView: TimelineRowView {
         toggle.isHidden = !collapsible
         toggle.setAccessibilityExpanded(item.ui.messageExpanded)
         needsLayout = true
+    }
+
+    /// Phases with members, then the members outside phases (:46-100). Members show only once the coordinator
+    /// names its provider instance (`memberRow`, :48-59).
+    private func rebuildPlan() {
+        for section in sections {
+            section.heading?.removeFromSuperview(); section.count?.removeFromSuperview()
+            section.members.forEach { $0.stop(); $0.removeFromSuperview() }
+        }
+        sections = []
+        guard let group = plan.group else { return }
+        func rows(_ members: [SubagentWorkflowGroup.Member]) -> [SubagentCardLinkView] {
+            guard plan.providerInstanceId != nil else { return [] }
+            return members.map { member in
+                let link = SubagentCardLinkView()
+                link.configure(SubagentCardPresentation(member: member, driver: plan.driver))
+                link.action = { [weak self] in if let child = member.childThreadId { self?.context.model?.onOpenThread?(child) } }
+                addSubview(link)
+                return link
+            }
+        }
+        for phase in group.phases where !phase.members.isEmpty {
+            let heading = LabelView(phase.title, font: TL.font(11, .medium), color: TL.c(\.mutedForeground))
+            let count = LabelView("\(phase.settledCount)/\(phase.members.count)", font: SB.tabular(11), color: TL.c(\.mutedForeground))
+            heading.lineHeight = 16; count.lineHeight = 16
+            addSubview(heading); addSubview(count)
+            sections.append(Section(heading: heading, count: count, members: rows(phase.members)))
+        }
+        if !group.unphased.isEmpty { sections.append(Section(heading: nil, count: nil, members: rows(group.unphased))) }
     }
 
     /// A match below the fold opens it (`findRevealRef`, :204).
@@ -407,7 +454,23 @@ final class WorkflowOpeningRowView: TimelineRowView {
         return markdown.convert(rect, to: self)
     }
 
-    private static let header: CGFloat = 16 + 2 + 20
+    override func setContentVisible(_ visible: Bool) { sections.forEach { $0.members.forEach { $0.contentVisible = visible } } }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        plan = WorkflowOpening.Plan()
+        rebuildPlan()
+    }
+
+    /// The header: eyebrow, title (`gap-0.5`) and the wrapping description under it.
+    private func header(_ width: CGFloat) -> CGFloat {
+        16 + 2 + 20 + (summary.isHidden ? 0 : 2 + summary.height(forWidth: textWidth(width)))
+    }
+    private func textWidth(_ width: CGFloat) -> CGFloat {
+        max(0, width - 4 - 26 - (agents.isHidden ? 0 : 8 + ceil(agents.textWidth)))
+    }
+    private func sectionHeight(_ section: Section) -> CGFloat {
+        (section.heading == nil ? 0 : 16 + 2) + section.members.reduce(0) { $0 + SubagentCardLinkView.height($1.presentation!) }
+    }
 
     private func body(_ width: CGFloat) -> (shown: CGFloat, full: CGFloat) {
         let full = markdown.height(forWidth: max(0, width - 8))
@@ -415,18 +478,44 @@ final class WorkflowOpeningRowView: TimelineRowView {
         return (folded ? min(full, UserMessageRowView.collapsedHeight) : full, full)
     }
 
+    /// Where the script starts: the header, then each section after `gap-3`.
+    private func scriptTop(_ width: CGFloat) -> CGFloat {
+        2 + header(width) + sections.reduce(0) { $0 + 12 + sectionHeight($1) } + 12
+    }
+
     override func height(forWidth width: CGFloat) -> CGFloat {
-        2 + Self.header + 12 + body(width).shown + (collapsible ? 24 : 0) + 2 + 16
+        scriptTop(width) + body(width).shown + (collapsible ? 24 : 0) + 2 + 16
     }
 
     override func layout() {
         super.layout()
         let width = bounds.width
         icon.frame = NSRect(x: 4, y: 4, width: 14, height: 14)
-        eyebrow.frame = NSRect(x: 26, y: 2, width: max(0, width - 30), height: 16)
-        title.frame = NSRect(x: 26, y: 20, width: max(0, width - 30), height: 20)
+        let aw = agents.isHidden ? 0 : ceil(agents.textWidth)
+        agents.frame = NSRect(x: width - 4 - aw, y: 2, width: aw, height: 16)
+        let tw = textWidth(width)
+        eyebrow.frame = NSRect(x: 26, y: 2, width: tw, height: 16)
+        title.frame = NSRect(x: 26, y: 20, width: tw, height: 20)
+        summary.frame = NSRect(x: 26, y: 42, width: tw, height: summary.isHidden ? 0 : summary.height(forWidth: tw))
+        var y = 2 + header(width)
+        for section in sections {
+            y += 12
+            if let heading = section.heading, let count = section.count {
+                // `flex items-baseline gap-2 px-2`: the title truncates before the count.
+                let cw = ceil(count.textWidth)
+                let hw = min(ceil(heading.textWidth), max(0, width - 8 - 16 - 8 - cw))
+                heading.frame = NSRect(x: 4 + 8, y: y, width: hw, height: 16)
+                count.frame = NSRect(x: heading.frame.maxX + 8, y: y, width: cw, height: 16)
+                y += 16 + 2
+            }
+            for link in section.members {
+                let h = SubagentCardLinkView.height(link.presentation!)
+                link.frame = NSRect(x: 4, y: y, width: max(0, width - 8), height: h)
+                y += h
+            }
+        }
         let b = body(width)
-        let top = 2 + Self.header + 12
+        let top = scriptTop(width)
         markdown.frame = NSRect(x: 4, y: top, width: max(0, width - 8), height: b.full)
         layer?.masksToBounds = true
         CATransaction.begin(); CATransaction.setDisableActions(true)

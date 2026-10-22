@@ -147,6 +147,58 @@ public enum WorkflowOpening {
               isScript(role: first.role, text: first.text, workflowScript: first.workflowScript) else { return nil }
         return first.id
     }
+
+    /// `workflowOpeningParentThreadId` (:367-378): the parent whose subagent rows describe this thread's workflow,
+    /// nil unless the thread opens with a workflow script, so ordinary subagent threads never load their parent.
+    public static func parentThreadId(_ projection: ThreadProjection) -> ThreadId? {
+        messageId(projection) == nil ? nil : projection.thread.lineage?.parentThreadId
+    }
+
+    /// The parts of a workflow opening that live on the parent's coordinator row (`WorkflowOpening`, :315-324).
+    public struct Plan: Equatable, Sendable {
+        public var name: String?
+        public var description: String?
+        public var driver: String?
+        public var providerInstanceId: String?
+        /// Nil until the parent's coordinator row is loaded, and for a coordinator without a workflow.
+        public var group: SubagentWorkflowGroup?
+        public init(name: String? = nil, description: String? = nil, driver: String? = nil, providerInstanceId: String? = nil,
+                    group: SubagentWorkflowGroup? = nil) {
+            self.name = name; self.description = description; self.driver = driver; self.providerInstanceId = providerInstanceId; self.group = group
+        }
+
+        /// `resolveWorkflowOpening` (:331-361): the parent subagent whose child is this thread.
+        public init(coordinator: JSONValue?) {
+            guard let c = coordinator else { self.init(); return }
+            let group = SubagentWorkflowGroup(coordinator: c)
+            self.init(name: group?.name, description: c["title"]?.stringValue, driver: c["driver"]?.stringValue,
+                      providerInstanceId: c["providerInstanceId"]?.stringValue, group: group)
+        }
+
+        /// The coordinator row among the parent projection's subagents.
+        public static func coordinator(of threadId: ThreadId, in parentSubagents: [JSONValue]) -> JSONValue? {
+            parentSubagents.first { $0["childThreadId"]?.stringValue == threadId.rawValue }
+        }
+
+        /// `workflowOpeningHeadline` (:380-420): the workflow, what it does, and "N agents · 2 working · 1 done".
+        public var headline: (title: String, description: String?, agents: String?) {
+            let title = name ?? description ?? "Workflow"
+            let members = (group?.phases.flatMap(\.members) ?? []) + (group?.unphased ?? [])
+            var counts: [String: Int] = [:]
+            for m in members {
+                let key = switch m.status {
+                case "completed": "done"
+                case "failed": "failed"
+                case "cancelled", "interrupted": "stopped"
+                default: "working"
+                }
+                counts[key, default: 0] += 1
+            }
+            let agents = members.isEmpty ? nil : "\(members.count) \(members.count == 1 ? "agent" : "agents") · "
+                + ["working", "done", "failed", "stopped"].compactMap { k in counts[k].map { "\($0) \(k)" } }.joined(separator: " · ")
+            return (title, description != nil && description != title ? description : nil, agents)
+        }
+    }
 }
 
 public enum TimelineEntries {

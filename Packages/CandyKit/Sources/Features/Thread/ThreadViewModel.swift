@@ -25,6 +25,8 @@ struct TimelineRowUI: Hashable {
     /// An MCP App asked to be closed; the row shows "Show app".
     var appClosed = false
     var subagentRecords: [JSONValue] = []
+    /// A workflow opening's coordinator row from the parent thread, once that projection loaded.
+    var workflowCoordinator: JSONValue?
     /// Runs of this row's preparation failures that a Retry can prepare again.
     var retryRunIds: Set<RunId> = []
 }
@@ -91,6 +93,11 @@ public final class ThreadViewModel {
     private var expandedWorkGroupIds: Set<String> = []
     private var expandedEntries: Set<String> = []
     private var expandedMessages: Set<String> = []
+    /// The parent thread's subagents while this thread opens with a workflow script (`useThreadProjection` of the
+    /// parent, ChatView.tsx:1044-1060), nil until that projection loads. The opening block shows the workflow's plan.
+    public var parentSubagents: [JSONValue]? {
+        didSet { if parentSubagents != oldValue { refreshItems() } }
+    }
     private var expandedPlans: Set<String> = []
     /// Per run, like T3's `threadChangedFilesExpandedById` (kept for the thread, not persisted).
     private var expandedChangedFiles: Set<RunId> = []
@@ -420,6 +427,9 @@ public final class ThreadViewModel {
             ui.expandedEntries = [thought.id]
         case .message(let m, _, _, _, _, let summary):
             ui.messageExpanded = !expandedMessages.isEmpty && expandedMessages.contains(m.id.rawValue)
+            if m.workflowOpening, let parentSubagents, let thread = projection?.thread.id {
+                ui.workflowCoordinator = WorkflowOpening.Plan.coordinator(of: thread, in: parentSubagents)
+            }
             if let run = summary?.runId {
                 ui.filesExpanded = expandedChangedFiles.contains(run)
                 ui.folderOverrides = folderOverrides[run] ?? [:]

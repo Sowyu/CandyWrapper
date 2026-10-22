@@ -435,7 +435,10 @@ public enum ThreadRelationships {
 
     private static let settledStatuses: Set<String> = ["completed", "failed", "error", "cancelled", "interrupted", "idle"]
 
-    public static func lineage(threadId: ThreadId, threads: [ThreadShell], projection: ThreadProjection?) -> Lineage {
+    /// `parentStatus` is a provider-native parent's own status from its projection (`deriveProviderSubagentStatus`):
+    /// the parent row shows it unless the parent has a live run (ThreadRelationshipsControl.tsx:440-443).
+    public static func lineage(threadId: ThreadId, threads: [ThreadShell], projection: ThreadProjection?,
+                               parentStatus: (threadId: ThreadId, status: String)? = nil) -> Lineage {
         let g = graph(threads: threads, projection: projection)
         let mergeTarget = mergeBackTarget(projection)
         let agents = (projection?.subagents ?? []).compactMap(ProjectedSubagent.init)
@@ -463,7 +466,8 @@ public enum ThreadRelationships {
             }
             let agent = workflow != nil ? projected : projected?.following(node?.thread)
             let raw = workflow?.name ?? node?.thread?.title ?? agent?.title ?? r.threadId.rawValue
-            var row = Lineage.Row(threadId: r.threadId, edge: r.edge, status: rowStatus(g, r), isParent: parent, isSubagent: isSubagent,
+            let native = parent && r.threadId == parentStatus?.threadId ? node?.thread?.activityRunStatus?.rawValue ?? parentStatus?.status : nil
+            var row = Lineage.Row(threadId: r.threadId, edge: r.edge, status: native ?? rowStatus(g, r), isParent: parent, isSubagent: isSubagent,
                                   isMergeTarget: r.threadId == mergeTarget, missing: node?.missing ?? true,
                                   title: isSubagent ? subagentDisplayTitle(raw) : raw, agent: agent, child: node?.thread,
                                   relationship: relationshipLabel(r.edge, threadId))

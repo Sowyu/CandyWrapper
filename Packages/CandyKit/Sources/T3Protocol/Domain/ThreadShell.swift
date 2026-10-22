@@ -338,3 +338,8 @@ public struct PullRequestStack: Codable, Hashable, Sendable {
     public var base: String
     public var layers: [Layer]
 }
+
+extension ThreadShell {
+    /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
+    public var isProviderNativeSubagent: Bool { lineage.relationshipToParent == .subagent && creationSource == "provider" }
+}
