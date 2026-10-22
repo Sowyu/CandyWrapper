@@ -6,6 +6,10 @@ import DesignSystem
 @MainActor
 func detailsHoverFill() -> NSColor { Themed.pick(light: Themed.black(0.035), dark: Themed.white(0.08)) }
 
+/// A row's corner: T3's 10, or Redesign's control corner, concentric 9 inside the card's 16.
+@MainActor
+func detailsRowRadius(_ view: NSView) -> CGFloat { ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.controlRadius : 10 }
+
 /// `ThreadDetailsControl` in the panel (ThreadDetailsControl.tsx, threadDetailsPanelStyles.ts): a 32pt row,
 /// radius 10, `px-2.5 gap-2.5`, a 16pt muted icon (or two, 2 apart), 13pt medium text in `foreground/80`.
 /// `.select` ends in a 32pt chevron cell behind a 16pt `border/65` rule; `.locked` is the static row; `.row`
@@ -50,7 +54,6 @@ public final class DetailsRowControl: ControlView {
         self.kind = kind
         super.init(frame: .zero)
         for l in [fill, rule] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
-        fill.cornerRadius = 10
         layer?.addSublayer(fill)
         primaryFill.host = self
         layer?.addSublayer(primaryFill)
@@ -156,8 +159,9 @@ public final class DetailsRowControl: ControlView {
     public override func updateLayer() {
         let lit = kind != .locked && state.enabled && state.hoverOrPressed
         fill.backgroundColor = lit ? detailsHoverFill().cgColor(in: self) : nil
+        fill.cornerRadius = detailsRowRadius(self)
         var part = BoxStyle()
-        part.radius = 10
+        part.radius = detailsRowRadius(self)
         part.corners = .leading
         part.fill = lit && secondary.map { !$0.state.hoverOrPressed } == true ? detailsHoverFill() : nil
         // `.select` stacks a second fill on the hovered half, the label or the chevron
@@ -166,7 +170,7 @@ public final class DetailsRowControl: ControlView {
         if kind == .select { part.fill = selectHover && !chevronHovered ? detailsHoverFill() : nil }
         primaryFill.boxStyle = part
         var icon = BoxStyle()
-        icon.radius = 10
+        icon.radius = detailsRowRadius(self)
         icon.corners = .trailing
         icon.fill = selectHover && chevronHovered ? detailsHoverFill() : nil
         chevronFill.boxStyle = icon
@@ -207,7 +211,6 @@ public final class DetailsSplitControl: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for l in [fill, rule] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
-        fill.cornerRadius = 10
         layer?.addSublayer(fill)
         layer?.addSublayer(rule)
         primary.corners = .leading
@@ -272,6 +275,7 @@ public final class DetailsSplitControl: DSView {
         // keeps a resting fill (`bg-black/[0.035] dark:bg-white/[0.055]`).
         let running = elapsedText != nil
         let lit = hovered || secondary.isPopupOpen
+        fill.cornerRadius = detailsRowRadius(self)
         fill.backgroundColor = running ? Themed.pick(light: Themed.black(0.035), dark: Themed.white(0.055)).cgColor(in: self)
             : lit ? detailsHoverFill().cgColor(in: self) : nil
         rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
@@ -411,7 +415,7 @@ public final class DetailsSplitPart: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 10
+        box.radius = detailsRowRadius(self)
         box.corners = corners
         let lit = mode == .idle && state.enabled && (state.hoverOrPressed)
         box.fill = lit ? detailsHoverFill() : nil
@@ -708,6 +712,8 @@ public final class ThreadDetailsCardView: DSView {
         decoration.boxStyle = box
         blur.isHidden = !frost || CommandLine.arguments.contains("--no-blur")
         blur.cornerRadius = DitherChrome.radius(box.radius)
+        // The rows clip inside the border's curve: 22 less 1, or Redesign's 16 less 1.
+        scrollArea.layer?.cornerRadius = frost ? DitherChrome.nested(in: DitherChrome.radius(box.radius), inset: 1) : Self.innerRadius
         divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
         automationsDivider.backgroundColor = Themed.color(\.border, 0.65).cgColor(in: self)
     }
