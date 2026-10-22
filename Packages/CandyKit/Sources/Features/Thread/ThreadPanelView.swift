@@ -932,12 +932,17 @@ public final class ThreadPanelView: DSView {
         // A closing panel gives back its surfaces at once (`RightPanelView.apply`); a still image of it slides away.
         if slides, !open { panelGhost = ghost(of: rightPanel, replacing: panelGhost) }
         if open { dropGhost(&panelGhost) }
+        // 5088aff613 (PreviewPanelShell.tsx:110-138): an inline panel that closes with the keyboard inside
+        // hands it to the panel toggle; AppKit would leave it on the window.
+        let focusLeaves = wasOpen && !open && !rightPanel.isSheet
+            && (window?.firstResponder as? NSView)?.isDescendant(of: rightPanel) == true
         panelState = state
         updateMaximizeControl()
         rightPanel.isHidden = !open
         rightPanel.apply(state)
         header.toggles[2].isPressed = open
         placePanelToggles()
+        if focusLeaves { window?.makeFirstResponder(header.toggles[2]) }
         // The panel asks for a diff only while it shows. Generic openings show Changes; a timeline click
         // opens its own turn instead (ChatView.tsx:2304-2313).
         if open, state.active?.kind == .diff {
