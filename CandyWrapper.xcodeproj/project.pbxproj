@@ -17,6 +17,7 @@
 		38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */; };
 		3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */; };
 		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
+		465C7E33430B6D30F8D83E09 /* AddProjectToMachineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B3C485C72229F33DBF2C8C /* AddProjectToMachineController.swift */; };
 		46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FB4EFB4DBDAF423D7789DC /* GitController.swift */; };
 		472C78A43764067DA610C34E /* ServerUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */; };
 		4F0A678A7750FE0672129144 /* notification-completion.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = F2BF14EF655D3233700A5A1A /* notification-completion.mp3 */; };
@@ -99,6 +100,7 @@
 		9180310B966F99CABD99C1F5 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		92A5E63032239ADD1C5F8E1C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		92B1A20A927434B822A78FBE /* T3ConnectController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3ConnectController.swift; sourceTree = "<group>"; };
+		94B3C485C72229F33DBF2C8C /* AddProjectToMachineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProjectToMachineController.swift; sourceTree = "<group>"; };
 		9E2E782C1ADCF72BBE6BC1C4 /* CandyWrapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CandyWrapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 		92A0B4A03222046AF9527540 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				94B3C485C72229F33DBF2C8C /* AddProjectToMachineController.swift */,
 				A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */,
 				B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */,
 				08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */,
@@ -352,6 +355,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				465C7E33430B6D30F8D83E09 /* AddProjectToMachineController.swift in Sources */,
 				D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */,
 				237342D7C8F16250C670D589 /* BrowserController.swift in Sources */,
 				E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */,

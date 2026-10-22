@@ -142,7 +142,7 @@ final class NumberStepperView: ControlView {
 
 extension NSFont {
     /// `tabular-nums`.
-    var monospacedDigits: NSFont {
+    public var monospacedDigits: NSFont {
         let descriptor = fontDescriptor.addingAttributes([.featureSettings: [[
             NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
             NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector,

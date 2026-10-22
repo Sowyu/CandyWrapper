@@ -313,6 +313,7 @@ final class ThreadController {
     private(set) var composer: ComposerController!
     private(set) var git: GitController!
     private(set) var clones: ProjectCloneController!
+    private(set) var addToMachine: AddProjectToMachineController!
     private(set) var scripts: ProjectScriptsController!
     private(set) var files: FilesController!
     private(set) var pullRequests: ThreadPullRequestsController!
@@ -379,6 +380,7 @@ final class ThreadController {
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)
         clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
+        addToMachine = AddProjectToMachineController(panel: panel, sidebar: sidebar, environments: environments, composer: composer, clones: clones)
         composer.onTargetChange = { [weak self] in
             self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
             self?.onRouteChange?()
@@ -553,6 +555,7 @@ final class ThreadController {
             guard let self, let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return }
             self.newThread(in: project)
         }
+        addToMachine.openProject = { [weak self] project in self?.newThread(in: project) }
         // A row's pull request badge: one link opens it beside the thread, a stack or several open
         // the thread's pull requests tab (`ThreadPullRequestBadgeControl`).
         sidebar.actions.openPullRequest = { [weak self, weak sidebar] id in
@@ -818,6 +821,7 @@ final class ThreadController {
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
         clones.sessionChanged(environmentId)
+        composer.addTargetsMayHaveChanged()
         git.sessionChanged(environmentId)
         browser.sessionChanged(environmentId)
         devices.sync()

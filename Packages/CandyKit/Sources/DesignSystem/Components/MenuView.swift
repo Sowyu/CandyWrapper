@@ -61,6 +61,9 @@ public struct MenuItem {
     /// Muted 12pt tabular text at the row's end, 20pt after the title (`justify-between gap-5`, the browser
     /// device presets' sizes, BrowserDeviceToolbar.tsx:200-211). Takes the shortcut's place.
     public var trailingDetail: String?
+    /// The title and glyph at 55% until the row is highlighted or its submenu is open ("Add to another machine",
+    /// `ADD_TO_MACHINE_LABEL_CLASS`, BranchToolbar.logic.ts:25-27).
+    public var mutedUntilHighlighted = false
 
     public init(_ title: String, icon: IconName? = nil, shortcut: String? = nil, kind: Kind = .item, destructive: Bool = false,
                 disabled: Bool = false, inset: Bool = false, action: (@MainActor () -> Void)? = nil) {
@@ -741,6 +744,11 @@ final class MenuRowView: DSView {
         trailing?.alphaValue = 0.8
         glyphView?.strokeColor = Themed.color(\.contrastMutedForeground)
         badgeView?.strokeColor = Themed.color(\.contrastMutedForeground)
+        if item.mutedUntilHighlighted {
+            let alpha: CGFloat = highlighted ? 1 : 0.55
+            label.alphaValue = alpha
+            glyphView?.alphaValue = alpha
+        }
         if let check { check.strokeColor = text.cgColor(in: self) }
         note?.color = item.isDestructive ? Themed.color(\.destructive) : Themed.color(\.warning)
         subtitleLabel?.color = Themed.color(\.contrastMutedForeground)
