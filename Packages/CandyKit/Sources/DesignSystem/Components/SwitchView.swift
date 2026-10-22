@@ -97,6 +97,9 @@ public final class SwitchView: ControlView {
         thumb.setNeedsDisplay()
     }
 
+    /// Capy's on track in dark, measured on its settings page.
+    static let ditherDarkTrack = NSColor(srgbRed: 0x5b / 255, green: 0xa1 / 255, blue: 0x9c / 255, alpha: 1)
+
     private func apply(animated: Bool) {
         let animate = animated && window != nil && !Motion.reduced
         let t = size.thumb, d = t - 2
@@ -115,12 +118,15 @@ public final class SwitchView: ControlView {
         var thumbStyle = BoxStyle()
         thumbStyle.radius = 9999
         // `dark:data-unchecked:bg-muted-foreground` keeps an off switch visible in dark (3473 switch.tsx:36, 8a948076bb).
-        thumbStyle.fill = isOn ? Themed.color(\.background) : Themed.color(light: \.background, dark: \.contrastMutedForeground)
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        thumbStyle.fill = isOn ? Themed.color(dither ? \.card : \.background) : Themed.color(light: \.background, dark: \.contrastMutedForeground)
         thumbStyle.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.05)),
                               BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.05))]
         thumb.boxStyle = thumbStyle
 
-        let trackColor = (isOn && !isMixed ? Themed.color(\.primary) : Themed.color(\.contrastInput)).cgColor(in: self)
+        // Dither (after Capy's settings switches): a lighter teal track, #5ba19c in dark, under a card-colored knob.
+        let onColor = dither ? Themed.pick(light: Themed.color(\.primary), dark: Self.ditherDarkTrack) : Themed.color(\.primary)
+        let trackColor = (isOn && !isMixed ? onColor : Themed.color(\.contrastInput)).cgColor(in: self)
         let offset = isMixed ? (t - 4) / 2 : (isOn ? t - 4 : 0)
         let slide = CATransform3DMakeTranslation(offset, 0, 0)
         let stretched = state.active && state.enabled

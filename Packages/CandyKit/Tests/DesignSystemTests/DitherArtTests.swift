@@ -68,10 +68,13 @@ struct DitherArtDisplayOptionTests {
         // The user wants the thread's art vivid with a slight dim: never a heavy veil.
         #expect(DitherArt.threadScrim <= 0.4)
         #expect(DitherArt.scrim(.page, standard) == DitherArt.pageScrim)
+        // Settings shows the art under its cards, dimmer than a thread and lighter than other pages.
+        #expect(DitherArt.scrim(.settings, standard) > DitherArt.threadScrim)
+        #expect(DitherArt.scrim(.settings, standard) < DitherArt.pageScrim)
     }
 
     @Test func reduceTransparencyHidesTheArt() {
-        for page in [DitherArt.Page.hero, .thread, .page] {
+        for page in [DitherArt.Page.hero, .thread, .settings, .page] {
             #expect(DitherArt.scrim(page, (true, false)) == 1)
             #expect(DitherArt.scrim(page, (true, true)) == 1)
         }
