@@ -1,6 +1,6 @@
 # Progress
 
-- [ ] Port upstream timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
+- [x] Port upstream timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline): audited 17 commits. Visit marks and equal projections skip panel layout and row derivation; pending changed-turn opens still run. All 16 focused counting and thread/Markdown fidelity tests passed. Other timeline patterns already have native guards; fork clone URL belongs to the project/protocol area.
 
 - [x] Audited upstream diff, git and pull request performance bucket b4 (2026-10-22, perf-diffgit): linked PR rows mount only the viewport, and viewed-state refreshes update header controls without rebuilding code rows. Counting tests and area fidelity passed (nine tests, then six); dark real-window scrolling and Viewed fold/unfold checked. The timeline owner still needs ChangedFilesCardView virtualization; PR diff pagination still reparses accumulated patches.
 

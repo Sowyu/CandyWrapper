@@ -1232,6 +1232,9 @@ public final class ThreadPanelView: DSView {
     /// panel lays out, the diff summaries or the proactive panels read changed, so only the
     /// timeline updates.
     public func setProjection(_ projection: ThreadProjection?, projectTitle: String, workspaceRoot: String?, onlyStreamingText: Bool = false) {
+        if !onlyStreamingText, !switchingThread, !isDraft, !timeline.isInert, !opensChangedTurnOnLoad,
+           projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot,
+           model.acceptReadState(projection) { return }
         timeline.setGlimmerModel(projection?.runs.max { $0.ordinal < $1.ordinal }?.modelSelection)
         if onlyStreamingText, let projection, projection.thread.id == model.projection?.thread.id, !switchingThread, !isDraft,
            !timeline.isInert, projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot {
