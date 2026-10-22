@@ -275,6 +275,8 @@ final class SubagentCardLinkView: ControlView {
         let tone = failed ? TL.c(\.destructive) : TL.c(\.mutedForeground)
         status.color = tone; detail.color = tone; plainDetail.color = tone; elapsed.color = TL.c(\.mutedForeground)
         avatar.fill = TL.c(\.muted); avatar.border = TL.c(\.border, 0.7)
+        // Redesign draws the provider glyph bare, without T3's disc (the user, 2026-10-22).
+        avatar.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let working = ["pending", "running", "waiting"].contains(presentation?.status ?? "")
         if working, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             if dotGrid == nil { let g = DotGridSpinnerView(); dotGrid = g; addSubview(g); needsLayout = true }
