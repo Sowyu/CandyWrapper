@@ -541,6 +541,27 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         #expect(rows.last.map(kind) == "thinking")
     }
 
+    // T3 07d38b8d17: MessagesTimeline.logic.ts:1969, threadExecution.ts:56-71.
+    @Test func dropsThinkingOnceTheOpenRunsProviderTurnEnded() {
+        let entries = [message("user-entry", "user", role: .user, run: "turn-1", at: "2026-01-01T00:00:00Z")]
+        #expect(derive(entries) { Self.running(&$0) }.last.map(kind) == "thinking")
+        let ended = derive(entries) { Self.running(&$0); $0.latestRun?.turnEnded = true }
+        #expect(!ended.contains { kind($0) == "thinking" })
+
+        let run = try! JSONDecoder().decode(Run.self, from: Data("""
+            {"id":"turn-1","threadId":"t","ordinal":1,"status":"running","activeAttemptId":"a","requestedAt":"2026-01-01T00:00:00Z"}
+            """.utf8))
+        func turn(_ ordinal: Double, _ status: String) -> JSONValue {
+            .object(["runAttemptId": .string("a"), "ordinal": .number(ordinal), "status": .string(status)])
+        }
+        #expect(!TimelineRunState.turnEnded(run, []))
+        #expect(!TimelineRunState.turnEnded(run, [turn(1, "failed"), turn(2, "running")]))
+        #expect(TimelineRunState.turnEnded(run, [turn(1, "running"), turn(2, "failed")]))
+        var settled = run
+        settled.status = .failed
+        #expect(!TimelineRunState.turnEnded(settled, [turn(1, "failed")]))
+    }
+
     // LT:3046
     @Test(arguments: [(WorkLogTone.tool, "Used 3 tools"), (.info, "Used 2 tools and received 1 update")])
     func expandsActivitiesThroughTheSameGroup(_ middleTone: WorkLogTone, _ summary: String) {
