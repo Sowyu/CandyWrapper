@@ -583,7 +583,9 @@ public final class SidebarAccountRowView: ControlView {
         if updateAllCount > 0 {
             items.append(MenuItem("Update all (\(updateAllCount))", icon: .circleArrowUp) { [weak self] in self?.onUpdateAll?() })
         }
-        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none))
+        // Over the chevron, its right edge on the chevron's (the user, 2026-10-22).
+        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .end, sideOffset: 6, fallbackAxisSide: .none),
+                                      anchorRect: chevron.frame)
         menuOpen = menu != nil
         menu?.hostPopup?.onClose = { [weak self] in self?.menuOpen = false }
     }
