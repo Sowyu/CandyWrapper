@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import DesignSystem
 import Testing
 import T3Protocol
 @testable import Features
@@ -71,5 +72,26 @@ struct ConnectionDiagnosisTests {
         let text = Self.diagnose(leaky, via: .direct)!.text(hostLabel: "Mac mini")
         for secret in ["abc.def", "xyz", "me:pw", "s3cret", "frag"] { #expect(!text.contains(secret)) }
         #expect(text.contains("Bearer [redacted]") && text.contains("https://[redacted]@host/pair?token=[redacted]#token=[redacted]"))
+    }
+
+    /// The retry countdown ticks only while its row can be seen: scrolled out it stops, scrolled back it starts,
+    /// and out of a window it holds nothing (ConnectionDiagnosisDetails.tsx:65-74 ticks while mounted).
+    @MainActor @Test func countdownStopsOutOfView() async throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: .borderless, backing: .buffered, defer: false)
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 3000))
+        let row = ConnectionDiagnosisSummaryView(frame: NSRect(x: 0, y: 2800, width: 300, height: 40))
+        document.addSubview(row)
+        scroll.documentView = document
+        window.contentView = scroll
+        scroll.contentView.scroll(to: .zero)
+        row.configure(Self.diagnose(Self.unavailable("tunnel_down"))!, retryAt: Date(timeIntervalSinceNow: 30), attempt: 2, expanded: false)
+        row.layoutSubtreeIfNeeded()
+        #expect(LabelClock.shared.due(for: row) == nil)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 2790))
+        for _ in 0..<100 where LabelClock.shared.due(for: row) == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(LabelClock.shared.due(for: row) != nil)
+        row.removeFromSuperview()
+        #expect(LabelClock.shared.due(for: row) == nil)
     }
 }

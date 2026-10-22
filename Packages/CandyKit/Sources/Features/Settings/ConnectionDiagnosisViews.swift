@@ -11,7 +11,6 @@ final class ConnectionDiagnosisSummaryView: DSView {
                         LabelView("·", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))]
     let details = InlineDisclosureButton()
     private var retryAt: Date?
-    private var ticker: Timer?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -35,22 +34,20 @@ final class ConnectionDiagnosisSummaryView: DSView {
         needsLayout = true
     }
 
-    /// `RetryCountdown`: ticks once a second, and only while a retry is scheduled and the row is on screen.
+    /// `RetryCountdown`: ticks once a second, and only while a retry is scheduled and the row can be seen. `LabelClock`
+    /// holds the tick while the window is covered, minimized or hidden; a row scrolled out of view stops and the
+    /// scroll that brings it back starts it again.
     // ponytail: one wakeup a second through a backoff of up to 5 min while Connections shows, round to 5 s if wakeup measurements object
     private func updateRetry() {
-        let seconds = retryAt.map { Int(ceil($0.timeIntervalSinceNow)) }
+        let remaining = retryAt?.timeIntervalSinceNow
+        let seconds = remaining.map { Int(ceil($0)) }
         retry.isHidden = seconds == nil
         retry.text = seconds.map { $0 > 0 ? "retrying in \($0)s" : "retrying" } ?? ""
-        let ticking = (seconds ?? 0) > 0 && window != nil
-        if ticking, ticker == nil {
-            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.tick() } }
-            t.tolerance = 0.1
-            RunLoop.main.add(t, forMode: .common)
-            ticker = t
-        } else if !ticking {
-            ticker?.invalidate()
-            ticker = nil
-        }
+        waitsForScroll = false
+        guard let remaining, let seconds, seconds > 0, window != nil else { LabelClock.shared.cancel(self); return }
+        guard inScrolledView else { LabelClock.shared.cancel(self); waitsForScroll = true; return }
+        // The text changes when the remaining time drops below the next whole second.
+        LabelClock.shared.schedule(self, in: remaining - Double(seconds - 1)) { [weak self] in self?.tick() }
     }
 
     private func tick() {
@@ -58,15 +55,41 @@ final class ConnectionDiagnosisSummaryView: DSView {
         needsLayout = true
     }
 
+    /// Whether any of the row lies in its scroll view's visible part, and false while it has no size yet.
+    private var inScrolledView: Bool {
+        guard !bounds.isEmpty else { return false }
+        guard let clip = enclosingScrollView?.contentView else { return true }
+        return !convert(clip.bounds, from: clip).intersection(bounds).isEmpty
+    }
+
+    /// Set while a countdown is due but the row is scrolled out of view.
+    private var waitsForScroll = false
+    private var scrollObserver: NSObjectProtocol?
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+        scrollObserver = nil
+        if let clip = enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if let self, self.waitsForScroll, self.inScrolledView { self.tick() } }
+            }
+        }
         updateRetry()
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        LabelClock.shared.visibilityChanged()
     }
 
     func height(forWidth width: CGFloat) -> CGFloat { headline.height(forWidth: width) + 16 }
 
     override func layout() {
         super.layout()
+        // A row laid out for the first time, or moved into view, starts its countdown.
+        if waitsForScroll, inScrolledView { updateRetry() }
         let w = bounds.width
         let hh = headline.height(forWidth: w)
         headline.frame = NSRect(x: 0, y: 0, width: w, height: hh)
