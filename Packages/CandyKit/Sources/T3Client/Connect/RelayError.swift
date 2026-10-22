@@ -142,7 +142,7 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
                 // The tunnel carried the request when T3 Code is what failed to answer.
                 let server = endpointFailure == "origin_unreachable" || endpointFailure == "invalid_response"
                 return info("endpoint-unavailable", server ? .server : .tunnel, cause: endpointFailure, via: .relay,
-                            httpStatus: body.endpointStatus.map { Int($0) })
+                            httpStatus: body.endpointStatus.flatMap { Int(exactly: $0) })
             case "RelayEnvironmentLinkUnavailableError":
                 return info("endpoint-unavailable", .tunnel)
             default:
@@ -185,7 +185,7 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
             let stage = body.provisioningStage.map { " Failed stage: \($0)." } ?? ""
             return "Relay cannot provision the managed endpoint (\(reason)).\(stage)"
         case "RelayEnvironmentLinkLimitExceededError":
-            let max = body.maxTunnels.map { String(Int($0)) } ?? "?"
+            let max = body.maxTunnels.flatMap { Int(exactly: $0) }.map(String.init) ?? "?"
             return "Relay refused the link: this account already has its maximum of \(max) managed tunnels. Unlink an environment to free one up."
         case "RelayAgentActivityPublishProofExpiredError": return "Relay rejected an expired agent activity publish proof."
         case "RelayAgentActivityPublishProofInvalidError": return "Relay rejected the agent activity publish proof (\(reason))."
