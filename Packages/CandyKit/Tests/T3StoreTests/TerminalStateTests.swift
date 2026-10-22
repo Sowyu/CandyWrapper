@@ -10,11 +10,27 @@ struct TerminalStateTests {
     }
 
     @Test func drawerHeightClamp() {
-        #expect(TerminalDrawerState.clampHeight(100, windowHeight: 800) == 180)
-        #expect(TerminalDrawerState.clampHeight(700, windowHeight: 800) == 600)
-        #expect(TerminalDrawerState.clampHeight(280.4, windowHeight: 800) == 280)
-        // A short window still allows 180.
-        #expect(TerminalDrawerState.clampHeight(300, windowHeight: 200) == 180)
+        let tall = TerminalDrawerState.maxHeight(windowHeight: 800, columnHeight: 800, headerHeight: 52, composerHeight: 0)
+        #expect(tall == 600)
+        #expect(TerminalDrawerState.clampHeight(100, maxHeight: tall) == 180)
+        #expect(TerminalDrawerState.clampHeight(700, maxHeight: tall) == 600)
+        #expect(TerminalDrawerState.clampHeight(280.4, maxHeight: tall) == 280)
+        // 055a8418c1: a short window keeps the header and composer, even under 180.
+        let short = TerminalDrawerState.maxHeight(windowHeight: 400, columnHeight: 400, headerHeight: 52, composerHeight: 200)
+        #expect(short == 148)
+        #expect(TerminalDrawerState.clampHeight(300, maxHeight: short) == 148)
+        #expect(TerminalDrawerState.maxHeight(windowHeight: 200, columnHeight: 200, headerHeight: 52, composerHeight: 300) == 0)
+    }
+
+    /// `findReusableProjectScriptTerminal` (687bd55533): panel terminals and running ones never get a script.
+    @Test func scriptReusesOnlyIdleDrawerTerminals() {
+        let reuse = TerminalDrawerState.reusableScriptTerminal
+        #expect(reuse(["term-1", "term-2"], "term-2", [], []) == "term-2")
+        #expect(reuse(["term-1", "term-2"], "term-2", [], ["term-2"]) == "term-1")
+        // An empty drawer with a right-panel terminal the server lists: a new terminal, not the panel's.
+        #expect(reuse(["term-1"], "", ["term-1"], []) == nil)
+        #expect(reuse(["term-1", "term-1", "term-3"], "term-1", ["term-1"], []) == "term-3")
+        #expect(ProjectScript.terminalInput("npm test") == " npm test\r")
     }
 
     @Test func drawerEnsureAndClose() {

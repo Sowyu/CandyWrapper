@@ -229,13 +229,11 @@ final class TerminalController {
         }
     }
 
-    private var windowHeight: CGFloat { panel.window?.contentView?.bounds.height ?? panel.bounds.height }
-
     /// Puts both hosts and their attach streams in line with the open thread's state.
     private func refresh() {
         let state = state
         let shown = threadId != nil && state.open
-        panel.setTerminal(open: shown, height: TerminalDrawerState.clampHeight(state.height, windowHeight: windowHeight))
+        panel.setTerminal(open: shown, height: TerminalDrawerState.clampHeight(state.height, maxHeight: panel.terminalMaxHeight))
         panel.terminalAvailable = threadId.flatMap(launch) != nil
         updateLabels(state)
         if shown, let threadId, let active = state.resolvedActiveId {
@@ -418,18 +416,26 @@ final class TerminalController {
 
     // MARK: Project scripts (ChatView.tsx:4956-5100)
 
-    /// `runProjectScript`: the drawer opens on the active terminal, or a new one (120 x 30) when that
-    /// one runs a command; `terminal.open`, then the command and Return.
+    /// `runProjectScript`: the drawer opens on an idle drawer terminal, or a new one (120 x 30) when none
+    /// is idle; `terminal.open`, then the command and Return.
     /// A script's command reached its terminal (the preview URL opens then).
     var onScriptStarted: ((ProjectScript) -> Void)?
 
-    func runScript(_ script: ProjectScript) {
+    /// `preserveHistory` is a code block's one-off command (`shellHistory: "preserve"`, ChatView.tsx:2760).
+    func runScript(_ script: ProjectScript, preserveHistory: Bool = false) {
         guard let threadId, let launch = launch(threadId), let shell = environments.session(threadId.environmentId) else { return }
         var state = state
-        let known = metadata[threadId.environmentId ?? ""]?.activity.terminalIds(threadId: threadId.localId.rawValue) ?? []
-        let base = state.resolvedActiveId ?? known.first ?? "term-1"
-        let busy = summary(base)?.hasRunningSubprocess == true
-        let terminalId = busy ? allocateTerminalId(threadId) : base
+        let local = threadId.localId.rawValue
+        // T3 reuses nothing until the server's sessions are known (`canReuseTerminal`), and counts server
+        // sessions this client has not opened yet, such as a worktree setup shell (ChatView.tsx:2656-2670).
+        let activity = metadata[threadId.environmentId ?? ""]?.activity
+        let reusable = activity.flatMap {
+            TerminalDrawerState.reusableScriptTerminal(drawerIds: state.terminalIds + $0.terminalIds(threadId: local),
+                                                       activeId: state.activeTerminalId, panelIds: panel.panelState.panelTerminalIds,
+                                                       runningIds: $0.runningTerminalIds(threadId: local))
+        }
+        let busy = reusable == nil
+        let terminalId = reusable ?? allocateTerminalId(threadId)
         if busy || !state.terminalIds.contains(terminalId) { state.newTerminal(terminalId) } else { state.activate(terminalId); state.open = true }
         self.state = state
         refresh()
@@ -440,11 +446,11 @@ final class TerminalController {
             o["rows"] = .number(30)
             payload = .object(o)
         }
-        let local = threadId.localId.rawValue
+        let input = preserveHistory ? script.command + "\r" : ProjectScript.terminalInput(script.command)
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request(TerminalRPC.open, payload: payload)
-                _ = try await shell.supervisor.request(TerminalRPC.write, payload: TerminalRPC.writeInput(threadId: local, terminalId: terminalId, data: script.command + "\r"))
+                _ = try await shell.supervisor.request(TerminalRPC.write, payload: TerminalRPC.writeInput(threadId: local, terminalId: terminalId, data: input))
                 self?.onScriptStarted?(script)
             } catch {
                 self?.panel.toasts.show(ToastView(title: "Failed to run script \"\(script.name)\".", message: (error as? RPCClientError)?.typedError?.message, kind: .error))
@@ -500,7 +506,13 @@ final class TerminalController {
     // MARK: Height
 
     private func drag(start: CGFloat, delta: CGFloat, ended: Bool) {
-        let height = TerminalDrawerState.clampHeight(start + delta, windowHeight: windowHeight)
+        let height = TerminalDrawerState.clampHeight(start + delta, maxHeight: panel.terminalMaxHeight)
+        // A drag that ends where it started keeps the stored height, which may be taller than the capped
+        // one it started from (ThreadTerminalDrawer.tsx:1707-1716).
+        if ended, height == start {
+            panel.setTerminal(open: true, height: TerminalDrawerState.clampHeight(state.height, maxHeight: panel.terminalMaxHeight))
+            return
+        }
         panel.setTerminal(open: true, height: height)
         if ended {
             var state = state
@@ -511,7 +523,7 @@ final class TerminalController {
 
     private func windowResized() {
         guard threadId != nil, state.open else { return }
-        panel.setTerminal(open: true, height: TerminalDrawerState.clampHeight(state.height, windowHeight: windowHeight))
+        panel.setTerminal(open: true, height: TerminalDrawerState.clampHeight(state.height, maxHeight: panel.terminalMaxHeight))
     }
 
     // MARK: Attach
