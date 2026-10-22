@@ -86,6 +86,15 @@ struct ThreadCompletionTests {
         let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: " Fix  it ", assistantText: "## Done\n\n**Bold** and `code`\n\n- one\n- two\n\n```swift\nlet x = 1\n```")
         #expect(item.preview == "Fix it\n\nDone Bold and code one two let x = 1")
     }
+    /// Redesign's ticks: 4pt for an empty turn, wider as the turn grows, never past 12.
+    @Test func minimapLengthHintGrowsWithTheTurn() {
+        func width(_ chars: Int) -> CGFloat {
+            ThreadMinimapView.lengthHint(ThreadMinimapItem(id: "u", rowIndex: 0, userText: String(repeating: "a", count: chars)))
+        }
+        #expect(width(0) == 4)
+        #expect(width(40) < width(400) && width(400) < width(4_000))
+        #expect(width(1_000_000) == 12)
+    }
     @Test func taskSummaryUsesRunningThenPendingThenLast() {
         let steps = [ThreadTaskStep(text: "A", status: "pending"), ThreadTaskStep(text: "B", status: "running")]
         #expect(ThreadTaskStep.summary(steps) == "B")
