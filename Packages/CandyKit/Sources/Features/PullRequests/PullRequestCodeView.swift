@@ -149,6 +149,7 @@ public final class PullRequestCodeView: DSView {
     }
 
     func setViewed(states: [String: String]?, overlay: [String: Bool], store: String?) {
+        guard states != self.states || overlay != self.overlay || store != self.store else { return }
         self.states = states; self.overlay = overlay; self.store = store
         if store == nil {
             list.viewedState = nil

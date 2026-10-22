@@ -47,7 +47,7 @@ public final class DiffListView: DSView {
     public var onOpenFile: (@MainActor (String) -> Void)?
     var onCollapsedChange: (@MainActor () -> Void)?
     /// The pull request Code tab's viewed marks by path; nil hides the tick.
-    public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { reconfigureAll() } }
+    public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { updateViewedHeaders() } }
     /// A tick pressed: viewing a file folds it, clearing the tick opens it (`toggleFileDiffFoldForViewed`).
     public var onSetViewed: (@MainActor (String, Bool) -> Void)?
     /// Cards under lines. Their views come from `annotationView` and are kept while their id stays.
@@ -74,6 +74,7 @@ public final class DiffListView: DSView {
 
     /// Counters for tests.
     public private(set) var createdRowViews = 0
+    public private(set) var configuredRowViews = 0
     public var liveRowViews: Int { visible.count }
 
     public override var acceptsFirstResponder: Bool { true }
@@ -244,6 +245,15 @@ public final class DiffListView: DSView {
 
     // MARK: Tiling
 
+    private func updateViewedHeaders() {
+        // PullRequestCodeTab.tsx at bb3039093: a viewed press only changes header controls.
+        for (index, view) in visible {
+            guard let header = view as? DiffFileHeaderView else { continue }
+            let file = Int(rowLayout.rows[index].file)
+            header.configure(viewed: viewedState?(diff.files[file].path))
+        }
+    }
+
     private func reconfigureAll() {
         for (index, view) in visible { recycle(view); visible[index] = nil }
         tile()
@@ -304,6 +314,7 @@ public final class DiffListView: DSView {
     }
 
     private func configure(_ view: DiffRowView, _ row: DiffLayout.Row, index: Int, _ context: DiffRowContext) {
+        configuredRowViews += 1
         view.rowIndex = index
         switch view {
         case let header as DiffFileHeaderView:
