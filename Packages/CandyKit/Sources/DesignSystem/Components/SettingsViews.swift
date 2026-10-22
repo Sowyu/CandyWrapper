@@ -106,12 +106,15 @@ public final class SettingsRowView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyDither() }
 
-    /// Dither (after Capy's settings rows): a 13pt medium title over a 12pt muted description, same line heights.
+    /// Dither (after Capy's settings rows): a 13pt regular title in the foreground over a 12pt description in
+    /// `--muted-foreground-1` (#aaaaab in dark), same line heights.
     private func applyDither() {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        let size: CGFloat = dither ? 13 : 14
-        if titleLabel.font.pointSize != size { titleLabel.font = DSFont.ui(size, weight: .medium); needsLayout = true }
-        if !detailIsError { detailText.color = Themed.color(\.contrastMutedForeground, dither ? 1 : 0.8) }
+        titleLabel.font = dither ? DSFont.ui(13) : DSFont.ui(14, weight: .medium)
+        titleLabel.color = Themed.color(dither ? \.foreground : \.contrastForeground)
+        if !detailIsError { detailText.color = dither ? Themed.color(\.mutedForeground) : Themed.color(\.contrastMutedForeground, 0.8) }
+        // A select sizes itself to its value under Dither, so the control column changes with the theme.
+        invalidateIntrinsicContentSize(); needsLayout = true
     }
 
     private func applyInert() {
@@ -276,11 +279,12 @@ public final class SettingsGroupView: BoxView {
     private func restyle() {
         var box = BoxStyle()
         if variant == .grouped, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            // Dither (after Capy's `bg-card rounded-(--radius-card) border-[0.5px] border-(--card-hairline)`).
+            // Dither (after Capy's settings cards): a translucent fill a step lighter than the page, so the art
+            // under the page faintly shows through, ringed by a faint light 1pt rim. Measured on Capy in dark:
+            // the card reads #222 over art averaging #1c1d1e, the rim #2b2a2b.
             box.radius = DitherChrome.cardRadius
-            box.borderWidth = 0.5
-            box.border = Self.dividerColor(dither: true)
-            box.fill = Themed.color(\.card)
+            box.border = Themed.color(light: \.foreground, 0.08, dark: \.foreground, 0.06)
+            box.fill = Themed.pick(light: Themed.color(\.card, 0.82), dark: Self.ditherDarkCard)
         } else if variant == .grouped {
             box.radius = 14
             box.border = Themed.color(\.contrastBorder, 0.6)
@@ -301,6 +305,9 @@ public final class SettingsGroupView: BoxView {
     }
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle(); needsLayout = true }
+
+    /// Capy's settings card in dark: #222 where its art averages #1c1d1e, so about #222223 at 86%.
+    static let ditherDarkCard = NSColor(srgbRed: 0x22 / 255, green: 0x22 / 255, blue: 0x23 / 255, alpha: 0.86)
 
     /// The rows' dividers: T3's border/50, or under Dither Capy's hairline (`--border-1`, black 11% in light where
     /// Capy rings its cards with that shadow).
@@ -383,10 +390,10 @@ public final class SettingsSectionView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyDither() }
 
-    /// Dither (after Capy's section labels): 15pt medium in the foreground color.
+    /// Dither (after Capy's section labels): 15pt regular in the foreground color.
     private func applyDither() {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        titleLabel.font = dither ? DSFont.ui(15, weight: .medium) : DSFont.ui(14)
+        titleLabel.font = DSFont.ui(dither ? 15 : 14)
         titleLabel.color = Themed.color(\.contrastForeground, dither ? 1 : 0.7)
     }
 

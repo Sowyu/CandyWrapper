@@ -69,15 +69,20 @@ public final class DitherArtView: NSView {
     }
 
     /// How much of the art a page shows.
-    public enum Emphasis: Sendable { case hero, thread }
+    public enum Emphasis: Sendable { case hero, thread, settings }
 
     /// The thread panel calls this: while `source` shows inside the art's panel, the art takes `emphasis`'s scrim.
     /// Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
     @MainActor
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
         let wasHero = heroSources.contains(source)
-        heroSources.remove(source); threadSources.remove(source)
-        if emphasis == .hero { heroSources.add(source) } else if emphasis == .thread { threadSources.add(source) }
+        heroSources.remove(source); threadSources.remove(source); settingsSources.remove(source)
+        switch emphasis {
+        case .hero: heroSources.add(source)
+        case .thread: threadSources.add(source)
+        case .settings: settingsSources.add(source)
+        case nil: break
+        }
         // The full art goes up first, then opening a new thread resolves its dots in.
         for art in arts.allObjects { art.updateScrim() }
         if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
@@ -125,6 +130,7 @@ public final class DitherArtView: NSView {
     }
     @MainActor private static let heroSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let threadSources = NSHashTable<NSView>.weakObjects()
+    @MainActor private static let settingsSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
 
     public override func updateLayer() {
@@ -171,6 +177,7 @@ public final class DitherArtView: NSView {
         }
         if shows(Self.heroSources) { return .hero }
         if shows(Self.threadSources) { return .thread }
+        if shows(Self.settingsSources) { return .settings }
         return .page
     }
 
@@ -250,7 +257,10 @@ public enum DitherArt {
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
 
-    enum Page: Sendable { case hero, thread, page }
+    /// Settings (after Capy's): its translucent cards sit over the art, which shows dimmer than in a thread.
+    nonisolated static let settingsScrim: CGFloat = 0.8
+
+    enum Page: Sendable { case hero, thread, settings, page }
 
     /// The scrim for `page` under the system display options. Reduce Transparency covers the art with the solid
     /// background, so the frosted panes over it read as solid surfaces. Increase Contrast keeps the art as a faint
@@ -260,6 +270,7 @@ public enum DitherArt {
         switch page {
         case .hero: return display.increaseContrast ? 0.6 : 0
         case .thread: return display.increaseContrast ? 0.75 : threadScrim
+        case .settings: return display.increaseContrast ? 1 : settingsScrim
         case .page: return display.increaseContrast ? 1 : pageScrim
         }
     }

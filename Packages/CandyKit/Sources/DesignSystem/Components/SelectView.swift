@@ -33,6 +33,15 @@ public final class SelectView: ControlView {
     public var hidesIndicator = false
     /// `w-auto`: the trigger is as wide as its value instead of filling its container.
     public var fitsContent = false { didSet { invalidateIntrinsicContentSize() } }
+    /// A settings row's select, which Dither draws after Capy's: as wide as its value (`ditherSettingsMetrics`), 14pt
+    /// foreground text on a fill a step lighter than the card, a faint light rim and a 16pt chevron. Other themes keep
+    /// T3's trigger at the width it was given.
+    public var ditherSettings = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// Capy's settings select, measured at 2x: 11pt in, the value, 8pt to the chevron's 8pt glyph, 8pt out.
+    static let ditherSettingsMetrics = (padding: CGFloat(11), gap: CGFloat(8), chevron: CGFloat(16), trailing: CGFloat(8))
+    private var ditherStyled: Bool {
+        ditherSettings && variant == .default && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+    }
     /// A view before the value (`SelectTrigger` children such as an icon), `gap` from it.
     public var leading: NSView? { didSet { oldValue?.removeFromSuperview(); leading.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true } }
     /// Items' subtitles in the popup (`SelectItem` with a description line).
@@ -88,6 +97,12 @@ public final class SelectView: ControlView {
     /// `w-full min-w-36`: the trigger fills its container, so it has no intrinsic width.
     public override var intrinsicContentSize: NSSize {
         let m = size.metrics
+        if ditherStyled {
+            let d = Self.ditherSettingsMetrics
+            let lead = leading.map { $0.frame.width + m.gap } ?? 0
+            // The 16pt chevron box draws an 8pt glyph centred in it, so 4pt of the box sits in each margin.
+            return NSSize(width: ceil(d.padding + lead + ceil(label.textWidth) + d.gap + d.chevron - 8 + d.trailing), height: m.height)
+        }
         guard fitsContent else { return NSSize(width: NSView.noIntrinsicMetric, height: m.height) }
         let lead = leading.map { $0.frame.width + m.gap } ?? 0
         return NSSize(width: ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + 12 - 4), height: m.height)
@@ -97,6 +112,18 @@ public final class SelectView: ControlView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         let m = size.metrics
+        if ditherStyled {
+            let d = Self.ditherSettingsMetrics
+            let chevronX = bounds.width - d.trailing + 4 - d.chevron
+            chevron.frame = NSRect(x: chevronX, y: (bounds.height - d.chevron) / 2, width: d.chevron, height: d.chevron)
+            var x = d.padding
+            if let leading {
+                leading.frame.origin = NSPoint(x: x, y: ((bounds.height - leading.frame.height) / 2).rounded())
+                x += leading.frame.width + m.gap
+            }
+            label.frame = NSRect(x: x, y: (bounds.height - m.line) / 2, width: max(0, chevronX + 4 - d.gap - x), height: m.line)
+            return
+        }
         let chevronX = bounds.width - 1 - m.padding + 4 - 12
         chevron.frame = NSRect(x: chevronX, y: (bounds.height - 12) / 2, width: 12, height: 12)
         var x = 1 + m.padding
@@ -152,6 +179,19 @@ public final class SelectView: ControlView {
             chevron.strokeColor = label.color
         }
         chevron.alphaValue = 0.5
+        if ditherStyled {
+            // Measured on Capy in dark: the fill #292929 on a #222 card, a #3e3e3e 1pt rim, #ececec text.
+            box.fill = Themed.color(light: \.foreground, 0.03, dark: \.foreground, 0.035)
+            box.backgroundClip = .border
+            box.beforeShadows = []
+            if !state.focusVisible {
+                box.shadows = []
+                box.border = isInvalid ? box.border : Themed.color(light: \.foreground, 0.1, dark: \.foreground, 0.1)
+            }
+            if state.hoverOrPressed || state.popupOpen { box.fill = Themed.color(light: \.foreground, 0.05, dark: \.foreground, 0.065) }
+            label.color = placeholderShown ? Themed.color(\.placeholder) : Themed.color(\.foreground)
+            chevron.strokeColor = Themed.color(\.mutedForeground)
+        }
         decoration.boxStyle = box
         needsLayout = true
     }

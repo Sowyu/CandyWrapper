@@ -1,5 +1,7 @@
 # Progress
 
+- [x] Redesign Settings after Capy (2026-10-22, settings): cards sit over the art (Settings scrim 0.8) as #222223 at 86% with a faint 1pt rim; titles 13pt regular in the foreground, descriptions in muted foreground (#aaaaab); section titles 15pt regular; selects sized to their value (11pt in, 8pt gap, 16pt chevron box, 8pt out, 28pt tall) on a lighter fill with a 10% rim; switches on a #5ba19c track under a card-colored knob. Checked in a dark window against Capy's "Composer and chat" crop. Fast lane and Settings, Select, Switch and DitherArt filters passed.
+
 - [x] Thread performance leftovers (2026-10-22, perf-thread-leftovers): changed-file trees reuse viewport rows (`c3585b9b`), and repeated Markdown thread links resolve each id once per pass, including misses. Eleven focused counting, behavior and fidelity tests passed. Checked the 2,000-file tree at the top and mid-scroll in a real dark window. Thread chips already use project icons and cached icon decoding; cross-machine resolution remains an existing feature gap. No full suite or perf-review, per the task brief.
 
 - [x] Composer typing performance (2026-10-22, perf-typing): text edits skip thread derivation, picker resolution and controller layout; plan labels and branch notices update only when their inputs change. All 11 focused counting and composer/picker fidelity tests passed; isolated app build and dark sandbox typing, multiline input and command filtering passed. No Features/Thread changes, full suite or perf-review.

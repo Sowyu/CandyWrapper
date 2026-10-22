@@ -456,6 +456,7 @@ func settingsSelect(_ labels: [String], width: CGFloat?, hideIndicator: Bool = t
     select.alignItemWithTrigger = false
     select.popupAlign = .end
     select.hidesIndicator = hideIndicator
+    select.ditherSettings = true
     if let width { select.frame.size = NSSize(width: width, height: 28) } else { select.fitsContent = true }
     return select
 }

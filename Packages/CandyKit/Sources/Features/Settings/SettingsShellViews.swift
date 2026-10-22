@@ -663,6 +663,12 @@ public final class SettingsPageView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
 
+    /// Dither shows its art under Settings, dimmer than under a thread (`DitherArtView`).
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DitherArtView.setEmphasis(window == nil ? nil : .settings, from: self)
+    }
+
     public override func layout() {
         super.layout()
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
