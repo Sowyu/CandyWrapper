@@ -26,6 +26,18 @@ final class ProjectCloneController {
     private var bannerProject: ProjectId?
     /// Opens a project's draft ("Open project").
     var openProject: ((ProjectId) -> Void)?
+    /// Clones whose progress stays out of toasts, by scoped project id: the user is looking at the project, whose
+    /// composer shows the same progress (`silenceProjectCloneToasts`, state/projectClones.ts:45-58). Failures still toast.
+    private var silenced: Set<String> = []
+    /// Ignored files Add to another machine still owes a clone, by scoped project id (`useFileCopies`,
+    /// addProjectToMachine.ts:111-134). The composer holds sends while they copy and shows a failed copy until dismissed.
+    private var fileCopies: [String: FileCopy] = [:]
+    enum FileCopy: Equatable {
+        case copying
+        case failed(title: String, failures: [String])
+    }
+    /// `waitForClone` callers, by scoped project id, with whether the clone has been seen yet.
+    private var cloneWaiters: [String: [(seen: Bool, resume: (ProjectCloneSnapshot?) -> Void)]] = [:]
 
     init(panel: ThreadPanelView, environments: Environments, composer: ComposerController) {
         self.panel = panel
@@ -66,9 +78,48 @@ final class ProjectCloneController {
     }
 
     private func apply(_ list: [ProjectCloneSnapshot], environmentId: String) {
+        let previous = clones[environmentId] ?? []
         clones[environmentId] = list.isEmpty ? nil : list
+        // A finished clone fills a folder whose icon the server reported missing (#22254).
+        for clone in list where clone.phase == .done && previous.first(where: { $0.projectId == clone.projectId })?.phase != .done {
+            ProjectIconStore.shared.forget(environmentId: environmentId, cwd: clone.destinationPath)
+        }
+        resolveWaiters(environmentId)
         syncToasts(environmentId)
         syncBanner()
+    }
+
+    // MARK: Add to another machine
+
+    func silenceToasts(_ scopedProjectId: String) { silenced.insert(scopedProjectId) }
+
+    func setFileCopy(_ scopedProjectId: String, _ copy: FileCopy?) {
+        fileCopies[scopedProjectId] = copy
+        syncBanner()
+    }
+
+    /// `waitForClone` (addProjectToMachine.ts:86-109): the clone once it finishes, or nil once the server stops
+    /// tracking it. A failed or cancelled clone keeps waiting, since the composer offers Retry.
+    func waitForClone(environmentId: String, projectId: String) async -> ProjectCloneSnapshot? {
+        await withCheckedContinuation { continuation in
+            let key = EnvironmentScope.key(environmentId, projectId)
+            cloneWaiters[key, default: []].append((false, { continuation.resume(returning: $0) }))
+            resolveWaiters(environmentId)
+        }
+    }
+
+    private func resolveWaiters(_ env: String) {
+        for (key, waiters) in cloneWaiters where key.hasPrefix(env + ":") {
+            let clone = clones[env]?.first { EnvironmentScope.key(env, $0.projectId) == key }
+            var kept: [(seen: Bool, resume: (ProjectCloneSnapshot?) -> Void)] = []
+            for var waiter in waiters {
+                if clone != nil { waiter.seen = true }
+                if let clone, clone.phase == .done { waiter.resume(clone) }
+                else if clone == nil, waiter.seen { waiter.resume(nil) }
+                else { kept.append(waiter) }
+            }
+            cloneWaiters[key] = kept.isEmpty ? nil : kept
+        }
     }
 
     // MARK: Toasts (ProjectCloneToastCoordinator.tsx:98-221)
@@ -80,11 +131,16 @@ final class ProjectCloneController {
             let key = EnvironmentScope.key(env, clone.projectId)
             seen.insert(key)
             if composer?.activeDraftProjectId?.rawValue == key {
-                // The draft's banner shows it.
+                // The draft's banner shows it, and once seen there its progress stays out of toasts.
+                silenced.insert(key)
                 if let t = toasts.removeValue(forKey: key) { panel.toasts.dismiss(t.id) }
                 continue
             }
             if toasts[key]?.key == clone.renderKey { continue }
+            if silenced.contains(key), clone.phase == .running || clone.phase == .done {
+                if let t = toasts.removeValue(forKey: key) { panel.toasts.dismiss(t.id) }
+                continue
+            }
             show(clone, env: env, scopedKey: key)
         }
         // A clone the server stopped tracking takes its toast, unless it settled into a timed success.
@@ -153,7 +209,18 @@ final class ProjectCloneController {
             guard let env = id.environmentId else { return nil }
             return clones[env]?.first { $0.projectId == id.localId.rawValue }
         }
-        composer?.projectCloneSendBlock = ComposerLogic.projectCloneSendBlockReason(running: clone.map { $0.phase == .running }, done: clone?.phase == .done)
+        let copy = project.flatMap { fileCopies[$0.rawValue] }
+        composer?.projectCloneSendBlock = ComposerLogic.projectCloneSendBlockReason(running: clone.map { $0.phase == .running }, done: clone?.phase == .done,
+                                                                                    copyingFiles: copy == .copying)
+        // A failed copy comes before the clone (ChatView.tsx:1348-1357).
+        if let project, case .failed(let title, let failures)? = copy {
+            bannerProject = project
+            panel.noticeBanner.apply(.init(variant: .error, icon: .download, title: title, description: failures.joined(separator: "\n"),
+                                           dismissible: true, compact: true))
+            panel.showsNoticeBanner = true
+            if let env = project.environmentId { syncToasts(env) }
+            return
+        }
         guard let clone, let project, clone.phase != .done else {
             bannerProject = nil
             panel.showsNoticeBanner = false
@@ -175,6 +242,10 @@ final class ProjectCloneController {
     }
 
     private func bannerAction(_ index: Int?) {
+        if let project = bannerProject, case .failed? = fileCopies[project.rawValue] {
+            if index == nil { setFileCopy(project.rawValue, nil) }
+            return
+        }
         guard let project = bannerProject, let env = project.environmentId, let index,
               let clone = clones[env]?.first(where: { $0.projectId == project.localId.rawValue }) else { return }
         let local = project.localId.rawValue
