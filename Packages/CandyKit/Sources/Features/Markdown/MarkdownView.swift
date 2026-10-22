@@ -624,12 +624,29 @@ public final class MarkdownView: DSView {
             if meta.panelPath != nil { onOpenFile?(meta, false) }
             return
         }
-        guard let window else { return }
-        let reference = MediaReference.file(meta.filePath, workspaceRoot: cwd)
-        let item = ExpandedImagePreviewView.Item(key: "media-file:" + meta.filePath, name: meta.basename,
-                                                 load: MarkdownImages.loader(.workspaceFile(meta.filePath)), reference: reference)
-        ExpandedImagePreviewView(items: [item], index: 0).present(in: window)
+        // `openMarkdownMedia` (ChatMarkdown.tsx:510-575): sign the URL first and open the preview only when that works,
+        // else say why in a toast. Only the latest click opens.
+        mediaRequest += 1
+        let request = mediaRequest, key = "media-file:" + meta.filePath
+        MarkdownImages.unavailableReasons[key] = nil
+        Task { [weak self] in
+            let asset = await MarkdownImages.signedURL(meta.filePath)
+            guard let self, request == self.mediaRequest, let window = self.window else { return }
+            guard let asset else {
+                MarkdownImages.onMediaUnavailable?(MarkdownImages.unavailableReasons[key]
+                    ?? MarkdownImages.mediaUnavailableDescription(errorTag: nil, message: nil, checkedPath: nil, path: meta.filePath, remoteHost: nil))
+                return
+            }
+            let item = ExpandedImagePreviewView.Item(key: key, name: meta.basename, load: { side in
+                if let size = asset.size { await MarkdownImages.record(size, for: key) }
+                guard let decoded = await MarkdownImages.download(asset.url, side: side) else { return nil }
+                await MarkdownImages.record(decoded.natural, for: key)
+                return decoded.image
+            }, reference: MediaReference.file(meta.filePath, workspaceRoot: self.cwd))
+            ExpandedImagePreviewView(items: [item], index: 0).present(in: window)
+        }
     }
+    private var mediaRequest = 0
 
     /// T3's native file menu (ChatMarkdown.tsx:2115-2160 `showFileContextMenu`): "Preview media" for images and video,
     /// "Open in <editor>" where the environment runs shell actions, "Open in integrated browser" for HTML and PDF,

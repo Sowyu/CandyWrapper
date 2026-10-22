@@ -17,6 +17,18 @@ struct MarkdownMediaTests {
         #expect(MarkdownImageSource.classify("#top", workspaceRoot: "/w") == .blocked)
     }
 
+    /// T3 826ef55b74 (ChatMarkdown.tsx:541-565): a remote host's missing file names the host and the checked path.
+    @Test func mediaUnavailableNamesTheRemoteHost() {
+        let notFound = "AssetWorkspaceAssetNotFoundError"
+        #expect(MarkdownImages.mediaUnavailableDescription(errorTag: notFound, message: nil, checkedPath: "/home/u/a.png", path: "~/a.png",
+                                                           remoteHost: "Studio") == "The file was not found on Studio at /home/u/a.png.")
+        #expect(MarkdownImages.mediaUnavailableDescription(errorTag: notFound, message: nil, checkedPath: nil, path: "~/a.png",
+                                                           remoteHost: "Studio") == "The file was not found on Studio at ~/a.png.")
+        #expect(MarkdownImages.mediaUnavailableDescription(errorTag: notFound, message: nil, checkedPath: "/a.png", path: "/a.png",
+                                                           remoteHost: nil) == "Media file was not found.")
+        #expect(MarkdownImages.mediaUnavailableDescription(errorTag: "X", message: "Boom.", checkedPath: nil, path: "/a.png", remoteHost: "Studio") == "Boom.")
+    }
+
     @Test func imagesTakeTheirOwnSizeWithinThirtyRem() {
         #expect(MarkdownImages.displaySize(natural: CGSize(width: 100, height: 50), maxWidth: 680, border: 0) == CGSize(width: 100, height: 50))
         #expect(MarkdownImages.displaySize(natural: CGSize(width: 1920, height: 1080), maxWidth: 680, border: 0) == CGSize(width: 480, height: 270))

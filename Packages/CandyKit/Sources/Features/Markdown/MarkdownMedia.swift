@@ -183,6 +183,23 @@ public enum MarkdownImages {
     public static let missingFileAccessMessage = "This connection cannot read host files. Pair again with a new link to view it."
     /// Host file keys (`media-file:<path>`) the server refused because the session lacks `filesystem:read`.
     public static var missingFileAccess: Set<String> = []
+
+    /// Why the last signed URL for a host file failed, by `media-file:<path>` key. Set by the app.
+    public static var unavailableReasons: [String: String] = [:]
+    /// Shows the "Media unavailable" toast with its description. Set by the app.
+    public static var onMediaUnavailable: ((_ description: String) -> Void)?
+
+    /// The "Media unavailable" toast's description (ChatMarkdown.tsx:541-565, T3 826ef55b74). A file missing on a
+    /// remote host names the host and the path the server checked (`checkedPath`, contracts assets.ts:206-212, absent
+    /// on older servers). Anything else shows the error's own message.
+    public static func mediaUnavailableDescription(errorTag: String?, message: String?, checkedPath: String?, path: String,
+                                                   remoteHost: String?) -> String {
+        if errorTag == "AssetWorkspaceAssetNotFoundError" {
+            if let remoteHost { return "The file was not found on \(remoteHost) at \(checkedPath ?? path)." }
+            return "Media file was not found."
+        }
+        return message ?? "The file could not be loaded. It may have been moved or deleted."
+    }
 }
 
 /// The authored media location behind an image, for its tooltip and menu (client-runtime/src/mediaReference.ts).

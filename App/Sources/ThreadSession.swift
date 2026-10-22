@@ -665,12 +665,20 @@ final class ThreadController {
             do {
                 reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]))
             } catch let error as RPCClientError {
+                guard resource["_tag"]?.stringValue == "media-file", let path = resource["path"]?.stringValue else { return nil }
+                let typed = error.typedError
                 // `blockedAssetUrlState` (client-runtime state/assets.ts:91-119): a session without `filesystem:read`
                 // says so instead of implying the file is gone.
-                if error.typedError?.tag == "EnvironmentAuthorizationError", error.typedError?.message?.contains(AuthScopes.filesystemRead) == true,
-                   resource["_tag"]?.stringValue == "media-file", let path = resource["path"]?.stringValue {
+                if typed?.tag == "EnvironmentAuthorizationError", typed?.message?.contains(AuthScopes.filesystemRead) == true {
                     MarkdownImages.missingFileAccess.insert("media-file:" + path)
+                    MarkdownImages.unavailableReasons["media-file:" + path] = MarkdownImages.missingFileAccessMessage
+                    return nil
                 }
+                // The primary environment runs on this Mac (`resolveRemoteOpenState`'s local-exec, as OpenInController reads it).
+                let remoteHost = env == self.environments.primaryId ? nil : self.environments.label(env) ?? env
+                MarkdownImages.unavailableReasons["media-file:" + path] = MarkdownImages.mediaUnavailableDescription(
+                    errorTag: typed?.tag, message: typed?.message, checkedPath: typed?.fields["checkedPath"]?.stringValue, path: path,
+                    remoteHost: remoteHost)
                 return nil
             } catch {
                 return nil
@@ -683,6 +691,9 @@ final class ThreadController {
             return (url, size)
         }
         MarkdownImages.openInFileViewer = { [weak self] relative in self?.files.openFile(relative, line: nil) }
+        MarkdownImages.onMediaUnavailable = { [weak self] description in
+            self?.panel.toasts.show(ToastView(title: "Media unavailable", message: description, kind: .error))
+        }
         MarkdownView.canOpenFileInBrowser = { [weak self] in self?.openThreadId != nil && self?.panel.browserAvailable == true }
         // `openFileInPreview` (browser/openFileInPreview.ts:117-160): inside the workspace the page may load its siblings.
         MarkdownView.onOpenFileInBrowser = { [weak self] meta in
