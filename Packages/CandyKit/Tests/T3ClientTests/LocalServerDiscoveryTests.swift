@@ -33,7 +33,8 @@ struct LocalServerDiscoveryTests {
         owner.standardOutput = out
         try owner.run()
         defer { owner.terminate(); owner.waitUntilExit() }
-        _ = out.fileHandleForReading.availableData
+        // Blocks until the holder has the lock, or reads EOF if python died first.
+        #expect(String(decoding: out.fileHandleForReading.availableData, as: UTF8.self) == "held\n")
         #expect(LocalServerDiscovery.ownerLockHolder(home: home) == owner.processIdentifier)
         // Asking twice proves the probe took nothing: the holder still holds it.
         #expect(LocalServerDiscovery.ownerLockHolder(home: home) == owner.processIdentifier)
@@ -127,6 +128,7 @@ struct LocalServerDiscoveryTests {
         #expect(setting.isOn == false)
     }
 
+    /// `wait: .zero` checks each case once, so the outcome never depends on how long a poll takes.
     @Test func neverClearsTheWayForASecondServer() async throws {
         let fm = FileManager.default
         let home = fm.temporaryDirectory.appending(path: "t3home-\(UUID().uuidString)")
@@ -141,17 +143,17 @@ struct LocalServerDiscoveryTests {
         }
 
         // Nobody runs a server here: start ours.
-        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1)) == nil)
+        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .zero) == nil)
 
         // A live server process that doesn't answer: wait, then refuse.
         try writeRuntime(startedAt: Date.ISO8601FormatStyle(includingFractionalSeconds: true).format(.now))
         await #expect(throws: LocalServerDiscoveryError.unresponsive) {
-            try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1))
+            try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .zero)
         }
 
         // A file left by a killed server whose pid a newer process took: not a server.
         try writeRuntime(startedAt: "2001-01-01T00:00:00.000Z")
-        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .seconds(1)) == nil)
+        #expect(try await LocalServerDiscovery.discover(home: home, servicePlist: noService, wait: .zero) == nil)
 
         // T3's background service owns this home: leave it to the service.
         try fm.removeItem(at: runtimeFile)
@@ -160,7 +162,7 @@ struct LocalServerDiscoveryTests {
         try PropertyListSerialization.data(fromPropertyList: unit, format: .xml, options: 0).write(to: plist)
         #expect(LocalServerDiscovery.serviceHome(plist: plist)?.path == home.path)
         await #expect(throws: LocalServerDiscoveryError.serviceNotRunning) {
-            try await LocalServerDiscovery.discover(home: home, servicePlist: plist, wait: .seconds(1))
+            try await LocalServerDiscovery.discover(home: home, servicePlist: plist, wait: .zero)
         }
     }
 }
