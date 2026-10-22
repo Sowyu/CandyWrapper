@@ -309,15 +309,8 @@ final class ThreadSession {
 @MainActor
 final class ThreadController {
     let panel = ThreadPanelView()
-    /// Dither's tab bar figure, after Capy's: what the open thread would cost at API prices.
-    let costLabel: LabelView = {
-        let l = LabelView("", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
-        l.lineHeight = 18
-        l.isHidden = true
-        l.setAccessibilityLabel("Estimated cost at API prices")
-        return l
-    }()
-    private var costUSD: Double?
+    /// Redesign's header figure, after Capy's: what the open thread would cost at API prices.
+    private var cost: ThreadCostEstimate.Breakdown?
     /// Whether the window shows a thread route; Settings and the utility pages hide the figure.
     var costRouteShowsThread = true { didSet { syncCost() } }
     private(set) var terminal: TerminalController!
@@ -989,19 +982,14 @@ final class ThreadController {
     }
 
     private func setCost(_ projection: ThreadProjection?) {
-        let usd = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false) ? ThreadCostEstimate.usd(projection) : nil
-        guard usd != costUSD || projection == nil else { return }
-        costUSD = usd
+        let next = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false) ? ThreadCostEstimate.breakdown(projection) : nil
+        guard next != cost || projection == nil else { return }
+        cost = next
         syncCost()
     }
 
     private func syncCost() {
-        let text = costUSD.map(ThreadCostEstimate.label) ?? ""
-        let hidden = costUSD == nil || !costRouteShowsThread || panel.isDraft
-        guard text != costLabel.text || hidden != costLabel.isHidden else { return }
-        costLabel.text = text
-        costLabel.isHidden = hidden
-        costLabel.superview?.needsLayout = true
+        panel.header.cost.breakdown = !costRouteShowsThread || panel.isDraft ? nil : cost
     }
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).

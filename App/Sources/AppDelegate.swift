@@ -608,7 +608,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capy's + opens the new-thread page for the current project; its project chip picks another.
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
-        layout.tabStrip.trailingAccessory = threads.costLabel
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,

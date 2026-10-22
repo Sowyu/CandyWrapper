@@ -3,7 +3,7 @@ import Testing
 import T3Protocol
 @testable import Features
 
-/// Dither's tab bar cost estimate: API prices per million tokens over each provider turn's totals.
+/// Redesign's header cost estimate: API prices per million tokens over each provider turn's totals.
 @Suite struct ThreadCostEstimateTests {
     @Test func pricesSplitInputIntoUncachedCachedAndWritten() throws {
         let opus = try #require(ThreadCostEstimate.price("claude-opus-5-5"))
@@ -13,6 +13,17 @@ import T3Protocol
         #expect(abs(tokens.cost(opus) - (1.2 + 0.12 + 0.5 + 1.0)) < 1e-9)
         #expect(ThreadCostEstimate.label(2.8249) == "$2.82")
         #expect(ThreadCostEstimate.label(0.001) == "$0.00")
+    }
+
+    @Test func theBreakdownSplitsTheSameTotalByKind() throws {
+        let opus = try #require(ThreadCostEstimate.price("claude-opus-5-5"))
+        let tokens = ThreadCostEstimate.Tokens(input: 1_000_000, cached: 600_000, cacheWrite: 100_000, output: 50_000)
+        var b = ThreadCostEstimate.Breakdown()
+        b.add(tokens, opus, model: "claude-opus-5-5")
+        b.add(tokens, opus, model: "claude-opus-5-5")
+        #expect(abs(b.inputUSD - 2.4) < 1e-9 && abs(b.cachedUSD - 0.24) < 1e-9 && abs(b.cacheWriteUSD - 1) < 1e-9 && abs(b.outputUSD - 2) < 1e-9)
+        #expect(abs(b.usd - 2 * tokens.cost(opus)) < 1e-9)
+        #expect(b.models == ["claude-opus-5-5"] && b.tokens.input == 2_000_000)
     }
 
     @Test func modelNamesIgnoreContextTagsAndDatesAndUnknownModelsHaveNoPrice() {
