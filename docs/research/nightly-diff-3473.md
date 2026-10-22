@@ -98,40 +98,50 @@ Still open: section 2's list. Also: T3 always offers "Revert files too" in "Edit
 On 2026-10-22 a check of the research notes against `git log 3315..3473 -- apps/web/src packages/client-runtime packages/contracts packages/shared` found 115 commits, tests and refactors left out, that no note cites by hash or PR number. Three agents read each one against CandyWrapper: 60 can't matter here (web rendering, mobile, Windows, dev tooling, server internals), 18 CandyWrapper already matches, 3 need a look on screen and 33 are gaps. Their per-commit lines are in ~/CandyWrapper-research/notes/nightly-3473/audit-batch-{1,2,3}.md. The audit only read code, so each gap is confirmed against T3's source before it is fixed.
 
 Terminal, project scripts, files and panels:
-- [ ] Terminal output gets no clickable file paths; T3 detects them, keeps Unicode paths whole and skips logged request routes (terminal-links.ts, 9ac1355e01, 10b86829e8).
-- [ ] Project scripts reach the shell history; T3 sends a leading space (projectScripts.ts, b92ebce0ad).
-- [ ] A project script can reuse a right-panel terminal when the drawer is empty (projectScriptTerminal.ts, 687bd55533).
-- [ ] A tall terminal drawer can push the composer into the header on a short window (ThreadTerminalDrawer.tsx, 055a8418c1).
-- [ ] Revealing a deep file loads one folder at a time; T3 loads four (loadFileAncestors.ts, 1ea378c6f4).
-- [ ] A changed file opened from the commit dialog resolves against the project folder, not the repository root (771fd93fc5).
+- [x] Terminal output gets no clickable file paths; T3 detects them, keeps Unicode paths whole and skips logged request routes (terminal-links.ts, 9ac1355e01, 10b86829e8).
+- [x] Project scripts reach the shell history; T3 sends a leading space (projectScripts.ts, b92ebce0ad).
+- [x] A project script can reuse a right-panel terminal when the drawer is empty (projectScriptTerminal.ts, 687bd55533).
+- [x] A tall terminal drawer can push the composer into the header on a short window (ThreadTerminalDrawer.tsx, 055a8418c1).
+- [x] Revealing a deep file loads one folder at a time; T3 loads four (loadFileAncestors.ts, 1ea378c6f4).
+- [x] A changed file opened from the commit dialog resolves against the project folder, not the repository root (771fd93fc5).
 
 Composer:
-- [ ] The approval menu takes its content's width and the approval editor its smaller minimum height (d356059c84).
-- [ ] A SnapShot taken while a question is open attaches to the answer (SnapShotCoordinator.tsx, b874ff6c22).
-- [ ] The draft's model pick yields once another client sets the thread to that model (composerDraftStore.ts, 2767012996).
-- [ ] The model preferences migration stops resending against servers that predate it (useSettings.ts, b34501a466).
-- [ ] A draft that starts with a list or quote sits 10 pt too low (index.css:2003-2010, 3ec095bc8b).
-- [ ] `@namespace.foo(bar)` stays text instead of becoming a file chip (composerInlineTokens.ts, 729924af29).
-- [ ] The context handoff footer hides for a provider the next send would skip (ChatView.tsx:3974-3985, a9af48a3d2).
+- [x] The approval menu takes its content's width and the approval editor its smaller minimum height (d356059c84).
+- [x] A SnapShot taken while a question is open attaches to the answer (SnapShotCoordinator.tsx, b874ff6c22).
+- [x] The draft's model pick yields once another client sets the thread to that model (composerDraftStore.ts, 2767012996).
+- [x] The model preferences migration stops resending against servers that predate it (useSettings.ts, b34501a466).
+- [x] A draft that starts with a list or quote sits 10 pt too low (index.css:2003-2010, 3ec095bc8b).
+- [x] `@namespace.foo(bar)` stays text instead of becoming a file chip (composerInlineTokens.ts, 729924af29).
+- [x] The context handoff footer hides for a provider the next send would skip (ChatView.tsx:3974-3985, a9af48a3d2).
 
 Thread, Markdown and sidebar:
-- [ ] A finished run no longer ends a snooze, a failed run wakes it only when it failed after the snooze, and re-snoozing to the same time restamps it (threadSettled.ts, d2fb83a973 reverting b14120fbc8, 69ba80dfae, 699c1c5d4c).
-- [ ] The Working row ends with a failed Codex turn that is still settling (threadExecution.ts, 07d38b8d17).
-- [ ] The sidebar update pill shows updates on non-default provider instances (f15aa815f3).
-- [ ] The code block scrollbar is 6 px (index.css:2073, b5a0696a98).
-- [ ] Rows of the changed-files card show the pointing hand (72ebd98cc6).
-- [ ] Expanded wide tables wrap to fit a lane of 36rem or more (f8b06c5fd0).
-- [ ] Media missing on a remote host says "Media unavailable" with the host and checked path (ChatMarkdown.tsx:536-575, 826ef55b74).
+- [x] A finished run no longer ends a snooze, a failed run wakes it only when it failed after the snooze, and re-snoozing to the same time restamps it (threadSettled.ts, d2fb83a973 reverting b14120fbc8, 69ba80dfae, 699c1c5d4c).
+- [x] The Working row ends with a failed Codex turn that is still settling (threadExecution.ts, 07d38b8d17).
+- [x] The sidebar update pill shows updates on non-default provider instances (f15aa815f3).
+- [x] The code block scrollbar is 6 px (index.css:2073, b5a0696a98).
+- [x] Rows of the changed-files card show the pointing hand (72ebd98cc6).
+- [x] Expanded wide tables wrap to fit a lane of 36rem or more (f8b06c5fd0).
+- [x] Media missing on a remote host says "Media unavailable" with the host and checked path (ChatMarkdown.tsx:536-575, 826ef55b74).
 
 Git, pull requests, settings and palette:
-- [ ] The SSH prompt says "SSH verification required" and asks for a password or verification code (cc93dc10d2).
-- [ ] A slow `vcs.refreshStatus` waits 120 s before the slow-request toast (requestLatencyState.ts:43, 069e63b117).
-- [ ] Azure DevOps Server pull request links on any host are recognised (changeRequestUrl.ts, fa68107b8b).
-- [ ] The default-branch dialog disables "Check out feature branch" on a clean tree and says why (7241e7ee50).
-- [ ] The branch select row has separate hover fills for its label and chevron (2fc244a438).
-- [ ] A long PR badge list scrolls within the screen (219afe344c).
-- [ ] A maximized right panel draws one border next to the sidebar, not two (06ce02f194).
-- [ ] Palette icons top-align with the title line, and thread results show the PR badge (26c6df72f8, 8a9d0e0dd5).
-- [ ] The Antigravity install row with its download bar, an older gap that 6a00484478 restyled.
+- [x] The SSH prompt says "SSH verification required" and asks for a password or verification code (cc93dc10d2).
+- [x] A slow `vcs.refreshStatus` waits 120 s before the slow-request toast (requestLatencyState.ts:43, 069e63b117).
+- [x] Azure DevOps Server pull request links on any host are recognised (changeRequestUrl.ts, fa68107b8b).
+- [x] The default-branch dialog disables "Check out feature branch" on a clean tree and says why (7241e7ee50).
+- [x] The branch select row has separate hover fills for its label and chevron (2fc244a438).
+- [x] A long PR badge list scrolls within the screen (219afe344c).
+- [x] A maximized right panel draws one border next to the sidebar, not two (06ce02f194).
+- [x] Palette icons top-align with the title line, and thread results show the PR badge (26c6df72f8, 8a9d0e0dd5).
+- [ ] The Antigravity install row with its download bar, an older gap that 6a00484478 restyled. CandyWrapper lacks T3's whole `ProviderSetupSection` (enable row, read-only and "Update required" states, the install row on `provider.install.*`, the remove confirmation, `ProviderAuthenticationSection`); `CodexSetupView.swift` has the subscribe plumbing to reuse. Large.
 
-To check on screen: focus after closing the right panel from the keyboard (5088aff613), the branch strip after a failed worktree bootstrap (77ed46a8aa), and the editor's focus around the Implement menu (232e930cd2). CandyWrapper also never sends `server.reportClientActivity`; what the server uses it for is being looked up.
+Ported on 2026-10-22 by four agents, merged and reviewed (Codex, GPT-6-Astra at medium effort), which found four bugs in the ports, all fixed: the commit dialog opened server paths through this Mac's default opener (now the preferred editor on the repository's machine), a script could reuse a terminal before the server's terminal snapshot arrived, `~\` links ignored a Windows cwd, and a SnapShot without a destination stayed on disk. The audit was wrong about terminal links, which already underlined on hover; they now follow T3's rules and open in the preferred editor.
+
+Left from this list:
+- [ ] A pending subagent request doesn't end a snooze yet; it needs T3's `pendingSubagentRequestsByThread` (f4df794777) at every `SidebarThread` builder (ponytail at `SidebarModel.swift:363`).
+- [ ] 26c6df72f8 also top-aligns icons in the sidebar, the thread details PR row, diff comments, guide stops, Diagnostics settings, the settings nav and toasts; only the palette moved.
+- [ ] Tables in user messages still scroll in a wide lane, and the wrapped column split approximates Chromium's automatic table layout.
+- [ ] On screen still: the Implement menu's focus with plan mode on (232e930cd2), the select row halves, the PR badge list scroll, the maximized panel border, the default-branch dialog on a clean tree, wide tables and the "Media unavailable" toast against a second machine.
+
+77ed46a8aa matches T3's rule as it is: after a failed worktree setup the strip hides unless "Keep composer context visible" is on (`shouldShowComposerContextStrip`). 5088aff613 is fixed: closing the right panel moves focus to the panel toggle. CandyWrapper never sends `server.reportClientActivity`, which T3 sends every 25 s per environment and on focus changes; the server runs provider health probes, usage-limit refreshes and git fetch with PR polling only while such a lease is live (`BackgroundPolicy.ts`, `managedProvider.ts:220-233`, `UsageLimitSources.ts:138-148`, `VcsStatusBroadcaster.ts:540-590`). Whether CandyWrapper should report, and when, waits on the user (PROGRESS.md).
+
+The stylesheet in `design/t3-source/main.css` was still 2861's until this pass. It is 3473's now, and only the composer rich text references were regenerated with it; the other component references still come from the 2861 stylesheet.
