@@ -27,6 +27,23 @@ struct MarkdownThreadLinkTests {
         #expect(chips.map(\.look.label) == ["Fix login", "Spaced id"] && chips.allSatisfy { $0.tooltip == "Open thread" })
     }
 
+    @Test func repeatedLinksResolveEachIdOnceIncludingMisses() {
+        let source = Array(repeating: "[known](t3-thread://v1/t1) [encoded](t3-thread://v1/a%20b) [missing](t3-thread://v1/gone)", count: 200).joined(separator: " ")
+        let document = MarkdownDocument(parsing: source)
+        var calls: [String: Int] = [:]
+        let contexts = MarkdownContextChips.links(in: document) { id in
+            calls[id, default: 0] += 1
+            return lookup(id)
+        }
+        #expect(calls == ["t1": 1, "a%20b": 1, "a b": 1, "gone": 1])
+        #expect(contexts?.threads.keys.sorted() == ["a b", "t1"])
+        // A miss is not cached beyond this pass: a later shell snapshot can find it.
+        let refreshed = MarkdownContextChips.links(in: document) { id in
+            id == "gone" ? .init(title: "Now available", project: project) : lookup(id)
+        }
+        #expect(refreshed?.threads["gone"]?.title == "Now available")
+    }
+
     @Test func linkDrawsAsChip() {
         let text = "See [old title](t3-thread://v1/t1), [y](t3-thread://v1/a%20b), [gone](t3-thread://v1/gone) and `[c](t3-thread://v1/t1)`."
         let contexts = MarkdownContextChips.links(in: MarkdownDocument(parsing: text), thread: lookup)
