@@ -13,6 +13,8 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] T3 web performance bucket 5: settings, provider pushes, reconnect snapshots and miscellaneous panes (taken 2026-10-22, perf-misc).
+
 ### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [x] M. Readable thread text over the art, the panel fade from the very top with no black band, and the gap at the fade's right edge (done 2026-10-22, agent dither-art). The thread's scrim is heavy under the text column only, sized from the rendered art's brightest dot so muted text keeps 4.6:1 (about 0.9 over a bright picture, none over a dark one); the timeline fades out by mask over the art instead of a band-colored overlay, which also removes the unfaded 6pt scrollbar column that was the right gap. Checked on screen in dark and light with a bright warm test picture at 1100pt and full screen: work rows 5.2:1 measured (2.2 before). Dither light's `secondaryLabel` #898989 is 3.3:1 on the plain background, under AA before any art; left as is.
