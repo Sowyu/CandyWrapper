@@ -436,29 +436,72 @@ final class SidebarNavRowView: ControlView {
 }
 
 
-/// Dither (after Capy): the account row at the foot of the sidebar. A 28pt round avatar (the picture, or initials on a
-/// muted disc), the name and a muted second line, and a chevron. A click opens the account menu above it: Settings,
-/// Usage and Appearance, then "Update all (N)" while updates wait.
+/// The account pill's avatar: the picture, or initials on a muted disc. A click opens Machines and connections, so a
+/// hairline ring shows on hover.
+final class SidebarAccountAvatarView: ControlView {
+    static let size: CGFloat = 28
+    /// The ring sits this far outside the picture.
+    static let ringGap: CGFloat = 2
+    let image = CALayer()
+    let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        image.masksToBounds = true
+        image.contentsGravity = .resizeAspectFill
+        image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(image)
+        initials.alignment = .center
+        initials.lineHeight = 16
+        addSubview(initials)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Machines and connections")
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
+    }
+
+    override func layout() {
+        super.layout()
+        let g = Self.ringGap, s = Self.size
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        image.frame = CGRect(x: g, y: g, width: s, height: s)
+        image.cornerRadius = s / 2
+        CATransaction.commit()
+        initials.frame = NSRect(x: g, y: g + (s - 16) / 2, width: s, height: 16)
+    }
+
+    override func updateLayer() {
+        layer?.cornerRadius = bounds.height / 2
+        layer?.borderWidth = 1
+        layer?.borderColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.35 : 0).cgColor(in: self)
+        image.backgroundColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.18 : 0.12).cgColor(in: self)
+    }
+}
+
+/// Dither (after Capy): the account row at the foot of the sidebar. A 28pt round avatar, the name, CandyWrapper's own
+/// CPU and memory (`AppUsageReadoutView`), and a chevron. The avatar opens Settings at Machines and connections; the
+/// rest opens the account menu above it: Settings, Usage and Appearance, then "Update all (N)" while updates wait. It
+/// shows no e-mail, which was too easy to reveal on a screen share (the user, 2026-10-22).
 public final class SidebarAccountRowView: ControlView {
     public static let height: CGFloat = 44
     /// Its distance from the sidebar's left, right and bottom edges.
     public static let inset: CGFloat = 8
     /// Concentric with the window's bottom left corner, which it sits `inset` inside.
     public static let radius: CGFloat = DitherChrome.nested(in: DitherChrome.windowRadius, inset: inset)
-    private let avatar = CALayer()
-    private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
+    let avatar = SidebarAccountAvatarView()
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
-    let detail = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
-    /// Redesign shows the e-mail as T3's blurred scramble (`RedactedSensitiveText`), for screen shares, and fades to
-    /// the real `detail` once the user clicks it; a second click blurs it again (the user, 2026-10-22).
-    let redacted = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
+    public let usage = AppUsageReadoutView()
     private let chevron = IconView(name: .chevronUp, size: 12)
-    /// The e-mail shows unblurred until it is clicked again or the account changes.
-    var revealed = false
-    /// The press began on the e-mail line, so the click toggles it instead of opening the menu.
-    var pressOnEmail = false
     public var onOpenSettings: (() -> Void)?
     public var onOpenUsage: (() -> Void)?
+    /// A click on the avatar: Settings at Machines and connections.
+    public var onOpenMachines: (() -> Void)?
     /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
     public var updateAllCount = 0
     public var onUpdateAll: (() -> Void)?
@@ -474,38 +517,25 @@ public final class SidebarAccountRowView: ControlView {
         layer?.borderWidth = 0.5
         layer?.shadowColor = Themed.black(1).cgColor
         layer?.shadowRadius = 4
-        avatar.masksToBounds = true
-        avatar.contentsGravity = .resizeAspectFill
-        avatar.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        layer?.addSublayer(avatar)
-        initials.alignment = .center
-        for l in [initials, name, detail, redacted] { l.lineHeight = 16; addSubview(l) }
-        layerUsesCoreImageFilters = true
-        redacted.layer?.filters = [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 2])].compactMap { $0 }
+        addSubview(avatar)
+        name.lineHeight = 16
+        addSubview(name)
+        addSubview(usage)
         addSubview(chevron)
         setAccessibilityRole(.button)
-        action = { [weak self] in
-            guard let self else { return }
-            if self.pressOnEmail { self.revealed.toggle(); self.updateRedaction(animated: true) } else { self.showMenu() }
-        }
-        set(name: NSFullUserName(), detail: "This Mac", image: nil, initials: nil)
+        action = { [weak self] in self?.showMenu() }
+        avatar.action = { [weak self] in self?.onOpenMachines?() }
+        set(name: NSFullUserName(), image: nil, initials: nil)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    public func set(name: String, detail: String, image: CGImage?, initials: String?) {
+    public func set(name: String, image: CGImage?, initials: String?) {
         self.name.text = name
-        if self.detail.text != detail { revealed = false }
-        self.detail.text = detail
-        redacted.text = UsageRedactedTextView.placeholder(detail)
-        updateRedaction(animated: false)
-        avatar.contents = image
-        let letters = initials ?? name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
-        self.initials.text = letters
-        self.initials.isHidden = image != nil
+        avatar.image.contents = image
+        avatar.initials.text = initials ?? name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+        avatar.initials.isHidden = image != nil
         setAccessibilityLabel("\(name), account menu")
-        // VoiceOver reads the real line, blurred or not.
-        setAccessibilityValue(detail)
         needsLayout = true
         needsDisplay = true
     }
@@ -515,30 +545,7 @@ public final class SidebarAccountRowView: ControlView {
         needsDisplay = true
     }
 
-    public override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        var email = redacted.frame
-        email.size.width = min(email.width, ceil(redacted.textWidth))
-        pressOnEmail = !redacted.isHidden && email.insetBy(dx: -4, dy: -3).contains(p)
-        super.mouseDown(with: event)
-    }
-
-    /// Under Redesign an e-mail rests blurred and shows once clicked; other themes and other lines show as they are.
-    private func updateRedaction(animated: Bool) {
-        let redacts = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && detail.text.contains("@")
-        redacted.isHidden = !redacts
-        let hidden = redacts && !revealed
-        guard detail.alphaValue != (hidden ? 0 : 1) else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animated && !Motion.reduced ? 0.15 : 0
-            context.allowsImplicitAnimation = animated
-            detail.animator().alphaValue = hidden ? 0 : 1
-            redacted.animator().alphaValue = hidden ? 1 : 0
-        }
-    }
-
     public override func updateLayer() {
-        updateRedaction(animated: false)
         // A floating pill: an opaque resting fill a step up from the sidebar, so its shadow stays outside, lit a
         // step more on hover and while the menu is open, under a light hairline.
         let dark = effectiveAppearance.isDark
@@ -547,25 +554,23 @@ public final class SidebarAccountRowView: ControlView {
         layer?.backgroundColor = NSColor(white: dark ? 0.085 + 0.03 * lift : 1 - 0.025 * lift, alpha: 1).cgColor
         layer?.borderColor = SB.c(\.sidebarForeground, dark ? 0.08 : 0.07).cgColor(in: self)
         layer?.shadowOpacity = dark ? 0.4 : 0.08
-        avatar.backgroundColor = SB.c(\.sidebarForeground, 0.12).cgColor(in: self)
         chevron.strokeColor = menuOpen || state.hoverOrPressed ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
     }
 
     public override func layout() {
         super.layout()
         let h = bounds.height
+        let a = SidebarAccountAvatarView.size + 2 * SidebarAccountAvatarView.ringGap
+        avatar.frame = NSRect(x: 8 - SidebarAccountAvatarView.ringGap, y: (h - a) / 2, width: a, height: a)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         layer?.shadowOffset = CGSize(width: 0, height: layer?.isGeometryFlipped == true ? 2 : -2)
         layer?.shadowPath = SmoothCorners.path(bounds, Self.radius, flipped: false)
-        avatar.frame = CGRect(x: 8, y: (h - 28) / 2, width: 28, height: 28)
-        avatar.cornerRadius = 14
         CATransaction.commit()
-        initials.frame = NSRect(x: 8, y: (h - 16) / 2, width: 28, height: 16)
+        let tx: CGFloat = 8 + 28 + 10
         let end = bounds.width - trailingReserve
-        let tx: CGFloat = 8 + 28 + 10, right = end - 8 - 12 - 6
+        let right = end - 8 - 12 - 6
         name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
-        detail.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
-        redacted.frame = detail.frame
+        usage.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
         chevron.frame = NSRect(x: end - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
     }
 

@@ -233,10 +233,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Sign-out keeps the account client, so only a signed-in Clerk session counts.
             if t3Connect.signedIn != nil {
                 sidebar.accountRow.set(name: name.isEmpty ? (email.isEmpty ? "T3 Connect" : email) : name,
-                                       detail: name.isEmpty || email.isEmpty ? "Signed in to T3 Connect" : email,
                                        image: t3Connect.avatar, initials: p?.initials)
             } else {
-                sidebar.accountRow.set(name: NSFullUserName(), detail: "This Mac", image: nil, initials: nil)
+                sidebar.accountRow.set(name: NSFullUserName(), image: nil, initials: nil)
             }
         }
         _ = t3Connect.observe(showAccount)
@@ -251,6 +250,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         layout.main.showsGrain = false
         window.contentView = layout
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
+        // The account row samples CPU and memory only while the sidebar is open.
+        layout.onOpenChange = { [weak sidebar] open in sidebar?.accountRow.usage.sidebarOpen = open }
+        sidebar.accountRow.usage.sidebarOpen = layout.isOpen
         let settings = SettingsController(window: window, layout: layout, threadSidebar: sidebar, threadPanel: main,
                                           environments: environments, t3: t3Connect)
         settings.composer = threads.composer
@@ -291,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
+        sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
         let updater = UpdateController()
         self.updater = updater
