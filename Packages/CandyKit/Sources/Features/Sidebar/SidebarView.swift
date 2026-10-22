@@ -756,6 +756,13 @@ public final class SidebarContentView: DSView {
         super.viewDidMoveToWindow()
         scheduleLabelTimer()
         applyStage()
+        syncDither()
+    }
+
+    /// Dither's rows and project sections follow the sidebar's own appearance; a change rebuilds the list.
+    private func syncDither() {
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if state.dither != dither { state.dither = dither }
     }
 
     /// A sidebar shown again after a collapse catches up a tick it skipped while hidden.
@@ -767,6 +774,7 @@ public final class SidebarContentView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         applyStage() // Dither hides the artwork
+        syncDither()
         needsLayout = true
     }
 

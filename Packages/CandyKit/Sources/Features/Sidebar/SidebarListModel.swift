@@ -59,6 +59,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var terminalProcessCount = 0
     /// Dither: the row sits under its project's header, so it leaves the project out.
     public var inProjectSection = false
+    /// Dither's compact row, from `SidebarListState.dither`.
+    public var dither = false
 
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
@@ -233,7 +235,7 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        case .row(let r): r.variant == .card ? (ThemeRuntime.ditherRows ? 48 : 82) : 36
+        case .row(let r): r.variant == .card ? (r.dither ? 48 : 82) : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32
@@ -287,6 +289,8 @@ public struct SidebarListState: Equatable, Sendable {
     public var heldOrder: (section: SidebarSection, order: [ThreadId])?
     /// Dither's project sections the user folded, by group key.
     public var collapsedProjects: Set<String> = []
+    /// Dither in the sidebar's current appearance: compact rows under project sections.
+    public var dither = false
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -301,7 +305,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
-            && a.collapsedProjects == b.collapsedProjects
+            && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
     }
 }
 
@@ -428,7 +432,7 @@ public enum SidebarListBuilder {
             return first + threads.filter { !placed.contains($0.id) }
         }
         var items: [SidebarItem] = []
-        if ThemeRuntime.ditherRows {
+        if state.dither {
             // Dither (after Capy): Pinned is a section like the projects, above them.
             let pinned = held(shelves.pinned, .pinned)
             if !pinned.isEmpty {
@@ -544,7 +548,7 @@ public enum SidebarListBuilder {
         let wake = section == .snoozed ? shell.snoozedUntil?.epochMs : nil
         let working = status == .working
             ? SidebarModel.resolveWorkingStartedAt(latestRun: t.latestRun, runtime: t.runtime)?.epochMs : status == .waiting ? t.latestRun?.completedAt?.epochMs : nil
-        return SidebarRowModel(
+        var model = SidebarRowModel(
             id: shell.id, variant: variant, action: action, section: section, title: shell.title,
             projectLabel: group?.label ?? project?.title, projectTitle: project?.title, projectIcon: project.map(ProjectIconSource.init),
             branch: shell.branch, hasWorktree: !(shell.worktreePath ?? "").isEmpty,
@@ -565,6 +569,8 @@ public enum SidebarListBuilder {
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
+        model.dither = state.dither
+        return model
     }
 
     /// `snoozeWakeLabel` (packages/client-runtime/src/state/threadSettled.ts:310-319).

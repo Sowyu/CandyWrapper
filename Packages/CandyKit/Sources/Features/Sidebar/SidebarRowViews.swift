@@ -606,12 +606,13 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.color = SB.c(\.secondaryLabel)
             duration.font = SB.tabular(12)
         }
-        let grid = capyRow && r.topStatus == .working
+        // Waiting keeps its label and duration, with the grid in the foreground color for its icon.
+        let waitingGrid = capyRow && r.topStatus == .waiting
+        let grid = capyRow && r.topStatus == .working || waitingGrid
         if grid {
             statusIcon.set(nil, color: .clear)
-            statusLabel.text = ""
-            duration.text = ""
-            workingGrid.color = SB.c(\.warning)
+            if !waitingGrid { statusLabel.text = ""; duration.text = "" }
+            workingGrid.color = waitingGrid ? SB.c(\.foreground) : SB.c(\.warning)
         }
         if workingGrid.isHidden == grid { workingGrid.isHidden = !grid }
         HoverReveal.fade([workingGrid], visible: !showActions)
@@ -657,7 +658,8 @@ final class SidebarCardRowView: SidebarRowBase {
         provider.driver = r.providerIcon
         provider.isHidden = capyRow
         machine.kind = r.environmentMachine
-        machine.isHidden = r.environmentMachine == nil || showsScratch
+        // Dither drops the trailing machine glyph.
+        machine.isHidden = r.environmentMachine == nil || showsScratch || capyRow
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
@@ -669,7 +671,7 @@ final class SidebarCardRowView: SidebarRowBase {
 
     /// Dither (after Capy): 48pt, the icon and title on the first line with the status at its right, then the
     /// project, branch and badges on a small gray line.
-    private var capyRow: Bool { ThemeRuntime.ditherRows }
+    private var capyRow: Bool { row?.dither == true }
 
     override func layout() {
         super.layout()
@@ -711,7 +713,13 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         if !wokeButton.isHidden { wokeButton.frame = NSRect(x: sx, y: top, width: statusRight - sx, height: 20) }
         if wokeBeside { slotLeft = sx }
-        if !workingGrid.isHidden { workingGrid.frame = NSRect(x: statusRight - 16, y: top + 2, width: 16, height: 16); sx = statusRight - 16 }
+        if !workingGrid.isHidden {
+            if statusLabel.text.isEmpty {
+                workingGrid.frame = NSRect(x: statusRight - 16, y: top + 2, width: 16, height: 16); sx = statusRight - 16
+            } else {
+                workingGrid.frame = NSRect(x: sx - 4 - 16, y: top + 2, width: 16, height: 16); sx -= 20
+            }
+        }
         let restWidth = max(32, slotRight - sx) // `min-w-8`
         if !showsActions { slotLeft = slotRight - restWidth }
         if lift != nil {
