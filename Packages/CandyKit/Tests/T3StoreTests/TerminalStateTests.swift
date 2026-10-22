@@ -50,8 +50,12 @@ struct TerminalStateTests {
             TerminalSummary(threadId: thread, terminalId: id, cwd: "/", status: .running, hasRunningSubprocess: running, label: "", updatedAt: "x")
         }
         var activity = TerminalActivity()
+        // An upsert before the snapshot doesn't make the server's sessions known (`canReuseTerminal`).
+        activity.apply(.upsert(summary("c", "term-1", running: false)))
+        #expect(!activity.loaded)
         let r0 = activity.apply(.snapshot([summary("a", "term-1", running: true), summary("a", "term-2", running: true), summary("b", "term-1", running: false)]))
         #expect(r0)
+        #expect(activity.loaded)
         #expect(activity.runningThreads == ["a": 2])
         let r1 = activity.apply(.upsert(summary("b", "term-1", running: false)))
         #expect(!r1)
