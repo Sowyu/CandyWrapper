@@ -198,7 +198,8 @@ final class UserMessageRowView: TimelineRowView {
         markdown.onOpenFile = context.model?.openFile
         // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
         let model = context.model
-        markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, text: text,
+        let document = context.document(item.id, text, lineBreaks: true)
+        markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, document: document,
                                                              thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
@@ -206,7 +207,7 @@ final class UserMessageRowView: TimelineRowView {
             markdown.contextImageLoader = nil
         }
         markdown.onContextChip = { [weak self] action, _ in self?.openContextChip(action, message: m) }
-        markdown.document = context.document(item.id, text, lineBreaks: true)
+        markdown.document = document
         attachments.configure(m, model: context.model)
         collapsible = shouldCollapseUserMessage(text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
@@ -597,12 +598,13 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.citationSourceID = m.id.rawValue
         // `MarkdownThreadLink` (ChatMarkdown.tsx:1067-1074): `t3-thread://` links draw as thread chips.
         let model = context.model
-        markdown.contextChips = MarkdownContextChips.links(in: m.text, thread: { model?.linkedThread?(ThreadId($0)) })
+        let document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming)
+        markdown.contextChips = MarkdownContextChips.links(in: document, thread: { model?.linkedThread?(ThreadId($0)) })
         markdown.onContextChip = { action, _ in if case .openThread(let id) = action { model?.onOpenThread?(ThreadId(id)) } }
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)
         }
-        markdown.document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming)
+        markdown.document = document
         meta.isHidden = !showMeta
         meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected))
         needsLayout = true
