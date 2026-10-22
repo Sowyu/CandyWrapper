@@ -2,7 +2,7 @@
 
 - [ ] Port changed-file virtualization and audit Markdown thread chips (taken 2026-10-22, perf-thread-leftovers).
 
-- [ ] Keep composer typing out of the broad thread refresh (taken 2026-10-22, perf-typing).
+- [x] Composer typing performance (2026-10-22, perf-typing): text edits skip thread derivation, picker resolution and controller layout; plan labels and branch notices update only when their inputs change. All 11 focused counting and composer/picker fidelity tests passed; isolated app build and dark sandbox typing, multiline input and command filtering passed. No Features/Thread changes, full suite or perf-review.
 
 - [x] Narrow Pull Requests Shift quick actions (2026-10-22, perf-leftovers): retain buttons and skip list derivation and row configuration on modifier changes. Counting and PullRequestsFidelityTests passed.
 

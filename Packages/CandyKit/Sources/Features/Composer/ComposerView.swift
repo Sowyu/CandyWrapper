@@ -520,10 +520,13 @@ public final class ComposerView: DSView {
             editor.setAccessibilityPlaceholderValue(placeholderText)
             needsLayout = true
         }
-        planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
+        let planTitle = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
+        if planPill.title != planTitle {
+            planPill.title = planTitle
+            if planFollowUp { needsLayout = true }
+        }
         planPill.isEnabled = !isBusy && sendDisabledReason == nil && !environmentUnavailable
         implementMenu.isEnabled = planPill.isEnabled
-        if planFollowUp { needsLayout = true }
         if editor.isEditable == editorDisabled { editor.isEditable = !editorDisabled }
         if let footer = questionFooter {
             questionPill.title = compactActions ? footer.compactLabel : footer.label
