@@ -113,6 +113,21 @@ struct PopupBehaviourTests {
         #expect(!button.isPopupOpen)
     }
 
+    /// The menu tracks only its own bounds. Tracking its visible rect, which reaches over the whole popup host, put
+    /// the pointer inside from the start, so AppKit sent no moves and rows never highlighted on hover.
+    @Test func menuTracksItsOwnBounds() throws {
+        let (_, root) = window()
+        let button = ButtonView("Open")
+        button.frame = NSRect(x: 100, y: 100, width: 80, height: 32)
+        root.addSubview(button)
+        let menu = try #require(MenuPopupView.show([MenuItem("Copy"), MenuItem("Paste")], from: button))
+        menu.superview?.layoutSubtreeIfNeeded()
+        menu.updateTrackingAreas()
+        let area = try #require(menu.trackingAreas.first { $0.options.contains(.mouseMoved) })
+        #expect(!area.options.contains(.inVisibleRect))
+        #expect(area.rect == menu.bounds && !menu.bounds.isEmpty)
+    }
+
     @Test func enterRunsTheActionAndCloses() throws {
         let (w, root) = window()
         let button = ButtonView("Open")

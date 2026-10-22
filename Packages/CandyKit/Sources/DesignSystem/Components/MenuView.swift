@@ -98,7 +98,7 @@ public struct MenuItem {
 
 /// The popup list behind Menu, Select, Combobox and Autocomplete. The styles differ only in the
 /// surface and the fills for highlighted and selected rows.
-public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
+public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSyncPointerClient {
     public enum Style: Sendable {
         case menu, select, combobox, autocomplete
     }
@@ -433,7 +433,9 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        // Its own bounds, not `.inVisibleRect`: a popup's visible rect reaches over the whole popup host, so the pointer
+        // counted as inside from the moment the menu opened, AppKit sent it no moves, and no row ever highlighted.
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
         addTrackingArea(area)
         tracking = area
     }
@@ -446,8 +448,17 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu {
         rowIndex(at: convert(windowPoint, from: nil)).flatMap { items[$0].isSelectable ? $0 : nil }
     }
 
-    public override func mouseMoved(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
+    public override func mouseMoved(with event: NSEvent) { pointerMoved(to: convert(event.locationInWindow, from: nil)) }
+
+    /// HoverSync forwards the moves AppKit holds back, as when the menu opens under a still pointer.
+    public func hoverPointerMoved() {
+        guard let window else { return }
+        pointerMoved(to: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    }
+
+    private func pointerMoved(to p: CGPoint) {
+        // AppKit and HoverSync can both report one move.
+        guard p != lastPointer else { return }
         defer { lastPointer = p }
         // Safe triangle: while the pointer heads for an open submenu, keep the submenu trigger highlighted.
         if let open = openSubmenu, let last = lastPointer, let host = superview?.superview,
