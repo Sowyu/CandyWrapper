@@ -18,12 +18,16 @@ public final class ThreadCostPillView: ControlView {
         }
     }
 
+    /// The card is opening: the controller reads subagent usage it hasn't read yet.
+    public var onOpen: (() -> Void)?
+
     private let decoration = BoxDecorationLayer()
     private let digits = RollingTextView(font: TL.tabular(13, .medium), lineHeight: 18)
     private lazy var tip: TooltipController = {
         let tip = TooltipController.attach(to: self, text: "", placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4), delay: 0.15)
         tip.content = { [weak self] in
-            PopoverView(content: ThreadCostDetailsView(self?.breakdown ?? .init()), padding: .none, tooltipStyle: true)
+            self?.onOpen?()
+            return PopoverView(content: ThreadCostDetailsView(self?.breakdown ?? .init()), padding: .none, tooltipStyle: true)
         }
         return tip
     }()
@@ -42,6 +46,13 @@ public final class ThreadCostPillView: ControlView {
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// Rebuilds an open card after new subagent usage arrives.
+    public func refreshCard() {
+        guard tip.isShown else { return }
+        tip.hide()
+        tip.show(instant: true)
+    }
 
     /// `ToggleView` ghost `.sm`: 28 tall, 10 round; 8 either side of the digits.
     public override var intrinsicContentSize: NSSize { NSSize(width: max(28, digits.textWidth + 16), height: 28) }
@@ -76,7 +87,7 @@ public final class ThreadCostPillView: ControlView {
 /// The pill's card: tokens and cost per kind, the total, the models priced and what the figure leaves out.
 final class ThreadCostDetailsView: DSView {
     static let inset: CGFloat = 12, width: CGFloat = 232
-    private var rows: [[LabelView]] = []
+    private var rows: [(cells: [LabelView], indent: CGFloat)] = []
     private let note = TextBlockView("", font: DSFont.ui(11), lineHeight: 16, color: Themed.color(\.contrastSecondaryLabel))
 
     init(_ b: ThreadCostEstimate.Breakdown) {
@@ -84,13 +95,13 @@ final class ThreadCostDetailsView: DSView {
         // Sub-cent amounts keep four places, as `formatContextWindowCost` does (ContextWindowMeter.logic.ts:139-145).
         func money(_ usd: Double) -> String { usd > 0 && usd < 0.01 ? String(format: "$%.4f", usd) : ThreadCostEstimate.label(usd) }
         let tokens = ThreadContextWindowUsage.tokens
-        func row(_ name: String, _ count: String, _ usd: String, strong: Bool = false) {
+        func row(_ name: String, _ count: String, _ usd: String, strong: Bool = false, indent: CGFloat = 0) {
             let color = Themed.color(strong ? \.foreground : \.contrastSecondaryLabel)
             let cells = [LabelView(name, font: DSFont.ui(strong ? 12 : 11, weight: strong ? .medium : .regular), color: color),
                          LabelView(count, font: TL.tabular(11), color: Themed.color(\.contrastSecondaryLabel)),
                          LabelView(usd, font: TL.tabular(strong ? 12 : 11, .medium), color: color)]
             for c in cells { c.lineHeight = 16; addSubview(c) }
-            rows.append(cells)
+            rows.append((cells, indent))
         }
         row("API cost estimate", "", ThreadCostEstimate.label(b.usd), strong: true)
         let t = b.tokens
@@ -98,12 +109,36 @@ final class ThreadCostDetailsView: DSView {
         row("Cached input", tokens(t.cached), money(b.cachedUSD))
         if t.cacheWrite > 0 { row("Cache writes", tokens(t.cacheWrite), money(b.cacheWriteUSD)) }
         row("Output", tokens(t.output), money(b.outputUSD))
-        note.text = "Priced as \(b.models.joined(separator: ", ")). Subagents' own tokens aren't counted."
+        let subs = b.subagents
+        if !subs.isEmpty {
+            let all = subs.reduce(0) { $0 + $1.tokens.input + $1.tokens.output }
+            row("Subagents (\(subs.count))", tokens(all), money(b.subagentsUSD))
+            // ponytail: a list up to five, the summed row alone past that; a scrolling list if threads run more
+            if subs.count <= 5 {
+                for s in subs { row(s.title, Self.shortModel(s.models.first ?? ""), money(s.usd), indent: 10) }
+            }
+        }
+        note.text = Self.note(b)
         addSubview(note)
         frame.size = NSSize(width: Self.width + 2 * Self.inset, height: place(apply: false) + Self.inset)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// What the figure counts and what it leaves out.
+    static func note(_ b: ThreadCostEstimate.Breakdown) -> String {
+        var text = b.models.isEmpty ? "" : "Priced as \(b.models.joined(separator: ", ")). "
+        if !b.subagents.isEmpty { text += "Includes subagents' own tokens, each at its own model's price. " }
+        func subagents(_ n: Int) -> String { n == 1 ? "1 subagent" : "\(n) subagents" }
+        if b.subagentsUnpriced > 0 {
+            text += "\(subagents(b.subagentsUnpriced)) left out: no price for \(b.unpricedModels.joined(separator: ", ")). "
+        }
+        if b.subagentsUnread > 0 { text += "\(subagents(b.subagentsUnread)) left out: usage couldn't be read." }
+        return text.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// "haiku-5-5" for "claude-haiku-5-5"; other providers keep their names.
+    static func shortModel(_ model: String) -> String { model.hasPrefix("claude-") ? String(model.dropFirst(7)) : model }
 
     override var intrinsicContentSize: NSSize { frame.size }
 
@@ -116,11 +151,11 @@ final class ThreadCostDetailsView: DSView {
     private func place(apply: Bool) -> CGFloat {
         let x = Self.inset, w = Self.width
         var y = Self.inset
-        for (i, cells) in rows.enumerated() {
+        for (i, (cells, indent)) in rows.enumerated() {
             if i == 1 { y += 4 }
             let usdW = ceil(cells[2].textWidth), countW = ceil(cells[1].textWidth)
             if apply {
-                cells[0].frame = NSRect(x: x, y: y, width: w - 64 - countW - 8, height: 16)
+                cells[0].frame = NSRect(x: x + indent, y: y, width: w - 64 - countW - 8 - indent, height: 16)
                 cells[1].frame = NSRect(x: x + w - 64 - countW, y: y, width: countW, height: 16)
                 cells[2].frame = NSRect(x: x + w - usdW, y: y, width: usdW, height: 16)
             }

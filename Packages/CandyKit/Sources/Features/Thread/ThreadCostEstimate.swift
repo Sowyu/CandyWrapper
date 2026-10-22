@@ -61,7 +61,18 @@ public enum ThreadCostEstimate {
         public var inputUSD = 0.0, cachedUSD = 0.0, cacheWriteUSD = 0.0, outputUSD = 0.0
         /// In order of first use.
         public var models: [String] = []
-        public var usd: Double { inputUSD + cachedUSD + cacheWriteUSD + outputUSD }
+        /// Every subagent thread under this one with usage, nested ones included, depth first.
+        public var subagents: [Subagent] = []
+        /// Subagent threads left out because their projection couldn't be read.
+        public var subagentsUnread = 0
+        /// Subagent threads left out because a turn ran on a model without a price.
+        public var subagentsUnpriced = 0
+        /// Models without a price, in order of first use: this thread's own in `own(_:)`, its subagents' in the tree.
+        public var unpricedModels: [String] = []
+        /// This thread's own turns.
+        public var ownUSD: Double { inputUSD + cachedUSD + cacheWriteUSD + outputUSD }
+        public var subagentsUSD: Double { subagents.reduce(0) { $0 + $1.usd } }
+        public var usd: Double { ownUSD + subagentsUSD }
         public init() {}
         mutating func add(_ t: Tokens, _ p: Price, model: String) {
             tokens.input += t.input; tokens.cached += t.cached; tokens.cacheWrite += t.cacheWrite; tokens.output += t.output
@@ -73,24 +84,70 @@ public enum ThreadCostEstimate {
         }
     }
 
+    /// One subagent thread's own turns, priced by its own models.
+    public struct Subagent: Equatable, Sendable {
+        public var title: String, models: [String], tokens: Tokens, usd: Double
+    }
+
+    /// A subagent thread as the card reads it: `own` is its `own(_:)` breakdown, nil when its projection
+    /// couldn't be read.
+    public struct SubagentThread: Sendable {
+        public var id: ThreadId, title: String, own: Breakdown?
+        public init(id: ThreadId, title: String, own: Breakdown?) { self.id = id; self.title = title; self.own = own }
+    }
+
     /// The thread's estimate in USD, or nil when it has no usage or any turn ran on a model without a price.
     public static func usd(_ projection: ThreadProjection?) -> Double? { breakdown(projection)?.usd }
 
     /// The thread's estimate by kind of token, nil as `usd` is.
     public static func breakdown(_ projection: ThreadProjection?) -> Breakdown? {
         guard let projection else { return nil }
+        let b = own(projection)
+        guard b.unpricedModels.isEmpty, !b.models.isEmpty else { return nil }
+        return b
+    }
+
+    /// The open thread's estimate with every subagent thread under it, each priced by its own models. Subagent
+    /// turns count in their own threads only: T3 scopes a turn's totals to the main agent (providerRuntime.ts:321-331).
+    /// Nil when the thread's own turns can't be priced, or nothing has usage yet.
+    public static func breakdown(_ projection: ThreadProjection, id: ThreadId, children: (ThreadId) -> [SubagentThread]) -> Breakdown? {
+        var result = own(projection)
+        guard result.unpricedModels.isEmpty else { return nil }
+        var seen: Set<ThreadId> = [id]
+        func walk(_ parent: ThreadId) {
+            for child in children(parent) where seen.insert(child.id).inserted {
+                if let b = child.own, !b.unpricedModels.isEmpty {
+                    result.subagentsUnpriced += 1
+                    for m in b.unpricedModels where !result.unpricedModels.contains(m) { result.unpricedModels.append(m) }
+                } else if let b = child.own {
+                    if !b.models.isEmpty { result.subagents.append(Subagent(title: child.title, models: b.models, tokens: b.tokens, usd: b.ownUSD)) }
+                } else {
+                    result.subagentsUnread += 1
+                }
+                walk(child.id)
+            }
+        }
+        walk(id)
+        return result.models.isEmpty && result.subagents.isEmpty ? nil : result
+    }
+
+    /// The thread's own turns, no models when it has none. Turns on a model without a price only add to `unpricedModels`.
+    public static func own(_ projection: ThreadProjection) -> Breakdown {
         let runByAttempt = Dictionary(projection.attempts.map { ($0.id.rawValue, $0.runId) }, uniquingKeysWith: { a, _ in a })
         let modelByRun = Dictionary(projection.runs.compactMap { run in run.modelSelection.map { (run.id, $0.model) } }, uniquingKeysWith: { a, _ in a })
         let fallback = projection.runs.max { $0.ordinal < $1.ordinal }?.modelSelection?.model
-        var result = Breakdown(), counted = false
+        var result = Breakdown()
         for turn in projection.providerTurns {
             guard let tokens = tokens(turn) else { continue }
             let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] }
-            guard let model = run.flatMap({ modelByRun[$0] }) ?? fallback, let price = price(model) else { return nil }
+            let model = run.flatMap { modelByRun[$0] } ?? fallback ?? "an unknown model"
+            guard let price = price(model) else {
+                if !result.unpricedModels.contains(model) { result.unpricedModels.append(model) }
+                continue
+            }
             result.add(tokens, price, model: model)
-            counted = true
         }
-        return counted ? result : nil
+        return result
     }
 
     /// A turn's totals, else its latest request.

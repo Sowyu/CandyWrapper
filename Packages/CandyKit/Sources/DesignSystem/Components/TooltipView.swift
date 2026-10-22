@@ -147,6 +147,8 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         if wait == 0 { work.perform() } else { DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work) }
     }
 
+    public var isShown: Bool { popup != nil }
+
     public func show(instant: Bool = false) {
         guard popup == nil, (!text.isEmpty || content != nil), let view, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
         // Redesign, after Capy: no tooltip over the trigger's own open menu. Other themes keep T3's, which shows it.

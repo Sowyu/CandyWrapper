@@ -47,4 +47,46 @@ import T3Protocol
         let empty = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"status":"pending"}"#.utf8))
         #expect(ThreadCostEstimate.tokens(empty) == nil)
     }
+
+    /// A projection whose every turn ran on `model`, one turn of `input` and `output` tokens.
+    private func thread(_ model: String, input: Double, output: Double) throws -> ThreadProjection {
+        var p = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
+        for i in p.runs.indices { p.runs[i].modelSelection = ModelSelection(instanceId: "claudeAgent", model: model) }
+        p.providerTurns = [.object(["turnTokenUsage": .object(["inputTokens": .number(input), "outputTokens": .number(output)])])]
+        return p
+    }
+
+    @Test func subagentThreadsAddTheirOwnCostNestedOnesIncluded() throws {
+        let root = ThreadId("env:root"), a = ThreadId("env:a"), b = ThreadId("env:b"), c = ThreadId("env:c"), d = ThreadId("env:d")
+        let haiku = ThreadCostEstimate.own(try thread("claude-haiku-5-5", input: 1_000_000, output: 100_000))
+        let sonnet = ThreadCostEstimate.own(try thread("claude-sonnet-5-5", input: 1_000_000, output: 0))
+        let unpriced = ThreadCostEstimate.own(try thread("muse-spark-1.3", input: 10, output: 10))
+        #expect(unpriced.unpricedModels == ["muse-spark-1.3"] && unpriced.models.isEmpty)
+        // a (haiku) runs b (sonnet), which runs c (unread); d priced on an unknown model; b also lists the root, a cycle.
+        let tree: [ThreadId: [ThreadCostEstimate.SubagentThread]] = [
+            root: [.init(id: a, title: "A", own: haiku), .init(id: d, title: "D", own: unpriced)],
+            a: [.init(id: b, title: "B", own: sonnet)],
+            b: [.init(id: c, title: "C", own: nil), .init(id: root, title: "Root", own: haiku)],
+        ]
+        let result = try #require(ThreadCostEstimate.breakdown(try thread("claude-opus-5-5", input: 1_000_000, output: 0), id: root) { tree[$0] ?? [] })
+        // Opus $4, haiku $0.10 + $0.05, sonnet $2.
+        #expect(abs(result.ownUSD - 4) < 1e-9)
+        #expect(result.subagents.map(\.title) == ["A", "B"])
+        #expect(result.subagents.map(\.models) == [["claude-haiku-5-5"], ["claude-sonnet-5-5"]])
+        #expect(abs(result.subagentsUSD - 2.15) < 1e-9 && abs(result.usd - 6.15) < 1e-9)
+        #expect(result.subagentsUnread == 1 && result.subagentsUnpriced == 1)
+        #expect(ThreadCostDetailsView.note(result) == "Priced as claude-opus-5-5. Includes subagents' own tokens, each at its own model's price. "
+            + "1 subagent left out: no price for muse-spark-1.3. 1 subagent left out: usage couldn't be read.")
+        // The open thread on a model without a price hides the figure, as before.
+        #expect(ThreadCostEstimate.breakdown(try thread("muse-spark-1.3", input: 1, output: 1), id: root) { tree[$0] ?? [] } == nil)
+    }
+
+    @Test func aThreadWithNoUsageOfItsOwnStillShowsItsSubagents() throws {
+        var empty = try thread("claude-opus-5-5", input: 0, output: 0)
+        empty.providerTurns = []
+        let child = ThreadCostEstimate.own(try thread("claude-haiku-5-5", input: 1_000_000, output: 0))
+        let result = try #require(ThreadCostEstimate.breakdown(empty, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: child)] })
+        #expect(result.models.isEmpty && abs(result.usd - 0.1) < 1e-9)
+        #expect(ThreadCostEstimate.breakdown(empty, id: "env:root") { _ in [] } == nil)
+    }
 }
