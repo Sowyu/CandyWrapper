@@ -108,11 +108,21 @@ public final class SettingsPageContext {
     func patchServer(_ patch: [String: JSONValue]) { writeServer?(patch) }
 }
 
-/// Re-reads every control from the context after a change. Rows register a closure each.
+/// Rows register context readers; projected bindings update controls only when their value changes.
 @MainActor
 final class SettingsBinder {
     private var updaters: [() -> Void] = []
     func add(_ update: @escaping () -> Void) { updaters.append(update); update() }
+    func add<Value: Equatable>(read: @escaping () -> Value, update: @escaping (Value) -> Void) {
+        var previous = read()
+        update(previous)
+        updaters.append {
+            let next = read()
+            guard next != previous else { return }
+            previous = next
+            update(next)
+        }
+    }
     func refresh() { updaters.forEach { $0() } }
 }
 
