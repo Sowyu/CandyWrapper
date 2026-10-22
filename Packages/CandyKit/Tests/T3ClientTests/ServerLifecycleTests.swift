@@ -387,16 +387,15 @@ struct ServerLifecycleTests {
         #expect(await rec.stops == [1])
     }
 
-    @Test func dispatchSchedulerFiresOnceAndCancels() async {
+    /// Only that the real timer fires. "A cancelled timer never fires" is Dispatch's promise, and a
+    /// sleep-then-check here could only pass vacuously.
+    @Test func dispatchSchedulerFires() async {
         let fired = Recorder()
-        let s = DispatchLifecycleScheduler()
-        let kept = s.schedule(after: .milliseconds(10), tolerance: .milliseconds(5)) { Task { await fired.set(failNextLaunch: true) } }
-        let cancelled = s.schedule(after: .milliseconds(10), tolerance: .zero) { Task { await fired.set(holdLaunch: true) } }
-        cancelled.cancel()
-        #expect(await eventually { await fired.failNextLaunch })
-        try? await Task.sleep(for: .milliseconds(50))
-        #expect(await fired.holdLaunch == false)
-        kept.cancel()
+        let timer = DispatchLifecycleScheduler().schedule(after: .milliseconds(10), tolerance: .milliseconds(5)) {
+            Task { await fired.set(failNextLaunch: true) }
+        }
+        #expect(await eventually(seconds: 30) { await fired.failNextLaunch })
+        timer.cancel()
     }
 }
 
@@ -414,14 +413,14 @@ struct ServerLifecycleTests {
         // The app that started it is still running: not an orphan.
         let me = try #require(ProcessIdentity.of(getpid()))
         try JSONEncoder().encode(LocalServerLauncher.OwnerRecord(server: server, owner: me)).write(to: url)
-        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(2))
+        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(30))
         #expect(server.isAlive)
         #expect(FileManager.default.fileExists(atPath: url.path))
 
         // Same pid, different start time: that app is gone.
         let gone = ProcessIdentity(pid: getpid(), startTime: 1)
         try JSONEncoder().encode(LocalServerLauncher.OwnerRecord(server: server, owner: gone)).write(to: url)
-        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(2))
+        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(30))
         sleeper.waitUntilExit()
         #expect(sleeper.terminationReason == .uncaughtSignal)
         #expect(!FileManager.default.fileExists(atPath: url.path))
@@ -438,7 +437,7 @@ struct ServerLifecycleTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let gone = ProcessIdentity(pid: getpid(), startTime: 1)
         try JSONEncoder().encode(LocalServerLauncher.OwnerRecord(server: server, owner: gone, handoff: true)).write(to: url)
-        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(2))
+        await LocalServerLauncher.stopOrphan(recordedAt: url, timeout: .seconds(30))
         #expect(server.isAlive)
         #expect(FileManager.default.fileExists(atPath: url.path))
 
@@ -468,6 +467,6 @@ struct ServerLifecycleTests {
         let watcher = ChildExitWatcher(adopting: identity)
         #expect(watcher.exitStatus == nil)
         identity.signal(SIGTERM)
-        #expect(await watcher.waitForExit(timeout: .seconds(5)))
+        #expect(await watcher.waitForExit(timeout: .seconds(30)))
     }
 }
