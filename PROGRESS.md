@@ -21,7 +21,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 - [ ] T3 web performance bucket 5: settings, provider pushes, reconnect snapshots and miscellaneous panes (taken 2026-10-22, perf-misc).
 - [ ] Port timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
-- [ ] Port upstream sidebar performance work, bucket b1 (taken 2026-10-22, perf-sidebar).
+- [x] Port upstream sidebar performance work, bucket b1 (taken 2026-10-22, perf-sidebar): audited all 10 commits; unchanged repository identity refreshes now keep project-array storage (20 copies to zero). All 41 focused reducer, sidebar load and sidebar fidelity tests passed; the counting test fails on the old reducer. The other changes already fit the native sidebar or belong to other areas.
 
 ### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
 
