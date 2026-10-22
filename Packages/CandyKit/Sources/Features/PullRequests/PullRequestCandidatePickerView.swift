@@ -169,7 +169,7 @@ public final class PullRequestCandidatePickerView: DSView, PickerPopupBody {
     }
 
     public override func scrollWheel(with event: NSEvent) {
-        scrollOffset = min(max(0, scrollOffset - event.scrollingDeltaY), max(0, contentHeight - list.bounds.height))
+        scrollOffset = min(max(0, scrollOffset - event.scrollPointsY), max(0, contentHeight - list.bounds.height))
         needsLayout = true
     }
 
