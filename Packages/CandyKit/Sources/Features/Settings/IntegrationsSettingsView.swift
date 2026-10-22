@@ -9,7 +9,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
     private var deviceHostEditor: DeviceHostEditor?
     public init(context: SettingsPageContext) {
         super.init(context: context)
-        body = [browserAccessSection(), browserSection(), browserProfilesSection(), devicesSection()]
+        body = [browserSection(), devicesSection()]
     }
 
     private func pullRequestRow() -> SettingsRowView {
@@ -22,16 +22,18 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
 
     // MARK: Agent browser access (server, project-scoped)
 
-    private func browserAccessSection() -> SettingsSectionView {
+    private func browserAccessRow() -> SettingsRowView {
         let r = serverSwitch("agent-browser-access", "", key: "enableAgentBrowserAccess", reset: "default browser access", label: "Agent browser access")
         r.title = "Agent browser access"
         projectScopeDetails([(r, "Allow agents in this project to use the shared browser. Applies when the agent session next starts.",
                               "Allow agents to use the shared browser. Projects can override it.")])
-        return section("browser-access", "Browser", [r])
+        return r
     }
 
     // MARK: Browser defaults (this device)
 
+    /// One Browser section, as 3473 has it (IntegrationsSettings.tsx:1613-1645, 7e1a5a38b5): agent access,
+    /// the profiles, the defaults this device keeps, the search engine and pull request links.
     private func browserSection() -> SettingsSectionView {
         let viewport = SettingsBrowserViewportControl(frame: .zero)
         let viewportRow = row("browser-default-viewport", detail: "Tab size for you and agents. Fill fits the panel; other sizes show the device toolbar.", control: viewport)
@@ -92,8 +94,8 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
                                     "Show the floating preview when an agent opens a browser or device unless the agent says otherwise.",
                                     key: "browserAutoShowFloatingPreview", reset: "auto-show floating preview", label: "Auto-show floating preview")
         let (engine, customURL) = searchEngineRows()
-        let s = section("browser", "Browser", [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating, engine, customURL,
-                                               pullRequestRow()])
+        let s = section("browser", "Browser", [browserAccessRow()] + browserProfileRows()
+                        + [viewportRow, zoomRow, appearance, rateRow, keys, mouse, links, floating, engine, customURL, pullRequestRow()])
         // The custom URL row leaves the card unless the engine is Custom, like T3's conditional rendering.
         binder.add { [weak s] in s.map { $0.group.rows = $0.group.rows } }
         return s
@@ -136,7 +138,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         return (engine, custom)
     }
 
-    private func browserProfilesSection() -> SettingsSectionView {
+    private func browserProfileRows() -> [SettingsRowView] {
         let add = ButtonView("New profile", icon: .plus, variant: .outline, size: .sm)
         add.action = { [weak self] in self?.editBrowserProfile(nil) }
         let addRow = row("browser-profiles", detail: "Separate cookies and logins for each browser profile.", control: add)
@@ -173,7 +175,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             choose?.selectedIndex = profiles.firstIndex { $0["id"]?.stringValue == BrowserProfiles.defaultId(client) }
             add?.isEnabled = profiles.count < 25
         }
-        return section("browser-profiles", "Browser profiles", [addRow, defaultRow, manageRow])
+        return [addRow, defaultRow, manageRow]
     }
     private func editBrowserProfile(_ profile: JSONValue?) {
         let dialog = DialogView(title: profile == nil ? "New profile" : "Rename profile")
