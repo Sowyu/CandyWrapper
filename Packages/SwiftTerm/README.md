@@ -30,6 +30,9 @@ CandyWrapper only uses the CoreText renderer, so neither is needed.
 - `Package.swift` builds the target with `-Osize` in release, like CandyKit.
 - `TerminalView.draw` on macOS is `open`, so CandyWrapper's subclass can paint the background behind the
   glyphs when a dialog snapshots the window (2026-10-13, keyboard side by side item F).
+- `Terminal.implicitLinkDetector` lets CandyWrapper find implicit links with T3's rules
+  (`apps/web/src/terminal-links.ts`) in place of the Ghostty pattern, on the same hover lookup
+  (2026-10-22, Nightly 3473).
 
 ## Updating
 

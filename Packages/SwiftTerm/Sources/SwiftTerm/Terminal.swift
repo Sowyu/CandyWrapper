@@ -380,6 +380,11 @@ open class Terminal {
     /// take precedence over local selection, links, or ordinary mouse reports.
     public var semanticPromptClickBehavior: SemanticPromptClickBehavior = .enabled
 
+    /// CandyWrapper: finds implicit links in a logical line instead of the Ghostty pattern. Returns each
+    /// link's span as UTF-16 offsets into the line and the text to open, which may differ from the span
+    /// (a quoted path opens without its quotes).
+    public var implicitLinkDetector: ((String) -> [(range: Range<Int>, text: String)])?
+
     /// The click mode most recently advertised by the active buffer's OSC 133 shell.
     public var semanticPromptClickMode: SemanticPromptClickMode {
         buffer.semanticClickMode
@@ -7304,24 +7309,36 @@ open class Terminal {
         guard let lineMap = buildGhosttyImplicitLineMap(at: position, in: buffer) else {
             return nil
         }
-        guard let regex = Self.ghosttyImplicitLinkRegex else {
-            return nil
+        // Character offsets (one per cell) and the text to open.
+        var candidates: [(start: Int, end: Int, text: String)] = []
+        let text = lineMap.text
+        if let detector = implicitLinkDetector {
+            for found in detector(text) where !found.range.isEmpty {
+                let lower = String.Index(utf16Offset: found.range.lowerBound, in: text)
+                let upper = String.Index(utf16Offset: found.range.upperBound, in: text)
+                candidates.append((text.distance(from: text.startIndex, to: lower), text.distance(from: text.startIndex, to: upper), found.text))
+            }
+        } else {
+            guard let regex = Self.ghosttyImplicitLinkRegex else {
+                return nil
+            }
+            let searchRange = NSRange(text.startIndex..<text.endIndex, in: text)
+            for match in regex.matches(in: text, options: [], range: searchRange) {
+                guard match.range.length > 0,
+                      let textRange = Range(match.range, in: text)
+                else {
+                    continue
+                }
+                if suppressGhosttyLikeMatch(textRange, in: text) {
+                    continue
+                }
+                candidates.append((text.distance(from: text.startIndex, to: textRange.lowerBound),
+                                   text.distance(from: text.startIndex, to: textRange.upperBound), String(text[textRange])))
+            }
         }
-
-        let searchRange = NSRange(lineMap.text.startIndex..<lineMap.text.endIndex, in: lineMap.text)
-        let matches = regex.matches(in: lineMap.text, options: [], range: searchRange)
-        for match in matches {
-            guard match.range.length > 0,
-                  let textRange = Range(match.range, in: lineMap.text)
-            else {
-                continue
-            }
-            if suppressGhosttyLikeMatch(textRange, in: lineMap.text) {
-                continue
-            }
-
-            let startOffset = lineMap.text.distance(from: lineMap.text.startIndex, to: textRange.lowerBound)
-            let endOffset = lineMap.text.distance(from: lineMap.text.startIndex, to: textRange.upperBound)
+        for candidate in candidates {
+            let startOffset = candidate.start
+            let endOffset = candidate.end
             guard startOffset < lineMap.cells.count else {
                 continue
             }
@@ -7373,7 +7390,7 @@ open class Terminal {
                 }
 
             return LinkMatch(
-                text: String(lineMap.text[textRange]),
+                text: candidate.text,
                 row: lineMap.targetRow,
                 range: rowStart..<rowEnd,
                 isExplicit: false,
