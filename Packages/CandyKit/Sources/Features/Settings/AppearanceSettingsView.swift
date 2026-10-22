@@ -209,7 +209,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), identification, diff, strip, width])
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width])
         return s
     }
 
@@ -243,6 +243,28 @@ public final class AppearanceSettingsView: SettingsPageBase {
         binder.add { [weak self, weak control] in
             guard let self else { return }
             control?.value = Double(self.client.int(key))
+            slot.isShown = !self.client.isDefault(key)
+        }
+        return r
+    }
+
+    /// CandyWrapper's own: the Redesign theme's accent (the user, 2026-10-23). It recolors the palette's accent roles.
+    private func ditherAccentRow() -> SettingsRowView {
+        let key = "ditherAccent"
+        let swatches = DitherAccent.all.map { accent in
+            let b = AccentSwatchButton(accent)
+            b.action = { [weak self] in self?.context.writeClient?([key: .string(accent.id)]) }
+            return b
+        }
+        let r = row(nil, title: "Accent color", detail: "The color the Redesign theme uses for switches, the send button, focus and selection.",
+                    control: SettingsControlGroup(swatches, gap: 6))
+        let slot = ResetSlot(label: "accent color")
+        r.accessories = [slot]
+        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
+        binder.add { [weak self] in
+            guard let self else { return }
+            let current = DitherAccent.named(self.client.string(key)).id
+            for b in swatches { b.isSelected = b.accent.id == current }
             slot.isShown = !self.client.isDefault(key)
         }
         return r
@@ -581,5 +603,41 @@ final class ModeTilesView: DSView, SettingsGroupRow {
                 fill(NSRect(x: rowRect.minX + d + 4, y: rowRect.midY - rowRect.height * 0.15, width: rowRect.width * 0.52, height: rowRect.height * 0.30), line, radius: 2)
             }
         }
+    }
+}
+
+/// One accent in the Redesign accent row: a 16pt dot, ringed in the foreground color when chosen.
+final class AccentSwatchButton: ControlView {
+    let accent: DitherAccent
+    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; setAccessibilityValue(isSelected) } } }
+
+    init(_ accent: DitherAccent) {
+        self.accent = accent
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        setAccessibilityRole(.radioButton)
+        setAccessibilityLabel(accent.label)
+        toolTip = accent.label
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 22, height: 22) }
+    override var wantsUpdateLayer: Bool { false }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = NSRect(x: bounds.midX - 11, y: bounds.midY - 11, width: 22, height: 22)
+        if isSelected || state.focusVisible {
+            Themed.color(\.foreground, isSelected ? 0.9 : 0.5).setStroke()
+            let ring = NSBezierPath(ovalIn: r.insetBy(dx: 0.75, dy: 0.75))
+            ring.lineWidth = 1.5
+            ring.stroke()
+        }
+        let dark = effectiveAppearance.isDark
+        (state.hovered && !isSelected ? DitherAccent.color(DitherAccent.mix(accent.accent(dark: dark), white: 0.12))
+            : DitherAccent.color(accent.accent(dark: dark))).setFill()
+        NSBezierPath(ovalIn: r.insetBy(dx: 3, dy: 3)).fill()
     }
 }
