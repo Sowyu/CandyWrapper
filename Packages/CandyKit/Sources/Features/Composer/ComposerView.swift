@@ -52,6 +52,8 @@ public final class ComposerView: DSView {
     /// `isEnvironmentUnavailable`: the button is disabled with "Environment disconnected", but Enter still
     /// reaches `onSend`, which answers with T3's "Not connected" toast (ChatView.tsx:8797-8811).
     public var environmentUnavailable = false { didSet { if environmentUnavailable != oldValue { refresh() } } }
+    /// The environment is connected and only a missing provider blocks sending.
+    public var providerUnavailable = false { didSet { if providerUnavailable != oldValue { refresh() } } }
     public var placeholderInput = ComposerLogic.PlaceholderInput() { didSet { if placeholderInput != oldValue { refresh() } } }
     public var collapseOnScroll = false { didSet { if !collapseOnScroll { expandFromScroll() } } }
     private var scrollGesture = ComposerScrollGesture()
@@ -335,8 +337,11 @@ public final class ComposerView: DSView {
         // `text-placeholder/75`, leading-relaxed, wrapping in the full composer.
         placeholder.font = ComposerEditor.font
         placeholder.lineHeight = ComposerEditor.lineHeight
-        placeholder.color = Themed.color(\.placeholder, 0.75)
+        updatePlaceholderContrast()
         addSubview(placeholder, positioned: .below, relativeTo: scroll)
+        editor.setAccessibilityLabel("Message")
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                          name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         validation.font = DSFont.ui(12)
         validation.lineHeight = 16
         validation.color = Themed.color(\.destructive)
@@ -498,11 +503,23 @@ public final class ComposerView: DSView {
             || questionFooter?.responding == true
     }
 
+    /// Increase Contrast lifts the placeholder to full strength: it carries the composer's recovery guidance.
+    @objc private func displayOptionsChanged(_ note: Notification) { updatePlaceholderContrast() }
+
+    private func updatePlaceholderContrast() {
+        let strong = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        placeholder.color = Themed.color(\.placeholder, strong ? 1 : 0.75)
+    }
+
     func refresh() {
         defer { invalidateHeightIfNeeded() }
         // ChatComposer.tsx:7489-7490.
         let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
-        if placeholder.text != placeholderText { placeholder.text = placeholderText; needsLayout = true }
+        if placeholder.text != placeholderText {
+            placeholder.text = placeholderText
+            editor.setAccessibilityPlaceholderValue(placeholderText)
+            needsLayout = true
+        }
         planPill.title = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Implement" : "Refine"
         planPill.isEnabled = !isBusy && sendDisabledReason == nil && !environmentUnavailable
         implementMenu.isEnabled = planPill.isEnabled
@@ -522,7 +539,8 @@ public final class ComposerView: DSView {
             : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
-        let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, sendDisabledReason: sendDisabledReason,
+        let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, providerUnavailable: providerUnavailable,
+                                                sendDisabledReason: sendDisabledReason,
                                                 busy: isBusy, editingQueued: editingQueued)
         let canSend = sendDisabledReason == nil && !environmentUnavailable
         switch face {
