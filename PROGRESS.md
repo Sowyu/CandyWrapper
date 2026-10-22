@@ -2,6 +2,8 @@
 
 The current state and the open work. Before you stop, tick what you finished, add what the next agent must know, and keep this file short: finished work belongs in the git log, and the full history up to 2026-10-12 is in `docs/history/`.
 
+- [ ] Port upstream composer perf bucket b2, typing, pickers and drafts (taken 2026-10-22, perf-composer).
+
 ## State on 2026-10-21
 
 - Milestones 1 to 9 are done. Milestone 10's stress half is done (`docs/research/m10-report-2026-10-12.md`). Its side-by-side half was dropped on 2026-10-13 after keyboard shortcuts and part of the thread view.
