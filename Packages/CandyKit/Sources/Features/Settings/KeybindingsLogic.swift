@@ -181,6 +181,11 @@ public enum KeybindingsLogic {
             let c = compareCommands(l.command, r.command) { $0 }
             return c != 0 ? c < 0 : compareStrings(l.key, r.key) < 0
         }
+        return filter(rows, query: query)
+    }
+
+    /// Searching does not rebuild rows or scan their shortcut conflicts.
+    public static func filter(_ rows: [KeybindingRow], query: String) -> [KeybindingRow] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return rows }
         return rows.filter {
@@ -341,5 +346,23 @@ public enum KeybindingsLogic {
         guard case .object(var o) = target.json else { return target.json }
         if let replace { o["replace"] = replace.json }
         return .object(o)
+    }
+}
+
+/// Keeps conflict detection and sorting outside the search keystroke path.
+@MainActor
+final class KeybindingsCatalog {
+    private var rules: [ResolvedKeybindingRule]?
+    private(set) var rows: [KeybindingRow] = []
+    private let build: ([ResolvedKeybindingRule]) -> [KeybindingRow]
+
+    init(build: @escaping ([ResolvedKeybindingRule]) -> [KeybindingRow] = { KeybindingsLogic.rows($0) }) {
+        self.build = build
+    }
+
+    func update(_ next: [ResolvedKeybindingRule]) {
+        guard rules != next else { return }
+        rules = next
+        rows = build(Keymap.merged(withServer: next).rules)
     }
 }

@@ -20,6 +20,8 @@ public final class KeybindingsSettingsView: SettingsPageBase {
     private let readOnly = SettingsNoticeView("This connection can view keybindings but cannot change them.", size: 12)
     private var newRow: SettingsGroupView?
     private var groupViews: [SettingsSectionView] = []
+    private var groupsById: [String: (KeybindingGroup, SettingsSectionView)] = [:]
+    private let catalog = KeybindingsCatalog()
     private let empty: SettingsGroupView
     private var rowViews: [String: KeybindingRowView] = [:]
     public private(set) var rows: [KeybindingRow] = []
@@ -62,7 +64,7 @@ public final class KeybindingsSettingsView: SettingsPageBase {
     private func showNewRow() {
         guard newRow == nil else { return }
         let r = NewKeybindingRowView(commands: KeybindingsLogic.commandOptions(keybindings))
-        r.allRows = { [weak self] in self?.rows ?? [] }
+        r.allRows = { [weak self] in self?.catalog.rows ?? [] }
         r.onSave = { [weak self] target in self?.context.saveKeybinding?(target, nil) }
         r.onCancel = { [weak self] in self?.hideNewRow() }
         newRowView = r
@@ -82,36 +84,41 @@ public final class KeybindingsSettingsView: SettingsPageBase {
 
     private func rebuild() {
         sentence.refresh()
-        let all = keybindings
-        rows = KeybindingsLogic.rows(all, query: query)
+        catalog.update(context.serverKeybindings)
+        rows = KeybindingsLogic.filter(catalog.rows, query: query)
         let canWrite = context.scope.canWrite
         addButton.isEnabled = newRow == nil && canWrite
         fileButton.isEnabled = context.keybindingsConfigPath != nil
         readOnly.isHidden = canWrite
-        // Rows are rebuilt per change; their drafts reset like T3's remount on new bindings.
+        // Changed bindings reset their drafts; searches retain rows that stay visible.
         var views: [String: KeybindingRowView] = [:]
         var firstOfCommand = Set<String>()
+        var nextGroups: [String: (KeybindingGroup, SettingsSectionView)] = [:]
+        anchors = anchors.filter { !$0.key.hasPrefix("keybinding-") && !$0.key.hasPrefix("keybindings-") }
         groupViews = KeybindingsLogic.group(rows).map { group in
             let rowViews = group.rows.map { row -> KeybindingRowView in
                 let v = self.rowViews[row.id].flatMap { $0.row == row ? $0 : nil } ?? KeybindingRowView(row: row)
-                v.allRows = { [weak self] in self?.rows ?? [] }
+                v.allRows = { [weak self] in self?.catalog.rows ?? [] }
                 v.onSave = { [weak self] target, replace in self?.context.saveKeybinding?(target, replace) }
                 v.onRemove = { [weak self] row in self?.context.removeKeybinding?(row) }
                 v.onReset = { [weak self] row in
                     guard let (target, replace) = KeybindingsLogic.resetInput(row) else { return }
                     self?.context.saveKeybinding?(target, replace)
                 }
-                v.isEditable = canWrite
-                v.isSaving = savingCommand == row.command
+                if v.isEditable != canWrite { v.isEditable = canWrite }
+                if v.isSaving != (savingCommand == row.command) { v.isSaving = savingCommand == row.command }
                 views[row.id] = v
                 if firstOfCommand.insert(row.command).inserted { anchors[KeybindingsLogic.anchorId(row.command)] = v }
                 return v
             }
-            let s = SettingsSectionView(title: group.title, rows: rowViews)
+            let s = groupsById[group.id].flatMap { $0.0 == group ? $0.1 : nil }
+                ?? SettingsSectionView(title: group.title, rows: rowViews)
+            nextGroups[group.id] = (group, s)
             anchors["keybindings-\(group.id)"] = s
             return s
         }
         rowViews = views
+        groupsById = nextGroups
         rebuildItems()
     }
 
@@ -119,7 +126,7 @@ public final class KeybindingsSettingsView: SettingsPageBase {
         var list: [NSView & SettingsGroupRow] = [sentence, toolbar, readOnly]
         if let newRow { list.append(newRow) }
         if groupViews.isEmpty { list.append(empty) } else { list.append(contentsOf: groupViews) }
-        items = list
+        if !items.elementsEqual(list, by: { $0 === $1 }) { items = list }
         addButton.isEnabled = newRow == nil && context.scope.canWrite
     }
 
