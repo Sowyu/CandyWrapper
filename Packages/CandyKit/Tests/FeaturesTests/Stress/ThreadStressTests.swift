@@ -489,9 +489,12 @@ extension ArraySlice {
     }
 
     /// A long thread: after the snapshot, every live update (streaming text, tool progress, status
-    /// changes, a new prompt) reaches new rows within one 60 Hz frame. The default run uses about 400
-    /// rows; a long run (`CW_STRESS_ITERATIONS`) about 2,000.
-    @Test func largeThreadStepsStayUnderAFrame() throws {
+    /// changes, a new prompt) touches only the rows it changed. Streaming answer text patches its
+    /// rows without a full row pass, and no step hands the view more than a few rows to rebuild. The
+    /// default run uses about 400 rows; a long run (`CW_STRESS_ITERATIONS`) about 2,000. Counting
+    /// work instead of timing it catches the same O(rows) regression without depending on the
+    /// machine's load; `scripts/perf-review` measures the time.
+    @Test func largeThreadStepsTouchOnlyChangedRows() throws {
         let long = ProcessInfo.processInfo.environment["CW_STRESS_ITERATIONS"] != nil
         var generator = StressThreadGenerator(seed: 7, runCount: long ? 260 : 50, maxSteps: 12)
         let server = try StressServer(script: generator.generate())
@@ -504,27 +507,42 @@ extension ArraySlice {
             TimelinePipeline.Request(projection: client.projection, projectionChanged: changed, expandedRunIds: [],
                                      expandedAttemptIds: [], expandedWorkGroupIds: [], pending: [])
         }
-        _ = pipeline.run(request(true))
-        let rows = client.projection!.visibleTurnItems.count
-        var times: [Double] = []
+        var rows = pipeline.run(request(true))?.rows ?? []
+        #expect(rows.count > 200, "the thread is long enough to show a per-step blow-up")
+        var textSteps = 0, answerSteps = 0, steps = 0, widest = 0
         while !server.done {
             let batch = server.publish(1)
-            let start = ContinuousClock.now
+            let passes = pipeline.fullPasses
             let changes = client.apply(batch)
-            _ = pipeline.run(request(changes.projectionChanged))
-            times.append(OpenTiming.ms(ContinuousClock.now - start))
+            let result = pipeline.run(request(changes.projectionChanged))
+            steps += 1
+            if let result { rows = result.rows }
+            // Rows the view has to rebuild for this step.
+            let touched: Int
+            switch result?.change {
+            case nil: touched = 0
+            case .rows(let changed): touched = changed.count
+            case .tail(let first): touched = rows.count - first
+            case .head(let replaced, let inserted): touched = max(replaced, inserted)
+            case .all, .thread: touched = rows.count
+            }
+            widest = max(widest, touched)
+            #expect(touched <= 12, "step \(steps): \(touched) of \(rows.count) rows changed (\(String(describing: result?.change)))")
+            if changes.projectionChanged, changes.onlyStreamingText {
+                textSteps += 1
+                #expect(touched <= 2, "step \(steps): streaming text changed \(touched) rows")
+                // An answer's text patches its rows in place (T3's `replaceStreamingMessageRows`); other streaming
+                // items, like reasoning, take the full row pass.
+                if case .rows(let changed)? = result?.change, !changed.isEmpty, changed.allSatisfy({ i in
+                    switch rows[i].kind { case .message, .assistantMeta: true; default: false }
+                }) {
+                    answerSteps += 1
+                    #expect(pipeline.fullPasses == passes, "step \(steps): streaming answer text ran a full row pass")
+                }
+            }
         }
-        times.sort()
-        let median = times[times.count / 2], p95 = times[times.count * 95 / 100], worst = times.last!
-        print("large thread: \(rows) rows, \(times.count) steps, median \(String(format: "%.2f", median)) ms, "
-              + "p95 \(String(format: "%.2f", p95)) ms, worst \(String(format: "%.2f", worst)) ms")
-        #if DEBUG
-        // Unoptimized builds run these passes about three times slower than the app's release build.
-        let frame = 16.0 * 3
-        #else
-        let frame = 16.0
-        #endif
-        #expect(p95 < frame, "95% of steps under \(frame) ms, got \(p95) ms")
+        print("large thread: \(rows.count) rows, \(steps) steps, \(textSteps) text-only, \(answerSteps) answer text, \(pipeline.fullPasses) full passes, widest step \(widest) rows")
+        #expect(answerSteps >= 5, "the tail streams answer text")
     }
 
     @Test func forkedThreadsWithInheritedRows() async throws {

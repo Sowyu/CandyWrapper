@@ -37,6 +37,8 @@ final class TimelinePipeline: @unchecked Sendable {
     private var changedSinceShown: Set<Int>? = []
     /// Entries an older history page put in front of `shown`'s, with every later entry unchanged.
     private var prependedSinceShown: Int?
+    /// Full row passes run so far. Tests read it to check that streaming updates patch rows instead.
+    private(set) var fullPasses = 0
 
     /// The rows for `request`, or nil when nothing changed.
     func run(_ request: Request) -> Result? {
@@ -89,6 +91,7 @@ final class TimelinePipeline: @unchecked Sendable {
             shown = previous
             if let splice { return Result(rows: previous.rows, change: .head(replaced: splice.replaced, inserted: splice.inserted)) }
         }
+        fullPasses += 1
         let derived = OpenTiming.measure("timeline rows", "\(source.entries.count) entries") { TimelineRows.Derived(source) }
         let previous = shown?.rows
         shown = derived
