@@ -8,25 +8,25 @@ import T3Protocol
 @Suite struct ComposerCompactionTests {
     private let start = Date(timeIntervalSince1970: 1_800_000_000)
 
-    @Test func resumeOfferNeedsClaudeAHundredThousandTokensAndSeventyIdleMinutes() {
+    @Test func resumeOfferNeedsClaudeFourHundredThousandTokensAndSeventyIdleMinutes() {
         let due = start.addingTimeInterval(70 * 60)
-        #expect(ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 100_000, updatedAt: start, now: due))
-        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 99_999, updatedAt: start, now: due))
-        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 150_000, updatedAt: start, now: due.addingTimeInterval(-1)))
-        #expect(!ComposerCompaction.shouldOfferResume(driver: "codex", usedTokens: 150_000, updatedAt: start, now: due))
-        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 150_000, updatedAt: nil, now: due))
-        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 120_000, updatedAt: start) == due)
+        #expect(ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 400_000, updatedAt: start, now: due))
+        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 399_999, updatedAt: start, now: due))
+        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 450_000, updatedAt: start, now: due.addingTimeInterval(-1)))
+        #expect(!ComposerCompaction.shouldOfferResume(driver: "codex", usedTokens: 450_000, updatedAt: start, now: due))
+        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 450_000, updatedAt: nil, now: due))
+        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 420_000, updatedAt: start) == due)
     }
 
     @Test func resumeTokensHideForDismissalsDisabledCompactionHeldQueuesAndFanOuts() {
-        let usage = ThreadContextWindowUsage(used: 123_400, maximum: 200_000, automatically: true, updatedAt: start)
+        let usage = ThreadContextWindowUsage(used: 423_400, maximum: 1_000_000, automatically: true, updatedAt: start)
         let late = start.addingTimeInterval(2 * 3600)
         func tokens(dismissed: Bool = false, disabled: Bool = false, held: Bool = false, multiple: Bool = false) -> Double? {
             ComposerCompaction.resumeTokens(usage: usage, driver: "claudeAgent", dismissed: dismissed, compactDisabled: disabled,
                                             hasHeldQueuedRuns: held, multipleModels: multiple, now: late)
         }
-        #expect(tokens() == 123_400)
-        #expect(ThreadContextWindowUsage.tokens(tokens() ?? 0) == "123k")
+        #expect(tokens() == 423_400)
+        #expect(ThreadContextWindowUsage.tokens(tokens() ?? 0) == "423k")
         #expect(tokens(dismissed: true) == nil)
         #expect(tokens(disabled: true) == nil)
         #expect(tokens(held: true) == nil)
@@ -145,5 +145,11 @@ import T3Protocol
         let half = try item("c", "compaction", run: "r", extra: ["afterTokenCount": .number(12)]).item
         #expect(EventRowView.compactionTokens(half) == "? → 12 tokens")
         #expect(EventRowView.compactionTokens(try item("c", "compaction", run: "r").item) == nil)
+    }
+
+    @Test func compactingBelowFiveHundredThousandAsksFirst() {
+        #expect(ComposerCompaction.confirmsCompaction(tokens: 420_000))
+        #expect(!ComposerCompaction.confirmsCompaction(tokens: 500_000))
+        #expect(!ComposerCompaction.confirmsCompaction(tokens: 780_000))
     }
 }
