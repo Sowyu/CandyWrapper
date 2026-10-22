@@ -2,6 +2,8 @@
 
 - [x] Redesign switches and accent color (2026-10-23, switches): measured again on Capy's settings page with a color-managed reader (the old reader misread Display P3, see docs/gotchas.md), Capy's switch is a 30 by 18 track in its accent #2b948b with a solid #131314 14pt knob inset 2pt and no shadow; ours now draws exactly that in dark, off on Capy's `--muted` #353537. Settings > Appearance > Interface has "Accent color": 8 swatches (teal default, blue, violet, pink, red, orange, amber, green) that recolor the Dither palette's accent roles live, with white or near-black text by contrast. Checked on screen in dark with teal, blue and pink. Open: Redesign's settings card (#222223 at 86%) was measured the old way and Capy's card reads #1a191a, so it needs a second look.
 
+- [x] Sticker app icon and the App icon setting (2026-10-23, appicon): `AppIcon.icon` is the white sticker; Settings > Appearance > App icon adds Pink, Grape, Mint, Lemon, Orange and Classic as alternates in Assets.car, put in the Dock with `applicationIconImage` while the app runs (Finder keeps Sticker, alternates ignore the Dark and Clear icon styles; docs/decisions.md). Checked on screen: the row and the Dock switching live to Pink, Classic and back.
+
 - [x] Redesign Settings after Capy (2026-10-22, settings): cards sit over the art (Settings scrim 0.8) as #222223 at 86% with a faint 1pt rim; titles 13pt regular in the foreground, descriptions in muted foreground (#aaaaab); section titles 15pt regular; selects sized to their value (11pt in, 8pt gap, 16pt chevron box, 8pt out, 28pt tall) on a lighter fill with a 10% rim; switches on a #5ba19c track under a card-colored knob. Checked in a dark window against Capy's "Composer and chat" crop. Fast lane and Settings, Select, Switch and DitherArt filters passed.
 
 - [x] Thread performance leftovers (2026-10-22, perf-thread-leftovers): changed-file trees reuse viewport rows (`c3585b9b`), and repeated Markdown thread links resolve each id once per pass, including misses. Eleven focused counting, behavior and fidelity tests passed. Checked the 2,000-file tree at the top and mid-scroll in a real dark window. Thread chips already use project icons and cached icon decoding; cross-machine resolution remains an existing feature gap. No full suite or perf-review, per the task brief.
@@ -180,7 +182,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 Leave these alone during side-by-side checks.
 
 - The sidebar title is the candy glyph and "Wrapper", and clicking it goes home.
-- The app icon is a black, glossy candy. T3's logo and name stay out of CandyWrapper's branding, to avoid a takedown.
+- The app icon is the white "sticker" candy with a thick black outline; Settings > Appearance > App icon puts a colored sticker or the old black, glossy candy (Classic) in the Dock while the app runs. T3's logo and name stay out of CandyWrapper's branding, to avoid a takedown.
 - The Glass theme and the Panel animations setting exist only here. The Glass opacity slider goes down to 10%, where T3 stops at 40%.
 - Escape leaves Settings.
 - Updates come from this repo's GitHub releases through Sparkle, and an update keeps agents on this Mac's server running.

@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ThemeLibrary.shared.controlsAppearance = false
         }
         ThemeLibrary.shared.start()
+        AppIconChoice.start()
         quitOnSIGTERM()
         DispatchQueue.global(qos: .utility).async { ComposerController.pruneAttachmentCache() }
         showMainWindow()

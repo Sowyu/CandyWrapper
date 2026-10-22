@@ -209,7 +209,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width])
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, appIconRow()])
         return s
     }
 
