@@ -64,4 +64,11 @@ struct FileLinksTests {
         }
         #expect(MarkdownLayout(document: doc, width: 640).fileChips.count == 1)
     }
+
+    /// `resolvePathLinkTarget` (fileLinks.ts:91-108): `~\` is a home path only under a Windows cwd.
+    @Test func homeRelativeLinksFollowTheCwdStyle() {
+        #expect(FileLinks.resolveAgainst("~\\notes.txt", cwd: "C:\\Users\\alice\\repo") == "C:\\Users\\alice\\notes.txt")
+        #expect(FileLinks.resolveAgainst("~/notes.txt", cwd: "/Users/alice/repo") == "/Users/alice/notes.txt")
+        #expect(FileLinks.resolveAgainst("~\\notes.txt", cwd: "/Users/alice/repo") == "/Users/alice/repo/~\\notes.txt")
+    }
 }
