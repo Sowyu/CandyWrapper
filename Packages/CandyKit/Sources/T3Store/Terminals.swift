@@ -289,6 +289,8 @@ public struct TerminalGroup: Codable, Sendable, Equatable {
 /// (`selectRunningSubprocessTerminalIds`). Feeds the sidebar's terminal indicator.
 public struct TerminalActivity: Sendable, Equatable {
     public private(set) var terminals: [String: TerminalSummary] = [:]
+    /// Whether the server's first snapshot arrived; until then no terminal counts as idle (`canReuseTerminal`).
+    public private(set) var loaded = false
 
     public init() {}
 
@@ -301,6 +303,7 @@ public struct TerminalActivity: Sendable, Equatable {
         switch event {
         case .snapshot(let list):
             terminals = Dictionary(list.map { (Self.key($0.threadId, $0.terminalId), $0) }) { $1 }
+            loaded = true
         case .upsert(let summary):
             terminals[Self.key(summary.threadId, summary.terminalId)] = summary
         case .remove(let threadId, let terminalId):

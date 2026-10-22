@@ -428,7 +428,8 @@ final class TerminalController {
         let local = threadId.localId.rawValue
         // T3 reuses nothing until the server's sessions are known (`canReuseTerminal`), and counts server
         // sessions this client has not opened yet, such as a worktree setup shell (ChatView.tsx:2656-2670).
-        let activity = metadata[threadId.environmentId ?? ""]?.activity
+        // The entry exists from the moment the subscription starts, so `loaded` waits for its snapshot.
+        let activity = (metadata[threadId.environmentId ?? ""]?.activity).flatMap { $0.loaded ? $0 : nil }
         let reusable = activity.flatMap {
             TerminalDrawerState.reusableScriptTerminal(drawerIds: state.terminalIds + $0.terminalIds(threadId: local),
                                                        activeId: state.activeTerminalId, panelIds: panel.panelState.panelTerminalIds,
