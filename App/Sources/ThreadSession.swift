@@ -374,7 +374,7 @@ final class ThreadController {
         // `runShellCommand` (ChatView.tsx:5105-5116): a code block's command runs as a one-off project script.
         // ponytail: T3 passes the handler only when the thread has a project; runScript does nothing without a launch target
         panel.model.runShellCommand = { [weak self] command in
-            self?.terminal.runScript(ProjectScript(id: "chat-code-block", name: "Chat code block", command: command))
+            self?.terminal.runScript(ProjectScript(id: "chat-code-block", name: "Chat code block", command: command), preserveHistory: true)
         }
         git = GitController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         automations = ThreadAutomationsController(panel: panel, environments: environments)

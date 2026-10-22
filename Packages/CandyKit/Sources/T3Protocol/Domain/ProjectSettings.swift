@@ -207,6 +207,10 @@ public struct ProjectScript: Equatable, Sendable {
                   async: json["async"]?.boolValue, previewUrl: json["previewUrl"]?.stringValue, autoOpenPreview: json["autoOpenPreview"]?.boolValue)
     }
 
+    /// `projectScriptTerminalInput` (packages/shared/src/projectScripts.ts:83-90): a leading space keeps the
+    /// script out of the history of bash with ignorespace, zsh with HIST_IGNORE_SPACE, and fish.
+    public static func terminalInput(_ command: String) -> String { " \(command)\r" }
+
     /// Optional keys stay off the wire when unset, as T3 builds them.
     public var json: JSONValue {
         var o: [String: JSONValue] = ["id": .string(id), "name": .string(name), "command": .string(command), "icon": .string(icon),

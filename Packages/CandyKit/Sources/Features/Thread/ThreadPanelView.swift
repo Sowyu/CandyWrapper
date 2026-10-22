@@ -538,6 +538,13 @@ public final class ThreadPanelView: DSView {
     public private(set) var terminalOpen = false
     /// The drawer's height while open (already clamped by the controller).
     public private(set) var terminalHeight: CGFloat = 0
+    /// `resolveTerminalDrawerMaxHeight` (ThreadTerminalDrawer.tsx:108-120): the composer overlays the
+    /// timeline, so the drawer stops where it would push the composer into the header. The composer's
+    /// share is the room the timeline keeps clear for it (`composerReservedHeight`).
+    public var terminalMaxHeight: CGFloat {
+        TerminalDrawerState.maxHeight(windowHeight: window?.contentView?.bounds.height ?? bounds.height, columnHeight: bounds.height,
+                                      headerHeight: chatTop, composerHeight: timeline.bottomInset)
+    }
     /// The header's terminal toggle was clicked (`terminal.toggle`).
     public var onTerminalToggle: (@MainActor () -> Void)?
     /// The thread details card (`ThreadDetailsPanel`): workspace, branch and git actions.
@@ -1406,7 +1413,11 @@ public final class ThreadPanelView: DSView {
         let stackCap = bannerStack.hasStack ? ComposerBannerStackView.peekHeight : 0
         let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
-        if timeline.bottomInset != inset { timeline.bottomInset = inset }
+        if timeline.bottomInset != inset {
+            timeline.bottomInset = inset
+            // The drawer's cap counts the composer, measured here after the drawer was placed.
+            if terminalOpen { needsLayout = true }
+        }
         if isDraft { timeline.isHidden = true }
     }
 
@@ -1447,8 +1458,8 @@ public final class ThreadPanelView: DSView {
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
         fileDropOverlay.frame = NSRect(x: 8, y: chatTop + 8, width: max(0, chat - 16), height: max(0, bounds.height - chatTop - 16))
         // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
-        // the column above it keeps at least the header.
-        let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, bounds.height - chatTop)) : 0
+        // the column above it keeps the header and the composer (`terminalMaxHeight`).
+        let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, terminalMaxHeight)) : 0
         let shownDrawer = !terminalSlide.isRunning ? drawer
             : ((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer

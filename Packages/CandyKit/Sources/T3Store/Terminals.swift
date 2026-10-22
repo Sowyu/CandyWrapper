@@ -39,11 +39,28 @@ public struct TerminalDrawerState: Codable, Sendable, Equatable {
         self = normalized
     }
 
-    /// `clampDrawerHeight`: rounded, at least 180, at most 75% of the window (never under 180).
-    public static func clampHeight(_ height: CGFloat, windowHeight: CGFloat) -> CGFloat {
+    /// `clampDrawerHeight` (ThreadTerminalDrawer.tsx:122-125): rounded, at least 180, at most `maxHeight`,
+    /// which wins when it is under 180.
+    public static func clampHeight(_ height: CGFloat, maxHeight: CGFloat) -> CGFloat {
         let safe = height.isFinite ? height : defaultHeight
-        let maxHeight = max(minHeight, (windowHeight * maxHeightRatio).rounded(.down))
         return min(max(safe.rounded(), minHeight), maxHeight)
+    }
+
+    /// `resolveTerminalDrawerMaxHeight` (ThreadTerminalDrawer.tsx:108-120, 055a8418c1): 75% of the window but
+    /// never under 180, and no more than the chat column leaves under its header and above the composer,
+    /// which overlays the timeline. That second cap may be under 180, so a short window shrinks the drawer
+    /// instead of pushing the composer into the header.
+    public static func maxHeight(windowHeight: CGFloat, columnHeight: CGFloat, headerHeight: CGFloat, composerHeight: CGFloat) -> CGFloat {
+        let windowCap = max(minHeight, (windowHeight * maxHeightRatio).rounded(.down))
+        return min(windowCap, max(0, columnHeight - headerHeight - composerHeight))
+    }
+
+    /// `findReusableProjectScriptTerminal` (apps/web/src/lib/projectScriptTerminal.ts): an idle drawer
+    /// terminal, the active one first. Right-panel terminals never count, even when listed as drawer ones,
+    /// because one PTY would show in both places and closing the drawer copy would kill the panel's shell.
+    public static func reusableScriptTerminal(drawerIds: [String], activeId: String, panelIds: Set<String>, runningIds: Set<String>) -> String? {
+        let idle = unique(drawerIds).filter { !panelIds.contains($0) && !runningIds.contains($0) }
+        return idle.contains(activeId) ? activeId : idle.first
     }
 
     /// The terminal the drawer shows: the active one if it still exists, else the first.
@@ -301,6 +318,11 @@ public struct TerminalActivity: Sendable, Equatable {
 
     public func summary(threadId: String, terminalId: String) -> TerminalSummary? {
         terminals[Self.key(threadId, terminalId)]
+    }
+
+    /// A thread's terminals running a subprocess (`useThreadRunningTerminalIds`).
+    public func runningTerminalIds(threadId: String) -> Set<String> {
+        Set(terminals.values.filter { $0.threadId == threadId && $0.hasRunningSubprocess }.map(\.terminalId))
     }
 
     /// A thread's terminals the server knows, in T3's numeric id order.
