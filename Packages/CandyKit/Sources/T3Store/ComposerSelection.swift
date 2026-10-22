@@ -321,6 +321,37 @@ public final class ComposerSelectionStore {
         save()
     }
 
+    /// Thread drafts whose model pick the thread already runs drop the pick, so the composer follows later
+    /// model changes made on other clients (`subscribeComposerDraftModelReconciliation`, composerDraftStore.ts:4152-4219).
+    /// Access and interaction mode picks stay. Returns whether anything changed.
+    @discardableResult
+    public func reconcileThreadModels(_ threadModel: (String) -> ModelSelection?) -> Bool {
+        var changed = false
+        for (key, draft) in drafts {
+            guard let id = draft.activeInstance, let pick = draft.selectionByInstance[id], let thread = threadModel(key),
+                  Self.pickMatchesThread(ModelSelection(instanceId: id, model: pick.model, selections: pick.options), thread) else { continue }
+            var kept = ComposerModelDraft()
+            kept.runtimeMode = draft.runtimeMode
+            kept.interactionMode = draft.interactionMode
+            drafts[key] = kept == ComposerModelDraft() ? nil : kept
+            changed = true
+        }
+        if changed { save() }
+        return changed
+    }
+
+    /// `draftModelPickMatchesThread` (packages/shared/src/model.ts:119-131): the same instance, model and options in
+    /// any order, with `fastMode: false` counted as unset because mobile omits it.
+    public static func pickMatchesThread(_ pick: ModelSelection, _ thread: ModelSelection) -> Bool {
+        func options(_ s: ModelSelection) -> [String] {
+            s.optionSelections.filter { $0.id != "fastMode" || $0.value != .bool(false) }.map { o in
+                let value = switch o.value { case .string(let v): "s" + v; case .bool(let b): b ? "b1" : "b0" }
+                return o.id + "\u{0}" + value
+            }.sorted()
+        }
+        return pick.instanceId == thread.instanceId && pick.model == thread.model && options(pick) == options(thread)
+    }
+
     /// Drops the picks of every key that matches, for a removed environment.
     public func removeDrafts(where matches: (String) -> Bool) {
         let before = drafts.count

@@ -208,6 +208,26 @@ struct ModelPickerTests {
         #expect(ModelTraits.ultrathinkInBody("Ultrathink:\nplease ultrathink") && !ModelTraits.ultrathinkInBody("Ultrathink:\nfix"))
     }
 
+    /// Another client moves the thread to the draft's pick: the pick drops, the access pick stays
+    /// (composerDraftStore.ts:4152-4219, model.ts:119-131).
+    @Test func threadModelReconcilesDraftPick() throws {
+        let config = try Self.recordedConfig()
+        let ctx = ComposerSelectionContext(catalog: ProviderCatalog(config.providers), serverDefaults: config.settings)
+        let store = ComposerSelectionStore(defaults: nil)
+        store.pickModel("t1", instance: "claudeAgent", model: "claude-opus-5-5", ctx)
+        store.setRuntimeMode("t1", .approvalRequired)
+        let other = ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5")
+        #expect(!store.reconcileThreadModels { _ in other })
+        let picked = ModelSelection(instanceId: "claudeAgent", model: "claude-opus-5-5", selections: [.init(id: "fastMode", value: .bool(false))])
+        #expect(store.reconcileThreadModels { $0 == "t1" ? picked : nil })
+        #expect(store.drafts["t1"]?.activeInstance == nil && store.drafts["t1"]?.explicit == false)
+        #expect(store.drafts["t1"]?.runtimeMode == .approvalRequired)
+        let high = ModelSelection(instanceId: "claudeAgent", model: "m", selections: [.init(id: "effort", value: .string("high"))])
+        #expect(!ComposerSelectionStore.pickMatchesThread(high, ModelSelection(instanceId: "claudeAgent", model: "m")))
+        #expect(!ComposerSelectionStore.pickMatchesThread(ModelSelection(instanceId: "claudeAgent", model: "m", selections: [.init(id: "fastMode", value: .bool(true))]),
+                                                          ModelSelection(instanceId: "claudeAgent", model: "m")))
+    }
+
     @Test func resolutionAndPicks() throws {
         let config = try Self.recordedConfig()
         let catalog = ProviderCatalog(config.providers)
