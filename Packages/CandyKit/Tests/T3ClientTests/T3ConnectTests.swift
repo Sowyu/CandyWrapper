@@ -401,6 +401,11 @@ struct RelayErrorMappingTests {
         #expect(ConnectionFailure.classify(wrapped) == .transient("x") && ConnectionFailure.locate(wrapped) == endpoint)
         // A direct route that does not answer failed at the server; over T3 Connect at the tunnel.
         #expect(ConnectionFailure.locate(EnvironmentHTTPError.network("down")).hop == .server)
+        // A 500's own reason and message stay out of the failure, as T3 maps `EnvironmentInternalError` (errors.ts:238-244).
+        let echo = try! JSONDecoder().decode(EnvironmentHTTPErrorBody.self, from: Data(#"{"_tag":"EnvironmentInternalError","reason":"Authorization: Bearer leaked","message":"Bearer leaked","traceId":"t5"}"#.utf8))
+        #expect(ConnectionFailure.classify(EnvironmentHTTPError.status(500, echo)) == .transient("The environment could not authorize the connection."))
+        #expect(ConnectionFailure.locate(EnvironmentHTTPError.status(500, echo)).traceId == "t5")
+        #expect(ConnectionFailure.classify(EnvironmentHTTPError.status(418, echo)) == .transient("The environment returned undeclared status 418."))
         #expect(T3Connect.locate(EnvironmentHTTPError.network("down")).hop == .tunnel)
     }
 

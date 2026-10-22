@@ -62,4 +62,14 @@ struct ConnectionDiagnosisTests {
         #expect(d?.headline == "T3 Code on Mac mini did not answer" && d?.moreInfoURL == nil)
         #expect(Self.diagnose(nil) == nil)
     }
+
+    /// Copy diagnostics carries no credentials, whatever an error quotes.
+    @Test func copiedErrorDropsCredentials() {
+        let leaky = ConnectionFailureInfo(reason: "network", blocked: false,
+                                          detail: "echo Authorization: Bearer abc.def, DPoP xyz; https://me:pw@host/pair?token=s3cret#token=frag",
+                                          hop: .server, via: .direct)
+        let text = Self.diagnose(leaky, via: .direct)!.text(hostLabel: "Mac mini")
+        for secret in ["abc.def", "xyz", "me:pw", "s3cret", "frag"] { #expect(!text.contains(secret)) }
+        #expect(text.contains("Bearer [redacted]") && text.contains("https://[redacted]@host/pair?token=[redacted]#token=[redacted]"))
+    }
 }
