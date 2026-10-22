@@ -19,6 +19,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 - [ ] T3 web performance bucket 5: settings, provider pushes, reconnect snapshots and miscellaneous panes (taken 2026-10-22, perf-misc).
 - [ ] Port timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
+- [ ] Port upstream sidebar performance work, bucket b1 (taken 2026-10-22, perf-sidebar).
 
 ### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
 
