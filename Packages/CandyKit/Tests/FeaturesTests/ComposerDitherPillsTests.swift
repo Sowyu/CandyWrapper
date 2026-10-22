@@ -88,6 +88,7 @@ struct ComposerDitherPillsTests {
             panel.layoutSubtreeIfNeeded()
             let composer = panel.composer.frame, row = panel.deviceRow.frame, waiting = panel.waitingIndicator.frame
             #expect(!panel.deviceRow.isHidden && panel.contextStrip.isHidden)
+            #expect(panel.deviceRow.subviews.contains { $0 is DitherPillSurface } && row.height == DitherPill.height)
             #expect(row.minY == composer.maxY + DitherPill.gap && row.minX == composer.minX + DitherPill.inset)
             #expect(row.maxX <= waiting.minX)
         }
