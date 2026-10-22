@@ -236,6 +236,14 @@ public final class DitherProjectPopoverView: DSView, PopupContent {
     }
 
     private var visibleProjectRows: Int { min(shown.count, Self.maxProjectRows) }
+    /// The project rows that fit once PopupHost caps the height to the space on its side: the list scrolls
+    /// and the footer rows stay inside the popup.
+    private var fittedProjectRows: Int {
+        let natural = popupSize.height
+        guard bounds.height > 0, bounds.height < natural else { return visibleProjectRows }
+        let spare = bounds.height - (natural - CGFloat(visibleProjectRows) * Self.rowHeight)
+        return min(visibleProjectRows, max(1, Int((spare / Self.rowHeight).rounded(.down))))
+    }
     private var projectSectionHeight: CGFloat { shown.isEmpty ? 0 : 8 + CGFloat(visibleProjectRows) * Self.rowHeight + 0.5 }
 
     public var popupSize: CGSize {
@@ -262,7 +270,7 @@ public final class DitherProjectPopoverView: DSView, PopupContent {
         hairline()
         var i = 0
         if !shown.isEmpty {
-            let listHeight = CGFloat(visibleProjectRows) * Self.rowHeight
+            let listHeight = CGFloat(fittedProjectRows) * Self.rowHeight
             projectList.frame = NSRect(x: 0, y: y + 4, width: bounds.width, height: listHeight)
             scrollOffset = min(scrollOffset, maxScroll)
             for r in 0..<shown.count {
@@ -284,11 +292,11 @@ public final class DitherProjectPopoverView: DSView, PopupContent {
         }
     }
 
-    private var maxScroll: CGFloat { max(0, CGFloat(shown.count - visibleProjectRows) * Self.rowHeight) }
+    private var maxScroll: CGFloat { max(0, CGFloat(shown.count - fittedProjectRows) * Self.rowHeight) }
 
     private func scrollToHighlight() {
         guard let i = highlighted, i < shown.count else { return }
-        let top = CGFloat(i) * Self.rowHeight, visible = CGFloat(visibleProjectRows) * Self.rowHeight
+        let top = CGFloat(i) * Self.rowHeight, visible = CGFloat(fittedProjectRows) * Self.rowHeight
         if top < scrollOffset { scrollOffset = top } else if top + Self.rowHeight > scrollOffset + visible { scrollOffset = top + Self.rowHeight - visible }
         needsLayout = true
     }
