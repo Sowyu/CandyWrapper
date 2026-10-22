@@ -55,21 +55,29 @@ Ported in this run, most seen first. Each commit message cites its T3 file:line.
 
 Still open, roughly by how often a user meets them:
 
-- [ ] Sending while approvals are pending declines them and redirects the agent, with four race toasts (ChatComposer.tsx:6177, ChatView.tsx:5225-5263). CW still locks the composer. Large.
-- [ ] The background work banner above the composer, with "Show" for one subagent (ThreadActivityBanners.tsx:100-170). Medium.
+- [x] Sending while approvals are pending declines them and redirects the agent, with four race toasts (ChatComposer.tsx:6177, ChatView.tsx:5225-5263). CW still locks the composer. Large.
+- [x] The background work banner above the composer, with "Show" for one subagent (ThreadActivityBanners.tsx:100-170). Medium.
 - [x] Thread links in assistant Markdown render as chips (MarkdownThreadLink.tsx, 15dc7b0130), with the project icon on every thread chip. Links to a thread on another machine stay unresolved.
 - [x] Mermaid diagrams use T3's new "pele" renderer, and closed fences render while streaming (fcb20e49aa, 48b486bd73). CW bundles pele 1.8.0 (`scripts/fetch-pele`) in place of mermaid; the diagram face's buttons moved to T3's top row (5a4e998053). Left: KaTeX in `$$` labels and the 600ms fade of a diagram that appears mid-stream.
 - [ ] Opt-in math rendering with KaTeX (`mathRenderingEnabled`, MarkdownMath.tsx, MathTypeset.tsx). Large, and it needs the user's decision on a WKWebView renderer (see PROGRESS.md).
 - [x] Workflow phases and member agents in the opening block, and the native coordinator status on the parent Lineage row (3ff5b3c82a, 6eff4a9647). The parent thread streams only while a workflow opening or the details card needs it. Not seen on screen: no sandbox has a workflow coordinator.
-- [ ] PR panel: review thread replies nested with "More replies" and "View on host" (70a869d262), the change breakdown tooltip through `pullRequests.changeBreakdown` (92a6f6d731), and checks popover columns (618c46478a).
-- [ ] Connection diagnosis: a failure model with hop, cause, trace id and the "Details" block with "What to try", "Retry now" and "Copy diagnostics" (packages/client-runtime/src/connection/diagnosis.ts). Large.
+- [x] PR panel: review thread replies nested with "More replies" and "View on host" (70a869d262), the change breakdown tooltip through `pullRequests.changeBreakdown` (92a6f6d731), and checks popover columns (618c46478a).
+- [x] Connection diagnosis: a failure model with hop, cause, trace id and the "Details" block with "What to try", "Retry now" and "Copy diagnostics" (packages/client-runtime/src/connection/diagnosis.ts). Large.
 - [x] Add to another machine: the dialog, `projects.listIgnoredFiles` and the ignored file copy (AddProjectToMachineDialog.tsx, lib/addProjectToMachine.ts), with #22254's landing on the clone, no clone toasts and the favicon asked again once the clone lands. Done 2026-10-22 (`AddProjectToMachineController`, `Features/Composer/AddProjectToMachine*.swift`); checked on screen against two 3473 servers in dark and light. No fidelity reference exists for the dialog.
-- [ ] Scheduled task webhook filters and dedupe fields in the form (ScheduledTasksSettings.tsx:162-250, 1535-1603). Medium.
-- [ ] Usage: weekly-exhausted accounts and their refill estimate (`poolMember`, 5b72385065), the freshest snapshot for one account on two instances (780b62dd26).
-- [ ] Storage cleanup results as a Machine, Project, Folder and Thread grid (5803c8b299). It needs a width-dependent detail row in DesignSystem.
-- [ ] Smaller: Cmd+Z undoes a settle while an editor has focus (21da3061aa), the Browser settings sections merged into one, the dark switch thumb (`muted-foreground`, needs new switch references), "Load earlier turns" as a button between dividers, the composer's code-pair caret rule (7259e4f594) and the blank line after a quote (02e9d2417a), the host freeze toast's environment label from the descriptor, the reachability line's "More info" link, EAS cloud simulator hosts (needs WebRTC; see PROGRESS.md).
+- [x] Scheduled task webhook filters and dedupe fields in the form (ScheduledTasksSettings.tsx:162-250, 1535-1603). Medium.
+- [x] Usage: weekly-exhausted accounts and their refill estimate (`poolMember`, 5b72385065), the freshest snapshot for one account on two instances (780b62dd26).
+- [x] Storage cleanup results as a Machine, Project, Folder and Thread grid (5803c8b299). It needs a width-dependent detail row in DesignSystem.
+- [x] Smaller, ported 2026-10-22: Cmd+Z undoes a settle while an editor has focus (21da3061aa), the Browser settings sections merged into one, the dark switch thumb (`muted-foreground`) with 3473's inset focus ring, the composer's code-pair caret rule (7259e4f594) and the blank line after a quote (02e9d2417a), the host freeze toast's environment label from the descriptor, and the reachability line's "More info" link.
+- [ ] Still open from the smaller list: "Load earlier turns" as a button between dividers and EAS cloud simulator hosts (both wait on the user, see PROGRESS.md).
 
 No CW counterpart: the hosted web app's empty states, the mobile composer and keyboard fixes, Electron webview and zoom fixes, desktop default-browser and passkey handling, browser preview recording, and React state or focus fixes.
+
+Left after the 2026-10-22 ports, besides math rendering and the two items above:
+- [ ] The Antigravity install section (`ProviderSetupSection`): enable row, read-only and "Update required" states, the install row on `provider.install.*`, the remove confirmation and `ProviderAuthenticationSection`. Large.
+- [ ] The connection diagnosis headline in the composer's offline banner (`EnvironmentBannerView` needs a description line); relay-route failures were not checked on screen.
+- [ ] The PR Summary shows every conversation at once; T3 shows 20 with "Show older conversations" and a partially loaded notice. Cleanup result titles stay on one line where T3 wraps a long path.
+- [ ] 3473's browser profile rows (one row with a list and an import menu), Codex usage pooled by window kind (`poolKey`), and the sidebar hover card's branch line (`leading-5`, needs a new hover-card reference).
+- [ ] Smaller: T3's guard that holds new approvals back while you type, unwatching PR watches when Stop finds no run, pasted backtick pairs staying literal, KaTeX in `$$` diagram labels, the 600 ms fade of a diagram that appears mid-stream, thread links with empty text or to another machine, and tables in user messages in a wide lane.
 
 ## 3. Client performance
 
