@@ -198,6 +198,46 @@ struct UsageTests {
         #expect(pools[0].windows.last?.columns.first?.window == nil)
     }
 
+    /// `poolMember` (usageLimits.test.ts, T3 5b72385065): an account out of weekly quota shows its session spent and
+    /// refills only as both resets allow.
+    @Test func weeklyExhaustedSessionsRefillAsTheResetsAllow() {
+        func pooled(sessionUsed: Double, sessionReset: String, weeklyReset: String) -> (UsageLimitWindow, Double, Int?) {
+            let p = Self.provider("codex", email: "a@x.com", windows: [
+                UsageLimitWindow(id: "primary", kind: "session", label: "5h", usedPercent: sessionUsed, resetsAt: sessionReset, windowDurationMins: 300),
+                UsageLimitWindow(id: "secondary", kind: "weekly", label: "Weekly", usedPercent: 100, resetsAt: weeklyReset, windowDurationMins: 10080)])
+            let accounts = UsageLimitsLogic.accounts([UsageLimitsEnvironment(environmentId: "e1", label: "One", providers: [p], sources: [])])
+            let session = UsageLimitsLogic.pools(accounts, nowMs: Self.now)[0].windows[0]
+            return (session.columns[0].window!, session.columns[0].refillPercent, session.resets.first?.restoresPercent)
+        }
+        // The session resets first but stays blocked until the week does, then comes back whole.
+        let early = pooled(sessionUsed: 40, sessionReset: "2026-10-10T13:00:00.000Z", weeklyReset: "2026-10-11T00:00:00.000Z")
+        #expect(early.0.usedPercent == 100 && early.0.resetsAt == "2026-10-11T00:00:00.000Z" && early.0.windowDurationMins == nil)
+        #expect(early.1 == 100 && early.2 == 100)
+        // The week resets first: a spent session waits for its own reset.
+        let spent = pooled(sessionUsed: 100, sessionReset: "2026-10-12T00:00:00.000Z", weeklyReset: "2026-10-11T00:00:00.000Z")
+        #expect(spent.0.resetsAt == "2026-10-12T00:00:00.000Z" && spent.1 == 100)
+        // A partly spent session only gets its unused part back when the week resets.
+        let partial = pooled(sessionUsed: 30, sessionReset: "2026-10-12T00:00:00.000Z", weeklyReset: "2026-10-11T00:00:00.000Z")
+        #expect(partial.0.resetsAt == "2026-10-11T00:00:00.000Z" && partial.1 == 70)
+        // A stale reset gives no estimate.
+        let stale = pooled(sessionUsed: 30, sessionReset: "2026-10-10T11:00:00.000Z", weeklyReset: "2026-10-11T00:00:00.000Z")
+        #expect(stale.0.usedPercent == 100 && stale.0.resetsAt == nil && stale.1 == 0 && stale.2 == nil)
+    }
+
+    /// `collectProviderUsageLimits` (usageLimits.test.ts, T3 780b62dd26): one account on two instances shows once, with
+    /// the fresher usable reading and the freshest reset credits.
+    @Test func reportShowsAnAccountOnTwoInstancesOnce() {
+        let older = Self.provider("codex", email: "a@x.com", windows: [UsageLimitWindow(id: "primary", kind: "session", label: "5h", usedPercent: 10)],
+                                  checkedAt: "2026-10-10T09:00:00.000Z", credits: UsageResetCredits(availableCount: 2))
+        let newer = Self.provider("work", email: "a@x.com", windows: [UsageLimitWindow(id: "primary", kind: "session", label: "5h", usedPercent: 60)],
+                                  checkedAt: "2026-10-10T11:00:00.000Z")
+        let report = UsageLimitsLogic.report(instanceId: "codex", providers: [older, newer], sources: [], nowMs: Self.now)
+        #expect(report?.accounts.count == 1)
+        #expect(report?.accounts[0].instanceId == "work" && report?.accounts[0].limits.windows[0].usedPercent == 60)
+        #expect(report?.accounts[0].limits.resetCredits?.availableCount == 2)
+        #expect(report?.accounts[0].resetCreditTarget == .instance("codex"))
+    }
+
     @Test func noticesAndReport() {
         var failing = Self.provider("claudeAgent", driver: "claudeAgent", email: nil, windows: [])
         failing.usageLimits?.unavailableReason = "probeFailed"

@@ -430,7 +430,8 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         let restores = Dictionary(w.resets.map { ($0.account.key, $0) }, uniquingKeysWith: { a, _ in a })
         for (i, col) in w.columns.enumerated() {
             guard let cw = col.window else { continue }
-            let seg = UsagePoolSegmentView(account: col.account, window: cw, reset: restores[col.account.key], color: color, nowMs: nowMs, index: i + 1,
+            let seg = UsagePoolSegmentView(account: col.account, window: cw, reset: restores[col.account.key], refillPercent: col.refillPercent,
+                                           color: color, nowMs: nowMs, index: i + 1,
                                            columns: w.columns.count, showAccountName: w.columns.count > 1)
             seg.onUseReset = { [weak self] a in self?.onUseReset?(a) }
             segments.append(seg)
@@ -505,6 +506,8 @@ final class UsagePoolSegmentView: ControlView {
     let account: UsageLimitAccount
     let limitWindow: UsageLimitWindow
     let reset: UsageLimitPoolWindow.Reset?
+    /// The share the next reset restores, which for an account out of weekly quota can be less than what is spent.
+    let refillPercent: Double
     let color: NSColor
     let nowMs: Int64
     let index: Int
@@ -523,9 +526,10 @@ final class UsagePoolSegmentView: ControlView {
     /// `paceRemainingPercent`: where even spending would be, as the tick in a gap (UsageLimitsPooled.tsx:345-393).
     let timeLeft: Int?
 
-    init(account: UsageLimitAccount, window: UsageLimitWindow, reset: UsageLimitPoolWindow.Reset?, color: NSColor, nowMs: Int64, index: Int,
-         columns: Int, showAccountName: Bool) {
+    init(account: UsageLimitAccount, window: UsageLimitWindow, reset: UsageLimitPoolWindow.Reset?, refillPercent: Double = 100, color: NSColor,
+         nowMs: Int64, index: Int, columns: Int, showAccountName: Bool) {
         self.account = account; self.limitWindow = window; self.reset = reset; self.color = color; self.nowMs = nowMs; self.index = index
+        self.refillPercent = refillPercent
         remaining = UsageLimitsLogic.remainingPercent(window)
         resetsIn = UsageLimitsLogic.resetsIn(window, nowMs: nowMs)
         creditCount = account.limits.resetCredits?.availableCount ?? 0
@@ -604,9 +608,11 @@ final class UsagePoolSegmentView: ControlView {
             ctx.setFillColor(color.withAlphaComponent(0.35).cgColor(in: self))
             ctx.fillPath()
         }
-        // `repeating-linear-gradient(135deg, color 0 1px, transparent 1px 5px)` at 20%.
-        if remaining < 100, reset != nil {
-            let spent = CGRect(x: fillW, y: 0, width: r.width - fillW, height: r.height)
+        // `repeating-linear-gradient(135deg, color 0 1px, transparent 1px 5px)` at 20%, from the right edge over what the
+        // reset hands back (UsageLimitsPooled.tsx:249-258, T3 5b72385065).
+        if remaining < 100, reset != nil, refillPercent > 0 {
+            let hatchW = r.width * CGFloat(min(Double(100 - remaining), refillPercent)) / 100
+            let spent = CGRect(x: r.width - hatchW, y: 0, width: hatchW, height: r.height)
             ctx.saveGState()
             ctx.clip(to: spent)
             ctx.setStrokeColor(color.withAlphaComponent(0.2).cgColor(in: self))
