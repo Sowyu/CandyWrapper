@@ -149,7 +149,8 @@ import Testing
         b.receive(json(#"{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"nope"}}"#))
         b.receive(json(#"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"arguments":{}}}"#))
         b.receive(json(#"{"jsonrpc":"2.0","id":10,"method":"ui/unknown"}"#))
-        try await Task.sleep(for: .milliseconds(50))
+        // The tool calls answer on their own tasks.
+        #expect(await eventually { Set(posted.messages.compactMap { $0["id"]?.doubleValue }) == [7, 8, 9, 10] })
         let byId = Dictionary(posted.messages.compactMap { m in m["id"]?.doubleValue.map { (Int($0), m) } }, uniquingKeysWith: { a, _ in a })
         #expect(byId[7]?["result"]?["content"]?[0]?["text"]?.stringValue == "ok")
         #expect(byId[7]?["result"]?["structuredContent"] == nil)
@@ -174,7 +175,8 @@ import Testing
         b.receive(json(#"{"jsonrpc":"2.0","id":3,"method":"ui/request-display-mode","params":{"mode":"inline"}}"#))
         b.receive(json(#"{"jsonrpc":"2.0","id":4,"method":"ui/download-file","params":{"contents":[{"type":"resource","resource":{"name":"note.txt","text":"hello"}}]}}"#))
         b.receive(json(#"{"jsonrpc":"2.0","id":5,"method":"ui/message","params":{"role":"user","content":[{"type":"text","text":"Continue"}]}}"#))
-        try await Task.sleep(for: .milliseconds(50))
+        // Every request has its answer, so every callback that was going to run has run.
+        #expect(await eventually { Set(posted.messages.compactMap { $0["id"]?.doubleValue }).isSuperset(of: [1, 2, 3, 4, 5]) })
         #expect(requestedModes.isEmpty)
         #expect(messages == ["Continue"])
         #expect(downloads.first?.bytes == Data("hello".utf8))
