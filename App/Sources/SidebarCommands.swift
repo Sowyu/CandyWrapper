@@ -64,7 +64,7 @@ final class SidebarCommands {
         sidebar.actions.unsnooze = { [weak self] in self?.unsnooze($0) }
         sidebar.actions.unpin = { [weak self] in self?.unpin($0) }
         sidebar.actions.acknowledgeWake = { [weak self] id in
-            guard let self, let thread = self.shell(id), let wake = SidebarModel.threadWokeAt(SidebarThread(thread), nowMs: self.nowMs) else { return }
+            guard let self, let thread = self.shell(id), let wake = SidebarModel.threadWokeAt(self.presented(thread), nowMs: self.nowMs) else { return }
             self.threads.acknowledgeWake(id, at: wake)
         }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
@@ -270,6 +270,10 @@ final class SidebarCommands {
 
     private var snapshot: ShellSnapshot? { sidebar?.snapshot }
     func shell(_ id: ThreadId) -> ThreadShell? { snapshot?.threads.first { $0.id == id } }
+    /// The thread as the sidebar presents it, with what its hidden subagents wait on (T3 f4df794777).
+    func presented(_ thread: ThreadShell) -> SidebarThread {
+        SidebarThread(thread, pendingSubagentRequest: PendingSubagentRequests.byThread(snapshot?.threads ?? [])[thread.id])
+    }
     private var nowMs: Int64 { TimestampFormat.nowMs() }
 
     /// `checkThreadOperations` (Sidebar.tsx:315-326): every thread must be on a connection that may change it.
@@ -300,7 +304,7 @@ final class SidebarCommands {
         guard !settling.contains(id), let thread = shell(id) else { return }
         settling.insert(id)
         let navigate = navigates ? planForwardNavigation(id) : nil
-        let wokeAt = SidebarModel.threadWokeAt(SidebarThread(thread), nowMs: nowMs)
+        let wokeAt = SidebarModel.threadWokeAt(presented(thread), nowMs: nowMs)
         // Settling drops the pin and the snooze on the server, so Undo puts them back too.
         let pinKey = thread.pinnedAt != nil ? thread.pinOrderKey : nil
         let wasPinned = thread.pinnedAt != nil
@@ -362,7 +366,7 @@ final class SidebarCommands {
     @discardableResult
     private func performSnooze(_ id: ThreadId, until wake: Date, leaving: Set<ThreadId> = [], reportFailure: Bool = true) async -> Error? {
         guard !snoozing.contains(id), let thread = shell(id) else { return nil }
-        let presented = SidebarThread(thread)
+        let presented = self.presented(thread)
         guard SidebarModel.canSnooze(presented, nowMs: nowMs) else {
             let error = CommandMessage(errorDescription: "This thread is waiting on you. Respond to the pending request before snoozing it.")
             if reportFailure { fail("Failed to snooze thread", error) }
@@ -384,7 +388,7 @@ final class SidebarCommands {
             guard let self else { return }
             _ = await self.attempt("Failed to wake thread", { try await self.environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) })
         }
-        if routeThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(SidebarThread(now), nowMs: nowMs) { navigate?() }
+        if routeThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(self.presented(now), nowMs: nowMs) { navigate?() }
         return nil
     }
 
@@ -467,7 +471,7 @@ final class SidebarCommands {
         }
         let wasOpen = routeThreadId == id
         let project = snapshot?.projects.first { $0.id == thread.projectId }
-        let wokeAt = SidebarModel.threadWokeAt(SidebarThread(thread), nowMs: nowMs)
+        let wokeAt = SidebarModel.threadWokeAt(presented(thread), nowMs: nowMs)
         let claim = ledger.begin("archive", id.rawValue)
         Task {
             do { try await environments.dispatch(id, ThreadCommands.archive(id.localId)) } catch {
@@ -545,7 +549,7 @@ final class SidebarCommands {
             showSelectionMenu(event: event, view: view)
             return
         }
-        let presented = SidebarThread(thread)
+        let presented = self.presented(thread)
         let row = sidebar.shownItems.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
         let group = snapshot.flatMap { s in
             SidebarModel.buildProjectGroups(s.projects, preferredEnvironmentId: sidebar.state.environments.primaryId)
@@ -733,9 +737,10 @@ final class SidebarCommands {
         let settling = selected.filter { $0.settledOverride != .settled }
         let regeneratable = selected.filter { $0.titleRegeneration == nil }
         let presets = SnoozePresets.resolve(now: Date())
+        let requests = PendingSubagentRequests.byThread(snapshot?.threads ?? [])
         // ponytail: every environment reads as supporting pins, snooze and title regeneration; gate per descriptor for old servers
         let items = ThreadActionMenu.bulkItems(count: selected.count, pinnedCount: pinned.count, settlingCount: settling.count,
-                                               canSnooze: selected.allSatisfy { SidebarModel.canSnooze(SidebarThread($0), nowMs: ms) },
+                                               canSnooze: selected.allSatisfy { SidebarModel.canSnooze(SidebarThread($0, pendingSubagentRequest: requests[$0.id]), nowMs: ms) },
                                                titleSupportedCount: selected.count, titleActionableCount: regeneratable.count,
                                                canOperate: selected.allSatisfy { environments.canOperate($0.id.environmentId) },
                                                snoozePresets: presets)

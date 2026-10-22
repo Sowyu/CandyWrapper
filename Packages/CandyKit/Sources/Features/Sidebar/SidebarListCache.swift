@@ -62,6 +62,9 @@ public final class SidebarListCache {
     private var shells: [ThreadShell] = []
     private var entries: [Entry?] = []
     private var threads: [SidebarThread?] = []
+    /// The last snapshot's `pendingSubagentRequestsByThread`. A subagent's request changes its parent's values
+    /// while the parent's own shell stays the same.
+    private var subagentRequests: [ThreadId: PendingSubagentRequest] = [:]
     /// Threads that may differ from the last build's, from the app; nil when unknown, which compares them all.
     private var pending: Set<ThreadId>?
     /// Whether `noteChanges` ran since the last build. A build without a note compares every thread.
@@ -116,6 +119,10 @@ public final class SidebarListCache {
         var moved = false
         let new = snapshot.threads
         let hint = noted ? pending : nil
+        let same = Self.sameStorage(new, shells)
+        let requests = same ? subagentRequests : PendingSubagentRequests.byThread(new)
+        let requestChanged = same ? [] : Set(requests.keys).union(subagentRequests.keys).filter { requests[$0] != subagentRequests[$0] }
+        subagentRequests = requests
         func derive(_ i: Int, _ shell: ThreadShell, previous: Placement?) -> (Entry?, SidebarThread?) {
             rows[shell.id] = nil
             changed.insert(i)
@@ -125,16 +132,18 @@ public final class SidebarListCache {
             }
             // The old place stays until the pass below compares it with the new one.
             if entry.visible { entry.placement = previous } else if let previous { resort.insert(previous.section) }
-            return (entry, SidebarThread(shell))
+            return (entry, SidebarThread(shell, pendingSubagentRequest: requests[shell.id]))
         }
-        if Self.sameStorage(new, shells) {
+        if same {
             // Nothing changed (a clock tick or a state change).
         } else if Self.sameIds(new, shells) {
             // The usual update: the same threads in the same order, some with new values. Those are derived
             // again in place; with the app's hint only the hinted ones are even compared.
             for i in new.indices {
-                if let hint, hint.isEmpty || !hint.contains(new[i].id) { continue }
-                if shells[i] == new[i] { continue }
+                if !requestChanged.contains(new[i].id) {
+                    if let hint, hint.isEmpty || !hint.contains(new[i].id) { continue }
+                    if shells[i] == new[i] { continue }
+                }
                 (entries[i], threads[i]) = derive(i, new[i], previous: entries[i]?.placement)
             }
             shells = new
@@ -147,7 +156,7 @@ public final class SidebarListCache {
             nextThreads.reserveCapacity(new.count)
             for (i, shell) in new.enumerated() {
                 let j = oldIndex[shell.id]
-                if let j, shells[j] == shell {
+                if let j, shells[j] == shell, !requestChanged.contains(shell.id) {
                     next.append(entries[j]); nextThreads.append(threads[j])
                     if j != i { resort.insert(.snoozed) } // equal snooze times keep snapshot order
                     continue
@@ -208,9 +217,10 @@ public final class SidebarListCache {
         noted = false
         entries = []
         threads = []
+        subagentRequests = PendingSubagentRequests.byThread(shells)
         for shell in shells {
             guard var e = Self.entry(shell, scopedIds: ctx.scopedIds) else { entries.append(nil); threads.append(nil); continue }
-            let thread = SidebarThread(shell)
+            let thread = SidebarThread(shell, pendingSubagentRequest: subagentRequests[shell.id])
             if e.visible { e.placement = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs) }
             entries.append(e)
             threads.append(thread)

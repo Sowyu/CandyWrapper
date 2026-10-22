@@ -60,11 +60,15 @@ public struct SidebarThread: Sendable, Equatable, Identifiable {
     public let latestRun: ThreadRunSummary?
     public let hasPendingApprovals: Bool
     public let hasPendingUserInput: Bool
+    /// What a live subagent below this thread waits on the user for (models.ts:112-114, T3 f4df794777). Subagent rows
+    /// are hidden, so the threads above them carry it. See `PendingSubagentRequests`.
+    public let pendingSubagentRequest: PendingSubagentRequest?
 
     public var id: ThreadId { shell.id }
 
-    public init(_ shell: ThreadShell) {
+    public init(_ shell: ThreadShell, pendingSubagentRequest: PendingSubagentRequest? = nil) {
         self.shell = shell
+        self.pendingSubagentRequest = pendingSubagentRequest
         runtime = SidebarModel.shellRuntime(shell)
         latestRun = SidebarModel.presentLatestRun(shell)
         let pending = shell.pendingRuntimeRequest
@@ -186,9 +190,11 @@ public enum SidebarModel {
         return .ready
     }
 
+    /// A subagent's request reads as the thread's own (Sidebar.logic.ts:984-990).
     public static func resolveSidebarThreadStatus(_ thread: SidebarThread) -> SidebarThreadStatus {
         resolveSidebarThreadStatus(
-            hasPendingApprovals: thread.hasPendingApprovals, hasPendingUserInput: thread.hasPendingUserInput,
+            hasPendingApprovals: thread.hasPendingApprovals || thread.pendingSubagentRequest == .approval,
+            hasPendingUserInput: thread.hasPendingUserInput || thread.pendingSubagentRequest == .userInput,
             runtime: thread.runtime, blockedOnThreadWait: thread.shell.blockedOnThreadWait == true)
     }
 
@@ -266,7 +272,8 @@ public enum SidebarModel {
 
     public static func resolveThreadStatusPill(_ thread: SidebarThread, lastVisitedAt: T3Timestamp?) -> ThreadStatusPill? {
         resolveThreadStatusPill(
-            hasPendingApprovals: thread.hasPendingApprovals, hasPendingUserInput: thread.hasPendingUserInput,
+            hasPendingApprovals: thread.hasPendingApprovals || thread.pendingSubagentRequest == .approval,
+            hasPendingUserInput: thread.hasPendingUserInput || thread.pendingSubagentRequest == .userInput,
             interactionMode: thread.shell.interactionMode,
             hasActionableProposedPlan: thread.shell.hasActionableProposedPlan, latestRun: thread.latestRun,
             runtime: thread.runtime, lastVisitedAt: lastVisitedAt,
@@ -359,10 +366,10 @@ public enum SidebarModel {
     /// Port of `threadRaisedHandWhileSnoozed` (threadSettled.ts:82-97). Only a request for the user or a fresh
     /// failure ends a snooze early. A finished run never does (T3 d2fb83a973), so a snoozed thread that keeps
     /// waking for background work stays hidden until its timer. Any pending request counts, auth refresh and a
-    /// nonblocking question included.
-    // ponytail: no pendingSubagentRequest yet (T3 f4df794777), add it with the subagent sidebar status
+    /// nonblocking question included, and so does a subagent's (T3 f4df794777).
     public static func threadRaisedHandWhileSnoozed(_ thread: SidebarThread) -> Bool {
         if thread.hasPendingApprovals || thread.hasPendingUserInput { return true }
+        if thread.pendingSubagentRequest != nil { return true }
         if thread.shell.pendingRuntimeRequest != nil { return true }
         guard let failedAt = failureEdgeAt(thread) else { return false }
         guard let snoozedAt = thread.shell.snoozedAt else { return true }
@@ -453,9 +460,11 @@ public enum SidebarModel {
     }
 
     /// `isThreadWorking` (client-runtime state/threadInbox.ts:21-34): a running run, or one stopped with
-    /// background work that will wake it. Approvals, questions, plan prompts and failures stay in the inbox.
+    /// background work that will wake it. Approvals, questions (its own or a subagent's), plan prompts and failures
+    /// stay in the inbox.
     public static func isThreadWorking(_ thread: SidebarThread) -> Bool {
         if thread.hasPendingApprovals || thread.hasPendingUserInput { return false }
+        if thread.pendingSubagentRequest != nil { return false }
         let runtimeActive = thread.runtime.map { activeRunStatuses.contains($0.status) } ?? false
         if !runtimeActive, thread.runtime?.status != .idle { return false }
         let runSettled = thread.latestRun.map { run in

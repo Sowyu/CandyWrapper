@@ -71,6 +71,7 @@ public struct ThreadNotificationEvent: Sendable, Equatable {
 public struct ThreadNotificationTracker: Sendable {
     struct State: Sendable {
         var raw: ThreadShell
+        var subagentRequest: PendingSubagentRequest?
         var attention: String?
         var completion: Int64?
     }
@@ -89,15 +90,18 @@ public struct ThreadNotificationTracker: Sendable {
         let before = previous[environmentId] ?? [:]
         var next: [ThreadId: State] = [:]
         var events: [ThreadNotificationEvent] = []
+        // Subagents are skipped below, so their requests notify through the thread above them (T3 f4df794777).
+        let subagentRequests = PendingSubagentRequests.byThread(threads)
         for raw in threads {
             if raw.lineage.relationshipToParent == .subagent { continue }
             let prior = before[raw.id]
+            let subagentRequest = subagentRequests[raw.id]
             // An unchanged thread can't produce a new notification.
-            if let prior, prior.raw == raw {
+            if let prior, prior.raw == raw, prior.subagentRequest == subagentRequest {
                 next[raw.id] = prior
                 continue
             }
-            let thread = SidebarThread(raw)
+            let thread = SidebarThread(raw, pendingSubagentRequest: subagentRequest)
             var status = SidebarModel.resolveSidebarThreadStatus(thread)
             if status == .ready, thread.latestRun?.status == .failed { status = .failed }
             let attention: String? = [.input, .approval, .failed, .limited].contains(status)
@@ -106,7 +110,7 @@ public struct ThreadNotificationTracker: Sendable {
             let completedAt = thread.latestRun?.completedAt?.epochMs
             let completion: Int64? = status == .ready && thread.latestRun?.status == .completed && completedAt != nil
                 ? completedAt : prior?.completion
-            next[raw.id] = State(raw: raw, attention: attention, completion: completion)
+            next[raw.id] = State(raw: raw, subagentRequest: subagentRequest, attention: attention, completion: completion)
             guard let prior, raw.archivedAt == nil else { continue }
             let kind: ThreadNotificationEvent.Kind?
             if let attention, attention != prior.attention {

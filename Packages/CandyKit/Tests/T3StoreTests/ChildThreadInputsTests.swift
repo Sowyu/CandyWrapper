@@ -32,4 +32,31 @@ struct ChildThreadInputsTests {
         ]
         #expect(ChildThreadInputs.pending(for: "root", in: threads).map(\.id.rawValue) == ["live", "old", "deep"])
     }
+
+    /// `pendingSubagentRequestsByThread` and the snooze it ends (threadShell.test.ts, threadSnoozed.test.ts, T3 f4df794777).
+    @Test func aSubagentRequestReachesEveryThreadAboveIt() {
+        let approval = { (t: inout ThreadShell) in
+            Self.live(.running)(&t)
+            t.pendingRuntimeRequest = PendingRuntimeRequestSummary(id: RuntimeRequestId("a-\(t.id.rawValue)"), kind: "command_approval",
+                                                                   createdAt: "2026-10-14T00:00:00.000Z")
+        }
+        let threads = [
+            thread("root") { $0.snoozedUntil = "2999-01-01T00:00:00.000Z"; $0.snoozedAt = "2026-10-14T00:00:00.000Z" },
+            Self.child("mid", of: "root") { $0.pendingRuntimeRequest = nil },
+            Self.child("ask", of: "mid", Self.live(.waiting)),
+            Self.child("approve", of: "mid", approval),
+            Self.child("other", of: "root", Self.live(.waiting)),
+            Self.child("native", of: "other") { Self.live(.running)(&$0); $0.creationSource = "provider" },
+            Self.child("auth", of: "other") { Self.live(.running)(&$0); $0.pendingRuntimeRequest?.kind = .authRefresh },
+        ]
+        let requests = PendingSubagentRequests.byThread(threads)
+        // An approval outranks a question.
+        #expect(requests["root"] == .approval && requests["mid"] == .approval && requests["other"] == nil)
+        #expect(ChildThreadInputs.title(ChildThreadInputs.pending(for: "mid", in: threads)) == "2 subagents need you")
+        let root = SidebarThread(threads[0], pendingSubagentRequest: requests["root"])
+        #expect(!SidebarModel.effectiveSnoozed(root, nowMs: 0))
+        #expect(!SidebarModel.canSnooze(root, nowMs: 0))
+        #expect(SidebarModel.resolveSidebarThreadStatus(root) == .approval)
+        #expect(SidebarModel.effectiveSnoozed(SidebarThread(threads[0]), nowMs: 0))
+    }
 }

@@ -51,7 +51,7 @@ struct SidebarSearchTests {
                 "linkedPullRequest": ["projectId": "p", "repository": "acme/app", "number": 42, "url": "https://github.com/acme/app/pull/42"]]),
             SidebarPreview.thread("b", "Other", project: "p", kind: .read, minutesAgo: 4),
         ])
-        let threads = snap.threads.map(SidebarThread.init)
+        let threads = snap.threads.map { SidebarThread($0) }
         #expect(SidebarModel.searchSidebarThreads(threads, query: "#42").map(\.id.rawValue) == ["a"])
         #expect(SidebarModel.searchSidebarThreads(threads, query: "ACME/app#4").map(\.id.rawValue) == ["a"])
         #expect(SidebarModel.searchSidebarThreads(threads, query: "   ").isEmpty)
