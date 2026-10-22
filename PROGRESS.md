@@ -33,6 +33,11 @@ The current state and the open work. Before you stop, tick what you finished, ad
 - [ ] Port timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
 - [x] Port upstream sidebar performance work, bucket b1 (taken 2026-10-22, perf-sidebar): audited all 10 commits; unchanged repository identity refreshes now keep project-array storage (20 copies to zero). All 41 focused reducer, sidebar load and sidebar fidelity tests passed; the counting test fails on the old reducer. The other changes already fit the native sidebar or belong to other areas.
 
+### Dither round 7, 2026-10-22 (taken 2026-10-22, main agent)
+
+- [ ] P. No middle bar: the thread scrim reads evenly across the panel, and the account row's email shows blurred (taken 2026-10-22, agent dither-scrim). Files: `DitherArtView`, `SidebarAccountRowView`.
+- [ ] Q. Nothing attached to the composer: chips, checkout and branch, Stash, the background work banner and the server update banner become floating pills (taken 2026-10-22, agent dither-pills). Files: `Features/Composer/**`, `DitherProjectChips.swift`, the composer banners.
+
 ### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [x] M. Readable thread text over the art, the panel fade from the very top with no black band, and the gap at the fade's right edge (done 2026-10-22, agent dither-art). The thread's scrim is heavy under the text column only, sized from the rendered art's brightest dot so muted text keeps 4.6:1 (about 0.9 over a bright picture, none over a dark one); the timeline fades out by mask over the art instead of a band-colored overlay, which also removes the unfaded 6pt scrollbar column that was the right gap. Checked on screen in dark and light with a bright warm test picture at 1100pt and full screen: work rows 5.2:1 measured (2.2 before). Dither light's `secondaryLabel` #898989 is 3.3:1 on the plain background, under AA before any art; left as is.
